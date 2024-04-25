@@ -200,15 +200,6 @@ class Ec2Instance {
             }
         });
     }
-    // async runInstances(params: RunInstancesRequest) {
-    //   const client = await this.getEc2Client();
-    //   try {
-    //     return (await client.runInstances(params).promise()).Instances;
-    //   } catch (error) {
-    //     core.error(`Failed to create instance(s)`);
-    //     throw error;
-    //   }
-    // }
     getSubnetAzId() {
         var _a;
         return __awaiter(this, void 0, void 0, function* () {
@@ -329,82 +320,12 @@ class Ec2Instance {
                     DefaultTargetCapacityType: useOnDemand ? "on-demand" : "spot",
                 },
             };
-            // const config: SpotFleetRequestConfigData = {
-            //   IamFleetRole:
-            //     "arn:aws:iam::278380418400:role/aws-ec2-spot-fleet-tagging-role",
-            //   TargetCapacity: 1,
-            //   // We always ask for 1 instance, but might ask for 100% on demand or spot
-            //   OnDemandTargetCapacity: useOnDemand ? 1 : 0,
-            //   TerminateInstancesWithExpiration: true,
-            //   Type: "request",
-            //   LaunchSpecifications:
-            // };
-            // const params: RequestSpotFleetRequest = {
-            //   SpotFleetRequestConfig: config,
-            // };
             const client = yield this.getEc2Client();
             const fleet = yield client.createFleet(createFleetRequest).promise();
             const instances = ((fleet === null || fleet === void 0 ? void 0 : fleet.Instances) || [])[0] || {};
             return (instances.InstanceIds || [])[0];
         });
     }
-    // async getOnDemandInstanceConfiguration(
-    //   ec2SpotInstanceStrategy: string
-    // ): Promise<RunInstancesRequest> {
-    //   const userData = new UserData(this.config);
-    //   const params: RunInstancesRequest = {
-    //     ImageId: this.config.ec2AmiId,
-    //     InstanceInitiatedShutdownBehavior: "terminate",
-    //     InstanceMarketOptions: {},
-    //     InstanceType: "",
-    //     MaxCount: 1,
-    //     MinCount: 1,
-    //     SecurityGroupIds: [this.config.ec2SecurityGroupId],
-    //     SubnetId: this.config.ec2SubnetId,
-    //     KeyName: this.config.ec2KeyName,
-    //     Placement: {
-    //       AvailabilityZone: await this.getSubnetAz(),
-    //     },
-    //     TagSpecifications: [
-    //       {
-    //         ResourceType: "instance",
-    //         Tags: this.tags,
-    //       },
-    //     ],
-    //     // <aztec>parity with build-system
-    //     BlockDeviceMappings: [
-    //       {
-    //         DeviceName: "/dev/sda1",
-    //         Ebs: {
-    //           VolumeSize: 32,
-    //         },
-    //       },
-    //     ],
-    //     // parity with build-system</aztec>
-    //     UserData: await userData.getUserData(),
-    //   };
-    //   switch (ec2SpotInstanceStrategy.toLowerCase()) {
-    //     case "besteffort":
-    //     case "spotonly": {
-    //       params.InstanceMarketOptions = {
-    //         MarketType: "spot",
-    //         SpotOptions: {
-    //           InstanceInterruptionBehavior: "terminate",
-    //           SpotInstanceType: "one-time",
-    //         },
-    //       };
-    //       break;
-    //     }
-    //     case "none": {
-    //       params.InstanceMarketOptions = {};
-    //       break;
-    //     }
-    //     default: {
-    //       throw new TypeError("Invalid value for ec2_spot_instance_strategy");
-    //     }
-    //   }
-    //   return params;
-    // }
     getInstanceStatus(instanceId) {
         return __awaiter(this, void 0, void 0, function* () {
             const client = yield this.getEc2Client();
@@ -420,7 +341,7 @@ class Ec2Instance {
             }
         });
     }
-    getInstancesForTags() {
+    getInstancesForTags(instanceStatus) {
         return __awaiter(this, void 0, void 0, function* () {
             const client = yield this.getEc2Client();
             const filters = [
@@ -437,6 +358,10 @@ class Ec2Instance {
                 let instances = [];
                 for (const reservation of (yield client.describeInstances(params).promise()).Reservations || []) {
                     instances = instances.concat(reservation.Instances || []);
+                }
+                if (instanceStatus) {
+                    // Filter instances that are stopped
+                    instances = instances.filter((instance) => { var _a; return ((_a = instance === null || instance === void 0 ? void 0 : instance.State) === null || _a === void 0 ? void 0 : _a.Name) === instanceStatus; });
                 }
                 return instances;
             }
@@ -716,9 +641,8 @@ function pollSpotStatus(config, ec2Client, ghClient) {
     return __awaiter(this, void 0, void 0, function* () {
         // 12 iters x 10000 ms = 2 minutes
         for (let iter = 0; iter < 12; iter++) {
-            const instances = yield ec2Client.getInstancesForTags();
-            const hasInstance = instances.filter((i) => { var _a; return ((_a = i.State) === null || _a === void 0 ? void 0 : _a.Name) === "running"; }).length > 0;
-            if (!hasInstance) {
+            const instances = yield ec2Client.getInstancesForTags("running");
+            if (instances.length <= 0) {
                 // we need to start an instance
                 return "none";
             }
@@ -742,14 +666,18 @@ function start() {
     return __awaiter(this, void 0, void 0, function* () {
         const config = new config_1.ActionConfig();
         if (config.subaction === "stop") {
-            yield stop();
+            yield terminate();
             return;
         }
         else if (config.subaction === "restart") {
-            yield stop();
+            yield terminate();
             // then we make a fresh instance
         }
-        else if (config.subaction !== "start") {
+        else if (config.subaction === "start") {
+            // We need to terminate
+            yield terminate("stopped");
+        }
+        else {
             throw new Error("Unexpected subaction: " + config.subaction);
         }
         // subaction is 'start' or 'restart'estart'
@@ -765,7 +693,7 @@ function start() {
             if (config.subaction === "restart") {
                 throw new Error("Taking down spot we just started. This seems wrong, erroring out.");
             }
-            yield stop();
+            yield terminate();
         }
         var ec2SpotStrategies;
         switch (config.ec2SpotInstanceStrategy) {
@@ -831,14 +759,14 @@ function start() {
         }
     });
 }
-function stop() {
+function terminate(instanceStatus) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             core.info("Starting instance cleanup");
             const config = new config_1.ActionConfig();
             const ec2Client = new ec2_1.Ec2Instance(config);
             const ghClient = new github_1.GithubClient(config);
-            const instances = yield ec2Client.getInstancesForTags();
+            const instances = yield ec2Client.getInstancesForTags(instanceStatus);
             yield ec2Client.terminateInstances(instances.map((i) => i.InstanceId));
             core.info("Clearing previously installed runners");
             const result = yield ghClient.removeRunnersWithLabels([config.githubJobId]);
@@ -860,7 +788,7 @@ function stop() {
             start();
         }
         catch (error) {
-            stop();
+            terminate();
             (0, utils_1.assertIsError)(error);
             core.error(error);
             core.setFailed(error.message);
