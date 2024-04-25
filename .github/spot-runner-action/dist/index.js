@@ -675,7 +675,7 @@ function start() {
         }
         else if (config.subaction === "start") {
             // We need to terminate
-            yield terminate("stopped");
+            yield terminate("stopped", false);
         }
         else {
             throw new Error("Unexpected subaction: " + config.subaction);
@@ -759,7 +759,7 @@ function start() {
         }
     });
 }
-function terminate(instanceStatus) {
+function terminate(instanceStatus, cleanupRunners = true) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             core.info("Starting instance cleanup");
@@ -768,13 +768,17 @@ function terminate(instanceStatus) {
             const ghClient = new github_1.GithubClient(config);
             const instances = yield ec2Client.getInstancesForTags(instanceStatus);
             yield ec2Client.terminateInstances(instances.map((i) => i.InstanceId));
-            core.info("Clearing previously installed runners");
-            const result = yield ghClient.removeRunnersWithLabels([config.githubJobId]);
-            if (result) {
-                core.info("Finished runner cleanup");
-            }
-            else {
-                throw Error("Failed to cleanup runners. Continuing, but failure expected!");
+            if (cleanupRunners) {
+                core.info("Clearing previously installed runners");
+                const result = yield ghClient.removeRunnersWithLabels([
+                    config.githubJobId,
+                ]);
+                if (result) {
+                    core.info("Finished runner cleanup");
+                }
+                else {
+                    throw Error("Failed to cleanup runners. Continuing, but failure expected!");
+                }
             }
         }
         catch (error) {
