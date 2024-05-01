@@ -308,7 +308,6 @@ class Ec2Instance {
                     InstanceType: instanceType,
                     AvailabilityZone: availabilityZone,
                     SubnetId: this.config.ec2SubnetId,
-                    KeyName: this.config.ec2KeyName,
                 })),
             };
             const createFleetRequest = {
