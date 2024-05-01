@@ -243,7 +243,6 @@ class Ec2Instance {
     getLaunchTemplate() {
         return __awaiter(this, void 0, void 0, function* () {
             const client = yield this.getEc2Client();
-            // NOTE: This should be deterministic or we will create a launch template each time
             const userData = yield new userdata_1.UserData(this.config).getUserData();
             const ec2InstanceTypeHash = this.getHashOfStringArray(this.config.ec2InstanceType.concat([userData, JSON.stringify(this.tags), this.config.ec2KeyName]));
             const launchTemplateName = "aztec-packages-spot-" + this.config.ec2AmiId + "-" + ec2InstanceTypeHash;
@@ -251,6 +250,7 @@ class Ec2Instance {
                 LaunchTemplateName: launchTemplateName,
                 LaunchTemplateData: {
                     ImageId: this.config.ec2AmiId,
+                    InstanceInitiatedShutdownBehavior: "terminate",
                     InstanceRequirements: {
                         // We do not know what the instance types correspond to
                         // just let the user send a list of allowed instance types
@@ -258,6 +258,7 @@ class Ec2Instance {
                         MemoryMiB: { Min: 0 },
                         AllowedInstanceTypes: this.config.ec2InstanceType,
                     },
+                    SecurityGroupIds: [this.config.ec2SecurityGroupId],
                     KeyName: this.config.ec2KeyName,
                     UserData: userData,
                     TagSpecifications: [
@@ -276,33 +277,20 @@ class Ec2Instance {
                     ],
                 },
             };
-            let arr = [];
-            try {
-                arr = (yield client
-                    .describeLaunchTemplates({
-                    LaunchTemplateNames: [launchTemplateName],
-                })
-                    .promise()).LaunchTemplates || [];
-            }
-            catch (err) {
-                core.info("Launch templates describe error, note this will be likely resolved by creating the template in the next step: " + err);
-            }
-            core.info("Launch templates found: " + JSON.stringify(arr, null, 2));
-            if (arr.length <= 0) {
-                core.info("Creating launch template: " + launchTemplateName);
-                yield client.createLaunchTemplate(launchTemplateParams).promise();
-            }
+            core.info("Creating launch template: " + launchTemplateName);
+            yield client.createLaunchTemplate(launchTemplateParams).promise();
             return launchTemplateName;
         });
     }
     requestMachine(useOnDemand) {
         return __awaiter(this, void 0, void 0, function* () {
             // Note advice re max bid: "If you specify a maximum price, your instances will be interrupted more frequently than if you do not specify this parameter."
+            const launchTemplateName = yield this.getLaunchTemplate();
             const availabilityZone = yield this.getSubnetAz();
             const fleetLaunchConfig = {
                 LaunchTemplateSpecification: {
                     Version: "$Latest",
-                    LaunchTemplateName: yield this.getLaunchTemplate(),
+                    LaunchTemplateName: launchTemplateName,
                 },
                 Overrides: this.config.ec2InstanceType.map((instanceType) => ({
                     InstanceType: instanceType,
@@ -323,6 +311,10 @@ class Ec2Instance {
             const client = yield this.getEc2Client();
             const fleet = yield client.createFleet(createFleetRequest).promise();
             const instances = ((fleet === null || fleet === void 0 ? void 0 : fleet.Instances) || [])[0] || {};
+            // cleanup
+            yield client.deleteLaunchTemplate({
+                LaunchTemplateName: launchTemplateName,
+            });
             return (instances.InstanceIds || [])[0];
         });
     }
