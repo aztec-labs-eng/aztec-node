@@ -337,8 +337,9 @@ class Ec2Instance {
             const fleet = yield client.createFleet(createFleetRequest).promise();
             if (fleet.Errors && fleet.Errors.length > 0) {
                 for (const error of fleet.Errors) {
-                    if (error.ErrorCode === "RequestLimitExceeded") {
-                        return "RequestLimitExceeded";
+                    if (error.ErrorCode === "RequestLimitExceeded" ||
+                        error.ErrorCode === "InsufficientInstanceCapacity") {
+                        return error.ErrorCode;
                     }
                 }
                 core.error(JSON.stringify(fleet.Errors, null, 2));
@@ -732,29 +733,21 @@ function requestAndWaitForSpot(config) {
             // 6 * 10000ms = 1 minute per strategy, unless we hit RequestLimitExceeded, then we do exponential backoff
             // TODO make longer lived spot request?
             for (let i = 0; i < 6; i++) {
-                try {
-                    // Start instance
-                    instanceId =
-                        yield ec2Client.requestMachine(
-                        // we fallback to on-demand
-                        ec2Strategy.toLocaleLowerCase() === "none");
-                    // let's exit, only loop on InsufficientInstanceCapacity
-                    if (instanceId !== "RequestLimitExceeded") {
-                        break;
-                    }
+                // Start instance
+                const instanceIdOrError = yield ec2Client.requestMachine(
+                // we fallback to on-demand
+                ec2Strategy.toLocaleLowerCase() === "none");
+                // let's exit, only loop on InsufficientInstanceCapacity
+                if (instanceIdOrError === "RequestLimitExceeded" ||
+                    instanceIdOrError === "InsufficientInstanceCapacity") {
+                    core.info("Failed to create instance due to " +
+                        instanceIdOrError +
+                        " , waiting 10 seconds and trying again.");
+                    backoff += 1;
                 }
-                catch (error) {
-                    // TODO is this still the relevant error?
-                    if ((error === null || error === void 0 ? void 0 : error.code) &&
-                        error.code === "InsufficientInstanceCapacity" &&
-                        ec2SpotStrategies.length > 0 &&
-                        ec2Strategy.toLocaleLowerCase() != "none") {
-                        core.info("Failed to create instance due to 'InsufficientInstanceCapacity', waiting 10 seconds and trying again.");
-                        // we loop after 10 seconds
-                    }
-                    else {
-                        throw error;
-                    }
+                else {
+                    instanceId = instanceIdOrError;
+                    break;
                 }
                 // wait 10 seconds
                 yield new Promise((r) => setTimeout(r, 10000 * Math.pow(2, backoff)));
