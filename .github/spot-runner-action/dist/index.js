@@ -260,13 +260,6 @@ class Ec2Instance {
                 LaunchTemplateData: {
                     ImageId: this.config.ec2AmiId,
                     InstanceInitiatedShutdownBehavior: "terminate",
-                    InstanceRequirements: {
-                        // We do not know what the instance types correspond to
-                        // just let the user send a list of allowed instance types
-                        VCpuCount: { Min: 0 },
-                        MemoryMiB: { Min: 0 },
-                        AllowedInstanceTypes: this.config.ec2InstanceType,
-                    },
                     SecurityGroupIds: [this.config.ec2SecurityGroupId],
                     KeyName: this.config.ec2KeyName,
                     UserData: userDataScript,
@@ -326,6 +319,9 @@ class Ec2Instance {
                 Type: "instant",
                 LaunchTemplateConfigs: [fleetLaunchConfig],
                 ClientToken: this.config.clientToken || undefined,
+                SpotOptions: {
+                    AllocationStrategy: "price-capacity-optimized",
+                },
                 TargetCapacitySpecification: {
                     TotalTargetCapacity: 1,
                     OnDemandTargetCapacity: useOnDemand ? 1 : 0,
@@ -336,13 +332,13 @@ class Ec2Instance {
             const client = yield this.getEc2Client();
             const fleet = yield client.createFleet(createFleetRequest).promise();
             if (fleet.Errors && fleet.Errors.length > 0) {
+                core.warning(JSON.stringify(fleet.Errors, null, 2));
                 for (const error of fleet.Errors) {
                     if (error.ErrorCode === "RequestLimitExceeded" ||
                         error.ErrorCode === "InsufficientInstanceCapacity") {
                         return error.ErrorCode;
                     }
                 }
-                core.error(JSON.stringify(fleet.Errors, null, 2));
             }
             const instances = ((fleet === null || fleet === void 0 ? void 0 : fleet.Instances) || [])[0] || {};
             return (instances.InstanceIds || [])[0] || "";
@@ -728,11 +724,10 @@ function requestAndWaitForSpot(config) {
         }
         let instanceId = "";
         for (const ec2Strategy of ec2SpotStrategies) {
-            let backoff = 1;
+            let backoff = 0;
             core.info(`Starting instance with ${ec2Strategy} strategy`);
-            // 6 * 10000ms = 1 minute per strategy, unless we hit RequestLimitExceeded, then we do exponential backoff
-            // TODO make longer lived spot request?
-            for (let i = 0; i < 6; i++) {
+            const MAX_ATTEMPTS = 3; // uses exponential backoff
+            for (let i = 0; i < MAX_ATTEMPTS; i++) {
                 // Start instance
                 const instanceIdOrError = yield ec2Client.requestMachine(
                 // we fallback to on-demand
@@ -742,15 +737,15 @@ function requestAndWaitForSpot(config) {
                     instanceIdOrError === "InsufficientInstanceCapacity") {
                     core.info("Failed to create instance due to " +
                         instanceIdOrError +
-                        " , waiting 10 seconds and trying again.");
-                    backoff += 1;
+                        ", waiting " + 5 * Math.pow(2, backoff) + " seconds and trying again.");
                 }
                 else {
                     instanceId = instanceIdOrError;
                     break;
                 }
                 // wait 10 seconds
-                yield new Promise((r) => setTimeout(r, 10000 * Math.pow(2, backoff)));
+                yield new Promise((r) => setTimeout(r, 5000 * Math.pow(2, backoff)));
+                backoff += 1;
             }
             if (instanceId) {
                 core.info("Successfully requested instance with ID " + instanceId);
