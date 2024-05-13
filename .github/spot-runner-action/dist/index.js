@@ -246,7 +246,7 @@ class Ec2Instance {
         return __awaiter(this, void 0, void 0, function* () {
             const client = yield this.getEc2Client();
             const userData = yield new userdata_1.UserData(this.config);
-            const userDataScript = this.config.githubActionRunnerConcurrency !== 0 ? yield userData.getUserDataForBuilder() : yield userData.getUserDataForBareSpot();
+            const userDataScript = yield userData.getUserData();
             const ec2InstanceTypeHash = this.getHashOfStringArray(this.config.ec2InstanceType.concat([
                 userDataScript,
                 JSON.stringify(this.tags),
@@ -318,8 +318,8 @@ class Ec2Instance {
                 },
                 Overrides: this.config.ec2InstanceType.map((instanceType) => ({
                     InstanceType: instanceType,
-                    AvailabilityZone: availabilityZone,
-                    SubnetId: this.config.ec2SubnetId,
+                    AvailabilityZone: this.config.githubActionRunnerConcurrency > 0 ? availabilityZone : undefined,
+                    SubnetId: this.config.githubActionRunnerConcurrency > 0 ? this.config.ec2SubnetId : undefined,
                 })),
             };
             const createFleetRequest = {
@@ -336,10 +336,15 @@ class Ec2Instance {
             const client = yield this.getEc2Client();
             const fleet = yield client.createFleet(createFleetRequest).promise();
             if (fleet.Errors && fleet.Errors.length > 0) {
+                for (const error of fleet.Errors) {
+                    if (error.ErrorCode === "RequestLimitExceeded") {
+                        return "RequestLimitExceeded";
+                    }
+                }
                 core.error(JSON.stringify(fleet.Errors, null, 2));
             }
             const instances = ((fleet === null || fleet === void 0 ? void 0 : fleet.Instances) || [])[0] || {};
-            return (instances.InstanceIds || [])[0];
+            return (instances.InstanceIds || [])[0] || "";
         });
     }
     getInstanceStatus(instanceId) {
@@ -722,21 +727,21 @@ function requestAndWaitForSpot(config) {
         }
         let instanceId = "";
         for (const ec2Strategy of ec2SpotStrategies) {
+            let backoff = 1;
             core.info(`Starting instance with ${ec2Strategy} strategy`);
-            // 6 * 10000ms = 1 minute per strategy
+            // 6 * 10000ms = 1 minute per strategy, unless we hit RequestLimitExceeded, then we do exponential backoff
             // TODO make longer lived spot request?
             for (let i = 0; i < 6; i++) {
                 try {
                     // Start instance
                     instanceId =
-                        (yield ec2Client.requestMachine(
+                        yield ec2Client.requestMachine(
                         // we fallback to on-demand
-                        ec2Strategy.toLocaleLowerCase() === "none")) || "";
-                    if (instanceId) {
+                        ec2Strategy.toLocaleLowerCase() === "none");
+                    // let's exit, only loop on InsufficientInstanceCapacity
+                    if (instanceId !== "RequestLimitExceeded") {
                         break;
                     }
-                    // let's exit, only loop on InsufficientInstanceCapacity
-                    break;
                 }
                 catch (error) {
                     // TODO is this still the relevant error?
@@ -752,7 +757,7 @@ function requestAndWaitForSpot(config) {
                     }
                 }
                 // wait 10 seconds
-                yield new Promise((r) => setTimeout(r, 10000));
+                yield new Promise((r) => setTimeout(r, 10000 * Math.pow(2, backoff)));
             }
             if (instanceId) {
                 core.info("Successfully requested instance with ID " + instanceId);
@@ -1020,25 +1025,7 @@ class UserData {
     constructor(config) {
         this.config = config;
     }
-    getUserDataForBareSpot() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const cmds = [
-                "#!/bin/bash",
-                `exec 1>/run/log.out 2>&1`,
-                `shutdown -P +${this.config.ec2InstanceTtl}`,
-                `echo '{"default-address-pools":[{"base":"172.17.0.0/12","size":20}, {"base":"10.99.0.0/12","size":20}, {"base":"192.168.0.0/16","size":24}]}' > /etc/docker/daemon.json`,
-                `sudo service docker restart`,
-                "sudo apt install -y brotli",
-                // NOTE also update versions below and in .github/ci-setup-action/action.yml
-                "sudo wget -q https://github.com/earthly/earthly/releases/download/v0.8.9/earthly-linux-$(dpkg --print-architecture) -O /usr/local/bin/earthly",
-                "sudo chmod +x /usr/local/bin/earthly",
-                "touch /home/ubuntu/.user-data-finished",
-            ];
-            console.log("Sending: ", cmds.filter((x) => !x.startsWith("TOKENS")).join("\n"));
-            return Buffer.from(cmds.join("\n")).toString("base64");
-        });
-    }
-    getUserDataForBuilder() {
+    getUserData() {
         return __awaiter(this, void 0, void 0, function* () {
             if (!this.config.githubActionRunnerLabel)
                 throw Error("failed to object job ID for label");
@@ -1053,9 +1040,10 @@ class UserData {
                 `sudo service docker restart`,
                 "sudo wget -q https://github.com/earthly/earthly/releases/download/v0.8.9/earthly-linux-$(dpkg --print-architecture) -O /usr/local/bin/earthly",
                 "sudo chmod +x /usr/local/bin/earthly",
-                "cd /run",
                 "sudo apt install -y brotli",
                 'echo "MaxStartups 1000" >> /etc/ssh/sshd_config',
+                'echo "ClientAliveInterval=30" >> /etc/ssh/sshd_config',
+                'echo "ClientAliveCountMax=20" >> /etc/ssh/sshd_config',
                 "sudo service sshd restart",
                 "touch /home/ubuntu/.user-data-finished",
             ];
