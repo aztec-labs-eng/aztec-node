@@ -41,6 +41,7 @@ class ActionConfig {
         this.awsRegion = core.getInput("aws_region");
         this.awsIamRoleArn = core.getInput("aws_iam_role_arn");
         this.awsAssumeRole = this.awsIamRoleArn ? true : false;
+        this.clientToken = core.getInput("client_token");
         // Github params
         this.githubToken = core.getInput("github_token");
         this.githubJobId = core.getInput("runner_label");
@@ -61,6 +62,7 @@ class ActionConfig {
         this.ec2SpotInstanceStrategy = core
             .getInput("ec2_spot_instance_strategy")
             .toLowerCase();
+        this.ec2Key = core.getInput("ec2_key");
     }
 }
 exports.ActionConfig = ActionConfig;
@@ -243,11 +245,18 @@ class Ec2Instance {
     getLaunchTemplate() {
         return __awaiter(this, void 0, void 0, function* () {
             const client = yield this.getEc2Client();
-            const userData = yield new userdata_1.UserData(this.config).getUserData();
-            const ec2InstanceTypeHash = this.getHashOfStringArray(this.config.ec2InstanceType.concat([userData, JSON.stringify(this.tags), this.config.ec2KeyName]));
-            const launchTemplateName = "aztec-packages-spot-" + this.config.ec2AmiId + "-" + ec2InstanceTypeHash;
+            const userData = yield new userdata_1.UserData(this.config);
+            const userDataScript = this.config.githubActionRunnerConcurrency !== 0 ? yield userData.getUserDataForBuilder() : yield userData.getUserDataForBareSpot();
+            const ec2InstanceTypeHash = this.getHashOfStringArray(this.config.ec2InstanceType.concat([
+                userDataScript,
+                JSON.stringify(this.tags),
+                this.config.ec2KeyName,
+                this.config.ec2AmiId,
+            ]));
+            const launchTemplateName = "aztec-packages-spot-" + ec2InstanceTypeHash;
             const launchTemplateParams = {
                 LaunchTemplateName: launchTemplateName,
+                ClientToken: launchTemplateName,
                 LaunchTemplateData: {
                     ImageId: this.config.ec2AmiId,
                     InstanceInitiatedShutdownBehavior: "terminate",
@@ -260,7 +269,7 @@ class Ec2Instance {
                     },
                     SecurityGroupIds: [this.config.ec2SecurityGroupId],
                     KeyName: this.config.ec2KeyName,
-                    UserData: userData,
+                    UserData: userDataScript,
                     TagSpecifications: [
                         {
                             ResourceType: "instance",
@@ -272,13 +281,27 @@ class Ec2Instance {
                             DeviceName: "/dev/sda1",
                             Ebs: {
                                 VolumeSize: 32,
+                                VolumeType: 'gp3',
+                                Throughput: 1000,
+                                Iops: 5000
                             },
                         },
                     ],
                 },
             };
+            // core.info(JSON.stringify(launchTemplateParams, null, 2));
             core.info("Creating launch template: " + launchTemplateName);
-            yield client.createLaunchTemplate(launchTemplateParams).promise();
+            try {
+                yield client.createLaunchTemplate(launchTemplateParams).promise();
+            }
+            catch (error) {
+                if ((error === null || error === void 0 ? void 0 : error.code) &&
+                    error.code === "InvalidLaunchTemplateName.AlreadyExistsException") {
+                    // Ignore if it is already created
+                    return launchTemplateName;
+                }
+                throw error;
+            }
             return launchTemplateName;
         });
     }
@@ -286,6 +309,7 @@ class Ec2Instance {
         return __awaiter(this, void 0, void 0, function* () {
             // Note advice re max bid: "If you specify a maximum price, your instances will be interrupted more frequently than if you do not specify this parameter."
             const launchTemplateName = yield this.getLaunchTemplate();
+            // Launch template name already in use
             const availabilityZone = yield this.getSubnetAz();
             const fleetLaunchConfig = {
                 LaunchTemplateSpecification: {
@@ -301,6 +325,7 @@ class Ec2Instance {
             const createFleetRequest = {
                 Type: "instant",
                 LaunchTemplateConfigs: [fleetLaunchConfig],
+                ClientToken: this.config.clientToken || undefined,
                 TargetCapacitySpecification: {
                     TotalTargetCapacity: 1,
                     OnDemandTargetCapacity: useOnDemand ? 1 : 0,
@@ -310,11 +335,10 @@ class Ec2Instance {
             };
             const client = yield this.getEc2Client();
             const fleet = yield client.createFleet(createFleetRequest).promise();
+            if (fleet.Errors && fleet.Errors.length > 0) {
+                core.error(JSON.stringify(fleet.Errors, null, 2));
+            }
             const instances = ((fleet === null || fleet === void 0 ? void 0 : fleet.Instances) || [])[0] || {};
-            // cleanup
-            yield client.deleteLaunchTemplate({
-                LaunchTemplateName: launchTemplateName,
-            });
             return (instances.InstanceIds || [])[0];
         });
     }
@@ -329,6 +353,26 @@ class Ec2Instance {
             }
             catch (error) {
                 core.error(`Failed to lookup status for instance ${instanceId}`);
+                throw error;
+            }
+        });
+    }
+    getPublicIpFromInstanceId(instanceId) {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            const client = yield this.getEc2Client();
+            try {
+                const instance = yield client.describeInstances({ InstanceIds: [instanceId] }).promise();
+                if (!instance ||
+                    !instance.Reservations ||
+                    !instance.Reservations[0].Instances ||
+                    ((_a = instance.Reservations[0].Instances[0].State) === null || _a === void 0 ? void 0 : _a.Name) !== "running") {
+                    throw new Error("Could not find running instance:" + instanceId);
+                }
+                return instance.Reservations[0].Instances[0].PublicIpAddress;
+            }
+            catch (error) {
+                core.error(`Failed to lookup instance for instance ID ${instanceId}`);
                 throw error;
             }
         });
@@ -572,6 +616,7 @@ class GithubClient {
                     }
                     if (yield this.hasRunner(labels)) {
                         clearInterval(interval);
+                        resolve("");
                         return;
                     }
                     waitSeconds += retryIntervalSeconds;
@@ -625,14 +670,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(42186));
+const fs = __importStar(__nccwpck_require__(57147));
+const child_process_1 = __nccwpck_require__(32081);
 const config_1 = __nccwpck_require__(20088);
 const ec2_1 = __nccwpck_require__(32695);
 const github_1 = __nccwpck_require__(85928);
 const utils_1 = __nccwpck_require__(50918);
+const child_process_2 = __nccwpck_require__(32081);
+const github = __importStar(__nccwpck_require__(95438));
+(__nccwpck_require__(93985).suppress) = true;
 function pollSpotStatus(config, ec2Client, ghClient) {
     return __awaiter(this, void 0, void 0, function* () {
-        // 12 iters x 10000 ms = 2 minutes
-        for (let iter = 0; iter < 12; iter++) {
+        // 6 iters x 10000 ms = 1 minute
+        for (let iter = 0; iter < 6; iter++) {
             const instances = yield ec2Client.getInstancesForTags("running");
             if (instances.length <= 0) {
                 // we need to start an instance
@@ -642,7 +692,7 @@ function pollSpotStatus(config, ec2Client, ghClient) {
                 core.info("Found ec2 instance, looking for runners.");
                 if (yield ghClient.hasRunner([config.githubJobId])) {
                     // we have runners
-                    return "usable";
+                    return instances[0].InstanceId;
                 }
             }
             catch (err) { }
@@ -650,44 +700,15 @@ function pollSpotStatus(config, ec2Client, ghClient) {
             yield new Promise((r) => setTimeout(r, 10000));
         }
         // we have a bad state for a while, error
-        core.warning("Looped for 2 minutes and could only find spot with no runners!");
+        core.warning("Looped for 1 minutes and could only find spot with no runners!");
         return "unusable";
     });
 }
-function start() {
+function requestAndWaitForSpot(config) {
     return __awaiter(this, void 0, void 0, function* () {
-        const config = new config_1.ActionConfig();
-        if (config.subaction === "stop") {
-            yield terminate();
-            return;
-        }
-        else if (config.subaction === "restart") {
-            yield terminate();
-            // then we make a fresh instance
-        }
-        else if (config.subaction === "start") {
-            // We need to terminate
-            yield terminate("stopped", false);
-        }
-        else {
-            throw new Error("Unexpected subaction: " + config.subaction);
-        }
         // subaction is 'start' or 'restart'estart'
         const ec2Client = new ec2_1.Ec2Instance(config);
-        const ghClient = new github_1.GithubClient(config);
-        const spotStatus = yield pollSpotStatus(config, ec2Client, ghClient);
-        if (spotStatus === "usable") {
-            core.info(`Runner already running. Continuing as we can target it with jobs.`);
-            return;
-        }
-        if (spotStatus === "unusable") {
-            core.warning("Taking down spot as it has no runners! If we were mistaken, this could impact existing jobs.");
-            if (config.subaction === "restart") {
-                throw new Error("Taking down spot we just started. This seems wrong, erroring out.");
-            }
-            yield terminate();
-        }
-        var ec2SpotStrategies;
+        let ec2SpotStrategies;
         switch (config.ec2SpotInstanceStrategy) {
             case "besteffort": {
                 ec2SpotStrategies = ["BestEffort", "none"];
@@ -699,7 +720,7 @@ function start() {
                 core.info(`Ec2 spot instance strategy is set to ${config.ec2SpotInstanceStrategy}`);
             }
         }
-        var instanceId = "";
+        let instanceId = "";
         for (const ec2Strategy of ec2SpotStrategies) {
             core.info(`Starting instance with ${ec2Strategy} strategy`);
             // 6 * 10000ms = 1 minute per strategy
@@ -707,9 +728,10 @@ function start() {
             for (let i = 0; i < 6; i++) {
                 try {
                     // Start instance
-                    instanceId = (yield ec2Client.requestMachine(
-                    // we fallback to on-demand
-                    ec2Strategy.toLocaleLowerCase() === "none")) || "";
+                    instanceId =
+                        (yield ec2Client.requestMachine(
+                        // we fallback to on-demand
+                        ec2Strategy.toLocaleLowerCase() === "none")) || "";
                     if (instanceId) {
                         break;
                     }
@@ -743,11 +765,135 @@ function start() {
             core.error("Failed to get ID of running instance");
             throw Error("Failed to get ID of running instance");
         }
-        if (instanceId)
-            yield ghClient.pollForRunnerCreation([config.githubJobId]);
+        return instanceId;
+    });
+}
+function startBareSpot(config) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (config.subaction !== "start") {
+            throw new Error("Unexpected subaction for bare spot, only 'start' is allowed: " +
+                config.subaction);
+        }
+        const ec2Client = new ec2_1.Ec2Instance(config);
+        const instanceId = yield requestAndWaitForSpot(config);
+        const ip = yield ec2Client.getPublicIpFromInstanceId(instanceId);
+        const tempKeyPath = installSshKey(config.ec2Key);
+        core.info("Logging SPOT_IP and SPOT_KEY to GITHUB_ENV for later step use.");
+        yield standardSpawn("bash", ["-c", `echo SPOT_IP=${ip} >> $GITHUB_ENV`]);
+        yield standardSpawn("bash", [
+            "-c",
+            `echo SPOT_KEY=${tempKeyPath} >> $GITHUB_ENV`,
+        ]);
+        yield establishSshContact(ip, config.ec2Key);
+    });
+}
+function startWithGithubRunners(config) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (config.subaction === "stop") {
+            yield terminate();
+            return "";
+        }
+        else if (config.subaction === "restart") {
+            yield terminate();
+            // then we make a fresh instance
+        }
+        else if (config.subaction !== "start") {
+            throw new Error("Unexpected subaction: " + config.subaction);
+        }
+        // subaction is 'start' or 'restart'estart'
+        const ec2Client = new ec2_1.Ec2Instance(config);
+        const ghClient = new github_1.GithubClient(config);
+        let spotStatus = yield pollSpotStatus(config, ec2Client, ghClient);
+        if (spotStatus === "unusable") {
+            core.warning("Taking down spot as it has no runners! If we were mistaken, this could impact existing jobs.");
+            if (config.subaction === "restart") {
+                throw new Error("Taking down spot we just started. This seems wrong, erroring out.");
+            }
+            yield terminate();
+            spotStatus = "none";
+        }
+        let instanceId = "";
+        let ip = "";
+        if (spotStatus !== "none") {
+            core.info(`Runner already running. Continuing as we can target it with jobs.`);
+            instanceId = spotStatus;
+            ip = yield ec2Client.getPublicIpFromInstanceId(instanceId);
+            if (!(yield establishSshContact(ip, config.ec2Key))) {
+                return false;
+            }
+        }
         else {
-            core.error("Instance failed to register with Github Actions");
-            throw Error("Instance failed to register with Github Actions");
+            core.info(`Starting runner.`);
+            instanceId = yield requestAndWaitForSpot(config);
+            ip = yield ec2Client.getPublicIpFromInstanceId(instanceId);
+            if (!(yield establishSshContact(ip, config.ec2Key))) {
+                return false;
+            }
+            yield setupGithubRunners(ip, config);
+            if (instanceId)
+                yield ghClient.pollForRunnerCreation([config.githubJobId]);
+            else {
+                core.error("Instance failed to register with Github Actions");
+                throw Error("Instance failed to register with Github Actions");
+            }
+            core.info("Done setting up runner.");
+        }
+        // Export to github environment
+        const tempKeyPath = installSshKey(config.ec2Key);
+        core.info("Logging BUILDER_SPOT_IP and BUILDER_SPOT_KEY to GITHUB_ENV for later step use.");
+        yield standardSpawn("bash", ["-c", `echo BUILDER_SPOT_IP=${ip} >> $GITHUB_ENV`]);
+        yield standardSpawn("bash", [
+            "-c",
+            `echo BUILDER_SPOT_KEY=${tempKeyPath} >> $GITHUB_ENV`,
+        ]);
+        return true;
+    });
+}
+function standardSpawn(command, args) {
+    // Wrap the process execution in a Promise to handle asynchronous execution and output streaming
+    return new Promise((resolve, reject) => {
+        const child = (0, child_process_2.spawn)(command, args, { stdio: 'inherit' });
+        // Handle close event
+        child.on("close", (code) => {
+            if (code === 0) {
+                resolve(`SSH command completed with code ${code}`);
+            }
+            else {
+                reject(new Error(`SSH command failed with code ${code}`));
+            }
+        });
+        // Handle process errors (e.g., command not found, cannot spawn process)
+        child.on("error", (err) => {
+            reject(new Error(`Failed to execute SSH command: ${err.message}`));
+        });
+    });
+}
+function installSshKey(encodedSshKey) {
+    const decodedKey = Buffer.from(encodedSshKey, "base64").toString("utf8");
+    const tempKeyPath = "/tmp/ec2_ssh_key.pem";
+    fs.writeFileSync(tempKeyPath, decodedKey, { mode: 0o600 });
+    return tempKeyPath;
+}
+function establishSshContact(ip, encodedSshKey) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const tempKeyPath = installSshKey(encodedSshKey);
+        // Improved SSH connection retry logic
+        let attempts = 0;
+        const maxAttempts = 60;
+        while (attempts < maxAttempts) {
+            try {
+                (0, child_process_1.execSync)(`ssh -q -o StrictHostKeyChecking=no -i ${tempKeyPath} -o ConnectTimeout=1 ubuntu@${ip} true`);
+                core.info(`SSH connection with spot at ${ip} established`);
+                return true;
+            }
+            catch (_a) {
+                if (attempts >= maxAttempts - 1) {
+                    core.error(`Timeout: SSH could not connect to ${ip} within 60 seconds.`);
+                    return false;
+                }
+                yield new Promise((resolve) => setTimeout(resolve, 1000)); // Retry every second
+                attempts++;
+            }
         }
     });
 }
@@ -778,10 +924,69 @@ function terminate(instanceStatus, cleanupRunners = true) {
         }
     });
 }
+function setupGithubRunners(ip, config) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const ghClient = new github_1.GithubClient(config);
+        const githubActionRunnerVersion = yield ghClient.getRunnerVersion();
+        // Retrieve runner registration tokens in parallel
+        const tokens = yield Promise.all(Array.from({ length: config.githubActionRunnerConcurrency }, () => ghClient.getRunnerRegistrationToken()));
+        const runnerNameBase = `${config.githubJobId}-ec2`;
+        // space-separated registration tokens
+        const tokensSpaceSep = tokens.map((t) => t.token).join(" ");
+        const bumpShutdown = `sudo shutdown -c ; sudo shutdown -P +${config.ec2InstanceTtl}`;
+        // TODO could deregister runners right before shutdown starts
+        const setupRunnerCmds = [
+            // Shutdown rules:
+            // - github actions job starts and ends always bump +ec2InstanceTtl minutes
+            // - when the amount of started jobs (start_run_* files) equal the amount of finished jobs (end_run_* files), we shutdown in 5 minutes (with a reaper script installed later)
+            "set -x",
+            "sudo touch ~/.user-data-started",
+            `cd ~`,
+            `echo "${bumpShutdown}" > /home/ubuntu/delay_shutdown.sh`,
+            "chmod +x /home/ubuntu/delay_shutdown.sh",
+            "export ACTIONS_RUNNER_HOOK_JOB_STARTED=/home/ubuntu/delay_shutdown.sh",
+            "export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/home/ubuntu/delay_shutdown.sh",
+            "mkdir -p actions-runner && cd actions-runner",
+            'echo "ACTIONS_RUNNER_HOOK_JOB_STARTED=/home/ubuntu/delay_shutdown.sh" > .env',
+            'echo "ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/home/ubuntu/delay_shutdown.sh" > .env',
+            `GH_RUNNER_VERSION=${githubActionRunnerVersion}`,
+            'case $(uname -m) in aarch64) ARCH="arm64" ;; amd64|x86_64) ARCH="x64" ;; esac && export RUNNER_ARCH=${ARCH}',
+            "curl -O -L https://github.com/actions/runner/releases/download/v${GH_RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${GH_RUNNER_VERSION}.tar.gz",
+            "tar xzf ./actions-runner-linux-${RUNNER_ARCH}-${GH_RUNNER_VERSION}.tar.gz",
+            "mv externals ..",
+            // Note sharing bin doesn't work due to using it as a folder, and we don't bother splitting up sharing bin
+            "rm ./actions-runner-linux-${RUNNER_ARCH}-${GH_RUNNER_VERSION}.tar.gz",
+            `TOKENS=(${tokensSpaceSep})`,
+            `for i in {0..${config.githubActionRunnerConcurrency - 1}}; do`,
+            `  cp -r . ../${runnerNameBase}-$i`,
+            `  ln -s $(pwd)/../externals ../${runnerNameBase}-$i`,
+            `  pushd ../${runnerNameBase}-$i`,
+            `  echo \${TOKENS[i]} > .runner-token`,
+            `  echo './config.sh $@ && ./run.sh' > config_and_run.sh`,
+            `  nohup bash ./config_and_run.sh --unattended --url https://github.com/${github.context.repo.owner}/${github.context.repo.repo} --token \${TOKENS[i]} --labels ${config.githubActionRunnerLabel} --replace --name ${runnerNameBase}-$i 1>/dev/null 2>/dev/null &`,
+            `  popd`,
+            "done",
+            "exit",
+        ];
+        const tempKeyPath = installSshKey(config.ec2Key);
+        yield standardSpawn("ssh", ["-o", "StrictHostKeyChecking=no", "-i", tempKeyPath, "-o", "ConnectTimeout=1", `ubuntu@${ip}`, "bash", "-c", setupRunnerCmds.join("\n")]);
+    });
+}
 (function () {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            start();
+            const config = new config_1.ActionConfig();
+            if (config.githubActionRunnerConcurrency !== 0) {
+                for (let i = 0; i < 3; i++) {
+                    // retry in a loop in case we can't ssh connect after a minute
+                    if (yield startWithGithubRunners(config)) {
+                        break;
+                    }
+                }
+            }
+            else {
+                startBareSpot(config);
+            }
         }
         catch (error) {
             terminate();
@@ -796,33 +1001,10 @@ function terminate(instanceStatus, cleanupRunners = true) {
 /***/ }),
 
 /***/ 77519:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+/***/ (function(__unused_webpack_module, exports) {
 
 "use strict";
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -834,59 +1016,50 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UserData = void 0;
-const github = __importStar(__nccwpck_require__(95438));
-const github_1 = __nccwpck_require__(85928);
 class UserData {
     constructor(config) {
         this.config = config;
     }
-    getUserData() {
+    getUserDataForBareSpot() {
         return __awaiter(this, void 0, void 0, function* () {
-            const ghClient = new github_1.GithubClient(this.config);
-            const githubActionRunnerVersion = yield ghClient.getRunnerVersion();
-            // Retrieve runner registration tokens in parallel
-            const tokens = yield Promise.all(Array.from({ length: this.config.githubActionRunnerConcurrency }, () => ghClient.getRunnerRegistrationToken()));
-            if (!this.config.githubActionRunnerLabel)
-                throw Error("failed to object job ID for label");
-            const runnerNameBase = `${this.config.githubJobId}-ec2`;
-            // space-separated registration tokens
-            const tokensSpaceSep = tokens.map((t) => t.token).join(" ");
-            const bumpShutdown = `shutdown -c ; shutdown -P +${this.config.ec2InstanceTtl}`;
-            // Note, we dont make the runner ephemeral as we start fresh runners as needed
-            // and delay shutdowns whenever jobs start
-            // TODO could deregister runners right before shutdown starts
             const cmds = [
                 "#!/bin/bash",
                 `exec 1>/run/log.out 2>&1`,
                 `shutdown -P +${this.config.ec2InstanceTtl}`,
-                "cd /run",
-                `mkdir -p shutdown-refcount`,
-                // Shutdown rules:
-                // - github actions job starts and ends always bump +ec2InstanceTtl minutes
-                // - when the amount of started jobs (start_run_* files) equal the amount of finished jobs (end_run_* files), we shutdown in 5 minutes (with a reaper script installed later)
-                `echo "${bumpShutdown}" > /run/delay_shutdown.sh`,
-                "chmod +x /run/delay_shutdown.sh",
-                "export ACTIONS_RUNNER_HOOK_JOB_STARTED=/run/delay_shutdown.sh",
-                "export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/run/delay_shutdown.sh",
-                "mkdir -p actions-runner && cd actions-runner",
-                'echo "ACTIONS_RUNNER_HOOK_JOB_STARTED=/run/delay_shutdown.sh" > .env',
-                'echo "ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/run/delay_shutdown.sh" > .env',
-                `GH_RUNNER_VERSION=${githubActionRunnerVersion}`,
-                'case $(uname -m) in aarch64) ARCH="arm64" ;; amd64|x86_64) ARCH="x64" ;; esac && export RUNNER_ARCH=${ARCH}',
-                "curl -O -L https://github.com/actions/runner/releases/download/v${GH_RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${GH_RUNNER_VERSION}.tar.gz",
-                "tar xzf ./actions-runner-linux-${RUNNER_ARCH}-${GH_RUNNER_VERSION}.tar.gz",
-                "export RUNNER_ALLOW_RUNASROOT=1",
-                "mv externals ..",
-                // Note sharing bin doesn't work due to using it as a folder, and we don't bother splitting up sharing bin
-                "rm ./actions-runner-linux-${RUNNER_ARCH}-${GH_RUNNER_VERSION}.tar.gz",
-                '[ -n "$(command -v yum)" ] && yum install libicu -y',
-                `TOKENS=(${tokensSpaceSep}) ; echo ${tokensSpaceSep} > /run/github-runner-tokens`,
-                `for i in {0..${this.config.githubActionRunnerConcurrency - 1}}; do`,
-                `  ( cp -r . ../${runnerNameBase}-$i && ln -s $(pwd)/../externals ../${runnerNameBase}-$i && cd ../${runnerNameBase}-$i && echo \${TOKENS[i]} > .runner-token && ./config.sh --unattended --url https://github.com/${github.context.repo.owner}/${github.context.repo.repo} --token \${TOKENS[i]} --labels ${this.config.githubActionRunnerLabel} --replace --name ${runnerNameBase}-$i ; ./run.sh ) &`,
-                "done",
-                "wait", // Wait for all background processes to finish
+                `echo '{"default-address-pools":[{"base":"172.17.0.0/12","size":20}, {"base":"10.99.0.0/12","size":20}, {"base":"192.168.0.0/16","size":24}]}' > /etc/docker/daemon.json`,
+                `sudo service docker restart`,
+                "sudo apt install -y brotli",
+                // NOTE also update versions below and in .github/ci-setup-action/action.yml
+                "sudo wget -q https://github.com/earthly/earthly/releases/download/v0.8.9/earthly-linux-$(dpkg --print-architecture) -O /usr/local/bin/earthly",
+                "sudo chmod +x /usr/local/bin/earthly",
+                "touch /home/ubuntu/.user-data-finished",
             ];
             console.log("Sending: ", cmds.filter((x) => !x.startsWith("TOKENS")).join("\n"));
+            return Buffer.from(cmds.join("\n")).toString("base64");
+        });
+    }
+    getUserDataForBuilder() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.config.githubActionRunnerLabel)
+                throw Error("failed to object job ID for label");
+            // Note, we dont make the runner ephemeral as we start fresh runners as needed
+            // and delay shutdowns whenever jobs start
+            const cmds = [
+                "#!/bin/bash",
+                `exec 1>/run/log.out 2>&1`,
+                "touch /home/ubuntu/.user-data-started",
+                `shutdown -P +${this.config.ec2InstanceTtl}`,
+                `echo '{"default-address-pools":[{"base":"172.17.0.0/12","size":20}, {"base":"10.99.0.0/12","size":20}, {"base":"192.168.0.0/16","size":24}]}' > /etc/docker/daemon.json`,
+                `sudo service docker restart`,
+                "sudo wget -q https://github.com/earthly/earthly/releases/download/v0.8.9/earthly-linux-$(dpkg --print-architecture) -O /usr/local/bin/earthly",
+                "sudo chmod +x /usr/local/bin/earthly",
+                "cd /run",
+                "sudo apt install -y brotli",
+                'echo "MaxStartups 1000" >> /etc/ssh/sshd_config',
+                "sudo service sshd restart",
+                "touch /home/ubuntu/.user-data-finished",
+            ];
+            console.log("Sending: ", cmds.join("\n"));
             return Buffer.from(cmds.join("\n")).toString("base64");
         });
     }
