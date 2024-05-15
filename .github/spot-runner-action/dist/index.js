@@ -708,6 +708,7 @@ function pollSpotStatus(config, ec2Client, ghClient) {
     });
 }
 function requestAndWaitForSpot(config) {
+    var _a;
     return __awaiter(this, void 0, void 0, function* () {
         // subaction is 'start' or 'restart'estart'
         const ec2Client = new ec2_1.Ec2Instance(config);
@@ -747,9 +748,11 @@ function requestAndWaitForSpot(config) {
                 // wait 10 seconds
                 yield new Promise((r) => setTimeout(r, 5000 * Math.pow(2, backoff)));
                 backoff += 1;
+                core.info("Polling to see if we somehow have an instance up");
+                instanceId = yield ((_a = ec2Client.getInstancesForTags("running")[0]) === null || _a === void 0 ? void 0 : _a.instanceId);
             }
             if (instanceId) {
-                core.info("Successfully requested instance with ID " + instanceId);
+                core.info("Successfully requested/found instance with ID " + instanceId);
                 break;
             }
         }
