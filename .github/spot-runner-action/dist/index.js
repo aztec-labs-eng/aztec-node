@@ -754,8 +754,10 @@ function requestAndWaitForSpot(config) {
                 // wait 10 seconds
                 yield new Promise((r) => setTimeout(r, 5000 * Math.pow(2, backoff)));
                 backoff += 1;
-                core.info("Polling to see if we somehow have an instance up");
-                instanceId = yield ((_a = ec2Client.getInstancesForTags("running")[0]) === null || _a === void 0 ? void 0 : _a.instanceId);
+                if (config.githubActionRunnerConcurrency > 0) {
+                    core.info("Polling to see if we somehow have an instance up");
+                    instanceId = yield ((_a = ec2Client.getInstancesForTags("running")[0]) === null || _a === void 0 ? void 0 : _a.instanceId);
+                }
             }
             if (instanceId) {
                 core.info("Successfully requested/found instance with ID " + instanceId);
