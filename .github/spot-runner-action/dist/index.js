@@ -138,6 +138,9 @@ class Ec2Instance {
                 this.client = new aws_sdk_1.default.EC2({
                     credentials: credentials,
                     region: this.config.awsRegion,
+                    maxRetries: 3,
+                    // base 10 seconds for the exponential backoff, up to 3 times
+                    retryDelayOptions: { base: 10000 }
                 });
             }
             return this.client;
