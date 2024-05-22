@@ -299,7 +299,7 @@ class Ec2Instance {
                     // Ignore if it is already created
                     return launchTemplateName;
                 }
-                throw error;
+                core.warning("Ignoring:" + JSON.stringify(error));
             }
             return launchTemplateName;
         });
