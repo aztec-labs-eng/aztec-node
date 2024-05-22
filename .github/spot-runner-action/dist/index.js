@@ -734,7 +734,7 @@ function requestAndWaitForSpot(config) {
         for (const ec2Strategy of ec2SpotStrategies) {
             let backoff = 0;
             core.info(`Starting instance with ${ec2Strategy} strategy`);
-            const MAX_ATTEMPTS = 3; // uses exponential backoff
+            const MAX_ATTEMPTS = 6; // uses exponential backoff
             for (let i = 0; i < MAX_ATTEMPTS; i++) {
                 // Start instance
                 const instanceIdOrError = yield ec2Client.requestMachine(
