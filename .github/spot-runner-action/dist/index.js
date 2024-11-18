@@ -699,10 +699,11 @@ function pollSpotStatus(config, ec2Client, ghClient) {
             }
             try {
                 core.info("Found ec2 instance, looking for runners.");
-                if (process.env.WAIT_FOR_RUNNERS === "false" || (yield ghClient.hasRunner([config.githubJobId]))) {
-                    // we have runners
-                    return instances[0].InstanceId;
-                }
+                // TODO find out whatever happened here but we seem to not be able to wait for runners
+                //if (process.env.WAIT_FOR_RUNNERS === "false" || await ghClient.hasRunner([config.githubJobId])) {
+                // we have runners
+                return instances[0].InstanceId;
+                //}
             }
             catch (err) { }
             // wait 10 seconds
