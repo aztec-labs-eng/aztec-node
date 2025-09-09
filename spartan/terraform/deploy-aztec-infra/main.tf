@@ -75,7 +75,8 @@ locals {
       custom_settings = {
         "nodeType" = "p2p-bootstrap"
       }
-      boot_node_path = ""
+      boot_node_host_path  = ""
+      bootstrap_nodes_path = ""
     } : null
 
     validators = {
