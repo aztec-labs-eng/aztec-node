@@ -269,8 +269,8 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     return this.taggingDataProvider.getSenderAddresses();
   }
 
-  public getNextIndexAsSender(secret: DirectionalAppTaggingSecret): Promise<number> {
-    return this.taggingDataProvider.getNextIndexAsSender(secret);
+  public getLastUsedIndexAsSender(secret: DirectionalAppTaggingSecret): Promise<number | undefined> {
+    return this.taggingDataProvider.getLastUsedIndexesAsSender(secret);
   }
 
   public async calculateDirectionalAppTaggingSecret(
@@ -301,7 +301,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
   async #getIndexedTaggingSecretsForSenders(
     contractAddress: AztecAddress,
     recipient: AztecAddress,
-  ): Promise<IndexedTaggingSecret[]> {
+  ): Promise<{ secret: DirectionalAppTaggingSecret; index: number | undefined }[]> {
     const recipientCompleteAddress = await this.getCompleteAddress(recipient);
     const recipientIvsk = await this.keyStore.getMasterIncomingViewingSecretKey(recipient);
 
@@ -322,7 +322,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
         );
       }),
     );
-    const indexes = await this.taggingDataProvider.getNextIndexesAsRecipient(secrets);
+    const indexes = await this.taggingDataProvider.getLastUsedIndexesAsRecipient(secrets);
     if (indexes.length !== secrets.length) {
       throw new Error('Indexes and directional app tagging secrets have different lengths');
     }
@@ -337,7 +337,10 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     secret: DirectionalAppTaggingSecret,
     contractAddress: AztecAddress,
   ): Promise<void> {
-    const oldIndex = await this.taggingDataProvider.getNextIndexAsSender(secret);
+    const lastUsedIndex = await this.taggingDataProvider.getLastUsedIndexesAsSender(secret);
+    // If lastUsedIndex is undefined, we've never used this secret, so start from 0
+    // Otherwise, start from one past the last used index
+    const startIndex = lastUsedIndex === undefined ? 0 : lastUsedIndex + 1;
 
     // This algorithm works such that:
     // 1. If we find minimum consecutive empty logs in a window of logs we set the index to the index of the last log
@@ -347,7 +350,8 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     const MIN_CONSECUTIVE_EMPTY_LOGS = 10;
     const WINDOW_SIZE = MIN_CONSECUTIVE_EMPTY_LOGS * 2;
 
-    let [numConsecutiveEmptyLogs, currentIndex] = [0, oldIndex];
+    let [numConsecutiveEmptyLogs, currentIndex] = [0, startIndex];
+    let indexOfLastLog = -1;
     do {
       // We compute the tags for the current window of indexes
       const currentTags = await timesParallel(WINDOW_SIZE, async i => {
@@ -361,7 +365,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
       const possibleLogs = await this.#getPrivateLogsByTags(tagsAsFr);
 
       // We find the index of the last log in the window that is not empty
-      const indexOfLastLog = possibleLogs.findLastIndex(possibleLog => possibleLog.length !== 0);
+      indexOfLastLog = possibleLogs.findLastIndex(possibleLog => possibleLog.length !== 0);
 
       if (indexOfLastLog === -1) {
         // We haven't found any logs in the current window so we stop looking
@@ -376,11 +380,11 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     } while (numConsecutiveEmptyLogs < MIN_CONSECUTIVE_EMPTY_LOGS);
 
     const contractName = await this.contractDataProvider.getDebugContractName(contractAddress);
-    if (currentIndex !== oldIndex) {
-      await this.taggingDataProvider.setNextIndexesAsSender([{ secret, index: currentIndex }]);
+    if (currentIndex !== startIndex) {
+      await this.taggingDataProvider.setLastUsedIndexesAsSender([{ secret, index: indexOfLastLog }]);
 
       this.log.debug(`Syncing logs for secret ${secret.toString()} at contract ${contractName}(${contractAddress})`, {
-        index: currentIndex,
+        index: indexOfLastLog,
         contractName,
         contractAddress,
       });
@@ -534,11 +538,13 @@ export class PXEOracleInterface implements ExecutionDataProvider {
         secretsAndWindows = newSecretsAndWindows;
       }
 
-      // At this point we have processed all the logs for the recipient so we store the new largest indexes in the db.
-      await this.taggingDataProvider.setNextIndexesAsRecipient(
+      // At this point we have processed all the logs for the recipient so we store the last used indexes in the db.
+      // newLargestIndexMapToStore contains "next" indexes to look for (one past the last found), so subtract 1 to get
+      // last used.
+      await this.taggingDataProvider.setLastUsedIndexesAsRecipient(
         Object.entries(newLargestIndexMapToStore).map(([directionalAppTaggingSecret, index]) => ({
           secret: DirectionalAppTaggingSecret.fromString(directionalAppTaggingSecret),
-          index,
+          index: index - 1,
         })),
       );
     }

@@ -209,7 +209,7 @@ describe('PXEOracleInterface', () => {
       // First sender should have 2 logs, but keep index 1 since they were built using the same tag
       // Next 4 senders should also have index 1 = offset + 1
       // Last 5 senders should have index 2 = offset + 2
-      const indexes = await taggingDataProvider.getNextIndexesAsRecipient(secrets);
+      const indexes = await taggingDataProvider.getLastUsedIndexesAsRecipient(secrets);
 
       expect(indexes).toHaveLength(NUM_SENDERS);
       expect(indexes).toEqual([1, 1, 1, 1, 1, 2, 2, 2, 2, 2]);
@@ -244,7 +244,7 @@ describe('PXEOracleInterface', () => {
       );
 
       const getTaggingSecretsIndexesAsSenderForSenders = () =>
-        Promise.all(secrets.map(secret => taggingDataProvider.getNextIndexAsSender(secret)));
+        Promise.all(secrets.map(secret => taggingDataProvider.getLastUsedIndexesAsSender(secret)));
 
       const indexesAsSender = await getTaggingSecretsIndexesAsSenderForSenders();
       expect(indexesAsSender).toStrictEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -316,7 +316,7 @@ describe('PXEOracleInterface', () => {
       // First sender should have 2 logs, but keep index 6 since they were built using the same tag
       // Next 4 senders should also have index 6 = offset + 1
       // Last 5 senders should have index 7 = offset + 2
-      const indexes = await taggingDataProvider.getNextIndexesAsRecipient(secrets);
+      const indexes = await taggingDataProvider.getLastUsedIndexesAsRecipient(secrets);
 
       expect(indexes).toHaveLength(NUM_SENDERS);
       expect(indexes).toEqual([6, 6, 6, 6, 6, 7, 7, 7, 7, 7]);
@@ -344,8 +344,8 @@ describe('PXEOracleInterface', () => {
         ),
       );
 
-      // Increase our indexes to 2
-      await taggingDataProvider.setNextIndexesAsRecipient(secrets.map(secret => ({ secret, index: 2 })));
+      // Set last used indexes to 1 (so next scan starts at 2)
+      await taggingDataProvider.setLastUsedIndexesAsRecipient(secrets.map(secret => ({ secret, index: 1 })));
 
       await pxeOracleInterface.syncTaggedLogs(contractAddress, PENDING_TAGGED_LOG_ARRAY_BASE_SLOT);
 
@@ -356,7 +356,7 @@ describe('PXEOracleInterface', () => {
       // First sender should have 2 logs, but keep index 2 since they were built using the same tag
       // Next 4 senders should also have index 2 = tagIndex + 1
       // Last 5 senders should have index 3 = tagIndex + 2
-      const indexes = await taggingDataProvider.getNextIndexesAsRecipient(secrets);
+      const indexes = await taggingDataProvider.getLastUsedIndexesAsRecipient(secrets);
 
       expect(indexes).toHaveLength(NUM_SENDERS);
       expect(indexes).toEqual([2, 2, 2, 2, 2, 3, 3, 3, 3, 3]);
@@ -384,10 +384,10 @@ describe('PXEOracleInterface', () => {
         ),
       );
 
-      // We set the indexes to WINDOW_HALF_SIZE + 1 so that it's outside the window and for this reason no updates
-      // should be triggered.
+      // We set the last used indexes to WINDOW_HALF_SIZE so that next scan starts at WINDOW_HALF_SIZE + 1,
+      // which is outside the window, and for this reason no updates should be triggered.
       const index = WINDOW_HALF_SIZE + 1;
-      await taggingDataProvider.setNextIndexesAsRecipient(secrets.map(secret => ({ secret, index })));
+      await taggingDataProvider.setLastUsedIndexesAsRecipient(secrets.map(secret => ({ secret, index: index - 1 })));
 
       await pxeOracleInterface.syncTaggedLogs(contractAddress, PENDING_TAGGED_LOG_ARRAY_BASE_SLOT);
 
@@ -396,7 +396,7 @@ describe('PXEOracleInterface', () => {
       await expectPendingTaggedLogArrayLengthToBe(contractAddress, NUM_SENDERS / 2);
 
       // Indexes should remain where we set them (window_size + 1)
-      const indexes = await taggingDataProvider.getNextIndexesAsRecipient(secrets);
+      const indexes = await taggingDataProvider.getLastUsedIndexesAsRecipient(secrets);
 
       expect(indexes).toHaveLength(NUM_SENDERS);
       expect(indexes).toEqual([index, index, index, index, index, index, index, index, index, index]);
@@ -423,8 +423,8 @@ describe('PXEOracleInterface', () => {
         ),
       );
 
-      await taggingDataProvider.setNextIndexesAsRecipient(
-        secrets.map(secret => ({ secret, index: WINDOW_HALF_SIZE + 2 })),
+      await taggingDataProvider.setLastUsedIndexesAsRecipient(
+        secrets.map(secret => ({ secret, index: WINDOW_HALF_SIZE + 1 })),
       );
 
       await pxeOracleInterface.syncTaggedLogs(contractAddress, PENDING_TAGGED_LOG_ARRAY_BASE_SLOT);
@@ -446,7 +446,7 @@ describe('PXEOracleInterface', () => {
       // First sender should have 2 logs, but keep index 1 since they were built using the same tag
       // Next 4 senders should also have index 1 = offset + 1
       // Last 5 senders should have index 2 = offset + 2
-      const indexes = await taggingDataProvider.getNextIndexesAsRecipient(secrets);
+      const indexes = await taggingDataProvider.getLastUsedIndexesAsRecipient(secrets);
 
       expect(indexes).toHaveLength(NUM_SENDERS);
       expect(indexes).toEqual([1, 1, 1, 1, 1, 2, 2, 2, 2, 2]);
