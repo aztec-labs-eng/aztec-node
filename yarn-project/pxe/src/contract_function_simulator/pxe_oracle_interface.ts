@@ -350,7 +350,6 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     const WINDOW_SIZE = MIN_CONSECUTIVE_EMPTY_LOGS * 2;
 
     let [numConsecutiveEmptyLogs, currentIndex] = [0, startIndex];
-    let indexOfLastLog = -1;
     do {
       // We compute the tags for the current window of indexes
       const currentTags = await timesParallel(WINDOW_SIZE, async i => {
@@ -364,7 +363,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
       const possibleLogs = await this.#getPrivateLogsByTags(tagsAsFr);
 
       // We find the index of the last log in the window that is not empty
-      indexOfLastLog = possibleLogs.findLastIndex(possibleLog => possibleLog.length !== 0);
+      const indexOfLastLog = possibleLogs.findLastIndex(possibleLog => possibleLog.length !== 0);
 
       if (indexOfLastLog === -1) {
         // We haven't found any logs in the current window so we stop looking
@@ -380,10 +379,10 @@ export class PXEOracleInterface implements ExecutionDataProvider {
 
     const contractName = await this.contractDataProvider.getDebugContractName(contractAddress);
     if (currentIndex !== startIndex) {
-      await this.taggingDataProvider.setLastUsedIndexesAsSender([{ secret, index: indexOfLastLog }]);
+      await this.taggingDataProvider.setLastUsedIndexesAsSender([{ secret, index: currentIndex }]);
 
       this.log.debug(`Syncing logs for secret ${secret.toString()} at contract ${contractName}(${contractAddress})`, {
-        index: indexOfLastLog,
+        index: currentIndex,
         contractName,
         contractAddress,
       });
