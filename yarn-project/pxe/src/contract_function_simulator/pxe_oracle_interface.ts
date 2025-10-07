@@ -295,9 +295,9 @@ export class PXEOracleInterface implements ExecutionDataProvider {
    * so we're keeping it private for now.
    * @param contractAddress - The contract address to silo the secret for
    * @param recipient - The address receiving the notes
-   * @returns A list of indexed tagging secrets
+   * @returns A list of indexed tagging secrets. If the corresponding secret was never used, the index is undefined.
    */
-  async #getIndexedTaggingSecretsForSenders(
+  async #getLastUsedIndexedTaggingSecretsForSenders(
     contractAddress: AztecAddress,
     recipient: AztecAddress,
   ): Promise<{ secret: DirectionalAppTaggingSecret; index: number | undefined }[]> {
@@ -425,7 +425,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     const contractName = await this.contractDataProvider.getDebugContractName(contractAddress);
     for (const recipient of recipients) {
       // Get all the secrets for the recipient and sender pairs (#9365)
-      const indexedSecrets = await this.#getIndexedTaggingSecretsForSenders(contractAddress, recipient);
+      const indexedSecrets = await this.#getLastUsedIndexedTaggingSecretsForSenders(contractAddress, recipient);
 
       // We fetch logs for a window of indexes in a range:
       //    <latest_log_index - WINDOW_HALF_SIZE, latest_log_index + WINDOW_HALF_SIZE>.
