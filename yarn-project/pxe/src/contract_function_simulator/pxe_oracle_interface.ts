@@ -24,7 +24,6 @@ import {
   TxScopedL2Log,
   deriveEcdhSharedSecret,
 } from '@aztec/stdlib/logs';
-import type { IndexedTaggingSecret } from '@aztec/stdlib/logs';
 import { getNonNullifiedL1ToL2MessageWitness } from '@aztec/stdlib/messaging';
 import { Note, type NoteStatus } from '@aztec/stdlib/note';
 import { MerkleTreeId, type NullifierMembershipWitness, PublicDataWitness } from '@aztec/stdlib/trees';
@@ -423,7 +422,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     const contractName = await this.contractDataProvider.getDebugContractName(contractAddress);
     for (const recipient of recipients) {
       // Get all the secrets for the recipient and sender pairs (#9365)
-      const secrets = await this.#getIndexedTaggingSecretsForSenders(contractAddress, recipient);
+      const indexedSecrets = await this.#getIndexedTaggingSecretsForSenders(contractAddress, recipient);
 
       // We fetch logs for a window of indexes in a range:
       //    <latest_log_index - WINDOW_HALF_SIZE, latest_log_index + WINDOW_HALF_SIZE>.
@@ -433,19 +432,28 @@ export class PXEOracleInterface implements ExecutionDataProvider {
       // for logs the first time we don't receive any logs for a tag, we might never receive anything from that sender again.
       //    Also there's a possibility that we have advanced our index, but the sender has reused it, so we might have missed
       // some logs. For these reasons, we have to look both back and ahead of the stored index.
-      let secretsAndWindows = secrets.map(indexedSecret => {
-        return {
-          secret: indexedSecret.secret,
-          leftMostIndex: Math.max(0, indexedSecret.index - WINDOW_HALF_SIZE),
-          rightMostIndex: indexedSecret.index + WINDOW_HALF_SIZE,
-        };
+      let secretsAndWindows = indexedSecrets.map(indexedSecret => {
+        if (indexedSecret.index === undefined) {
+          return {
+            secret: indexedSecret.secret,
+            leftMostIndex: 0,
+            rightMostIndex: WINDOW_HALF_SIZE,
+          };
+        } else {
+          return {
+            secret: indexedSecret.secret,
+            leftMostIndex: Math.max(0, indexedSecret.index - WINDOW_HALF_SIZE),
+            rightMostIndex: indexedSecret.index + WINDOW_HALF_SIZE,
+          };
+        }
       });
 
       // As we iterate we store the largest index we have seen for a given secret to later on store it in the db.
       const newLargestIndexMapToStore: { [k: string]: number } = {};
 
-      // The initial/unmodified indexes of the secrets stored in a key-value map where key is the app tagging secret.
-      const initialIndexesMap = getInitialIndexesMap(secrets);
+      // The initial/unmodified indexes of the secrets stored in a key-value map where key is the directional app
+      // tagging secret.
+      const initialIndexesMap = getInitialIndexesMap(indexedSecrets);
 
       while (secretsAndWindows.length > 0) {
         const secretsForTheWholeWindow = getIndexedTaggingSecretsForTheWindow(secretsAndWindows);
@@ -514,7 +522,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
         // so we fetch the logs only for the difference of the window sets.
         const newSecretsAndWindows = [];
         for (const [directionalAppTaggingSecret, newIndex] of Object.entries(newLargestIndexMapForIteration)) {
-          const maybeIndexedSecret = secrets.find(
+          const maybeIndexedSecret = indexedSecrets.find(
             indexedSecret => indexedSecret.secret.toString() === directionalAppTaggingSecret,
           );
           if (maybeIndexedSecret) {
