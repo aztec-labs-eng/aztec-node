@@ -58,7 +58,7 @@ export class TaggingDataProvider {
   }
 
   /**
-   * Returns the last used index when sending a log.
+   * Returns the last used index when sending a log with a given secret.
    * @param secret - The directional app tagging secret.
    * @returns The last used index for the given directional app tagging secret, or undefined if not found.
    */
