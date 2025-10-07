@@ -209,6 +209,11 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     );
 
     const index = await this.#getIndexToUseForSecret(secret);
+    this.log.debug(
+      `Incrementing tagging index for sender: ${sender}, recipient: ${recipient}, contract: ${this.contractAddress} to ${index}`,
+    );
+    this.taggingIndexCache.setLastUsedIndex(secret, index);
+
     return Tag.compute({ secret, index });
   }
 
