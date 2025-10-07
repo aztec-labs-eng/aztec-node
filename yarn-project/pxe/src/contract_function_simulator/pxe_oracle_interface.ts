@@ -350,6 +350,7 @@ export class PXEOracleInterface implements ExecutionDataProvider {
     const WINDOW_SIZE = MIN_CONSECUTIVE_EMPTY_LOGS * 2;
 
     let [numConsecutiveEmptyLogs, currentIndex] = [0, startIndex];
+    let lastFoundLogIndex: number | undefined = undefined;
     do {
       // We compute the tags for the current window of indexes
       const currentTags = await timesParallel(WINDOW_SIZE, async i => {
@@ -363,23 +364,26 @@ export class PXEOracleInterface implements ExecutionDataProvider {
       const possibleLogs = await this.#getPrivateLogsByTags(tagsAsFr);
 
       // We find the index of the last log in the window that is not empty
-      const indexOfLastLog = possibleLogs.findLastIndex(possibleLog => possibleLog.length !== 0);
+      const indexOfLastLogWithinArray = possibleLogs.findLastIndex(possibleLog => possibleLog.length !== 0);
 
-      if (indexOfLastLog === -1) {
+      if (indexOfLastLogWithinArray === -1) {
         // We haven't found any logs in the current window so we stop looking
         break;
       }
 
-      // We move the current index to that of the last log we found
-      currentIndex += indexOfLastLog + 1;
+      // We've found logs so we update the last found log index
+      lastFoundLogIndex = (lastFoundLogIndex ?? 0) + indexOfLastLogWithinArray;
+      // We move the current index to that of the log right after the last found log
+      currentIndex = lastFoundLogIndex + 1;
 
       // We compute the number of consecutive empty logs we found and repeat the process if we haven't found enough.
-      numConsecutiveEmptyLogs = WINDOW_SIZE - indexOfLastLog - 1;
+      numConsecutiveEmptyLogs = WINDOW_SIZE - indexOfLastLogWithinArray - 1;
     } while (numConsecutiveEmptyLogs < MIN_CONSECUTIVE_EMPTY_LOGS);
 
     const contractName = await this.contractDataProvider.getDebugContractName(contractAddress);
-    if (currentIndex !== startIndex) {
-      await this.taggingDataProvider.setLastUsedIndexesAsSender([{ secret, index: currentIndex }]);
+    if (lastFoundLogIndex !== undefined) {
+      // Last found index is defined meaning we have actually found logs so we update the last used index
+      await this.taggingDataProvider.setLastUsedIndexesAsSender([{ secret, index: lastFoundLogIndex }]);
 
       this.log.debug(`Syncing logs for secret ${secret.toString()} at contract ${contractName}(${contractAddress})`, {
         index: currentIndex,
