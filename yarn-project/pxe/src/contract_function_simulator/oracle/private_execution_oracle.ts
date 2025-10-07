@@ -152,10 +152,10 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
   }
 
   /**
-   * Return the tagging indexes incremented by this execution along with the directional app tagging secrets.
+   * Returns the indexed tagging secrets that were used in this execution.
    */
-  public getIndexedTaggingSecrets(): IndexedTaggingSecret[] {
-    return this.taggingIndexCache.getLastUsedIndexedTaggingSecrets();
+  public getUsedIndexedTaggingSecrets(): IndexedTaggingSecret[] {
+    return this.taggingIndexCache.getUsedIndexedTaggingSecrets();
   }
 
   /**

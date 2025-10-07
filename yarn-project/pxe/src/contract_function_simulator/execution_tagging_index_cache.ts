@@ -20,7 +20,10 @@ export class ExecutionTaggingIndexCache {
     this.taggingIndexMap.set(secret.toString(), index);
   }
 
-  public getLastUsedIndexedTaggingSecrets(): IndexedTaggingSecret[] {
+  /**
+   * Returns the indexed tagging secrets that were used in this execution.
+   */
+  public getUsedIndexedTaggingSecrets(): IndexedTaggingSecret[] {
     return Array.from(this.taggingIndexMap.entries()).map(([secret, index]) => ({
       secret: DirectionalAppTaggingSecret.fromString(secret),
       index,
