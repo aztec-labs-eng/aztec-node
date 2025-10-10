@@ -33,7 +33,7 @@ pub contract BobToken {
     #[public]
     fn setup() {
         // Giggle becomes the owner who can mint mental health tokens
-        storage.owner.write(context.msg_sender());
+        storage.owner.write(context.msg_sender().unwrap());
     }
     // docs:end:setup
 
@@ -41,7 +41,7 @@ pub contract BobToken {
     #[public]
     fn mint_public(employee: AztecAddress, amount: u64) {
         // Only Giggle can mint tokens
-        assert_eq(context.msg_sender(), storage.owner.read(), "Only Giggle can mint BOB tokens");
+        assert_eq(context.msg_sender().unwrap(), storage.owner.read(), "Only Giggle can mint BOB tokens");
 
         // Add tokens to employee's public balance
         let current_balance = storage.public_balances.at(employee).read();
@@ -52,7 +52,7 @@ pub contract BobToken {
     // docs:start:transfer_public
     #[public]
     fn transfer_public(to: AztecAddress, amount: u64) {
-        let sender = context.msg_sender();
+        let sender = context.msg_sender().unwrap();
         let sender_balance = storage.public_balances.at(sender).read();
         assert(sender_balance >= amount, "Insufficient BOB tokens");
 
@@ -68,7 +68,7 @@ pub contract BobToken {
     // docs:start:transfer_ownership
     #[public]
     fn transfer_ownership(new_owner: AztecAddress) {
-        assert_eq(context.msg_sender(), storage.owner.read(), "Only current admin can transfer ownership");
+        assert_eq(context.msg_sender().unwrap(), storage.owner.read(), "Only current admin can transfer ownership");
         storage.owner.write(new_owner);
     }
     // docs:end:transfer_ownership
@@ -76,7 +76,7 @@ pub contract BobToken {
     // docs:start:public_to_private
     #[private]
     fn public_to_private(amount: u64) {
-        let sender = context.msg_sender();
+        let sender = context.msg_sender().unwrap();
         // This will enqueue a public function to deduct from public balance
         BobToken::at(context.this_address())._deduct_public_balance(sender, amount).enqueue(&mut context);
         // Add to private balance
@@ -98,7 +98,7 @@ pub contract BobToken {
     // docs:start:transfer_private
     #[private]
     fn transfer_private(to: AztecAddress, amount: u64) {
-        let sender = context.msg_sender();
+        let sender = context.msg_sender().unwrap();
         // Spend sender's notes (consumes existing notes)
         storage.private_balances.at(sender).sub(amount, sender);
         // Create new notes for recipient
@@ -131,7 +131,7 @@ pub contract BobToken {
     fn mint_private(employee: AztecAddress, amount: u64) {
         // Enqueue ownership check (will revert if not Giggle)
         BobToken::at(context.this_address())
-            ._assert_is_owner(context.msg_sender())
+            ._assert_is_owner(context.msg_sender().unwrap())
             .enqueue(&mut context);
 
         // If check passes, mint tokens privately
@@ -143,7 +143,7 @@ pub contract BobToken {
     // docs:start:private_to_public
     #[private]
     fn private_to_public(amount: u64) {
-        let sender = context.msg_sender();
+        let sender = context.msg_sender().unwrap();
         // Remove from private balance
         storage.private_balances.at(sender).sub(amount, sender);
         // Enqueue public credit
