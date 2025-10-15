@@ -14,12 +14,12 @@ import {
  * in `pxe/src/tagging`. But this type is used by other types in stdlib hence there doesn't seem to be a good way
  * around this.
  */
-export type IndexedTaggingSecret = {
+export type PreTag = {
   secret: DirectionalAppTaggingSecret;
   index: number;
 };
 
-export const IndexedTaggingSecretSchema = z.object({
+export const PreTagSchema = z.object({
   secret: DirectionalAppTaggingSecretSchema,
   index: schemas.Integer,
 });
