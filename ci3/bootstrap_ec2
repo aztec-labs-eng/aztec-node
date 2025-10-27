@@ -17,6 +17,8 @@ else
   if [ "$CI_FULL" -eq 1 ]; then
     # cores=192,128,64
     cores=128,64
+    # Allow for 75 minutes as ci-full time has crept up.
+    export AWS_SHUTDOWN_TIME=75
   else
     cores=128,64
   fi
@@ -136,7 +138,7 @@ container_script=$(
   ci_log_id=\$(log_ci_run)
   export PARENT_LOG_URL=${PARENT_LOG_URL:-http://ci.aztec-labs.com/\$ci_log_id}
 
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
+  if [ -n "\${DOCKERHUB_PASSWORD:-}" ]; then
     echo $DOCKERHUB_PASSWORD | docker login -u aztecprotocolci --password-stdin
   fi
 
