@@ -390,7 +390,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     if (proposedBlock) {
       this.lastBlockPublished = block;
       this.emit('block-published', { blockNumber: newBlockNumber, slot: Number(slot) });
-      await this.metrics.incFilledSlot(publisher.getSenderAddress().toString());
+      await this.metrics.incFilledSlot(publisher.getSenderAddress().toString(), coinbase);
     } else if (block) {
       this.emit('block-publish-failed', l1Response ?? {});
     }

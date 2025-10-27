@@ -1,4 +1,4 @@
-import { AztecAddress, EthAddress, Fr, type Logger, type Wallet, retryUntil, sleep } from '@aztec/aztec.js';
+import type { Wallet } from '@aztec/aztec.js/wallet';
 import { CheatCodes } from '@aztec/aztec/testing';
 import type { BlobSinkServer } from '@aztec/blob-sink/server';
 import {
@@ -11,11 +11,17 @@ import { ChainMonitor } from '@aztec/ethereum/test';
 import { times } from '@aztec/foundation/collection';
 import { SecretValue } from '@aztec/foundation/config';
 import { TimeoutError } from '@aztec/foundation/error';
+import { EthAddress } from '@aztec/foundation/eth-address';
+import { Fr } from '@aztec/foundation/fields';
+import type { Logger } from '@aztec/foundation/log';
+import { retryUntil } from '@aztec/foundation/retry';
+import { sleep } from '@aztec/foundation/sleep';
 import { bufferToHex } from '@aztec/foundation/string';
 import type { TestDateProvider } from '@aztec/foundation/timer';
 import { NewGovernanceProposerPayloadAbi } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadAbi';
 import { NewGovernanceProposerPayloadBytecode } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadBytecode';
 import { TestContract } from '@aztec/noir-test-contracts.js/Test';
+import type { AztecAddress } from '@aztec/stdlib/aztec-address';
 import type { AztecNode, AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
 
 import { jest } from '@jest/globals';
