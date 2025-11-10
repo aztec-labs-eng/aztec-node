@@ -180,11 +180,12 @@ describe('p2p utils', () => {
       expect(isValidIpAddress('255.255.255.255')).toBe(true);
       expect(isValidIpAddress('0.0.0.0')).toBe(true);
 
-      expect(isValidIpAddress('::1')).toBe(true);
-      expect(isValidIpAddress('2001:0db8:85a3:0000:0000:8a2e:0370:7334')).toBe(true);
-      expect(isValidIpAddress('2001:db8::1')).toBe(true);
-      expect(isValidIpAddress('fe80::1ff:fe23:4567:890a')).toBe(true);
-      expect(isValidIpAddress('::')).toBe(true);
+      // No IP v6 support
+      expect(isValidIpAddress('::1')).toBe(false);
+      expect(isValidIpAddress('2001:0db8:85a3:0000:0000:8a2e:0370:7334')).toBe(false);
+      expect(isValidIpAddress('2001:db8::1')).toBe(false);
+      expect(isValidIpAddress('fe80::1ff:fe23:4567:890a')).toBe(false);
+      expect(isValidIpAddress('::')).toBe(false);
 
       expect(isValidIpAddress('256.256.256.256')).toBe(false);
       expect(isValidIpAddress('192.168.1')).toBe(false);

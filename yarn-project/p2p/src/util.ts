@@ -68,7 +68,7 @@ export async function getPublicIp(): Promise<string> {
 
 export function isValidIpAddress(address: string): boolean {
   const netType = net.isIP(address);
-  return netType === 4 || netType === 6;
+  return netType === 4;
 }
 
 export async function resolveAddressIfNecessary(address: string, port: string): Promise<string> {
