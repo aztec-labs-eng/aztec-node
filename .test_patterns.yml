@@ -220,13 +220,6 @@ tests:
     owners:
       - *saleel
 
-  - regex: "vanilla-all-browsers box boxes"
-    error_regex: "Error: Timed out [0-9]+ms waiting for expect\\(locator\\)"
-    owners:
-      - *saleel
-
-Error:
-
   # Example http://ci.aztec-labs.com/18db8adf0db50928
   # This seems to be an error in acvm wasm/js
   - regex: "run_compose_test [a-z]*-[a-z]* box boxes"
