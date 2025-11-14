@@ -1057,7 +1057,7 @@ export class PublicTxResult {
     public gasUsed: GasUsed,
     public revertCode: RevertCode,
     public revertReason: SimulationError | undefined, // Revert reason, if any
-    // These are only guaranteed to be present in "client initiated simulation" mode.
+    // These are only guaranteed to be present if the simulator is configured to collect them.
     public processedPhases: ProcessedPhase[] | undefined,
     public logs: DebugLog[] | undefined,
     // For the proving request.
