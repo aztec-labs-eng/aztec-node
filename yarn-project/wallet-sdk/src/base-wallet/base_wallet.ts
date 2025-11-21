@@ -1,3 +1,16 @@
+import type { Account } from '@aztec/aztec.js/account';
+import type { CallIntent, IntentInnerHash } from '@aztec/aztec.js/authorization';
+import type { FeePaymentMethod } from '@aztec/aztec.js/fee';
+import type {
+  Aliased,
+  BatchResults,
+  BatchableMethods,
+  BatchedMethod,
+  ProfileOptions,
+  SendOptions,
+  SimulateOptions,
+  Wallet,
+} from '@aztec/aztec.js/wallet';
 import {
   GAS_ESTIMATION_DA_GAS_LIMIT,
   GAS_ESTIMATION_L2_GAS_LIMIT,
@@ -9,6 +22,7 @@ import type { ChainInfo } from '@aztec/entrypoints/interfaces';
 import { Fr } from '@aztec/foundation/fields';
 import { createLogger } from '@aztec/foundation/log';
 import type { FieldsOf } from '@aztec/foundation/types';
+import type { PXE } from '@aztec/pxe/server';
 import {
   type ContractArtifact,
   type EventMetadataDefinition,
@@ -39,20 +53,6 @@ import { ExecutionPayload, mergeExecutionPayloads } from '@aztec/stdlib/tx';
 
 import { inspect } from 'util';
 
-import type { Account } from '../account/account.js';
-import type { FeePaymentMethod } from '../fee/fee_payment_method.js';
-import type { CallIntent, IntentInnerHash } from '../utils/authwit.js';
-import type {
-  Aliased,
-  BatchResults,
-  BatchableMethods,
-  BatchedMethod,
-  ProfileOptions,
-  SendOptions,
-  SimulateOptions,
-  Wallet,
-} from './wallet.js';
-
 /**
  * Options to configure fee payment for a transaction
  */
@@ -72,16 +72,14 @@ export type FeeOptions = {
  * A base class for Wallet implementations
  */
 export abstract class BaseWallet implements Wallet {
-  protected log = createLogger('aztecjs:base_wallet');
+  protected log = createLogger('wallet-sdk:base_wallet');
 
   protected baseFeePadding = 0.5;
   protected cancellableTransactions = false;
 
   // Protected because we want to force wallets to instantiate their own PXE.
   protected constructor(
-    // TODO: We cannot type here pxe because we cannot import that package as that would result in a circular
-    // dependency. This will eventually get resolved by the introduction of @aztec/wallet-sdk package.
-    protected readonly pxe: any,
+    protected readonly pxe: PXE,
     protected readonly aztecNode: AztecNode,
   ) {}
 
