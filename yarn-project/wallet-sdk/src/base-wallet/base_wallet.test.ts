@@ -1,12 +1,6 @@
-// Why test BaseWallet here and not at Aztec.js?
-// We need a PXE to instantiate a BaseWallet, and due to
-// circular dependencies we can't have it.
-// Current plans involve creating a Wallet SDK which would be
-// a natural new home for both BaseWallet and this test,
-// but that's out of scope for now.
 import type { Account } from '@aztec/aztec.js/account';
 import type { AztecNode } from '@aztec/aztec.js/node';
-import { type Aliased, BaseWallet } from '@aztec/aztec.js/wallet';
+import type { Aliased } from '@aztec/aztec.js/wallet';
 import { Fr } from '@aztec/foundation/fields';
 import { TokenContract, type Transfer } from '@aztec/noir-contracts.js/Token';
 import { PXE, type PrivateEvent } from '@aztec/pxe/server';
@@ -15,6 +9,8 @@ import { L2BlockHash } from '@aztec/stdlib/block';
 import { TxHash } from '@aztec/stdlib/tx';
 
 import { type MockProxy, mock } from 'jest-mock-extended';
+
+import { BaseWallet } from './base_wallet.js';
 
 /**
  * Just a construct to test BaseWallet
