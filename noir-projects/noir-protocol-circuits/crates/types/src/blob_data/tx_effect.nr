@@ -1,4 +1,4 @@
-use types::{
+use crate::{
     abis::{
         contract_class_log::ContractClassLog, private_log::PrivateLog,
         public_data_write::PublicDataWrite, public_logs::PublicLogs,

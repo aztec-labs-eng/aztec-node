@@ -1,6 +1,4 @@
-use crate::abis::TxEffect;
-use dep::types::{
-    abis::sponge_blob::SpongeBlob,
+use crate::{
     constants::{
         CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH,
         MAX_CONTRACT_CLASS_LOGS_PER_TX, MAX_L2_TO_L1_MSGS_PER_TX, MAX_NOTE_HASHES_PER_TX,
@@ -9,8 +7,9 @@ use dep::types::{
     },
     traits::ToField,
 };
+use super::tx_effect::TxEffect;
 
-pub(crate) global MAX_TX_BLOB_DATA_SIZE_IN_FIELDS: u32 = 1 // tx start marker
+pub global MAX_TX_BLOB_DATA_SIZE_IN_FIELDS: u32 = 1 // tx start marker
     + 1 // tx hash
     + 1 // transaction fee
     + MAX_NOTE_HASHES_PER_TX
@@ -121,31 +120,13 @@ pub fn create_tx_start_marker(
     marker
 }
 
-pub fn append_tx_effect_to_sponge_blob(
-    tx_effect: TxEffect,
-    array_lengths: TxEffectArrayLengths,
-    start_sponge_blob: SpongeBlob,
-) -> SpongeBlob {
-    let (mut tx_effects_hash_input, num_blob_fields) =
-        get_tx_effect_hash_input(tx_effect, array_lengths);
-
-    // NB: using start.absorb & returning start caused issues in ghost values appearing in
-    // base_rollup_inputs.start when using a fresh sponge. These only appeared when simulating via wasm.
-    let mut end_sponge_blob = start_sponge_blob;
-
-    // The sponge blob will only absorb up to num_blob_fields.
-    end_sponge_blob.absorb(tx_effects_hash_input, num_blob_fields);
-
-    end_sponge_blob
-}
-
-fn get_tx_effect_hash_input(
+pub fn create_tx_blob_data(
     tx_effect: TxEffect,
     array_lengths: TxEffectArrayLengths,
 ) -> ([Field; MAX_TX_BLOB_DATA_SIZE_IN_FIELDS], u32) {
     // Safety: This constructs the array of effects and is constrained below.
-    let (tx_effects_hash_input, num_blob_fields, private_logs_length) =
-        unsafe { get_tx_effect_hash_input_helper(tx_effect, array_lengths) };
+    let (tx_blob_fields, num_blob_fields, private_logs_length) =
+        unsafe { get_tx_blob_fields_unsafe(tx_effect, array_lengths) };
 
     // The first field marks the start of a tx. It contains:
     // - the total number of fields for this tx, including this first field.
@@ -164,15 +145,15 @@ fn get_tx_effect_hash_input(
         tx_effect.revert_code,
     );
     assert_eq(
-        tx_effects_hash_input[0],
+        tx_blob_fields[0],
         expected_tx_start_marker,
         "Incorrect tx start marker in blob data",
     );
 
-    assert_eq(tx_effects_hash_input[1], tx_effect.tx_hash, "Incorrect tx hash in blob data");
+    assert_eq(tx_blob_fields[1], tx_effect.tx_hash, "Incorrect tx hash in blob data");
 
     assert_eq(
-        tx_effects_hash_input[2],
+        tx_blob_fields[2],
         tx_effect.transaction_fee,
         "Incorrect transaction fee in blob data",
     );
@@ -186,7 +167,7 @@ fn get_tx_effect_hash_input(
             check_elt &= i != array_lengths.note_hashes;
             if check_elt {
                 assert_eq(
-                    tx_effects_hash_input[offset + i],
+                    tx_blob_fields[offset + i],
                     note_hashes[i],
                     "Incorrect note hash in blob data",
                 );
@@ -202,7 +183,7 @@ fn get_tx_effect_hash_input(
             check_elt &= i != array_lengths.nullifiers;
             if check_elt {
                 assert_eq(
-                    tx_effects_hash_input[offset + i],
+                    tx_blob_fields[offset + i],
                     nullifiers[i],
                     "Incorrect nullifier in blob data",
                 );
@@ -218,7 +199,7 @@ fn get_tx_effect_hash_input(
             check_elt &= i != array_lengths.l2_to_l1_msgs;
             if check_elt {
                 assert_eq(
-                    tx_effects_hash_input[offset + i],
+                    tx_blob_fields[offset + i],
                     l2_to_l1_msgs[i],
                     "Incorrect L2 to L1 message in blob data",
                 );
@@ -234,12 +215,12 @@ fn get_tx_effect_hash_input(
             check_elt &= i != array_lengths.public_data_writes;
             if check_elt {
                 assert_eq(
-                    tx_effects_hash_input[offset + i * 2],
+                    tx_blob_fields[offset + i * 2],
                     public_data_writes[i].leaf_slot,
                     "Incorrect public data write leaf slot in blob data",
                 );
                 assert_eq(
-                    tx_effects_hash_input[offset + i * 2 + 1],
+                    tx_blob_fields[offset + i * 2 + 1],
                     public_data_writes[i].value,
                     "Incorrect public data write value in blob data",
                 );
@@ -257,7 +238,7 @@ fn get_tx_effect_hash_input(
             check_log &= i != array_lengths.private_logs;
             if check_log {
                 assert_eq(
-                    tx_effects_hash_input[offset],
+                    tx_blob_fields[offset],
                     private_log.length as Field,
                     "Incorrect private log length in blob data",
                 );
@@ -268,7 +249,7 @@ fn get_tx_effect_hash_input(
                     check_elt &= j != private_log.length;
                     if check_elt {
                         assert_eq(
-                            tx_effects_hash_input[offset + j],
+                            tx_blob_fields[offset + j],
                             private_log.fields[j],
                             "Incorrect private log field in blob data",
                         );
@@ -291,7 +272,7 @@ fn get_tx_effect_hash_input(
             check_log &= i != public_logs.length;
             if check_log {
                 assert_eq(
-                    tx_effects_hash_input[offset + i],
+                    tx_blob_fields[offset + i],
                     public_logs.payload[i],
                     "Incorrect public log field in blob data",
                 );
@@ -309,7 +290,7 @@ fn get_tx_effect_hash_input(
             check_log &= i != array_lengths.contract_class_logs;
             if check_log {
                 assert_eq(
-                    tx_effects_hash_input[offset],
+                    tx_blob_fields[offset],
                     log.contract_address.to_field(),
                     "Incorrect contract class log contract address in blob data",
                 );
@@ -320,7 +301,7 @@ fn get_tx_effect_hash_input(
                 check_elt &= j != log_len;
                 if check_elt {
                     assert_eq(
-                        tx_effects_hash_input[offset + j],
+                        tx_blob_fields[offset + j],
                         log.log.fields[j],
                         "Incorrect contract class log field in blob data",
                     );
@@ -333,45 +314,45 @@ fn get_tx_effect_hash_input(
     // Validate that the number of fields appended to blob matches the hint given by the unconstrained function.
     assert_eq(offset, num_blob_fields, "Incorrect number of blob fields in tx start marker");
 
-    (tx_effects_hash_input, offset)
+    (tx_blob_fields, offset)
 }
 
-unconstrained fn get_tx_effect_hash_input_helper(
+unconstrained fn get_tx_blob_fields_unsafe(
     tx_effect: TxEffect,
     array_lengths: TxEffectArrayLengths,
 ) -> ([Field; MAX_TX_BLOB_DATA_SIZE_IN_FIELDS], u32, u32) {
-    let mut tx_effects_hash_input = [0; MAX_TX_BLOB_DATA_SIZE_IN_FIELDS];
+    let mut tx_blob_fields = [0; MAX_TX_BLOB_DATA_SIZE_IN_FIELDS];
 
-    // tx_effects_hash_input[0] is the tx start marker and is set at the end when the number of fields is known.
+    // tx_blob_fields[0] is the tx start marker and is set at the end when the number of fields is known.
 
-    tx_effects_hash_input[1] = tx_effect.tx_hash;
+    tx_blob_fields[1] = tx_effect.tx_hash;
 
-    tx_effects_hash_input[2] = tx_effect.transaction_fee;
+    tx_blob_fields[2] = tx_effect.transaction_fee;
 
     let mut offset = 3;
 
     let note_hashes = tx_effect.note_hashes;
     for i in 0..array_lengths.note_hashes {
-        tx_effects_hash_input[offset + i] = note_hashes[i];
+        tx_blob_fields[offset + i] = note_hashes[i];
     }
     offset += array_lengths.note_hashes;
 
     let nullifiers = tx_effect.nullifiers;
     for i in 0..array_lengths.nullifiers {
-        tx_effects_hash_input[offset + i] = nullifiers[i];
+        tx_blob_fields[offset + i] = nullifiers[i];
     }
     offset += array_lengths.nullifiers;
 
     let l2_to_l1_msgs = tx_effect.l2_to_l1_msgs;
     for i in 0..array_lengths.l2_to_l1_msgs {
-        tx_effects_hash_input[offset + i] = l2_to_l1_msgs[i];
+        tx_blob_fields[offset + i] = l2_to_l1_msgs[i];
     }
     offset += array_lengths.l2_to_l1_msgs;
 
     let public_data_writes = tx_effect.public_data_writes;
     for i in 0..array_lengths.public_data_writes {
-        tx_effects_hash_input[offset + i * 2] = public_data_writes[i].leaf_slot;
-        tx_effects_hash_input[offset + i * 2 + 1] = public_data_writes[i].value;
+        tx_blob_fields[offset + i * 2] = public_data_writes[i].leaf_slot;
+        tx_blob_fields[offset + i * 2 + 1] = public_data_writes[i].value;
     }
     offset += array_lengths.public_data_writes * 2;
 
@@ -381,18 +362,18 @@ unconstrained fn get_tx_effect_hash_input_helper(
         let log = private_logs[i];
         let log_len = log.length;
         private_logs_length += log_len;
-        tx_effects_hash_input[offset] = log_len as Field;
+        tx_blob_fields[offset] = log_len as Field;
         offset += 1;
 
         for j in 0..log_len {
-            tx_effects_hash_input[offset + j] = log.fields[j];
+            tx_blob_fields[offset + j] = log.fields[j];
         }
         offset += log_len;
     }
 
     let public_logs = tx_effect.public_logs;
     for i in 0..public_logs.length {
-        tx_effects_hash_input[offset + i] = public_logs.payload[i];
+        tx_blob_fields[offset + i] = public_logs.payload[i];
     }
     offset += public_logs.length;
 
@@ -400,17 +381,17 @@ unconstrained fn get_tx_effect_hash_input_helper(
     for i in 0..array_lengths.contract_class_logs {
         let log = contract_class_logs[i];
         let log_len = log.log.length;
-        tx_effects_hash_input[offset] = log.contract_address.to_field();
+        tx_blob_fields[offset] = log.contract_address.to_field();
         offset += 1;
 
         for j in 0..log_len {
-            tx_effects_hash_input[offset + j] = log.log.fields[j];
+            tx_blob_fields[offset + j] = log.log.fields[j];
         }
         offset += log_len;
     }
 
     // Now we know the number of fields appended, we can assign the first value:
-    tx_effects_hash_input[0] = create_tx_start_marker(
+    tx_blob_fields[0] = create_tx_start_marker(
         offset,
         array_lengths,
         private_logs_length,
@@ -419,21 +400,21 @@ unconstrained fn get_tx_effect_hash_input_helper(
         tx_effect.revert_code,
     );
 
-    (tx_effects_hash_input, offset, private_logs_length)
+    (tx_blob_fields, offset, private_logs_length)
 }
 
 mod tests {
+    use crate::constants::{
+        CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH,
+        MAX_CONTRACT_CLASS_LOGS_PER_TX, MAX_L2_TO_L1_MSGS_PER_TX, MAX_NOTE_HASHES_PER_TX,
+        MAX_NULLIFIERS_PER_TX, MAX_PRIVATE_LOGS_PER_TX, MAX_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
+        PRIVATE_LOG_SIZE_IN_FIELDS, TX_START_PREFIX,
+    };
     use super::{
         CONTRACT_CLASS_LOG_LENGTH_BIT_SIZE, create_tx_start_marker, MAX_TX_BLOB_DATA_SIZE_IN_FIELDS,
         NUM_BLOB_FIELDS_BIT_SIZE, NUM_L2_TO_L1_MSG_BIT_SIZE, NUM_NOTE_HASH_BIT_SIZE,
         NUM_NULLIFIER_BIT_SIZE, NUM_PRIVATE_LOG_BIT_SIZE, NUM_PUBLIC_DATA_WRITE_BIT_SIZE,
         PRIVATE_LOGS_LENGTH_BIT_SIZE, PUBLIC_LOGS_LENGTH_BIT_SIZE, TxEffectArrayLengths,
-    };
-    use types::constants::{
-        CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH,
-        MAX_CONTRACT_CLASS_LOGS_PER_TX, MAX_L2_TO_L1_MSGS_PER_TX, MAX_NOTE_HASHES_PER_TX,
-        MAX_NULLIFIERS_PER_TX, MAX_PRIVATE_LOGS_PER_TX, MAX_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
-        PRIVATE_LOG_SIZE_IN_FIELDS, TX_START_PREFIX,
     };
 
     fn accumulate_bytes<let N: u32>(bytes: [u8; N], offset: u32, num_bytes: u32) -> Field {

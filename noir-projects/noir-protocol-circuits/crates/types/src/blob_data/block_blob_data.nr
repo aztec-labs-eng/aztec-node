@@ -1,4 +1,4 @@
-use types::{
+use crate::{
     abis::{
         append_only_tree_snapshot::AppendOnlyTreeSnapshot, global_variables::GlobalVariables,
         state_reference::StateReference,
@@ -100,16 +100,16 @@ pub fn create_block_end_state_field(state: StateReference, total_mana_used: Fiel
 }
 
 mod tests {
-    use super::{
-        BLOCK_NUMBER_BIT_SIZE, create_block_end_marker, create_block_end_state_field,
-        NUM_TXS_BIT_SIZE, TIMESTAMP_BIT_SIZE, TOTAL_MANA_USED_BIT_SIZE,
-    };
-    use types::{
+    use crate::{
         abis::{global_variables::GlobalVariables, state_reference::StateReference},
         constants::{
             BLOCK_END_PREFIX, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT,
             NULLIFIER_TREE_HEIGHT, PUBLIC_DATA_TREE_HEIGHT,
         },
+    };
+    use super::{
+        BLOCK_NUMBER_BIT_SIZE, create_block_end_marker, create_block_end_state_field,
+        NUM_TXS_BIT_SIZE, TIMESTAMP_BIT_SIZE, TOTAL_MANA_USED_BIT_SIZE,
     };
 
     fn accumulate_bits<let N: u32>(bits: [u1; N], offset: u32, num_bits: u32) -> Field {
