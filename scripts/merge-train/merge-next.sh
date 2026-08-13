@@ -63,11 +63,10 @@ function get_meaningful_commits {
 }
 
 # Usage: merge-next.sh <train-branch> [source-branch]
-# source-branch defaults to "main"; the spartan-v5 train is fed from "v5-next".
+# source-branch defaults to "main".
 if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "Usage: $0 <train-branch> [source-branch]"
   echo "Example: $0 merge-train/docs"
-  echo "Example: $0 merge-train/spartan-v5 v5-next"
   exit 1
 fi
 

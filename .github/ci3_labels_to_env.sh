@@ -87,8 +87,6 @@ function main {
     ci_mode="skip"
   elif [ "${GITHUB_EVENT_NAME:-}" == "merge_group" ] || has_label "ci-merge-queue"; then
     ci_mode="merge-queue"
-    # Check if this is a spartan merge-train PR entering the merge queue.
-    # If so, use the heavier merge-queue-heavy mode (10 grind runs).
     if [ "${GITHUB_EVENT_NAME:-}" == "merge_group" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
       # GITHUB_REF_NAME in merge_group is like: gh-readonly-queue/main/pr-XXX-SHA
       local pr_number
@@ -96,9 +94,7 @@ function main {
       if [ -n "$pr_number" ]; then
         local head_branch
         head_branch=$(GH_TOKEN="$GITHUB_TOKEN" gh pr view "$pr_number" --json headRefName -q '.headRefName' 2>/dev/null || true)
-        if [ "$head_branch" == "merge-train/spartan-v5" ]; then
-          ci_mode="merge-queue-heavy"
-        elif [ "$head_branch" == "merge-train/ci" ]; then
+        if [ "$head_branch" == "merge-train/ci" ]; then
           ci_mode="merge-queue-ci"
         fi
       fi
@@ -118,8 +114,8 @@ function main {
     ci_mode="docs"
   elif [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
     # A pushed semver tag is a release; REF_NAME is the tag (see ci3/source_refname). In the private
-    # repo this is the nightly path (nightly-release-tag*.yml push v<ver>-nightly.<date> tags on main and
-    # v5-next); the private-repo safety gate below routes it to the internal Artifact Registry.
+    # repo this is the nightly path (nightly-release-tag*.yml push v<ver>-nightly.<date> tags on main);
+    # the private-repo safety gate below routes it to the internal Artifact Registry.
     ci_mode="release"
   else
     ci_mode="fast"

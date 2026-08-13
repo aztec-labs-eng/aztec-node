@@ -26,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     # The auto acceptance test validates published releases, which are only cut from the
     # public repo. Don't let the workflow_run trigger fire in the private
-    # mirror, where it runs against non-release branches (e.g. v5-next) and always fails.
+    # mirror, where it runs against non-release branches and always fails.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run'

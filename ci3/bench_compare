@@ -11,9 +11,9 @@
 # benches relevant to what the PR changes and drops the noise.
 #
 # BASELINE BRANCH — read this. The cache is content-addressed by git *tree hash*, so branches with
-# different perf (main vs v5-next vs merge-train/*) already live under different keys and never cross-
-# contaminate. But you MUST merge-base against the PR's *actual* base branch: comparing a v5-next PR
-# against `main` would surface the whole v5-next-vs-main delta as bogus regressions. If --baseline is
+# different perf (main vs merge-train/*) already live under different keys and never cross-
+# contaminate. But you MUST merge-base against the PR's *actual* base branch: comparing a merge-train
+# PR against `main` would surface the whole train-vs-main delta as bogus regressions. If --baseline is
 # not given, this auto-detects the base of the current branch's PR via `gh` and falls back to
 # origin/main with a loud warning. The chosen baseline is always printed to stderr — check it.
 # Caveat: the cache key carries no branch/repo/hardware provenance, so a tree benched under a different
@@ -70,7 +70,7 @@ if [ -z "$BASELINE" ]; then
     echo "bench_compare: auto-detected PR base branch -> $BASELINE" >&2
   else
     BASELINE="origin/main"
-    echo "bench_compare: WARNING baseline defaulted to origin/main (no PR base detected). Pass --baseline for v5-next / merge-train PRs." >&2
+    echo "bench_compare: WARNING baseline defaulted to origin/main (no PR base detected). Pass --baseline for merge-train PRs." >&2
   fi
 fi
 echo "bench_compare: baseline = $BASELINE" >&2
