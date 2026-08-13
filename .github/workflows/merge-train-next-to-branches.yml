@@ -3,7 +3,7 @@ name: Merge Train Auto-Pull
 on:
   push:
     branches:
-      - next
+      - main
       - v5-next
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
         run: |
           # The -v<N> trains track the matching release line (v5-next); every
-          # other train tracks next. Sync only the trains fed by the branch
+          # other train tracks main. Sync only the trains fed by the branch
           # that was just pushed.
           if [[ "${{ github.ref_name }}" == "v5-next" ]]; then
             for branch in merge-train/spartan-v5 merge-train/fairies-v5; do
