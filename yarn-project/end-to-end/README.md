@@ -158,7 +158,7 @@ or it **won't run in CI**:
 Bespoke handling to be aware of:
 
 - **`avm_simulator`** (`automine/simulation/avm_simulator.test.ts`) has a dedicated line in `test_cmds`
-  that sets `DUMP_AVM_INPUTS_TO_DIR` (feeds the downstream `avm_check_circuit` job) and is therefore
+  that dumps AVM circuit inputs when `DUMP_AVM_INPUTS_TO_DIR` is set, and is therefore
   excluded from the generic `simulation/` glob there (`!(avm_simulator)`). In `compat_test_cmds` it runs
   as a regular test (no dump line), so it is **not** excluded there.
 - **`kernelless_simulation`** is excluded from `compat_test_cmds` only.
