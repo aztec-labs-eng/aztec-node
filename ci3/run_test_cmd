@@ -44,18 +44,14 @@ if [ "$CI" -eq 1 ]; then
   allow_flakes=1
   track_test_fail=1
 
-  # Track the test in the history tracker if this is in merge queue, targeting a version branch, or
-  # targeting a merge-train.
-  if [[ "$is_merge_queue" -eq 1 || ("${TARGET_BRANCH:-}" =~ ^v[0-9]) || ("${TARGET_BRANCH:-}" == merge-train/*) ]]; then
+  # Track the test in the history tracker if this is in merge queue or targeting a version branch.
+  if [[ "$is_merge_queue" -eq 1 || ("${TARGET_BRANCH:-}" =~ ^v[0-9]) ]]; then
     track_test_history=1
   fi
 
-  # Notify on flakes if in merge queue, backport-to-v2-staging, or a spartan merge-train.
-  # The spartan trains run their full test suite on pull_request (via ci-full-no-test-cache),
-  # not just merge_group, so without these cases the spartan PR's flakes are never reported.
+  # Notify on flakes if in merge queue or on backport-to-v2-staging.
   [[ "$is_merge_queue" -eq 1 \
-      || "$REF_NAME" == "backport-to-v2-staging" \
-      || "$REF_NAME" == "merge-train/spartan" ]] && slack_notify_flake=1
+      || "$REF_NAME" == "backport-to-v2-staging" ]] && slack_notify_flake=1
 
   # Notify on fails for scenario tests.
   [[ ${SCENARIO_TESTS:-0} -eq 1 ]] && slack_notify_fail=1
@@ -339,29 +335,6 @@ function fail {
   exit $code
 }
 
-# Resolve the slack channel used for flake notifications, based on the PR head
-# branch. Defaults to empty (slack_notify falls back to #aztec3-ci). Cached in
-# /tmp so parallel test runs don't repeatedly hit the gh API.
-function flake_slack_channel {
-  local cache=/tmp/.flake_slack_channel
-  if [ -f "$cache" ]; then
-    cat "$cache"
-    return
-  fi
-  local head_branch="${PR_HEAD_REF:-$REF_NAME}"
-  if [[ "$head_branch" =~ ^gh-readonly-queue/.+/pr-([0-9]+)- ]] \
-      && [ -n "${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
-    head_branch=$(GH_TOKEN="$GITHUB_TOKEN" gh pr view "${BASH_REMATCH[1]}" \
-      --repo aztec-labs-eng/aztec-node --json headRefName -q '.headRefName' 2>/dev/null || true)
-  fi
-  local channel=""
-  case "$head_branch" in
-    merge-train/spartan) channel="#team-alpha-ci" ;;
-  esac
-  echo "$channel" > "$cache"
-  echo "$channel"
-}
-
 # Show FLAKED and send slack message to test owner(s). Exit with success.
 function flake {
   local group_suffix=""
@@ -387,7 +360,7 @@ function flake {
     for uid in $owners; do
       slack_uids+="<@$uid> "
     done
-    slack_notify "${slack_uids% }: Test flaked on *${TARGET_BRANCH:-$REF_NAME}*: \`$test_cmd\` $DASHBOARD_URL/$log_key" "$(flake_slack_channel)"
+    slack_notify "${slack_uids% }: Test flaked on *${TARGET_BRANCH:-$REF_NAME}*: \`$test_cmd\` $DASHBOARD_URL/$log_key"
   fi
 
   exit 0

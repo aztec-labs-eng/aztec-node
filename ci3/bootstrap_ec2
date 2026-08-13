@@ -73,14 +73,6 @@ fi
 # connect/kill helpers so the launch and connect names never drift.
 instance_name=$(aws_instance_name "$REF_NAME" "$arch" "${INSTANCE_POSTFIX:-}")
 
-# Merge-train PRs are intentionally not cancelled per-commit (see ci3.yml concurrency), so
-# several distinct commits build concurrently. Append the commit sha so each gets its own
-# instance and they don't reap each other. ci.sh's connect helpers match the Name tag by
-# substring, so the sha-free base from aws_instance_name still resolves these.
-if [[ "$REF_NAME" == merge-train/* ]]; then
-  instance_name="${instance_name}_${current_commit:0:9}"
-fi
-
 state_dir=$(mktemp -d /tmp/aws_request_instance.XXXXXX)
 
 if semver check "$REF_NAME"; then
@@ -235,7 +227,6 @@ container_script=$(
     0) log_ci_run \$ci_log_id PASSED ;;
     *)
       log_ci_run \$ci_log_id FAILED
-      merge_train_failure_slack_notify \$ci_log_id
       release_canary_slack_notify \$ci_log_id
       ;;
   esac

@@ -1125,9 +1125,9 @@ case "$cmd" in
     ./bootstrap.sh release
     ;;
 
-  ##########################
-  # MERGE TRAIN CI SUBSETS #
-  ##########################
+  ##############
+  # CI SUBSETS #
+  ##############
   "ci-docs")
     export CI=1
     export USE_TEST_CACHE=1

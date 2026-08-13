@@ -16,11 +16,7 @@ on:
   merge_group: {}
 
 concurrency:
-  # merge-train PRs: one run per commit — distinct commits run concurrently (each is a real
-  # train state to test), but duplicate events for the same commit (synchronize + the bot's
-  # label re-applies) collapse. Keying on head.sha instead of run_id is what collapses them;
-  # run_id is unique per run and never collapsed anything. Everything else: one run per branch.
-  group: ci3-${{ (startsWith(github.event.pull_request.head.ref, 'merge-train/') && github.event.pull_request.head.sha) || github.event.merge_group.head_ref || github.ref_name }}
+  group: ci3-${{ github.event.merge_group.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -53,12 +49,6 @@ jobs:
       contents: read    # checkout/fetch with the default github.token
       pull-requests: read # merge_group mode looks up the source PR
     steps:
-      - name: Remove wakeup label
-        if: contains(github.event.pull_request.labels.*.name, 'ci-wakeup-pr-after-merge')
-        env:
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-wakeup-pr-after-merge --repo ${{ github.repository }} || true
-
       # Do NOT bump actions/checkout to v6 here. v6 ("persist creds to a separate file", #2286)
       # stores the persisted github.token in a temp credentials file pulled in via includeIf, which
       # `git config --unset-all http....extraheader` cannot clear. Our runner-side pushes (ci3.sh
@@ -126,7 +116,6 @@ jobs:
           MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_COMMITS: ${{ github.event.pull_request.commits }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_ACTOR: ${{ github.actor }}

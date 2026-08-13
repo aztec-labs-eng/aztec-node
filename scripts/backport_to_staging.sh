@@ -258,8 +258,8 @@ else
   fi
 fi
 
-# Update PR body with commit override markers (same mechanism as merge-trains)
+# Update PR body with commit override markers
 echo "Updating PR body with commit list..."
-do_or_dryrun "$root/scripts/merge-train/update-pr-body.sh" "$STAGING_BRANCH"
+do_or_dryrun "$root/scripts/update-pr-body.sh" "$STAGING_BRANCH"
 
 do_or_dryrun echo "Successfully backported PR #$PR_NUMBER to $STAGING_BRANCH"

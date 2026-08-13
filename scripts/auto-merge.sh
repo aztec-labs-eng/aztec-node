@@ -32,7 +32,10 @@ function enable_auto_merge {
 }
 
 # Configuration (can be overridden via environment variables)
-BRANCH_PATTERN="${BRANCH_PATTERN:-merge-train/}"
+if [[ -z "${BRANCH_PATTERN:-}" ]]; then
+  echo "Error: BRANCH_PATTERN is not set (e.g. backport-to-, port-to-main)."
+  exit 1
+fi
 MERGE_STRATEGY="${MERGE_STRATEGY:-merge}"
 INACTIVITY_HOURS="${INACTIVITY_HOURS:-4}"
 INACTIVITY_SECONDS=$((INACTIVITY_HOURS * 3600))

@@ -31,14 +31,14 @@ blobs — never the multi-MB per-branch `data.js` graph history.
   triggers x-bench on a dedicated metal box and uploads) and to re-run this once CI finishes. Do not
   block waiting unless asked.
 
-### 2. Determine the baseline branch — do NOT assume `next`
+### 2. Determine the baseline branch — do NOT assume `main`
 
 The comparison is `merge-base(PR, baseline)`, so the baseline MUST be the PR's *actual* target branch.
-A PR onto `v5-next` or a `merge-train/*` branch compared against `next` would report the entire
-branch-vs-branch perf delta as bogus regressions. Get it from the PR itself:
+A PR onto a release branch compared against `main` would report the entire branch-vs-branch perf
+delta as bogus regressions. Get it from the PR itself:
 
 ```bash
-gh pr view <pr-or-branch> --json baseRefName -q .baseRefName   # e.g. next, v5-next, merge-train/spartan
+gh pr view <pr-or-branch> --json baseRefName -q .baseRefName   # e.g. main, or a release branch
 git fetch origin <baseRefName>                                  # ensure origin/<baseRefName> is current
 ```
 

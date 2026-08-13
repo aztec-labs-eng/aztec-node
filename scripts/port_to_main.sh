@@ -120,7 +120,7 @@ else
 fi
 
 echo "Updating PR body with commit list..."
-do_or_dryrun "$root/scripts/merge-train/update-pr-body.sh" "$PORT_BRANCH"
+do_or_dryrun "$root/scripts/update-pr-body.sh" "$PORT_BRANCH"
 
 # Expose results for the workflow (PR link, and conflicts if any) so it can
 # notify Slack. Guarded so the script still works when run locally.

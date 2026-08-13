@@ -1,4 +1,4 @@
-name: Merge Train Auto-Merge
+name: Staging Auto-Merge
 
 on:
   schedule:
@@ -17,26 +17,20 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run auto-merge script (merge-train)
-        run: |
-          GH_TOKEN=${{ secrets.AZTEC_BOT_GITHUB_TOKEN }} \
-          MERGE_TRAIN_GITHUB_TOKEN=${{ secrets.MERGE_TRAIN_GITHUB_TOKEN }} \
-          ./scripts/merge-train/auto-merge.sh
-
-      - name: Run auto-merge script (backport-train)
+      - name: Run auto-merge script (backport staging)
         run: |
           GH_TOKEN=${{ secrets.AZTEC_BOT_GITHUB_TOKEN }} \
           MERGE_TRAIN_GITHUB_TOKEN=${{ secrets.MERGE_TRAIN_GITHUB_TOKEN }} \
           BRANCH_PATTERN=backport-to- \
           MERGE_STRATEGY=merge \
           INACTIVITY_HOURS=8 \
-          ./scripts/merge-train/auto-merge.sh
+          ./scripts/auto-merge.sh
 
-      - name: Run auto-merge script (port-to-main)
+      - name: Run auto-merge script (port-to-main staging)
         run: |
           GH_TOKEN=${{ secrets.AZTEC_BOT_GITHUB_TOKEN }} \
           MERGE_TRAIN_GITHUB_TOKEN=${{ secrets.MERGE_TRAIN_GITHUB_TOKEN }} \
           BRANCH_PATTERN=port-to-main \
           MERGE_STRATEGY=merge \
           INACTIVITY_HOURS=8 \
-          ./scripts/merge-train/auto-merge.sh
+          ./scripts/auto-merge.sh

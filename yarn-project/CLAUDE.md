@@ -304,7 +304,7 @@ ab/feature-name
 jd/fix-something
 ```
 
-Conventional commit types, branch strategy, merge-train routing, and base-branch detection live in the root `CLAUDE.md` under `<git_workflow>`. The sections below cover only yarn-project-specific additions.
+Conventional commit types, branch strategy, and base-branch detection live in the root `CLAUDE.md` under `<git_workflow>`. The sections below cover only yarn-project-specific additions.
 
 ### Port Commits
 

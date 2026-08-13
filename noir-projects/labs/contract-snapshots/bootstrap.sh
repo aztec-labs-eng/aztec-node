@@ -39,17 +39,13 @@ function test {
 }
 
 function test_cmds {
-    if [ "${TARGET_BRANCH:-}" = "merge-train/fairies" ]; then
-      hash=disabled-cache
-    else
-      hash=$(hash_str \
-        $($root/labs-aztec-toolchain/bootstrap.sh hash) \
-        $($root/noir-projects/labs/aztec-nr/bootstrap.sh hash) \
-        $(cache_content_hash \
-            ^noir-projects/labs/contract-snapshots \
-            ^noir-projects/labs/noir-contracts/contracts/app \
-            ^noir-projects/labs/noir-contracts/contracts/test))
-    fi
+    hash=$(hash_str \
+      $($root/labs-aztec-toolchain/bootstrap.sh hash) \
+      $($root/noir-projects/labs/aztec-nr/bootstrap.sh hash) \
+      $(cache_content_hash \
+          ^noir-projects/labs/contract-snapshots \
+          ^noir-projects/labs/noir-contracts/contracts/app \
+          ^noir-projects/labs/noir-contracts/contracts/test))
     echo "$hash ./noir-projects/labs/contract-snapshots/bootstrap.sh test"
 }
 

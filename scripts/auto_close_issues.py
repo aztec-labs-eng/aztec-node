@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Auto-close issues referenced in merged PRs.
 
-When PRs target intermediate branches (like merge-train), GitHub's native
-auto-close doesn't work. This script processes new commits and closes any
-issues referenced in merged PRs.
+When PRs target intermediate branches (like the backport/forward-port staging
+branches), GitHub's native auto-close doesn't work. This script processes new
+commits and closes any issues referenced in merged PRs.
 """
 
 import os
