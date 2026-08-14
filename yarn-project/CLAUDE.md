@@ -12,8 +12,7 @@ An Aztec **node** syncs L2 state and serves RPC requests. A node may also act as
 
 - **TypeScript monorepo** with each folder being a package
 - **Working directory**: `yarn-project`
-- **Main branch**: `master`
-- **Development branch**: `next` (most changes go here first)
+- **Main branch**: `main`
 
 ## Native Tools Over Bash
 
@@ -321,7 +320,7 @@ For PRs with multiple commits that should be preserved (e.g., porting multiple P
 
 ### Fixing PRs
 
-PRs are squashed to a single commit on merge, so during development just create normal commits. Only amend when explicitly asked or when using the `/fix-pr` skill on a PR targeting `next`.
+PRs are squashed to a single commit on merge, so during development just create normal commits. Only amend when explicitly asked or when using the `/fix-pr` skill on a PR targeting `main`.
 
 ```bash
 git add .

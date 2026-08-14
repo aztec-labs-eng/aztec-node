@@ -101,7 +101,7 @@ yarn workspace @aztec/<package> test <file>.test.ts
 
 ### Phase 6: Commit and Push
 
-If the PR targets `next`, amend to keep it as a single commit:
+If the PR targets `main`, amend to keep it as a single commit:
 
 ```bash
 git add .
@@ -122,7 +122,7 @@ git push
 - **Validate first**: Only fix PRs that are open
 - **Delegate identification**: Use `identify-ci-failures` subagent, don't analyze logs directly
 - **Rebase, don't merge**: Always rebase on the base branch
-- **Amend only for PRs targeting `next`**: Other PRs use normal commits
+- **Amend only for PRs targeting `main`**: Other PRs use normal commits
 - **Bootstrap when needed**: Only if changes outside yarn-project
 - **Escalate e2e failures**: Complex e2e issues need `/debug-e2e`
 

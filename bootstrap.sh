@@ -764,8 +764,8 @@ function test_bootstrap_macos {
   /mnt/user-data/macos/ssh.sh $name bash -c 'cat > /tmp/mac_bootstrap.sh' <<REMOTE_EOF
 set -euo pipefail
 ulimit -n 65536
-git clone --depth=1 --branch=$(git branch --show-current) https://github.com/aztecprotocol/aztec-packages
-cd aztec-packages
+git clone --depth=1 --branch=$(git branch --show-current) https://github.com/aztec-labs-eng/aztec-node
+cd aztec-node
 ./bootstrap.sh install_deps </dev/null
 zsh -l -i -c "ulimit -n 65536 && NO_CACHE=1 ./bootstrap.sh gentle"
 REMOTE_EOF

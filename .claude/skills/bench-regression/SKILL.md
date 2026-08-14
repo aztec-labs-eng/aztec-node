@@ -1,12 +1,12 @@
 ---
 name: bench-regression
-description: Check a PR for performance regressions by comparing its benchmark run against its merge-base on next. Use when a dev asks "did my PR regress anything?" or wants to vet benchmark impact before merge.
+description: Check a PR for performance regressions by comparing its benchmark run against its merge-base on main. Use when a dev asks "did my PR regress anything?" or wants to vet benchmark impact before merge.
 argument-hint: [pr-ref] (defaults to HEAD)
 ---
 
 # PR benchmark regression check
 
-Compares a PR's benchmark run against its baseline (merge-base on `next`, optionally a window of
+Compares a PR's benchmark run against its baseline (merge-base on `main`, optionally a window of
 baseline runs) and reports only the regressions that (a) are statistically real and (b) plausibly
 relate to what the PR changed. The data-pulling and diff math are done by `ci3/bench_compare`; your
 job is to get a run, invoke the script, then filter the output with judgement.
@@ -43,9 +43,9 @@ git fetch origin <baseRefName>                                  # ensure origin/
 ```
 
 (You do NOT need to worry about cross-branch data mixups: the bench cache is content-addressed by git
-tree hash, so `next`, `v5-next`, etc. already occupy different keys — a next commit's tree is only ever
-benched by next-content. The only thing you control, and must get right, is *which branch's lineage*
-you merge-base against.)
+tree hash, so `main`, release branches, etc. already occupy different keys — a main commit's tree is
+only ever benched by main-content. The only thing you control, and must get right, is *which branch's
+lineage* you merge-base against.)
 
 ### 3. Run the comparison
 
@@ -70,7 +70,7 @@ Read the JSON and keep a regression only if **all** hold:
   to requiring a large `pct` AND a meaningful absolute magnitude.
 - **Material magnitude:** skip tiny absolutes (e.g. `0.01 ms -> 0.02 ms` = +100% but noise).
 - **Plausibly caused by the PR:** map the bench `name` prefix to the PR's changed areas. Get the diff
-  with `git diff --name-only $(git merge-base HEAD origin/next)..HEAD | cut -d/ -f1-2 | sort -u`, then
+  with `git diff --name-only $(git merge-base HEAD origin/main)..HEAD | cut -d/ -f1-2 | sort -u`, then
   keep benches whose names start with a touched area (`yarn-project/simulator`,
   `noir-projects/labs/noir-contracts`, …) and treat far-away regressions (a docs-only PR moving a
   proving bench) as drift/noise, not this PR.
@@ -83,7 +83,7 @@ the dev can override your judgement.
 
 ## Notes
 
-- Baseline is `origin/next` by default; `git fetch` it first if stale (`ci3/bench_compare` errors if
+- Baseline is `origin/main` by default; `git fetch` it first if stale (`ci3/bench_compare` errors if
   the ref is missing).
 - Requires `jq`, `python3`, and read access to the build-cache (the public `build-cache.aztec-labs.com`
   endpoint needs no creds; the in-VPC S3 path is a fallback).
