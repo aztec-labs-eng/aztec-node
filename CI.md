@@ -339,7 +339,7 @@ All projects have at least a "build hash". This is computed using `cache_content
 
 Some projects will also have a "test hash". The test hash is part of the input to deciding if a test should be re-run. So this might also include files that don't make up the build hash, but are used as part of testing.
 
-To give a concrete example, take `noir-projects/labs/noir-contracts`. Here we have a build hash that consists of the labs toolchain (the pinned nargo/bb binaries, via `labs-aztec-toolchain/bootstrap.sh hash`), the aztec-nr library, and the contract sources themselves, as the contracts are compiled with those binaries and the results stored in the build cache. The "test hash" then additionally adds yarn-project's hash, because the contract tests run against the TXE server built from it.
+To give a concrete example, take `noir-projects/noir-contracts`. Here we have a build hash that consists of the labs toolchain (the pinned nargo/bb binaries, via `labs-aztec-toolchain/bootstrap.sh hash`), the aztec-nr library, and the contract sources themselves, as the contracts are compiled with those binaries and the results stored in the build cache. The "test hash" then additionally adds yarn-project's hash, because the contract tests run against the TXE server built from it.
 
 If a test successfully runs in CI, it won't be run again unless its redis key changes. This key consists of the "test hash" and the "test command". Here's an example:
 

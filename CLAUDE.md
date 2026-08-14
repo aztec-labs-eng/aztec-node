@@ -5,7 +5,7 @@ All paths below are relative to the git root. When working inside a component, a
 <components>
 `yarn-project/` is the TypeScript monorepo containing the node, client SDK (`aztec.js`), PXE/wallet, sequencer, prover, p2p stack, and tooling — the main entrypoint for most day-to-day work; see `yarn-project/CLAUDE.md`.
 
-`noir-projects/` holds the contract libraries written in Noir; see `noir-projects/labs/aztec-nr/CLAUDE.md`.
+`noir-projects/` holds the contract libraries written in Noir; see `noir-projects/aztec-nr/CLAUDE.md`.
 
 `docs/` is the developer documentation site (Docusaurus); see `docs/CLAUDE.md`. `spartan/` holds Kubernetes deployment infrastructure (Helm charts + Terraform); see `spartan/CLAUDE.md`. `ci3/` contains CI infrastructure scripts.
 </components>
@@ -56,13 +56,13 @@ Never bulk-update lockfiles (`Cargo.lock`, `yarn.lock`). Use targeted updates on
 </lockfile_discipline>
 
 <standard_contract_repin>
-Never run `noir-projects/labs/noir-contracts/bootstrap.sh pin-standard-build` on your own initiative. The pin exists so ordinary source or bytecode changes do NOT move the standard contracts' canonical addresses, and CI does not fail when the bytecode drifts. A re-pin is a deliberate redeploy decision for a human to make: if a change seems to need one, leave the pin, rebuild against it, and ask. See the comment on `pin-standard-build` for why re-pinning is breaking.
+Never run `noir-projects/noir-contracts/bootstrap.sh pin-standard-build` on your own initiative. The pin exists so ordinary source or bytecode changes do NOT move the standard contracts' canonical addresses, and CI does not fail when the bytecode drifts. A re-pin is a deliberate redeploy decision for a human to make: if a change seems to need one, leave the pin, rebuild against it, and ask. See the comment on `pin-standard-build` for why re-pinning is breaking.
 </standard_contract_repin>
 
 </git_workflow>
 
 <code_formatting>
-Each language's formatter is documented in the relevant subdir `CLAUDE.md` — TypeScript conventions live in `yarn-project/CLAUDE.md` and Noir in `noir-projects/labs/aztec-nr/CLAUDE.md`. A post-edit hook runs the appropriate formatter automatically, so there is normally no need to invoke one by hand.
+Each language's formatter is documented in the relevant subdir `CLAUDE.md` — TypeScript conventions live in `yarn-project/CLAUDE.md` and Noir in `noir-projects/aztec-nr/CLAUDE.md`. A post-edit hook runs the appropriate formatter automatically, so there is normally no need to invoke one by hand.
 </code_formatting>
 
 <red_green_testing>

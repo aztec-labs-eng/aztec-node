@@ -3,7 +3,7 @@ title: Understanding Function Context
 sidebar_position: 3
 tags: [functions, context]
 description: Learn about the execution context available to Aztec contract functions, including caller information and block data.
-references: ["noir-projects/labs/aztec-nr/aztec/src/context/*"]
+references: ["noir-projects/aztec-nr/aztec/src/context/*"]
 ---
 
 import Image from '@theme/IdealImage';
@@ -36,7 +36,7 @@ The following section will cover both contexts.
 ## The Private Context
 
 The code snippet below shows what is contained within the private context.
-#include_code private-context /noir-projects/labs/aztec-nr/aztec/src/context/private_context.nr rust
+#include_code private-context /noir-projects/aztec-nr/aztec/src/context/private_context.nr rust
 
 ### Private Context Broken Down
 
@@ -44,7 +44,7 @@ The code snippet below shows what is contained within the private context.
 
 The context inputs includes all of the information that is passed from the kernel circuit into the application circuit. It contains the following values.
 
-#include_code private-context-inputs /noir-projects/labs/aztec-nr/aztec/src/context/inputs/private_context_inputs.nr rust
+#include_code private-context-inputs /noir-projects/aztec-nr/aztec/src/context/inputs/private_context_inputs.nr rust
 
 As shown in the snippet, the application context is made up of 3 main structures. The call context, the block header, and the private global variables.
 
@@ -90,7 +90,7 @@ return_hash: Field,
 
 Some data structures impose time constraints, e.g. they may make it so that a value can only be changed after a certain delay. Interacting with these in private involves creating proofs that are only valid as long as they are included before a certain future point in time. To achieve this, the `set_expiration_timestamp` function can be used to set this property:
 
-#include_code expiration-timestamp /noir-projects/labs/aztec-nr/aztec/src/context/private_context.nr rust
+#include_code expiration-timestamp /noir-projects/aztec-nr/aztec/src/context/private_context.nr rust
 
 A transaction that sets this value will never be included in a block with a timestamp larger than the requested value, since it would be considered invalid. This can also be used to make transactions automatically expire after some time if not included.
 

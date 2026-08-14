@@ -145,7 +145,7 @@ describe('hash', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData('noir-projects/labs/aztec-nr/aztec/src/hash.nr', 'secret_hash_from_ts', hash.toString());
+    updateInlineTestData('noir-projects/aztec-nr/aztec/src/hash.nr', 'secret_hash_from_ts', hash.toString());
   });
 
   it('Var args hash matches noir', async () => {
@@ -156,7 +156,7 @@ describe('hash', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData('noir-projects/labs/aztec-nr/aztec/src/hash.nr', 'var_args_hash_from_ts', res.toString());
+    updateInlineTestData('noir-projects/aztec-nr/aztec/src/hash.nr', 'var_args_hash_from_ts', res.toString());
   });
 
   it('calldata hash matches noir', async () => {
@@ -167,7 +167,7 @@ describe('hash', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData('noir-projects/labs/aztec-nr/aztec/src/hash.nr', 'calldata_hash_from_ts', res.toString());
+    updateInlineTestData('noir-projects/aztec-nr/aztec/src/hash.nr', 'calldata_hash_from_ts', res.toString());
   });
 
   it('empty L2ToL1Message siloing matches Noir', () => {
