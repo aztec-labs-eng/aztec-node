@@ -45,8 +45,8 @@ jobs:
     if: github.event.pull_request.head.repo.fork != true && (github.event.pull_request.draft == false || contains(github.event.pull_request.labels.*.name, 'ci-draft'))
     environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'master' || '' }}
     permissions:
-      id-token: write   # required for OIDC assume-role with AWS
-      contents: read    # checkout/fetch with the default github.token
+      id-token: write # required for OIDC assume-role with AWS
+      contents: read # checkout/fetch with the default github.token
       pull-requests: read # merge_group mode looks up the source PR
     steps:
       # Do NOT bump actions/checkout to v6 here. v6 ("persist creds to a separate file", #2286)
@@ -69,7 +69,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
           role-session-name: ci3-${{ github.run_id }}
           role-duration-seconds: 7200 # 2h – covers max AWS_SHUTDOWN_TIME (90 min ARM) + 30 min buffer
@@ -88,20 +88,14 @@ jobs:
 
       - name: Run
         env:
-          CI_USE_SSH: ${{ (vars.CI_USE_SSH == '1' && !contains(github.event.pull_request.labels.*.name, 'ci-ssm')) && '1' || '0' }}
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          # Used by docs CI scripts to post to #docs-alerts (the SLACK_BOT_TOKEN bot lacks access there).
-          AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN: ${{ secrets.AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN }}
-          AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION: ${{ vars.AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION }}
           # For automatic documentation updates via Claude Code
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # Nightly test env vars.
@@ -121,16 +115,15 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           # Forwarded to EC2 so release_compat_e2e's nightly-failure Slack alert can build a real run URL.
           RUN_ID: ${{ github.run_id }}
-          CI3_INSTANCE_PROFILE_NAME: ${{ secrets.CI3_INSTANCE_PROFILE_NAME }}
-          CI3_SECURITY_GROUP_ID: ${{ secrets.CI3_SECURITY_GROUP_ID }}
-          AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
+          AWS_OIDC_ROLE_ARN: ${{ vars.AWS_OIDC_ROLE_ARN }}
         # NOTE: $CI_MODE is set in the Determine CI Mode step.
         run: ./.github/ci3.sh $CI_MODE
 
       - name: Post-Actions
         env:
           SHOULD_SQUASH_MERGE: ${{ contains(github.event.pull_request.labels.*.name, 'ci-squash-and-merge') && '1' || '0' }}
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -159,7 +152,6 @@ jobs:
       - name: Upload benchmarks
         if: env.BENCH_UPLOAD == '1'
         env: &ci_benchmark_env
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: &ci_benchmark_run ./ci3/upload_benchmarks "Aztec Benchmarks" "bench/${BENCH_BRANCH:-}" ./bench-out/bench.json "$COMMIT_SHA"
 
@@ -197,7 +189,7 @@ jobs:
       fail-fast: false
       matrix:
         test_set: ["1", "2"]
-    # We run on the current public nightly tag, or when the ci-network-scenario label is present in a PR.
+    # We run on the current main (v6) public nightly tag, or when the ci-network-scenario label is present in a PR.
     needs: [ci, validate-nightly-tag]
     if: |
       always()
@@ -215,8 +207,6 @@ jobs:
     steps:
       - name: Remove label (one-time use)
         if: github.event.pull_request && contains(github.event.pull_request.labels.*.name, 'ci-network-scenario')
-        env:
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
         run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-network-scenario --repo ${{ github.repository }} || true
 
       - name: Checkout
@@ -227,7 +217,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
           role-session-name: ci3-network-scenario-${{ github.run_id }}
           role-duration-seconds: 23400 # 6.5h – covers AWS_SHUTDOWN_TIME (360 min) + 30 min buffer
@@ -244,8 +234,8 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           INTERNAL_DOCKER_REGISTRY: ${{ secrets.INTERNAL_DOCKER_REGISTRY }}
-          CI3_INSTANCE_PROFILE_NAME: ${{ secrets.CI3_INSTANCE_PROFILE_NAME }}
-          CI3_SECURITY_GROUP_ID: ${{ secrets.CI3_SECURITY_GROUP_ID }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: 360
           NO_SPOT: 1
@@ -286,8 +276,8 @@ jobs:
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          CI3_INSTANCE_PROFILE_NAME: ${{ secrets.CI3_INSTANCE_PROFILE_NAME }}
-          CI3_SECURITY_GROUP_ID: ${{ secrets.CI3_SECURITY_GROUP_ID }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           NO_SPOT: 1
         run: |
           ./.github/ci3.sh network-teardown next-scenario "${NAMESPACE}-${{ matrix.test_set }}" || true
@@ -433,7 +423,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
           role-session-name: ci3-network-kind-${{ github.run_id }}
           role-duration-seconds: 12600 # 3.5h – covers AWS_SHUTDOWN_TIME (180 min) + 30 min buffer
@@ -446,8 +436,8 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          CI3_INSTANCE_PROFILE_NAME: ${{ secrets.CI3_INSTANCE_PROFILE_NAME }}
-          CI3_SECURITY_GROUP_ID: ${{ secrets.CI3_SECURITY_GROUP_ID }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: 180
         run: |
