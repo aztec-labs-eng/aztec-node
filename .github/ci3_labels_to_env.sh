@@ -112,13 +112,13 @@ function main {
   echo "CI_MODE=$ci_mode" >> $GITHUB_ENV
   echo "CI mode: $ci_mode"
 
-  # Private-repo safety gate. The release flow can publish to DockerHub/npmjs/crates.io/github; that
-  # MUST NEVER run in the private fork. So whenever this repo would release — for ANY trigger (a pushed
-  # nightly tag, a ci-release-pr tag, anything future) — force the private path: publish only the docker
-  # image and npm packages to our internal Artifact Registry (bootstrap.sh::private_release). Keyed on
-  # the repo name (case-insensitive) so it can't be reached in the public repo.
+  # Release safety gate. The release flow can publish to DockerHub/npmjs/crates.io/github; that
+  # MUST ONLY run in the canonical public repo. In any other repo (e.g. a private fork), whenever this
+  # repo would release — for ANY trigger (a pushed nightly tag, a ci-release-pr tag, anything future) —
+  # force the private path: publish only the docker image and npm packages to our internal Artifact
+  # Registry (bootstrap.sh::private_release). Repo name compared case-insensitively.
   if [ "$ci_mode" = "release" ] &&
-     [ "$(printf '%s' "${GITHUB_REPOSITORY:-}" | tr 'A-Z' 'a-z')" = "aztecprotocol/aztec-packages-private" ]; then
+     [ "$(printf '%s' "${GITHUB_REPOSITORY:-}" | tr 'A-Z' 'a-z')" != "aztec-labs-eng/aztec-node" ]; then
     echo "PRIVATE_RELEASE=1" >> $GITHUB_ENV
     echo "SKIP_COMPAT_E2E=1" >> $GITHUB_ENV
   fi

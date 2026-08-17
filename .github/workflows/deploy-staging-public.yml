@@ -25,11 +25,6 @@ env:
 jobs:
   determine-tag:
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule') &&
-      (github.event_name != 'schedule' ||
-      github.repository == 'aztec-labs-eng/aztec-node')
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       semver: ${{ steps.resolve.outputs.semver }}
@@ -63,7 +58,6 @@ jobs:
 
   wait-for-ci3:
     needs: determine-tag
-    if: ${{ github.event_name != 'schedule' || github.repository == 'aztec-labs-eng/aztec-node' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -81,7 +75,6 @@ jobs:
 
   deploy:
     needs: [determine-tag, wait-for-ci3]
-    if: ${{ github.event_name != 'schedule' || github.repository == 'aztec-labs-eng/aztec-node' }}
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: staging-public
