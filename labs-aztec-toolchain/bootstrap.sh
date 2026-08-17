@@ -6,17 +6,17 @@ source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 #
 # - Foundation mode (FND_ROOT non-empty): symlink the binaries built inside the checkout at
 #   FND_ROOT (barretenberg/cpp and the noir submodule), and derive the toolchain identity
-#   from that tree's source hashes. This is the monorepo flow today; after the repo split it
-#   is how the foundation repo runs the labs components (as a submodule) against its own tree.
+#   from that tree's source hashes. This is how the foundation repo runs the labs components
+#   (as a submodule) against its own tree.
 # - Pinned mode (FND_ROOT empty): download released binaries at the versions pinned below,
 #   and derive the identity from this directory's committed content. This is the standalone
 #   labs repo flow.
 #
-# The committed default differs per line: the labs side (here) commits an empty default,
-# the monorepo/foundation side points at its own checkout. AZTEC_TOOLCHAIN_FND_ROOT overrides
-# either default — export it empty to force pinned mode, or set it to a foundation checkout
-# root, as the foundation repo does when driving its labs submodule.
-FND_ROOT=${AZTEC_TOOLCHAIN_FND_ROOT-}
+# Foundation mode engages when `use-local` recorded a checkout root in .fnd-root (that
+# command also rewires the manifest pins, so one invocation flips the whole tree), or via
+# AZTEC_TOOLCHAIN_FND_ROOT, which overrides the recording: export it empty to force pinned
+# mode, or point it at a checkout to use foundation binaries without touching the manifests.
+FND_ROOT=${AZTEC_TOOLCHAIN_FND_ROOT-$(cat .fnd-root 2>/dev/null || true)}
 
 TARGET_DIR=bin
 BB_BINARY=bb
@@ -31,8 +31,8 @@ PIN_FILE=$TARGET_DIR/.pin
 
 # Pinned versions installed in pinned mode (see build_pinned; foundation mode links the
 # locally built binaries instead and ignores these). These versions are also hardcoded in
-# other files throughout the repo, so a change here requires also updating those.
-# check_pin_drift detects any drift between this and those declarations.
+# other files throughout the repo: pins.mjs owns that list. `./bootstrap.sh set-pins`
+# bumps this file and every copy, and check_pin_drift fails the build on any mismatch.
 # Note that BB is downloaded from the AztecProtocol/barretenberg mirror first (via bbup).
 BB_VERSION=6.0.0-nightly.20260817
 # NOIR_VERSION must be the noir release the $BB_VERSION aztec-packages release was built
@@ -43,8 +43,10 @@ BB_VERSION=6.0.0-nightly.20260817
 NOIR_VERSION=1.0.0-beta.26
 
 # The installers and sources are fetched at build time; overridable for testing/mirroring.
-BBUP_URL=${BBUP_URL:-https://raw.githubusercontent.com/AztecProtocol/aztec-packages/86f69c8751f63ca604a1dab5967f208b211a1611/barretenberg/bbup/bbup}
-NOIRUP_URL=${NOIRUP_URL:-https://raw.githubusercontent.com/noir-lang/noirup/324a51fca2c410d2477400316efc5ce0d743a5b3/noirup}
+# bbup comes from the same release as the bb it installs. noirup versions independently of
+# noir - we need a version that ships noir-profiler (introduced in v0.1.4).
+BBUP_URL=${BBUP_URL:-https://raw.githubusercontent.com/AztecProtocol/aztec-packages/v$BB_VERSION/barretenberg/bbup/bbup}
+NOIRUP_URL=${NOIRUP_URL:-https://raw.githubusercontent.com/noir-lang/noirup/v0.1.4/noirup}
 # bbup's artifact name is hardcoded to the plain bb, so the AVM-enabled build is taken
 # straight from the release. The URLs are tried in order: the barretenberg mirror, which
 # bb is also published to first, then aztec-packages.
@@ -74,7 +76,8 @@ function link_tool {
 
 function check_fnd_root {
   if [ ! -f "$FND_ROOT/barretenberg/cpp/bootstrap.sh" ] || [ ! -f "$FND_ROOT/noir/bootstrap.sh" ]; then
-    echo_stderr "AZTEC_TOOLCHAIN_FND_ROOT does not point at a foundation checkout (no barretenberg/cpp and noir): $FND_ROOT"
+    echo_stderr "FND_ROOT does not point at a foundation checkout (no barretenberg/cpp and noir): $FND_ROOT"
+    echo_stderr "It comes from AZTEC_TOOLCHAIN_FND_ROOT if set, else from labs-aztec-toolchain/.fnd-root (recorded by use-local; remove it to return to pinned mode)."
     exit 1
   fi
 }
@@ -371,55 +374,24 @@ function clean {
 # directly and cannot read them from here. This asserts they all match BB_VERSION
 # so a pin bump cannot leave one behind.
 function check_pin_drift {
-  local repo_root=$(git rev-parse --show-toplevel)
-  local failed=false
+  node ./pins.mjs check
+}
 
-  local hit tag
-  while IFS= read -r hit; do
-    tag=$(sed -n 's/.*tag *= *"\([^"]*\)".*/\1/p' <<< "${hit#*:*:}")
-    if [ "$tag" != "v$BB_VERSION" ]; then
-      echo_stderr "${hit%%:*}:$(cut -d: -f2 <<< "$hit"): aztec-packages git dep pins tag \"$tag\", expected \"v$BB_VERSION\" (BB_VERSION in labs-aztec-toolchain/bootstrap.sh)."
-      failed=true
-    fi
-  done < <(git -C "$repo_root" grep -n 'github.com/AztecProtocol/aztec-packages' -- '*Nargo.toml' || true)
+# Rewrites BB_VERSION/NOIR_VERSION above and every file pins.mjs tracks.
+function set-pins {
+  node ./pins.mjs set "$@"
+}
 
-  local config=$repo_root/docs/examples/ts/recursive_verification/config.yaml
-  local pin version
-  while IFS= read -r pin; do
-    version=${pin##*@}
-    if [ "$version" != "$BB_VERSION" ]; then
-      echo_stderr "$config: \"$pin\" pins version \"$version\", expected \"$BB_VERSION\" (BB_VERSION in labs-aztec-toolchain/bootstrap.sh)."
-      failed=true
-    fi
-  # Only bb.js and the noir packages track BB_VERSION: other @aztec-scoped pins
-  # (e.g. the viem fork) version independently and must not be checked.
-  done < <(grep -oE 'npm:@aztec/(bb\.js|noir-[^@"]*)@[^"]*' "$config" 2>/dev/null || true)
-
-  # docs pins the l1-artifacts package, whose l1-contracts sources feed the docs
-  # L1 snippets and the solidity examples' imports.
-  local pkg_json=$repo_root/docs/package.json
-  version=$(sed -n 's/.*"@aztec\/l1-artifacts": *"\([^"]*\)".*/\1/p' "$pkg_json")
-  if [ "$version" != "$BB_VERSION" ]; then
-    echo_stderr "$pkg_json: @aztec/l1-artifacts pins version \"$version\", expected \"$BB_VERSION\" (BB_VERSION in labs-aztec-toolchain/bootstrap.sh)."
-    failed=true
+# Points the files pins.mjs tracks at a foundation checkout instead of published releases
+# and records the root so builds provision the binaries from the same checkout, for the
+# foundation repo driving this repo as a submodule. Worktree-only: never commit the result.
+function use-local {
+  # source_base cd'd to this script's directory, so a relative argument must be rebased
+  # onto the directory the user actually ran the command from.
+  if [ $# -ge 1 ] && [[ "$1" != /* ]]; then
+    set -- "$OLDPWD/$1" "${@:2}"
   fi
-
-  # yarn-project pins its first-party npm dependencies in one place, the resolutions block; the
-  # workspace manifests carry a dummy version. Every @aztec-scoped entry there is a release of this
-  # repo and so tracks BB_VERSION, unlike the third-party entries it sits beside.
-  local manifest=$repo_root/yarn-project/package.json
-  local pkg
-  while IFS=$'\t' read -r pkg version; do
-    if [ "$version" != "$BB_VERSION" ]; then
-      echo_stderr "$manifest: \"$pkg\" pins version \"$version\", expected \"$BB_VERSION\" (BB_VERSION in labs-aztec-toolchain/bootstrap.sh)."
-      failed=true
-    fi
-  done < <(jq -r '.resolutions | to_entries[] | select(.key | startswith("@aztec/")) | "\(.key)\t\(.value)"' "$manifest")
-
-  if $failed; then
-    echo_stderr "Pinned release versions drifted - align them with BB_VERSION."
-    exit 1
-  fi
+  node ./pins.mjs use-local "$@"
 }
 
 function build {
@@ -526,6 +498,12 @@ case "$cmd" in
     ;;
   "hash")
     hash
+    ;;
+  "set-pins")
+    set-pins "$@"
+    ;;
+  "use-local")
+    use-local "$@"
     ;;
   bench|bench_cmds)
     # Empty handling just to make this command valid.
