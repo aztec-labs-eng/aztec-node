@@ -13,9 +13,9 @@ services:
     mem_limit: 8G
     stop_grace_period: 60s
     volumes:
-      - ../../../:/root/aztec-packages
+      - ../../../:/root/aztec-node
       - ${HOME}/.bb-crs:/root/.bb-crs
-    working_dir: /root/aztec-packages/yarn-project/aztec
+    working_dir: /root/aztec-node/yarn-project/aztec
     command: 'node ./dest/bin start --local-network'
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-verbose}
@@ -36,9 +36,9 @@ services:
     cpuset: ${CPU_LIST:-}
     mem_limit: 8G
     volumes:
-      - ../../../:/root/aztec-packages
+      - ../../../:/root/aztec-node
       - ${HOME}/.bb-crs:/root/.bb-crs
-    working_dir: /root/aztec-packages/docs/examples/ts/aztecjs_runner
+    working_dir: /root/aztec-node/docs/examples/ts/aztecjs_runner
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-verbose}
       FORCE_COLOR: ${FORCE_COLOR:-1}
