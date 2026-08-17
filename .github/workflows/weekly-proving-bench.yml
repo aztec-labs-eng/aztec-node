@@ -16,7 +16,6 @@ concurrency:
 
 jobs:
   select-image:
-    if: ${{ github.repository == 'aztec-labs-eng/aztec-node' }}
     runs-on: ubuntu-latest
     outputs:
       nightly_tag: ${{ steps.nightly-tag.outputs.nightly_tag }}
@@ -67,7 +66,6 @@ jobs:
 
   deploy-real-proving-network:
     needs: select-image
-    if: ${{ github.repository == 'aztec-labs-eng/aztec-node' }}
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: prove-n-tps-real
@@ -81,7 +79,6 @@ jobs:
     needs:
       - select-image
       - deploy-real-proving-network
-    if: ${{ github.repository == 'aztec-labs-eng/aztec-node' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -111,7 +108,6 @@ jobs:
     needs:
       - select-image
       - wait-for-first-l2-block
-    if: ${{ github.repository == 'aztec-labs-eng/aztec-node' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -142,7 +138,7 @@ jobs:
           ./.github/ci3.sh network-proving-bench prove-n-tps-real prove-n-tps-real
 
   cleanup:
-    if: ${{ always() && github.repository == 'aztec-labs-eng/aztec-node' }}
+    if: ${{ always() }}
     needs:
       - select-image
       - deploy-real-proving-network
@@ -167,7 +163,7 @@ jobs:
         run: ./.github/ci3.sh network-teardown prove-n-tps-real prove-n-tps-real
 
   notify:
-    if: (success() || failure()) && github.event_name != 'workflow_dispatch' && github.repository == 'aztec-labs-eng/aztec-node'
+    if: (success() || failure()) && github.event_name != 'workflow_dispatch'
     needs:
       - select-image
       - deploy-real-proving-network

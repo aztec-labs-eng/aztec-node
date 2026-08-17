@@ -13,7 +13,6 @@ on:
 
 jobs:
   healthcheck:
-    if: ${{ github.event_name != 'schedule' || github.repository == 'aztec-labs-eng/aztec-node' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

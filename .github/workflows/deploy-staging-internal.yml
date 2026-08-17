@@ -1,8 +1,9 @@
 name: Deploy to staging internal
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
+  # TODO(monorepo-split): disabled until v6 and the private flow is rebuilt.
+  # schedule:
+  #  - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       tag:
@@ -25,11 +26,6 @@ env:
 jobs:
   determine-tag:
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule') &&
-      (github.event_name != 'schedule' ||
-      github.repository == 'AztecProtocol/aztec-packages-private')
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       semver: ${{ steps.resolve.outputs.semver }}
@@ -63,7 +59,6 @@ jobs:
 
   wait-for-ci3:
     needs: determine-tag
-    if: ${{ github.event_name != 'schedule' || github.repository == 'AztecProtocol/aztec-packages-private' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -81,7 +76,6 @@ jobs:
 
   deploy:
     needs: [determine-tag, wait-for-ci3]
-    if: ${{ github.event_name != 'schedule' || github.repository == 'AztecProtocol/aztec-packages-private' }}
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: staging-internal
