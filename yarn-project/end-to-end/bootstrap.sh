@@ -3,7 +3,6 @@ source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 hash=$(../bootstrap.sh hash)
 bench_fixtures_dir=chonk-pinned-flows
-default_avm_inputs_dump_dir=dumped-avm-circuit-inputs
 ultrahonk_bench_dir=ultrahonk-bench-inputs
 
 function build {
@@ -94,7 +93,7 @@ function test_cmds {
         ;;
       single-node/block-building/block_building)
         # Block-building covers the full multi-tx / reorg surface and dumps AVM circuit inputs
-        # (via set_dump_avm in the loop below) for downstream avm_check_circuit.
+        # (via set_dump_avm in the loop below) when DUMP_AVM_INPUTS_TO_DIR is set.
         test_prefix="$prefix:TIMEOUT=25m"
         ;;
       single-node/proving/long_proving_time)
@@ -214,93 +213,6 @@ function bench {
   rm -rf bench-out
   mkdir -p bench-out
   bench_cmds | STRICT_SCHEDULING=1 parallelize
-}
-
-# Runs e2e tests with AVM circuit inputs dumping enabled, then packages and uploads them
-function test_and_collect_avm_inputs {
-  echo_header "e2e tests with AVM circuit inputs dumping"
-
-  # Fail if dump directory already exists to avoid mixing/overwriting results
-  if [ -d "$default_avm_inputs_dump_dir" ]; then
-    echo_stderr "Error: Dump directory '$default_avm_inputs_dump_dir' already exists. Failing instead of overwriting."
-    exit 1
-  fi
-  mkdir -p "$default_avm_inputs_dump_dir"
-
-  # Set base dir for dumping - test_cmds will append test name subdirs
-  export DUMP_AVM_INPUTS_TO_DIR="$default_avm_inputs_dump_dir"
-
-  # Run tests in parallel (like regular test command)
-  test_cmds | filter_test_cmds | parallelize
-
-  # Use AVM_INPUTS_HASH if set (computed before build in CI), otherwise fall back to $hash
-  local avm_hash=${AVM_INPUTS_HASH:-$hash}
-  local tarball_name="e2e-avm-circuit-inputs-$avm_hash.tar.gz"
-
-  if [ -d "$default_avm_inputs_dump_dir" ] && [ "$(ls -A $default_avm_inputs_dump_dir 2>/dev/null)" ]; then
-    echo_header "Packaging and uploading AVM circuit inputs"
-    cache_upload "$tarball_name" "$default_avm_inputs_dump_dir"
-  else
-    echo_stderr "Warning: No AVM circuit inputs were dumped. Skipping upload."
-  fi
-
-  unset DUMP_AVM_INPUTS_TO_DIR
-}
-
-# Generates commands to run avm_check_circuit on all dumped AVM circuit inputs
-function avm_check_circuit_cmds {
-  local bb_avm="labs-aztec-toolchain/bin/bb-avm"
-  # Commands run from repo root via parallelize, so use path from top
-  local dump_dir_from_top="yarn-project/end-to-end/$default_avm_inputs_dump_dir"
-
-  # Specify timeout and resources
-  # WARNING: theoretically, transactions could need more CPU and MEM than we allocate by default.
-  # In that case, they might start timing out. For now, all of the e2e test txs seem to be relatively
-  # small and the AVM can run check-circuit with limited resources.
-  local prefix="$hash:ISOLATE=1:TIMEOUT=30s"
-
-  # Find all .bin files in the dump directory (handles nested dirs, e.g. the 3-segment
-  # single-node/block-building/block_building dump path needs the 4-level glob).
-  for input_file in "$default_avm_inputs_dump_dir"/*/*.bin "$default_avm_inputs_dump_dir"/*/*/*.bin "$default_avm_inputs_dump_dir"/*/*/*/*.bin; do
-    # Skip if no matches (glob didn't expand)
-    [ -e "$input_file" ] || continue
-
-    # Extract test name and tx hash for the command name
-    # e.g., dumped-avm-circuit-inputs/single-node/block-building/block_building/avm-circuit-inputs-tx-0x1234.bin
-    # -> avm_cc_single-node_block-building_block_building_0x1234
-    local rel_path="${input_file#$default_avm_inputs_dump_dir/}"
-    local test_dir=$(dirname "$rel_path")
-    local filename=$(basename "$input_file" .bin)
-    # Extract just the tx hash part (remove "avm-circuit-inputs-tx-" prefix)
-    local tx_hash="${filename#avm-circuit-inputs-tx-}"
-    # Shorten hash for readability
-    local short_hash="${tx_hash:0:10}"
-    # Create safe name (replace / with _)
-    local safe_test_dir="${test_dir//\//_}"
-    local name="avm_cc_${safe_test_dir}_${short_hash}"
-
-    # Use full path from repo root for the command (parallelize runs from there)
-    local input_path="$dump_dir_from_top/$rel_path"
-    echo "$prefix:NAME=$name $bb_avm avm_check_circuit -v --avm-inputs $input_path"
-  done
-}
-
-# Downloads cached AVM circuit inputs and runs check-circuit on all of them
-function avm_check_circuit {
-  echo_header "AVM check-circuit on dumped inputs"
-
-  # Use AVM_INPUTS_HASH if set (computed before build in CI), otherwise fall back to $hash
-  local avm_hash=${AVM_INPUTS_HASH:-$hash}
-  local tarball_name="e2e-avm-circuit-inputs-$avm_hash.tar.gz"
-
-  # Download the cached tarball
-  if ! cache_download "$tarball_name"; then
-    echo_stderr "Error: Could not download AVM circuit inputs tarball '$tarball_name'"
-    exit 1
-  fi
-
-  # Run check-circuit
-  avm_check_circuit_cmds | parallelize 16
 }
 
 # Generates e2e test commands using contract artifacts from a prior release version.

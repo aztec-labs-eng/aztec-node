@@ -1,4 +1,4 @@
-# aztec-packages
+# aztec-node
 
 All paths below are relative to the git root. When working inside a component, also read that component's `CLAUDE.md` — each is self-contained and covers its own build, style, and test conventions.
 
@@ -20,28 +20,17 @@ The noir-projects build scripts default `$NARGO` to `labs-aztec-toolchain/bin/na
 
 <git_workflow>
 
-<critical_never_assume_master>
-Never assume the base branch is `master` or `main`. Most branches target `next` or a `merge-train/*` branch, and defaulting to `master` produces incorrect diffs and broken PR comparisons. Determine the actual base before diffing or opening a PR.
-
-If a PR is already open, that is authoritative:
+<base_branch>
+The default branch and standard PR base is `main`. If a PR is already open, its base is authoritative:
 
 ```bash
 gh pr view --json baseRefName -q '.baseRefName'
 ```
 
-Otherwise infer from the component being worked in:
+Backport and forward-port PRs target their staging branches (`backport-to-*-staging`, `port-to-main-staging`) rather than `main`. Never present internal branch names, or `spartan` (the deployment infrastructure in `spartan/`), to a user as something to install or migrate to — releases are version tags (e.g. v5) and networks are named (e.g. testnet).
 
-| Component | Base branch |
-|---|---|
-| `yarn-project/**` | `merge-train/spartan` |
-| everything else | `next` |
-
-The bases above target the `next` line. For work scoped to the v5 release line, use `merge-train/spartan-v5` (which targets `v5-next`) in place of `merge-train/spartan`.
-
-`spartan` in these branch names refers to the deployment infrastructure in `spartan/`; it is not a release channel, network, or SDK version. Never present it, `merge-train/*`, `next`, or `v5-next` to a user as something to install or migrate to — releases are version tags (e.g. v5) and networks are named (e.g. testnet).
-
-Use the discovered base in `git diff origin/<base>...HEAD` and `git log origin/<base>..HEAD`. Always `git fetch` before creating branches so the base is not stale.
-</critical_never_assume_master>
+Use the base in `git diff origin/<base>...HEAD` and `git log origin/<base>..HEAD`. Always `git fetch` before creating branches so the base is not stale.
+</base_branch>
 
 <commits_and_prs>
 Follow Conventional Commits: `fix:`, `feat:`, `chore:`, `refactor:`, `docs:`, `test:`. PRs are squashed to a single commit on merge, so during development just create normal commits — do not amend unless explicitly asked.

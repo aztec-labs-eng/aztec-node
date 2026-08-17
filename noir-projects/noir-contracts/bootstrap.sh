@@ -202,18 +202,11 @@ function test_cmds {
   # Test bb aztec_process command
   echo "$AZTEC_TOOLCHAIN_HASH noir-projects/noir-contracts/scripts/test_aztec_process.sh"
 
-  # Fairies want to run these tests on every PR
-  if [ "${TARGET_BRANCH:-}" = "merge-train/fairies" ]; then
-    $NARGO test --list-tests --silence-warnings | sort | while read -r package test; do
-      echo "disabled-cache noir-projects/scripts/run_test.sh noir-contracts $package $test $txe_port"
-    done
-  else
-    local -A cache
-    $NARGO test --list-tests --silence-warnings | sort | while read -r package test; do
-      [ -z "${cache[$package]:-}" ] && cache[$package]=$(get_contract_hash_for_testing $package $folder_name)
-      echo "${cache[$package]} noir-projects/scripts/run_test.sh noir-contracts $package $test $txe_port"
-    done
-  fi
+  local -A cache
+  $NARGO test --list-tests --silence-warnings | sort | while read -r package test; do
+    [ -z "${cache[$package]:-}" ] && cache[$package]=$(get_contract_hash_for_testing $package $folder_name)
+    echo "${cache[$package]} noir-projects/scripts/run_test.sh noir-contracts $package $test $txe_port"
+  done
 }
 
 function start_txe {

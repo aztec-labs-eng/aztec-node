@@ -7,12 +7,7 @@ ROOT=$(git rev-parse --show-toplevel)
 export NARGO=${NARGO:-"$ROOT/labs-aztec-toolchain/bin/nargo"}
 export AZTEC_TOOLCHAIN_HASH=${AZTEC_TOOLCHAIN_HASH:-$($ROOT/labs-aztec-toolchain/bootstrap.sh hash)}
 
-# Fairies want to run these tests on every PR
-if [ "${TARGET_BRANCH:-}" = "merge-train/fairies" ]; then
-  hash=disabled-cache
-else
-  hash=$(hash_str $AZTEC_TOOLCHAIN_HASH $(cache_content_hash "^noir-projects/aztec-nr"))
-fi
+hash=$(hash_str $AZTEC_TOOLCHAIN_HASH $(cache_content_hash "^noir-projects/aztec-nr"))
 
 function build {
   # Being a library, aztec-nr does not technically need to be built. But we can still run nargo check to find any type
@@ -20,7 +15,7 @@ function build {
   echo_stderr "Checking aztec-nr for warnings..."
   # nargo resolves git dependencies (e.g. noir-lang/sha256, noir-lang/poseidon) by cloning from
   # github.com on a cold cache, which intermittently fails with transient DNS/network errors. Retry
-  # only on those transport failures so a flaky clone does not dequeue the merge train, while genuine
+  # only on those transport failures so a flaky clone does not fail CI, while genuine
   # check failures (type errors, warnings) still fail immediately.
   local git_net_flake="Could not resolve host|unable to access|Connection timed out|Connection refused|Failed to connect|TLS connect error|early EOF|RPC failed"
   retry -p "$git_net_flake" "$NARGO check --deny-warnings"

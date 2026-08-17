@@ -764,8 +764,8 @@ function test_bootstrap_macos {
   /mnt/user-data/macos/ssh.sh $name bash -c 'cat > /tmp/mac_bootstrap.sh' <<REMOTE_EOF
 set -euo pipefail
 ulimit -n 65536
-git clone --depth=1 --branch=$(git branch --show-current) https://github.com/aztecprotocol/aztec-packages
-cd aztec-packages
+git clone --depth=1 --branch=$(git branch --show-current) https://github.com/aztec-labs-eng/aztec-node
+cd aztec-node
 ./bootstrap.sh install_deps </dev/null
 zsh -l -i -c "ulimit -n 65536 && NO_CACHE=1 ./bootstrap.sh gentle"
 REMOTE_EOF
@@ -1081,7 +1081,7 @@ case "$cmd" in
     set -e
     if [ "$compat_rc" -ne 0 ]; then
       if [[ "${REF_NAME:-}" == *-nightly.* ]]; then
-        run_url="https://github.com/${GITHUB_REPOSITORY:-AztecProtocol/aztec-packages}/actions/runs/${RUN_ID:-unknown}"
+        run_url="https://github.com/${GITHUB_REPOSITORY:-aztec-labs-eng/aztec-node}/actions/runs/${RUN_ID:-unknown}"
         "$ci3/slack_notify" "Backwards compatibility e2e tests FAILED on nightly tag <${run_url}|${REF_NAME}>" "#team-fairies" || true
         echo "Compat e2e failed on nightly tag — continuing (non-blocking)."
       else
@@ -1125,33 +1125,14 @@ case "$cmd" in
     ./bootstrap.sh release
     ;;
 
-  ##########################
-  # MERGE TRAIN CI SUBSETS #
-  ##########################
+  ##############
+  # CI SUBSETS #
+  ##############
   "ci-docs")
     export CI=1
     export USE_TEST_CACHE=1
     ./bootstrap.sh build yarn-project
     docs/bootstrap.sh ci
-    ;;
-  #######################
-  # AVM QA ONE OFF JOBS #
-  #######################
-  "ci-avm-inputs-collection")
-    # Nightly job: Run e2e tests with AVM circuit inputs dumping, upload to cache
-    export CI=1
-    # Use tree hash for tarball name - consistent across all environments
-    export AVM_INPUTS_HASH=$(git rev-parse HEAD^{tree})
-    build
-    yarn-project/end-to-end/bootstrap.sh test_and_collect_avm_inputs
-    ;;
-  "ci-avm-check-circuit")
-    # Nightly job: Download cached AVM inputs and run check-circuit on each
-    export CI=1
-    # Use tree hash for tarball name - consistent across all environments
-    export AVM_INPUTS_HASH=$(git rev-parse HEAD^{tree})
-    build
-    yarn-project/end-to-end/bootstrap.sh avm_check_circuit
     ;;
   ##########################################
   # ROLLUP UPGRADE DEPLOYMENT              #

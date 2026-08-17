@@ -46,8 +46,6 @@ function print_usage {
   echo_cmd "draft"                 "Mark the current PR as draft (no automatic CI runs when pushing)."
   echo_cmd "ready"                 "Mark the current PR as ready (enable automatic CI runs when pushing)."
   echo_cmd "pr-url"                "Print the URL of the current PR associated with the branch."
-  echo_cmd "avm-inputs-collection" "Run e2e tests, dump AVM circuit inputs, upload to cache."
-  echo_cmd "avm-check-circuit"     "Download cached AVM inputs, run check-circuit on each."
   echo_cmd "help"                  "Display this help message."
 }
 
@@ -139,8 +137,7 @@ function multi_job_run {
   export DENOISE_WIDTH=32
   # Only the first job (the amd64 full build) runs the dedicated bench box and uploads;
   # the rest bench inline as a breakage check (see bootstrap.sh build_and_test). This
-  # de-races grind runs (e.g. merge-queue-heavy fires ~10 instances) that would otherwise
-  # all upload to the same bench cache key.
+  # de-races multi-instance runs that would otherwise all upload to the same bench cache key.
   local bench_primary=${1%% *}
   export bench_primary
   run() {
@@ -168,7 +165,7 @@ export RUN_ID=${RUN_ID:-$(date +%s%3N)}
 
 case "$cmd" in
   dash)
-    watch_ci -s next,prs --user --watch
+    watch_ci -s main,prs --user --watch
     ;;
   fast|docs)
     export CI_DASHBOARD="prs"
@@ -211,11 +208,6 @@ case "$cmd" in
     export AWS_SHUTDOWN_TIME=75
     multi_job_run "x-$cmd amd64 ci-$cmd"
     ;;
-  avm-inputs-collection|avm-check-circuit)
-    export CI_DASHBOARD="nightly"
-    export JOB_ID="x-$cmd"
-    bootstrap_ec2 "./bootstrap.sh ci-$cmd"
-    ;;
   grind)
     # Grind a default of 5 times.
     export CI_DASHBOARD="local"
@@ -233,21 +225,6 @@ case "$cmd" in
     multi_job_run \
       'x1-full amd64 ci-full-no-test-cache' \
       'a1-fast arm64 ci-fast'
-    ;;
-  merge-queue-heavy)
-    # Heavy merge queue with 10 parallel grind runs, used for merge-train/spartan-v5 PRs.
-    multi_job_run \
-      'x'{1..10}'-full amd64 ci-full-no-test-cache' \
-      'a1-fast arm64 ci-fast'
-    ;;
-  merge-queue-ci)
-    # 10 parallel grind runs with no build cache and dry run of release, used for merge-train/ci PRs.
-    export DRY_RUN=1
-    export NO_CACHE=1
-    multi_job_run \
-      'x'{1..10}'-full amd64 ci-full-no-test-cache' \
-      'a1-fast arm64 ci-fast' \
-      "release amd64 ci-release v0.0.1-commit.$(git rev-parse --short HEAD)"
     ;;
   grind-test)
     full_cmd="$1"

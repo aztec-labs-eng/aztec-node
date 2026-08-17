@@ -1,11 +1,10 @@
-name: Merge-Train PR Body
+name: Staging PR Body
 
 on:
   push:
     branches:
-      - 'merge-train/**'
       - 'backport-to-*-staging'
-      - 'port-to-next-staging'
+      - 'port-to-main-staging'
 
 jobs:
   update-pr-body:
@@ -19,6 +18,6 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
 
-      - name: Update merge train PR body
+      - name: Update staging PR body
         run: |
-          GH_TOKEN=${{ secrets.AZTEC_BOT_GITHUB_TOKEN }} ./scripts/merge-train/update-pr-body.sh "$GITHUB_REF_NAME"
+          GH_TOKEN=${{ secrets.AZTEC_BOT_GITHUB_TOKEN }} ./scripts/update-pr-body.sh "$GITHUB_REF_NAME"

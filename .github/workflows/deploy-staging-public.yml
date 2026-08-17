@@ -29,15 +29,15 @@ jobs:
       (github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule') &&
       (github.event_name != 'schedule' ||
-      github.repository == 'AztecProtocol/aztec-packages')
+      github.repository == 'aztec-labs-eng/aztec-node')
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       semver: ${{ steps.resolve.outputs.semver }}
     steps:
-      - name: Checkout next
+      - name: Checkout main
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: next
+          ref: main
           token: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
           fetch-depth: 1
 
@@ -63,7 +63,7 @@ jobs:
 
   wait-for-ci3:
     needs: determine-tag
-    if: ${{ github.event_name != 'schedule' || github.repository == 'AztecProtocol/aztec-packages' }}
+    if: ${{ github.event_name != 'schedule' || github.repository == 'aztec-labs-eng/aztec-node' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -81,12 +81,12 @@ jobs:
 
   deploy:
     needs: [determine-tag, wait-for-ci3]
-    if: ${{ github.event_name != 'schedule' || github.repository == 'AztecProtocol/aztec-packages' }}
+    if: ${{ github.event_name != 'schedule' || github.repository == 'aztec-labs-eng/aztec-node' }}
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: staging-public
       semver: ${{ needs.determine-tag.outputs.semver }}
       source_tag: ${{ needs.determine-tag.outputs.tag }}
-      ref: next
+      ref: main
       deploy_contracts: ${{ inputs.deploy_contracts == true }}
     secrets: inherit

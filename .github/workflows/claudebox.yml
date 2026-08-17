@@ -16,7 +16,7 @@ on:
         required: false
         type: string
       target_ref:
-        description: 'Git ref the session should work against (e.g., origin/merge-train/spartan)'
+        description: 'Git ref the session should work against (e.g., origin/main)'
         required: false
         type: string
       repo:
@@ -139,9 +139,8 @@ jobs:
           SLACK_THREAD_TS: ${{ inputs.slack_thread_ts || '' }}
           # Mode selection, in priority order:
           #   1. an explicit `mode` input (caller knows best);
-          #   2. private, when the target repo is a private mirror (…-private) —
-          #      e.g. a merge-train dequeue on aztec-packages-private, which a
-          #      public-mode session cannot read or open a fix PR against;
+          #   2. private, when the target repo is a private mirror (…-private),
+          #      which a public-mode session cannot read or open a fix PR against;
           #   3. the repo/org default (public) for ordinary /claudebox work on
           #      aztec-packages.
           CLAUDEBOX_MODE: ${{ inputs.mode || (endsWith(inputs.repo || github.repository, '-private') && 'private' || vars.CLAUDEBOX_MODE || 'public') }}
