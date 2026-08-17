@@ -14,7 +14,7 @@ function get_meaningful_commits {
 # Usage: update-pr-body.sh <branch-name>
 if [[ $# -ne 1 ]]; then
   echo "Usage: $0 <branch-name>"
-  echo "Example: $0 merge-train/docs"
+  echo "Example: $0 port-to-main-staging"
   exit 1
 fi
 

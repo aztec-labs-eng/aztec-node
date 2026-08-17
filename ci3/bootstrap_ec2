@@ -73,14 +73,6 @@ fi
 # connect/kill helpers so the launch and connect names never drift.
 instance_name=$(aws_instance_name "$REF_NAME" "$arch" "${INSTANCE_POSTFIX:-}")
 
-# Merge-train PRs are intentionally not cancelled per-commit (see ci3.yml concurrency), so
-# several distinct commits build concurrently. Append the commit sha so each gets its own
-# instance and they don't reap each other. ci.sh's connect helpers match the Name tag by
-# substring, so the sha-free base from aws_instance_name still resolves these.
-if [[ "$REF_NAME" == merge-train/* ]]; then
-  instance_name="${instance_name}_${current_commit:0:9}"
-fi
-
 state_dir=$(mktemp -d /tmp/aws_request_instance.XXXXXX)
 
 if semver check "$REF_NAME"; then
@@ -176,11 +168,11 @@ container_script=$(
   # Note we use the "ci-started" file to determine if we're running on a CI machine in some cases (e.g. npm cache).
   while [ -f ci-started ]; do sleep 999; done
   touch ci-started
-  sudo chown aztec-dev:aztec-dev aztec-packages
+  sudo chown aztec-dev:aztec-dev aztec-node
   # Set up preferred commit attribution (used during releases).
   git config --global user.email "tech@aztecprotocol.com"
   git config --global user.name "AztecBot"
-  cd aztec-packages
+  cd aztec-node
   git config --global advice.detachedHead false
   git init .
   if [ -n "\${GITHUB_TOKEN:-}" ]; then
@@ -235,7 +227,6 @@ container_script=$(
     0) log_ci_run \$ci_log_id PASSED ;;
     *)
       log_ci_run \$ci_log_id FAILED
-      merge_train_failure_slack_notify \$ci_log_id
       release_canary_slack_notify \$ci_log_id
       ;;
   esac
@@ -344,7 +335,7 @@ start_build() {
     --name aztec_build \
     --hostname $docker_hostname \
     -v bootstrap_ci_local_docker:/var/lib/docker \
-    -v bootstrap_ci_repo:/home/aztec-dev/aztec-packages \
+    -v bootstrap_ci_repo:/home/aztec-dev/aztec-node \
     -v \$HOME/.ssh:/home/aztec-dev/.ssh:ro \
     -v \$HOME/.bb-crs:/home/aztec-dev/.bb-crs \
     -v /dev/kmsg:/dev/kmsg \
@@ -380,7 +371,7 @@ start_build() {
     -e R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-} \
     -e BUILD_SYSTEM_DEBUG=${BUILD_SYSTEM_DEBUG:-} \
     -e GITHUB_TOKEN=${GITHUB_TOKEN:-} \
-    -e GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-aztecprotocol/aztec-packages} \
+    -e GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-aztec-labs-eng/aztec-node} \
     -e PR_NUMBER=${PR_NUMBER:-} \
     -e PR_HEAD_REF=${PR_HEAD_REF:-} \
     -e PR_BASE_REF=${PR_BASE_REF:-} \

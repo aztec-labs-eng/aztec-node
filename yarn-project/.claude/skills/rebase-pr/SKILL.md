@@ -25,7 +25,7 @@ gh pr view <PR> --repo AztecProtocol/aztec-packages --json state,headRefName,bas
 **Abort if:**
 - `state` is not `OPEN` → "PR #\<N> is \<state>, nothing to rebase."
 
-Note the `baseRefName` (usually `next` or `merge-train/*`).
+Note the `baseRefName` (usually `main`).
 
 ### Step 2: Checkout and Rebase
 

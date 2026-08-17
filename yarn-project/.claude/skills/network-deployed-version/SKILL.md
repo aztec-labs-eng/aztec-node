@@ -5,9 +5,9 @@ description: Determine which git commit an Aztec network (next-net, devnet, stag
 
 # Determine an Aztec network's deployed commit
 
-Aztec networks deploy via **scheduled GitHub Actions workflows**. Depending on the network, the run history lives in **either** the PRIVATE repo `AztecProtocol/aztec-packages-private` **or** the PUBLIC repo `AztecProtocol/aztec-packages` — see the table below for which repo each network deploys from (`gh` needs auth with access to both). The commit a network runs at time T is the **headSha of the last *successful* deploy run at or before T** — failed runs leave the previous commit live, so a string of failed nightlies can keep a network on a days-old commit.
+Aztec networks deploy via **scheduled GitHub Actions workflows**. Depending on the network, the run history lives in **either** the PRIVATE repo `AztecProtocol/aztec-packages-private` **or** the PUBLIC repo `aztec-labs-eng/aztec-node` — see the table below for which repo each network deploys from (`gh` needs auth with access to both). The commit a network runs at time T is the **headSha of the last *successful* deploy run at or before T** — failed runs leave the previous commit live, so a string of failed nightlies can keep a network on a days-old commit.
 
-> The local working clone is usually the **public mirror** (`aztec-packages`), which has *different commits and PR numbers*. Do not infer deployed code from local `origin/next`.
+> The local working clone is usually the **public repo** (`aztec-node`), which has *different commits and PR numbers* from the private repo. Do not infer deployed code from local `origin/main`.
 
 ## Run the investigation in a subagent
 
@@ -27,16 +27,16 @@ If the optional live cross-check (step 4) is needed, the subagent can itself del
 |---|---|---|---|---|---|
 | next-net | Deploy Next Net | 235418088 | aztec-packages-private | `next` branch (latest nightly tag) | nightly, cron `0 6 * * *` UTC (runs typically start/finish ~07:30–08:25 UTC due to GitHub schedule lag) |
 | devnet | Devnet Auto-Deploy | 235418089 | aztec-packages-private | `v*-devnet-*` branch | on push to the devnet branch; that branch is created on demand by "Create Devnet" (id 235418083, `workflow_dispatch` only) from a chosen nightly tag |
-| staging (public) | Deploy to staging public | 244296513 | aztec-packages (PUBLIC) | `next` → `v5.0.0-nightly.<date>` tag | nightly, cron `0 6 * * *` UTC |
+| staging (public) | Deploy to staging public | 244296513 | aztec-node (PUBLIC) | `main` → `v5.0.0-nightly.<date>` tag | nightly, cron `0 6 * * *` UTC |
 | staging (internal) | Deploy to staging internal | 292462388 | aztec-packages-private | `next` → `v5.0.0-nightly.<date>` tag | nightly, cron `0 6 * * *` UTC |
 
-> Watch the repo column. The scheduled "Deploy to staging public" run is gated to `github.repository == 'AztecProtocol/aztec-packages'`, so in the **private** repo those runs show as `skipped` — its real run history lives in the **public** `aztec-packages` repo. The other three deploy from the private repo.
+> Watch the repo column. The scheduled "Deploy to staging public" run is gated to `github.repository == 'aztec-labs-eng/aztec-node'`, so in the **private** repo those runs show as `skipped` — its real run history lives in the **public** `aztec-node` repo. The other three deploy from the private repo.
 
 Re-confirm ids/branches with `gh workflow list -R AztecProtocol/aztec-packages-private --all` and the YAML under `.github/workflows/`.
 
 ## Procedure
 
-The subagent runs these steps. Use the repo from the table above for each network — private for most, public (`AztecProtocol/aztec-packages`) for staging-public — substituting it for `-R AztecProtocol/aztec-packages-private` in the commands below.
+The subagent runs these steps. Use the repo from the table above for each network — private for most, public (`aztec-labs-eng/aztec-node`) for staging-public — substituting it for `-R AztecProtocol/aztec-packages-private` in the commands below.
 
 1. **Find the live commit at time T.** Use the repo from the table above (either private or public):
    ```bash
