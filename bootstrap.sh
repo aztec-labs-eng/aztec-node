@@ -530,12 +530,14 @@ function release {
   set -x
 
   # A private release publishes only to our internal GCP Artifact Registry (the docker image and our
-  # npm packages) — see private_release. ci3_labels_to_env.sh sets PRIVATE_RELEASE for every release in
-  # the private repo; we ALSO backstop on the repo name here so the public release flow (DockerHub,
-  # npmjs, crates.io, github) can never run in the private fork, even if that env var is missing or this
-  # is invoked outside ci3.yml.
+  # npm packages) — see private_release. ci3_labels_to_env.sh sets PRIVATE_RELEASE for every release
+  # outside the canonical public repo; we ALSO backstop on the repo name here so the public release
+  # flow (DockerHub, npmjs, crates.io, github) can never run in any other repo (e.g. a private fork),
+  # even if that env var is missing or this is invoked outside ci3.yml. GITHUB_REPOSITORY is unset in
+  # local runs, which keep the public path.
   if [ "${PRIVATE_RELEASE:-0}" = 1 ] ||
-     [ "$(printf '%s' "${GITHUB_REPOSITORY:-}" | tr 'A-Z' 'a-z')" = "aztecprotocol/aztec-packages-private" ]; then
+     { [ -n "${GITHUB_REPOSITORY:-}" ] &&
+       [ "$(printf '%s' "$GITHUB_REPOSITORY" | tr 'A-Z' 'a-z')" != "aztec-labs-eng/aztec-node" ]; }; then
     private_release
     return
   fi
@@ -1090,20 +1092,6 @@ case "$cmd" in
       fi
     fi
 
-    if [[ "$(semver prerelease $REF_NAME)" == private* ]]; then
-      echo_header "Private fork release: $REF_NAME"
-      echo "Fetching private source from aztec-packages-private..."
-      git remote add private "https://x-access-token:${GITHUB_TOKEN}@github.com/AztecProtocol/aztec-packages-private.git"
-      git fetch --depth 1 private "refs/tags/$REF_NAME"
-      git worktree add aztec-private FETCH_HEAD
-      cd aztec-private
-      echo "Initializing submodules in private worktree..."
-      git submodule update --init --recursive
-      echo "Private worktree ready at $(pwd) (HEAD=$(git rev-parse --short HEAD)). Cache uploads disabled."
-      export NO_CACHE_UPLOAD=1
-      # Unset so child bootstrap.sh re-derives these from the worktree.
-      unset COMMIT_HASH root
-    fi
     ./bootstrap.sh build release
     ./bootstrap.sh release
     ;;

@@ -9,7 +9,7 @@
 #   postfix default $INSTANCE_POSTFIX (the per-job suffix, e.g. x-fast, bench); optional.
 #
 # The repo prefix is $GITHUB_REPOSITORY's basename (default aztec-node) so that
-# aztec-packages and aztec-packages-private don't collide on names.
+# runs from different repos sharing the AWS account don't collide on names.
 set -eu
 
 ref=${1:-${REF_NAME:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)}}

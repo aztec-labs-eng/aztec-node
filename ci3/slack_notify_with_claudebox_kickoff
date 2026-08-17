@@ -6,7 +6,7 @@ set -eu
 #
 # --mode  forces the ClaudeBox session's repo-access mode. Leave unset to let
 #         claudebox.yml pick it (private for a private target repo, else public).
-# --repo  the repo the work targets (e.g. AztecProtocol/aztec-packages-private).
+# --repo  the repo the work targets (e.g. aztec-labs-eng/aztec-node).
 #         Passed to ClaudeBox so a private target lands in private mode; without
 #         it, work aimed at a private repo dead-ends in a public-mode session.
 #

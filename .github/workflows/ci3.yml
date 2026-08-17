@@ -62,8 +62,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           # Fetch PR commits depth (we'll deepen by 1 in squash script if needed)
           fetch-depth: ${{ github.event.pull_request.commits || 1 }}
-          # Persisted for authenticated reads (e.g. the aztec-packages-private mirror); pushes swap in
-          # a bot-PAT remote at each push site.
+          # Persisted for authenticated reads; pushes swap in a bot-PAT remote at each push site.
           persist-credentials: true
 
       - name: Configure AWS credentials (OIDC)
@@ -104,8 +103,8 @@ jobs:
           EXTERNAL_ETHEREUM_CONSENSUS_HOST_API_KEY: ${{ secrets.GCP_SEPOLIA_API_KEY }}
           EXTERNAL_ETHEREUM_CONSENSUS_HOST_API_KEY_HEADER: "X-goog-api-key"
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          # Internal GCP Artifact Registry the private repo's release pushes the docker image to (see
-          # bootstrap.sh::private_release). Empty in the public repo, where releases publish normally.
+          # Internal GCP Artifact Registry that private releases push the docker image to (see
+          # bootstrap.sh::private_release). Empty here, where releases publish normally.
           INTERNAL_DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
           MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -199,7 +198,6 @@ jobs:
       && (
         (
           needs.validate-nightly-tag.outputs.is_current == 'true'
-          && github.repository == 'aztec-labs-eng/aztec-node'
           && startsWith(github.ref_name, 'v6.')
         )
         || contains(github.event.pull_request.labels.*.name, 'ci-network-scenario')
@@ -249,16 +247,7 @@ jobs:
             tag="${tag#v}"
             major_version=$(./ci3/semver major "$tag")
             namespace="v${major_version}-scenario"
-            case "$GITHUB_REPOSITORY" in
-              AztecProtocol/aztec-packages-private)
-                image_registry="${INTERNAL_DOCKER_REGISTRY%/}"
-                echo "::add-mask::${image_registry}"
-                ;;
-              *)
-                image_registry="aztecprotocol"
-                ;;
-            esac
-            docker_image="${image_registry}/aztec:${tag}"
+            docker_image="aztecprotocol/aztec:${tag}"
           else
             # branch name
             namespace=pr-$(echo "$HEAD_REF" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20 | sed 's/-*$//')
