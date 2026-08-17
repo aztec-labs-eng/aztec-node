@@ -61,9 +61,11 @@ without checking:
 
 ```bash
 sha=$(gh api "repos/AztecProtocol/aztec-packages/contents/noir/noir-repo?ref=v<version>" --jq .sha)
-git ls-remote --tags https://github.com/noir-lang/noir | grep "$sha"
+[ -n "$sha" ] && git ls-remote --tags https://github.com/noir-lang/noir | grep "$sha"
 ```
 
+- An empty `$sha` means the lookup itself failed (wrong tag?): fix that before going on —
+  an unguarded `grep ""` would list every noir tag and invite picking an arbitrary one.
 - Multiple tags may point at the commit (e.g. `nightly-2026-07-31` and `v1.0.0-beta.26`):
   prefer the `v*` release tag, stripped of its `v`.
 - Only a `nightly-*` tag: use it verbatim (`NOIR_VERSION` supports that form).
