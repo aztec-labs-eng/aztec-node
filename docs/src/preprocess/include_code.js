@@ -25,7 +25,7 @@ function resolveSnippetSource(relativeCodeFilePath, rootDir, defaultTag) {
   );
   if (!published) {
     return {
-      repoUrl: "https://github.com/AztecProtocol/aztec-packages",
+      repoUrl: "https://github.com/aztec-labs-eng/aztec-node",
       ref: defaultTag,
       displayPath: relativeCodeFilePath,
     };
@@ -297,7 +297,7 @@ async function preprocessIncludeCode(markdownContent, filePath, rootDir) {
       const relativeCodeFilePath = path
         .resolve(rootDir, codeFilePath)
         .replace(/^\//, "");
-      const tag = process.env.COMMIT_TAG ? `${process.env.COMMIT_TAG}` : "next";
+      const tag = process.env.COMMIT_TAG ? `${process.env.COMMIT_TAG}` : "main";
       const { repoUrl, ref, displayPath } = resolveSnippetSource(
         relativeCodeFilePath,
         rootDir,

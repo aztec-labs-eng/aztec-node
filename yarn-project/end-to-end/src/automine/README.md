@@ -56,5 +56,5 @@ files directly under `automine/` — smoke, tx ordering/double-spend/phase check
 | `effects/` | Note discovery, events, and offchain effects: note getters, pending note hashes, partial notes, event logs, event-only notes, offchain effects and payments, large public events, custom messages, the tx-effect oracle, and note rediscovery after pruned blocks. |
 | `simulation/` | Circuit simulation surface: the AVM simulator, kernelless simulation, and the circuit recorder. |
 
-The `simulation/avm_simulator` file is a genuine outlier: it dumps AVM circuit inputs for the downstream
-`avm_check_circuit` CI job, so it has a bespoke CI line and is excluded from the generic `simulation/` glob.
+The `simulation/avm_simulator` file is a genuine outlier: it dumps AVM circuit inputs when
+`DUMP_AVM_INPUTS_TO_DIR` is set, so it has a bespoke CI line and is excluded from the generic `simulation/` glob.

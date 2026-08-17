@@ -4,9 +4,9 @@ Three benchmarks run against ephemeral networks on the `aztec-gke-private` GKE c
 their results to the network dashboard. This document describes the workflows, what each one
 measures, and how results are published.
 
-Documented against `next`. Scheduled workflows only fire from the repository's default branch, so
-`next` is the branch that actually runs nightly — a benchmark change merged only to a release or
-merge-train branch does not affect the nightly run.
+Documented against `main`. Scheduled workflows only fire from the repository's default branch, so
+`main` is the branch that actually runs nightly — a benchmark change merged only to a release
+branch does not affect the nightly run.
 
 | Benchmark | Workflow | Schedule | Env / namespace | `benchmarkType` |
 | --- | --- | --- | --- | --- |
@@ -38,7 +38,7 @@ Every benchmark follows the same phases:
 7. **Notify** `#alerts-next-scenario` on Slack. Failures on scheduled runs also dispatch a ClaudeBox
    investigation; `workflow_dispatch` runs stay silent.
 
-All four workflows are guarded on `github.repository == 'AztecProtocol/aztec-packages'` so they only
+All four workflows are guarded on `github.repository == 'aztec-labs-eng/aztec-node'` so they only
 run there, and all use `concurrency` with `cancel-in-progress`.
 
 ### From workflow to test

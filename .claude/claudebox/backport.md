@@ -10,10 +10,10 @@ You will receive a prompt like:
 
 Variables you need to extract from the prompt:
 - `PR_NUMBER`: the PR number (e.g., `21829`)
-- `TARGET_BRANCH`: the target branch (e.g., `v4-next`, or `next` for a `port-to-next` port)
+- `TARGET_BRANCH`: the target branch (e.g., `v6-next`, or `main` for a `port-to-main` port)
 - `STAGING_BRANCH`: `backport-to-${TARGET_BRANCH}-staging` for a backport. For a
-  `port-to-next` port it is `port-to-next-staging`; the prompt states it explicitly
-  (`... (staging branch port-to-next-staging) ...`) — use the branch named there.
+  `port-to-main` port it is `port-to-main-staging`; the prompt states it explicitly
+  (`... (staging branch port-to-main-staging) ...`) — use the branch named there.
 
 ## Constraints
 
@@ -28,7 +28,7 @@ commits will leak into the PR. **Always verify your branch before calling `creat
 ### 1. Validate PR State
 
 ```
-github_api(method="GET", path="repos/AztecProtocol/aztec-packages/pulls/<PR_NUMBER>")
+github_api(method="GET", path="repos/aztec-labs-eng/aztec-node/pulls/<PR_NUMBER>")
 ```
 
 Confirm `state` is `closed` and `merged` is `true`. Extract `merge_commit_sha`.
@@ -81,7 +81,7 @@ When the cherry-pick fails:
 1. Check `git status` and `git diff` to understand the conflict state
 2. Get the full PR diff for reference:
    ```
-   github_api(method="GET", path="repos/AztecProtocol/aztec-packages/pulls/<PR_NUMBER>",
+   github_api(method="GET", path="repos/aztec-labs-eng/aztec-node/pulls/<PR_NUMBER>",
               accept="application/vnd.github.v3.diff")
    ```
 3. For each conflicted file:
@@ -125,7 +125,7 @@ Then create the PR:
 create_pr(
   title="<PR_TITLE> (backport #<PR_NUMBER>)",
   body="## Summary
-Backport of https://github.com/AztecProtocol/aztec-packages/pull/<PR_NUMBER> to <TARGET_BRANCH>.
+Backport of https://github.com/aztec-labs-eng/aztec-node/pull/<PR_NUMBER> to <TARGET_BRANCH>.
 
 <Brief description of what was backported and any conflicts resolved>
 

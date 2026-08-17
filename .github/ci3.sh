@@ -22,12 +22,6 @@ function setup_environment {
     jq -e . "$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null
     echo "GCP key stored"
   fi
-  # To allow full concurrency, we set instance postfix for merge-train PRs
-  if [[ "${PR_HEAD_REF:-}" == merge-train/* ]]; then
-    export INSTANCE_POSTFIX=${PR_COMMITS:-}
-    echo "INSTANCE_POSTFIX=$INSTANCE_POSTFIX" >> $GITHUB_ENV
-    echo "Instance postfix set to: $INSTANCE_POSTFIX"
-  fi
   # Setup SSH key — needed for the Redis tunnel (denoise logs) even in SSM mode,
   # and for direct SSH bootstrap when CI_USE_SSH=1.
   if [ -n "${BUILD_INSTANCE_SSH_KEY:-}" ]; then
