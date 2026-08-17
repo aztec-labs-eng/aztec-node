@@ -17,13 +17,13 @@ services:
     cpuset: ${CPU_LIST:-}
     mem_limit: 8G
     volumes:
-      - ../../../../:/root/aztec-packages
+      - ../../../../:/root/aztec-node
       - ${HOME}/.bb-crs:/root/.bb-crs
       - web3signer_keys:/keys
     tmpfs:
       - /tmp:rw,size=1g
       - /tmp-jest:rw,size=512m
-    working_dir: /root/aztec-packages/yarn-project/end-to-end
+    working_dir: /root/aztec-node/yarn-project/end-to-end
     environment:
       JEST_CACHE_DIR: /tmp-jest
       LOG_LEVEL: ${LOG_LEVEL:-verbose}
@@ -32,7 +32,7 @@ services:
       WEB3_SIGNER_TEST_KEYSTORE_DIR: /keys
       FORCE_COLOR: ${FORCE_COLOR:-1}
       # Allow git usage despite different ownership. Relevant for script tests.
-      GIT_CONFIG_GLOBAL: /root/aztec-packages/build-images/src/home/.gitconfig
+      GIT_CONFIG_GLOBAL: /root/aztec-node/build-images/src/home/.gitconfig
       # For debugging scripts that were passed as TEST.
       BUILD_SYSTEM_DEBUG: ${BUILD_SYSTEM_DEBUG:-}
     # Voodoo explanation.

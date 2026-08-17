@@ -13,10 +13,10 @@ services:
     mem_limit: 8G
     stop_grace_period: 60s
     volumes:
-      - ../../../:/root/aztec-packages
+      - ../../../:/root/aztec-node
       - ${HOME}/.bb-crs:/root/.bb-crs
       - local-network-logs:/logs
-    working_dir: /root/aztec-packages/yarn-project/aztec
+    working_dir: /root/aztec-node/yarn-project/aztec
     entrypoint: >
       bash -c '
         set -o pipefail
@@ -41,13 +41,13 @@ services:
     cpuset: ${CPU_LIST:-}
     mem_limit: 8G
     volumes:
-      - ../../../:/root/aztec-packages
+      - ../../../:/root/aztec-node
       - ${HOME}/.bb-crs:/root/.bb-crs
       - local-network-logs:/logs
     tmpfs:
       - /tmp:rw,size=1g
       - /tmp-jest:rw,size=512m
-    working_dir: /root/aztec-packages/yarn-project/end-to-end
+    working_dir: /root/aztec-node/yarn-project/end-to-end
     environment:
       JEST_CACHE_DIR: /tmp-jest
       BENCHMARK: 'true'
@@ -57,7 +57,7 @@ services:
       FORCE_COLOR: ${FORCE_COLOR:-1}
       AZTEC_NODE_URL: http://local-network:8080
       # Allow git usage despite different ownership. Relevant for script tests.
-      GIT_CONFIG_GLOBAL: /root/aztec-packages/build-images/src/home/.gitconfig
+      GIT_CONFIG_GLOBAL: /root/aztec-node/build-images/src/home/.gitconfig
       # For debugging scripts that were passed as TEST.
       BUILD_SYSTEM_DEBUG: ${BUILD_SYSTEM_DEBUG:-}
     # Voodoo explanation.
