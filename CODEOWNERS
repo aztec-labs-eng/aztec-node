@@ -9,7 +9,7 @@
 # Notify the AVM team
 #
 # on changes to public context in aztec-nr
-/noir-projects/labs/aztec-nr/aztec/src/context/public_context.nr @MirandaWood @jeanmon @IlyasRidhuan
+/noir-projects/aztec-nr/aztec/src/context/public_context.nr @MirandaWood @jeanmon @IlyasRidhuan
 # on changes to the AVM simulator and supporting modules
 /yarn-project/simulator/src/public @MirandaWood @jeanmon @IlyasRidhuan
 #####################################################
@@ -18,7 +18,7 @@
 /playground/vite.config.ts @Thunkar
 
 # Notify nventuro of changes to aztec-nr
-/noir-projects/labs/aztec-nr @nventuro
+/noir-projects/aztec-nr @nventuro
 
 # Notify devrel of changes to docs examples
 /docs/examples @AztecProtocol/devrel

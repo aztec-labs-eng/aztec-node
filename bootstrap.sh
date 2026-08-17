@@ -307,7 +307,7 @@ function install_hooks {
 #!/usr/bin/env bash
 set -euo pipefail
 ./yarn-project/precommit.sh
-./noir-projects/labs/precommit.sh
+./noir-projects/precommit.sh
 ./docs/examples/ts/precommit.sh
 EOF
   chmod +x $hooks_dir/pre-commit
@@ -464,7 +464,7 @@ function build_and_test {
 
 function bench_cmds {
   if [ "$#" -eq 0 ]; then
-    set -- yarn-project/end-to-end yarn-project noir-projects/labs/noir-contracts
+    set -- yarn-project/end-to-end yarn-project noir-projects/noir-contracts
   fi
   parallel -k --line-buffer './{}/bootstrap.sh bench_cmds' ::: $@
 }
