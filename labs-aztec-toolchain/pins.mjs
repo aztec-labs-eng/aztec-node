@@ -214,9 +214,11 @@ const SITES = [
         ctx,
       );
       return {
+        // A replacer function, not a replacement string: the localized value embeds a
+        // filesystem path, which must not be interpreted for $-patterns.
         content: content.replace(
           /("@aztec\/l1-artifacts":\s*")[^"]+(")/,
-          `$1${value}$2`,
+          (_, pre, post) => pre + value + post,
         ),
         targets: [target],
       };
@@ -293,20 +295,13 @@ const SITES = [
           return `"${name}":${ws}"${value}"`;
         },
       );
-      // Re-running against a different root retargets the npm entries, but the Nargo path
-      // deps written by the earlier run no longer match any rewrite rule and keep pointing
-      // at the old root.
-      if (retargeted) {
-        console.warn(
-          "warning: tree was already localized to a different root; Nargo path deps were NOT retargeted — git checkout the touched files and re-run use-local.",
-        );
-      }
       return {
         content:
           content.slice(0, block.index) +
           updated +
           content.slice(block.index + block[0].length),
         targets,
+        retargeted: retargeted > 0,
       };
     },
   },
@@ -336,6 +331,9 @@ function audit(versions) {
   for (const site of SITES) {
     const pinCounts = new Map();
     for (const file of site.files()) {
+      // ls-files reports the index, so a file deleted from the worktree but not staged
+      // still lands here; skip it so a required one is reported as missing, not as ENOENT.
+      if (!existsSync(join(repoRoot, file))) continue;
       const content = read(file);
       const pins = site.pins(content, versions);
       pinCounts.set(file, pins.length);
@@ -350,7 +348,8 @@ function audit(versions) {
 }
 
 function check() {
-  const { results, requiredMisses, verifyErrors } = audit(readPinnedVersions());
+  const versions = readPinnedVersions();
+  const { results, requiredMisses, verifyErrors } = audit(versions);
   let drifted = false;
   for (const { site, file, content, pins } of results) {
     for (const pin of pins) {
@@ -369,7 +368,7 @@ function check() {
   for (const error of verifyErrors) console.error(error);
   if (drifted) {
     console.error(
-      `Pinned release versions drifted. Run ${BOOTSTRAP} set-pins to realign them.`,
+      `Pinned release versions drifted. Run ${BOOTSTRAP} set-pins ${versions.bb} to realign them.`,
     );
   }
   if (requiredMisses.length) {
@@ -381,7 +380,7 @@ function check() {
 }
 
 function normalize(version) {
-  const v = version.replace(/^v(?=\d)/, "");
+  const v = version.replace(/^v(?=\d)/i, "");
   if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(v)) {
     console.error(`Invalid version "${version}".`);
     process.exit(1);
@@ -391,7 +390,11 @@ function normalize(version) {
 
 function set(bbArg, noirArg) {
   const bb = normalize(bbArg);
-  const noir = noirArg ? normalize(noirArg) : readPinnedVersions().noir;
+  // An explicit empty noir argument must be rejected by normalize, not treated as omitted:
+  // a caller whose version lookup came up empty would otherwise bump bb and silently keep
+  // the old noir pin.
+  const noir =
+    noirArg !== undefined ? normalize(noirArg) : readPinnedVersions().noir;
   const versions = { bb, noir };
 
   // Validate everything and compute every rewrite before writing anything: an abort
@@ -460,27 +463,56 @@ function useLocal(fndRootArg) {
       process.exit(1);
     }
   }
+  // Compute every rewrite before writing anything: a failure at any site must leave the
+  // tree untouched, not half-localized with no .fnd-root to show for it.
+  const writes = [];
+  const missingTargets = [];
+  const errors = [];
+  let retargeted = false;
   for (const site of SITES) {
     for (const file of site.files()) {
+      if (!existsSync(join(repoRoot, file))) continue;
       const original = read(file);
-      const { content, targets } = site.useLocal(original, {
-        fndRoot,
-        fileDir: dirname(join(repoRoot, file)),
-      });
-      // A missing target is only a warning: several are build outputs that appear once the
-      // foundation tree is built.
-      for (const target of targets) {
-        if (!existsSync(join(fndRoot, target))) {
-          console.warn(
-            `warning: ${file} now points at ${join(fndRootArg, target)}, which does not exist (not built yet?).`,
-          );
-        }
+      let rewritten;
+      try {
+        rewritten = site.useLocal(original, {
+          fndRoot,
+          fileDir: dirname(join(repoRoot, file)),
+        });
+      } catch (err) {
+        errors.push(`${file}: ${err.message}`);
+        continue;
       }
-      if (content !== original) {
-        writeFileSync(join(repoRoot, file), content);
-        console.log(`${file}: now consumes the foundation checkout.`);
+      retargeted ||= rewritten.retargeted ?? false;
+      for (const target of rewritten.targets) {
+        if (!existsSync(join(fndRoot, target)))
+          missingTargets.push({ file, target });
       }
+      if (rewritten.content !== original)
+        writes.push({ file, content: rewritten.content });
     }
+  }
+  for (const error of errors) console.error(error);
+  // A tree already localized to a different root cannot be retargeted: the Nargo path
+  // deps written by the earlier run no longer match any rewrite rule and would keep
+  // pointing at the old root.
+  if (retargeted) {
+    console.error(
+      "Tree is already localized to a different root; git checkout the touched files, then re-run use-local.",
+    );
+  }
+  if (errors.length || retargeted) process.exit(1);
+
+  // A missing target is only a warning: several are build outputs that appear once the
+  // foundation tree is built.
+  for (const { file, target } of missingTargets) {
+    console.warn(
+      `warning: ${file} now points at ${join(fndRootArg, target)}, which does not exist (not built yet?).`,
+    );
+  }
+  for (const { file, content } of writes) {
+    writeFileSync(join(repoRoot, file), content);
+    console.log(`${file}: now consumes the foundation checkout.`);
   }
   // Recording the root makes the binaries follow: bootstrap.sh provisions bin/ from this
   // checkout whenever .fnd-root exists, so one command flips the whole tree consistently.

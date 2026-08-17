@@ -76,7 +76,8 @@ function link_tool {
 
 function check_fnd_root {
   if [ ! -f "$FND_ROOT/barretenberg/cpp/bootstrap.sh" ] || [ ! -f "$FND_ROOT/noir/bootstrap.sh" ]; then
-    echo_stderr "AZTEC_TOOLCHAIN_FND_ROOT does not point at a foundation checkout (no barretenberg/cpp and noir): $FND_ROOT"
+    echo_stderr "FND_ROOT does not point at a foundation checkout (no barretenberg/cpp and noir): $FND_ROOT"
+    echo_stderr "It comes from AZTEC_TOOLCHAIN_FND_ROOT if set, else from labs-aztec-toolchain/.fnd-root (recorded by use-local; remove it to return to pinned mode)."
     exit 1
   fi
 }
