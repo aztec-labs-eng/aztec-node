@@ -17,6 +17,7 @@ import type { BenchReqRespCommand, BenchResultMessage, DistributionPattern } fro
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const p2pRoot = path.resolve(__dirname, '../..');
+// @dependency ./p2p_client_testbench_worker.ts
 const workerTsPath = path.join(__dirname, 'p2p_client_testbench_worker.ts');
 const workerJsPath = path.join(p2pRoot, 'dest/testbench/p2p_client_testbench_worker.js');
 const tsconfigPath = path.join(p2pRoot, 'tsconfig.json');

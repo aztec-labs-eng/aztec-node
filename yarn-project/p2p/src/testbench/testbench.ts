@@ -20,6 +20,7 @@ async function main() {
       throw new Error('Configuration file must be provided as first argument');
     }
 
+    // @dependency ../../testbench/configurations/*.json
     const configPath = path.join(__dirname, '../../testbench/configurations', configFile);
     const config = await import(configPath, { with: { type: 'json' } });
     const testConfig = { ...testChainConfig, ...config.default };

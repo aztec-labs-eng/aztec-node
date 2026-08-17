@@ -32,6 +32,7 @@ function deserializeWorkerError(error: { message: string; name?: string; stack?:
 
 function encryptEthJsonV3InWorker(privateKeyHex: string, password: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
+    // @dependency ./eth_json_v3_worker.ts
     const worker = new Worker(new URL('./eth_json_v3_worker.js', import.meta.url), {
       workerData: { privateKeyHex, password },
     });

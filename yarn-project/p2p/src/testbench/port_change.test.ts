@@ -30,6 +30,7 @@ describe('Port Change', () => {
   beforeEach(async () => {
     logger.info('Starting test setup');
     // Use 5 node configuration for this test
+    // @dependency ../../testbench/configurations/normal-degree-5-nodes.json
     const configPath = path.join(__dirname, '../../testbench/configurations', 'normal-degree-5-nodes.json');
     logger.info(`Loading config from ${configPath}`);
     const config = await import(configPath, { with: { type: 'json' } });

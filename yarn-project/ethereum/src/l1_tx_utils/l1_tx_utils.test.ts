@@ -1834,6 +1834,7 @@ describe('L1TxUtils', () => {
     it('loads state and resumes monitoring', async () => {
       // We need dynamic imports here since we do NOT depend on this projects
       // and we need to mark them as non-const so ts does not try to look for them
+      // @dependency ../../../kv-store/src/lmdb-v2/index.ts, ../../../node-lib/src/stores/index.ts
       const { openTmpStore } = await import('@aztec/kv-store/lmdb-v2' as string);
       const { L1TxStore } = await import('@aztec/node-lib/stores' as string);
 

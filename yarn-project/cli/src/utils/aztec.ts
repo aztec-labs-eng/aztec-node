@@ -114,6 +114,10 @@ export async function getContractArtifact(fileDir: string, log: LogFn) {
   const allNames = await getExampleContractNames();
   const contractName = fileDir.replace(/Contract(Artifact)?$/, '');
   if (allNames.includes(contractName)) {
+    // The generated contract modules this can load (noir-contracts.js/src, gitignored) are
+    // covered by yarn-project's bootstrap hash via `../noir-projects/labs/noir-contracts/bootstrap.sh hash`;
+    // the @dependency below declares the generator side.
+    // @dependency ../../../noir-contracts.js/scripts/generate-types.sh, ../../../noir-contracts.js/package.json
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - Importing noir-contracts.js even in devDeps results in a circular dependency error. Need to ignore because this line doesn't cause an error in a dev environment
     const imported = await import(`@aztec/noir-contracts.js/${contractName}`);

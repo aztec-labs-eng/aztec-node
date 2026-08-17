@@ -1,14 +1,117 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
+# Used for build.
 function hash {
   # Nothing under noir-projects/fnd is an input: everything it produces reaches us as a pinned
   # package, hashed via yarn.lock (covered by the yarn-project patterns).
   hash_str \
     $(../labs-aztec-toolchain/bootstrap.sh hash) \
     $(../noir-projects/labs/noir-contracts/bootstrap.sh hash) \
-    $(../noir-projects/labs/aztec-nr/bootstrap.sh hash) \
     $(cache_content_hash ../yarn-project/.rebuild_patterns)
+}
+
+# Base for per-test cache keys: everything a test can depend on that per-test TS dependency
+# closures (scripts/test-deps.mjs) don't cover — all non-.ts files (package.json, yarn.lock,
+# .swcrc, jest configs, scripts, fixtures) plus the toolchain and contract hashes. The ERE is
+# the complement of '\.ts$' written without lookahead (grep -E/awk don't support it): last char
+# isn't 's', or 's' not preceded by 't', or 'ts' not preceded by '.'. .tsx/.mts/.cts stay in the
+# base — excluding them isn't worth the regex, and including them only over-invalidates.
+function hash_tests_base {
+  hash_str \
+    $(../labs-aztec-toolchain/bootstrap.sh hash) \
+    $(../noir-projects/labs/noir-contracts/bootstrap.sh hash) \
+    $(cache_content_hash '^yarn-project/.*([^s]|[^t]s|[^.]ts)$')
+}
+
+# Prints a test's cache key from the map produced by compute_test_dependencies. The keys only
+# matter to CI's redis test cache, so outside CI this always prints disabled-cache (the token
+# both cache layers treat as "never cache") — local runs never read the map, so a stale local
+# map can't poison anything. A missing map or entry likewise disables caching for that test
+# rather than risking a stale hit.
+function test_hash {
+  local h=
+  if [ "$CI" -eq 1 ]; then
+    h=$(awk -v t="$1" '$1 == t { print $2; exit }' .test-dep-hashes 2>/dev/null || true)
+  fi
+  echo "${h:-disabled-cache}"
+}
+
+# Dumps the whole per-test cache-key map ("<test> <hash>" per line) so other bootstraps
+# (end-to-end) can load it into memory once instead of invoking test_hash per test.
+function test_hashes {
+  cat .test-dep-hashes 2>/dev/null || true
+}
+
+# One parallel unit of compute_test_dependencies: computes the closures of one package's tests
+# (batched into a single ts.Program by test-deps.mjs) and prints one "<test> <hash>" line per
+# test, paths relative to yarn-project to match test_cmds. The hash is the final cache key:
+# hash_tests_base (passed as $base, hashed once per compute rather than once per test_cmds
+# line) plus the git blob hashes of the closure members in closure order (the closure is
+# path-sorted, so this is deterministic). Blobs come from $lstree, a single ls-tree dump shared
+# by all workers — memoized by the caller so the same file is never ls-tree'd once per test.
+# Closure members absent from the dump (untracked generated sources, dest/*.d.ts leaves)
+# contribute nothing and are covered by the other hash_tests_base components, matching
+# cache_content_hash's tracked-files-only behavior.
+function compute_package_test_dep_hashes {
+  set -euo pipefail
+  local pkg=$1 tests_file=$2 lstree=$3 base=$4
+  local out=$(dirname "$lstree")/$pkg
+  # awk writes each test's key preimage ("<base> <blobs...>", the exact bytes hash_str would
+  # hash) to its own file and prints the test name; one git hash-object --stdin-paths call
+  # then hashes all of them, instead of one hash_str subprocess per test.
+  node scripts/test-deps.mjs $(grep "^$pkg/" "$tests_file") \
+    | awk -v base="$base" -v out="$out" '
+        function flush() { if (t) { f = out "." n++; print line > f; close(f); print t } }
+        NR == FNR { blob[$4] = $3; next }
+        /^# / { flush(); t = substr($0, 3); line = base; next }
+        NF && ($0 in blob) { line = line " " blob[$0] }
+        END { flush() }
+      ' "$lstree" - > "$out.tests"
+  paste -d' ' <(sed 's|^yarn-project/||' "$out.tests") \
+    <(seq 0 $(($(wc -l < "$out.tests") - 1)) | sed "s|^|$out.|" | git hash-object --stdin-paths | cut -c1-16)
+}
+
+# Computes the per-test dependency-hash map (gitignored .test-dep-hashes) consumed by
+# test_hash. Runs at the end of compile_all: since the map is gitignored it ships inside the
+# yarn-project build artifact (cache_upload sweeps all ignored files), keyed by the full
+# content hash — so a downloaded or freshly built tree always carries a map that is current
+# for its content, with no separate staleness tracking. Dirty-tree handling is delegated to
+# cache_content_hash: uncommitted changes disable caching (and error in CI).
+function compute_test_dependencies {
+  echo_header "yarn-project compute test dependencies"
+
+  # Refuse to build a map from dishonest closures: every detectable dynamic-load site
+  # (workers, non-literal imports, forks) must carry a // @dependency annotation.
+  node scripts/test-deps.mjs --check
+
+  local commit=${AZTEC_CACHE_COMMIT:-HEAD}
+  local tmp=$(mktemp -d)
+
+  find . -name '*.test.ts' -not -path '*node_modules*' -not -path '*/dest/*' \
+    | sed 's|^\./||' | sort > $tmp/tests
+
+  # Closures are computed from the working tree but keys are hashed from $commit's blobs, so
+  # tree and commit must agree. cache_content_hash implements the canonical contract (dirty →
+  # disabled-cache, dirty in CI → error, explicit AZTEC_CACHE_COMMIT → check skipped): probe
+  # .ts dirt with it directly; hash_tests_base's own cache_content_hash covers everything
+  # else. Either disabled means every key is disabled — write the map directly and skip the
+  # closure computation.
+  local ts_hash base
+  ts_hash=$(cache_content_hash '^yarn-project/.*\.ts$')
+  base=$(hash_tests_base)
+  if [[ "$ts_hash" == "disabled-cache" || "$base" == "disabled-cache" ]]; then
+    sed 's/$/ disabled-cache/' $tmp/tests > .test-dep-hashes
+    rm -rf $tmp
+    return
+  fi
+
+  # All closure members live under yarn-project/; one dump serves every worker.
+  git -C .. ls-tree -r "$commit" -- yarn-project > $tmp/lstree
+  cut -d/ -f1 $tmp/tests | sort -u \
+    | parallel --memsuspend 16G "compute_package_test_dep_hashes {} $tmp/tests $tmp/lstree $base > $tmp/hashes-{}"
+  sort $tmp/hashes-* > $tmp/out && mv $tmp/out .test-dep-hashes
+  rm -rf $tmp
 }
 
 function compile_project {
@@ -164,6 +267,10 @@ function compile_all {
   parallel --joblog joblog.txt --tag denoise ::: "${cmds[@]}"
   cat joblog.txt
 
+  # Runs after the block above: closure resolution walks the dest/*.d.ts that tsgo emits.
+  # The map is gitignored, so the upload below carries it inside the build artifact.
+  compute_test_dependencies
+
   if [ "$CI" -eq 1 ]; then
     cache_upload "yarn-project-$hash.tar.gz" $(git ls-files --others --ignored --exclude-standard | grep -v '^node_modules/')
   fi
@@ -200,7 +307,8 @@ function warm_solc_cache {
   fi
 }
 
-export -f compile_project format lint get_projects compile_all hash warm_solc_cache
+export -f compile_project format lint get_projects compile_all hash warm_solc_cache \
+  compute_package_test_dep_hashes compute_test_dependencies hash_tests_base
 
 function build {
   echo_header "yarn-project build"
@@ -211,8 +319,6 @@ function build {
 }
 
 function test_cmds {
-  local hash=$(hash)
-
   # Exclusions:
   # end-to-end: e2e tests handled separately with end-to-end/bootstrap.sh.
   # kv-store: per-file fan-out handled by kv-store/bootstrap.sh test_cmds.
@@ -220,7 +326,7 @@ function test_cmds {
     # Skip benchmarks here.
     [[ "$test" =~ \.bench\.test\.ts$ ]] && continue
 
-    local prefix=$hash
+    local prefix=$(test_hash "$test")
     local cmd_env=""
 
     # These need isolation due to network stack usage (p2p, anvil, etc).
@@ -270,8 +376,9 @@ function test_cmds {
   aztec/bootstrap.sh test_cmds
 
   if [[ "${TARGET_BRANCH:-}" =~ ^(v[0-9]+(-next)?|backport-to-v[0-9]+-(staging|next))$ ]]; then
-    echo "$hash yarn-project/scripts/run_test.sh aztec/src/testnet_compatibility.test.ts"
-    echo "$hash yarn-project/scripts/run_test.sh aztec/src/mainnet_compatibility.test.ts"
+    for test in aztec/src/testnet_compatibility.test.ts aztec/src/mainnet_compatibility.test.ts; do
+      echo "$(test_hash "$test") yarn-project/scripts/run_test.sh $test"
+    done
   fi
 }
 

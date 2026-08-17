@@ -62,6 +62,7 @@ export class WorkerWallet implements Wallet {
    */
   static async create(nodeUrl: string, pxeConfig?: Partial<PXEConfig>): Promise<WorkerWallet> {
     // replace stc/ with dest/ so the wallet works in Jest tests
+    // @dependency ./wallet_worker_script.ts
     const workerUrl = new URL('./wallet_worker_script.js', import.meta.url);
     workerUrl.pathname = workerUrl.pathname.replace('/src/', '/dest/');
     // remove JEST_WORKER_ID so the worker uses pino-pretty transport instead of Jest's raw output.
