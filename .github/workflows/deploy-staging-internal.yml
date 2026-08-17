@@ -1,8 +1,9 @@
 name: Deploy to staging internal
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
+  # TODO(monorepo-split): disabled until v6 and the private flow is rebuilt.
+  # schedule:
+  #  - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       tag:
