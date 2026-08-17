@@ -35,13 +35,13 @@ services:
     cpuset: ${CPU_LIST:-}
     mem_limit: 8G
     volumes:
-      - ../../../../:/root/aztec-packages
+      - ../../../../:/root/aztec-node
       - ${HOME}/.bb-crs:/root/.bb-crs
       - web3signer_keys:/keys
     tmpfs:
       - /tmp:rw,size=1g
       - /tmp-jest:rw,size=512m
-    working_dir: /root/aztec-packages/yarn-project/end-to-end
+    working_dir: /root/aztec-node/yarn-project/end-to-end
     environment:
       JEST_CACHE_DIR: /tmp-jest
       LOG_LEVEL: ${LOG_LEVEL:-verbose}
@@ -53,7 +53,7 @@ services:
       WEB3_SIGNER_TEST_KEYSTORE_DIR: /keys
       FORCE_COLOR: ${FORCE_COLOR:-1}
       # Allow git usage despite different ownership
-      GIT_CONFIG_GLOBAL: /root/aztec-packages/build-images/src/home/.gitconfig
+      GIT_CONFIG_GLOBAL: /root/aztec-node/build-images/src/home/.gitconfig
       BUILD_SYSTEM_DEBUG: ${BUILD_SYSTEM_DEBUG:-}
     entrypoint: >
       bash -c '
@@ -67,12 +67,12 @@ services:
 
         # Run database migrations
         echo "Running database migrations..."
-        cd /root/aztec-packages/yarn-project/aztec
+        cd /root/aztec-node/yarn-project/aztec
         node --no-warnings dest/bin/index.js migrate-ha-db up --database-url "$${DATABASE_URL}"
         echo "Database migrations complete"
 
         # Return to test directory
-        cd /root/aztec-packages/yarn-project/end-to-end
+        cd /root/aztec-node/yarn-project/end-to-end
 
         # Run the test
         setsid ./scripts/test_simple.sh "$${TEST}" "$${TEST_NAME}" &

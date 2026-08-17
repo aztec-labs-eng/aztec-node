@@ -738,16 +738,16 @@ function test_bootstrap_linux {
   docker run --rm -ti --name $name \
     --cpus=32 \
     --ulimit nofile=1048576:1048576 \
-    -v $root:/aztec-packages:ro \
-    --mount type=volume,src=$name-volume,dst=/root/aztec-packages \
+    -v $root:/aztec-node:ro \
+    --mount type=volume,src=$name-volume,dst=/root/aztec-node \
     -w /root \
     ubuntu:24.04 bash -c "
 set -euo pipefail
 ulimit -n 65536
 apt update && apt install -y git sudo
-git config --global --add safe.directory /aztec-packages/.git
-git clone --branch=$(git branch --show-current) /aztec-packages
-cd aztec-packages
+git config --global --add safe.directory /aztec-node/.git
+git clone --branch=$(git branch --show-current) /aztec-node
+cd aztec-node
 ./bootstrap.sh install_deps </dev/null
 bash -l -i -c 'ulimit -n 65536 && NO_CACHE=1 ./bootstrap.sh gentle'
   "
