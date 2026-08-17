@@ -340,6 +340,8 @@ To give a concrete example, take `noir-projects/labs/noir-contracts`. Here we ha
 
 yarn-project (and end-to-end) go one step finer: each test gets its own hash, derived from the test's transitive TypeScript dependency closure. `yarn-project/bootstrap.sh compute_test_dependencies` computes every test's closure (`yarn-project/scripts/test-deps.mjs`; dynamic loads such as workers and non-literal imports are declared with `// @dependency` comments, enforced by the script's `--check`) and writes one key per test to a gitignored map, combining a base hash (everything a test can depend on that closures don't cover: all non-TS files, the toolchain, and contracts) with the git blob hashes of the closure members. It runs at the end of the yarn-project build, so the map ships inside the build artifact keyed by the full content hash — a downloaded or freshly built tree always carries a map current for its content. `test_cmds` reads keys from the map in CI, so a source change only re-runs the tests whose closures contain it. Outside CI the map is not consulted: keys are always `disabled-cache` (tests run uncached), as they are for any test missing from the map.
 
+Other projects compose on these closures too. The map also carries registered non-test entry points (the TXE server and oracle test resolver), exposed via `yarn-project/bootstrap.sh get_dependencies_hash <file>`; noir-contracts and aztec-nr fold those into their test keys instead of the whole yarn-project hash, so only yarn-project changes inside the TXE's dependency closure invalidate nargo tests.
+
 If a test successfully runs in CI, it won't be run again unless its redis key changes. This key consists of the "test hash" and the "test command". Here's an example:
 
 ```
