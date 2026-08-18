@@ -43,6 +43,26 @@ function test_hashes {
   cat .test-dep-hashes 2>/dev/null || true
 }
 
+# Prints the cache key of a non-test entry point registered in compute_test_dependencies
+# (e.g. txe/src/bin/index.ts), for other bootstraps to compose their test hashes from.
+# Outside CI prints disabled-cache like test_hash. In CI a missing map or entry is a hard
+# error: it means the entry point was never registered, and degrading silently would leave
+# the caller's tests keyed on nothing.
+function get_dependencies_hash {
+  if [ "$CI" -ne 1 ]; then
+    echo disabled-cache
+    return
+  fi
+  local h
+  h=$(awk -v t="$1" '$1 == t { print $2; exit }' .test-dep-hashes 2>/dev/null || true)
+  if [ -z "$h" ]; then
+    echo_stderr "ERROR: no dependency hash for '$1' in yarn-project/.test-dep-hashes." \
+      "Register it in compute_test_dependencies and rebuild."
+    exit 1
+  fi
+  echo "$h"
+}
+
 # One parallel unit of compute_test_dependencies: computes the closures of one package's tests
 # (batched into a single ts.Program by test-deps.mjs) and prints one "<test> <hash>" line per
 # test, paths relative to yarn-project to match test_cmds. The hash is the final cache key:
@@ -88,8 +108,13 @@ function compute_test_dependencies {
   local commit=${AZTEC_CACHE_COMMIT:-HEAD}
   local tmp=$(mktemp -d)
 
-  find . -name '*.test.ts' -not -path '*node_modules*' -not -path '*/dest/*' \
-    | sed 's|^\./||' | sort > $tmp/tests
+  {
+    find . -name '*.test.ts' -not -path '*node_modules*' -not -path '*/dest/*' | sed 's|^\./||'
+    # Non-test entry points other bootstraps key their test caches on via get_dependencies_hash:
+    # the TXE server and oracle test resolver that noir-contracts/aztec-nr nargo tests run against.
+    echo txe/src/bin/index.ts
+    echo txe/src/bin/oracle_test_server.ts
+  } | sort > $tmp/tests
 
   # Closures are computed from the working tree but keys are hashed from $commit's blobs, so
   # tree and commit must agree. cache_content_hash implements the canonical contract (dirty →

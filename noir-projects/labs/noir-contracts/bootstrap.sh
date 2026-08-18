@@ -192,11 +192,13 @@ function test_cmds {
     folder_name="contracts"
   fi
 
-  # Tests depend on the TXE so we have to inject this dependency.
-  local yarn_project_hash
-  yarn_project_hash=$($ROOT/yarn-project/bootstrap.sh hash)
+  # Tests run against the TXE server, so inject that dependency: key on the TXE entry point's
+  # dependency closure (computed by yarn-project's build) rather than the whole yarn-project
+  # hash, so unrelated yarn-project changes don't invalidate contract tests.
+  local txe_hash
+  txe_hash=$($ROOT/yarn-project/bootstrap.sh get_dependencies_hash txe/src/bin/index.ts)
   function get_contract_hash_for_testing {
-    hash_str $yarn_project_hash $(get_contract_hash "$1" "$2")
+    hash_str $txe_hash $(get_contract_hash "$1" "$2")
   }
 
   # Test bb aztec_process command
