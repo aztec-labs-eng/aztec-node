@@ -14,7 +14,8 @@
  *   AT EXECUTION TIME, once their `dependsOn` has run.
  * - Steps execute in topological layers over the single graph, so an action can precede a contract
  *   it sets up. Within a layer, contract publishes are individual txs and same-account actions batch
- *   into ≤{@link APP_MAX_CALLS}-call BatchCalls. The one-time fee-juice claim per account is
+ *   into BatchCalls sized to leave room for the fee payment's calls (the entrypoint's limit
+ *   counts those too). The one-time fee-juice claim per account is
  *   consumed + mined by that account's first tx before the rest fan out.
  * - Fund steps provision arbitrary addresses (contracts or accounts that never send) with bridged
  *   Fee Juice: bridge at execution time, then an L2 claim tx from the step's `from` account. Their
@@ -408,7 +409,7 @@ class DeploymentRun<C extends Steps> {
   public async executeLayers(feeSession: FeeSession): Promise<void> {
     for (const layer of this.layers) {
       await this.runLayer(
-        [...this.publishUnits(layer), ...this.fundUnits(layer), ...this.actionUnits(layer)],
+        [...this.publishUnits(layer), ...this.fundUnits(layer), ...(await this.actionUnits(layer, feeSession))],
         feeSession,
       );
     }
@@ -771,8 +772,11 @@ class DeploymentRun<C extends Steps> {
     return units;
   }
 
-  /** A layer's actions, batching independent same-account actions into ≤{@link APP_MAX_CALLS}-call BatchCalls. */
-  private actionUnits(layer: string[]): ExecutionUnit[] {
+  /**
+   * A layer's actions, batching independent same-account actions into BatchCalls sized to leave
+   * room for the account's fee payment calls — the entrypoint's call limit counts those too.
+   */
+  private async actionUnits(layer: string[], feeSession: FeeSession): Promise<ExecutionUnit[]> {
     const actionsByAccount = new Map<string, { account: AztecAddress; aliases: string[] }>();
     for (const alias of layer.filter(a => this.actionSteps.has(a))) {
       const account = getOrThrow(this.actionSteps, alias, 'action').from(this.resolver);
@@ -785,7 +789,7 @@ class DeploymentRun<C extends Steps> {
     }
     const units: ExecutionUnit[] = [];
     for (const { account, aliases } of actionsByAccount.values()) {
-      for (const batch of chunk(aliases, APP_MAX_CALLS)) {
+      for (const batch of chunk(aliases, APP_MAX_CALLS - (await feeSession.feeCallCount(account)))) {
         units.push({
           label: batch.length === 1 ? `action ${batch[0]}` : `batch [${batch.join(', ')}]`,
           kind: 'action',
