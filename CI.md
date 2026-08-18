@@ -96,37 +96,34 @@ This erases untracked files, submodules, etc. Use with caution locally.
 
 ### Running tests.
 
-You should be able to just do:
+Tests are run per project, via that project's bootstrap script:
 
 ```
-./bootstrap.sh test
+yarn-project/bootstrap.sh test
+yarn-project/end-to-end/bootstrap.sh test
 ```
 
-However this will run _the entire repository test suite_. This isn't recommended unless you have a very powerful machine or a lot of patience. I would rather you didn't do this on the mainframe at present as if several users do it at once it could cause issues.
+This runs the project's entire test suite. This isn't recommended for the larger projects unless you have a very powerful machine or a lot of patience. I would rather you didn't do this on the mainframe at present as if several users do it at once it could cause issues.
 
-You can provide one or more projects (a folder with another `./bootstrap.sh` script) as arguments. e.g.
+Tests are run in parallel. At present it's limited to half the number of vcpus (usually the number of physical cores).
 
-`./bootstrap.sh test yarn-project playground`
-
-This will run the tests for `yarn-project` and `playground`.
-
-Tests for all projects are run in parallel. At present it's limited to half the number of vcpus (usually the number of physical cores).
+(The root `./bootstrap.sh` no longer has a `test` command; the full-repo build-and-test flow is what CI runs via `./bootstrap.sh ci-fast` / `ci-full`.)
 
 ### Test commands.
 
-To see the test commands that are run for a given project, run:
+To see the test commands that are run for a given project, run its `test_cmds` command:
 
 ```
-./bootstrap.sh test_cmds
+yarn-project/bootstrap.sh test_cmds
 ```
 
-The test commands are filtered to not include matching patterns in the root `.test_skip_patterns` file.
+The test commands are filtered to not include tests marked `skip` in the root `.test_patterns.yml` file.
 
-You can run this in the root to see all test commands, or provide project folders as arguments, or run it directly in a project folder. You might want to make sure this reflects what you expect when you add tests. Generally you shouldn't have to worry about it, the scripts are automated enough to find the tests if you're following the usual patterns. You'll get something like:
+You might want to make sure this reflects what you expect when you add tests. Generally you shouldn't have to worry about it, the scripts are automated enough to find the tests if you're following the usual patterns. You'll get something like:
 
 ```
-699e81f5e2f9e8a3 yarn-project/scripts/run_test.sh foundation/src/serialize/buffer_reader.test.ts
-699e81f5e2f9e8a3 yarn-project/scripts/run_test.sh foundation/src/json-rpc/convert.test.ts
+50d8d8702561371d yarn-project/scripts/run_test.sh accounts/src/utils/key_derivation.test.ts
+ad5b050267acc114 yarn-project/scripts/run_test.sh archiver/src/archiver-misc.test.ts
 ```
 
 Note the first field before the actual command is the "test hash" discussed further below.
@@ -341,13 +338,15 @@ Some projects will also have a "test hash". The test hash is part of the input t
 
 To give a concrete example, take `noir-projects/labs/noir-contracts`. Here we have a build hash that consists of the labs toolchain (the pinned nargo/bb binaries, via `labs-aztec-toolchain/bootstrap.sh hash`), the aztec-nr library, and the contract sources themselves, as the contracts are compiled with those binaries and the results stored in the build cache. The "test hash" then additionally adds yarn-project's hash, because the contract tests run against the TXE server built from it.
 
+yarn-project (and end-to-end) go one step finer: each test gets its own hash, derived from the test's transitive TypeScript dependency closure. `yarn-project/bootstrap.sh compute_test_dependencies` computes every test's closure (`yarn-project/scripts/test-deps.mjs`; dynamic loads such as workers and non-literal imports are declared with `// @dependency` comments, enforced by the script's `--check`) and writes one key per test to a gitignored map, combining a base hash (everything a test can depend on that closures don't cover: all non-TS files, the toolchain, and contracts) with the git blob hashes of the closure members. It runs at the end of the yarn-project build, so the map ships inside the build artifact keyed by the full content hash — a downloaded or freshly built tree always carries a map current for its content. `test_cmds` reads keys from the map in CI, so a source change only re-runs the tests whose closures contain it. Outside CI the map is not consulted: keys are always `disabled-cache` (tests run uncached), as they are for any test missing from the map.
+
 If a test successfully runs in CI, it won't be run again unless its redis key changes. This key consists of the "test hash" and the "test command". Here's an example:
 
 ```
-c533d7b87f00f64f ISOLATE=1 yarn-project/scripts/run_test.sh prover-node/dest/prover-node.test.js
+e8925ab004837207 yarn-project/scripts/run_test.sh stdlib/src/abi/abi.test.ts
 ```
 
-This is one of the tests output by `./yarn-project/bootstrap.sh test_cmds`. The first field is the test hash, the rest is the command you can run from the repository root. This entire line is what's hashed to make up the redis key.
+This is one of the tests output by `yarn-project/bootstrap.sh test_cmds`. The first field is the test hash, the rest is the command you can run from the repository root. This entire line is what's hashed to make up the redis key.
 
 Note that all cache entries expire after 7 days.
 
