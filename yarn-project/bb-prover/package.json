@@ -79,7 +79,6 @@
     "@aztec/simulator": "workspace:^",
     "@aztec/stdlib": "workspace:^",
     "@aztec/telemetry-client": "workspace:^",
-    "@aztec/world-state": "workspace:^",
     "commander": "^12.1.0",
     "msgpackr": "^1.11.2",
     "pako": "^2.1.0",
@@ -87,11 +86,10 @@
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/kv-store": "workspace:^",
     "@aztec/noir-contracts.js": "workspace:^",
     "@aztec/noir-test-contracts.js": "workspace:^",
     "@aztec/protocol-contracts": "workspace:^",
+    "@aztec/world-state": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

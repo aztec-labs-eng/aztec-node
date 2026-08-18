@@ -75,7 +75,6 @@
     "@aztec/ethereum": "workspace:^",
     "@aztec/foundation": "workspace:^",
     "@aztec/kv-store": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy",
     "@aztec/node-keystore": "workspace:^",
     "@aztec/node-lib": "workspace:^",
     "@aztec/p2p": "workspace:^",

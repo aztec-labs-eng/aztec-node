@@ -56,7 +56,6 @@
   "dependencies": {
     "@aztec/accounts": "workspace:^",
     "@aztec/aztec.js": "workspace:^",
-    "@aztec/entrypoints": "workspace:^",
     "@aztec/ethereum": "workspace:^",
     "@aztec/foundation": "workspace:^",
     "@aztec/kv-store": "workspace:^",

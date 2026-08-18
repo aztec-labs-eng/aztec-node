@@ -67,6 +67,7 @@
     ]
   },
   "dependencies": {
+    "@aztec/archiver": "workspace:^",
     "@aztec/constants": "workspace:^",
     "@aztec/epoch-cache": "workspace:^",
     "@aztec/ethereum": "workspace:^",
@@ -103,7 +104,6 @@
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@aztec/archiver": "workspace:^",
     "@aztec/world-state": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",

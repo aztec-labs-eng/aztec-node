@@ -22,9 +22,6 @@
       "path": "../kv-store"
     },
     {
-      "path": "../protocol-contracts"
-    },
-    {
       "path": "../pxe"
     },
     {

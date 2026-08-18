@@ -59,7 +59,6 @@
     "@aztec/blob-lib": "workspace:^",
     "@aztec/ethereum": "workspace:^",
     "@aztec/foundation": "workspace:^",
-    "@aztec/kv-store": "workspace:*",
     "@aztec/stdlib": "workspace:^",
     "@aztec/telemetry-client": "workspace:*",
     "express": "^4.21.2",

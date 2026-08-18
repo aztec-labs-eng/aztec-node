@@ -1,9 +1,9 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
 import type { EpochCache } from '@aztec/epoch-cache';
 import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec/ethereum/contracts';
 import { maxBigint } from '@aztec/foundation/bigint';
 import { SlotNumber } from '@aztec/foundation/branded-types';
 import { compactArray, partition, times } from '@aztec/foundation/collection';
+import { EthAddress } from '@aztec/foundation/eth-address';
 import { createLogger } from '@aztec/foundation/log';
 import type { DateProvider } from '@aztec/foundation/timer';
 import type { Prettify } from '@aztec/foundation/types';

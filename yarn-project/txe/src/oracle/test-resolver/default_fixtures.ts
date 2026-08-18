@@ -1,4 +1,3 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
 import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
 import { Fr } from '@aztec/foundation/curves/bn254';
 import { EthAddress } from '@aztec/foundation/eth-address';
@@ -36,6 +35,7 @@ import {
   tryFieldWidth,
 } from '@aztec/pxe/simulator';
 import { EventSelector, FunctionSelector, NoteSelector } from '@aztec/stdlib/abi';
+import { AztecAddress } from '@aztec/stdlib/aztec-address';
 import { BlockHash } from '@aztec/stdlib/block';
 import { AppTaggingSecretKind } from '@aztec/stdlib/logs';
 import { TxHash } from '@aztec/stdlib/tx';

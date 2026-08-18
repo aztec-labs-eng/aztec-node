@@ -13,9 +13,6 @@
       "path": "../foundation"
     },
     {
-      "path": "../kv-store"
-    },
-    {
       "path": "../protocol-contracts"
     },
     {

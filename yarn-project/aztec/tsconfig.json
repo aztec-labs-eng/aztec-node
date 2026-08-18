@@ -19,9 +19,6 @@
       "path": "../aztec.js"
     },
     {
-      "path": "../bb-prover"
-    },
-    {
       "path": "../blob-client"
     },
     {
@@ -35,9 +32,6 @@
     },
     {
       "path": "../constants"
-    },
-    {
-      "path": "../entrypoints"
     },
     {
       "path": "../ethereum"
@@ -59,9 +53,6 @@
     },
     {
       "path": "../p2p"
-    },
-    {
-      "path": "../p2p-bootstrap"
     },
     {
       "path": "../protocol-contracts"

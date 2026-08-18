@@ -1,4 +1,4 @@
-import { createLogger } from '@aztec/aztec.js/log';
+import { createLogger } from '@aztec/foundation/log';
 import type { L1PublishCheckpointStats, L1PublishStats } from '@aztec/stdlib/stats';
 import {
   Attributes,

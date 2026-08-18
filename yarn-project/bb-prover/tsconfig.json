@@ -25,15 +25,6 @@
       "path": "../telemetry-client"
     },
     {
-      "path": "../world-state"
-    },
-    {
-      "path": "../ethereum"
-    },
-    {
-      "path": "../kv-store"
-    },
-    {
       "path": "../noir-contracts.js"
     },
     {
@@ -41,6 +32,9 @@
     },
     {
       "path": "../protocol-contracts"
+    },
+    {
+      "path": "../world-state"
     }
   ],
   "include": ["src"]

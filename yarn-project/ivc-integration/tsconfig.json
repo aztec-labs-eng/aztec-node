@@ -20,9 +20,6 @@
       "path": "../bb-prover"
     },
     {
-      "path": "../kv-store"
-    },
-    {
       "path": "../noir-protocol-circuits-types"
     },
     {
@@ -30,9 +27,6 @@
     },
     {
       "path": "../simulator"
-    },
-    {
-      "path": "../telemetry-client"
     },
     {
       "path": "../world-state"

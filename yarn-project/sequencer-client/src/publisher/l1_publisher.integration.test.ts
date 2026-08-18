@@ -1,9 +1,5 @@
 import type { ArchiverDataSource } from '@aztec/archiver';
 import { MockL1ToL2MessageSource } from '@aztec/archiver/test';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { createLogger } from '@aztec/aztec.js/log';
-import { GlobalVariables } from '@aztec/aztec.js/tx';
 import { createBlobClient } from '@aztec/blob-client/client';
 import {
   BatchedBlob,
@@ -44,7 +40,9 @@ import { times, timesParallel } from '@aztec/foundation/collection';
 import { SecretValue } from '@aztec/foundation/config';
 import { Secp256k1Signer, flipSignature } from '@aztec/foundation/crypto/secp256k1-signer';
 import { sha256ToField } from '@aztec/foundation/crypto/sha256';
+import { Fr } from '@aztec/foundation/curves/bn254';
 import { EthAddress } from '@aztec/foundation/eth-address';
+import { createLogger } from '@aztec/foundation/log';
 import { retryUntil } from '@aztec/foundation/retry';
 import { sleep } from '@aztec/foundation/sleep';
 import { hexToBuffer } from '@aztec/foundation/string';
@@ -53,6 +51,7 @@ import { InboxAbi, RollupAbi } from '@aztec/l1-artifacts';
 import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
 import { ProtocolContractsList, protocolContractsHash } from '@aztec/protocol-contracts';
 import { LightweightCheckpointBuilder } from '@aztec/prover-client/light';
+import { AztecAddress } from '@aztec/stdlib/aztec-address';
 import {
   type BlockData,
   type BlockQuery,
@@ -83,7 +82,7 @@ import {
 import { CheckpointHeader } from '@aztec/stdlib/rollup';
 import { fr, mockProcessedTx } from '@aztec/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import type { BlockHeader, CheckpointGlobalVariables, ProcessedTx } from '@aztec/stdlib/tx';
+import { type BlockHeader, type CheckpointGlobalVariables, GlobalVariables, type ProcessedTx } from '@aztec/stdlib/tx';
 import { NativeWorldStateService, ServerWorldStateSynchronizer, type WorldStateConfig } from '@aztec/world-state';
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';

@@ -1,7 +1,7 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
 import type { RollupContract } from '@aztec/ethereum/contracts';
 import type { L1FeeAnalysisResult } from '@aztec/ethereum/l1-fee-analysis';
 import type { SlotNumber } from '@aztec/foundation/branded-types';
+import { EthAddress } from '@aztec/foundation/eth-address';
 import {
   Attributes,
   type Gauge,

@@ -90,7 +90,6 @@
     "zod": "^4"
   },
   "devDependencies": {
-    "@aztec/noir-contracts.js": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

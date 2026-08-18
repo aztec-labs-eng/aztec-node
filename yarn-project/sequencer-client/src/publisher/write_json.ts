@@ -1,7 +1,7 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
 import { BatchedBlob, Blob, getEthBlobEvaluationInputs, getPrefixedEthBlobCommitments } from '@aztec/blob-lib';
+import { Fr } from '@aztec/foundation/curves/bn254';
 import { EthAddress } from '@aztec/foundation/eth-address';
+import { AztecAddress } from '@aztec/stdlib/aztec-address';
 import { L2Block } from '@aztec/stdlib/block';
 import { CheckpointHeader } from '@aztec/stdlib/rollup';
 

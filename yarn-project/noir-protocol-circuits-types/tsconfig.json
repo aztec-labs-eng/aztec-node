@@ -18,9 +18,6 @@
     },
     {
       "path": "../stdlib"
-    },
-    {
-      "path": "../kv-store"
     }
   ],
   "include": ["src", "artifacts/*.d.json.ts", "artifacts/**/*.d.json.ts"],
