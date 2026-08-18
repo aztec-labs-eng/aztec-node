@@ -5,6 +5,9 @@ import { fileURLToPath } from 'url';
 import { type ContractArtifact, loadContractArtifact } from '../abi/index.js';
 import type { NoirCompiledContract } from '../noir/index.js';
 
+// The fixtures are gitignored copies of noir-contracts build outputs, read via fs below.
+// @dependency ../../fixtures/*.json
+
 // Copied from the build output for the contract `Benchmarking` in noir-contracts
 export function getBenchmarkContractArtifact(): ContractArtifact {
   const path = getPathToFixture('Benchmarking.test.json');
