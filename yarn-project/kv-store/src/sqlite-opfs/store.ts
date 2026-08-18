@@ -121,6 +121,7 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
           log.warn(`Quarantined SQLite-OPFS pool with duplicate logical file mappings`, quarantine);
         }
       }
+      // @dependency ./worker.ts
       worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
       const store = new AztecSQLiteOPFSStore(worker, dbName, log, ephemeral, poolLock);
       // Transfer (not clone) the key buffer to the worker so we don't leave a

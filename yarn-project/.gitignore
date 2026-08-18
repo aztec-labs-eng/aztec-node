@@ -69,3 +69,4 @@ tmp/
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+.test-dep-hashes

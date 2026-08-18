@@ -54,6 +54,8 @@ export async function buildSharedContractStore(): Promise<{ dataDir: string; sch
  * refers to whichever module the calling code actually lives in; we try both relative locations
  * and use whichever exists.
  */
+// worker.bundle.js is esbuild's bundling of src/worker.ts (see esbuild.config.mjs).
+// @dependency ./worker.ts
 function resolveWorkerBundlePath(): URL {
   const candidates = [new URL('./worker.bundle.js', import.meta.url), new URL('../worker.bundle.js', import.meta.url)];
   return candidates.find(u => existsSync(fileURLToPath(u))) ?? candidates[0];

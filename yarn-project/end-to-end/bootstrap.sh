@@ -5,6 +5,22 @@ hash=$(../bootstrap.sh hash)
 bench_fixtures_dir=chonk-pinned-flows
 ultrahonk_bench_dir=ultrahonk-bench-inputs
 
+# Per-test cache keys from yarn-project's dependency framework (../bootstrap.sh
+# compute_test_dependencies, run as part of the yarn-project build). load_test_hashes loads
+# the map once in the test_cmds shell; test_hash then runs inside $(...) subshells that
+# inherit the map, so lookups spawn no per-test processes. The keys only matter to CI's redis
+# test cache, so outside CI the map is not read at all — the empty-map fallback makes every
+# lookup disabled-cache, as does any test absent from the map (it just runs uncached).
+declare -A test_hashes
+function load_test_hashes {
+  [ "$CI" -eq 1 ] || return 0
+  local t h
+  while read -r t h; do test_hashes["$t"]=$h; done < <(../bootstrap.sh test_hashes)
+}
+function test_hash {
+  echo "${test_hashes[end-to-end/$1]:-disabled-cache}"
+}
+
 function build {
   cache_load_image consensys/web3signer:25.11.0
   cache_load_image postgres:16-alpine
@@ -24,30 +40,31 @@ function set_dump_avm {
 
 function test_cmds {
   local run_test_script="yarn-project/end-to-end/scripts/run_test.sh"
-  local prefix="$hash:ISOLATE=1:TIMEOUT=20m"
+  load_test_hashes
+  local flags=":ISOLATE=1:TIMEOUT=20m"
 
   # On full CI we enable real proofs and allocate more resources to the e2e prover tests
   if [ "$CI_FULL" -eq 1 ]; then
     for test in src/single-node/prover/server/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo "$prefix:TIMEOUT=20m:CPUS=16:MEM=96g:NAME=${name}_real $run_test_script simple ${test#src/}"
+      echo "$(test_hash "$test")$flags:TIMEOUT=20m:CPUS=16:MEM=96g:NAME=${name}_real $run_test_script simple ${test#src/}"
     done
     for test in src/single-node/prover/client/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo "$prefix:TIMEOUT=10m:CPUS=2:MEM=4g:NAME=${name}_real $run_test_script simple ${test#src/}"
+      echo "$(test_hash "$test")$flags:TIMEOUT=10m:CPUS=2:MEM=4g:NAME=${name}_real $run_test_script simple ${test#src/}"
     done
   else
     for test in src/single-node/prover/**/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo "$prefix:NAME=${name}_fake FAKE_PROOFS=1 $run_test_script simple ${test#src/}"
+      echo "$(test_hash "$test")$flags:NAME=${name}_fake FAKE_PROOFS=1 $run_test_script simple ${test#src/}"
     done
   fi
 
   # Long-running avm_simulator
-  echo "$prefix:TIMEOUT=30m:NAME=automine/simulation/avm_simulator $(set_dump_avm e2e_avm_simulator) $run_test_script simple src/automine/simulation/avm_simulator.test.ts"
+  echo "$(test_hash src/automine/simulation/avm_simulator.test.ts)$flags:TIMEOUT=30m:NAME=automine/simulation/avm_simulator $(set_dump_avm e2e_avm_simulator) $run_test_script simple src/automine/simulation/avm_simulator.test.ts"
 
   local tests=(
     # List all standalone and nested tests, except for the ones listed above.
@@ -70,6 +87,7 @@ function test_cmds {
     name=${name%.test.ts}
 
     # Per-test bash TIMEOUT overrides — keep in sync with the test file's jest.setTimeout.
+    local prefix="$(test_hash "$test")$flags"
     local test_prefix="$prefix"
     case "$name" in
       multi-node/governance/add_rollup)
@@ -130,7 +148,7 @@ function test_cmds {
   )
   for test in "${tests[@]}"; do
     # We must set ONLY_TERM_PARENT=1 to allow the script to fully control cleanup process.
-    echo "$hash:ONLY_TERM_PARENT=1:TIMEOUT=20m $run_test_script compose $test"
+    echo "$(test_hash "$test"):ONLY_TERM_PARENT=1:TIMEOUT=20m $run_test_script compose $test"
   done
 
   tests=(
@@ -138,7 +156,7 @@ function test_cmds {
   )
   for test in "${tests[@]}"; do
     # We must set ONLY_TERM_PARENT=1 to allow the script to fully control cleanup process.
-    echo "$hash:ONLY_TERM_PARENT=1:TIMEOUT=20m $run_test_script web3signer $test"
+    echo "$(test_hash "$test"):ONLY_TERM_PARENT=1:TIMEOUT=20m $run_test_script web3signer $test"
   done
 
   tests=(
@@ -148,10 +166,10 @@ function test_cmds {
     # We must set ONLY_TERM_PARENT=1 to allow the script to fully control cleanup process.
     if [[ "$test" == *.parallel.test.ts ]]; then
       while IFS= read -r test_name; do
-        echo "$hash:ONLY_TERM_PARENT=1:TIMEOUT=30m $run_test_script ha $test \"$test_name\""
+        echo "$(test_hash "$test"):ONLY_TERM_PARENT=1:TIMEOUT=30m $run_test_script ha $test \"$test_name\""
       done < <(extract_test_names "$test")
     else
-      echo "$hash:ONLY_TERM_PARENT=1:TIMEOUT=30m $run_test_script ha $test"
+      echo "$(test_hash "$test"):ONLY_TERM_PARENT=1:TIMEOUT=30m $run_test_script ha $test"
     fi
   done
 
