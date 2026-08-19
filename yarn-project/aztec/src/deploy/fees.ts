@@ -189,6 +189,11 @@ export interface FeeSession {
    * account's first tx: the claim must mine before its balance-paying txs fan out.
    */
   hasPendingClaim(account: AztecAddress): boolean;
+  /**
+   * How many calls `account`'s next fee payment adds to its tx (0 when it pays from balance, 1 for
+   * an FPC or a pending claim) — the runner sizes action batches to leave room for them.
+   */
+  feeCallCount(account: AztecAddress): Promise<number>;
 }
 
 /** What {@link prepareFeeSession} needs to fund a run's working accounts. */
@@ -327,5 +332,10 @@ export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<Fe
       return { fee: {}, onConsumed: () => {} }; // later txs (or already-funded): pay from the account's balance
     },
     hasPendingClaim: account => sessions.get(account.toString())?.claim !== undefined,
+    feeCallCount: async account => {
+      const session = sessions.get(account.toString());
+      const method = session?.sponsored ? sponsoredFee?.paymentMethod : session?.claim;
+      return method ? (await method.getExecutionPayload()).calls.length : 0;
+    },
   };
 }
