@@ -74,6 +74,7 @@ import { PrivateEventFilterValidator } from './events/private_event_filter_valid
 import type { ExecutionHooks } from './hooks/index.js';
 import { JobCoordinator } from './job_coordinator/job_coordinator.js';
 import { TxResolverService } from './messages/tx_resolver_service.js';
+import type { Recording } from './node/benchmarked_node.js';
 import { type CachingAztecNode, withCache } from './node/caching_aztec_node.js';
 import {
   PrivateKernelExecutionProver,
@@ -257,7 +258,7 @@ export class PXE {
     private protocolContractsProvider: ProtocolContractsProvider,
     private preloadedContractsProvider: PreloadedContractsProvider,
     private log: Logger,
-    private jobQueue: SerialQueue,
+    private queue: SerialQueue,
     private jobCoordinator: JobCoordinator,
     public debug: PXEDebugUtils,
     private hooks: ExecutionHooks | undefined,
@@ -355,9 +356,9 @@ export class PXE {
       contractSyncService,
     ]);
 
-    const debugUtils = new PXEDebugUtils(contractSyncService, noteStore, synchronizer, anchorBlockStore);
+    const debugUtils = new PXEDebugUtils(contractSyncService, noteStore);
 
-    const jobQueue = new SerialQueue();
+    const queue = new SerialQueue();
 
     const pxe = new PXE(
       readCachedNode,
@@ -386,19 +387,19 @@ export class PXE {
       protocolContractsProvider,
       preloadedContractsProvider,
       log,
-      jobQueue,
+      queue,
       jobCoordinator,
       debugUtils,
       hooks,
     );
 
     debugUtils.setPXEHelpers(
-      pxe.#putInJobQueue.bind(pxe),
+      fn => pxe.#syncedJob(fn, { forceSync: true }),
       pxe.#getSimulatorForTx.bind(pxe),
       pxe.#executeUtility.bind(pxe),
     );
 
-    pxe.jobQueue.start();
+    pxe.queue.start();
 
     await allToCompletion([pxe.#registerProtocolContracts(), pxe.#registerPreloadedContracts()]);
     log.info(`Started PXE connected to chain ${info.l1ChainId} version ${info.rollupVersion}`);
@@ -469,33 +470,60 @@ export class PXE {
   }
 
   /**
-   * Enqueues a job for execution once no other jobs are running. Returns a promise that will resolve once the job is
-   * complete.
+   * Enqueues an operation for execution once no other operations are running. Returns a promise that will resolve
+   * once the operation is complete.
    *
    * Useful for tasks that cannot run concurrently, such as contract function simulation.
    */
-  #putInJobQueue<T>(fn: (jobId: string) => Promise<T>): Promise<T> {
+  #enqueue<T>(fn: () => Promise<T>): Promise<T> {
     // TODO(#12636): relax the conditions under which we forbid concurrency.
-    if (this.jobQueue.length() != 0) {
+    if (this.queue.length() != 0) {
       this.log.warn(
-        `PXE is already processing ${this.jobQueue.length()} jobs, concurrent execution is not supported. Will run once those are complete.`,
+        `PXE is already processing ${this.queue.length()} operations, concurrent execution is not supported. Will run once those are complete.`,
       );
     }
 
-    return this.jobQueue.put(async () => {
-      const jobId = this.jobCoordinator.beginJob();
-      this.log.verbose(`Beginning job ${jobId}`);
+    return this.queue.put(fn);
+  }
 
+  /**
+   * Enqueues a job (`fn`) that is meant to run after a sync with the node (if the `autoSync` flag supports it, or
+   * unconditionally with `forceSync`). If the job run is successful, then all staged writes are committed. If the job
+   * rejects, then all staged writes are discarded.
+   */
+  #syncedJob<T>(
+    fn: (ctx: SyncedJobContext) => Promise<T>,
+    { errorContext, forceSync = false }: { errorContext?: () => string[]; forceSync?: boolean } = {},
+  ): Promise<T> {
+    return this.#enqueue(async () => {
+      const totalTimer = new Timer();
+      const recording = this.node.startRecording();
       try {
-        const result = await fn(jobId);
-        this.log.verbose(`Committing job ${jobId}`);
+        const syncTimer = new Timer();
+        await (forceSync ? this.blockStateSynchronizer.sync() : this.#maybeSync());
+        const syncTime = syncTimer.ms();
 
-        await this.jobCoordinator.commitJob(jobId);
-        return result;
-      } catch (err) {
-        this.log.verbose(`Aborting job ${jobId}`);
-        await this.jobCoordinator.abortJob(jobId);
-        throw err;
+        const jobId = this.jobCoordinator.beginJob();
+        this.log.verbose(`Beginning job ${jobId}`);
+
+        try {
+          const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
+          const result = await fn({ jobId, syncTime, anchorBlockHeader, recording, totalMs: () => totalTimer.ms() });
+          this.log.verbose(`Committing job ${jobId}`);
+
+          await this.jobCoordinator.commitJob(jobId);
+          return result;
+        } catch (err) {
+          this.log.verbose(`Aborting job ${jobId}`);
+          await this.jobCoordinator.abortJob(jobId);
+          throw err;
+        }
+      } catch (err: any) {
+        throw errorContext ? this.#contextualizeError(err, ...errorContext()) : err;
+      } finally {
+        // Idempotent cleanup: operations stop the recording themselves to collect the calls in their stats, but an
+        // early exit or error may leave it running.
+        recording.stop();
       }
     });
   }
@@ -698,10 +726,10 @@ export class PXE {
   /**
    * Triggers a sync of PXE state with the node, regardless of the `autoSync` config flag. Use this to
    * batch syncs across composite flows when `autoSync` is disabled (e.g. one sync per simulate+send
-   * instead of one per inner PXE call). Serialized through the job queue.
+   * instead of one per inner PXE call). Serialized through the queue.
    */
   public sync(): Promise<void> {
-    return this.#putInJobQueue(() => this.blockStateSynchronizer.sync());
+    return this.#enqueue(() => this.blockStateSynchronizer.sync());
   }
 
   /**
@@ -709,7 +737,7 @@ export class PXE {
    * @returns The synced block header
    */
   public getSyncedBlockHeader(): Promise<BlockHeader> {
-    return this.#putInJobQueue(() => {
+    return this.#enqueue(() => {
       return this.anchorBlockStore.getBlockHeader();
     });
   }
@@ -812,7 +840,7 @@ export class PXE {
 
     if (wasAdded) {
       // Queued to avoid wiping while a job is in flight.
-      await this.#putInJobQueue(() => Promise.resolve(this.contractSyncService.wipe()));
+      await this.#enqueue(() => Promise.resolve(this.contractSyncService.wipe()));
     }
   }
 
@@ -989,8 +1017,8 @@ export class PXE {
    * @returns The address of the registered instance.
    */
   public registerContract(instance: ContractInstancePreimage): Promise<AztecAddress> {
-    // Run inside the job queue so we can't race a concurrent simulation while writing the instance to the store.
-    return this.#putInJobQueue(async () => {
+    // Run inside the queue so we can't race a concurrent simulation while writing the instance to the store.
+    return this.#enqueue(async () => {
       const address = await computeContractAddressFromInstance(instance);
       await this.contractStore.addContractInstance({ ...instance, address });
       this.log.info(`Added contract at ${address}`, { address });
@@ -1020,14 +1048,8 @@ export class PXE {
     let privateExecutionResult: PrivateExecutionResult;
     // We disable proving concurrently mostly out of caution, since it accesses some of our stores. Proving is so
     // computationally demanding that it'd be rare for someone to try to do it concurrently regardless.
-    return this.#putInJobQueue(async jobId => {
-      const totalTimer = new Timer();
-      const recording = this.node.startRecording();
-      try {
-        const syncTimer = new Timer();
-        await this.#maybeSync();
-        const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
-        const syncTime = syncTimer.ms();
+    return this.#syncedJob(
+      async ({ jobId, syncTime, anchorBlockHeader, recording, totalMs }) => {
         const contractFunctionSimulator = this.#getSimulatorForTx();
         privateExecutionResult = await this.#executePrivate({
           contractFunctionSimulator,
@@ -1049,7 +1071,7 @@ export class PXE {
           profileMode: 'none',
         });
 
-        const totalTime = totalTimer.ms();
+        const totalTime = totalMs();
 
         const perFunction = executionSteps.map(({ functionName, timings: { witgen, oracles } }) => ({
           functionName,
@@ -1089,13 +1111,9 @@ export class PXE {
         );
 
         return txProvingResult;
-      } catch (err: any) {
-        throw this.#contextualizeError(err, inspect(txRequest), inspect(privateExecutionResult));
-      } finally {
-        // Idempotent cleanup for the error and early-exit paths. The success path already stopped the recording.
-        recording.stop();
-      }
-    });
+      },
+      { errorContext: () => [inspect(txRequest), inspect(privateExecutionResult)] },
+    );
   }
 
   /**
@@ -1109,10 +1127,8 @@ export class PXE {
     { profileMode, skipProofGeneration = true, scopes, senderForTags }: ProfileTxOpts,
   ): Promise<TxProfileResult> {
     // We disable concurrent profiles for consistency with simulateTx.
-    return this.#putInJobQueue(async jobId => {
-      const totalTimer = new Timer();
-      const recording = this.node.startRecording();
-      try {
+    return this.#syncedJob(
+      async ({ jobId, syncTime, anchorBlockHeader, recording, totalMs }) => {
         const txInfo = {
           origin: txRequest.origin,
           functionSelector: txRequest.functionSelector,
@@ -1125,10 +1141,6 @@ export class PXE {
           `Profiling transaction execution request to ${txRequest.functionSelector} at ${txRequest.origin}`,
           txInfo,
         );
-        const syncTimer = new Timer();
-        await this.#maybeSync();
-        const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
-        const syncTime = syncTimer.ms();
 
         const contractFunctionSimulator = this.#getSimulatorForTx();
         const privateExecutionResult = await this.#executePrivate({
@@ -1152,7 +1164,7 @@ export class PXE {
           },
         );
 
-        const totalTime = totalTimer.ms();
+        const totalTime = totalMs();
 
         const perFunction = executionSteps.map(({ functionName, timings: { witgen, oracles } }) => {
           return {
@@ -1178,13 +1190,9 @@ export class PXE {
         };
 
         return new TxProfileResult(executionSteps, { timings, nodeRPCCalls: recording.stop() });
-      } catch (err: any) {
-        throw this.#contextualizeError(err, inspect(txRequest), `profileMode=${profileMode}`);
-      } finally {
-        // Idempotent cleanup for the error and early-exit paths. The success path already stopped the recording.
-        recording.stop();
-      }
-    });
+      },
+      { errorContext: () => [inspect(txRequest), `profileMode=${profileMode}`] },
+    );
   }
 
   /**
@@ -1220,10 +1228,8 @@ export class PXE {
     // We disable concurrent simulations since those might execute oracles which read and write to the PXE stores (e.g.
     // to the capsules), and we need to prevent concurrent runs from interfering with one another (e.g. attempting to
     // delete the same read value, or reading values that another simulation is currently modifying).
-    return this.#putInJobQueue(async jobId => {
-      const recording = this.node.startRecording();
-      try {
-        const totalTimer = new Timer();
+    return this.#syncedJob(
+      async ({ jobId, syncTime, anchorBlockHeader, recording, totalMs }) => {
         const txInfo = {
           origin: txRequest.origin,
           functionSelector: txRequest.functionSelector,
@@ -1236,10 +1242,6 @@ export class PXE {
           `Simulating transaction execution request to ${txRequest.functionSelector} at ${txRequest.origin}`,
           txInfo,
         );
-        const syncTimer = new Timer();
-        await this.#maybeSync();
-        const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
-        const syncTime = syncTimer.ms();
 
         if (overrides?.contracts && Object.keys(overrides.contracts).length > 0 && !skipKernels) {
           throw new Error(
@@ -1308,7 +1310,7 @@ export class PXE {
 
         const txHash = simulatedTx.getTxHash();
 
-        const totalTime = totalTimer.ms();
+        const totalTime = totalMs();
 
         const perFunction = executionSteps.map(({ functionName, timings: { witgen, oracles } }) => ({
           functionName,
@@ -1346,19 +1348,16 @@ export class PXE {
           timings,
           nodeRPCCalls: recording.stop(),
         });
-      } catch (err: any) {
-        throw this.#contextualizeError(
-          err,
+      },
+      {
+        errorContext: () => [
           inspect(txRequest),
           `simulatePublic=${simulatePublic}`,
           `skipTxValidation=${skipTxValidation}`,
           `scopes=${scopes.map(s => s.toString()).join(', ')}`,
-        );
-      } finally {
-        // Idempotent cleanup for the error and early-exit paths. The success path already stopped the recording.
-        recording.stop();
-      }
-    });
+        ],
+      },
+    );
   }
 
   /**
@@ -1372,17 +1371,11 @@ export class PXE {
     // We disable concurrent executions since those might execute oracles which read and write to the PXE stores (e.g.
     // to the capsules), and we need to prevent concurrent runs from interfering with one another (e.g. attempting to
     // delete the same read value, or reading values that another execution is currently modifying).
-    return this.#putInJobQueue(async jobId => {
-      const recording = this.node.startRecording();
-      try {
-        const totalTimer = new Timer();
-        const syncTimer = new Timer();
-        await this.#maybeSync();
-        const syncTime = syncTimer.ms();
+    return this.#syncedJob(
+      async ({ jobId, syncTime, anchorBlockHeader, recording, totalMs }) => {
         const functionTimer = new Timer();
         const contractFunctionSimulator = this.#getSimulatorForTx();
 
-        const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
         await this.contractSyncService.ensureContractSynced({
           contract: call.to,
           functionToInvokeAfterSync: call.selector,
@@ -1403,7 +1396,7 @@ export class PXE {
         );
         const functionTime = functionTimer.ms();
 
-        const totalTime = totalTimer.ms();
+        const totalTime = totalMs();
 
         const perFunction = [{ functionName: call.name, time: functionTime }];
 
@@ -1420,19 +1413,18 @@ export class PXE {
           anchorBlockTimestamp: anchorBlockHeader.globalVariables.timestamp,
           stats: { timings, nodeRPCCalls: recording.stop() },
         };
-      } catch (err: any) {
-        const { to, name, args } = call;
-        const stringifiedArgs = args.map(arg => arg.toString()).join(', ');
-        throw this.#contextualizeError(
-          err,
-          `executeUtility ${to}:${name}(${stringifiedArgs})`,
-          `scopes=${scopes.map(s => s.toString()).join(', ')}`,
-        );
-      } finally {
-        // Idempotent cleanup for the error and early-exit paths. The success path already stopped the recording.
-        recording.stop();
-      }
-    });
+      },
+      {
+        errorContext: () => {
+          const { to, name, args } = call;
+          const stringifiedArgs = args.map(arg => arg.toString()).join(', ');
+          return [
+            `executeUtility ${to}:${name}(${stringifiedArgs})`,
+            `scopes=${scopes.map(s => s.toString()).join(', ')}`,
+          ];
+        },
+      },
+    );
   }
 
   /**
@@ -1454,10 +1446,7 @@ export class PXE {
   ): Promise<PackedPrivateEvent[]> {
     let anchorBlockNumber: BlockNumber;
 
-    await this.#putInJobQueue(async jobId => {
-      await this.#maybeSync();
-
-      const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
+    await this.#syncedJob(async ({ jobId, anchorBlockHeader }) => {
       anchorBlockNumber = anchorBlockHeader.getBlockNumber();
 
       const contractFunctionSimulator = this.#getSimulatorForTx();
@@ -1485,11 +1474,23 @@ export class PXE {
   }
 
   /**
-   * Stops the PXE's job queue and closes the backing store.
+   * Stops the PXE's queue and closes the backing store.
    */
   public async stop(): Promise<void> {
-    await this.jobQueue.end();
+    await this.queue.end();
     await this.blockStateSynchronizer.stop();
     await this.db.close();
   }
 }
+
+/** What a synced job receives: its id, the anchor its sync established, and the operation's instrumentation. */
+export type SyncedJobContext = {
+  jobId: string;
+  /** Duration of the sync, for timing stats. */
+  syncTime: number;
+  anchorBlockHeader: BlockHeader;
+  /** Node RPC call recording; operations that report stats stop it to embed the calls. */
+  recording: Recording;
+  /** The operation's duration so far, including the sync. */
+  totalMs: () => number;
+};
