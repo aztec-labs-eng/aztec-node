@@ -8,6 +8,7 @@ import { AuthWitness } from '@aztec/stdlib/auth-witness';
 import { AztecAddress } from '@aztec/stdlib/aztec-address';
 import { BlockHash } from '@aztec/stdlib/block';
 import type { ContractInstancePreimageWithAddress } from '@aztec/stdlib/contract';
+import { GasFees, GasSettings } from '@aztec/stdlib/gas';
 import { PublicKeys } from '@aztec/stdlib/keys';
 import {
   DroppedTxReceipt,
@@ -21,6 +22,7 @@ import {
 import { DEV_VERSION } from '@aztec/stdlib/update-checker';
 
 import {
+  type GasSettingsOption,
   type InteractionWaitOptions,
   NO_WAIT,
   type OffchainMessage,
@@ -70,6 +72,13 @@ describe('WalletSchema', () => {
       chainId: expect.any(Fr),
       version: expect.any(Fr),
     });
+  });
+
+  it('completeGasSettings', async () => {
+    const result = await context.client.completeGasSettings({
+      gasSettings: { maxFeesPerGas: new GasFees(1n, 2n) },
+    });
+    expect(result).toBeInstanceOf(GasSettings);
   });
 
   it('getPrivateEvents', async () => {
@@ -456,6 +465,10 @@ class MockWallet implements Wallet {
   async registerContract(_instanceData: any, _artifact?: any, _secretKey?: Fr): Promise<void> {}
 
   async registerContractClass(_artifact: any): Promise<void> {}
+
+  completeGasSettings(_fee?: GasSettingsOption): Promise<GasSettings> {
+    return Promise.resolve(GasSettings.empty());
+  }
 
   async simulateTx(_exec: ExecutionPayload, opts: SimulateOptions): Promise<TxSimulationResultWithAppOffset> {
     this.lastSimulateOpts = opts;

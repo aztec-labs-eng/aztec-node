@@ -165,6 +165,7 @@ export class EmbeddedWallet extends BaseWallet {
       from: opts.from,
       feePayer: executionPayload.feePayer,
       gasSettings: opts.fee?.gasSettings,
+      boundGasSettings: executionPayload.gasSettings,
       forEstimation: true,
     });
 

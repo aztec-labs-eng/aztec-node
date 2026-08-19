@@ -3,6 +3,7 @@ import { NO_FROM } from '@aztec/aztec.js/account';
 import type { CallIntent, IntentInnerHash } from '@aztec/aztec.js/authorization';
 import {
   DefaultWaitOpts,
+  type GasSettingsOption,
   type InteractionWaitOptions,
   NO_WAIT,
   type SendReturn,
@@ -98,6 +99,12 @@ export type CompleteFeeOptionsConfig = {
   feePayer?: AztecAddress;
   /** User-provided partial gas settings. */
   gasSettings?: Partial<FieldsOf<GasSettings>>;
+  /**
+   * Gas settings the execution payload's auth witness signs over (if any). When set they are used verbatim —
+   * including for estimation — since any other settings would make the witness fail verification. Explicitly
+   * provided `gasSettings` components that differ from them are rejected.
+   */
+  boundGasSettings?: GasSettings;
   /** If true, returns gas settings with high gas limits for estimation. If false, uses fallback limits. */
   forEstimation?: boolean;
   /**
@@ -275,13 +282,36 @@ export abstract class BaseWallet implements Wallet {
   }
 
   /**
+   * Completes partial user-provided gas settings with the values used when sending a transaction: the most a
+   * single tx may declare on this network (the node's per-tx admission limit) when no explicit limits are given,
+   * and predicted fees plus padding when no explicit max fees are given.
+   * @param fee - User-provided partial gas settings and congestion estimate.
+   */
+  public async completeGasSettings(fee?: GasSettingsOption): Promise<GasSettings> {
+    const { gasSettings, congestionEstimate } = fee ?? {};
+    const maxFeesPerGas =
+      gasSettings?.maxFeesPerGas ?? (await this.getMinFees(congestionEstimate)).mul(1 + this.minFeePadding);
+    const maxTxGasLimits = await this.getMaxTxGasLimits();
+    const gasLimits = gasSettings?.gasLimits ? Gas.from(gasSettings.gasLimits) : undefined;
+    // If the caller declared explicit gas limits, reject them up front when they exceed the network's
+    // per-tx admission limit (mirroring the node's MaxGasLimitsValidator). Otherwise fill in the limit.
+    if (gasLimits) {
+      assertGasLimitsWithinNetworkLimits(gasLimits, maxTxGasLimits);
+    }
+    return GasSettings.fallback({
+      gasLimits: gasLimits ?? maxTxGasLimits,
+      teardownGasLimits: gasSettings?.teardownGasLimits ? Gas.from(gasSettings.teardownGasLimits) : undefined,
+      maxFeesPerGas,
+      maxPriorityFeesPerGas: gasSettings?.maxPriorityFeesPerGas ?? GasFees.empty(),
+    });
+  }
+
+  /**
    * Completes partial user-provided fee options with wallet defaults.
    * @param config - Fee completion config.
    */
   protected async completeFeeOptions(config: CompleteFeeOptionsConfig): Promise<FeeOptions> {
-    const { from, feePayer, gasSettings, forEstimation, congestionEstimate } = config;
-    const maxFeesPerGas =
-      gasSettings?.maxFeesPerGas ?? (await this.getMinFees(congestionEstimate)).mul(1 + this.minFeePadding);
+    const { from, feePayer, gasSettings, boundGasSettings, forEstimation, congestionEstimate } = config;
     let accountFeePaymentMethodOptions;
     // If from is an address, we need to determine the appropriate fee payment method options for the
     // account contract entrypoint to use
@@ -298,31 +328,29 @@ export abstract class BaseWallet implements Wallet {
           : AccountFeePaymentMethodOptions.EXTERNAL;
       }
     }
-    const gasSettingsOverrides = {
-      gasLimits: gasSettings?.gasLimits ? Gas.from(gasSettings.gasLimits) : undefined,
-      teardownGasLimits: gasSettings?.teardownGasLimits ? Gas.from(gasSettings.teardownGasLimits) : undefined,
-      maxFeesPerGas,
-      maxPriorityFeesPerGas: gasSettings?.maxPriorityFeesPerGas ?? GasFees.empty(),
-    };
-    // When estimating gas (simulation), use high limits so the simulation doesn't run out of gas.
-    // When sending for real without explicit limits, declare the most a single tx may use on this network
-    // (the node's per-tx admission limit), so the proposer does not skip the tx for over-declaring gas.
     let fullGasSettings;
-    if (forEstimation) {
+    if (boundGasSettings) {
+      // An auth witness in the execution payload signs over these settings, so the transaction must use them
+      // verbatim: estimation limits or user overrides would make the witness fail verification. Explicitly
+      // provided settings that differ are rejected rather than silently ignored.
+      assertNoConflictWithBoundGasSettings(gasSettings, boundGasSettings);
+      fullGasSettings = boundGasSettings;
+    } else if (forEstimation) {
+      // When estimating gas (simulation), use high limits so the simulation doesn't run out of gas.
       // Estimation deliberately uses very high internal limits, which the node exempts from gas-limit
       // admission during simulation, so we do not validate against the network admission limit here.
-      fullGasSettings = GasSettings.forEstimation(gasSettingsOverrides);
-    } else {
-      const maxTxGasLimits = await this.getMaxTxGasLimits();
-      // If the caller declared explicit gas limits, reject them up front when they exceed the network's
-      // per-tx admission limit (mirroring the node's MaxGasLimitsValidator). Otherwise fill in the limit.
-      if (gasSettingsOverrides.gasLimits) {
-        assertGasLimitsWithinNetworkLimits(gasSettingsOverrides.gasLimits, maxTxGasLimits);
-      }
-      fullGasSettings = GasSettings.fallback({
-        ...gasSettingsOverrides,
-        gasLimits: gasSettingsOverrides.gasLimits ?? maxTxGasLimits,
+      const maxFeesPerGas =
+        gasSettings?.maxFeesPerGas ?? (await this.getMinFees(congestionEstimate)).mul(1 + this.minFeePadding);
+      fullGasSettings = GasSettings.forEstimation({
+        gasLimits: gasSettings?.gasLimits ? Gas.from(gasSettings.gasLimits) : undefined,
+        teardownGasLimits: gasSettings?.teardownGasLimits ? Gas.from(gasSettings.teardownGasLimits) : undefined,
+        maxFeesPerGas,
+        maxPriorityFeesPerGas: gasSettings?.maxPriorityFeesPerGas ?? GasFees.empty(),
       });
+    } else {
+      // When sending for real without explicit limits, declare the most a single tx may use on this network
+      // (the node's per-tx admission limit), so the proposer does not skip the tx for over-declaring gas.
+      fullGasSettings = await this.completeGasSettings({ gasSettings, congestionEstimate });
     }
     this.log.debug(`Using L2 gas settings`, fullGasSettings);
     return {
@@ -449,6 +477,7 @@ export abstract class BaseWallet implements Wallet {
       from: opts.from,
       feePayer: executionPayload.feePayer,
       gasSettings: opts.fee?.gasSettings,
+      boundGasSettings: executionPayload.gasSettings,
       forEstimation: true,
       congestionEstimate: opts.fee?.congestionEstimate,
     });
@@ -501,6 +530,7 @@ export abstract class BaseWallet implements Wallet {
       from: opts.from,
       feePayer: executionPayload.feePayer,
       gasSettings: opts.fee?.gasSettings,
+      boundGasSettings: executionPayload.gasSettings,
       congestionEstimate: opts.fee?.congestionEstimate,
     });
     const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(executionPayload, opts.from, feeOptions);
@@ -520,6 +550,7 @@ export abstract class BaseWallet implements Wallet {
       from: opts.from,
       feePayer: executionPayload.feePayer,
       gasSettings: opts.fee?.gasSettings,
+      boundGasSettings: executionPayload.gasSettings,
       congestionEstimate: opts.fee?.congestionEstimate,
     });
     const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(executionPayload, opts.from, feeOptions);
@@ -662,5 +693,44 @@ export abstract class BaseWallet implements Wallet {
       isArtifactRegistered: !!(await this.pxe.getContractArtifact(id)),
       isContractClassPubliclyRegistered: !!publiclyRegisteredContractClass,
     };
+  }
+}
+
+/**
+ * Rejects explicitly provided gas settings components that differ from the ones an execution payload's auth
+ * witness signs over. Components the user did not provide are filled from the bound settings, so only explicit
+ * mismatches throw.
+ */
+function assertNoConflictWithBoundGasSettings(
+  userGasSettings: Partial<FieldsOf<GasSettings>> | undefined,
+  bound: GasSettings,
+): void {
+  if (!userGasSettings) {
+    return;
+  }
+  const conflicts: string[] = [];
+  if (userGasSettings.gasLimits && !Gas.from(userGasSettings.gasLimits).equals(bound.gasLimits)) {
+    conflicts.push('gasLimits');
+  }
+  if (
+    userGasSettings.teardownGasLimits &&
+    !Gas.from(userGasSettings.teardownGasLimits).equals(bound.teardownGasLimits)
+  ) {
+    conflicts.push('teardownGasLimits');
+  }
+  if (userGasSettings.maxFeesPerGas && !GasFees.from(userGasSettings.maxFeesPerGas).equals(bound.maxFeesPerGas)) {
+    conflicts.push('maxFeesPerGas');
+  }
+  if (
+    userGasSettings.maxPriorityFeesPerGas &&
+    !GasFees.from(userGasSettings.maxPriorityFeesPerGas).equals(bound.maxPriorityFeesPerGas)
+  ) {
+    conflicts.push('maxPriorityFeesPerGas');
+  }
+  if (conflicts.length > 0) {
+    throw new Error(
+      `Provided gas settings (${conflicts.join(', ')}) conflict with the ones bound into the execution payload's ` +
+        'auth witness. Rebuild the payload with the desired gas settings instead.',
+    );
   }
 }

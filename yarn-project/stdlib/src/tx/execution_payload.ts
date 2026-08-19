@@ -1,6 +1,7 @@
 import type { FunctionCall } from '../abi/function_call.js';
 import type { AuthWitness } from '../auth_witness/auth_witness.js';
 import { AztecAddress } from '../aztec-address/index.js';
+import type { GasSettings } from '../gas/gas_settings.js';
 import type { Capsule } from './capsule.js';
 import type { HashedValues } from './hashed_values.js';
 
@@ -23,6 +24,12 @@ export class ExecutionPayload {
      * If undefined, the wallet software executing the payload will have to add a fee payment method
      */
     public feePayer?: AztecAddress,
+    /**
+     * Gas settings one of the payload's auth witnesses signs over (if any). When set, the transaction executing
+     * this payload must use these exact settings or the witness fails verification, so wallet software must honor
+     * them instead of filling in its own.
+     */
+    public gasSettings?: GasSettings,
   ) {}
 
   static empty() {
@@ -32,7 +39,7 @@ export class ExecutionPayload {
 
 /**
  * Merges an array ExecutionPayloads combining their calls, authWitnesses, capsules and extraArgHashes.
- * @throws Error if multiple payloads have different fee payers set
+ * @throws Error if multiple payloads have different fee payers or different bound gas settings set
  */
 export function mergeExecutionPayloads(requests: ExecutionPayload[]): ExecutionPayload {
   const calls = requests.map(r => r.calls).flat();
@@ -57,5 +64,18 @@ export function mergeExecutionPayloads(requests: ExecutionPayload[]): ExecutionP
   const feePayer =
     uniqueFeePayers.size === 1 ? AztecAddress.fromStringUnsafe(Array.from(uniqueFeePayers)[0]) : undefined;
 
-  return new ExecutionPayload(calls, combinedAuthWitnesses, combinedCapsules, combinedExtraHashedArgs, feePayer);
+  const allGasSettings = requests.map(r => r.gasSettings).filter((gs): gs is GasSettings => gs !== undefined);
+  if (allGasSettings.some(gs => !gs.equals(allGasSettings[0]))) {
+    throw new Error('Cannot merge execution payloads with different bound gas settings.');
+  }
+  const gasSettings = allGasSettings.at(0);
+
+  return new ExecutionPayload(
+    calls,
+    combinedAuthWitnesses,
+    combinedCapsules,
+    combinedExtraHashedArgs,
+    feePayer,
+    gasSettings,
+  );
 }

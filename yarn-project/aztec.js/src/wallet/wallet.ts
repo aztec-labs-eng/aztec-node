@@ -17,7 +17,7 @@ import {
   type ContractInstancePreimageWithAddress,
   ContractInstancePreimageWithAddressSchema,
 } from '@aztec/stdlib/contract';
-import { Gas, ManaUsageEstimate } from '@aztec/stdlib/gas';
+import { Gas, GasSettings, ManaUsageEstimate } from '@aztec/stdlib/gas';
 import type { MasterSecretKeys } from '@aztec/stdlib/keys';
 import { refineTxHashAndRange } from '@aztec/stdlib/logs';
 import {
@@ -296,6 +296,12 @@ export type Wallet = {
    * upgrade has taken effect. No chain check.
    */
   registerContractClass(artifact: ContractArtifact): Promise<void>;
+  /**
+   * Completes partial user-provided gas settings with the values the wallet would fill in when sending a
+   * transaction (network admission gas limits, predicted fees). Used by flows that must know the final gas
+   * settings before building a payload, such as self-paid account deployments whose auth witness signs over them.
+   */
+  completeGasSettings(fee?: GasSettingsOption): Promise<GasSettings>;
   simulateTx(exec: ExecutionPayload, opts: SimulateOptions): Promise<TxSimulationResultWithAppOffset>;
   executeUtility(call: FunctionCall, opts: ExecuteUtilityOptions): Promise<UtilityExecutionResult>;
   profileTx(exec: ExecutionPayload, opts: ProfileOptions): Promise<TxProfileResult>;
@@ -314,6 +320,7 @@ export const ExecutionPayloadSchema = z.object({
   capsules: z.array(Capsule.schema),
   extraHashedArgs: z.array(HashedValues.schema),
   feePayer: optional(schemas.AztecAddress),
+  gasSettings: optional(GasSettings.schema),
 });
 
 export const GasSettingsOptionSchema = z.object({
@@ -321,8 +328,8 @@ export const GasSettingsOptionSchema = z.object({
     z.object({
       gasLimits: optional(Gas.schema),
       teardownGasLimits: optional(Gas.schema),
-      maxFeePerGas: optional(z.object({ feePerDaGas: schemas.BigInt, feePerL2Gas: schemas.BigInt })),
-      maxPriorityFeePerGas: optional(z.object({ feePerDaGas: schemas.BigInt, feePerL2Gas: schemas.BigInt })),
+      maxFeesPerGas: optional(z.object({ feePerDaGas: schemas.BigInt, feePerL2Gas: schemas.BigInt })),
+      maxPriorityFeesPerGas: optional(z.object({ feePerDaGas: schemas.BigInt, feePerL2Gas: schemas.BigInt })),
     }),
   ),
   congestionEstimate: optional(z.nativeEnum(ManaUsageEstimate)),
@@ -591,6 +598,10 @@ const WalletMethodSchemas = {
     output: z.void(),
   }),
   registerContractClass: z.function({ input: z.tuple([ContractArtifactSchema]), output: z.void() }),
+  completeGasSettings: z.function({
+    input: z.tuple([optional(GasSettingsOptionSchema)]),
+    output: GasSettings.schema,
+  }),
   simulateTx: z.function({
     input: z.tuple([ExecutionPayloadSchema, SimulateOptionsSchema]),
     output: TxSimulationResultWithAppOffset.schema,

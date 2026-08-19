@@ -50,13 +50,38 @@ export interface EntrypointInterface {
    * Useful for account self-funding deployments and batching calls beyond the limit
    * of a single entrypoint call.
    *
+   * Entrypoints that authorize the wrapped payload with an auth witness bind `gasSettings` into it and record them
+   * on the returned payload, committing the transaction to those exact settings.
+   *
    * @param exec - The execution payload to wrap
+   * @param gasSettings - The gas settings the transaction executing the wrapped payload will use
    * @param chainInfo - Chain information (chainId and version) for replay protection
    * @param options - Implementation-specific options
    * @returns A new execution payload with a single call to this entrypoint
    * @throws Error if the payload cannot be wrapped (e.g., exceeds call limit)
    */
-  wrapExecutionPayload(exec: ExecutionPayload, chainInfo: ChainInfo, options?: any): Promise<ExecutionPayload>;
+  wrapExecutionPayload(
+    exec: ExecutionPayload,
+    gasSettings: GasSettings,
+    chainInfo: ChainInfo,
+    options?: any,
+  ): Promise<ExecutionPayload>;
+}
+
+/**
+ * Asserts that the gas settings a transaction is being assembled with match the ones already bound into the
+ * execution payload's auth witness (if any). A mismatch would produce a transaction whose witness fails
+ * verification during simulation or proving, so this surfaces the problem with a clear error instead.
+ * @param exec - The execution payload, possibly carrying bound gas settings
+ * @param gasSettings - The gas settings the transaction is being assembled with
+ */
+export function assertMatchesBoundGasSettings(exec: ExecutionPayload, gasSettings: GasSettings): void {
+  if (exec.gasSettings && !exec.gasSettings.equals(gasSettings)) {
+    throw new Error(
+      'The execution payload binds gas settings that differ from the ones provided for the transaction. ' +
+        'Rebuild the payload with the desired gas settings or assemble the transaction with the bound ones.',
+    );
+  }
 }
 
 /** Creates authorization witnesses. */

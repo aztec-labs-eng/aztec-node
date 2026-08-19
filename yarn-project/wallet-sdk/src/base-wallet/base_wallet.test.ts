@@ -9,7 +9,7 @@ import { FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi'
 import { AztecAddress } from '@aztec/stdlib/aztec-address';
 import { BlockHash } from '@aztec/stdlib/block';
 import type { NodeInfo } from '@aztec/stdlib/contract';
-import { Gas, GasFees, ManaUsageEstimate } from '@aztec/stdlib/gas';
+import { Gas, GasFees, GasSettings, ManaUsageEstimate } from '@aztec/stdlib/gas';
 import { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
 import {
   BlockHeader,
@@ -352,6 +352,43 @@ describe('BaseWallet', () => {
           gasSettings: { gasLimits: Gas.from({ daGas: 1_000_000, l2Gas: 1_000_000 }) },
         }),
       ).resolves.toBeDefined();
+    });
+
+    it('uses payload-bound gas settings verbatim, for both estimation and send', async () => {
+      const bound = GasSettings.from({
+        gasLimits: { daGas: 500, l2Gas: 600 },
+        teardownGasLimits: { daGas: 50, l2Gas: 60 },
+        maxFeesPerGas: { feePerDaGas: 7n, feePerL2Gas: 8n },
+        maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
+      });
+      const { gasSettings: forSend } = await wallet.completeFeeOptionsForTest({
+        from: NO_FROM,
+        boundGasSettings: bound,
+        gasSettings: { gasLimits: Gas.from({ daGas: 500, l2Gas: 600 }) },
+      });
+      const { gasSettings: forEstimation } = await wallet.completeFeeOptionsForTest({
+        from: NO_FROM,
+        boundGasSettings: bound,
+        forEstimation: true,
+      });
+      expect(forSend).toEqual(bound);
+      expect(forEstimation).toEqual(bound);
+    });
+
+    it('rejects explicitly provided gas settings that conflict with payload-bound ones', async () => {
+      const bound = GasSettings.from({
+        gasLimits: { daGas: 500, l2Gas: 600 },
+        teardownGasLimits: { daGas: 50, l2Gas: 60 },
+        maxFeesPerGas: { feePerDaGas: 7n, feePerL2Gas: 8n },
+        maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
+      });
+      await expect(
+        wallet.completeFeeOptionsForTest({
+          from: NO_FROM,
+          boundGasSettings: bound,
+          gasSettings: { gasLimits: Gas.from({ daGas: 999, l2Gas: 999 }) },
+        }),
+      ).rejects.toThrow(/conflict with the ones bound/);
     });
   });
 

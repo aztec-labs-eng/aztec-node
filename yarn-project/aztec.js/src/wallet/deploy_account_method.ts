@@ -4,6 +4,7 @@ import type { ContractArtifact, FunctionArtifact } from '@aztec/stdlib/abi';
 import type { AuthWitness } from '@aztec/stdlib/auth-witness';
 import { AztecAddress } from '@aztec/stdlib/aztec-address';
 import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import type { GasSettings } from '@aztec/stdlib/gas';
 import type { PublicKeys } from '@aztec/stdlib/keys';
 import { type Capsule, ExecutionPayload, type HashedValues, mergeExecutionPayloads } from '@aztec/stdlib/tx';
 
@@ -19,6 +20,7 @@ import {
 } from '../contract/deploy_method.js';
 import {
   type FeePaymentMethodOption,
+  type GasSettingsOption,
   type InteractionWaitOptions,
   NO_FROM,
   type NoFrom,
@@ -30,12 +32,15 @@ import { AccountEntrypointMetaPaymentMethod } from './account_entrypoint_meta_pa
 import type { ProfileOptions, SendOptions, SimulateOptions, Wallet } from './index.js';
 
 /**
- * Extended fee payment method option for account deployments that includes entrypoint wrapping options
+ * Extended fee payment method option for account deployments that includes entrypoint wrapping options.
+ * Gas settings matter at request time for self-paid deploys: the account entrypoint auth witness signs over them,
+ * so any user-provided values must be known before the payload is built.
  */
-export type DeployAccountFeePaymentMethodOption = FeePaymentMethodOption & {
-  /** Optional entrypoint-specific options for wrapping execution payloads */
-  feeEntrypointOptions?: unknown;
-};
+export type DeployAccountFeePaymentMethodOption = FeePaymentMethodOption &
+  GasSettingsOption & {
+    /** Optional entrypoint-specific options for wrapping execution payloads */
+    feeEntrypointOptions?: unknown;
+  };
 
 /**
  * The configuration options for the request method.
@@ -109,13 +114,24 @@ export class DeployAccountMethod<TContract extends ContractBase = Contract> exte
    *
    * For more details on how the fee payment routing works see documentation of AccountEntrypointMetaPaymentMethod class.
    *
+   * @param gasSettings - The resolved gas settings the account entrypoint auth witness signs over.
    * @param originalPaymentMethod - originalPaymentMethod The original payment method to be wrapped.
    * @param feeEntrypointOptions - Optional entrypoint-specific options for wrapping. If not provided, will be auto-computed based on the payment method.
    * @returns A FeePaymentMethod that routes the original one through the account's entrypoint (AccountEntrypointMetaPaymentMethod)
    */
-  private async getSelfFeePaymentMethod(originalPaymentMethod?: FeePaymentMethod, feeEntrypointOptions?: any) {
+  private async getSelfFeePaymentMethod(
+    gasSettings: GasSettings,
+    originalPaymentMethod?: FeePaymentMethod,
+    feeEntrypointOptions?: any,
+  ) {
     const chainInfo = await this.wallet.getChainInfo();
-    return new AccountEntrypointMetaPaymentMethod(this.account, chainInfo, originalPaymentMethod, feeEntrypointOptions);
+    return new AccountEntrypointMetaPaymentMethod(
+      this.account,
+      chainInfo,
+      gasSettings,
+      originalPaymentMethod,
+      feeEntrypointOptions,
+    );
   }
 
   /**
@@ -138,7 +154,17 @@ export class DeployAccountMethod<TContract extends ContractBase = Contract> exte
     // If this is a self-paid deployment (the to-be-deployed account pays for its own deploy),
     // wrap the payload through the multicall entrypoint after attaching the fee.
     if (opts?.from === NO_FROM) {
+      // The account entrypoint auth witness embedded in the fee payload signs over the transaction's gas settings,
+      // so they must be fully resolved before the payload is built. The witness commits the transaction to them:
+      // the returned payload carries the settings and the wallet uses them verbatim for simulation and send.
+      // Settings coming from the wrapped payment method seed the resolution with explicit user options on top,
+      // mirroring how `toSendOptions` merges them for ordinary sends.
+      const gasSettings = await this.wallet.completeGasSettings({
+        gasSettings: { ...opts?.fee?.paymentMethod?.getGasSettings(), ...opts?.fee?.gasSettings },
+        congestionEstimate: opts?.fee?.congestionEstimate,
+      });
       const feePaymentMethod = await this.getSelfFeePaymentMethod(
+        gasSettings,
         opts?.fee?.paymentMethod,
         opts?.fee?.feeEntrypointOptions,
       );
@@ -150,7 +176,7 @@ export class DeployAccountMethod<TContract extends ContractBase = Contract> exte
       // producing a single-call payload that DefaultEntrypoint can execute directly.
       const multicall = new DefaultMultiCallEntrypoint();
       const chainInfo = await this.wallet.getChainInfo();
-      return multicall.wrapExecutionPayload(mergeExecutionPayloads(executionPayloads), chainInfo);
+      return multicall.wrapExecutionPayload(mergeExecutionPayloads(executionPayloads), gasSettings, chainInfo);
     } else {
       const feeExecutionPayload = opts?.fee?.paymentMethod
         ? await opts.fee.paymentMethod.getExecutionPayload()
