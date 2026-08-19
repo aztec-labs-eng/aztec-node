@@ -41,9 +41,7 @@ function main {
 
   # Compute target branch
   local target_branch
-  if [ "${GITHUB_EVENT_NAME:-}" == "merge_group" ]; then
-    target_branch="${MERGE_GROUP_BASE_REF:-}"
-  elif [ "${GITHUB_EVENT_NAME:-}" == "pull_request" ] || [ "${GITHUB_EVENT_NAME:-}" == "pull_request_target" ]; then
+  if [ "${GITHUB_EVENT_NAME:-}" == "pull_request" ] || [ "${GITHUB_EVENT_NAME:-}" == "pull_request_target" ]; then
     target_branch="${PR_BASE_REF:-}"
   else
     target_branch="${GITHUB_REF_NAME:-}"
@@ -69,7 +67,7 @@ function main {
 
   local explicit_ci_mode_labels=()
   local mode_label
-  for mode_label in ci-merge-queue ci-release-pr ci-full ci-full-no-test-cache ci-docs; do
+  for mode_label in ci-release-pr ci-full ci-full-no-test-cache ci-docs; do
     if has_label "$mode_label"; then
       explicit_ci_mode_labels+=("$mode_label")
     fi
@@ -85,8 +83,6 @@ function main {
   if [ "$ci_skip_requested" -eq 1 ]; then
     echo "WARNING: Skipping CI because a ci-skip label or --ci-skip commit marker was present. Skip takes precedence over other CI signals." >&2
     ci_mode="skip"
-  elif [ "${GITHUB_EVENT_NAME:-}" == "merge_group" ] || has_label "ci-merge-queue"; then
-    ci_mode="merge-queue"
   elif has_label "ci-release-pr"; then
     # Release-PR mode creates and pushes a release tag for this PR's head (ci3.sh::handle_release_pr).
     # In the private repo that tag triggers a private release via the safety gate below — this is the
@@ -105,6 +101,10 @@ function main {
     # repo this is the nightly path (nightly-release-tag*.yml push v<ver>-nightly.<date> tags on main);
     # the private-repo safety gate below routes it to the internal Artifact Registry.
     ci_mode="release"
+  elif [[ "${GITHUB_REF:-}" == "refs/heads/main" ]]; then
+    # Pushes to main run full CI: with no merge queue, this is the post-merge gate and
+    # the producer of the per-commit benchmark series (see BENCH_UPLOAD/BENCH_BRANCH below).
+    ci_mode="full"
   else
     ci_mode="fast"
   fi
@@ -128,17 +128,17 @@ function main {
   # instance keeps BENCH_UPLOAD=1 — multi_job_run forces the rest to 0 so they bench inline
   # as a breakage check without racing the upload. The destination (bench/main vs bench/prs)
   # is BENCH_BRANCH below.
-  if [[ "$ci_mode" == "merge-queue" || "$ci_mode" == "full" || "$ci_mode" == "full-no-test-cache" ]]; then
+  if [[ "$ci_mode" == "full" || "$ci_mode" == "full-no-test-cache" ]]; then
     echo "BENCH_UPLOAD=1" >> $GITHUB_ENV
   fi
 
   # Determine the branch label for benchmark publishing.
-  # Only merge-queue runs targeting "main" publish under "main" since those represent code about to land.
-  # Everything else (ci-full PRs, merge queues for other branches) publishes under "prs"
+  # Only post-merge runs on main publish under "main" since those represent landed code.
+  # Everything else (ci-full PRs, full runs on other branches) publishes under "prs"
   # to avoid polluting the main benchmark graphs.
   local bench_branch
-  if [[ "$ci_mode" == "merge-queue" && "$target_branch" == "main" ]]; then
-    bench_branch="$target_branch"
+  if [[ "${GITHUB_REF:-}" == "refs/heads/main" ]]; then
+    bench_branch="main"
   else
     bench_branch="prs"
   fi

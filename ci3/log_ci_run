@@ -13,12 +13,9 @@ if [ -z "${CI_DASHBOARD:-}" ]; then
   # This path is deprecated. Set CI_DASHBOARD explicitly in ci.sh.
   # CI runs are grouped by:
   # - The 'release' group if tagged with a semver.
-  # - Or by the target branch of the merge queue they enter.
   # - Or in the 'prs' group.
   if semver check "$REF_NAME"; then
     range_key="ci-run-releases"
-  elif [[ "$REF_NAME" =~ ^gh-readonly-queue/ ]]; then
-    range_key="ci-run-$TARGET_BRANCH"
   else
     range_key="ci-run-prs"
   fi
@@ -34,15 +31,10 @@ if [ "$status" = "RUNNING" ]; then
   instance_type=$(aws_get_meta_data instance-type 2>/dev/null || echo "unknown")
   instance_vcpus=$(nproc 2>/dev/null || echo 0)
 
-  # Extract PR number from branch name or merge queue ref
+  # Extract PR number from branch name
   pr_number=""
   if [[ "$REF_NAME" =~ [Pp][Rr]-?([0-9]+) ]]; then
     pr_number="${BASH_REMATCH[1]}"
-  fi
-
-  # If this is github merge queue, just keep the queue name.
-  if [[ "$name" =~ ^gh-readonly-queue/([^/]+)/ ]]; then
-    name="${BASH_REMATCH[1]} (queue)"
   fi
 
   msg=$(pr_link "$msg")

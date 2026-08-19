@@ -130,21 +130,6 @@ while IFS= read -r pr_json; do
   latest_sha="${commit_info%%|*}"
   last_commit_date="${commit_info##*|}"
 
-  # Check if the last merge queue run failed
-  echo "Checking last merge queue run for PR #$pr_number"
-
-  # Get the most recent completed CI3 merge queue run for this PR
-  last_mq_run=$(gh api "repos/{owner}/{repo}/actions/runs?event=merge_group&per_page=50" \
-    --jq '.workflow_runs[] | select(.head_commit.message | contains("#'$pr_number'")) | select(.status == "completed") | select(.name == "CI3") | {conclusion: .conclusion, name: .name}' 2>/dev/null | head -1)
-
-  if [[ -n "$last_mq_run" ]]; then
-    last_mq_conclusion=$(echo "$last_mq_run" | jq -r '.conclusion // empty')
-    if [[ "$last_mq_conclusion" == "failure" ]] || [[ "$last_mq_conclusion" == "cancelled" ]]; then
-      echo "PR #$pr_number last merge queue run failed ($last_mq_conclusion), skipping auto-merge"
-      continue
-    fi
-  fi
-
   if is_pr_inactive "$last_commit_date"; then
     echo "PR #$pr_number has been inactive since $last_commit_date"
 

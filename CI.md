@@ -25,7 +25,7 @@ CI3:
 - Provides a consistent command interface on `./bootstrap.sh` scripts, e.g. `./bootstrap.sh clean|fast|full|test|test_cmds`.
 - Unifies how projects are tested allowing for a "build then test the entire repo" workflow. Projects expose their individual tests via `test_cmds` and they can all be parallelized at once to leverage maximum system throughput.
 - Runs on a single (currently large, 128 vcpu) machine.
-- Significantly reduces the chance of flakey tests making their way into master, by "grinding" the tests in the master merge queue. This simply executes the tests as above, but across N instances. (TBD)
+- Runs full CI on every push to main (the post-merge gate that also produces the per-commit benchmark series), and supports "grinding" a test across N instances on demand to expose flakes.
 - Provides a shared redis cache at the test level, meaning the same test never needs to be run twice in CI (except when grinding).
 - Aims to reduce log noise significantly, only displaying logs that errored by default, while still storing all logs in a shared redis cache. Developers can "drill-down" into logs via log ids.
 - Aims to reduce repository clutter significantly. Ultimately, outside of the `ci3` folder itself, we shouldn't need more than a handful of bootstrap scripts, run_test scripts, and maybe a handful of exceptional helper scripts.
@@ -258,8 +258,6 @@ The following labels can be used to control CI behavior on pull requests:
 - **`ci-squash-and-merge`**: Automatically squashes all commits in your PR into a single commit. Add this label to trigger squashing. The label is automatically removed after squashing. Thanks to content-based caching (see below), subsequent CI runs will be skipped if the content hasn't changed.
 
 - **`ci-no-squash`**: Exempts the PR from the single-commit requirement. Use when multiple commits are intentional (e.g., backport/forward-port staging PRs).
-
-- **`ci-merge-queue`**: Simulates merge queue behavior on your PR, running the full test suite.
 
 - **`ci-full`**: Forces a full CI run instead of the default fast run.
 

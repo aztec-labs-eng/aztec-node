@@ -24,7 +24,6 @@ function print_usage {
   echo_cmd "full-no-test-cache"    "Spin up an EC2 instance and run bootstrap ci-full-no-test-cache."
   echo_cmd "docs"                  "Spin up an EC2 instance and run docs-only CI."
   echo_cmd "grind"                 "Spin up EC2 instances to run parallel full CI runs."
-  echo_cmd "merge-queue"           "Spin up EC2 instances to run the merge-queue jobs."
   echo_cmd "grind-test"            "Spin up an EC2 and grind a given test command."
   echo_cmd "network-deploy"        "Spin up an EC2 instance to deploy a network."
   echo_cmd "network-scenarios"     "Spin up EC2 instances to run network scenario tests in parallel."
@@ -125,8 +124,8 @@ export RUN_ID=${RUN_ID:-$(date +%s%3N)}
 
 function multi_job_run {
   if [[ -z "${CI_DASHBOARD:-}" ]]; then
-    if [[ "$REF_NAME" =~ ^gh-readonly-queue/ ]]; then
-      export CI_DASHBOARD=${TARGET_BRANCH:-local}
+    if [[ "${REF_NAME:-}" == "main" ]]; then
+      export CI_DASHBOARD="main"
     else
       export CI_DASHBOARD="prs"
     fi
@@ -171,8 +170,8 @@ case "$cmd" in
     export CI_DASHBOARD="prs"
     # Route through multi_job_run (even for a single instance) so the runner-side
     # orchestration — including the spot/instance request — is captured into a
-    # parent dashboard log, matching merge-queue. The job id stays "x-$cmd" so the
-    # GitHub status check name is unchanged.
+    # parent dashboard log. The job id stays "x-$cmd" so the GitHub status check
+    # name is unchanged.
     multi_job_run "x-$cmd amd64 ci-$cmd"
     ;;
   bench)
@@ -204,7 +203,8 @@ case "$cmd" in
     PARENT_LOG_ID=$RUN_ID bootstrap_ec2 "./bootstrap.sh ci-socket-fix $*" 2>&1 | DUP=1 cache_log "CI run" $RUN_ID
     ;;
   full|full-no-test-cache)
-    export CI_DASHBOARD="prs"
+    # CI_DASHBOARD is left for multi_job_run to default: "main" for main-branch
+    # runs (post-merge full CI), "prs" otherwise.
     export AWS_SHUTDOWN_TIME=75
     multi_job_run "x-$cmd amd64 ci-$cmd"
     ;;
@@ -219,12 +219,6 @@ case "$cmd" in
     export -f run
     seq 1 ${1:-5} | parallel --jobs 100 --termseq 'TERM,10000' --tagstring '{= $_=~s/run (\w+).*/$1/; =}' --line-buffered \
       'run $USER-x{}-full amd64 ci-full-no-test-cache'
-    ;;
-  merge-queue)
-    # We perform full runs of all tests on multiple x86, and a single fast run on arm64.
-    multi_job_run \
-      'x1-full amd64 ci-full-no-test-cache' \
-      'a1-fast arm64 ci-fast'
     ;;
   grind-test)
     full_cmd="$1"
@@ -421,7 +415,7 @@ case "$cmd" in
     # Drop into a zsh shell in a running build instance's container. Optional filter
     # tokens select the instance, e.g.:
     #   ci.sh shell-container                 # the current branch's instance
-    #   ci.sh shell-container pr-12345 bench  # the bench box for that merge-queue run
+    #   ci.sh shell-container pr-12345 bench  # the bench box for that run
     #   ci.sh shell-container pr-12345 arm64  # the arm build of that run
     resolve_instance "$@"
     container_cmd="docker start aztec_build &>/dev/null || true && docker exec -it --user aztec-dev aztec_build zsh"
@@ -454,7 +448,7 @@ case "$cmd" in
     ;;
   kill)
     # Terminate ALL running build instances matching the filter tokens (default: the
-    # current branch). E.g. `ci.sh kill pr-12345` ends a whole merge-queue run.
+    # current branch). E.g. `ci.sh kill pr-12345` ends a whole CI run.
     kill_rows=$(filter_build_instances "$@")
     if [ -z "$kill_rows" ]; then
       echo "No running build instance matches: ${*:-$BRANCH}"

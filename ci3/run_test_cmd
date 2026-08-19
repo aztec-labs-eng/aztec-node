@@ -14,8 +14,8 @@ set -m
 cmd=$1
 [ -z "$cmd" ] && exit 0
 
-is_merge_queue=0
-[[ "$REF_NAME" =~ ^gh-readonly-queue/ ]] && is_merge_queue=1
+is_main=0
+[[ "$REF_NAME" == "main" ]] && is_main=1
 
 # If enabled, update the test log every 5s.
 live_logging=0
@@ -44,13 +44,13 @@ if [ "$CI" -eq 1 ]; then
   allow_flakes=1
   track_test_fail=1
 
-  # Track the test in the history tracker if this is in merge queue or targeting a version branch.
-  if [[ "$is_merge_queue" -eq 1 || ("${TARGET_BRANCH:-}" =~ ^v[0-9]) ]]; then
+  # Track the test in the history tracker if this is a main-branch run or targeting a version branch.
+  if [[ "$is_main" -eq 1 || ("${TARGET_BRANCH:-}" =~ ^v[0-9]) ]]; then
     track_test_history=1
   fi
 
-  # Notify on flakes if in merge queue or on backport-to-v2-staging.
-  [[ "$is_merge_queue" -eq 1 \
+  # Notify on flakes on main-branch runs or on backport-to-v2-staging.
+  [[ "$is_main" -eq 1 \
       || "$REF_NAME" == "backport-to-v2-staging" ]] && slack_notify_flake=1
 
   # Notify on fails for scenario tests.
