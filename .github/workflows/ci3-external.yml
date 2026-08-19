@@ -4,14 +4,12 @@
 name: CI3 (External)
 
 on:
-  # This check is skipped in merge queue, but we need it to run (even skipped) for status checks.
-  merge_group:
   # Run with pull_request_target for external devs. This forces them to use this workflow as-is.
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
-  # Only allow one run per <forked-repo>/<branch> and full concurrency on merge queue.
+  # Only allow one run per <forked-repo>/<branch>.
   group: |
     ci3-external-${{ github.event_name == 'pull_request' && format('{0}/{1}', github.event.pull_request.head.repo.full_name, github.head_ref)
                                                          || github.run_id }}
@@ -90,7 +88,6 @@ jobs:
 
       - name: Determine CI Mode
         env:
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -114,7 +111,6 @@ jobs:
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           # DO NOT allow build instance key access to external jobs.
           CI_USE_BUILD_INSTANCE_KEY: "0"
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           GITHUB_REF_NAME: ${{ github.ref_name }}

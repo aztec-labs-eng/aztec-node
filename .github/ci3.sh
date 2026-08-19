@@ -42,6 +42,12 @@ function check_cache {
   local cache_name="ci-success-${CI_MODE}-${tree_hash}.tar.gz"
   # Export for use by ci3_success.sh
   echo "CI_CACHE_NAME=$cache_name" >> $GITHUB_ENV
+  # Main-branch runs always execute: they produce the per-commit bench/main series, so a
+  # tree-hash cache hit (e.g. from a ci-full PR run of the same tree) must not skip them.
+  if [[ "${GITHUB_REF:-}" == "refs/heads/main" ]]; then
+    echo "Skipping the CI success-cache check for a main-branch run."
+    return
+  fi
   # Only whitelist some ci modes for cache.
   # E.g. we skip cache for release builds - they must always produce versioned images
   cached_ci_modes=(
