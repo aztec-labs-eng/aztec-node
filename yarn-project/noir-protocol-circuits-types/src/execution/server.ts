@@ -1,7 +1,7 @@
 import { INBOX_PARITY_SIZE_LARGE, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_SMALL } from '@aztec/constants';
 import { pushTestData } from '@aztec/foundation/testing';
 import type { WitnessMap } from '@aztec/noir-acvm_js';
-import { abiDecode, abiEncode } from '@aztec/noir-noirc_abi';
+import { type InputValue, abiDecode, abiEncode } from '@aztec/noir-noirc_abi';
 import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec/stdlib/parity';
 import type {
   BlockMergeRollupPrivateInputs,
@@ -412,7 +412,7 @@ export function convertInboxParityOutputsFromWitnessMap(
   return mapParityPublicInputsFromNoir(publicInputs);
 }
 
-function convertPrivateInputsToWitnessMap<InputsType>(
+function convertPrivateInputsToWitnessMap<InputsType extends InputValue>(
   artifactName: ServerProtocolArtifact,
   inputs: InputsType,
   simulated = false,

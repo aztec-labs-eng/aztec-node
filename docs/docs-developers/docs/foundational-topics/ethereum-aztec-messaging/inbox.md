@@ -2,7 +2,6 @@
 title: Inbox
 description: Learn about the inbox mechanism in Aztec portals for receiving messages from L1.
 tags: [portals, contracts]
-references: ["l1-contracts/src/core/interfaces/messagebridge/IInbox.sol"]
 ---
 
 The `Inbox` is a contract deployed on L1 that handles message passing from L1 to L2.
@@ -13,7 +12,7 @@ The `Inbox` is a contract deployed on L1 that handles message passing from L1 to
 
 Sends a message from L1 to L2.
 
-#include_code send_l1_to_l2_message l1-contracts/src/core/interfaces/messagebridge/IInbox.sol solidity
+#include_code send_l1_to_l2_message docs/node_modules/@aztec/l1-artifacts/l1-contracts/src/core/interfaces/messagebridge/IInbox.sol solidity
 
 | Name        | Type                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
