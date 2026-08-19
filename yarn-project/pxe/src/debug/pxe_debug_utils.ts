@@ -2,7 +2,7 @@ import type { FunctionCall } from '@aztec/stdlib/abi';
 import type { AuthWitness } from '@aztec/stdlib/auth-witness';
 import type { AztecAddress } from '@aztec/stdlib/aztec-address';
 import type { NoteDao } from '@aztec/stdlib/note';
-import type { ContractOverrides } from '@aztec/stdlib/tx';
+import type { BlockHeader, ContractOverrides } from '@aztec/stdlib/tx';
 
 import type { ContractSyncService } from '../contract/contract_sync_service.js';
 import type { ContractFunctionSimulator } from '../contract_function_simulator/contract_function_simulator.js';
@@ -22,6 +22,7 @@ export class PXEDebugUtils {
     call: FunctionCall,
     authWitnesses: AuthWitness[] | undefined,
     scopes: AztecAddress[],
+    anchorBlockHeader: BlockHeader,
     jobId: string,
   ) => Promise<any>;
 
@@ -39,6 +40,7 @@ export class PXEDebugUtils {
       call: FunctionCall,
       authWitnesses: AuthWitness[] | undefined,
       scopes: AztecAddress[],
+      anchorBlockHeader: BlockHeader,
       jobId: string,
     ) => Promise<any>,
   ) {
@@ -66,7 +68,14 @@ export class PXEDebugUtils {
         contract: filter.contractAddress,
         functionToInvokeAfterSync: null,
         utilityExecutor: async (privateSyncCall, execScopes) =>
-          await this.#executeUtility(contractFunctionSimulator, privateSyncCall, [], execScopes, jobId),
+          await this.#executeUtility(
+            contractFunctionSimulator,
+            privateSyncCall,
+            [],
+            execScopes,
+            anchorBlockHeader,
+            jobId,
+          ),
         anchorBlockHeader,
         jobId,
         scopes: filter.scopes,

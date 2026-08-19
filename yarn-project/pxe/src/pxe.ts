@@ -487,8 +487,8 @@ export class PXE {
   }
 
   /**
-   * Enqueues a job (`fn`) that is meant to run after a sync with the node (if the `autoSync` flag supports it, or
-   * unconditionally with `forceSync`). If the job run is successful, then all staged writes are committed. If the job
+   * Enqueues a job (`fn`) that runs after a sync with the node (skipped when the `autoSync` config flag is disabled,
+   * unless `forceSync` is set). If the job run is successful, then all staged writes are committed. If the job
    * rejects, then all staged writes are discarded.
    */
   #syncedJob<T>(
@@ -500,11 +500,13 @@ export class PXE {
       const recording = this.node.startRecording();
       try {
         const syncTimer = new Timer();
-        await (forceSync ? this.blockStateSynchronizer.sync() : this.#maybeSync());
+        if (forceSync || this.autoSync) {
+          await this.blockStateSynchronizer.sync();
+        }
         const syncTime = syncTimer.ms();
 
         const jobId = this.jobCoordinator.beginJob();
-        this.log.verbose(`Beginning job ${jobId}`);
+        this.log.verbose(`Beginning job ${jobId}`, { syncMs: syncTime });
 
         try {
           const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
@@ -521,8 +523,6 @@ export class PXE {
       } catch (err: any) {
         throw errorContext ? this.#contextualizeError(err, ...errorContext()) : err;
       } finally {
-        // Idempotent cleanup: operations stop the recording themselves to collect the calls in their stats, but an
-        // early exit or error may leave it running.
         recording.stop();
       }
     });
@@ -582,7 +582,7 @@ export class PXE {
         contract: contractAddress,
         functionToInvokeAfterSync: functionSelector,
         utilityExecutor: (privateSyncCall, execScopes) =>
-          this.#executeUtility(contractFunctionSimulator, privateSyncCall, [], execScopes, jobId),
+          this.#executeUtility(contractFunctionSimulator, privateSyncCall, [], execScopes, anchorBlockHeader, jobId),
         anchorBlockHeader,
         jobId,
         scopes,
@@ -612,6 +612,7 @@ export class PXE {
    * @param authWitnesses - Authentication witnesses required for the function call.
    * @param scopes - Optional array of account addresses whose notes can be accessed in this call. Defaults to all
    * accounts if not specified.
+   * @param anchorBlockHeader - The anchor block header established by the enclosing job.
    * @param jobId - The job ID for staged writes.
    * @returns The execution result containing the outputs of the utility function.
    */
@@ -620,10 +621,10 @@ export class PXE {
     call: FunctionCall,
     authWitnesses: AuthWitness[] | undefined,
     scopes: AztecAddress[],
+    anchorBlockHeader: BlockHeader,
     jobId: string,
   ) {
     try {
-      const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
       const { result, offchainEffects } = await contractFunctionSimulator.runUtility(
         call,
         authWitnesses ?? [],
@@ -634,7 +635,6 @@ export class PXE {
       return { result, offchainEffects };
     } catch (err) {
       if (err instanceof SimulationError) {
-        const anchorBlockHeader = await this.anchorBlockStore.getBlockHeader();
         await enrichSimulationError(err, this.contractStore, this.contractClassService, anchorBlockHeader, this.log);
       }
       throw err;
@@ -708,17 +708,6 @@ export class PXE {
     );
     this.log.debug(`Executing kernel trace prover (${JSON.stringify(config)})...`);
     return await kernelTraceProver.proveWithKernels(txExecutionRequest.toTxRequest(), privateExecutionResult, config);
-  }
-
-  /**
-   * Syncs with the node only when `autoSync` is enabled.
-   * When `autoSync` is disabled, callers (typically a wallet) are
-   * responsible for invoking `pxe.sync()` at the right granularity.
-   */
-  async #maybeSync(): Promise<void> {
-    if (this.autoSync) {
-      await this.blockStateSynchronizer.sync();
-    }
   }
 
   // Public API
@@ -1092,7 +1081,7 @@ export class PXE {
 
         const txProvingResult = new TxProvingResult(privateExecutionResult, publicInputs, chonkProof!, {
           timings,
-          nodeRPCCalls: recording.stop(),
+          nodeRPCCalls: recording.stats(),
         });
 
         // We keep track of which tagging indices we've used in this tx so that we don't repeat them in future txs
@@ -1189,7 +1178,7 @@ export class PXE {
             total - ((syncTime ?? 0) + (proving ?? 0) + perFunction.reduce((acc, { time }) => acc + time, 0)),
         };
 
-        return new TxProfileResult(executionSteps, { timings, nodeRPCCalls: recording.stop() });
+        return new TxProfileResult(executionSteps, { timings, nodeRPCCalls: recording.stats() });
       },
       { errorContext: () => [inspect(txRequest), `profileMode=${profileMode}`] },
     );
@@ -1346,7 +1335,7 @@ export class PXE {
 
         return TxSimulationResult.fromPrivateSimulationResultAndPublicOutput(privateSimulationResult, publicOutput, {
           timings,
-          nodeRPCCalls: recording.stop(),
+          nodeRPCCalls: recording.stats(),
         });
       },
       {
@@ -1380,7 +1369,7 @@ export class PXE {
           contract: call.to,
           functionToInvokeAfterSync: call.selector,
           utilityExecutor: (privateSyncCall, execScopes) =>
-            this.#executeUtility(contractFunctionSimulator, privateSyncCall, [], execScopes, jobId),
+            this.#executeUtility(contractFunctionSimulator, privateSyncCall, [], execScopes, anchorBlockHeader, jobId),
           anchorBlockHeader,
           jobId,
           scopes,
@@ -1392,6 +1381,7 @@ export class PXE {
           call,
           authwits ?? [],
           scopes,
+          anchorBlockHeader,
           jobId,
         );
         const functionTime = functionTimer.ms();
@@ -1411,7 +1401,7 @@ export class PXE {
           result: executionResult,
           offchainEffects,
           anchorBlockTimestamp: anchorBlockHeader.globalVariables.timestamp,
-          stats: { timings, nodeRPCCalls: recording.stop() },
+          stats: { timings, nodeRPCCalls: recording.stats() },
         };
       },
       {
@@ -1455,7 +1445,14 @@ export class PXE {
         contract: filter.contractAddress,
         functionToInvokeAfterSync: null,
         utilityExecutor: async (privateSyncCall, execScopes) =>
-          await this.#executeUtility(contractFunctionSimulator, privateSyncCall, [], execScopes, jobId),
+          await this.#executeUtility(
+            contractFunctionSimulator,
+            privateSyncCall,
+            [],
+            execScopes,
+            anchorBlockHeader,
+            jobId,
+          ),
         anchorBlockHeader,
         jobId,
         scopes: filter.scopes,
@@ -1489,7 +1486,7 @@ export type SyncedJobContext = {
   /** Duration of the sync, for timing stats. */
   syncTime: number;
   anchorBlockHeader: BlockHeader;
-  /** Node RPC call recording; operations that report stats stop it to embed the calls. */
+  /** Open recording of the node RPC calls made so far in this job; `stats()` snapshots them for reporting. */
   recording: Recording;
   /** The operation's duration so far, including the sync. */
   totalMs: () => number;
