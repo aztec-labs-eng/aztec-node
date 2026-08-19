@@ -13,26 +13,24 @@ on:
       - "v*"
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
-  merge_group: {}
 
 concurrency:
-  group: ci3-${{ github.event.merge_group.head_ref || github.ref_name }}
-  cancel-in-progress: true
+  group: ci3-${{ github.ref_name }}
+  # Never cancel main-branch runs: each push to main is a full run that produces the
+  # per-commit benchmark series, so a newer push must queue behind it, not kill it.
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 jobs:
-  # The main CI job for Aztec pull requests. It gatekeeps merges to main, intended for the merge queue.
+  # The main CI job for Aztec. Fast runs gate pull requests; every push to main runs
+  # full CI, which also produces the per-commit benchmark series (bench/main).
   #
   # This orchestrates AWS EC2 spot instances then remotely runs ./bootstrap.sh
   # The ci-full label enables heavier tests. For other labels, see ci3.sh.
   #
-  #            Standard PR)                      Merge Queue
+  #            Standard PR                       Push to main
   #                  |                                 |
-  #      |  1x AMD64 EC2 Spot  |           |  [ 4x AMD64 EC2 Spot ]  |
-  #                                        |  [ 1x ARM64 EC2 Spot ]  |
-  #                                                    |
-  #                                           Filters out "accidental"
-  #                                           successes, but non-determinism
-  #                                           can still cause flaky tests.
+  #      |  1x AMD64 EC2 Spot  |           |  1x AMD64 EC2 Spot (full) |
+  #             (fast)                     |  + dedicated bench box    |
   #
   # If you suspect a flaky test, look for people recently reporting similar things.
   # Otherwise, spend time ensuring it is not your PR. Spend some time attempting to fix it.
@@ -47,7 +45,7 @@ jobs:
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token
-      pull-requests: read # merge_group mode looks up the source PR
+      pull-requests: read # the squash-and-merge flow reads PR data
     steps:
       # Do NOT bump actions/checkout to v6 here. v6 ("persist creds to a separate file", #2286)
       # stores the persisted github.token in a temp credentials file pulled in via includeIf, which
@@ -75,7 +73,6 @@ jobs:
 
       - name: Determine CI Mode
         env:
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -106,7 +103,6 @@ jobs:
           # Internal GCP Artifact Registry that private releases push the docker image to (see
           # bootstrap.sh::private_release). Empty here, where releases publish normally.
           INTERNAL_DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
-          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
