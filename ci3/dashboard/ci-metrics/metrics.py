@@ -431,7 +431,6 @@ def get_phases(date_from: str, date_to: str, dashboard: str = '',
 # ---- Sync failed_tests_{section} lists from Redis into SQLite ----
 
 _ANSI_STRIP = re.compile(r'\x1b\[[^m]*m|\x1b\]8;;[^\x07]*\x07')
-_GRIND_CMD_RE = re.compile(r'/grind\?cmd=([^&\x07"]+)')
 _LOG_KEY_RE = re.compile(r'ci\.aztec-labs\.com/([a-f0-9]{16})')
 _INLINE_CMD_RE = re.compile(r'(?:grind\)|[0-9a-f]{16}\)):?\s+(.+?)\s+\(\d+s\)')
 _DURATION_RE = re.compile(r'\((\d+)s\)')
@@ -444,7 +443,6 @@ _FAILED_TESTS_SYNC_TTL = 3600  # 1 hour
 
 def _parse_failed_test_entry(raw: str, section: str) -> dict | None:
     """Parse an ANSI-formatted failed_tests_{section} entry into structured data."""
-    from urllib.parse import unquote
     clean = _ANSI_STRIP.sub('', raw)
 
     # Status
@@ -478,23 +476,12 @@ def _parse_failed_test_entry(raw: str, section: str) -> dict | None:
     if m:
         log_key = m.group(1)
 
-    # Test command: try grind link first, then inline text
+    # Test command: extract from the inline text after the log key.
+    # (Historically a /grind?cmd= link was parsed first; that link was removed.)
     test_cmd = ''
-    m = _GRIND_CMD_RE.search(raw)
+    m = _INLINE_CMD_RE.search(clean)
     if m:
-        cmd_raw = unquote(m.group(1))
-        # Format: "hash:KEY=VAL:KEY=VAL actual_command"
-        # Strip the hash:KEY=VAL prefix to get the actual test command
-        parts = cmd_raw.split(' ', 1)
-        if len(parts) == 2 and ':' in parts[0]:
-            test_cmd = parts[1].strip()
-        else:
-            test_cmd = cmd_raw
-    else:
-        # Fallback: extract from inline text after log key
-        m = _INLINE_CMD_RE.search(clean)
-        if m:
-            test_cmd = m.group(1).strip()
+        test_cmd = m.group(1).strip()
 
     # Duration
     duration = None
