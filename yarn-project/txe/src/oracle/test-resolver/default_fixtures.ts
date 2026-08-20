@@ -223,7 +223,7 @@ export function testValueFor(type: TypeMapping<any>, seed: number): unknown {
   return scenariosForType(type, seed)[0].value;
 }
 
-class UnsynthesizableTypeError extends Error {
+export class UnsynthesizableTypeError extends Error {
   constructor(type: TypeMapping<any>, detail?: string) {
     super(detail ?? `No test-value impl for type: ${JSON.stringify(Object.keys(type))}`);
     this.name = 'UnsynthesizableTypeError';
