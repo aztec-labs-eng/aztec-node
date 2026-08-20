@@ -48,6 +48,7 @@ use crate::messages::processing::event_validation_request::EventValidationReques
 use crate::messages::processing::NoteValidationRequest;
 use crate::protocol::abis::function_selector::FunctionSelector;
 use crate::protocol::address::{AztecAddress, EthAddress};
+use crate::test::helpers::tagging_secret_strategy::TaggingSecretStrategy;
 use std::append::Append;
 use std::collections::bounded_vec::BoundedVec;
 use std::meta::{ctstring::AsCtString, type_of, unquote};
@@ -123,24 +124,31 @@ comptime fn compose_wire_name(scope: Quoted, name: Quoted) -> CtString {
 }
 
 comptime fn append_manifest_entry(routes_to_txe: bool, wire_name: CtString, line: CtString) {
+    let name = wire_name.as_quoted_str();
     if routes_to_txe {
-        assert_not_declared(TXE_ORACLE_MANIFEST, wire_name);
+        assert(!is_declared(TXE_ORACLE_MANIFEST, wire_name), f"oracle wire name {name} is declared more than once");
         TXE_ORACLE_MANIFEST.push((wire_name, line));
     } else {
-        assert_not_declared(EXECUTION_ORACLE_MANIFEST, wire_name);
+        assert(
+            !is_declared(EXECUTION_ORACLE_MANIFEST, wire_name),
+            f"oracle wire name {name} is declared more than once",
+        );
         EXECUTION_ORACLE_MANIFEST.push((wire_name, line));
     }
 }
 
-comptime fn assert_not_declared(
+comptime fn is_declared(
     manifest: BoundedVec<(CtString, CtString), MAX_ORACLES_PER_MANIFEST>,
     wire_name: CtString,
-) {
+) -> bool {
+    let mut declared = false;
     for i in 0..manifest.len() {
         let (existing, _) = manifest.get(i);
-        let name = wire_name.as_quoted_str();
-        assert(existing != wire_name, f"oracle wire name {name} is declared more than once");
+        if existing == wire_name {
+            declared = true;
+        }
     }
+    declared
 }
 
 /// Renders a full manifest line: `wire_name:param,param->return`, with `()` as the return of a valueless
@@ -339,6 +347,7 @@ comptime fn leaf_labels() -> [(Type, CtString)] {
         (type_of(std::mem::zeroed::<OriginBlockState>()), "origin-block-state".as_ctstring()),
         (type_of(std::mem::zeroed::<NoteValidationRequest>()), "note-validation-request".as_ctstring()),
         (type_of(std::mem::zeroed::<EventValidationRequest>()), "event-validation-request".as_ctstring()),
+        (type_of(std::mem::zeroed::<TaggingSecretStrategy>()), "tagging-secret-strategy".as_ctstring()),
     ]
 }
 
@@ -544,6 +553,39 @@ mod test {
             assert(label_of(quote { (Field, bool) }.as_type()) == "{field,bool}".as_ctstring());
             assert(label_of(quote { Option<Pair> }.as_type()) == "option({field,u32})".as_ctstring());
             assert(label_of(quote { [Pair; 2] }.as_type()) == "array({field,u32},2)".as_ctstring());
+        }
+    }
+
+    #[test]
+    fn routes_and_appends_manifest_entries() {
+        comptime {
+            // Probe entries are appended to the real globals and popped again below, so the manifests that
+            // ship in artifacts are untouched by this test.
+            let execution_len = super::EXECUTION_ORACLE_MANIFEST.len();
+            let txe_len = super::TXE_ORACLE_MANIFEST.len();
+
+            let name = "aztec_utl_manifestAppendProbe".as_ctstring();
+            let line = "aztec_utl_manifestAppendProbe:->()".as_ctstring();
+            assert(!super::is_declared(super::EXECUTION_ORACLE_MANIFEST, name));
+            super::append_manifest_entry(false, name, line);
+            assert(super::EXECUTION_ORACLE_MANIFEST.len() == execution_len + 1);
+            assert(super::TXE_ORACLE_MANIFEST.len() == txe_len);
+            assert(super::is_declared(super::EXECUTION_ORACLE_MANIFEST, name));
+            let (stored_name, stored_line) = super::EXECUTION_ORACLE_MANIFEST.get(execution_len);
+            assert(stored_name == name);
+            assert(stored_line == line);
+
+            let txe_name = "aztec_txe_manifestAppendProbe".as_ctstring();
+            super::append_manifest_entry(true, txe_name, txe_name);
+            assert(super::TXE_ORACLE_MANIFEST.len() == txe_len + 1);
+            assert(super::EXECUTION_ORACLE_MANIFEST.len() == execution_len + 1);
+            assert(super::is_declared(super::TXE_ORACLE_MANIFEST, txe_name));
+            assert(!super::is_declared(super::EXECUTION_ORACLE_MANIFEST, txe_name));
+
+            let _ = super::EXECUTION_ORACLE_MANIFEST.pop();
+            let _ = super::TXE_ORACLE_MANIFEST.pop();
+            assert(super::EXECUTION_ORACLE_MANIFEST.len() == execution_len);
+            assert(super::TXE_ORACLE_MANIFEST.len() == txe_len);
         }
     }
 
