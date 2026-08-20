@@ -113,8 +113,7 @@ if [[ -z "$EXISTING_PR" ]]; then
     --base "$TARGET_BRANCH" \
     --head "$PORT_BRANCH" \
     --title "$PR_TITLE" \
-    --body "Daily forward-port of \`$SOURCE_BRANCH\` into \`$TARGET_BRANCH\`. Body will be updated with the commit list." \
-    --label "ci-no-squash"
+    --body "Daily forward-port of \`$SOURCE_BRANCH\` into \`$TARGET_BRANCH\`. Body will be updated with the commit list."
 else
   echo "PR already exists (#$EXISTING_PR)"
 fi

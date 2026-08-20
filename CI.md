@@ -255,10 +255,6 @@ This will also show the last completed log if the run has already completed. You
 
 The following labels can be used to control CI behavior on pull requests:
 
-- **`ci-squash-and-merge`**: Automatically squashes all commits in your PR into a single commit. Add this label to trigger squashing. The label is automatically removed after squashing. Thanks to content-based caching (see below), subsequent CI runs will be skipped if the content hasn't changed.
-
-- **`ci-no-squash`**: Exempts the PR from the single-commit requirement. Use when multiple commits are intentional (e.g., backport/forward-port staging PRs).
-
 - **`ci-full`**: Forces a full CI run instead of the default fast run.
 
 - **`ci-docs`**: Runs only documentation-related CI checks.
@@ -267,17 +263,12 @@ The following labels can be used to control CI behavior on pull requests:
 
 - **`ci-no-fail-fast`**: Continues running all tests even if some fail.
 
-### Squash Enforcement
-
-PRs targeting `main` must be squashed to a single commit unless labeled with `ci-no-squash`. PRs targeting other branches are automatically exempt from this requirement.
-
 ### Top-level Content-Based CI Caching
 
 CI3 has granular caching, but as well it includes an additional layer of caching based on git content. When CI completes successfully, it stores a success marker keyed by the hash of the repository's file tree. On subsequent runs, if the exact same content is detected (same tree hash), CI will skip execution entirely.
 
 This is particularly useful when:
 
-- You squash commits using `ci-squash-and-merge` - the resulting single commit has the same content, so CI won't re-run
 - You rebase without changes - if the final content is identical, CI is skipped
 - Multiple PRs have identical changes - only the first needs to run CI
 

@@ -192,7 +192,7 @@ if [[ -z "$BASE_BRANCH" ]]; then
 fi
 echo "PR base branch: $BASE_BRANCH"
 
-# Deepen the current branch history to find merge-base (same pattern as squash-pr.sh)
+# Deepen the current branch history to find merge-base
 echo "Deepening git history..."
 git fetch --deepen=100 2>/dev/null || true
 

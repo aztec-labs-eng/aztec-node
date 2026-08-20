@@ -47,20 +47,19 @@ jobs:
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token
-      pull-requests: read # the squash-and-merge flow reads PR data
     steps:
       # Do NOT bump actions/checkout to v6 here. v6 ("persist creds to a separate file", #2286)
       # stores the persisted github.token in a temp credentials file pulled in via includeIf, which
-      # `git config --unset-all http....extraheader` cannot clear. Our runner-side pushes (ci3.sh
-      # release-pr tag, ci3_success.sh squash-and-merge) rely on swapping that header for a bot-PAT
-      # remote, so under v6 they push as github-actions[bot] (contents: read) and 403. v5.0.1 is still
-      # node24 but keeps the credential as a removable local extraheader.
+      # `git config --unset-all http....extraheader` cannot clear. Our runner-side pushes
+      # (ci3.sh release-pr tag) rely on swapping that header for a bot-PAT remote, so under v6
+      # they push as github-actions[bot] (contents: read) and 403. v5.0.1 is still node24 but
+      # keeps the credential as a removable local extraheader.
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           # The commit to checkout. We want our actual commit, and not the result of merging the PR to the target.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          # Fetch PR commits depth (we'll deepen by 1 in squash script if needed)
+          # Fetch all of the PR's commits.
           fetch-depth: ${{ github.event.pull_request.commits || 1 }}
           # Persisted for authenticated reads; pushes swap in a bot-PAT remote at each push site.
           persist-credentials: true
@@ -119,12 +118,6 @@ jobs:
         run: ./.github/ci3.sh $CI_MODE
 
       - name: Post-Actions
-        env:
-          SHOULD_SQUASH_MERGE: ${{ contains(github.event.pull_request.labels.*.name, 'ci-squash-and-merge') && '1' || '0' }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: ./.github/ci3_success.sh
 
       - name: Notify Slack on backport CI failure
