@@ -4,7 +4,7 @@ import type { AnyTx, TxHash, TxValidationResult, TxValidator } from '@aztec/stdl
 import { AggregateTxValidator } from './aggregate_tx_validator.js';
 
 describe('AggregateTxValidator', () => {
-  it('allows txs that pass all validation', async () => {
+  it('stops validation at the first failure', async () => {
     const txs = await Promise.all([mockTx(0), mockTx(1), mockTx(2), mockTx(3), mockTx(4)]);
     const agg = new AggregateTxValidator(
       new TxDenyList([txs[0].getTxHash(), txs[1].getTxHash(), txs[4].getTxHash()]),
@@ -15,7 +15,21 @@ describe('AggregateTxValidator', () => {
     await expect(agg.validateTx(txs[1])).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
     await expect(agg.validateTx(txs[2])).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
     await expect(agg.validateTx(txs[3])).resolves.toEqual({ result: 'valid' });
-    await expect(agg.validateTx(txs[4])).resolves.toEqual({ result: 'invalid', reason: ['Denied', 'Denied'] });
+    await expect(agg.validateTx(txs[4])).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
+  });
+
+  it('does not run validators after the first failure', async () => {
+    const tx = await mockTx(0);
+    const agg = new AggregateTxValidator(
+      new TxDenyList([tx.getTxHash()]),
+      new (class implements TxValidator<AnyTx> {
+        validateTx(): Promise<TxValidationResult> {
+          throw new Error('Validator after first failure was run');
+        }
+      })(),
+    );
+
+    await expect(agg.validateTx(tx)).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
   });
 
   class TxDenyList implements TxValidator<AnyTx> {

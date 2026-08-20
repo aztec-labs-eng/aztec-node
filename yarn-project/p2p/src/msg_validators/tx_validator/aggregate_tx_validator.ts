@@ -16,6 +16,7 @@ export class AggregateTxValidator<T> implements TxValidator<T> {
       const result = await validator.validateTx(tx);
       if (result.result === 'invalid') {
         reasons.push(...result.reason);
+        break;
       }
     }
     return reasons.length > 0 ? { result: 'invalid', reason: reasons } : { result: 'valid' };

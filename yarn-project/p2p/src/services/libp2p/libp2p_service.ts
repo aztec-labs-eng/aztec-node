@@ -1871,6 +1871,8 @@ export class LibP2PService extends WithTracer implements P2PService {
     tx: Tx,
     messageValidators: Record<string, TransactionValidator>,
   ): Promise<ValidationOutcome> {
+    // Gossip validation stays exhaustive within each stage because peer scoring uses the harshest failure severity;
+    // failing fast would make the penalty depend on validator order. The stage boundaries themselves fail fast.
     const validationPromises = Object.entries(messageValidators).map(async ([name, { validator, severity }]) => {
       const { result } = await validator.validateTx(tx);
       return { name, isValid: result !== 'invalid', severity };

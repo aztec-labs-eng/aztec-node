@@ -8,6 +8,9 @@ Transactions enter the system through different paths. **Unsolicited** transacti
 
 When solicited transactions fail to be mined, they may be migrated to the pending pool. At that point, the pool runs the state-dependent checks that were skipped on initial receipt.
 
+Aggregate validators run in order and stop at the first failure so rejected
+transactions avoid unnecessary work. The returned failure reason is deliberately not exhaustive.
+
 ## Entry Points
 
 ### 1. Gossip (libp2p pubsub)

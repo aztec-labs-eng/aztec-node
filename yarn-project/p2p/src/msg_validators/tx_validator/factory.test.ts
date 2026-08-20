@@ -1,6 +1,8 @@
 import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
 import { BlockNumber } from '@aztec/foundation/branded-types';
 import { Fr } from '@aztec/foundation/curves/bn254';
+import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec/protocol-contracts';
 import type { ContractDataSource } from '@aztec/stdlib/contract';
 import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
 import type {
@@ -10,6 +12,7 @@ import type {
 } from '@aztec/stdlib/interfaces/server';
 import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
 import { mockTx } from '@aztec/stdlib/testing';
+import { MerkleTreeId } from '@aztec/stdlib/trees';
 import { type GlobalVariables, TX_ERROR_GAS_LIMIT_TOO_HIGH, TX_ERROR_INSUFFICIENT_GAS_LIMIT } from '@aztec/stdlib/tx';
 
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -50,7 +53,25 @@ async function mockPrivateTxWithGasSettings(gasSettings: GasSettings) {
     hasPublicTeardownCallRequest: false,
   });
   tx.data.constants.txContext.gasSettings = gasSettings;
+  tx.data.constants.txContext.chainId = new Fr(1);
+  tx.data.constants.txContext.version = new Fr(2);
+  tx.data.constants.vkTreeRoot = getVKTreeRoot();
+  tx.data.constants.protocolContractsHash = protocolContractsHash;
+  await tx.recomputeHash();
   return tx;
+}
+
+function mockKnownArchiveAndUnusedNullifiers(db: MockProxy<MerkleTreeReadOperations>) {
+  db.findLeafIndices.mockImplementation((treeId, values) => {
+    switch (treeId) {
+      case MerkleTreeId.ARCHIVE:
+        return Promise.resolve(values.map(() => 0n));
+      case MerkleTreeId.NULLIFIER_TREE:
+        return Promise.resolve(values.map(() => undefined));
+      default:
+        throw new Error(`Unexpected tree ID ${treeId}`);
+    }
+  });
 }
 
 describe('Validator factory functions', () => {
@@ -242,8 +263,8 @@ describe('Validator factory functions', () => {
 
       const aggregate = validator as AggregateTxValidator<unknown>;
       expect(getValidatorNames(aggregate)).toEqual([
-        MetadataTxValidator.name,
         SizeTxValidator.name,
+        MetadataTxValidator.name,
         DataTxValidator.name,
         ContractInstanceTxValidator.name,
         TxProofValidator.name,
@@ -260,8 +281,8 @@ describe('Validator factory functions', () => {
 
       const aggregate = validator as AggregateTxValidator<unknown>;
       expect(getValidatorNames(aggregate)).toEqual([
-        MetadataTxValidator.name,
         SizeTxValidator.name,
+        MetadataTxValidator.name,
         DataTxValidator.name,
         ContractInstanceTxValidator.name,
         TxProofValidator.name,
@@ -293,14 +314,14 @@ describe('Validator factory functions', () => {
         TimestampTxValidator.name,
         SizeTxValidator.name,
         MetadataTxValidator.name,
+        MinGasLimitsValidator.name,
+        MaxGasLimitsValidator.name,
         PhasesTxValidator.name,
         BlockHeaderTxValidator.name,
         DoubleSpendTxValidator.name,
+        GasTxValidator.name,
         DataTxValidator.name,
         ContractInstanceTxValidator.name,
-        MinGasLimitsValidator.name,
-        MaxGasLimitsValidator.name,
-        GasTxValidator.name,
         TxProofValidator.name,
       ]);
     });
@@ -349,9 +370,7 @@ describe('Validator factory functions', () => {
 
     describe('gas-limit validation', () => {
       // Estimation limits exceed the per-tx protocol maximum by construction, so whether the tx is rejected is
-      // decided solely by isSimulation; skipFeeEnforcement must not affect it. The aggregate collects reasons
-      // from every validator, so asserting on the specific error is robust to other validators failing on the
-      // mocked db.
+      // decided solely by isSimulation; skipFeeEnforcement must not affect it.
       it.each`
         isSimulation | skipFeeEnforcement | rejected
         ${false}     | ${false}           | ${true}
@@ -361,7 +380,7 @@ describe('Validator factory functions', () => {
       `(
         'isSimulation=$isSimulation, skipFeeEnforcement=$skipFeeEnforcement: over-limit tx rejected=$rejected',
         async ({ isSimulation, skipFeeEnforcement, rejected }) => {
-          db.findLeafIndices.mockResolvedValue([]);
+          mockKnownArchiveAndUnusedNullifiers(db);
           const validator = createTxValidatorForAcceptingTxsOverRPC(db, contractSource, undefined, {
             l1ChainId: 1,
             rollupVersion: 2,
@@ -393,7 +412,7 @@ describe('Validator factory functions', () => {
       `(
         'isSimulation=$isSimulation, skipFeeEnforcement=$skipFeeEnforcement: under-minimum tx is rejected',
         async ({ isSimulation, skipFeeEnforcement }) => {
-          db.findLeafIndices.mockResolvedValue([]);
+          mockKnownArchiveAndUnusedNullifiers(db);
           const validator = createTxValidatorForAcceptingTxsOverRPC(db, contractSource, undefined, {
             l1ChainId: 1,
             rollupVersion: 2,
@@ -451,11 +470,11 @@ describe('Validator factory functions', () => {
       const aggregate = result.preprocessValidator as AggregateTxValidator<unknown>;
       expect(getValidatorNames(aggregate)).toEqual([
         TimestampTxValidator.name,
+        MinGasLimitsValidator.name,
+        MaxGasLimitsValidator.name,
         PhasesTxValidator.name,
         BlockHeaderTxValidator.name,
         DoubleSpendTxValidator.name,
-        MinGasLimitsValidator.name,
-        MaxGasLimitsValidator.name,
         GasTxValidator.name,
       ]);
     });
@@ -493,13 +512,13 @@ describe('Validator factory functions', () => {
 
       const aggregate = validator as AggregateTxValidator<unknown>;
       expect(getValidatorNames(aggregate)).toEqual([
+        AllowedSetupCallsMetaValidator.name,
+        TimestampTxValidator.name,
         MinGasLimitsValidator.name,
         MaxGasLimitsValidator.name,
         MaxFeePerGasValidator.name,
-        TimestampTxValidator.name,
-        DoubleSpendTxValidator.name,
         BlockHeaderTxValidator.name,
-        AllowedSetupCallsMetaValidator.name,
+        DoubleSpendTxValidator.name,
       ]);
     });
 

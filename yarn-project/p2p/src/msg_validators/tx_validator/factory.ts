@@ -224,6 +224,7 @@ function createTxValidatorForMinimumTxIntegrityChecks(
   cache?: TxValidationCache,
 ): TxValidator {
   const aggregate = new AggregateTxValidator(
+    new SizeTxValidator(bindings),
     new MetadataTxValidator(
       {
         l1ChainId: new Fr(l1ChainId),
@@ -233,7 +234,6 @@ function createTxValidatorForMinimumTxIntegrityChecks(
       },
       bindings,
     ),
-    new SizeTxValidator(bindings),
     CachedTxValidator.new(new DataTxValidator(bindings), cache),
     new ContractInstanceTxValidator(bindings),
     CachedTxValidator.new(new TxProofValidator(verifier, bindings), cache),
@@ -341,33 +341,24 @@ export function createTxValidatorForAcceptingTxsOverRPC(
       },
       bindings,
     ),
-    new PhasesTxValidator(contractDataSource, setupAllowList, timestamp, bindings),
-    new BlockHeaderTxValidator(new ArchiveCache(db), bindings),
-    new DoubleSpendTxValidator(new NullifierCache(db), bindings),
-    new DataTxValidator(bindings),
-    new ContractInstanceTxValidator(bindings),
     // Declared gas-limit admission is not fee enforcement, so it runs even when fees are skipped. The floor
     // has no exemption: a tx declaring less than the fixed overheads can never be mined, so rejecting it
     // during simulation is the earliest useful feedback rather than a surprise on sendTx.
     new MinGasLimitsValidator<Tx>(bindings),
+    // Only the ceiling is exempted during simulation: gas estimation submits intentionally-inflated
+    // `forEstimation` limits (above the per-tx max) and the wallet clamps the real tx to the admission limit
+    // afterward, so enforcing the ceiling on the estimation tx would reject a valid estimation.
+    ...(!isSimulation ? [new MaxGasLimitsValidator<Tx>({ maxTxL2Gas, maxTxDAGas, bindings })] : []),
+    new PhasesTxValidator(contractDataSource, setupAllowList, timestamp, bindings),
+    new BlockHeaderTxValidator(new ArchiveCache(db), bindings),
+    new DoubleSpendTxValidator(new NullifierCache(db), bindings),
+    ...(!skipFeeEnforcement
+      ? [new GasTxValidator(new DatabasePublicStateSource(db), ProtocolContractAddress.FeeJuice, gasFees, bindings)]
+      : []),
+    new DataTxValidator(bindings),
+    new ContractInstanceTxValidator(bindings),
+    ...(verifier ? [new TxProofValidator(verifier, bindings)] : []),
   ];
-
-  // Only the ceiling is exempted during simulation: gas estimation submits intentionally-inflated
-  // `forEstimation` limits (above the per-tx max) and the wallet clamps the real tx to the admission limit
-  // afterward, so enforcing the ceiling on the estimation tx would reject a valid estimation.
-  if (!isSimulation) {
-    validators.push(new MaxGasLimitsValidator<Tx>({ maxTxL2Gas, maxTxDAGas, bindings }));
-  }
-
-  if (!skipFeeEnforcement) {
-    validators.push(
-      new GasTxValidator(new DatabasePublicStateSource(db), ProtocolContractAddress.FeeJuice, gasFees, bindings),
-    );
-  }
-
-  if (verifier) {
-    validators.push(new TxProofValidator(verifier, bindings));
-  }
 
   return new AggregateTxValidator(...validators);
 }
@@ -423,13 +414,13 @@ function createTxValidatorForValidatingAgainstCurrentState(
       },
       bindings,
     ),
-    new PhasesTxValidator(contractDataSource, setupAllowList, globalVariables.timestamp, bindings),
-    new BlockHeaderTxValidator(archiveSource, bindings),
-    new DoubleSpendTxValidator(nullifierSource, bindings),
     new MinGasLimitsValidator<Tx>(bindings),
     // No limit opts: enforce only the per-tx protocol ceiling. Network admission limits are relay policy and
     // must not invalidate a proposed block.
     new MaxGasLimitsValidator<Tx>({ bindings }),
+    new PhasesTxValidator(contractDataSource, setupAllowList, globalVariables.timestamp, bindings),
+    new BlockHeaderTxValidator(archiveSource, bindings),
+    new DoubleSpendTxValidator(nullifierSource, bindings),
     new GasTxValidator(publicStateSource, ProtocolContractAddress.FeeJuice, globalVariables.gasFees, bindings),
   );
 }
@@ -469,13 +460,13 @@ export async function createTxValidatorForTransactionsEnteringPendingTxPool(
     },
   };
   return new AggregateTxValidator<TxMetaData>(
+    new AllowedSetupCallsMetaValidator<TxMetaData>(bindings),
+    new TimestampTxValidator<TxMetaData>({ timestamp, blockNumber }, bindings),
     new MinGasLimitsValidator<TxMetaData>(bindings),
     new MaxGasLimitsValidator<TxMetaData>({ ...gasLimitOpts, bindings }),
     new MaxFeePerGasValidator<TxMetaData>(gasFees, bindings),
-    new TimestampTxValidator<TxMetaData>({ timestamp, blockNumber }, bindings),
-    new DoubleSpendTxValidator<TxMetaData>(nullifierSource, bindings),
     new BlockHeaderTxValidator<TxMetaData>(archiveSource, bindings),
-    new AllowedSetupCallsMetaValidator<TxMetaData>(bindings),
+    new DoubleSpendTxValidator<TxMetaData>(nullifierSource, bindings),
   );
 }
 
