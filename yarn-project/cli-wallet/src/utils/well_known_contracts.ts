@@ -7,8 +7,8 @@ import type { AztecAddress } from '@aztec/stdlib/aztec-address';
 import type { WalletDB } from '../storage/wallet_db.js';
 
 /**
- * Aliases the well-known contracts missing from the wallet's database. Contracts that already have
- * an alias are skipped, so a user's own alias survives and older databases pick up new entries.
+ * Aliases the well-known contracts missing from the wallet's database. Contracts that already have an alias are
+ * skipped, so a user's own alias survives and older databases pick up new entries.
  */
 export async function registerWellKnownContractAliases(db: WalletDB, log: LogFn) {
   for (const { name, getAddress } of wellKnownContracts) {
@@ -17,7 +17,7 @@ export async function registerWellKnownContractAliases(db: WalletDB, log: LogFn)
     }
     const address = (await getAddress()).toString();
     await db.storeAlias('contracts', name, Buffer.from(address), log);
-    await db.storeAlias('artifacts', address, Buffer.from(`${name.slice(0, 1).toUpperCase()}${name.slice(1)}`), log);
+    await db.storeAlias('artifacts', address, Buffer.from(name), log);
   }
 }
 
@@ -32,7 +32,8 @@ const wellKnownContracts: WellKnownContract[] = [
     name,
     getAddress: () => address,
   })),
-  // Its address moves with the contract's bytecode, so it is derived rather than generated.
+  // SponsoredFPC has no generated address record: it is instantiated with a zero salt, so its address is computed
+  // from the current artifact.
   { name: 'SponsoredFPC', getAddress: getSponsoredFPCAddress },
 ];
 

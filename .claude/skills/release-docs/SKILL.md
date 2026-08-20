@@ -116,17 +116,10 @@ the tag checked out in Step 2 (needs `yarn-project` built, as in Step 6):
 
 ```bash
 cd yarn-project && node --input-type=module -e "
-import { getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { SPONSORED_FPC_SALT } from '@aztec/constants';
-import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC';
-const { address } = await getContractInstanceFromInstantiationParams(SponsoredFPCContract.artifact, { salt: new Fr(SPONSORED_FPC_SALT) });
-console.log(address.toString());
+import { getSponsoredFPCAddress } from '@aztec/cli/cli-utils';
+console.log((await getSponsoredFPCAddress()).toString());
 "
 ```
-
-Deriving from the tag is what makes the result correct: the address moves whenever the
-SponsoredFPC bytecode does, so it must come from the version being released.
 
 Store the address and update it wherever it appears in the versioned docs.
 
