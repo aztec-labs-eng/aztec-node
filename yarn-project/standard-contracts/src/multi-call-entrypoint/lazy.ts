@@ -19,7 +19,9 @@ export async function getMultiCallEntrypointArtifact(): Promise<ContractArtifact
     // Even if now supported by all major browsers, the MIME type is replaced with
     // "text/javascript"
     // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-    const { default: multiCallEntrypointJson } = await import('../../artifacts/MultiCallEntrypoint.json');
+    const { default: multiCallEntrypointJson } = await import('../../artifacts/MultiCallEntrypoint.json', {
+      with: { type: 'json' },
+    });
     standardContractArtifact = loadContractArtifact(multiCallEntrypointJson);
   }
   return standardContractArtifact;

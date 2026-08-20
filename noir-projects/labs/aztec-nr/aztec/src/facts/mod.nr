@@ -6,9 +6,7 @@
 //! They are stored in PXE's FactStore, which automatically deals with reorgs by removing any facts
 //! associated with blocks that have been pruned.
 use crate::ephemeral::EphemeralArray;
-use crate::oracle::fact_store::{
-    delete_fact_collection_oracle, get_fact_collection_oracle, get_fact_collections_by_type_oracle, record_fact_oracle,
-};
+use crate::oracle::fact_store;
 use crate::protocol::{address::AztecAddress, traits::{Deserialize, Serialize}};
 
 mod origin_state;
@@ -65,7 +63,7 @@ pub unconstrained fn record_retractable_fact(
     payload: EphemeralArray<Field>,
     origin_block: OriginBlock,
 ) {
-    record_fact_oracle(
+    fact_store::record_fact(
         contract_address,
         scope,
         fact_collection_type_id,
@@ -86,7 +84,7 @@ pub unconstrained fn record_non_retractable_fact(
     fact_type_id: Field,
     payload: EphemeralArray<Field>,
 ) {
-    record_fact_oracle(
+    fact_store::record_fact(
         contract_address,
         scope,
         fact_collection_type_id,
@@ -109,7 +107,7 @@ pub unconstrained fn delete_fact_collection(
     fact_collection_type_id: Field,
     fact_collection_id: Field,
 ) {
-    delete_fact_collection_oracle(
+    fact_store::delete_fact_collection(
         contract_address,
         scope,
         fact_collection_type_id,
@@ -124,7 +122,7 @@ pub unconstrained fn get_fact_collection(
     fact_collection_type_id: Field,
     fact_collection_id: Field,
 ) -> Option<FactCollection> {
-    get_fact_collection_oracle(
+    fact_store::get_fact_collection(
         contract_address,
         scope,
         fact_collection_type_id,
@@ -138,7 +136,7 @@ pub unconstrained fn get_fact_collections_by_type(
     scope: AztecAddress,
     fact_collection_type_id: Field,
 ) -> EphemeralArray<FactCollection> {
-    get_fact_collections_by_type_oracle(contract_address, scope, fact_collection_type_id)
+    fact_store::get_fact_collections_by_type(contract_address, scope, fact_collection_type_id)
 }
 
 mod test {

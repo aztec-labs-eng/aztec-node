@@ -1,14 +1,19 @@
 use crate::ephemeral::EphemeralArray;
+use crate::macros::{oracle_declaration::utl_oracle, oracle_testing::skip_oracle_test};
 use crate::protocol::{address::AztecAddress, hash::sha256_to_field, point::EmbeddedCurvePoint};
 
 global GET_SHARED_SECRET_SINGLE_SLOT: Field = sha256_to_field("AZTEC_NR::GET_SHARED_SECRET_SINGLE_SLOT".as_bytes());
 
-#[oracle(aztec_utl_getSharedSecrets)]
-unconstrained fn get_shared_secrets_oracle(
+// TODO: cover with an oracle test once the test resolver can serve EphemeralArray contents.
+#[skip_oracle_test]
+#[utl_oracle]
+unconstrained fn get_shared_secrets_internal(
     address: AztecAddress,
     eph_pks: EphemeralArray<EmbeddedCurvePoint>,
     contract_address: AztecAddress,
-) -> EphemeralArray<Field> {}
+) -> EphemeralArray<Field> {
+    get_shared_secrets_internal_oracle(address, eph_pks, contract_address)
+}
 
 /// Convenience wrapper around [`get_shared_secrets`] for a single ephemeral public key.
 ///
@@ -56,7 +61,7 @@ pub unconstrained fn get_shared_secrets(
     eph_pks: EphemeralArray<EmbeddedCurvePoint>,
     contract_address: AztecAddress,
 ) -> EphemeralArray<Field> {
-    let response = get_shared_secrets_oracle(address, eph_pks, contract_address);
+    let response = get_shared_secrets_internal(address, eph_pks, contract_address);
     assert(
         (response.len() == eph_pks.len()) | (response.len() == 0),
         "get_shared_secrets: response length does not match request length",

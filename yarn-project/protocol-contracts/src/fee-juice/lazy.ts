@@ -13,7 +13,7 @@ export async function getFeeJuiceArtifact(): Promise<ContractArtifact> {
     // Even if now supported by all major browsers, the MIME type is replaced with
     // "text/javascript"
     // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-    const { default: feeJuiceJson } = await import('../../artifacts/FeeJuice.json');
+    const { default: feeJuiceJson } = await import('../../artifacts/FeeJuice.json', { with: { type: 'json' } });
     protocolContractArtifact = loadContractArtifact(feeJuiceJson);
   }
   return protocolContractArtifact;

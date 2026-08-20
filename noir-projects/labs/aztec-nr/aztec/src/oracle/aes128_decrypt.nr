@@ -1,9 +1,13 @@
-#[oracle(aztec_utl_decryptAes128)]
-unconstrained fn aes128_decrypt_oracle<let N: u32>(
+use crate::macros::oracle_declaration::utl_oracle;
+
+#[utl_oracle]
+unconstrained fn decrypt_aes128<let N: u32>(
     ciphertext: BoundedVec<u8, N>,
     iv: [u8; 16],
     sym_key: [u8; 16],
-) -> Option<BoundedVec<u8, N>> {}
+) -> Option<BoundedVec<u8, N>> {
+    decrypt_aes128_oracle(ciphertext, iv, sym_key)
+}
 
 /// Attempts to decrypt a ciphertext using AES128.
 ///
@@ -20,7 +24,7 @@ pub unconstrained fn try_aes128_decrypt<let N: u32>(
     iv: [u8; 16],
     sym_key: [u8; 16],
 ) -> Option<BoundedVec<u8, N>> {
-    aes128_decrypt_oracle(ciphertext, iv, sym_key)
+    decrypt_aes128(ciphertext, iv, sym_key)
 }
 
 mod test {

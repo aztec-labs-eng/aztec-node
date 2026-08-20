@@ -1,4 +1,5 @@
 use crate::ephemeral::EphemeralArray;
+use crate::macros::{oracle_declaration::utl_oracle, oracle_testing::skip_oracle_test};
 use crate::protocol::{constants::MAX_NOTE_HASHES_PER_TX, traits::{Deserialize, Serialize}};
 
 /// The resolved on-chain context of a transaction.
@@ -12,9 +13,9 @@ pub struct ResolvedTx {
 }
 
 /// Resolves the on-chain context of each tx hash.
+// TODO: cover with an oracle test once the test resolver can serve EphemeralArray contents.
+#[skip_oracle_test]
+#[utl_oracle]
 pub(crate) unconstrained fn get_resolved_txs(requests: EphemeralArray<Field>) -> EphemeralArray<Option<ResolvedTx>> {
     get_resolved_txs_oracle(requests)
 }
-
-#[oracle(aztec_utl_getResolvedTxs)]
-unconstrained fn get_resolved_txs_oracle(requests: EphemeralArray<Field>) -> EphemeralArray<Option<ResolvedTx>> {}

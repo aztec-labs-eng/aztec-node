@@ -1,3 +1,4 @@
+use crate::macros::oracle_declaration::utl_oracle;
 use crate::protocol::{address::AztecAddress, constants::L1_TO_L2_MSG_TREE_HEIGHT};
 
 /// An unsiloed L1 to L2 message nullifier.
@@ -16,12 +17,14 @@ pub unconstrained fn get_l1_to_l2_membership_witness(
     message_hash: Field,
     nullifier: Option<UnsiloedNullifier>,
 ) -> (Field, [Field; L1_TO_L2_MSG_TREE_HEIGHT]) {
-    get_l1_to_l2_membership_witness_oracle(message_hash, nullifier)
+    get_l1_to_l2_membership_witness_v2(message_hash, nullifier)
 }
 
 // Obtains membership witness (index and sibling path) for a message in the L1 to L2 message tree.
-#[oracle(aztec_utl_getL1ToL2MembershipWitnessV2)]
-unconstrained fn get_l1_to_l2_membership_witness_oracle(
-    _message_hash: Field,
-    _nullifier: Option<UnsiloedNullifier>,
-) -> (Field, [Field; L1_TO_L2_MSG_TREE_HEIGHT]) {}
+#[utl_oracle]
+unconstrained fn get_l1_to_l2_membership_witness_v2(
+    message_hash: Field,
+    nullifier: Option<UnsiloedNullifier>,
+) -> (Field, [Field; L1_TO_L2_MSG_TREE_HEIGHT]) {
+    get_l1_to_l2_membership_witness_v2_oracle(message_hash, nullifier)
+}

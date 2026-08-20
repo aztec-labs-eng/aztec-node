@@ -1,5 +1,6 @@
 use crate::{
     ephemeral::EphemeralArray,
+    macros::{oracle_declaration::utl_oracle, oracle_testing::skip_oracle_test},
     protocol::{
         abis::block_header::BlockHeader,
         constants::{ARCHIVE_HEIGHT, NOTE_HASH_TREE_HEIGHT},
@@ -8,23 +9,31 @@ use crate::{
     },
 };
 
-#[oracle(aztec_utl_getNoteHashMembershipWitness)]
-unconstrained fn get_note_hash_membership_witness_oracle(
+#[utl_oracle]
+unconstrained fn get_note_hash_membership_witness_internal(
     anchor_block_hash: Field,
     note_hash: Field,
-) -> MembershipWitness<NOTE_HASH_TREE_HEIGHT> {}
+) -> MembershipWitness<NOTE_HASH_TREE_HEIGHT> {
+    get_note_hash_membership_witness_internal_oracle(anchor_block_hash, note_hash)
+}
 
-#[oracle(aztec_utl_getBlockHashMembershipWitness)]
-unconstrained fn get_block_hash_membership_witness_oracle(
+#[utl_oracle]
+unconstrained fn get_block_hash_membership_witness_internal(
     anchor_block_hash: Field,
     block_hash: Field,
-) -> Option<MembershipWitness<ARCHIVE_HEIGHT>> {}
+) -> Option<MembershipWitness<ARCHIVE_HEIGHT>> {
+    get_block_hash_membership_witness_internal_oracle(anchor_block_hash, block_hash)
+}
 
-#[oracle(aztec_utl_areBlockHashesInArchive)]
-unconstrained fn are_block_hashes_in_archive_oracle(
+// TODO: cover with an oracle test once the test resolver can serve EphemeralArray contents.
+#[skip_oracle_test]
+#[utl_oracle]
+unconstrained fn are_block_hashes_in_archive_internal(
     anchor_block_hash: Field,
     block_hashes: EphemeralArray<Field>,
-) -> EphemeralArray<bool> {}
+) -> EphemeralArray<bool> {
+    are_block_hashes_in_archive_internal_oracle(anchor_block_hash, block_hashes)
+}
 
 // Note: get_nullifier_membership_witness function is implemented in get_nullifier_membership_witness.nr
 
@@ -35,7 +44,7 @@ pub unconstrained fn get_note_hash_membership_witness(
     note_hash: Field,
 ) -> MembershipWitness<NOTE_HASH_TREE_HEIGHT> {
     let anchor_block_hash = anchor_block_header.hash();
-    get_note_hash_membership_witness_oracle(anchor_block_hash, note_hash)
+    get_note_hash_membership_witness_internal(anchor_block_hash, note_hash)
 }
 
 // There is no `get_public_data_membership_witness` function because it doesn't make sense to be getting a membership
@@ -47,7 +56,7 @@ pub unconstrained fn get_block_hash_membership_witness(
     block_hash: Field,
 ) -> MembershipWitness<ARCHIVE_HEIGHT> {
     let anchor_block_hash = anchor_block_header.hash();
-    get_block_hash_membership_witness_oracle(anchor_block_hash, block_hash).expect(
+    get_block_hash_membership_witness_internal(anchor_block_hash, block_hash).expect(
         f"Block hash {block_hash} not found in the archive tree at anchor block {anchor_block_hash}.",
     )
 }
@@ -59,7 +68,7 @@ pub unconstrained fn get_maybe_block_hash_membership_witness(
     block_hash: Field,
 ) -> Option<MembershipWitness<ARCHIVE_HEIGHT>> {
     let anchor_block_hash = anchor_block_header.hash();
-    get_block_hash_membership_witness_oracle(anchor_block_hash, block_hash)
+    get_block_hash_membership_witness_internal(anchor_block_hash, block_hash)
 }
 
 /// Returns whether each block hash is present in the archive tree whose root is defined in `anchor_block_header`.
@@ -68,7 +77,7 @@ pub unconstrained fn are_block_hashes_in_archive(
     block_hashes: EphemeralArray<Field>,
 ) -> EphemeralArray<bool> {
     let anchor_block_hash = anchor_block_header.hash();
-    are_block_hashes_in_archive_oracle(anchor_block_hash, block_hashes)
+    are_block_hashes_in_archive_internal(anchor_block_hash, block_hashes)
 }
 
 mod test {

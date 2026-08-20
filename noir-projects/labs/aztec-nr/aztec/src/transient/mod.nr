@@ -54,8 +54,8 @@ impl<T> TransientValue<T> {
     where
         T: Serialize,
     {
-        transient_oracles::clear_oracle(self.slot);
-        let _ = transient_oracles::push_oracle(self.slot, value.serialize());
+        transient_oracles::clear_transient(self.slot);
+        let _ = transient_oracles::push_transient(self.slot, value.serialize());
     }
 
     /// Returns the value previously stored at the slot with [`TransientValue::store`], or `Option::none()` if the
@@ -64,17 +64,17 @@ impl<T> TransientValue<T> {
     where
         T: Deserialize,
     {
-        if transient_oracles::len_oracle(self.slot) == 0 {
+        if transient_oracles::get_transient_len(self.slot) == 0 {
             Option::none()
         } else {
-            let serialized = transient_oracles::get_oracle(self.slot, 0);
+            let serialized = transient_oracles::get_transient(self.slot, 0);
             Option::some(Deserialize::deserialize(serialized))
         }
     }
 
     /// Deletes the stored value. Does nothing if the slot holds no value.
     pub unconstrained fn delete(self) {
-        transient_oracles::clear_oracle(self.slot)
+        transient_oracles::clear_transient(self.slot)
     }
 }
 
@@ -82,31 +82,31 @@ pub struct TransientOracles {}
 
 impl ArrayOracles for TransientOracles {
     unconstrained fn len_oracle(slot: Field) -> u32 {
-        transient_oracles::len_oracle(slot)
+        transient_oracles::get_transient_len(slot)
     }
 
     unconstrained fn push_oracle<let N: u32>(slot: Field, values: [Field; N]) -> u32 {
-        transient_oracles::push_oracle(slot, values)
+        transient_oracles::push_transient(slot, values)
     }
 
     unconstrained fn pop_oracle<let N: u32>(slot: Field) -> [Field; N] {
-        transient_oracles::pop_oracle(slot)
+        transient_oracles::pop_transient(slot)
     }
 
     unconstrained fn get_oracle<let N: u32>(slot: Field, index: u32) -> [Field; N] {
-        transient_oracles::get_oracle(slot, index)
+        transient_oracles::get_transient(slot, index)
     }
 
     unconstrained fn set_oracle<let N: u32>(slot: Field, index: u32, values: [Field; N]) {
-        transient_oracles::set_oracle(slot, index, values)
+        transient_oracles::set_transient(slot, index, values)
     }
 
     unconstrained fn remove_oracle(slot: Field, index: u32) {
-        transient_oracles::remove_oracle(slot, index)
+        transient_oracles::remove_transient(slot, index)
     }
 
     unconstrained fn clear_oracle(slot: Field) {
-        transient_oracles::clear_oracle(slot)
+        transient_oracles::clear_transient(slot)
     }
 }
 

@@ -1,7 +1,7 @@
-#[oracle(aztec_utl_getAuthWitness)]
-unconstrained fn get_auth_witness_oracle<let N: u32>(_message_hash: Field) -> [Field; N] {}
+use crate::macros::oracle_declaration::utl_oracle;
 
 /// Oracle wrapper to fetch an `auth_witness` for a given `message_hash` from the PXE.
+#[utl_oracle]
 pub unconstrained fn get_auth_witness<let N: u32>(message_hash: Field) -> [Field; N] {
     get_auth_witness_oracle(message_hash)
 }

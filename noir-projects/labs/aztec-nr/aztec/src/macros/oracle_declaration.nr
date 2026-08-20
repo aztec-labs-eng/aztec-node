@@ -371,12 +371,20 @@ comptime fn is_data_type_named(typ: Type, name: Quoted) -> bool {
 }
 
 /// Generates the raw `#[oracle]` stub as a sibling of the wrapper, named `<wrapper>_oracle`, carrying the
-/// wrapper's parameter and return types plus whatever numeric generics those types mention.
+/// wrapper's parameter and return types plus whatever numeric generics those types mention. A
+/// `#[skip_oracle_test]` marker on the wrapper is passed through to the stub, which is where
+/// `#[generate_oracle_tests]` looks for it.
 comptime fn generate_oracle_stub(f: FunctionDefinition, wire_name: CtString) -> Quoted {
     let name = f.name();
     let stub_name = f"{name}_oracle".quoted_contents();
     let wire_str = wire_name.as_quoted_str!();
     let wire_ident = f"{wire_str}".quoted_contents();
+
+    let skip_test_marker = if f.has_named_attribute("skip_oracle_test") {
+        quote { #[crate::macros::oracle_testing::skip_oracle_test] }
+    } else {
+        quote {}
+    };
 
     let params = f
         .parameters()
@@ -396,6 +404,7 @@ comptime fn generate_oracle_stub(f: FunctionDefinition, wire_name: CtString) -> 
     let generics = stub_generics(f);
 
     quote {
+        $skip_test_marker
         #[oracle($wire_ident)]
         unconstrained fn $stub_name $generics ($params) $return_clause {}
     }

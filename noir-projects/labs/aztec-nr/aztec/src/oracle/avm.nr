@@ -3,6 +3,7 @@
 //! There are only available during public execution. Calling any of them from a private or utility function will
 //! result in runtime errors.
 
+use crate::macros::oracle_testing::skip_oracle_test;
 use crate::protocol::address::{AztecAddress, EthAddress};
 
 pub unconstrained fn address() -> AztecAddress {
@@ -124,6 +125,8 @@ unconstrained fn address_opcode() -> AztecAddress {}
 #[oracle(aztec_avm_sender)]
 unconstrained fn sender_opcode() -> AztecAddress {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_transactionFee)]
 unconstrained fn transaction_fee_opcode() -> Field {}
 
@@ -139,21 +142,31 @@ unconstrained fn block_number_opcode() -> u32 {}
 #[oracle(aztec_avm_timestamp)]
 unconstrained fn timestamp_opcode() -> u64 {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_minFeePerL2Gas)]
 unconstrained fn min_fee_per_l2_gas_opcode() -> u128 {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_minFeePerDaGas)]
 unconstrained fn min_fee_per_da_gas_opcode() -> u128 {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_l2GasLeft)]
 unconstrained fn l2_gas_left_opcode() -> u32 {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_daGasLeft)]
 unconstrained fn da_gas_left_opcode() -> u32 {}
 
 #[oracle(aztec_avm_isStaticCall)]
 unconstrained fn is_static_call_opcode() -> bool {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_noteHashExists)]
 unconstrained fn note_hash_exists_opcode(note_hash: Field, leaf_index: u64) -> bool {}
 
@@ -169,12 +182,18 @@ unconstrained fn emit_nullifier_opcode(nullifier: Field) {}
 #[oracle(aztec_avm_emitPublicLog)]
 unconstrained fn emit_public_log_opcode(message: [Field]) {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_l1ToL2MsgExists)]
 unconstrained fn l1_to_l2_msg_exists_opcode(msg_hash: Field, msg_leaf_index: u64) -> bool {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_sendL2ToL1Msg)]
 unconstrained fn send_l2_to_l1_msg_opcode(recipient: EthAddress, content: Field) {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_calldataCopy)]
 unconstrained fn calldata_copy_opcode<let N: u32>(cdoffset: u32, copy_size: u32) -> [Field; N] {}
 
@@ -184,9 +203,13 @@ unconstrained fn returndata_size_opcode() -> u32 {}
 #[oracle(aztec_avm_returndataCopy)]
 unconstrained fn returndata_copy_opcode(rdoffset: u32, copy_size: u32) -> [Field] {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_return)]
 unconstrained fn return_opcode(returndata: [Field]) {}
 
+// Not implemented by TXE/PXE, so we don't test it.
+#[skip_oracle_test]
 #[oracle(aztec_avm_revert)]
 unconstrained fn revert_opcode(revertdata: [Field]) {}
 

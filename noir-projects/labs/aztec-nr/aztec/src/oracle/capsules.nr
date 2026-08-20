@@ -1,3 +1,4 @@
+use crate::macros::oracle_declaration::utl_oracle;
 use crate::protocol::{address::AztecAddress, traits::{Deserialize, Serialize}};
 
 /// Stores arbitrary information in a per-contract non-volatile database, which can later be retrieved with `load`. If
@@ -8,7 +9,7 @@ where
     T: Serialize,
 {
     let serialized = value.serialize();
-    set_capsule_oracle(contract_address, slot, serialized, scope);
+    set_capsule(contract_address, slot, serialized, scope);
 }
 
 /// Returns data previously stored via `storeCapsule` in the per-contract non-volatile database. Returns
@@ -18,13 +19,13 @@ pub unconstrained fn load<T>(contract_address: AztecAddress, slot: Field, scope:
 where
     T: Deserialize,
 {
-    let serialized_option = get_capsule_oracle(contract_address, slot, <T as Deserialize>::N, scope);
+    let serialized_option = get_capsule(contract_address, slot, <T as Deserialize>::N, scope);
     serialized_option.map(|arr| Deserialize::deserialize(arr))
 }
 
 /// Deletes data in the per-contract non-volatile database. Does nothing if no data was present.
 pub unconstrained fn delete(contract_address: AztecAddress, slot: Field, scope: AztecAddress) {
-    delete_oracle(contract_address, slot, scope);
+    delete_capsule(contract_address, slot, scope);
 }
 
 /// Copies a number of contiguous entries in the per-contract non-volatile database. This allows for efficient data
@@ -38,16 +39,18 @@ pub unconstrained fn copy(
     num_entries: u32,
     scope: AztecAddress,
 ) {
-    copy_oracle(contract_address, src_slot, dst_slot, num_entries, scope);
+    copy_capsule(contract_address, src_slot, dst_slot, num_entries, scope);
 }
 
-#[oracle(aztec_utl_setCapsule)]
-unconstrained fn set_capsule_oracle<let N: u32>(
+#[utl_oracle]
+unconstrained fn set_capsule<let N: u32>(
     contract_address: AztecAddress,
     slot: Field,
     values: [Field; N],
     scope: AztecAddress,
-) {}
+) {
+    set_capsule_oracle(contract_address, slot, values, scope)
+}
 
 /// We need to pass in `array_len` (the value of N) as a parameter to tell the oracle how many fields the response must
 /// have.
@@ -56,25 +59,31 @@ unconstrained fn set_capsule_oracle<let N: u32>(
 /// require for the oracle resolver to know the shape of T (e.g. if T were a struct of 3 u32 values then the expected
 /// response shape would be 3 single items, whereas it were a struct containing `u32, [Field;10], u32` then the
 /// expected shape would be single, array, single.). Instead, we return the serialization and deserialize in Noir.
-#[oracle(aztec_utl_getCapsule)]
-unconstrained fn get_capsule_oracle<let N: u32>(
+#[utl_oracle]
+unconstrained fn get_capsule<let N: u32>(
     contract_address: AztecAddress,
     slot: Field,
     array_len: u32,
     scope: AztecAddress,
-) -> Option<[Field; N]> {}
+) -> Option<[Field; N]> {
+    get_capsule_oracle(contract_address, slot, array_len, scope)
+}
 
-#[oracle(aztec_utl_deleteCapsule)]
-unconstrained fn delete_oracle(contract_address: AztecAddress, slot: Field, scope: AztecAddress) {}
+#[utl_oracle]
+unconstrained fn delete_capsule(contract_address: AztecAddress, slot: Field, scope: AztecAddress) {
+    delete_capsule_oracle(contract_address, slot, scope)
+}
 
-#[oracle(aztec_utl_copyCapsule)]
-unconstrained fn copy_oracle(
+#[utl_oracle]
+unconstrained fn copy_capsule(
     contract_address: AztecAddress,
     src_slot: Field,
     dst_slot: Field,
     num_entries: u32,
     scope: AztecAddress,
-) {}
+) {
+    copy_capsule_oracle(contract_address, src_slot, dst_slot, num_entries, scope)
+}
 
 mod test {
     // These tests are sort of redundant since we already test the oracle implementation directly in TypeScript, but

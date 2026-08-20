@@ -1,5 +1,6 @@
 //! Nullifier creation, existence checks, etc.
 
+use crate::macros::oracle_declaration::utl_oracle;
 use crate::protocol::address::aztec_address::AztecAddress;
 
 /// Notifies the simulator that a nullifier has been created, so that its correct status (pending or settled) can be
@@ -35,8 +36,10 @@ unconstrained fn is_nullifier_pending_oracle(_inner_nullifier: Field, _contract_
 /// patterns benefit from this abstraction (see e.g. `PrivateMutable`).
 // TODO(F-498): review naming consistency
 pub unconstrained fn check_nullifier_exists(inner_nullifier: Field) -> bool {
-    does_nullifier_exist_oracle(inner_nullifier)
+    does_nullifier_exist(inner_nullifier)
 }
 
-#[oracle(aztec_utl_doesNullifierExist)]
-unconstrained fn does_nullifier_exist_oracle(_inner_nullifier: Field) -> bool {}
+#[utl_oracle]
+unconstrained fn does_nullifier_exist(inner_nullifier: Field) -> bool {
+    does_nullifier_exist_oracle(inner_nullifier)
+}
