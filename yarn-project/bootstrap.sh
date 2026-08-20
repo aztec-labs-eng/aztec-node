@@ -12,18 +12,20 @@ function hash {
 }
 
 # Base for per-test cache keys: everything a test can depend on that per-test TS dependency
-# closures (scripts/test-deps.mjs) don't cover — all non-.ts files (package.json, yarn.lock,
-# .swcrc, jest configs, scripts, fixtures) plus the toolchain hash. Unlike the build hash,
-# noir-contracts is NOT folded in: the generated contract TS and artifact JSONs are closure
-# members and are content-hashed per test (see compute_package_test_dep_hashes), so a contract
-# change only invalidates the tests whose closures reach it. The ERE is the complement of
-# '\.ts$' written without lookahead (grep -E/awk don't support it): last char isn't 's', or
-# 's' not preceded by 't', or 'ts' not preceded by '.'. .tsx/.mts/.cts stay in the base —
-# excluding them isn't worth the regex, and including them only over-invalidates.
+# closures (scripts/test-deps.mjs) don't cover — package.json, yarn.lock, .swcrc, jest
+# configs, scripts, fixtures — plus the toolchain hash. Unlike the build hash, noir-contracts
+# is NOT folded in: the generated contract TS and artifact JSONs are closure members and are
+# content-hashed per test (see compute_package_test_dep_hashes), so a contract change only
+# invalidates the tests whose closures reach it. Everything under yarn-project is in by
+# default so new fixture types can't silently fall outside the base; the exclusions are
+# .ts (covered by the closures — .tsx/.mts/.cts stay in, excluding them isn't worth it and
+# including them only over-invalidates) and files that can't affect test behavior (docs,
+# terraform, images).
 function hash_tests_base {
   hash_str \
     $(../labs-aztec-toolchain/bootstrap.sh hash) \
-    $(cache_content_hash '^yarn-project/.*([^s]|[^t]s|[^.]ts)$')
+    $(cache_content_hash '^yarn-project/' \
+        '!^yarn-project/.*\.(ts|md|tf|svg|png)$')
 }
 
 # Prints a test's cache key from the map produced by compute_test_dependencies. The keys only

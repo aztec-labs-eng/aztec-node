@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Self-contained test + benchmark for ci3/cache_content_hash against a fixture repo.
+# Run directly for the correctness suite; run with 'bench' for timings:
+#   ci3/cache_content_hash_test          # correctness
+#   ci3/cache_content_hash_test bench    # benchmark on a synthetic 50k-file tree
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT="$REPO/ci3/cache_content_hash"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+fail() { echo "FAIL: $1" >&2; exit 1; }
+pass() { echo "PASS: $1"; }
+
+# Runs cache_content_hash from inside the fixture repo. `root` points sourcing
+# back at the real repo (the fixture has no ci3/), CI=0 keeps dirty trees on the
+# disabled-cache path instead of the CI hard-error path.
+function cch {
+  (cd "$WORK/fixture" && root=$REPO CI=0 "$SCRIPT" "$@")
+}
+
+# --- Fixture: a small repo with a spread of extensions ---
+git init -q "$WORK/fixture" -b main
+cd "$WORK/fixture"
+git config user.email t@t && git config user.name t
+mkdir -p src docs scripts
+echo 'code1' > src/a.ts
+echo 'code2' > src/b.ts
+echo 'config' > src/pkg.json
+echo 'snap' > src/a.test.ts.snap
+echo 'readme' > docs/notes.md
+echo 'guide' > docs/guide.md
+echo 'run' > scripts/run.sh
+echo 'img' > docs/logo.svg
+git add -A && git commit -qm init
+
+# --- Correctness ---
+if [ "${1:-test}" == "test" ]; then
+  h_all=$(cch '^src/')
+  [ "$h_all" == "$(cch '^src/')" ] || fail "hash not deterministic"
+  pass "deterministic"
+
+  h_nots=$(cch '^src/' '!^src/.*\.ts$')
+  [ "$h_nots" != "$h_all" ] || fail "negation had no effect"
+  pass "negation excludes"
+
+  # Re-inclusion: last match wins.
+  h_reinc=$(cch '^src/' '!^src/.*\.ts$' '^src/a\.ts$')
+  [ "$h_reinc" != "$h_nots" ] && [ "$h_reinc" != "$h_all" ] || fail "re-inclusion not distinct"
+  pass "re-inclusion distinct"
+  # a.ts re-included but b.ts not: equals the set {pkg.json, snap, a.ts}.
+  [ "$h_reinc" == "$(cch '^src/pkg\.json$' '^src/a\.test\.ts\.snap$' '^src/a\.ts$')" ] \
+    || fail "re-inclusion set wrong"
+  pass "re-inclusion set exact"
+
+  # Ordering: a negation before the positive is overridden entirely.
+  [ "$(cch '!^src/.*\.ts$' '^src/')" == "$h_all" ] || fail "last-match-wins ordering broken"
+  pass "negation-then-positive == positive"
+
+  # Pattern file with ! lines == CLI form.
+  printf '^src/\n!^src/.*\\.ts$\n' > "$WORK/pats"
+  [ "$(cch "$WORK/pats")" == "$h_nots" ] || fail "pattern file with ! differs from CLI"
+  pass "pattern file negation"
+
+  # Included content change moves the hash; excluded content change does not.
+  echo 'config2' > src/pkg.json && git -C . commit -qam bump
+  [ "$(cch '^src/' '!^src/.*\.ts$')" != "$h_nots" ] || fail "included change did not move hash"
+  pass "included change moves hash"
+  h_before=$(cch '^src/' '!^src/.*\.ts$')
+  echo 'code1x' > src/a.ts && git -C . commit -qam ts-change
+  [ "$(cch '^src/' '!^src/.*\.ts$')" == "$h_before" ] || fail "excluded change moved hash"
+  pass "excluded change ignored"
+
+  # Dirty behavior: an untracked file matching the pattern disables the cache;
+  # an untracked file only matching a negation does not.
+  echo x > src/dirty.json
+  [ "$(cch '^src/')" == "disabled-cache" ] || fail "dirty tracked-pattern file did not disable"
+  pass "dirty included file disables"
+  [ "$(cch '^src/' '!^src/.*\.json$')" != "disabled-cache" ] || fail "excluded dirty file disabled cache"
+  pass "dirty excluded file ignored"
+  rm src/dirty.json
+
+  # Directory shorthand, plain and negated.
+  h_dir=$(cch src)
+  [ -n "$h_dir" ] && [ "$h_dir" != "disabled-cache" ] || fail "dir shorthand failed"
+  pass "dir shorthand"
+  [ "$(cch '^src/' '!docs')" == "$(cch '^src/')" ] || fail "negated dir shorthand broke unrelated set"
+  pass "negated dir shorthand"
+
+  # Error paths.
+  cch '!^src/.*\.ts$' &>/dev/null && fail "only-negations did not error"
+  pass "only-negations errors"
+  cch '^no/such/path/' &>/dev/null && fail "no-match did not error"
+  pass "no-match errors"
+
+  echo "All tests passed."
+  exit 0
+fi
+
+# --- Benchmark: synthetic 50k-file tree built via index plumbing (no worktree I/O) ---
+[ "$1" == "bench" ] || { echo "usage: $0 [test|bench]" >&2; exit 1; }
+cd "$WORK/fixture"
+blob=$(echo content | git hash-object -w --stdin)
+exts=(ts json md sh js snap toml nr yml svg)
+for i in $(seq 0 49999); do
+  printf '100644 %s\t%s\n' "$blob" "pkg$((i % 40))/src/dir$((i % 97))/f$i.${exts[$((i % 10))]}"
+done | git update-index --index-info
+git commit -qm bench-tree
+sha=$(git rev-parse HEAD)
+
+# The empty worktree makes every path show as a deletion in git diff, so the
+# dirty scan filters all 50k paths — both awk passes get exercised at full size.
+# AZTEC_CACHE_COMMIT=<sha> keeps the result a real hash instead of disabled-cache.
+function bench_case {
+  local label=$1; shift
+  local t0 t1 total=0 reps=5
+  for _ in $(seq $reps); do
+    t0=$(date +%s%N)
+    (cd "$WORK/fixture" && root=$REPO CI=0 AZTEC_CACHE_COMMIT=$sha "$SCRIPT" "$@" >/dev/null)
+    t1=$(date +%s%N)
+    total=$((total + (t1 - t0)))
+  done
+  printf '%-45s %6d ms/run (avg of %d)\n' "$label" $(( total / reps / 1000000 )) $reps
+}
+
+echo "Benchmark: 50,000 tracked files, 50,000-path dirty scan"
+bench_case "1 positive"                '^pkg1/'
+bench_case "1 positive (matches all)"  '^pkg'
+bench_case "positive + 2 negations"    '^pkg' '!^pkg.*\.(ts|md)$' '!^pkg.*\.(svg)$'
+bench_case "10 patterns"               '^pkg1/' '^pkg2/' '!^pkg2/.*\.md$' '^pkg3/' '^pkg4/' '!^pkg4/.*\.ts$' '^pkg5/' '^pkg6/' '^pkg7/' '^pkg8/'
