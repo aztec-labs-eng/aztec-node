@@ -122,6 +122,11 @@ function compute_package_dep_hashes {
 function compute_dep_hashes {
   echo_header "yarn-project compute dependency hashes"
 
+  # The map was called .test-dep-hashes until 2026-08-20; a stale copy left by an older
+  # build is no longer gitignored and would dirty the tree. Remove this line once
+  # lingering checkouts have had time to churn (a few months).
+  rm -f .test-dep-hashes
+
   # Refuse to build a map from dishonest closures: every detectable dynamic-load site
   # (workers, non-literal imports, forks) must carry a // @dependency annotation.
   node scripts/dep-closures.mjs --check

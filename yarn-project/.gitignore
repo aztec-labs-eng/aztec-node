@@ -70,5 +70,3 @@ tmp/
 !.yarn/sdks
 !.yarn/versions
 .dep-hashes
-# Old name of .dep-hashes: keep ignored so stale files from earlier builds don't dirty trees.
-.test-dep-hashes
