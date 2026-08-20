@@ -2,7 +2,6 @@
 import { computeSecretHash } from '@aztec/aztec.js/crypto';
 import { Fr } from '@aztec/aztec.js/fields';
 import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { ProtocolContractAddress } from '@aztec/aztec.js/protocol';
 import { BackendType, Barretenberg } from '@aztec/bb.js';
 import { LOCALHOST } from '@aztec/cli/cli-utils';
 import { type LogFn, createConsoleLogger, createLogger } from '@aztec/foundation/log';
@@ -19,6 +18,7 @@ import { Aliases, WalletDB } from '../storage/wallet_db.js';
 import { CliWalletAndNodeWrapper } from '../utils/cli_wallet_and_node_wrapper.js';
 import { createAliasOption } from '../utils/options/index.js';
 import { CLIWallet } from '../utils/wallet.js';
+import { registerWellKnownContractAliases } from '../utils/well_known_contracts.js';
 
 const userLog = createConsoleLogger();
 const debugLogger = createLogger('wallet');
@@ -124,23 +124,7 @@ async function main() {
       walletAndNodeWrapper.setNodeAndWallet(node, wallet);
 
       await db.init(await openStoreAt(dataDir));
-      let protocolContractsRegistered;
-      try {
-        protocolContractsRegistered = !!(await db.retrieveAlias('contracts:ContractClassRegistry'));
-        // eslint-disable-next-line no-empty
-      } catch {}
-      if (!protocolContractsRegistered) {
-        userLog('Registering protocol contract aliases...');
-        for (const [name, address] of Object.entries(ProtocolContractAddress)) {
-          await db.storeAlias('contracts', name, Buffer.from(address.toString()), userLog);
-          await db.storeAlias(
-            'artifacts',
-            address.toString(),
-            Buffer.from(`${name.slice(0, 1).toUpperCase()}${name.slice(1)}`),
-            userLog,
-          );
-        }
-      }
+      await registerWellKnownContractAliases(db, userLog);
     });
 
   injectCommands(program, userLog, debugLogger, walletAndNodeWrapper, db);
