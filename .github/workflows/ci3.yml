@@ -145,7 +145,8 @@ jobs:
       # Uses ci3/upload_benchmarks rather than github-action-benchmark: the action full-clones
       # the multi-GB data repo per upload; the script does a shallow sparse clone instead.
       - name: Upload benchmarks
-        if: env.BENCH_UPLOAD == '1'
+        # TODO(A-1764): Setup benchmarks.
+        if: false && env.BENCH_UPLOAD == '1'
         env: &ci_benchmark_env
           COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: &ci_benchmark_run ./ci3/upload_benchmarks "Aztec Benchmarks" "bench/${BENCH_BRANCH:-}" ./bench-out/bench.json "$COMMIT_SHA"
