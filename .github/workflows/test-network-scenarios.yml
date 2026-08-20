@@ -34,6 +34,12 @@ concurrency:
   group: test-network-scenarios-${{ inputs.namespace }}
   cancel-in-progress: true
 
+# actions: write lets the failure handler dispatch claudebox.yml with the built-in
+# token (workflow_dispatch is exempt from the github.token no-retrigger rule).
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   deploy-and-test:
     runs-on: ubuntu-latest
@@ -52,7 +58,7 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -79,7 +85,7 @@ jobs:
         if: failure()
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \

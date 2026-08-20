@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Close stale claudebox draft PRs
         env:
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           CUTOFF=$(date -u -d '5 days ago' +%Y-%m-%dT%H:%M:%SZ)
           echo "Closing claudebox draft PRs not updated since $CUTOFF"

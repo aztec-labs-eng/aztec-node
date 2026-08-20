@@ -35,6 +35,11 @@ on:
         required: true
         type: string
 
+# contents: read lets the EC2 instance clone the repo with the built-in token.
+# On workflow_call this is capped by the caller's permissions.
+permissions:
+  contents: read
+
 jobs:
   bench:
     runs-on: ubuntu-latest
@@ -47,7 +52,7 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}

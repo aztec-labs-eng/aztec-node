@@ -20,8 +20,14 @@ concurrency:
   group: deploy-staging-internal
   cancel-in-progress: true
 
+# actions: write lets the failure paths dispatch claudebox.yml with the built-in token
+# and caps the called deploy-network.yml high enough for its failure handler.
+permissions:
+  contents: read
+  actions: write
+
 env:
-  GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   determine-tag:
@@ -34,7 +40,7 @@ jobs:
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: main
-          token: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          token: ${{ github.token }}
           fetch-depth: 1
 
       - name: Resolve nightly tag
