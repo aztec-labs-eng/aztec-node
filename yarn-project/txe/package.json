@@ -8,7 +8,7 @@
       "import": "./dest/server.bundle.js"
     }
   },
-  "bin": "./dest/bin/index.js",
+  "bin": "./dest/bin/index.bundle.js",
   "typedocOptions": {
     "entryPoints": [
       "./src/index.ts"
@@ -21,8 +21,8 @@
     "build:dev": "../scripts/tsc.sh --watch",
     "clean": "rm -rf ./dest .tsbuildinfo",
     "test": "NODE_NO_WARNINGS=1 node --experimental-vm-modules ../node_modules/.bin/jest --passWithNoTests --maxWorkers=${JEST_MAX_WORKERS:-8}",
-    "dev": "LOG_LEVEL=\"debug; trace: simulator:state_manager; info: json-rpc:proxy\" node ./dest/bin/index.js",
-    "start": "node --no-warnings ./dest/bin/index.js",
+    "dev": "LOG_LEVEL=\"debug; trace: simulator:state_manager; info: json-rpc:proxy\" node ./dest/bin/index.bundle.js",
+    "start": "node --no-warnings ./dest/bin/index.bundle.js",
     "start:oracle-test-resolver": "node --no-warnings ./dest/bin/oracle_test_server.js",
     "check_txe_oracle_version": "node ./dest/bin/check_txe_oracle_version.js"
   },
@@ -100,7 +100,7 @@
     "typescript": "^5.3.3"
   },
   "files": [
-    "dest/bin/index.js",
+    "dest/bin/index.bundle.js",
     "dest/worker.bundle.js",
     "dest/server.bundle.js",
     "dest/chunk-*.js",

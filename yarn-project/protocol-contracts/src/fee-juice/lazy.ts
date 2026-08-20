@@ -8,11 +8,11 @@ let protocolContractArtifact: ContractArtifact;
 
 export async function getFeeJuiceArtifact(): Promise<ContractArtifact> {
   if (!protocolContractArtifact) {
-    // Cannot assert this import as it's incompatible with bundlers like vite
-    // https://github.com/vitejs/vite/issues/19095#issuecomment-2566074352
-    // Even if now supported by all major browsers, the MIME type is replaced with
-    // "text/javascript"
-    // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
+    // Cannot add `with { type: 'json' }` (the import attribute formerly spelled `assert`): vite's dev server
+    // serves JSON as a JS module ("text/javascript") and only strips the attribute from static imports, so the
+    // browser's MIME check rejects the dynamic import: https://github.com/vitejs/vite/issues/19095
+    // Without the attribute, Node's ESM loader rejects the import (ERR_IMPORT_ATTRIBUTE_MISSING), so this lazy
+    // import is INCOMPATIBLE WITH NODEJS unless a bundler resolves the JSON at build time.
     const { default: feeJuiceJson } = await import('../../artifacts/FeeJuice.json');
     protocolContractArtifact = loadContractArtifact(feeJuiceJson);
   }
