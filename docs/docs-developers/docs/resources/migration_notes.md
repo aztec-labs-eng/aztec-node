@@ -9,6 +9,16 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [CLI] Removed `inspect-contract`, `compute-selector`, `generate-secret-and-hash`, `parse-parameter-struct`, and `example-contracts`
+
+The `aztec` CLI no longer includes these contract-inspection helpers, which predate the current tooling and had no remaining use:
+
+- `aztec inspect-contract`: contract class details and function selectors are available programmatically via `getContractClassFromArtifact` and `FunctionSelector.fromSignature` in `@aztec/aztec.js`.
+- `aztec compute-selector`: use `FunctionSelector.fromSignature` from `@aztec/aztec.js`.
+- `aztec generate-secret-and-hash`: use `Fr.random()` and `computeSecretHash` from `@aztec/aztec.js`.
+- `aztec parse-parameter-struct`: no replacement.
+- `aztec example-contracts`: the list of example contracts is the set of subpath exports of `@aztec/noir-contracts.js`.
+
 ### [Aztec.js] Contract artifacts preserve the names of `#[abi(tag)]` globals
 
 Globals exported from a Noir contract with `#[abi(tag)]` now keep their names in the artifact: entries in `ContractArtifact.outputs.globals` are `{ name, value }` objects as emitted by the compiler, where the names used to be stripped on load. This lets TypeScript read contract constants by name instead of duplicating their values:

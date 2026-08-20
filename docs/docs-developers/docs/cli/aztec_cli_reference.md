@@ -24,13 +24,11 @@ sidebar_position: 1
   - [aztec codegen](#aztec-codegen)
   - [aztec compile](#aztec-compile)
   - [aztec compute-genesis-values](#aztec-compute-genesis-values)
-  - [aztec compute-selector](#aztec-compute-selector)
   - [aztec debug-rollup](#aztec-debug-rollup)
   - [aztec decode-enr](#aztec-decode-enr)
   - [aztec deploy-l1-contracts](#aztec-deploy-l1-contracts)
   - [aztec deploy-new-rollup](#aztec-deploy-new-rollup)
   - [aztec deposit-governance-tokens](#aztec-deposit-governance-tokens)
-  - [aztec example-contracts](#aztec-example-contracts)
   - [aztec execute-governance-proposal](#aztec-execute-governance-proposal)
   - [aztec fast-forward-epochs](#aztec-fast-forward-epochs)
   - [aztec generate-bls-keypair](#aztec-generate-bls-keypair)
@@ -38,7 +36,6 @@ sidebar_position: 1
   - [aztec generate-keys](#aztec-generate-keys)
   - [aztec generate-l1-account](#aztec-generate-l1-account)
   - [aztec generate-p2p-private-key](#aztec-generate-p2p-private-key)
-  - [aztec generate-secret-and-hash](#aztec-generate-secret-and-hash)
   - [aztec get-block](#aztec-get-block)
   - [aztec get-canonical-sponsored-fpc-address](#aztec-get-canonical-sponsored-fpc-address)
   - [aztec get-current-min-fee](#aztec-get-current-min-fee)
@@ -47,11 +44,9 @@ sidebar_position: 1
   - [aztec get-l1-to-l2-message-witness](#aztec-get-l1-to-l2-message-witness)
   - [aztec get-logs](#aztec-get-logs)
   - [aztec get-node-info](#aztec-get-node-info)
-  - [aztec inspect-contract](#aztec-inspect-contract)
   - [aztec migrate-ha-db](#aztec-migrate-ha-db)
     - [aztec migrate-ha-db down](#aztec-migrate-ha-db-down)
     - [aztec migrate-ha-db up](#aztec-migrate-ha-db-up)
-  - [aztec parse-parameter-struct](#aztec-parse-parameter-struct)
   - [aztec preload-crs](#aztec-preload-crs)
   - [aztec profile](#aztec-profile)
     - [aztec profile flamegraph](#aztec-profile-flamegraph)
@@ -87,13 +82,11 @@ aztec [options] [command]
 - `codegen [options] <noir-abi-path>` - Validates and generates an Aztec Contract ABI from Noir ABI.
 - `compile [nargo-args...]` - Compile Aztec Noir contracts using nargo and postprocess them to generate transpiled artifacts and verification keys. All options are forwarded to nargo compile.
 - `compute-genesis-values [options]` - Computes genesis values (VK tree root, protocol contracts hash, genesis archive root).
-- `compute-selector <functionSignature>` - Given a function signature, it computes a selector
 - `debug-rollup [options]` - Debugs the rollup contract.
 - `decode-enr <enr>` - Decodes an ENR record
 - `deploy-l1-contracts [options]` - Deploys all necessary Ethereum contracts for Aztec.
 - `deploy-new-rollup [options]` - Deploys a new rollup contract and adds it to the registry (if you are the owner).
 - `deposit-governance-tokens [options]` - Deposits governance tokens to the governance contract.
-- `example-contracts` - Lists the example contracts available to deploy from @aztec/noir-contracts.js
 - `execute-governance-proposal [options]` - Executes a governance proposal.
 - `fast-forward-epochs [options]` - Fast forwards the epoch of the L1 rollup contract.
 - `generate-bls-keypair [options]` - Generate a BLS keypair with convenience flags
@@ -101,7 +94,6 @@ aztec [options] [command]
 - `generate-keys [options]` - Generates encryption and signing private keys.
 - `generate-l1-account [options]` - Generates a new private key for an account on L1.
 - `generate-p2p-private-key` - Generates a LibP2P peer private key.
-- `generate-secret-and-hash` - Generates an arbitrary secret (Fr), and its hash (using aztec-nr defaults)
 - `get-block [options] [blockNumber]` - Gets info for a given block or latest.
 - `get-canonical-sponsored-fpc-address` - Gets the canonical SponsoredFPC address for this any testnet running on the same version as this CLI
 - `get-current-min-fee [options]` - Gets the current base fee.
@@ -111,9 +103,7 @@ aztec [options] [command]
 - `get-logs [options]` - Gets public logs for a contract and tag, optionally restricted by block range or tx hash.
 - `get-node-info [options]` - Gets the information of an Aztec node from a PXE or directly from an Aztec node.
 - `help [command]` - display help for command
-- `inspect-contract <contractArtifactFile>` - Shows list of external callable functions for a contract
 - `migrate-ha-db` - Run validator-ha-signer database migrations
-- `parse-parameter-struct [options] <encodedString>` - Helper for parsing an encoded string into a contract's parameter struct.
 - `preload-crs` - Preload the points data needed for proving and verifying
 - `profile` - Profile compiled Aztec artifacts.
 - `propose-with-lock [options]` - Makes a proposal to governance with a lock
@@ -266,19 +256,6 @@ aztec compute-genesis-values [options]
 - `--sponsored-fpc <boolean>` - Include sponsored FPC contract in genesis state (env: SPONSORED_FPC)
 - `-h, --help` - display help for command
 
-### aztec compute-selector
-
-Given a function signature, it computes a selector
-
-**Usage:**
-```bash
-aztec compute-selector [options] <functionSignature>
-```
-
-**Options:**
-
-- `-h, --help` - display help for command
-
 ### aztec debug-rollup
 
 Debugs the rollup contract.
@@ -378,19 +355,6 @@ aztec deposit-governance-tokens [options]
 - `-i, --mnemonic-index <number>` - The index of the mnemonic to use to deposit (default: 0)
 - `-h, --help` - display help for command
 
-### aztec example-contracts
-
-Lists the example contracts available to deploy from @aztec/noir-contracts.js
-
-**Usage:**
-```bash
-aztec example-contracts [options]
-```
-
-**Options:**
-
-- `-h, --help` - display help for command
-
 ### aztec execute-governance-proposal
 
 Executes a governance proposal.
@@ -485,19 +449,6 @@ Generates a private key that can be used for running a node on a LibP2P network.
 **Usage:**
 ```bash
 aztec generate-p2p-private-key [options]
-```
-
-**Options:**
-
-- `-h, --help` - display help for command
-
-### aztec generate-secret-and-hash
-
-Generates an arbitrary secret (Fr), and its hash (using aztec-nr defaults)
-
-**Usage:**
-```bash
-aztec generate-secret-and-hash [options]
 ```
 
 **Options:**
@@ -632,19 +583,6 @@ aztec get-node-info [options]
 - `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
-### aztec inspect-contract
-
-Shows list of external callable functions for a contract
-
-**Usage:**
-```bash
-aztec inspect-contract [options] <contractArtifactFile>
-```
-
-**Options:**
-
-- `-h, --help` - display help for command
-
 ### aztec migrate-ha-db
 
 Run validator-ha-signer database migrations
@@ -694,21 +632,6 @@ aztec migrate-ha-db up [options]
 
 - `--database-url <string>` - PostgreSQL connection string
 - `--verbose` - Enable verbose output (default: false)
-- `-h, --help` - display help for command
-
-### aztec parse-parameter-struct
-
-Helper for parsing an encoded string into a contract's parameter struct.
-
-**Usage:**
-```bash
-aztec parse-parameter-struct [options] <encodedString>
-```
-
-**Options:**
-
-- `-c, --contract-artifact <fileLocation>` - A compiled Aztec.nr contract's ABI in JSON format or name of a contract ABI exported by @aztec/noir-contracts.js
-- `-p, --parameter <parameterName>` - The name of the struct parameter to decode into
 - `-h, --help` - display help for command
 
 ### aztec preload-crs

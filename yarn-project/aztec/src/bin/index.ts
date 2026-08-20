@@ -4,7 +4,6 @@ import { injectCommands as injectBuilderCommands } from '@aztec/builder';
 import { injectCommands as injectAztecNodeCommands } from '@aztec/cli/aztec_node';
 import { enrichEnvironmentWithChainName } from '@aztec/cli/config/chain';
 import { enrichEnvironmentWithNetworkConfig } from '@aztec/cli/config/network';
-import { injectCommands as injectContractCommands } from '@aztec/cli/contracts';
 import { injectCommands as injectInfrastructureCommands } from '@aztec/cli/infrastructure';
 import { injectCommands as injectL1Commands } from '@aztec/cli/l1';
 import { injectCommands as injectMiscCommands } from '@aztec/cli/misc';
@@ -53,7 +52,6 @@ async function main() {
   program.description('Aztec command line interface').version(cliVersion).enablePositionalOptions();
   program = injectAztecCommands(program, userLog, debugLogger);
   program = injectBuilderCommands(program);
-  program = injectContractCommands(program, userLog, debugLogger);
   program = injectInfrastructureCommands(program, userLog);
   program = injectL1Commands(program, userLog, debugLogger);
   program = injectAztecNodeCommands(program, userLog, debugLogger);
