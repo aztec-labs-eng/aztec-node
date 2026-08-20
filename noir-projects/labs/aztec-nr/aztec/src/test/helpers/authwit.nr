@@ -25,7 +25,7 @@ pub unconstrained fn add_private_authwit_from_call<let M: u32, let N: u32, T>(
     let args_hash = hash_args(args);
     let inner_hash = compute_inner_authwit_hash([caller.to_field(), selector.to_field(), args_hash]);
     let message_hash = compute_authwit_message_hash(target, chain_id, version, inner_hash);
-    txe_oracles::add_auth_witness(on_behalf_of, message_hash);
+    txe_oracles::add_authwit(on_behalf_of, message_hash);
 }
 
 pub unconstrained fn add_public_authwit_from_call<let M: u32, let N: u32, T>(

@@ -262,9 +262,13 @@ pub unconstrained fn add_account(secret: Field) -> TestAccount {
     add_account_oracle(secret)
 }
 
+pub unconstrained fn add_authwit(address: AztecAddress, message_hash: Field) {
+    add_auth_witness_internal(address, message_hash)
+}
+
 #[txe_oracle]
-pub unconstrained fn add_auth_witness(address: AztecAddress, message_hash: Field) {
-    add_auth_witness_oracle(address, message_hash)
+unconstrained fn add_auth_witness_internal(address: AztecAddress, message_hash: Field) {
+    add_auth_witness_internal_oracle(address, message_hash)
 }
 
 #[txe_oracle]

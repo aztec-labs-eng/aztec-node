@@ -143,7 +143,7 @@ unconstrained fn contract_accounts_accept_valid_private_authwits() {
         )
     });
 
-    txe_oracles::add_auth_witness(contract_account, message_hash);
+    txe_oracles::add_authwit(contract_account, message_hash);
 
     let result = env.view_private(
         contract_account,

@@ -18,6 +18,7 @@ import {
   NOTE_SELECTOR,
   Option,
   type OracleRegistryEntry,
+  SIDE_EFFECT_COUNTER,
   SLOT_NUMBER,
   type StructMapping,
   TX_HASH,
@@ -70,6 +71,7 @@ export function synthesizeDefaultFixtures(
 const SCALAR_IMPLS: ScalarImpl[] = [
   scalar(FIELD, seed => new Fr(seed)),
   scalar(U32, seed => seed),
+  scalar(SIDE_EFFECT_COUNTER, seed => new Fr(seed)),
   scalar(BLOCK_NUMBER, seed => BlockNumber(seed)),
   scalar(BIGINT, seed => BigInt(seed)),
   scalar(U64, seed => BigInt(seed)),

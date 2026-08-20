@@ -432,9 +432,15 @@ export const UTILITY_CONTEXT: TypeMapping<UtilityContext> = STRUCT<UtilityContex
   { name: 'msgSender', type: AZTEC_ADDRESS },
 ]);
 
-// The Noir side declares the end counter as `u32`, matching the `u32` start counter this oracle takes as a parameter.
-export const CALL_PRIVATE_RESULT: TypeMapping<{ endSideEffectCounter: number; returnsHash: Fr }> = STRUCT([
-  { name: 'endSideEffectCounter', type: U32 },
+// The Noir side declares the end counter as `u32`, matching the `u32` start counter this oracle takes as a parameter;
+// the handler API keeps the `Fr` the kernel outputs carry, so the label lives in this alias.
+export const SIDE_EFFECT_COUNTER: TypeMapping<Fr> = ALIAS(U32, {
+  wrap: v => new Fr(v),
+  unwrap: v => v.toNumber(),
+});
+
+export const CALL_PRIVATE_RESULT: TypeMapping<{ endSideEffectCounter: Fr; returnsHash: Fr }> = STRUCT([
+  { name: 'endSideEffectCounter', type: SIDE_EFFECT_COUNTER },
   { name: 'returnsHash', type: FIELD },
 ]);
 
