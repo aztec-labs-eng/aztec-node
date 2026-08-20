@@ -103,6 +103,13 @@ concurrency:
   group: deploy-network-${{ inputs.network }}-${{ inputs.namespace || inputs.network }}-${{ inputs.aztec_docker_image || inputs.semver }}-${{ github.ref || github.ref_name }}
   cancel-in-progress: true
 
+# actions: write lets the failure handler dispatch claudebox.yml with the built-in token
+# (workflow_dispatch is exempt from the github.token no-retrigger rule). On workflow_call
+# these are capped by the caller's permissions, so callers must grant at least this much.
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   deploy-network:
     runs-on: ubuntu-latest
@@ -237,7 +244,6 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
           RUN_ID: ${{ github.run_id }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
@@ -284,7 +290,7 @@ jobs:
         if: failure() && !inputs.skip_notify_on_failure
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ -z "${SLACK_BOT_TOKEN:-}" ]; then
             echo "No SLACK_BOT_TOKEN, skipping notification"
