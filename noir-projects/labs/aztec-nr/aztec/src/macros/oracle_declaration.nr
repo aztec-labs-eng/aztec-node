@@ -41,7 +41,11 @@
 //! struct labels spliced flat into the parent, since nesting affects neither the wire nor the interface. Two
 //! types share a label exactly when they are wire-identical.
 
-use crate::messages::delivery::OnchainDeliveryMode;
+use crate::event::EventSelector;
+use crate::facts::OriginBlockState;
+use crate::messages::delivery::{OnchainDeliveryMode, ResolvedTaggingStrategy};
+use crate::messages::processing::event_validation_request::EventValidationRequest;
+use crate::messages::processing::NoteValidationRequest;
 use crate::protocol::abis::function_selector::FunctionSelector;
 use crate::protocol::address::{AztecAddress, EthAddress};
 use std::append::Append;
@@ -105,13 +109,17 @@ comptime fn declare_oracle(f: FunctionDefinition, scope: Quoted) -> Quoted {
     let name = f.name();
     assert(f.is_unconstrained(), f"oracle wrapper {name} must be an unconstrained function");
 
-    let wire_name = "aztec_".as_ctstring().append_fmtstr(f"{scope}_").append(derive_wire_method_name(name));
+    let wire_name = compose_wire_name(scope, name);
     let line = manifest_line(wire_name, f.parameters(), f.return_type());
 
     let routes_to_txe = (scope == quote { txe }) | (scope == quote { avm });
     append_manifest_entry(routes_to_txe, wire_name, line);
 
     generate_oracle_stub(f, wire_name)
+}
+
+comptime fn compose_wire_name(scope: Quoted, name: Quoted) -> CtString {
+    "aztec_".as_ctstring().append_fmtstr(f"{scope}_").append(derive_wire_method_name(name))
 }
 
 comptime fn append_manifest_entry(routes_to_txe: bool, wire_name: CtString, line: CtString) {
@@ -317,14 +325,20 @@ comptime fn is_spliced_composite(typ: Type) -> bool {
 
 /// Leaf label registrations: Noir types whose wire label is not derived structurally, mirroring the
 /// TypeScript SCALAR/LEAF/ALIAS label decisions in `oracle_type_mappings.ts`. Extended as oracle migrations
-/// surface more types — a missing entry fails compilation in [`label_of`] with a pointer here, and a wrong
-/// one fails the Noir↔TS manifest comparison.
+/// surface more types. A non-struct type with no entry fails compilation in [`label_of`]; a struct with a
+/// missing (or wrong) entry renders structurally as `{...}` instead, which the Noir↔TS manifest comparisons
+/// then catch — the TS side of the pair labels it as its registered leaf kind.
 comptime fn leaf_labels() -> [(Type, CtString)] {
     @[
         (type_of(std::mem::zeroed::<AztecAddress>()), "aztec-address".as_ctstring()),
         (type_of(std::mem::zeroed::<EthAddress>()), "eth-address".as_ctstring()),
         (type_of(std::mem::zeroed::<FunctionSelector>()), "function-selector".as_ctstring()),
+        (type_of(std::mem::zeroed::<EventSelector>()), "event-selector".as_ctstring()),
         (type_of(std::mem::zeroed::<OnchainDeliveryMode>()), "onchain-delivery-mode".as_ctstring()),
+        (type_of(std::mem::zeroed::<ResolvedTaggingStrategy>()), "resolved-tagging-strategy".as_ctstring()),
+        (type_of(std::mem::zeroed::<OriginBlockState>()), "origin-block-state".as_ctstring()),
+        (type_of(std::mem::zeroed::<NoteValidationRequest>()), "note-validation-request".as_ctstring()),
+        (type_of(std::mem::zeroed::<EventValidationRequest>()), "event-validation-request".as_ctstring()),
     ]
 }
 
@@ -437,8 +451,28 @@ comptime fn push_generic_length(length_type: Type, acc: [Quoted]) -> [Quoted] {
 }
 
 mod test {
-    use super::{derive_wire_method_name, label_of, manifest_line};
+    use super::{compose_wire_name, derive_wire_method_name, generate_oracle_stub, label_of, manifest_line};
     use std::meta::ctstring::AsCtString;
+
+    /// Compile-time probe of the full declaration pipeline over a real `FunctionDefinition` — everything
+    /// [`super::declare_oracle`] does except the manifest append, so the probe never pollutes the manifests
+    /// that later ship in artifacts. The generated stub is spliced back in, proving it compiles, that its
+    /// numeric generics are reconstructed, and (via the wrapper body) that the sibling name resolves.
+    comptime fn assert_declaration_pipeline(f: FunctionDefinition) -> Quoted {
+        let wire_name = compose_wire_name(quote { utl }, f.name());
+        assert(wire_name == "aztec_utl_probeDeclaration".as_ctstring());
+
+        let line = manifest_line(wire_name, f.parameters(), f.return_type());
+        assert(line == "aztec_utl_probeDeclaration:array(field),bool->option(array(field,3))".as_ctstring());
+
+        generate_oracle_stub(f, wire_name)
+    }
+
+    #[assert_declaration_pipeline]
+    #[allow(dead_code)]
+    unconstrained fn probe_declaration<let N: u32>(values: [Field; N], flag: bool) -> Option<[Field; 3]> {
+        probe_declaration_oracle(values, flag)
+    }
 
     pub(crate) struct Pair {
         pub(crate) a: Field,
