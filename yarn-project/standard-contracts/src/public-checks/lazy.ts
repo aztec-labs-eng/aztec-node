@@ -19,7 +19,7 @@ export async function getPublicChecksArtifact(): Promise<ContractArtifact> {
     // Even if now supported by all major browsers, the MIME type is replaced with
     // "text/javascript"
     // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-    const { default: publicChecksJson } = await import('../../artifacts/PublicChecks.json');
+    const { default: publicChecksJson } = await import('../../artifacts/PublicChecks.json', { with: { type: 'json' } });
     standardContractArtifact = loadContractArtifact(publicChecksJson);
   }
   return standardContractArtifact;
