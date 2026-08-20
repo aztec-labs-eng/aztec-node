@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 # Calculate the content hash for an artifact that controls rebuilds.
-# Takes a list of rebuild pattern files (regex files that match patterns from repo root) or directories.
+#
+# Arguments (processed in order) are any mix of:
+#   - a rebuild-patterns FILE: its lines are read as patterns, in file order;
+#   - a DIRECTORY: shorthand for a pattern matching its repo-relative path;
+#   - a literal PATTERN starting with '^' (extended regex, matched against
+#     repo-root-relative paths);
+#   - a NEGATED pattern or directory, prefixed with '!' (e.g. '!^docs/.*\.md$').
+#
+# Pattern semantics — gitignore-style ordering over ERE regexes:
+#   - Patterns are evaluated IN ORDER (argument order; within a pattern file,
+#     line order) and the LAST pattern that matches a path decides its fate:
+#     positive -> included, '!'-negated -> excluded.
+#   - A path matching NO pattern is excluded. (This is the inverse of
+#     gitignore's default: patterns SELECT files, they don't ignore them.)
+#   - Unlike gitignore, patterns are regexes, not globs — no '**', no basename
+#     matching, no directory semantics — and there is no parent-directory rule:
+#     a '!' exclusion can always be re-included by a later positive pattern.
+#
+# Examples:
+#   cache_content_hash '^yarn-project/'
+#       everything under yarn-project/.
+#   cache_content_hash '^yarn-project/' '!^yarn-project/.*\.md$'
+#       everything under yarn-project/ except .md files.
+#   cache_content_hash '^docs/' '!^docs/.*\.(png|svg)$' '^docs/logo\.svg$'
+#       the docs tree without images — but docs/logo.svg is re-included,
+#       because the last matching pattern wins.
+#   In a rebuild-patterns file, one pattern per line, same rules:
+#       ^yarn-project/
+#       !^yarn-project/.*\.md$
+#
 # The REPO_PATH env var can be used to point the script at the root of the git repository where the patterns
 # are rooted, and where the git commands will be executed, which can be used to compute the hash in a sub repo.
 # Two special test-only environment variables can control the cache.
@@ -17,29 +46,75 @@ fi
 AZTEC_CACHE_COMMIT=${AZTEC_CACHE_COMMIT:-HEAD}
 PLATFORM_TAG="${PLATFORM_TAG:-${OSTYPE:-unknown}-$(uname -m)}"
 
-rebuild_patterns=()
-for arg in "$@"; do
-  if [[ -f "$arg" ]]; then
-    # If the file is a rebuild patterns file, read it and add its contents to the patterns.
-    rebuild_patterns+=$(cat "$arg")
-    rebuild_patterns+=$'\n'
-  elif [[ "$arg" == ^* ]]; then
-    # Add as pattern literally
-    rebuild_patterns+="$arg"$'\n'
-  else
-    # Ensure the folder exists, and add folder as pattern relative to repo root
-    if [[ ! -d "$arg" ]]; then
-      echo_stderr "Error: Directory '$arg' does not exist."
+# Ordered pattern list; each entry is the regex prefixed with '+' or '-'.
+patterns=()
+have_positive=0
+
+# Appends one pattern, handling the '!' negation prefix and directory shorthand.
+function add_pattern {
+  local p="$1" sign="+"
+  if [[ "$p" == '!'* ]]; then
+    sign="-"
+    p="${p:1}"
+  fi
+  if [[ "$p" != ^* ]]; then
+    # Directory shorthand: ensure it exists and add its repo-relative path.
+    if [[ ! -d "$p" ]]; then
+      echo_stderr "Error: Directory '$p' does not exist."
       exit 1
     fi
-    arg=$(realpath --relative-to="$(git rev-parse --show-toplevel)" "$arg")
-    rebuild_patterns+="$arg"$'\n'
+    p=$(realpath --relative-to="$(git rev-parse --show-toplevel)" "$p")
+  fi
+  [[ "$sign" == "+" ]] && have_positive=1
+  patterns+=("$sign$p")
+}
+
+for arg in "$@"; do
+  if [[ -f "$arg" ]]; then
+    # A rebuild-patterns file: read its lines as patterns, preserving order.
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      add_pattern "$line"
+    done < "$arg"
+  else
+    add_pattern "$arg"
   fi
 done
 
-GREP_PATTERN=$(echo "$rebuild_patterns" | grep -v '^$')
-# Concatenate patterns with '|' and double escape backslashes for AWK filter empty lines
-AWK_PATTERN=$(echo "$rebuild_patterns" | grep -v '^$' | sed 's/\\/\\\\/g' | tr '\n' '|' | sed 's/|$//')
+if [[ "$have_positive" -eq 0 ]]; then
+  echo_stderr "Error: No positive patterns provided (only negations)."
+  exit 1
+fi
+
+# The filter below implements last-match-wins over the ordered pattern list.
+# The awk program is GENERATED with each pattern as a literal /re/ regex: awk
+# compiles literals once at parse time, where a dynamic-regex loop recompiles
+# per line per pattern (~10x slower on large trees under mawk). Being literals,
+# the regexes also need no escaping beyond '/' (regex text can't contain the
+# newlines that would break out of the program).
+# mode=paths:  stdin is one path per line; kept paths are printed.
+# mode=lstree: stdin is 'git ls-tree -r' output; kept entries print their blob hash.
+awk_rules=""
+for p in "${patterns[@]}"; do
+  re=${p:1}
+  re=${re//\//\\/}
+  if [[ "${p:0:1}" == "+" ]]; then
+    awk_rules+="  if (path ~ /$re/) keep = 1"$'\n'
+  else
+    awk_rules+="  if (path ~ /$re/) keep = 0"$'\n'
+  fi
+done
+awk_prog='
+{
+  path = (mode == "lstree") ? $2 : $0
+  keep = 0
+'"$awk_rules"'
+  if (!keep) next
+  if (mode == "lstree") { split($1, meta, " "); print meta[3] } else print
+}'
+function filter_paths {
+  awk -F'\t' -v mode="$1" "$awk_prog"
+}
 
 # use git repo root because that is where our patterns are focused
 cd "${REPO_PATH:-$(git rev-parse --show-toplevel)}"
@@ -48,7 +123,7 @@ diff="$({
   git diff --name-only
   git diff --staged --name-only
   git ls-files --others --exclude-standard
-} | grep -E "$GREP_PATTERN" || true)"
+} | filter_paths paths)"
 
 # Check for uncommitted files/changes.
 # Only use this check if AZTEC_CACHE_COMMIT is the default, otherwise the user is being explicit about using git history.
@@ -64,25 +139,17 @@ if [ -n "$diff" ] && [ "$AZTEC_CACHE_COMMIT" == "HEAD" ]; then
   exit 0
 fi
 
-# Calculate a content hash for matched files
-# Use git ls-tree and AWK to filter files matching the rebuild patterns and extract their hashes
-# Sort the hashes and compute the content hash
-CONTENT_HASH="$(
-  git ls-tree -r "$AZTEC_CACHE_COMMIT" \
-    | awk -v pattern="($AWK_PATTERN)" '$4 ~ pattern {print $3}' \
-    | sort \
-    | git hash-object --stdin \
-    | cut -c1-16
-)"
+# Calculate a content hash for matched files: filter the committed tree through
+# the pattern list, then hash the sorted blob hashes of what survives.
+MATCHED_HASHES="$(git ls-tree -r "$AZTEC_CACHE_COMMIT" | filter_paths lstree | sort)"
 
-# Check if file list was empty by comparing against the result of
-# 'echo '' | git hash-object --stdin | cut -c1-16'
-EMPTY_HASH="8b137891791fe969"
-if [[ "$CONTENT_HASH" == "$EMPTY_HASH" ]]; then
-  echo "No files matched the rebuild patterns $rebuild_patterns."
-  echo "Awk pattern expanded: $AWK_PATTERN."
+if [[ -z "$MATCHED_HASHES" ]]; then
+  echo_stderr "No files matched the rebuild patterns:"
+  printf '%s\n' "${patterns[@]}" >&2
   exit 1
 fi
+
+CONTENT_HASH="$(echo "$MATCHED_HASHES" | git hash-object --stdin | cut -c1-16)"
 
 # important: include architecture in content hash because we target x86_64 and arm64
 echo $(hash_str $CONTENT_HASH-$PLATFORM_TAG)
