@@ -66,13 +66,11 @@ if [[ -z "$PR_NUMBER" || -z "$TARGET_BRANCH" ]]; then
   usage
 fi
 
-# STAGING_BRANCH, STAGING_PR_TITLE and STAGING_PR_LABELS may be pre-set in the
-# environment to reuse this script for non-backport ports (e.g. the
-# port-to-main label, which targets main and needs ci-no-squash). They default
-# to the backport naming with no extra labels.
+# STAGING_BRANCH and STAGING_PR_TITLE may be pre-set in the environment to
+# reuse this script for non-backport ports (e.g. the port-to-main label,
+# which targets main). They default to the backport naming.
 STAGING_BRANCH="${STAGING_BRANCH:-backport-to-${TARGET_BRANCH}-staging}"
 STAGING_PR_TITLE="${STAGING_PR_TITLE:-chore: Accumulated backports to $TARGET_BRANCH}"
-STAGING_PR_LABELS="${STAGING_PR_LABELS:-}"
 
 # Check for required tools
 command -v gh >/dev/null 2>&1 || { echo "Error: 'gh' CLI not found. Install from https://cli.github.com/" >&2; exit 1; }
@@ -245,17 +243,10 @@ if [[ -z "$EXISTING_PR" ]]; then
     --title "$STAGING_PR_TITLE"
     --body "Backport staging PR. Body will be updated with commit list."
   )
-  if [[ -n "$STAGING_PR_LABELS" ]]; then
-    CREATE_ARGS+=(--label "$STAGING_PR_LABELS")
-  fi
   do_or_dryrun gh pr create "${CREATE_ARGS[@]}"
   do_or_dryrun echo "Created new backport PR"
 else
   echo "PR already exists (#$EXISTING_PR)"
-  # Ensure required labels are present on a pre-existing staging PR too.
-  if [[ -n "$STAGING_PR_LABELS" ]]; then
-    do_or_dryrun gh pr edit "$EXISTING_PR" --add-label "$STAGING_PR_LABELS"
-  fi
 fi
 
 # Update PR body with commit override markers
