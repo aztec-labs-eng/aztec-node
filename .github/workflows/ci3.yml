@@ -41,7 +41,9 @@ jobs:
     # exclusive with ci3-external.yml: never run on forks
     # (github.event.pull_request.head.repo.fork resolves to nil if not a pull request)
     if: github.event.pull_request.head.repo.fork != true && (github.event.pull_request.draft == false || contains(github.event.pull_request.labels.*.name, 'ci-draft'))
-    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'master' || '' }}
+    # Tag runs get the `release` environment: DockerHub/npm publish secrets, with a
+    # deployment tag policy restricting it to v* refs. Non-tag runs get no environment.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || '' }}
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token
