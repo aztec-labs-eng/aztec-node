@@ -298,7 +298,11 @@ NODE
     yarn config set nodeLinker node-modules 2>/dev/null || true
     # Yarn 4 auto-enables --immutable when CI is set; we intentionally start
     # with an empty yarn.lock that this install populates, so disable that.
-    YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
+    # Skip puppeteer's Chrome download: this step only type-checks and runs
+    # `vite build`, never the e2e tests that need a browser. Set here rather
+    # than in webapp-tutorial itself so users following the tutorial still
+    # get Chrome for `yarn test:e2e`.
+    PUPPETEER_SKIP_DOWNLOAD=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
 
     # yarn's `link:` protocol creates portals into yarn-project/*, which require
     # --preserve-symlinks for Node's ESM loader to resolve dependencies correctly
