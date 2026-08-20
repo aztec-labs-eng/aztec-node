@@ -4,10 +4,20 @@
 #   nightly:  cron (or dispatch with kind=nightly)  -> v<ver>-nightly.<date>
 #             per branch in the nightly matrix below; unattended via the
 #             `tagger` environment.
+#   rc:       dispatch with kind=rc                 -> v<ver>-rc.<n>
+#             from any branch (input); n is derived from origin's existing
+#             rc tags for that version (max + 1, starting at 1). Gated by
+#             `release-approval` like a real release; artifacts publish to
+#             the 'rc' channel and never take 'latest'.
 #   release:  dispatch with kind=release            -> v<ver>
 #             from any branch (input), gated by the `release-approval`
 #             environment: required reviewers with self-review prevented, so
 #             cutting a release takes two distinct humans.
+#
+# rc numbers are dotted (-rc.N, not -rcN): semver compares the dotted N
+# numerically (rc.2 < rc.10) but an undotted rcN lexically (rc10 < rc2), and
+# ci3/dist_tag takes the first dot-separated prerelease identifier as the
+# release channel — 'rc' — where rcN would mint a fresh channel per candidate.
 #
 # Multi-branch model: scheduled/dispatched runs always execute THIS file from
 # the default branch, so the token-minting code is always the reviewed code on
@@ -25,9 +35,9 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "nightly re-tag, or a real release (requires approval)"
+        description: "nightly re-tag, a release candidate (requires approval), or a real release (requires approval)"
         type: choice
-        options: [nightly, release]
+        options: [nightly, rc, release]
         default: nightly
       branch:
         description: "branch to tag (its manifest supplies the version)"
@@ -48,7 +58,7 @@ jobs:
         branch: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.branch)) || fromJSON('["main"]') }}
     concurrency:
       group: ${{ github.workflow }}-${{ github.repository }}-${{ matrix.branch }}
-    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.kind == 'release') && 'release-approval' || 'tagger' }}
+    environment: ${{ (github.event_name == 'workflow_dispatch' && (inputs.kind == 'release' || inputs.kind == 'rc')) && 'release-approval' || 'tagger' }}
     steps:
       - name: Mint App token
         uses: actions/create-github-app-token@v2
@@ -69,11 +79,24 @@ jobs:
           git config --global user.email "tech@aztecprotocol.com"
           git config --global user.name "AztecBot"
           version=$(jq -r '."."' .release-please-manifest.json)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.kind }}" = "release" ]; then
-            tag="v${version}"
-          else
-            tag="v${version}-nightly.$(date -u +%Y%m%d)"
-          fi
+          kind=${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
+          case "$kind" in
+            release)
+              tag="v${version}"
+              ;;
+            rc)
+              # Next candidate number comes from origin, not the clone: list the
+              # existing v<ver>-rc.* tags and take max+1 (1 when none). The trailing
+              # anchor also drops ls-remote's peeled ^{} duplicates.
+              last=$(git ls-remote --tags origin "refs/tags/v${version}-rc.*" \
+                | sed -n "s|.*refs/tags/v${version}-rc\.\([0-9][0-9]*\)$|\1|p" \
+                | sort -n | tail -1)
+              tag="v${version}-rc.$(( ${last:-0} + 1 ))"
+              ;;
+            *)
+              tag="v${version}-nightly.$(date -u +%Y%m%d)"
+              ;;
+          esac
           echo "Tagging ${{ matrix.branch }} @ $(git rev-parse --short HEAD): $tag"
           # Refuse to move an existing tag: re-dispatching a release without a
           # version-bump PR must fail loudly, not re-tag.
