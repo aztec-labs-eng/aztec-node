@@ -11,6 +11,12 @@ on:
         type: string
         default: 'testnet,mainnet,staging-public,staging-internal,next-net'
 
+# actions: write lets the healthcheck kickoff dispatch claudebox.yml with the
+# built-in token (workflow_dispatch is exempt from the github.token no-retrigger rule).
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   healthcheck:
     runs-on: ubuntu-latest
@@ -21,7 +27,7 @@ jobs:
       - name: Run healthcheck
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           CI: "1"
         run: |
           NETWORKS="${{ inputs.networks || 'next-net,staging-public,staging-internal,testnet,mainnet' }}"

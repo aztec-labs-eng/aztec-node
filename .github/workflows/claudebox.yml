@@ -53,6 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write
+      pull-requests: write
     steps:
       - name: Check write access
         if: github.event_name == 'issue_comment'
@@ -68,7 +70,7 @@ jobs:
       - name: Add reaction
         if: github.event_name == 'issue_comment'
         env:
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh api \
             repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
@@ -110,7 +112,7 @@ jobs:
         id: status_comment
         if: github.event_name == 'issue_comment'
         env:
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PROMPT_TEXT: ${{ steps.parse.outputs.prompt }}
         run: |
           ISSUE_NUM="${{ github.event.issue.number }}"
@@ -191,11 +193,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      issues: write
+      pull-requests: write
     steps:
       - name: Post review status comment
         id: status_comment
         env:
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           PR_NUM="${{ github.event.pull_request.number }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
