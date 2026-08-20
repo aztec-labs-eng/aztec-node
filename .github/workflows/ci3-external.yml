@@ -37,13 +37,16 @@ jobs:
         if: github.event.pull_request.draft
         run: echo "CI is not run on drafts." && exit 1
 
-      # Gate 'ci-external' on the labeller being a member of AztecProtocol/watchers.
+      # Gate 'ci-external' on the labeller having write access to this repo.
+      # This is what stops an external fork PR from reaching the CI infra
+      # without a trusted human's sign-off, so the permission check must not
+      # be weakened to anything the PR author can influence.
       - name: Verify ci-external Labeller Authorization
         if: contains(github.event.pull_request.labels.*.name, 'ci-external')
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
           # Note: pipe to jq with -s add to flatten paginated arrays; gh's own --jq runs per-page.
@@ -54,13 +57,15 @@ jobs:
             gh pr edit "$PR_NUMBER" --remove-label "ci-external" || true
             exit 1
           fi
-          state=$(gh api "/orgs/AztecProtocol/teams/watchers/memberships/$labeller" --jq '.state' 2>/dev/null || true)
-          if [ "$state" != "active" ]; then
-            echo "Error: labeller is not an active member of AztecProtocol/watchers. Stripping 'ci-external' label."
+          # .user.permissions.push is true for write, maintain, and admin roles.
+          can_push=$(gh api "/repos/$REPO/collaborators/$labeller/permission" \
+            --jq '.user.permissions.push' 2>/dev/null || echo false)
+          if [ "$can_push" != "true" ]; then
+            echo "Error: labeller '$labeller' does not have write access to $REPO. Stripping 'ci-external' label."
             gh pr edit "$PR_NUMBER" --remove-label "ci-external"
             exit 1
           fi
-          echo "Labeller is authorized."
+          echo "Labeller '$labeller' is authorized (write access)."
 
       - name: External Contributor Checks
         env:
