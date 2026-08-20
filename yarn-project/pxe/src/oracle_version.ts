@@ -18,5 +18,6 @@ export const ORACLE_VERSION_MINOR = 10;
 /// - increment `ORACLE_VERSION_MAJOR` and reset `ORACLE_VERSION_MINOR` to zero if the change is breaking, or
 /// - increment only `ORACLE_VERSION_MINOR` if the change is additive (a new oracle was added).
 ///
-/// These constants must be kept in sync between this file and `noir-projects/labs/aztec-nr/aztec/src/oracle/version.nr`.
+/// The major version must match `noir-projects/labs/aztec-nr/aztec/src/oracle/version.nr` exactly; the minor version
+/// there may lag behind this one (the check requires PXE minor >= contract minor).
 export const ORACLE_INTERFACE_HASH = '69ab7a79921aed7b72cf9719f682bc8c6af00b4abd963bcc210aa8c889c5c5a8';
