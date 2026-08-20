@@ -19,7 +19,7 @@ export async function getAuthRegistryArtifact(): Promise<ContractArtifact> {
     // Even if now supported by all major browsers, the MIME type is replaced with
     // "text/javascript"
     // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-    const { default: authRegistryJson } = await import('../../artifacts/AuthRegistry.json', { with: { type: 'json' } });
+    const { default: authRegistryJson } = await import('../../artifacts/AuthRegistry.json');
     standardContractArtifact = loadContractArtifact(authRegistryJson);
   }
   return standardContractArtifact;

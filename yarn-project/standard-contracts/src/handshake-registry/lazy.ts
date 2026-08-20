@@ -19,9 +19,7 @@ export async function getHandshakeRegistryArtifact(): Promise<ContractArtifact> 
     // Even if now supported by all major browsers, the MIME type is replaced with
     // "text/javascript"
     // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-    const { default: handshakeRegistryJson } = await import('../../artifacts/HandshakeRegistry.json', {
-      with: { type: 'json' },
-    });
+    const { default: handshakeRegistryJson } = await import('../../artifacts/HandshakeRegistry.json');
     standardContractArtifact = loadContractArtifact(handshakeRegistryJson);
   }
   return standardContractArtifact;

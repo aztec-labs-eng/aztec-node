@@ -11,7 +11,7 @@ import { StubBaseAccountContract } from '../../defaults/stub_account_contract.js
 export async function getStubEcdsaAccountContractArtifact() {
   // Cannot assert this import as it's incompatible with bundlers like vite
   // https://github.com/vitejs/vite/issues/19095#issuecomment-2566074352
-  const { default: json } = await import('../../../artifacts/SimulatedEcdsaAccount.json', { with: { type: 'json' } });
+  const { default: json } = await import('../../../artifacts/SimulatedEcdsaAccount.json');
   return loadContractArtifact(json);
 }
 

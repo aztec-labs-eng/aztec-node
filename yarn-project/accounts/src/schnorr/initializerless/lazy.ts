@@ -25,10 +25,7 @@ export async function getSchnorrInitializerlessAccountContractArtifact() {
   // Even if now supported by all major browsers, the MIME type is replaced with
   // "text/javascript"
   // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-  const { default: schnorrAccountContractJson } = await import(
-    '../../../artifacts/SchnorrInitializerlessAccount.json',
-    { with: { type: 'json' } }
-  );
+  const { default: schnorrAccountContractJson } = await import('../../../artifacts/SchnorrInitializerlessAccount.json');
   return loadContractArtifact(schnorrAccountContractJson);
 }
 
