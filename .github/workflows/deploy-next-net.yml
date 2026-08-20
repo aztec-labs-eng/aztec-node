@@ -22,8 +22,15 @@ concurrency:
   group: deploy-next-net-${{ inputs.image_tag || 'nightly' }}
   cancel-in-progress: true
 
+# contents: read for wait_for_ci3's tag/commit lookups; actions: write both for its
+# workflow-run queries and to cap the called deploy-network.yml high enough that its
+# failure handler can dispatch claudebox.yml.
+permissions:
+  contents: read
+  actions: write
+
 env:
-  GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ github.token }}
 
 jobs:
   get-image-tag:
