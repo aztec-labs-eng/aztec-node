@@ -1,0 +1,68 @@
+# Creates release tags via the release GitHub App — the only identity the
+# release-tags ruleset permits to create v* tags.
+#
+#   nightly:  cron (or dispatch with kind=nightly)  -> v<ver>-nightly.<date>
+#             gated by the `tagger` environment: main-only, unattended.
+#   release:  dispatch with kind=release            -> v<ver>
+#             gated by the `release-approval` environment: main-only, required
+#             reviewers with self-review prevented — so cutting a release takes
+#             two distinct humans (dispatcher + approver).
+#
+# The version is read from .release-please-manifest.json at main, never typed:
+# bumping it is an ordinary reviewed PR, which replaces the release-please flow.
+# The pushed tag triggers ci3.yml's tag path, which must also satisfy the
+# tag-format ruleset (full semver, enforced even against the App).
+name: Release Tag
+
+on:
+  schedule:
+    # Every night at 4:00 AM UTC.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "nightly re-tag, or a real release (requires approval)"
+        type: choice
+        options: [nightly, release]
+        default: nightly
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.repository }}
+    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.kind == 'release') && 'release-approval' || 'tagger' }}
+    steps:
+      - name: Mint App token
+        uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID || secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # Do NOT bump to checkout v6 (see the pinning rationale in ci3.yml).
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: main
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Create and push tag
+        run: |
+          set -euo pipefail
+          git config --global user.email "tech@aztecprotocol.com"
+          git config --global user.name "AztecBot"
+          version=$(jq -r '."."' .release-please-manifest.json)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.kind }}" = "release" ]; then
+            tag="v${version}"
+          else
+            tag="v${version}-nightly.$(date -u +%Y%m%d)"
+          fi
+          echo "Tagging: $tag"
+          # Refuse to move an existing tag: re-dispatching a release without a
+          # version-bump PR must fail loudly, not re-tag.
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::error::Tag $tag already exists. Bump .release-please-manifest.json first."
+            exit 1
+          fi
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
