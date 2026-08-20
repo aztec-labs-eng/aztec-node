@@ -1,4 +1,5 @@
 import type { IMiscOracle, IPrivateExecutionOracle, IUtilityExecutionOracle } from '@aztec/pxe/simulator';
+import { AztecAddress } from '@aztec/stdlib/aztec-address';
 
 import type { IAvmExecutionOracle, ITxeExecutionOracle } from './oracle/interfaces.js';
 import { callTxeHandler } from './oracle/txe_oracle_registry.js';
@@ -88,18 +89,18 @@ export class RPCTranslator {
   // TXE session state transition functions - these get handled by the state handler
 
   // eslint-disable-next-line camelcase
-  aztec_txe_setTopLevelTXEContext() {
+  aztec_txe_setTopLevelTxeContext() {
     return callTxeHandler({
-      oracle: 'aztec_txe_setTopLevelTXEContext',
+      oracle: 'aztec_txe_setTopLevelTxeContext',
       inputs: [],
       handler: () => this.stateHandler.enterTopLevelState(),
     });
   }
 
   // eslint-disable-next-line camelcase
-  aztec_txe_setPrivateTXEContext(...inputs: ForeignCallArgs) {
+  aztec_txe_setPrivateTxeContext(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_txe_setPrivateTXEContext',
+      oracle: 'aztec_txe_setPrivateTxeContext',
       inputs,
       handler: ([contractAddress, anchorBlockNumber, gasSettings]) =>
         this.stateHandler.enterPrivateState(contractAddress, anchorBlockNumber, gasSettings),
@@ -107,18 +108,18 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
-  aztec_txe_setPublicTXEContext(...inputs: ForeignCallArgs) {
+  aztec_txe_setPublicTxeContext(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_txe_setPublicTXEContext',
+      oracle: 'aztec_txe_setPublicTxeContext',
       inputs,
       handler: ([contractAddress]) => this.stateHandler.enterPublicState(contractAddress),
     });
   }
 
   // eslint-disable-next-line camelcase
-  aztec_txe_setUtilityTXEContext(...inputs: ForeignCallArgs) {
+  aztec_txe_setUtilityTxeContext(...inputs: ForeignCallArgs) {
     return callTxeHandler({
-      oracle: 'aztec_txe_setUtilityTXEContext',
+      oracle: 'aztec_txe_setUtilityTxeContext',
       inputs,
       handler: ([contractAddress]) => this.stateHandler.enterUtilityState(contractAddress),
     });
@@ -178,7 +179,7 @@ export class RPCTranslator {
     return callTxeHandler({
       oracle: 'aztec_txe_deploy',
       inputs,
-      handler: ([contractPath, initializer, _, args, secret, salt, deployer]) =>
+      handler: ([contractPath, initializer, args, secret, salt, deployer]) =>
         this.handlerAsTxe().deploy(contractPath, initializer, args, secret, salt, deployer),
     });
   }
@@ -939,7 +940,8 @@ export class RPCTranslator {
     return callTxeHandler({
       oracle: 'aztec_avm_storageRead',
       inputs,
-      handler: ([slot, contractAddress]) => this.handlerAsAvm().storageRead(slot, contractAddress),
+      handler: ([slot, contractAddress]) =>
+        this.handlerAsAvm().storageRead(slot, AztecAddress.fromFieldUnsafe(contractAddress)),
     });
   }
 

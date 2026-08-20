@@ -2,7 +2,6 @@
 source: tests/snapshots.rs
 expression: stdout
 ---
-
 use aztec::macros::aztec;
 use aztec::macros::aztec;
 
@@ -626,77 +625,77 @@ pub contract PublicFnsWithEmitRepro {
         if selector == 1472103964_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_01(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 3685080997_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_02(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 2154571552_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_03(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 1049101134_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_04(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 1024449064_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_05(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 4182861060_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_06(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 3759335427_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_07(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 4192827894_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_08(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 1901877638_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_09(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 2644440885_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_10(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 3056031378_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_11(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 2749762129_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_12(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 2026372669_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_13(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 1096580269_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_14(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 986670843_Field {
             let arg0: u64 = __aztec_nr_internals__unpack_arguments_0();
             __aztec_nr_internals__fn_15(arg0);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         panic(f"Unknown selector {selector}")
     }

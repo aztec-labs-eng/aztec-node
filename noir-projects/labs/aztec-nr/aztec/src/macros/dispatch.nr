@@ -75,12 +75,12 @@ pub comptime fn generate_public_dispatch(m: Module, generate_emit_public_init_nu
             quote {
                 $call;
                 // Force early return.
-                aztec::oracle::avm::avm_return([]);
+                aztec::oracle::avm::return_([]);
             }
         } else {
             quote {
                 let return_value = aztec::protocol::traits::Serialize::serialize($call);
-                aztec::oracle::avm::avm_return(return_value.as_vector());
+                aztec::oracle::avm::return_(return_value.as_vector());
             }
         };
 
@@ -103,7 +103,7 @@ pub comptime fn generate_public_dispatch(m: Module, generate_emit_public_init_nu
             quote {
                 if selector == $init_nullifier_selector {
                     $name();
-                    aztec::oracle::avm::avm_return([]);
+                    aztec::oracle::avm::return_([]);
                 }
             },
         );

@@ -1542,7 +1542,7 @@ pub contract AMM {
             let arg1: AztecAddress = <AztecAddress as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             let arg2: AztecAddress = <AztecAddress as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             __aztec_nr_internals__constructor(arg0, arg1, arg2);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 1909103841_Field {
             let input_calldata: [Field; 10] = aztec::oracle::avm::calldata_copy(1_u32, ((((((<Config as aztec::protocol::traits::Serialize<N = 3>>::N + <PartialUintNote as aztec::protocol::traits::Serialize>::N) + <PartialUintNote as aztec::protocol::traits::Serialize>::N) + <PartialUintNote as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N);
@@ -1556,7 +1556,7 @@ pub contract AMM {
             let arg6: u128 = <u128 as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             let arg7: u128 = <u128 as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             __aztec_nr_internals___add_liquidity(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 2270402407_Field {
             let input_calldata: [Field; 8] = aztec::oracle::avm::calldata_copy(1_u32, ((((<Config as aztec::protocol::traits::Serialize<N = 3>>::N + <u128 as aztec::protocol::traits::Serialize>::N) + <PartialUintNote as aztec::protocol::traits::Serialize>::N) + <PartialUintNote as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N);
@@ -1568,7 +1568,7 @@ pub contract AMM {
             let arg4: u128 = <u128 as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             let arg5: u128 = <u128 as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             __aztec_nr_internals___remove_liquidity(arg0, arg1, arg2, arg3, arg4, arg5);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 1918288610_Field {
             let input_calldata: [Field; 5] = aztec::oracle::avm::calldata_copy(1_u32, (((<AztecAddress as aztec::protocol::traits::Serialize>::N + <AztecAddress as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <PartialUintNote as aztec::protocol::traits::Serialize>::N);
@@ -1579,7 +1579,7 @@ pub contract AMM {
             let arg3: u128 = <u128 as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             let arg4: PartialUintNote = <PartialUintNote as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             __aztec_nr_internals___swap_exact_tokens_for_tokens(arg0, arg1, arg2, arg3, arg4);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         if selector == 3156435103_Field {
             let input_calldata: [Field; 6] = aztec::oracle::avm::calldata_copy(1_u32, ((((<AztecAddress as aztec::protocol::traits::Serialize>::N + <AztecAddress as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <u128 as aztec::protocol::traits::Serialize>::N) + <PartialUintNote as aztec::protocol::traits::Serialize>::N) + <PartialUintNote as aztec::protocol::traits::Serialize>::N);
@@ -1591,7 +1591,7 @@ pub contract AMM {
             let arg4: PartialUintNote = <PartialUintNote as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             let arg5: PartialUintNote = <PartialUintNote as aztec::protocol::traits::Deserialize>::stream_deserialize(&mut reader);
             __aztec_nr_internals___swap_tokens_for_exact_tokens(arg0, arg1, arg2, arg3, arg4, arg5);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         panic(f"Unknown selector {selector}")
     }

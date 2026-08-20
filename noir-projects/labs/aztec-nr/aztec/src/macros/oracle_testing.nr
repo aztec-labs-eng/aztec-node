@@ -30,7 +30,7 @@
 //!
 //! ```noir
 //! #[oracle(aztec_avm_nullifierExists)]
-//! unconstrained fn nullifier_exists_opcode(siloed_nullifier: Field) -> bool {}
+//! unconstrained fn nullifier_exists_oracle(siloed_nullifier: Field) -> bool {}
 //! ```
 //!
 //! the macro produces a test asserting that the oracle, called with the `Field` entry's value at seed 10, returns

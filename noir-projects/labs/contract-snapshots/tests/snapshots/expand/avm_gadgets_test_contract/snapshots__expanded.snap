@@ -2,7 +2,6 @@
 source: tests/snapshots.rs
 expression: stdout
 ---
-
 use aztec::macros::aztec;
 use aztec::macros::aztec;
 
@@ -814,168 +813,168 @@ contract AvmGadgetsTest {
             let mut reader: aztec::protocol::utils::reader::Reader<10 * 1> = aztec::protocol::utils::reader::Reader::<10 * 1>::new(input_calldata);
             let arg0: [u8; 10] = <[u8; 10] as aztec::protocol::traits::Deserialize<N = 10 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__keccak_hash(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 3065624740_Field {
             let input_calldata: [Field; 300 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 300] as aztec::protocol::traits::Serialize<N = 300 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<300 * 1> = aztec::protocol::utils::reader::Reader::<300 * 1>::new(input_calldata);
             let arg0: [u8; 300] = <[u8; 300] as aztec::protocol::traits::Deserialize<N = 300 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__keccak_hash_300(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 372001522_Field {
             let input_calldata: [Field; 1400 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 1400] as aztec::protocol::traits::Serialize<N = 1400 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<1400 * 1> = aztec::protocol::utils::reader::Reader::<1400 * 1>::new(input_calldata);
             let arg0: [u8; 1400] = <[u8; 1400] as aztec::protocol::traits::Deserialize<N = 1400 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__keccak_hash_1400(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 1867977279_Field {
             let input_calldata: [Field; 25 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u64; 25] as aztec::protocol::traits::Serialize<N = 25 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<25 * 1> = aztec::protocol::utils::reader::Reader::<25 * 1>::new(input_calldata);
             let arg0: [u64; 25] = <[u64; 25] as aztec::protocol::traits::Deserialize<N = 25 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 25 * 1] = <[u64; 25] as aztec::protocol::traits::Serialize<N = 25 * 1>>::serialize(__aztec_nr_internals__keccak_f1600(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 3724082008_Field {
             let input_calldata: [Field; 10 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[Field; 10] as aztec::protocol::traits::Serialize<N = 10 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<10 * 1> = aztec::protocol::utils::reader::Reader::<10 * 1>::new(input_calldata);
             let arg0: [Field; 10] = <[Field; 10] as aztec::protocol::traits::Deserialize<N = 10 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 1] = <Field as aztec::protocol::traits::Serialize>::serialize(__aztec_nr_internals__poseidon2_hash(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 278602445_Field {
             let input_calldata: [Field; 1000 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[Field; 1000] as aztec::protocol::traits::Serialize<N = 1000 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<1000 * 1> = aztec::protocol::utils::reader::Reader::<1000 * 1>::new(input_calldata);
             let arg0: [Field; 1000] = <[Field; 1000] as aztec::protocol::traits::Deserialize<N = 1000 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 1] = <Field as aztec::protocol::traits::Serialize>::serialize(__aztec_nr_internals__poseidon2_hash_1000fields(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 3545543018_Field {
             let input_calldata: [Field; 10 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 10] as aztec::protocol::traits::Serialize<N = 10 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<10 * 1> = aztec::protocol::utils::reader::Reader::<10 * 1>::new(input_calldata);
             let arg0: [u8; 10] = <[u8; 10] as aztec::protocol::traits::Deserialize<N = 10 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_10(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 2926274626_Field {
             let input_calldata: [Field; 20 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 20] as aztec::protocol::traits::Serialize<N = 20 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<20 * 1> = aztec::protocol::utils::reader::Reader::<20 * 1>::new(input_calldata);
             let arg0: [u8; 20] = <[u8; 20] as aztec::protocol::traits::Deserialize<N = 20 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_20(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 3609677267_Field {
             let input_calldata: [Field; 30 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 30] as aztec::protocol::traits::Serialize<N = 30 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<30 * 1> = aztec::protocol::utils::reader::Reader::<30 * 1>::new(input_calldata);
             let arg0: [u8; 30] = <[u8; 30] as aztec::protocol::traits::Deserialize<N = 30 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_30(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 900925045_Field {
             let input_calldata: [Field; 40 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 40] as aztec::protocol::traits::Serialize<N = 40 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<40 * 1> = aztec::protocol::utils::reader::Reader::<40 * 1>::new(input_calldata);
             let arg0: [u8; 40] = <[u8; 40] as aztec::protocol::traits::Deserialize<N = 40 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_40(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 256881939_Field {
             let input_calldata: [Field; 50 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 50] as aztec::protocol::traits::Serialize<N = 50 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<50 * 1> = aztec::protocol::utils::reader::Reader::<50 * 1>::new(input_calldata);
             let arg0: [u8; 50] = <[u8; 50] as aztec::protocol::traits::Deserialize<N = 50 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_50(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 2495458303_Field {
             let input_calldata: [Field; 60 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 60] as aztec::protocol::traits::Serialize<N = 60 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<60 * 1> = aztec::protocol::utils::reader::Reader::<60 * 1>::new(input_calldata);
             let arg0: [u8; 60] = <[u8; 60] as aztec::protocol::traits::Deserialize<N = 60 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_60(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 2200074453_Field {
             let input_calldata: [Field; 70 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 70] as aztec::protocol::traits::Serialize<N = 70 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<70 * 1> = aztec::protocol::utils::reader::Reader::<70 * 1>::new(input_calldata);
             let arg0: [u8; 70] = <[u8; 70] as aztec::protocol::traits::Deserialize<N = 70 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_70(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 4268069756_Field {
             let input_calldata: [Field; 80 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 80] as aztec::protocol::traits::Serialize<N = 80 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<80 * 1> = aztec::protocol::utils::reader::Reader::<80 * 1>::new(input_calldata);
             let arg0: [u8; 80] = <[u8; 80] as aztec::protocol::traits::Deserialize<N = 80 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_80(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 799349905_Field {
             let input_calldata: [Field; 90 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 90] as aztec::protocol::traits::Serialize<N = 90 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<90 * 1> = aztec::protocol::utils::reader::Reader::<90 * 1>::new(input_calldata);
             let arg0: [u8; 90] = <[u8; 90] as aztec::protocol::traits::Deserialize<N = 90 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_90(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 2074027672_Field {
             let input_calldata: [Field; 100 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 100] as aztec::protocol::traits::Serialize<N = 100 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<100 * 1> = aztec::protocol::utils::reader::Reader::<100 * 1>::new(input_calldata);
             let arg0: [u8; 100] = <[u8; 100] as aztec::protocol::traits::Deserialize<N = 100 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_100(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 3548859530_Field {
             let input_calldata: [Field; 255 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 255] as aztec::protocol::traits::Serialize<N = 255 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<255 * 1> = aztec::protocol::utils::reader::Reader::<255 * 1>::new(input_calldata);
             let arg0: [u8; 255] = <[u8; 255] as aztec::protocol::traits::Deserialize<N = 255 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_255(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 3409224101_Field {
             let input_calldata: [Field; 256 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 256] as aztec::protocol::traits::Serialize<N = 256 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<256 * 1> = aztec::protocol::utils::reader::Reader::<256 * 1>::new(input_calldata);
             let arg0: [u8; 256] = <[u8; 256] as aztec::protocol::traits::Deserialize<N = 256 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_256(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 797967809_Field {
             let input_calldata: [Field; 511 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 511] as aztec::protocol::traits::Serialize<N = 511 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<511 * 1> = aztec::protocol::utils::reader::Reader::<511 * 1>::new(input_calldata);
             let arg0: [u8; 511] = <[u8; 511] as aztec::protocol::traits::Deserialize<N = 511 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_511(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 2560938307_Field {
             let input_calldata: [Field; 512 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 512] as aztec::protocol::traits::Serialize<N = 512 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<512 * 1> = aztec::protocol::utils::reader::Reader::<512 * 1>::new(input_calldata);
             let arg0: [u8; 512] = <[u8; 512] as aztec::protocol::traits::Deserialize<N = 512 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_512(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 2235915052_Field {
             let input_calldata: [Field; 1024 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 1024] as aztec::protocol::traits::Serialize<N = 1024 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<1024 * 1> = aztec::protocol::utils::reader::Reader::<1024 * 1>::new(input_calldata);
             let arg0: [u8; 1024] = <[u8; 1024] as aztec::protocol::traits::Deserialize<N = 1024 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_1024(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 373006257_Field {
             let input_calldata: [Field; 1536 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[u8; 1536] as aztec::protocol::traits::Serialize<N = 1536 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<1536 * 1> = aztec::protocol::utils::reader::Reader::<1536 * 1>::new(input_calldata);
             let arg0: [u8; 1536] = <[u8; 1536] as aztec::protocol::traits::Deserialize<N = 1536 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 32 * 1] = <[u8; 32] as aztec::protocol::traits::Serialize<N = 32 * 1>>::serialize(__aztec_nr_internals__sha256_hash_1536(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 2669406607_Field {
             let input_calldata: [Field; 10 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[Field; 10] as aztec::protocol::traits::Serialize<N = 10 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<10 * 1> = aztec::protocol::utils::reader::Reader::<10 * 1>::new(input_calldata);
             let arg0: [Field; 10] = <[Field; 10] as aztec::protocol::traits::Deserialize<N = 10 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 1] = <Field as aztec::protocol::traits::Serialize>::serialize(__aztec_nr_internals__pedersen_hash(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         if selector == 3265405934_Field {
             let input_calldata: [Field; 10 * 1] = aztec::oracle::avm::calldata_copy(1_u32, <[Field; 10] as aztec::protocol::traits::Serialize<N = 10 * 1>>::N);
             let mut reader: aztec::protocol::utils::reader::Reader<10 * 1> = aztec::protocol::utils::reader::Reader::<10 * 1>::new(input_calldata);
             let arg0: [Field; 10] = <[Field; 10] as aztec::protocol::traits::Deserialize<N = 10 * 1>>::stream_deserialize(&mut reader);
             let return_value: [Field; 1] = <Field as aztec::protocol::traits::Serialize>::serialize(__aztec_nr_internals__pedersen_hash_with_index(arg0));
-            aztec::oracle::avm::avm_return(return_value.as_vector());
+            aztec::oracle::avm::return_(return_value.as_vector());
         };
         panic(f"Unknown selector {selector}")
     }

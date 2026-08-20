@@ -1,5 +1,6 @@
 /* eslint-disable camelcase */
 import {
+  CONTRACT_INSTANCE_LENGTH,
   MAX_NOTE_HASHES_PER_TX,
   MAX_NULLIFIERS_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
@@ -38,6 +39,7 @@ import {
   type TypeMapping,
   U32,
   U64,
+  U128,
   VECTOR,
   buildACIRCallback,
   makeEntry,
@@ -202,9 +204,9 @@ export const TXE_ORACLE_REGISTRY = {
     ],
   }),
 
-  aztec_txe_setTopLevelTXEContext: makeEntry(),
+  aztec_txe_setTopLevelTxeContext: makeEntry(),
 
-  aztec_txe_setPrivateTXEContext: makeEntry({
+  aztec_txe_setPrivateTxeContext: makeEntry({
     params: [
       { name: 'contractAddress', type: OPTION(AZTEC_ADDRESS) },
       { name: 'anchorBlockNumber', type: OPTION(BLOCK_NUMBER) },
@@ -213,11 +215,11 @@ export const TXE_ORACLE_REGISTRY = {
     returnType: PRIVATE_CONTEXT_INPUTS,
   }),
 
-  aztec_txe_setPublicTXEContext: makeEntry({
+  aztec_txe_setPublicTxeContext: makeEntry({
     params: [{ name: 'contractAddress', type: OPTION(AZTEC_ADDRESS) }],
   }),
 
-  aztec_txe_setUtilityTXEContext: makeEntry({
+  aztec_txe_setUtilityTxeContext: makeEntry({
     params: [{ name: 'contractAddress', type: OPTION(AZTEC_ADDRESS) }],
   }),
 
@@ -239,13 +241,12 @@ export const TXE_ORACLE_REGISTRY = {
     params: [
       { name: 'contractPath', type: STR },
       { name: 'initializer', type: STR },
-      { name: 'argsLength', type: U32 },
-      { name: 'args', type: ARRAY(FIELD) },
+      { name: 'args', type: VECTOR(FIELD) },
       { name: 'secret', type: FIELD },
       { name: 'salt', type: FIELD },
       { name: 'deployer', type: AZTEC_ADDRESS },
     ],
-    returnType: ARRAY(FIELD),
+    returnType: FIXED_ARRAY(FIELD, CONTRACT_INSTANCE_LENGTH),
   }),
 
   aztec_txe_createAccount: makeEntry({
@@ -370,10 +371,12 @@ export const TXE_ORACLE_REGISTRY = {
     returnType: BOOL,
   }),
 
+  // The address parameter is labelled `field` because that is what the Noir declaration sends (its callers convert
+  // with `to_field()`).
   aztec_avm_storageRead: makeEntry({
     params: [
       { name: 'slot', type: FIELD },
-      { name: 'contractAddress', type: AZTEC_ADDRESS },
+      { name: 'contractAddress', type: FIELD },
     ],
     returnType: FIELD,
   }),
@@ -420,6 +423,59 @@ export const TXE_ORACLE_REGISTRY = {
   }),
 
   aztec_avm_successCopy: makeEntry({ returnType: BOOL }),
+
+  // The AVM oracles below have no TXE handler: TXE's Noir execution of public functions never reaches them, and in
+  // production the avm-transpiler compiles them into real opcodes. Their entries complete the description of the AVM
+  // oracle wire interface.
+
+  aztec_avm_transactionFee: makeEntry({ returnType: FIELD }),
+
+  aztec_avm_minFeePerL2Gas: makeEntry({ returnType: U128 }),
+
+  aztec_avm_minFeePerDaGas: makeEntry({ returnType: U128 }),
+
+  aztec_avm_l2GasLeft: makeEntry({ returnType: U32 }),
+
+  aztec_avm_daGasLeft: makeEntry({ returnType: U32 }),
+
+  aztec_avm_noteHashExists: makeEntry({
+    params: [
+      { name: 'noteHash', type: FIELD },
+      { name: 'leafIndex', type: U64 },
+    ],
+    returnType: BOOL,
+  }),
+
+  aztec_avm_l1ToL2MsgExists: makeEntry({
+    params: [
+      { name: 'msgHash', type: FIELD },
+      { name: 'msgLeafIndex', type: U64 },
+    ],
+    returnType: BOOL,
+  }),
+
+  aztec_avm_sendL2ToL1Msg: makeEntry({
+    params: [
+      { name: 'recipient', type: ETH_ADDRESS },
+      { name: 'content', type: FIELD },
+    ],
+  }),
+
+  aztec_avm_calldataCopy: makeEntry({
+    params: [
+      { name: 'cdOffset', type: U32 },
+      { name: 'copySize', type: U32 },
+    ],
+    returnType: ARRAY(FIELD),
+  }),
+
+  aztec_avm_return: makeEntry({
+    params: [{ name: 'returndata', type: VECTOR(FIELD) }],
+  }),
+
+  aztec_avm_revert: makeEntry({
+    params: [{ name: 'revertdata', type: VECTOR(FIELD) }],
+  }),
 
   aztec_avm_getContractInstanceDeployer: makeEntry({
     params: [{ name: 'address', type: AZTEC_ADDRESS }],
