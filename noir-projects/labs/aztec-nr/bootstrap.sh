@@ -29,8 +29,8 @@ function test_cmds {
   # so inject those dependencies: key each flavor on its entry point's dependency closure
   # (computed by yarn-project's build). The build hash alone under-covers — a TXE behavior
   # change must rerun these tests even though no aztec-nr source changed.
-  local txe_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh get_dependencies_hash txe/src/bin/index.ts))
-  local resolver_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh get_dependencies_hash txe/src/bin/oracle_test_server.ts))
+  local txe_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts))
+  local resolver_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/oracle_test_server.ts))
 
   i=0
   $NARGO test --list-tests --silence-warnings | grep -v __oracle_test__ | sort | while read -r package test; do
