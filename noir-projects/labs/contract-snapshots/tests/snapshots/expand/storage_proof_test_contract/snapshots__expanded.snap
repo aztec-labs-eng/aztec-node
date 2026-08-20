@@ -2,7 +2,6 @@
 source: tests/snapshots.rs
 expression: stdout
 ---
-
 use aztec::macros::aztec;
 use aztec::macros::aztec;
 
@@ -462,7 +461,7 @@ contract StorageProofTest {
             let arg2: [Node; 15] = <[Node; 15] as Deserialize<N = 15 * 81>>::stream_deserialize(&mut reader);
             let arg3: u32 = <u32 as Deserialize>::stream_deserialize(&mut reader);
             __aztec_nr_internals__account_proof(arg0, arg1, arg2, arg3);
-            aztec::oracle::avm::avm_return([].as_vector());
+            aztec::oracle::avm::return_([].as_vector());
         };
         panic(f"Unknown selector {selector}")
     }

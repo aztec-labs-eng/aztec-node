@@ -14,7 +14,7 @@ export class TXEPrivateExecutionOracle extends PrivateExecutionOracle {
     _argsHash: Fr,
     _sideEffectCounter: number,
     _isStaticCall: boolean,
-  ): Promise<{ endSideEffectCounter: number; returnsHash: Fr }> {
+  ): Promise<{ endSideEffectCounter: Fr; returnsHash: Fr }> {
     throw new Error(
       'Contract calls are forbidden inside a `TestEnvironment::private_context`, use `private_call` instead',
     );
