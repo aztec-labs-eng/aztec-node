@@ -35,7 +35,7 @@ Because the witness now signs over the gas settings, they must be final before t
 
 - `EntrypointInterface.wrapExecutionPayload` (and `Account.wrapExecutionPayload`) takes the gas settings as a new
   second argument, and the account entrypoint records them on the returned `ExecutionPayload` (new optional
-  `gasSettings` field). Wallets use payload-bound gas settings verbatim — for both fee estimation and sending —
+  `gasSettings` field). Wallets use payload-bound gas settings verbatim for both fee estimation and sending,
   since any other settings would make the embedded witness fail verification.
 - Self-paid account deployment resolves the final gas settings up front through the new
   `Wallet.completeGasSettings(fee?)` method, which completes partial user-provided gas settings with the values
@@ -43,8 +43,8 @@ Because the witness now signs over the gas settings, they must be final before t
   settings of a self-paid deployment, pass them in the deploy method's `fee` options so they are bound when the
   payload is built; explicitly passing conflicting settings later when sending the prebuilt payload is rejected.
   Simulating a self-paid deployment consequently runs under the exact settings the transaction will be sent with,
-  instead of the artificially high estimation-only limits used for ordinary sends — a faithful preview of the real
-  transaction.
+  instead of the artificially high estimation-only limits used for ordinary sends, providing a faithful preview of the
+  real transaction.
 - `AccountEntrypointMetaPaymentMethod` now requires the resolved gas settings as a constructor argument and
   reports them from `getGasSettings()`.
 
