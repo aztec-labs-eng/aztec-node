@@ -111,6 +111,32 @@ describe('runOperation', () => {
     expect(events).toEqual(['committed:after', 'discarded:after']);
   });
 
+  it('keeps the decided outcome when a contributor fails to handle the end of the operation', async () => {
+    const failing: OperationContributor = {
+      onOperationEnd: () => {
+        throw new Error('notification failed');
+      },
+    };
+    const notified: string[] = [];
+    const contributors: OperationContributor[] = [
+      failing,
+      {
+        onOperationEnd: (_, outcome) => {
+          notified.push(outcome);
+        },
+      },
+    ];
+
+    await expect(run(contributors, () => Promise.resolve('result')).operation).resolves.toEqual('result');
+    await expect(run(contributors, () => Promise.reject(new Error('operation failed'))).operation).rejects.toThrow(
+      'operation failed',
+    );
+
+    expect(committed).toHaveLength(1);
+    expect(discarded).toHaveLength(1);
+    expect(notified).toEqual(['committed', 'discarded']);
+  });
+
   /** Begins a change set and runs `fn` as an operation over it. */
   function run<T>(contributors: OperationContributor[], fn: () => Promise<T>) {
     const changeSetId = coordinator.begin();

@@ -15,7 +15,10 @@ export interface OperationContributor {
    */
   settle?(changeSetId: ChangeSetId): Promise<void>;
 
-  /** Called once the operation's change set has been committed or discarded. */
+  /**
+   * Called once the operation's change set has been committed or discarded. A throw is logged and swallowed: the outcome is
+   * already decided by this point, so it cannot change it.
+   */
   onOperationEnd(changeSetId: ChangeSetId, outcome: 'committed' | 'discarded'): void;
 }
 
@@ -44,24 +47,29 @@ export async function runOperation<T>(args: RunOperationArgs, fn: () => Promise<
     log.verbose(`Committing operation ${changeSetId}`, { changeSetId });
 
     await stagedWriteCoordinator.commit(changeSetId);
-    notifyOperationEnd(contributors, changeSetId, 'committed');
+    notifyOperationEnd(args, 'committed');
     return result;
   } catch (err) {
     log.verbose(`Aborting operation ${changeSetId}`, { changeSetId });
     await settleContributorsLoggingFailures(args);
     await stagedWriteCoordinator.abort(changeSetId);
-    notifyOperationEnd(contributors, changeSetId, 'discarded');
+    notifyOperationEnd(args, 'discarded');
     throw err;
   }
 }
 
 function notifyOperationEnd(
-  contributors: OperationContributor[],
-  changeSetId: ChangeSetId,
+  { contributors, changeSetId, log }: RunOperationArgs,
   outcome: 'committed' | 'discarded',
 ): void {
   for (const contributor of contributors) {
-    contributor.onOperationEnd(changeSetId, outcome);
+    // The change set has already been decided at this point, so a failed notification must not turn a committed
+    // operation into a rejected one, nor mask the error that caused a discard.
+    try {
+      contributor.onOperationEnd(changeSetId, outcome);
+    } catch (err) {
+      log.warn(`Contributor failed to handle the end of operation ${changeSetId}`, { changeSetId, outcome, err });
+    }
   }
 }
 
