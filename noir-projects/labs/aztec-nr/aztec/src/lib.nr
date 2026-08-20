@@ -47,6 +47,9 @@ pub mod facts;
 pub mod messages;
 pub(crate) mod partial_notes;
 pub use protocol_types as protocol;
+// The logging macros below emit calls to the foundation-declared logging oracle, whose manifest entry the
+// carried attribute registers by hand.
+#[crate::macros::oracle_declaration::declare_foundation_oracles]
 pub(crate) mod logging;
 pub mod utils;
 pub mod authwit;

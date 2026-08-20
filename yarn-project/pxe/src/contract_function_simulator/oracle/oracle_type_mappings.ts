@@ -432,8 +432,9 @@ export const UTILITY_CONTEXT: TypeMapping<UtilityContext> = STRUCT<UtilityContex
   { name: 'msgSender', type: AZTEC_ADDRESS },
 ]);
 
-export const CALL_PRIVATE_RESULT: TypeMapping<{ endSideEffectCounter: Fr; returnsHash: Fr }> = STRUCT([
-  { name: 'endSideEffectCounter', type: FIELD },
+// The Noir side declares the end counter as `u32`, matching the `u32` start counter this oracle takes as a parameter.
+export const CALL_PRIVATE_RESULT: TypeMapping<{ endSideEffectCounter: number; returnsHash: Fr }> = STRUCT([
+  { name: 'endSideEffectCounter', type: U32 },
   { name: 'returnsHash', type: FIELD },
 ]);
 

@@ -1,4 +1,4 @@
-use crate::macros::oracle_testing::skip_oracle_test;
+use crate::macros::{oracle_declaration::prv_oracle, oracle_testing::skip_oracle_test};
 use crate::messages::delivery::{OnchainDeliveryMode, ResolvedTaggingStrategy};
 use crate::oracle::random::random;
 use crate::protocol::address::AztecAddress;
@@ -18,7 +18,7 @@ pub(crate) unconstrained fn resolve_tagging_strategy(
     mode: OnchainDeliveryMode,
 ) -> ResolvedTaggingStrategy {
     if recipient.is_valid() {
-        resolve_tagging_strategy_oracle(sender, recipient, mode)
+        resolve_tagging_strategy_internal(sender, recipient, mode)
     } else if mode == OnchainDeliveryMode::onchain_constrained() {
         // Constrained delivery to an invalid recipient cannot be served, so fail.
         panic(
@@ -33,12 +33,14 @@ pub(crate) unconstrained fn resolve_tagging_strategy(
 // TODO: needs a hand-written multi-scenario synthesizer entry (enum-like type with private fields, one named scenario
 // per constructor) on both sides.
 #[skip_oracle_test]
-#[oracle(aztec_prv_resolveTaggingStrategy)]
-unconstrained fn resolve_tagging_strategy_oracle(
-    _sender: AztecAddress,
-    _recipient: AztecAddress,
-    _mode: OnchainDeliveryMode,
-) -> ResolvedTaggingStrategy {}
+#[prv_oracle]
+unconstrained fn resolve_tagging_strategy_internal(
+    sender: AztecAddress,
+    recipient: AztecAddress,
+    mode: OnchainDeliveryMode,
+) -> ResolvedTaggingStrategy {
+    resolve_tagging_strategy_internal_oracle(sender, recipient, mode)
+}
 
 mod test {
     use crate::messages::delivery::{OnchainDeliveryMode, ResolvedTaggingStrategy};

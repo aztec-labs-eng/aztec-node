@@ -1,4 +1,4 @@
-use crate::macros::{oracle_declaration::add_manual_execution_oracle, oracle_testing::skip_oracle_test};
+use crate::macros::{oracle_declaration::{add_manual_execution_oracle, prv_oracle}, oracle_testing::skip_oracle_test};
 use crate::messages::delivery::OnchainDeliveryMode;
 use crate::note::{HintedNote, note_interface::NoteType};
 
@@ -39,6 +39,8 @@ pub fn notify_nullified_note(nullifier: Field, note_hash: Field, counter: u32) {
     unsafe { notify_nullified_note_oracle_wrapper(nullifier, note_hash, counter) };
 }
 
+// Compiles to a brillig entry point (it is called from constrained code), and entry points embed their function
+// name in artifact bytecode: renaming this function would change every artifact hash and class ID.
 unconstrained fn notify_created_note_oracle_wrapper<let N: u32>(
     owner: AztecAddress,
     storage_slot: Field,
@@ -48,7 +50,7 @@ unconstrained fn notify_created_note_oracle_wrapper<let N: u32>(
     note_hash: Field,
     counter: u32,
 ) {
-    notify_created_note_oracle(
+    notify_created_note_internal(
         owner,
         storage_slot,
         randomness,
@@ -59,23 +61,37 @@ unconstrained fn notify_created_note_oracle_wrapper<let N: u32>(
     );
 }
 
-#[oracle(aztec_prv_notifyCreatedNote)]
-unconstrained fn notify_created_note_oracle<let N: u32>(
-    _owner: AztecAddress,
-    _storage_slot: Field,
-    _randomness: Field,
-    _note_type_id: Field,
-    _packed_note: [Field; N],
-    _note_hash: Field,
-    _counter: u32,
-) {}
-
-unconstrained fn notify_nullified_note_oracle_wrapper(nullifier: Field, note_hash: Field, counter: u32) {
-    notify_nullified_note_oracle(nullifier, note_hash, counter);
+#[prv_oracle]
+unconstrained fn notify_created_note_internal<let N: u32>(
+    owner: AztecAddress,
+    storage_slot: Field,
+    randomness: Field,
+    note_type_id: Field,
+    packed_note: [Field; N],
+    note_hash: Field,
+    counter: u32,
+) {
+    notify_created_note_internal_oracle(
+        owner,
+        storage_slot,
+        randomness,
+        note_type_id,
+        packed_note,
+        note_hash,
+        counter,
+    );
 }
 
-#[oracle(aztec_prv_notifyNullifiedNote)]
-unconstrained fn notify_nullified_note_oracle(_nullifier: Field, _note_hash: Field, _counter: u32) {}
+// Compiles to a brillig entry point (it is called from constrained code), and entry points embed their function
+// name in artifact bytecode: renaming this function would change every artifact hash and class ID.
+unconstrained fn notify_nullified_note_oracle_wrapper(nullifier: Field, note_hash: Field, counter: u32) {
+    notify_nullified_note_internal(nullifier, note_hash, counter);
+}
+
+#[prv_oracle]
+unconstrained fn notify_nullified_note_internal(nullifier: Field, note_hash: Field, counter: u32) {
+    notify_nullified_note_internal_oracle(nullifier, note_hash, counter);
+}
 
 /// Registers `get_notes`'s manifest entry. The stub below stays hand-written because the oracle is generic over the
 /// note type itself, so no derived label can describe its rows: the `note` token in the return is the TS registry's
@@ -197,12 +213,10 @@ where
 /// The secret is resolved by the simulator rather than computed by the contract.
 ///
 /// Returns `None` for an invalid recipient address.
+#[prv_oracle]
 pub unconstrained fn get_app_tagging_secret(sender: AztecAddress, recipient: AztecAddress) -> Option<Field> {
     get_app_tagging_secret_oracle(sender, recipient)
 }
-
-#[oracle(aztec_prv_getAppTaggingSecret)]
-unconstrained fn get_app_tagging_secret_oracle(_sender: AztecAddress, _recipient: AztecAddress) -> Option<Field> {}
 
 /// Returns the next sender-side tagging index for a given secret and delivery mode.
 ///
@@ -219,11 +233,13 @@ pub unconstrained fn get_next_tagging_index<M>(secret: Field, mode: M) -> u32
 where
     M: Into<OnchainDeliveryMode>,
 {
-    get_next_tagging_index_oracle(secret, mode.into())
+    get_next_tagging_index_internal(secret, mode.into())
 }
 
-#[oracle(aztec_prv_getNextTaggingIndex)]
-unconstrained fn get_next_tagging_index_oracle(_secret: Field, _mode: OnchainDeliveryMode) -> u32 {}
+#[prv_oracle]
+unconstrained fn get_next_tagging_index_internal(secret: Field, mode: OnchainDeliveryMode) -> u32 {
+    get_next_tagging_index_internal_oracle(secret, mode)
+}
 
 /// Gets the sender for tags.
 ///
@@ -232,9 +248,7 @@ unconstrained fn get_next_tagging_index_oracle(_secret: Field, _mode: OnchainDel
 /// sender, and hence about the shared secret.
 ///
 /// Returns the wallet-supplied default sender for tags, or `None` if no default was provided.
+#[prv_oracle]
 pub(crate) unconstrained fn get_sender_for_tags() -> Option<AztecAddress> {
     get_sender_for_tags_oracle()
 }
-
-#[oracle(aztec_prv_getSenderForTags)]
-unconstrained fn get_sender_for_tags_oracle() -> Option<AztecAddress> {}

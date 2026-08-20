@@ -751,7 +751,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     }
 
     return {
-      endSideEffectCounter: publicInputs.endSideEffectCounter,
+      endSideEffectCounter: publicInputs.endSideEffectCounter.toNumber(),
       returnsHash: publicInputs.returnsHash,
     };
   }
