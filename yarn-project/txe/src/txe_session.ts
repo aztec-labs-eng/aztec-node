@@ -13,15 +13,17 @@ import {
   ContractStore,
   FactService,
   FactStore,
-  JobCoordinator,
   NoteService,
   NoteStore,
   PrivateEventStore,
   RecipientTaggingStore,
   SenderTaggingStore,
+  StagedWriteCoordinator,
   TaggingSecretSourcesStore,
   composeHooks,
+  runOperation,
 } from '@aztec/pxe/server';
+import type { ChangeSetId, OperationContributor } from '@aztec/pxe/server';
 import {
   ExecutionNoteCache,
   ExecutionTaggingIndexCache,
@@ -141,7 +143,7 @@ export interface TXESessionStateHandler {
 
   /**
    * Executes a top-level private call: runs the private function, drains its offchain effects into the session buffer,
-   * commits the job, and (for non-static calls) tags the result with the mined tx hash.
+   * commits the change set, and (for non-static calls) tags the result with the mined tx hash.
    */
   executePrivateCall(
     from: Option<AztecAddress>,
@@ -155,7 +157,7 @@ export interface TXESessionStateHandler {
     gasSettings: GasSettingsData,
   ): Promise<Fr[]>;
 
-  /** Executes a top-level utility function and commits the job. */
+  /** Executes a top-level utility function and commits the change set. */
   executeUtilityFunction(
     from: Option<AztecAddress>,
     targetContractAddress: AztecAddress,
@@ -165,8 +167,8 @@ export interface TXESessionStateHandler {
   ): Promise<Fr[]>;
 
   /**
-   * Executes a top-level public call, commits the job, and (for non-static calls) tags the result with the mined tx
-   * hash.
+   * Executes a top-level public call, commits the change set, and (for non-static calls) tags the result with the mined
+   * tx hash.
    */
   executePublicCall(
     from: Option<AztecAddress>,
@@ -269,8 +271,9 @@ export class TXESession implements TXESessionStateHandler {
     private capsuleStore: CapsuleStore,
     private factStore: FactStore,
     private privateEventStore: PrivateEventStore,
-    private jobCoordinator: JobCoordinator,
-    private currentJobId: string,
+    private readonly stagedWriteCoordinator: StagedWriteCoordinator,
+    private readonly operationContributors: OperationContributor[],
+    private currentChangeSetId: ChangeSetId,
     private chainId: Fr,
     private version: Fr,
     private nextBlockTimestamp: bigint,
@@ -335,24 +338,18 @@ export class TXESession implements TXESessionStateHandler {
     const anchorBlockStore = new AnchorBlockStore(store);
     const stateMachine = await TXEStateMachine.create(archiver, anchorBlockStore, contractStore, noteStore);
 
-    const jobCoordinator = new JobCoordinator(store);
-    jobCoordinator.registerStores([
-      capsuleStore,
-      factStore,
-      senderTaggingStore,
-      recipientTaggingStore,
-      privateEventStore,
-      noteStore,
-      stateMachine.contractSyncService,
-    ]);
+    const stagedWriteCoordinator = new StagedWriteCoordinator({
+      kvStore: store,
+      stores: [capsuleStore, factStore, senderTaggingStore, recipientTaggingStore, privateEventStore, noteStore],
+    });
 
     const nextBlockTimestamp = BigInt(Math.floor(new Date().getTime() / 1000));
     const version = new Fr(await stateMachine.node.getVersion());
     const chainId = new Fr(await stateMachine.node.getChainId());
 
-    const initialJobId = jobCoordinator.beginJob();
-
     const logger = createLogger('txe:session');
+
+    const initialChangeSetId = stagedWriteCoordinator.begin();
 
     const topLevelOracleHandler = new TXEOracleTopLevelContext(
       stateMachine,
@@ -396,8 +393,9 @@ export class TXESession implements TXESessionStateHandler {
       capsuleStore,
       factStore,
       privateEventStore,
-      jobCoordinator,
-      initialJobId,
+      stagedWriteCoordinator,
+      [stateMachine.contractSyncService], // operationContributors
+      initialChangeSetId,
       version,
       chainId,
       nextBlockTimestamp,
@@ -471,11 +469,21 @@ export class TXESession implements TXESessionStateHandler {
     }
   }
 
-  /** Commits the current job and begins a new one. Returns the new job ID. */
-  private async cycleJob(): Promise<string> {
-    await this.jobCoordinator.commitJob(this.currentJobId);
-    this.currentJobId = this.jobCoordinator.beginJob();
-    return this.currentJobId;
+  /** Ends the current operation (committing its change set, or discarding it on failure) and begins a new one. */
+  private async cycleOperation(): Promise<string> {
+    const operationArgs = {
+      stagedWriteCoordinator: this.stagedWriteCoordinator,
+      contributors: this.operationContributors,
+      changeSetId: this.currentChangeSetId,
+      log: this.logger,
+    };
+    try {
+      // The operation's work already happened through the session's oracles, so there is nothing left to run.
+      await runOperation(operationArgs, () => Promise.resolve());
+    } finally {
+      this.currentChangeSetId = this.stagedWriteCoordinator.begin();
+    }
+    return this.currentChangeSetId;
   }
 
   private resetLastCall(): void {
@@ -546,7 +554,7 @@ export class TXESession implements TXESessionStateHandler {
         argsHash,
         isStaticCall,
         additionalScopes,
-        this.currentJobId,
+        this.currentChangeSetId,
         authorizedUtilityCallTargets,
         GasSettings.from(gasSettings),
       );
@@ -559,7 +567,7 @@ export class TXESession implements TXESessionStateHandler {
         this.recordOffchainEffect(data);
       }
 
-      await this.cycleJob();
+      await this.cycleOperation();
 
       if (isStaticCall) {
         // Static calls revert their checkpoint and mine no block, so there is no tx hash to tag offchain effects
@@ -585,11 +593,11 @@ export class TXESession implements TXESessionStateHandler {
         targetContractAddress,
         functionSelector,
         args,
-        this.currentJobId,
+        this.currentChangeSetId,
         authorizedUtilityCallTargets,
       );
 
-      await this.cycleJob();
+      await this.cycleOperation();
 
       return { result: returnValues };
     });
@@ -612,7 +620,7 @@ export class TXESession implements TXESessionStateHandler {
         GasSettings.from(gasSettings),
       );
 
-      await this.cycleJob();
+      await this.cycleOperation();
 
       if (isStaticCall) {
         // See the equivalent branch in `executePrivateCall`.
@@ -625,9 +633,9 @@ export class TXESession implements TXESessionStateHandler {
 
   async getPrivateEvents(selector: EventSelector, contractAddress: AztecAddress, scope: AztecAddress): Promise<Fr[][]> {
     const handler = this.handlerAsTxe();
-    await handler.syncContractNonOracleMethod(contractAddress, scope, this.currentJobId);
-    // Cycle the job to commit the stores after the contract sync.
-    await this.cycleJob();
+    await handler.syncContractNonOracleMethod(contractAddress, scope, this.currentChangeSetId);
+    // Cycle the change set to commit the stores after the contract sync.
+    await this.cycleOperation();
     return handler.getPrivateEvents(selector, contractAddress, scope);
   }
 
@@ -675,8 +683,8 @@ export class TXESession implements TXESessionStateHandler {
       }
     }
 
-    // Commit all staged stores from the job that was just completed, then begin a new job
-    await this.cycleJob();
+    // Commit all staged stores from the change set that was just completed, then begin a new change set
+    await this.cycleOperation();
 
     this.oracleHandler = new TXEOracleTopLevelContext(
       this.stateMachine,
@@ -721,10 +729,12 @@ export class TXESession implements TXESessionStateHandler {
     // a single transaction with the effects of what was done in the test.
     const anchorBlock = await this.stateMachine.node.getBlock(anchorBlockNumber ?? 'latest').then(b => b?.header);
 
-    await new NoteService(this.noteStore, this.stateMachine.node, anchorBlock!, this.currentJobId).syncNoteNullifiers(
-      contractAddress,
-      await this.keyStore.getAccounts(),
-    );
+    await new NoteService(
+      this.noteStore,
+      this.stateMachine.node,
+      anchorBlock!,
+      this.currentChangeSetId,
+    ).syncNoteNullifiers(contractAddress, await this.keyStore.getAccounts());
     const latestBlock = await this.stateMachine.node.getBlock('latest').then(b => b?.header);
 
     const nextBlockGlobalVariables = makeGlobalVariables(undefined, {
@@ -771,7 +781,7 @@ export class TXESession implements TXESessionStateHandler {
       privateEventStore: this.privateEventStore,
       contractSyncService: this.stateMachine.contractSyncService,
       l2TipsStore: this.stateMachine.l2TipsProvider,
-      jobId: this.currentJobId,
+      changeSetId: this.currentChangeSetId,
       scopes: await this.keyStore.getAccounts(),
       txResolver: this.stateMachine.txResolver,
       simulator: new WASMSimulator(),
@@ -840,7 +850,7 @@ export class TXESession implements TXESessionStateHandler {
       this.noteStore,
       this.stateMachine.node,
       anchorBlockHeader,
-      this.currentJobId,
+      this.currentChangeSetId,
     ).syncNoteNullifiers(contractAddress, await this.keyStore.getAccounts());
 
     this.oracleHandler = new UtilityExecutionOracle({
@@ -871,7 +881,7 @@ export class TXESession implements TXESessionStateHandler {
       txResolver: this.stateMachine.txResolver,
       contractSyncService: this.stateMachine.contractSyncService,
       l2TipsStore: this.stateMachine.l2TipsProvider,
-      jobId: this.currentJobId,
+      changeSetId: this.currentChangeSetId,
       scopes: await this.keyStore.getAccounts(),
       simulator: new WASMSimulator(),
       utilityExecutor: this.utilityExecutorForContractSync(anchorBlockHeader),
@@ -999,7 +1009,7 @@ export class TXESession implements TXESessionStateHandler {
           txResolver: this.stateMachine.txResolver,
           contractSyncService: this.stateMachine.contractSyncService,
           l2TipsStore: this.stateMachine.l2TipsProvider,
-          jobId: this.currentJobId,
+          changeSetId: this.currentChangeSetId,
           scopes,
           simulator,
           utilityExecutor: this.utilityExecutorForContractSync(anchorBlock),
