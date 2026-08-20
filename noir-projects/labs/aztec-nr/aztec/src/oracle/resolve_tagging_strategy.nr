@@ -1,3 +1,4 @@
+use crate::macros::oracle_testing::skip_oracle_test;
 use crate::messages::delivery::{OnchainDeliveryMode, ResolvedTaggingStrategy};
 use crate::oracle::random::random;
 use crate::protocol::address::AztecAddress;
@@ -29,6 +30,9 @@ pub(crate) unconstrained fn resolve_tagging_strategy(
     }
 }
 
+// TODO: needs a hand-written multi-scenario synthesizer entry (enum-like type with private fields, one named scenario
+// per constructor) on both sides.
+#[skip_oracle_test]
 #[oracle(aztec_prv_resolveTaggingStrategy)]
 unconstrained fn resolve_tagging_strategy_oracle(
     _sender: AztecAddress,

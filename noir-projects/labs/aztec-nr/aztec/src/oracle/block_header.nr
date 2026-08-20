@@ -1,12 +1,11 @@
+use crate::macros::oracle_declaration::utl_oracle;
 use crate::protocol::{abis::block_header::BlockHeader, merkle_tree::root::root_from_sibling_path, traits::Hash};
 
 use crate::{context::PrivateContext, oracle::get_membership_witness::get_block_hash_membership_witness};
 
-#[oracle(aztec_utl_getBlockHeader)]
-unconstrained fn get_block_header_at_oracle(_block_number: u32) -> BlockHeader {}
-
-unconstrained fn get_block_header_at_internal(block_number: u32) -> BlockHeader {
-    get_block_header_at_oracle(block_number)
+#[utl_oracle]
+unconstrained fn get_block_header_internal(block_number: u32) -> BlockHeader {
+    get_block_header_internal_oracle(block_number)
 }
 
 pub fn get_block_header_at(block_number: u32, context: PrivateContext) -> BlockHeader {
@@ -35,7 +34,7 @@ pub fn get_block_header_at(block_number: u32, context: PrivateContext) -> BlockH
 
         // 3) Get the header hint of a given block from an oracle.
         // Safety: The header is constrained to be in the archive tree below.
-        let header = unsafe { get_block_header_at_internal(block_number) };
+        let header = unsafe { get_block_header_internal(block_number) };
 
         // 4) We make sure that the header hint we received from the oracle exists in the state tree and is the actual
         // header at the desired block number
@@ -77,7 +76,7 @@ fn constrain_get_block_header_at_internal(
 mod test {
     use crate::protocol::traits::Hash;
     use crate::test::helpers::test_environment::TestEnvironment;
-    use super::{constrain_get_block_header_at_internal, get_block_header_at, get_block_header_at_internal};
+    use super::{constrain_get_block_header_at_internal, get_block_header_at, get_block_header_internal};
 
     #[test]
     unconstrained fn fetching_earliest_block_header_succeeds() {
@@ -91,7 +90,7 @@ mod test {
         env.private_context(|context| {
             let anchor_block_header = context.anchor_block_header;
 
-            let header = get_block_header_at_internal(1);
+            let header = get_block_header_internal(1);
             constrain_get_block_header_at_internal(header, 1, anchor_block_header);
 
             assert_eq(header.block_number(), 1);
@@ -111,7 +110,7 @@ mod test {
             let anchor_block_header = context.anchor_block_header;
             let target_block_number = anchor_block_header.block_number() - 2;
 
-            let header = get_block_header_at_internal(target_block_number);
+            let header = get_block_header_internal(target_block_number);
             constrain_get_block_header_at_internal(header, target_block_number, anchor_block_header);
 
             assert_eq(header.block_number(), target_block_number);
@@ -132,7 +131,7 @@ mod test {
             let anchor_block_header = context.anchor_block_header;
             let target_block_number = anchor_block_header.block_number() - 1;
 
-            let header = get_block_header_at_internal(target_block_number);
+            let header = get_block_header_internal(target_block_number);
             constrain_get_block_header_at_internal(header, target_block_number, anchor_block_header);
 
             assert_eq(header.block_number(), target_block_number);
@@ -188,7 +187,7 @@ mod test {
             let anchor_block_header = context.anchor_block_header;
 
             let target_block_number = anchor_block_header.block_number() - 2;
-            let bad_header = get_block_header_at_internal(target_block_number);
+            let bad_header = get_block_header_internal(target_block_number);
 
             // We pass in a different block number than the header received
             constrain_get_block_header_at_internal(bad_header, target_block_number - 1, anchor_block_header);

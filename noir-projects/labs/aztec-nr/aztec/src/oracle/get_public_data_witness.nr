@@ -1,3 +1,4 @@
+use crate::macros::oracle_declaration::utl_oracle;
 use crate::protocol::{
     abis::block_header::BlockHeader,
     constants::PUBLIC_DATA_TREE_HEIGHT,
@@ -12,16 +13,18 @@ pub struct PublicDataWitness {
     pub path: [Field; PUBLIC_DATA_TREE_HEIGHT],
 }
 
-#[oracle(aztec_utl_getPublicDataWitness)]
-unconstrained fn get_public_data_witness_oracle(
-    _block_hash: Field,
-    _public_data_tree_index: Field,
-) -> PublicDataWitness {}
+#[utl_oracle]
+unconstrained fn get_public_data_witness_internal(
+    block_hash: Field,
+    public_data_tree_index: Field,
+) -> PublicDataWitness {
+    get_public_data_witness_internal_oracle(block_hash, public_data_tree_index)
+}
 
 pub unconstrained fn get_public_data_witness(
     block_header: BlockHeader,
     public_data_tree_index: Field,
 ) -> PublicDataWitness {
     let block_hash = block_header.hash();
-    get_public_data_witness_oracle(block_hash, public_data_tree_index)
+    get_public_data_witness_internal(block_hash, public_data_tree_index)
 }

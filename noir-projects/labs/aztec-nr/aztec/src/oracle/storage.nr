@@ -1,12 +1,15 @@
-use crate::protocol::{abis::block_header::BlockHeader, address::AztecAddress, traits::{Hash, Packable, ToField}};
+use crate::macros::oracle_declaration::utl_oracle;
+use crate::protocol::{abis::block_header::BlockHeader, address::AztecAddress, traits::{Hash, Packable}};
 
-#[oracle(aztec_utl_getFromPublicStorage)]
-unconstrained fn get_from_public_storage_oracle<let N: u32>(
+#[utl_oracle]
+unconstrained fn get_from_public_storage<let N: u32>(
     block_hash: Field,
-    address: Field,
+    address: AztecAddress,
     storage_slot: Field,
     length: u32,
-) -> [Field; N] {}
+) -> [Field; N] {
+    get_from_public_storage_oracle(block_hash, address, storage_slot, length)
+}
 
 // TODO(F-498): review naming consistency
 pub unconstrained fn raw_storage_read<let N: u32>(
@@ -14,7 +17,7 @@ pub unconstrained fn raw_storage_read<let N: u32>(
     address: AztecAddress,
     storage_slot: Field,
 ) -> [Field; N] {
-    get_from_public_storage_oracle(block_hash_to_read_from, address.to_field(), storage_slot, N)
+    get_from_public_storage(block_hash_to_read_from, address, storage_slot, N)
 }
 
 // TODO(F-498): review naming consistency

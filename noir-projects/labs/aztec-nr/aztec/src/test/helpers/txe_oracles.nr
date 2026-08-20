@@ -1,6 +1,7 @@
 use crate::{
     context::inputs::PrivateContextInputs,
     event::EventSelector,
+    macros::oracle_testing::skip_oracle_test,
     messages::encoding::MESSAGE_CIPHERTEXT_LEN,
     test::helpers::{tagging_secret_strategy::TaggingSecretStrategy, utils::TestAccount},
 };
@@ -197,6 +198,8 @@ pub unconstrained fn advance_blocks_by(blocks: u32) {}
 #[oracle(aztec_txe_advanceTimestampBy)]
 pub unconstrained fn advance_timestamp_by(duration: u64) {}
 
+// TODO: implement once we support more complex types
+#[skip_oracle_test]
 #[oracle(aztec_txe_deploy)]
 pub unconstrained fn deploy_oracle<let N: u32, let P: u32>(
     path: str<N>,
@@ -224,6 +227,8 @@ pub unconstrained fn send_l1_to_l2_message(
     recipient: AztecAddress,
 ) -> Field {}
 
+// TODO: implement once we support more complex types
+#[skip_oracle_test]
 #[oracle(aztec_txe_setTaggingSecretStrategies)]
 pub unconstrained fn set_tagging_secret_strategies(
     unconstrained_strategy: Option<TaggingSecretStrategy>,

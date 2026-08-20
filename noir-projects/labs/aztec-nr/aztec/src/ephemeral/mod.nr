@@ -30,31 +30,31 @@ pub struct EphemeralOracles {}
 
 impl ArrayOracles for EphemeralOracles {
     unconstrained fn len_oracle(slot: Field) -> u32 {
-        ephemeral_oracles::len_oracle(slot)
+        ephemeral_oracles::get_ephemeral_len(slot)
     }
 
     unconstrained fn push_oracle<let N: u32>(slot: Field, values: [Field; N]) -> u32 {
-        ephemeral_oracles::push_oracle(slot, values)
+        ephemeral_oracles::push_ephemeral(slot, values)
     }
 
     unconstrained fn pop_oracle<let N: u32>(slot: Field) -> [Field; N] {
-        ephemeral_oracles::pop_oracle(slot)
+        ephemeral_oracles::pop_ephemeral(slot)
     }
 
     unconstrained fn get_oracle<let N: u32>(slot: Field, index: u32) -> [Field; N] {
-        ephemeral_oracles::get_oracle(slot, index)
+        ephemeral_oracles::get_ephemeral(slot, index)
     }
 
     unconstrained fn set_oracle<let N: u32>(slot: Field, index: u32, values: [Field; N]) {
-        ephemeral_oracles::set_oracle(slot, index, values)
+        ephemeral_oracles::set_ephemeral(slot, index, values)
     }
 
     unconstrained fn remove_oracle(slot: Field, index: u32) {
-        ephemeral_oracles::remove_oracle(slot, index)
+        ephemeral_oracles::remove_ephemeral(slot, index)
     }
 
     unconstrained fn clear_oracle(slot: Field) {
-        ephemeral_oracles::clear_oracle(slot)
+        ephemeral_oracles::clear_ephemeral(slot)
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::macros::{oracle_declaration::add_manual_execution_oracle, oracle_testing::skip_oracle_test};
 use crate::messages::delivery::OnchainDeliveryMode;
 use crate::note::{HintedNote, note_interface::NoteType};
 
@@ -76,6 +77,20 @@ unconstrained fn notify_nullified_note_oracle_wrapper(nullifier: Field, note_has
 #[oracle(aztec_prv_notifyNullifiedNote)]
 unconstrained fn notify_nullified_note_oracle(_nullifier: Field, _note_hash: Field, _counter: u32) {}
 
+/// Registers `get_notes`'s manifest entry. The stub below stays hand-written because the oracle is generic over the
+/// note type itself, so no derived label can describe its rows: the `note` token in the return is the TS registry's
+/// variable-width note leaf, honestly leaving the row layout unpinned while the wire name and parameter positions
+/// stay checked. The `u32` parameter labels transcribe the TS-side interpretation of the `u8` values sent here.
+comptime fn declare_get_notes_manifest_entry(_f: FunctionDefinition) {
+    add_manual_execution_oracle(
+        "aztec_utl_getNotes",
+        "option(aztec-address),field,u32,array(u32),array(u32),array(u32),array(field),array(u32),array(u32),array(u32),array(u32),array(u32),u32,u32,u32,u32,u32->bounded-vec(note)",
+    );
+}
+
+// TODO: cover with an oracle test once the test resolver can synthesize note rows.
+#[skip_oracle_test]
+#[declare_get_notes_manifest_entry]
 #[oracle(aztec_utl_getNotes)]
 unconstrained fn get_notes_oracle<Note, let M: u32, let MaxNotes: u32>(
     _owner: Option<AztecAddress>,

@@ -477,8 +477,16 @@ comptime fn flat_width(typ: Type) -> u32 {
     (synthesizer_for(typ).width)(typ)
 }
 
-/// Generates serialization roundtrip tests for every `#[oracle(...)]` declaration in a module. See the module docs for
-/// the full scheme. Use [`generate_oracle_tests_excluding`] when some of the module's oracles must be left out.
+/// Marks an oracle as excluded from [`generate_oracle_tests`]. Place it on a hand-written `#[oracle]` stub, or on
+/// the declaration-attribute-carrying wrapper of a generated one — the generated stub inherits the marker.
+pub(crate) comptime fn skip_oracle_test(_f: FunctionDefinition) {}
+
+/// Generates serialization roundtrip tests for every `#[oracle(...)]` declaration in a module, except those marked
+/// with [`skip_oracle_test`]. See the module docs for the full scheme.
+///
+/// Every oracle in the module must be testable or excluded: if an oracle's parameters or return type can't be
+/// synthesized (no [`synthesizers`] entry matches), generating its test fails at compile time and the dev must mark
+/// the oracle with [`skip_oracle_test`].
 ///
 /// ## Usage
 ///
@@ -487,37 +495,9 @@ comptime fn flat_width(typ: Type) -> u32 {
 /// pub mod nullifiers;
 /// ```
 pub(crate) comptime fn generate_oracle_tests(m: Module) -> Quoted {
-    let none: [Quoted] = @[];
-    generate_oracle_tests_excluding(m, none)
-}
-
-/// Like [`generate_oracle_tests`], but leaves out the oracles named in `skip` (by Noir function name).
-///
-/// Every oracle in the module must be testable or excluded: if an oracle's parameters or return type can't be
-/// synthesized (no [`synthesizers`] entry matches), generating its test fails at compile time and the dev must add it
-/// to `skip`. Every `skip` entry must in turn match an oracle in the module.
-///
-/// ## Usage
-///
-/// ```noir
-/// #[generate_oracle_tests_excluding(@[
-///     quote { transaction_fee_opcode },
-/// ])]
-/// pub mod avm;
-/// ```
-pub(crate) comptime fn generate_oracle_tests_excluding(m: Module, skip: [Quoted]) -> Quoted {
-    let oracles = m.functions().filter(|f: FunctionDefinition| f.has_named_attribute("oracle"));
-
-    // Guard against stale skip-list entries: every name must match an oracle in this module.
-    for s in skip {
-        assert(
-            oracles.any(|f: FunctionDefinition| f.name() == s),
-            f"oracle test skip-list entry {s} matched no oracle in {m}",
-        );
-    }
-
-    let tests = oracles
-        .filter(|f: FunctionDefinition| !skip.any(|s: Quoted| s == f.name()))
+    let tests = m
+        .functions()
+        .filter(|f: FunctionDefinition| f.has_named_attribute("oracle") & !f.has_named_attribute("skip_oracle_test"))
         .map(|f: FunctionDefinition| oracle_test_for(f));
     tests.join(quote {})
 }

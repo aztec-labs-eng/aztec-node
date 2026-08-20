@@ -1,14 +1,12 @@
+use crate::macros::oracle_declaration::utl_oracle;
 use crate::protocol::{
     address::AztecAddress, contract_class_id::ContractClassId, contract_instance::ContractInstance, traits::FromField,
 };
 
 // NOTE: this is for use in private only
-#[oracle(aztec_utl_getContractInstance)]
-unconstrained fn get_contract_instance_oracle(_address: AztecAddress) -> ContractInstance {}
-
-// NOTE: this is for use in private only
+#[utl_oracle]
 unconstrained fn get_contract_instance_internal(address: AztecAddress) -> ContractInstance {
-    get_contract_instance_oracle(address)
+    get_contract_instance_internal_oracle(address)
 }
 
 /// Returns `address`'s [`ContractInstance`].
