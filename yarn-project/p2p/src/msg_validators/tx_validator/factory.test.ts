@@ -61,6 +61,19 @@ async function mockPrivateTxWithGasSettings(gasSettings: GasSettings) {
   return tx;
 }
 
+function mockKnownArchiveAndUnusedNullifiers(db: MockProxy<MerkleTreeReadOperations>) {
+  db.findLeafIndices.mockImplementation((treeId, values) => {
+    switch (treeId) {
+      case MerkleTreeId.ARCHIVE:
+        return Promise.resolve(values.map(() => 0n));
+      case MerkleTreeId.NULLIFIER_TREE:
+        return Promise.resolve(values.map(() => undefined));
+      default:
+        throw new Error(`Unexpected tree ID ${treeId}`);
+    }
+  });
+}
+
 describe('Validator factory functions', () => {
   let synchronizer: MockProxy<WorldStateSynchronizer>;
   let contractSource: MockProxy<ContractDataSource>;
@@ -367,9 +380,7 @@ describe('Validator factory functions', () => {
       `(
         'isSimulation=$isSimulation, skipFeeEnforcement=$skipFeeEnforcement: over-limit tx rejected=$rejected',
         async ({ isSimulation, skipFeeEnforcement, rejected }) => {
-          db.findLeafIndices.mockImplementation((treeId, values) =>
-            Promise.resolve(values.map(() => (treeId === MerkleTreeId.ARCHIVE ? 0n : undefined))),
-          );
+          mockKnownArchiveAndUnusedNullifiers(db);
           const validator = createTxValidatorForAcceptingTxsOverRPC(db, contractSource, undefined, {
             l1ChainId: 1,
             rollupVersion: 2,
@@ -401,9 +412,7 @@ describe('Validator factory functions', () => {
       `(
         'isSimulation=$isSimulation, skipFeeEnforcement=$skipFeeEnforcement: under-minimum tx is rejected',
         async ({ isSimulation, skipFeeEnforcement }) => {
-          db.findLeafIndices.mockImplementation((treeId, values) =>
-            Promise.resolve(values.map(() => (treeId === MerkleTreeId.ARCHIVE ? 0n : undefined))),
-          );
+          mockKnownArchiveAndUnusedNullifiers(db);
           const validator = createTxValidatorForAcceptingTxsOverRPC(db, contractSource, undefined, {
             l1ChainId: 1,
             rollupVersion: 2,

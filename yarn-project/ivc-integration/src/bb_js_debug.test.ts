@@ -63,7 +63,7 @@ describe('BB.js Debug Wrapper', () => {
       num_msgs: inboxParityInputs.numMessages,
       // eslint-disable-next-line camelcase
       start_rolling_hash: inboxParityInputs.startRollingHash.toString(),
-      // eslint-disable-next-line camelcase
+       
       // eslint-disable-next-line camelcase
       prover_id: inboxParityInputs.proverId.toString(),
     };
