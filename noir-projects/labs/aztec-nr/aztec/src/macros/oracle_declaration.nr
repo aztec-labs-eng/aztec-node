@@ -106,6 +106,14 @@ pub(crate) comptime fn add_manual_execution_oracle<let N: u32, let M: u32>(wire_
     append_manifest_entry(false, name, line);
 }
 
+/// Registers manifest entries for the execution oracles declared in `protocol_types` (foundation), which this
+/// crate's attribute machinery cannot annotate. The signatures transcribe the TS registry labels (as with
+/// `get_notes`, the `u32` level label covers the `u8` the declaration sends); native annotation replaces this
+/// once the machinery is upstreamed.
+pub(crate) comptime fn declare_foundation_oracles(_m: Module) {
+    add_manual_execution_oracle("aztec_misc_log", "u32,str,u32,array(field)->()");
+}
+
 comptime fn declare_oracle(f: FunctionDefinition, scope: Quoted) -> Quoted {
     let name = f.name();
     assert(f.is_unconstrained(), f"oracle wrapper {name} must be an unconstrained function");
