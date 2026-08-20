@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Print the transitive TypeScript dependency closure of one or more test (or source) files.
 //
-// Usage: node scripts/test-deps.mjs [--all] [--diff-excluded] <path/to/foo.test.ts> [more files...]
-//        node scripts/test-deps.mjs --check
+// Usage: node scripts/dep-closures.mjs [--all] [--diff-excluded] <path/to/foo.test.ts> [more files...]
+//        node scripts/dep-closures.mjs --check
 //
 // Files are grouped by their containing package's tsconfig and one ts.Program is built per
 // group, so sweeping a whole package costs about the same as a single file (~2s). Each
@@ -59,8 +59,8 @@ const checkMode = args.includes('--check');
 const files = args.filter(a => !a.startsWith('--'));
 
 if (files.length === 0 && !checkMode) {
-  console.error('Usage: node scripts/test-deps.mjs [--all] [--diff-excluded] <file.ts> [more files...]');
-  console.error('       node scripts/test-deps.mjs --check');
+  console.error('Usage: node scripts/dep-closures.mjs [--all] [--diff-excluded] <file.ts> [more files...]');
+  console.error('       node scripts/dep-closures.mjs --check');
   console.error('  --all            also list node_modules dependencies');
   console.error('  --diff-excluded  show touched packages exhaustively: "+ included" / "- not included"');
   console.error('  --check          verify dynamic-load sites carry a // @dependency annotation');
@@ -360,6 +360,14 @@ for (const [cfgPath, entries] of groups) {
         continue;
       }
       repoFiles.add(path.relative(repoRoot, destToSrc(f)));
+    }
+
+    // Module resolution into a package is governed by its package.json (exports, main,
+    // jest config), so every spanned package's manifest joins the closure. The base hash
+    // (hash_deps_base) excludes per-package manifests in exchange: a manifest change then
+    // only moves the keys of entries whose closure reaches that package.
+    for (const pkg of new Set([...repoFiles].map(f => /^(yarn-project\/[^/]+)\//.exec(f)?.[1]).filter(Boolean))) {
+      if (existsSync(path.join(repoRoot, pkg, 'package.json'))) repoFiles.add(`${pkg}/package.json`);
     }
 
     console.log(`# ${path.relative(repoRoot, entry)}`);

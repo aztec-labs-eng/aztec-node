@@ -11,77 +11,81 @@ function hash {
     $(cache_content_hash ../yarn-project/.rebuild_patterns)
 }
 
-# Base for per-test cache keys: everything a test can depend on that per-test TS dependency
-# closures (scripts/test-deps.mjs) don't cover — package.json, yarn.lock, .swcrc, jest
+# Base folded into every dependency hash: everything an entry can depend on that the
+# dependency closures (scripts/dep-closures.mjs) don't cover — yarn.lock, .swcrc, jest
 # configs, scripts, fixtures — plus the toolchain hash. Unlike the build hash, noir-contracts
 # is NOT folded in: the generated contract TS and artifact JSONs are closure members and are
-# content-hashed per test (see compute_package_test_dep_hashes), so a contract change only
+# content-hashed per entry (see compute_package_dep_hashes), so a contract change only
 # invalidates the tests whose closures reach it. Everything under yarn-project is in by
 # default so new fixture types can't silently fall outside the base; the exclusions are
 # .ts (covered by the closures — .tsx/.mts/.cts stay in, excluding them isn't worth it and
-# including them only over-invalidates) and files that can't affect test behavior (docs,
-# terraform, images).
-function hash_tests_base {
+# including them only over-invalidates), files that can't affect test behavior (docs,
+# terraform, images), and per-package package.json manifests, which dep-closures.mjs adds
+# to each closure that spans the package — so a manifest change only moves the keys of
+# entries that reach it. The root yarn-project/package.json (workspaces, resolutions) and
+# any deeper fixture package.json stay in the base.
+function hash_deps_base {
   hash_str \
     $(../labs-aztec-toolchain/bootstrap.sh hash) \
     $(cache_content_hash '^yarn-project/' \
-        '!^yarn-project/.*\.(ts|md|tf|svg|png)$')
+        '!^yarn-project/.*\.(ts|md|tf|svg|png)$' \
+        '!^yarn-project/[^/]+/package\.json$')
 }
 
-# Prints a test's cache key from the map produced by compute_test_dependencies. The keys only
+# Prints a test's cache key from the map produced by compute_dep_hashes. The keys only
 # matter to CI's redis test cache, so outside CI this always prints disabled-cache (the token
 # both cache layers treat as "never cache") — local runs never read the map, so a stale local
 # map can't poison anything. A missing map or entry likewise disables caching for that test
 # rather than risking a stale hit.
-function test_hash {
+function dep_hash {
   local h=
   if [ "$CI" -eq 1 ]; then
-    h=$(awk -v t="$1" '$1 == t { print $2; exit }' .test-dep-hashes 2>/dev/null || true)
+    h=$(awk -v t="$1" '$1 == t { print $2; exit }' .dep-hashes 2>/dev/null || true)
   fi
   echo "${h:-disabled-cache}"
 }
 
 # Dumps the whole per-test cache-key map ("<test> <hash>" per line) so other bootstraps
-# (end-to-end) can load it into memory once instead of invoking test_hash per test.
-function test_hashes {
-  cat .test-dep-hashes 2>/dev/null || true
+# (end-to-end) can load it into memory once instead of invoking dep_hash per test.
+function dep_hashes {
+  cat .dep-hashes 2>/dev/null || true
 }
 
-# Prints the cache key of a non-test entry point registered in compute_test_dependencies
+# Prints the cache key of a non-test entry point registered in compute_dep_hashes
 # (e.g. txe/src/bin/index.ts), for other bootstraps to compose their test hashes from.
-# Outside CI prints disabled-cache like test_hash. In CI a missing map or entry is a hard
+# Outside CI prints disabled-cache like dep_hash. In CI a missing map or entry is a hard
 # error: it means the entry point was never registered, and degrading silently would leave
 # the caller's tests keyed on nothing.
-function get_dependencies_hash {
+function require_dep_hash {
   if [ "$CI" -ne 1 ]; then
     echo disabled-cache
     return
   fi
   local h
-  h=$(awk -v t="$1" '$1 == t { print $2; exit }' .test-dep-hashes 2>/dev/null || true)
+  h=$(awk -v t="$1" '$1 == t { print $2; exit }' .dep-hashes 2>/dev/null || true)
   if [ -z "$h" ]; then
-    echo_stderr "ERROR: no dependency hash for '$1' in yarn-project/.test-dep-hashes." \
-      "Register it in compute_test_dependencies and rebuild."
+    echo_stderr "ERROR: no dependency hash for '$1' in yarn-project/.dep-hashes." \
+      "Register it in compute_dep_hashes and rebuild."
     exit 1
   fi
   echo "$h"
 }
 
-# One parallel unit of compute_test_dependencies: computes the closures of one package's tests
-# (batched into a single ts.Program by test-deps.mjs) and prints one "<test> <hash>" line per
+# One parallel unit of compute_dep_hashes: computes the closures of one package's tests
+# (batched into a single ts.Program by dep-closures.mjs) and prints one "<test> <hash>" line per
 # test, paths relative to yarn-project to match test_cmds. The hash is the final cache key:
-# hash_tests_base (passed as $base, hashed once per compute rather than once per test_cmds
+# hash_deps_base (passed as $base, hashed once per compute rather than once per test_cmds
 # line) plus the git blob hashes of the closure members in closure order (the closure is
 # path-sorted, so this is deterministic). Blobs come from $lstree, a single ls-tree dump shared
 # by all workers — memoized by the caller so the same file is never ls-tree'd once per test.
 # Closure members absent from the dump (untracked generated sources, dest/*.d.ts leaves)
-# contribute nothing and are covered by the other hash_tests_base components, matching
+# contribute nothing and are covered by the other hash_deps_base components, matching
 # cache_content_hash's tracked-files-only behavior.
-function compute_package_test_dep_hashes {
+function compute_package_dep_hashes {
   set -euo pipefail
-  local pkg=$1 tests_file=$2 lstree=$3 base=$4
+  local pkg=$1 entries_file=$2 lstree=$3 base=$4
   local out=$(dirname "$lstree")/$pkg
-  node scripts/test-deps.mjs $(grep "^$pkg/" "$tests_file") > "$out.closures"
+  node scripts/dep-closures.mjs $(grep "^$pkg/" "$entries_file") > "$out.closures"
 
   # Closure members absent from the ls-tree dump are untracked build outputs (generated
   # contract TS, artifact JSONs, generated data files): hash their working-tree content. This
@@ -109,50 +113,50 @@ function compute_package_test_dep_hashes {
     <(seq 0 $(($(wc -l < "$out.tests") - 1)) | sed "s|^|$out.|" | git hash-object --stdin-paths | cut -c1-16)
 }
 
-# Computes the per-test dependency-hash map (gitignored .test-dep-hashes) consumed by
-# test_hash. Runs at the end of compile_all: since the map is gitignored it ships inside the
+# Computes the per-test dependency-hash map (gitignored .dep-hashes) consumed by
+# dep_hash. Runs at the end of compile_all: since the map is gitignored it ships inside the
 # yarn-project build artifact (cache_upload sweeps all ignored files), keyed by the full
 # content hash — so a downloaded or freshly built tree always carries a map that is current
 # for its content, with no separate staleness tracking. Dirty-tree handling is delegated to
 # cache_content_hash: uncommitted changes disable caching (and error in CI).
-function compute_test_dependencies {
-  echo_header "yarn-project compute test dependencies"
+function compute_dep_hashes {
+  echo_header "yarn-project compute dependency hashes"
 
   # Refuse to build a map from dishonest closures: every detectable dynamic-load site
   # (workers, non-literal imports, forks) must carry a // @dependency annotation.
-  node scripts/test-deps.mjs --check
+  node scripts/dep-closures.mjs --check
 
   local commit=${AZTEC_CACHE_COMMIT:-HEAD}
   local tmp=$(mktemp -d)
 
   {
     find . -name '*.test.ts' -not -path '*node_modules*' -not -path '*/dest/*' | sed 's|^\./||'
-    # Non-test entry points other bootstraps key their test caches on via get_dependencies_hash:
+    # Non-test entry points other bootstraps key their test caches on via require_dep_hash:
     # the TXE server and oracle test resolver that noir-contracts/aztec-nr nargo tests run against.
     echo txe/src/bin/index.ts
     echo txe/src/bin/oracle_test_server.ts
-  } | sort > $tmp/tests
+  } | sort > $tmp/entries
 
   # Closures are computed from the working tree but keys are hashed from $commit's blobs, so
   # tree and commit must agree. cache_content_hash implements the canonical contract (dirty →
   # disabled-cache, dirty in CI → error, explicit AZTEC_CACHE_COMMIT → check skipped): probe
-  # .ts dirt with it directly; hash_tests_base's own cache_content_hash covers everything
+  # .ts dirt with it directly; hash_deps_base's own cache_content_hash covers everything
   # else. Either disabled means every key is disabled — write the map directly and skip the
   # closure computation.
   local ts_hash base
   ts_hash=$(cache_content_hash '^yarn-project/.*\.ts$')
-  base=$(hash_tests_base)
+  base=$(hash_deps_base)
   if [[ "$ts_hash" == "disabled-cache" || "$base" == "disabled-cache" ]]; then
-    sed 's/$/ disabled-cache/' $tmp/tests > .test-dep-hashes
+    sed 's/$/ disabled-cache/' $tmp/entries > .dep-hashes
     rm -rf $tmp
     return
   fi
 
   # All closure members live under yarn-project/; one dump serves every worker.
   git -C .. ls-tree -r "$commit" -- yarn-project > $tmp/lstree
-  cut -d/ -f1 $tmp/tests | sort -u \
-    | parallel --memsuspend 16G "compute_package_test_dep_hashes {} $tmp/tests $tmp/lstree $base > $tmp/hashes-{}"
-  sort $tmp/hashes-* > $tmp/out && mv $tmp/out .test-dep-hashes
+  cut -d/ -f1 $tmp/entries | sort -u \
+    | parallel --memsuspend 16G "compute_package_dep_hashes {} $tmp/entries $tmp/lstree $base > $tmp/hashes-{}"
+  sort $tmp/hashes-* > $tmp/out && mv $tmp/out .dep-hashes
   rm -rf $tmp
 }
 
@@ -311,7 +315,7 @@ function compile_all {
 
   # Runs after the block above: closure resolution walks the dest/*.d.ts that tsgo emits.
   # The map is gitignored, so the upload below carries it inside the build artifact.
-  compute_test_dependencies
+  compute_dep_hashes
 
   if [ "$CI" -eq 1 ]; then
     cache_upload "yarn-project-$hash.tar.gz" $(git ls-files --others --ignored --exclude-standard | grep -v '^node_modules/')
@@ -350,7 +354,7 @@ function warm_solc_cache {
 }
 
 export -f compile_project format lint get_projects compile_all hash warm_solc_cache \
-  compute_package_test_dep_hashes compute_test_dependencies hash_tests_base
+  compute_package_dep_hashes compute_dep_hashes hash_deps_base
 
 function build {
   echo_header "yarn-project build"
@@ -368,7 +372,7 @@ function test_cmds {
     # Skip benchmarks here.
     [[ "$test" =~ \.bench\.test\.ts$ ]] && continue
 
-    local prefix=$(test_hash "$test")
+    local prefix=$(dep_hash "$test")
     local cmd_env=""
 
     # These need isolation due to network stack usage (p2p, anvil, etc).
@@ -419,7 +423,7 @@ function test_cmds {
 
   if [[ "${TARGET_BRANCH:-}" =~ ^(v[0-9]+(-next)?|backport-to-v[0-9]+-(staging|next))$ ]]; then
     for test in aztec/src/testnet_compatibility.test.ts aztec/src/mainnet_compatibility.test.ts; do
-      echo "$(test_hash "$test") yarn-project/scripts/run_test.sh $test"
+      echo "$(dep_hash "$test") yarn-project/scripts/run_test.sh $test"
     done
   fi
 }
