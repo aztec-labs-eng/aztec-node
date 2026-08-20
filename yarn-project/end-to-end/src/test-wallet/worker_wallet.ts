@@ -1,5 +1,5 @@
 import type { CallIntent, IntentInnerHash } from '@aztec/aztec.js/authorization';
-import type { InteractionWaitOptions, SendReturn } from '@aztec/aztec.js/contracts';
+import type { GasSettingsOption, InteractionWaitOptions, SendReturn } from '@aztec/aztec.js/contracts';
 import type {
   Aliased,
   AppCapabilities,
@@ -30,6 +30,7 @@ import type { ContractArtifact, EventMetadataDefinition, FunctionCall } from '@a
 import type { AuthWitness } from '@aztec/stdlib/auth-witness';
 import type { AztecAddress } from '@aztec/stdlib/aztec-address';
 import type { ContractInstancePreimage } from '@aztec/stdlib/contract';
+import type { GasSettings } from '@aztec/stdlib/gas';
 import type { ExecutionPayload, TxProfileResult, UtilityExecutionResult } from '@aztec/stdlib/tx';
 import { Tx } from '@aztec/stdlib/tx';
 
@@ -167,6 +168,10 @@ export class WorkerWallet implements Wallet {
 
   registerContractClass(artifact: ContractArtifact): Promise<void> {
     return this.call('registerContractClass', artifact);
+  }
+
+  completeGasSettings(fee?: GasSettingsOption): Promise<GasSettings> {
+    return this.call('completeGasSettings', fee);
   }
 
   simulateTx(exec: ExecutionPayload, opts: SimulateOptions): Promise<TxSimulationResultWithAppOffset> {

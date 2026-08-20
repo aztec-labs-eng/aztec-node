@@ -16,7 +16,7 @@ This is an auto-generated reference. For tutorials and guides, see the [Aztec.js
 
 *Package: @aztec/aztec.js*
 
-*Generated: 2026-08-19T09:19:51.719Z*
+*Generated: 2026-08-20T16:06:27.471Z*
 
 This document provides a comprehensive reference for all public APIs in the Aztec.js library.
 
@@ -366,6 +366,7 @@ createTxExecutionRequest(
 ```typescript
 wrapExecutionPayload(
   exec: ExecutionPayload,
+  gasSettings: GasSettings,
   chainInfo: ChainInfo,
   options?: any
 ): Promise<ExecutionPayload>
@@ -374,6 +375,7 @@ wrapExecutionPayload(
 **Parameters:**
 
 - `exec`: `ExecutionPayload`
+- `gasSettings`: `GasSettings`
 - `chainInfo`: `ChainInfo`
 - `options` (optional): `any`
 
@@ -4922,6 +4924,7 @@ Fee payment method that allows an account contract to pay for its own deployment
 constructor(
   private account: Account,
   private chainInfo: ChainInfo,
+  private gasSettings: GasSettings,
   private paymentMethod?: FeePaymentMethod,
   private feeEntrypointOptions?: any
 )
@@ -4931,6 +4934,8 @@ constructor(
 
 - `account`: `Account`
 - `chainInfo`: `ChainInfo`
+- `gasSettings`: `GasSettings`
+  - The gas settings the account entrypoint auth witness signs over. They must be fully resolved before this payment method builds its execution payload, since the transaction is committed to them from that point on.
 - `paymentMethod` (optional): `FeePaymentMethod`
 - `feeEntrypointOptions` (optional): `any`
 
@@ -5283,7 +5288,7 @@ Can get accounts from wallet. Maps to: getAccounts
 
 ##### canCreateAuthWit
 
-Can create auth witnesses for accounts. Maps to: createAuthWit
+Can create auth witnesses for accounts. Maps to: createAuthWit Not a lesser capability than transaction authority: a holder able to request witnesses of its choosing can transact as the account. Grant only to parties trusted with the account, regardless of any per-contract or per-function restriction applied to the transaction capability.
 
 **Type:** `boolean`
 
@@ -5683,14 +5688,15 @@ Wallet implementation details.
 
 **Type:** Type Alias
 
-Extended fee payment method option for account deployments that includes entrypoint wrapping options
+Extended fee payment method option for account deployments that includes entrypoint wrapping options. Gas settings matter at request time for self-paid deploys: the account entrypoint auth witness signs over them, so any user-provided values must be known before the payload is built.
 
 **Signature:**
 
 ```typescript
-export type DeployAccountFeePaymentMethodOption = FeePaymentMethodOption & {
+export type DeployAccountFeePaymentMethodOption = FeePaymentMethodOption &
+ GasSettingsOption & {
  feeEntrypointOptions?: unknown;
-};
+ };
 ```
 
 **Type Members:**
@@ -6527,6 +6533,7 @@ export type Wallet = {
  secretKeyOrKeys?: Fr | MasterSecretKeys,
  ): Promise<void>;
  registerContractClass(artifact: ContractArtifact): Promise<void>;
+ completeGasSettings(fee?: GasSettingsOption): Promise<GasSettings>;
  simulateTx(exec: ExecutionPayload, opts: SimulateOptions): Promise<TxSimulationResultWithAppOffset>;
  executeUtility(call: FunctionCall, opts: ExecuteUtilityOptions): Promise<UtilityExecutionResult>;
  profileTx(exec: ExecutionPayload, opts: ProfileOptions): Promise<TxProfileResult>;
@@ -6681,6 +6688,23 @@ registerContractClass(artifact: ContractArtifact): Promise<void>
 **Returns:**
 
 `Promise<void>`
+##### completeGasSettings
+
+Completes partial user-provided gas settings with the values the wallet would fill in when sending a transaction (network admission gas limits, predicted fees). Used by flows that must know the final gas settings before building a payload, such as self-paid account deployments whose auth witness signs over them.
+
+**Signature:**
+
+```typescript
+completeGasSettings(fee?: GasSettingsOption): Promise<GasSettings>
+```
+
+**Parameters:**
+
+- `fee` (optional): `GasSettingsOption`
+
+**Returns:**
+
+`Promise<GasSettings>`
 ##### simulateTx
 
 **Signature:**

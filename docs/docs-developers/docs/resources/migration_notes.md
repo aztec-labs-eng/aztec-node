@@ -9,13 +9,15 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
-### [aztec-nr / Aztec.js] Account entrypoint authorization now binds the fee-payment method and cancellation flag
+### [aztec-nr / Aztec.js] Account entrypoint authorization now binds the fee-payment method, cancellation flag and gas settings
 
 The account entrypoint (`AccountActions::entrypoint`) previously authorized only the app payload hash. It now
-authorizes a combined hash over the app payload, the `fee_payment_method` selector, and the `cancellable` flag, so
-the account's approval covers the fee-payer and cancellation side effects rather than the call list alone. This
+authorizes a combined hash over the app payload, the `fee_payment_method` selector, the `cancellable` flag and the
+transaction's gas settings (read from the context, where the kernel guarantees they match the transaction), so the
+account's approval covers the fee-payer, cancellation and gas side effects rather than the call list alone. This
 prevents a party holding an account's authorization witness (for example a relayer or delegated prover) from
-reusing it while switching the fee-payment mode or cancellation flag.
+reusing it while switching the fee-payment mode, the cancellation flag, or the gas limits and max fees the account
+is on the hook for.
 
 This changes the authorized message preimage, so it is a breaking change:
 
@@ -25,10 +27,26 @@ This changes the authorized message preimage, so it is a breaking change:
   the updated bytecode does not accept witnesses produced by an old client. Client and account bytecode must be
   upgraded together.
 - **Third-party wallets or tooling** that build the account entrypoint authorization witness themselves (mirroring
-  `DefaultAccountEntrypoint`) must include the fee-payment method and cancellation flag in the witnessed hash,
-  using the new `entrypoint_payload` domain separator, instead of hashing the encoded calls alone.
+  `DefaultAccountEntrypoint`) must include the fee-payment method, cancellation flag and serialized gas settings in
+  the witnessed hash, using the new `entrypoint_payload` domain separator, instead of hashing the encoded calls
+  alone.
 
-Gas settings are not yet bound; that is planned as a follow-up.
+Because the witness now signs over the gas settings, they must be final before the witness is built:
+
+- `EntrypointInterface.wrapExecutionPayload` (and `Account.wrapExecutionPayload`) takes the gas settings as a new
+  second argument, and the account entrypoint records them on the returned `ExecutionPayload` (new optional
+  `gasSettings` field). Wallets use payload-bound gas settings verbatim for both fee estimation and sending,
+  since any other settings would make the embedded witness fail verification.
+- Self-paid account deployment resolves the final gas settings up front through the new
+  `Wallet.completeGasSettings(fee?)` method, which completes partial user-provided gas settings with the values
+  the wallet would fill in when sending (network admission gas limits, predicted fees). To control the gas
+  settings of a self-paid deployment, pass them in the deploy method's `fee` options so they are bound when the
+  payload is built; explicitly passing conflicting settings later when sending the prebuilt payload is rejected.
+  Simulating a self-paid deployment consequently runs under the exact settings the transaction will be sent with,
+  instead of the artificially high estimation-only limits used for ordinary sends, providing a faithful preview of the
+  real transaction.
+- `AccountEntrypointMetaPaymentMethod` now requires the resolved gas settings as a constructor argument and
+  reports them from `getGasSettings()`.
 
 ### [CLI] Removed `inspect-contract`, `compute-selector`, `generate-secret-and-hash`, `parse-parameter-struct`, and `example-contracts`
 

@@ -165,6 +165,7 @@ export class EmbeddedWallet extends BaseWallet {
       from: opts.from,
       feePayer: executionPayload.feePayer,
       gasSettings: opts.fee?.gasSettings,
+      boundGasSettings: executionPayload.gasSettings,
       forEstimation: true,
     });
 
@@ -202,13 +203,15 @@ export class EmbeddedWallet extends BaseWallet {
     this.log.verbose(
       `Estimated gas limits for tx: DA=${estimated.gasLimits.daGas} L2=${estimated.gasLimits.l2Gas} teardownDA=${estimated.teardownGasLimits.daGas} teardownL2=${estimated.teardownGasLimits.l2Gas}`,
     );
-    const gasSettings = GasSettings.from({
-      ...opts.fee?.gasSettings,
-      maxFeesPerGas: feeOptions.gasSettings.maxFeesPerGas,
-      maxPriorityFeesPerGas: feeOptions.gasSettings.maxPriorityFeesPerGas,
-      gasLimits: opts.fee?.gasSettings?.gasLimits ?? estimated.gasLimits,
-      teardownGasLimits: opts.fee?.gasSettings?.teardownGasLimits ?? estimated.teardownGasLimits,
-    });
+    const gasSettings =
+      executionPayload.gasSettings ??
+      GasSettings.from({
+        ...opts.fee?.gasSettings,
+        maxFeesPerGas: feeOptions.gasSettings.maxFeesPerGas,
+        maxPriorityFeesPerGas: feeOptions.gasSettings.maxPriorityFeesPerGas,
+        gasLimits: opts.fee?.gasSettings?.gasLimits ?? estimated.gasLimits,
+        teardownGasLimits: opts.fee?.gasSettings?.teardownGasLimits ?? estimated.teardownGasLimits,
+      });
     let wait: InteractionWaitOptions = opts.wait;
     if (wait !== NO_WAIT) {
       const callerWaitOpts: WaitOpts = typeof wait === 'object' ? wait : {};

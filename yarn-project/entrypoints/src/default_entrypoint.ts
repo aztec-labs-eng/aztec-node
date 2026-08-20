@@ -2,7 +2,7 @@ import { FunctionType } from '@aztec/stdlib/abi';
 import type { GasSettings } from '@aztec/stdlib/gas';
 import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec/stdlib/tx';
 
-import type { ChainInfo, EntrypointInterface } from './interfaces.js';
+import { type ChainInfo, type EntrypointInterface, assertMatchesBoundGasSettings } from './interfaces.js';
 
 /**
  * Default implementation of the entrypoint interface. It calls a function on a contract directly
@@ -13,6 +13,7 @@ export class DefaultEntrypoint implements EntrypointInterface {
     gasSettings: GasSettings,
     chainInfo: ChainInfo,
   ): Promise<TxExecutionRequest> {
+    assertMatchesBoundGasSettings(exec, gasSettings);
     // Initial request with calls, authWitnesses and capsules
     const { calls, authWitnesses, capsules, extraHashedArgs } = exec;
 
@@ -41,7 +42,13 @@ export class DefaultEntrypoint implements EntrypointInterface {
     );
   }
 
-  async wrapExecutionPayload(exec: ExecutionPayload, _chainInfo: ChainInfo, _options?: any): Promise<ExecutionPayload> {
+  async wrapExecutionPayload(
+    exec: ExecutionPayload,
+    gasSettings: GasSettings,
+    _chainInfo: ChainInfo,
+    _options?: any,
+  ): Promise<ExecutionPayload> {
+    assertMatchesBoundGasSettings(exec, gasSettings);
     if (exec.calls.length !== 1) {
       throw new Error(`DefaultEntrypoint can only wrap a single call, got ${exec.calls.length}`);
     }
@@ -56,6 +63,7 @@ export class DefaultEntrypoint implements EntrypointInterface {
       exec.capsules,
       [hashedArguments, ...exec.extraHashedArgs],
       exec.feePayer,
+      exec.gasSettings,
     );
   }
 }

@@ -13,7 +13,12 @@ import type { GasSettings } from '@aztec/stdlib/gas';
 import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec/stdlib/tx';
 
 import { EncodedAppEntrypointCalls } from './encoding.js';
-import type { AuthWitnessProvider, ChainInfo, EntrypointInterface } from './interfaces.js';
+import {
+  type AuthWitnessProvider,
+  type ChainInfo,
+  type EntrypointInterface,
+  assertMatchesBoundGasSettings,
+} from './interfaces.js';
 
 /**
  * Domain separator for the account entrypoint payload authorization message. Mirrors DOM_SEP__ENTRYPOINT_PAYLOAD
@@ -25,16 +30,17 @@ export const ENTRYPOINT_PAYLOAD_DOMAIN_SEPARATOR = 3045079954;
 
 /**
  * Computes the inner hash the account authorizes when invoked through its entrypoint. Binds the app payload
- * together with the fee-payment selector and cancellation flag so that the account's approval covers the fee-payer
- * and cancellation side effects rather than the call list alone.
+ * together with the fee-payment selector, cancellation flag and gas settings so that the account's approval covers
+ * the fee-payer, cancellation and gas side effects rather than the call list alone.
  */
 export async function computeEntrypointPayloadHash(
   encodedCalls: EncodedAppEntrypointCalls,
   feePaymentMethod: AccountFeePaymentMethodOptions,
   cancellable: boolean,
+  gasSettings: GasSettings,
 ): Promise<Fr> {
   return poseidon2HashWithSeparator(
-    [await encodedCalls.hash(), new Fr(feePaymentMethod), new Fr(cancellable)],
+    [await encodedCalls.hash(), new Fr(feePaymentMethod), new Fr(cancellable), ...gasSettings.toFields()],
     ENTRYPOINT_PAYLOAD_DOMAIN_SEPARATOR,
   );
 }
@@ -97,8 +103,9 @@ export class DefaultAccountEntrypoint implements EntrypointInterface {
     chainInfo: ChainInfo,
     options: DefaultAccountEntrypointOptions,
   ): Promise<TxExecutionRequest> {
+    assertMatchesBoundGasSettings(exec, gasSettings);
     const { authWitnesses, capsules, extraHashedArgs } = exec;
-    const callData = await this.#buildEntrypointCallData(exec, chainInfo, options);
+    const callData = await this.#buildEntrypointCallData(exec, gasSettings, chainInfo, options);
     const entrypointHashedArgs = await HashedValues.fromArgs(callData.encodedArgs);
     const txRequest = TxExecutionRequest.from({
       firstCallArgsHash: entrypointHashedArgs.hash,
@@ -116,11 +123,13 @@ export class DefaultAccountEntrypoint implements EntrypointInterface {
 
   async wrapExecutionPayload(
     exec: ExecutionPayload,
+    gasSettings: GasSettings,
     chainInfo: ChainInfo,
     options: DefaultAccountEntrypointOptions,
   ): Promise<ExecutionPayload> {
+    assertMatchesBoundGasSettings(exec, gasSettings);
     const { authWitnesses, capsules, extraHashedArgs, feePayer } = exec;
-    const callData = await this.#buildEntrypointCallData(exec, chainInfo, options);
+    const callData = await this.#buildEntrypointCallData(exec, gasSettings, chainInfo, options);
 
     // Build the entrypoint function call
     const entrypointCall = FunctionCall.from({
@@ -134,12 +143,15 @@ export class DefaultAccountEntrypoint implements EntrypointInterface {
       returnType: getFunctionReturnType(callData.abi),
     });
 
+    // The embedded auth witness signs over the gas settings, so the payload records them for the wallet to
+    // honor when it assembles the transaction.
     return new ExecutionPayload(
       [entrypointCall],
       [callData.payloadAuthWitness, ...authWitnesses],
       capsules,
       [...callData.encodedCalls.hashedArguments, ...extraHashedArgs],
       feePayer ?? this.address,
+      gasSettings,
     );
   }
 
@@ -147,12 +159,14 @@ export class DefaultAccountEntrypoint implements EntrypointInterface {
    * Builds the shared data needed for both creating a tx execution request and wrapping an execution payload.
    * This includes encoding calls, building entrypoint arguments, and creating the authwitness.
    * @param exec - The execution payload containing calls to encode
+   * @param gasSettings - The gas settings bound into the authorized payload hash
    * @param chainInfo - Chain information (chainId and version) for replay protection
    * @param options - Account entrypoint options including tx nonce and fee payment method
    * @returns Encoded call data, ABI, function selector, and auth witness
    */
   async #buildEntrypointCallData(
     exec: ExecutionPayload,
+    gasSettings: GasSettings,
     chainInfo: ChainInfo,
     options: DefaultAccountEntrypointOptions,
   ) {
@@ -167,7 +181,12 @@ export class DefaultAccountEntrypoint implements EntrypointInterface {
 
     const functionSelector = await FunctionSelector.fromNameAndParameters(abi.name, abi.parameters);
 
-    const payloadHash = await computeEntrypointPayloadHash(encodedCalls, feePaymentMethodOptions, !!cancellable);
+    const payloadHash = await computeEntrypointPayloadHash(
+      encodedCalls,
+      feePaymentMethodOptions,
+      !!cancellable,
+      gasSettings,
+    );
     const messageHash = await computeOuterAuthWitHash(this.address, chainInfo.chainId, chainInfo.version, payloadHash);
     const payloadAuthWitness = await this.auth.createAuthWit(messageHash);
 

@@ -4,7 +4,7 @@ import { Fr } from '@aztec/foundation/curves/bn254';
 import type { PXE } from '@aztec/pxe/server';
 import { FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
 import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Gas, GasFees } from '@aztec/stdlib/gas';
+import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
 import type { AztecNode } from '@aztec/stdlib/interfaces/client';
 import type { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
 import {
@@ -102,6 +102,36 @@ describe('EmbeddedWallet', () => {
           fee: { gasSettings: { gasLimits: Gas.from({ daGas: 5000, l2Gas: 2000 }) } },
         }),
       ).rejects.toThrow('Declared DA gas limit (5000) exceeds the maximum this network allows per tx (1000)');
+    });
+
+    it('reaches proving for self-paid deployment payloads with bound gas settings', async () => {
+      getPredictedMinFees.mockResolvedValue([new GasFees(2, 2)]);
+      getNodeInfo.mockResolvedValue({
+        l1ChainId: 1,
+        rollupVersion: 1,
+        txsLimits: { gas: { daGas: 117_668, l2Gas: 6_540_000 } },
+      } as any);
+      simulateTx.mockResolvedValue(makeMinimalSimResult());
+      proveTx.mockRejectedValue(new Error('stop-at-prove'));
+
+      const call = FunctionCall.from({
+        name: 'deploy_account',
+        to: await AztecAddress.random(),
+        selector: FunctionSelector.random(),
+        type: FunctionType.PRIVATE,
+        hideMsgSender: false,
+        isStatic: false,
+        args: [],
+      });
+      const gasSettings = GasSettings.from({
+        gasLimits: { daGas: 50_000, l2Gas: 500_000 },
+        teardownGasLimits: { daGas: 5_000, l2Gas: 50_000 },
+        maxFeesPerGas: { feePerDaGas: 2n, feePerL2Gas: 2n },
+        maxPriorityFeesPerGas: { feePerDaGas: 0n, feePerL2Gas: 0n },
+      });
+      const payload = new ExecutionPayload([call], [], [], [], undefined, gasSettings);
+
+      await expect(wallet.sendTx(payload, { from: NO_FROM })).rejects.toThrow('stop-at-prove');
     });
   });
 });

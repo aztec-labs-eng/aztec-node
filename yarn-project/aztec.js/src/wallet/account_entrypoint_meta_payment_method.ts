@@ -27,6 +27,11 @@ export class AccountEntrypointMetaPaymentMethod implements FeePaymentMethod {
   constructor(
     private account: Account,
     private chainInfo: ChainInfo,
+    /**
+     * The gas settings the account entrypoint auth witness signs over. They must be fully resolved before this
+     * payment method builds its execution payload, since the transaction is committed to them from that point on.
+     */
+    private gasSettings: GasSettings,
     private paymentMethod?: FeePaymentMethod,
     private feeEntrypointOptions?: any,
   ) {}
@@ -63,7 +68,7 @@ export class AccountEntrypointMetaPaymentMethod implements FeePaymentMethod {
     }
 
     // Use the generic wrapping mechanism from the account interface
-    return this.account.wrapExecutionPayload(innerPayload, this.chainInfo, options);
+    return this.account.wrapExecutionPayload(innerPayload, this.gasSettings, this.chainInfo, options);
   }
 
   getFeePayer(): Promise<AztecAddress> {
@@ -71,6 +76,6 @@ export class AccountEntrypointMetaPaymentMethod implements FeePaymentMethod {
   }
 
   getGasSettings(): GasSettings | undefined {
-    return this.paymentMethod?.getGasSettings();
+    return this.gasSettings;
   }
 }

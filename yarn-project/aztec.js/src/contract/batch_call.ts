@@ -117,6 +117,7 @@ export class BatchCall extends BaseContractInteraction {
         combinedPayload.capsules.concat(options.capsules ?? []),
         combinedPayload.extraHashedArgs,
         combinedPayload.feePayer,
+        combinedPayload.gasSettings,
       );
 
       batchRequests.push({

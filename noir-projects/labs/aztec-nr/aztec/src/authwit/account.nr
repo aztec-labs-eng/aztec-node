@@ -1,6 +1,11 @@
 use crate::context::PrivateContext;
 
-use crate::protocol::{hash::poseidon2_hash_with_separator, traits::Hash};
+use crate::protocol::{
+    abis::gas_settings::GasSettings,
+    constants::GAS_SETTINGS_LENGTH,
+    hash::poseidon2_hash_with_separator,
+    traits::{Hash, Serialize},
+};
 
 use crate::authwit::auth::{compute_authwit_message_hash, IS_VALID_SELECTOR};
 use crate::authwit::entrypoint::app::AppPayload;
@@ -12,22 +17,50 @@ pub(crate) global DOM_SEP__TX_NULLIFIER: u32 = 1025801951;
 
 /// Domain separator for the account entrypoint payload authorization message.
 ///
-/// Binds the fee-payment selector and cancellation flag alongside the app payload so that the account authorizes
-/// them together.
+/// Binds the fee-payment selector, cancellation flag and gas settings alongside the app payload so that the account
+/// authorizes them together.
 pub(crate) global DOM_SEP__ENTRYPOINT_PAYLOAD: u32 = 3045079954;
 
 /// Computes the inner hash the account authorizes when invoked through its entrypoint.
 ///
-/// Binds the app payload together with the fee-payment selector and cancellation flag. Both drive fee-payer and
-/// cancellation side effects, so authorizing the app payload alone would let a party holding the witness switch the
-/// fee-payment mode or cancellation flag while keeping the account's approval valid. The gas settings are not yet
-/// bound: doing so requires the self-paid-deploy flow to build this witness with the settings resolved during send
-/// preparation.
-fn compute_entrypoint_payload_hash(app_payload: AppPayload, fee_payment_method: u8, cancellable: bool) -> Field {
-    poseidon2_hash_with_separator(
-        [app_payload.hash(), fee_payment_method as Field, cancellable as Field],
-        DOM_SEP__ENTRYPOINT_PAYLOAD,
-    )
+/// Binds the app payload together with the fee-payment selector, cancellation flag and gas settings. All of them
+/// drive side effects the account must approve: the fee-payment mode and gas settings determine how much the account
+/// can be charged and from where, and the cancellation flag determines whether the transaction can be replaced.
+/// Authorizing the app payload alone would let a party holding the witness alter any of them while keeping the
+/// account's approval valid.
+fn compute_entrypoint_payload_hash(
+    app_payload: AppPayload,
+    fee_payment_method: u8,
+    cancellable: bool,
+    gas_settings: GasSettings,
+) -> Field {
+    let serialized_gas_settings: [Field; GAS_SETTINGS_LENGTH] = gas_settings.serialize();
+    let mut inputs = [0 as Field; 3 + GAS_SETTINGS_LENGTH];
+    inputs[0] = app_payload.hash();
+    inputs[1] = fee_payment_method as Field;
+    inputs[2] = cancellable as Field;
+    for i in 0..GAS_SETTINGS_LENGTH {
+        inputs[3 + i] = serialized_gas_settings[i];
+    }
+    poseidon2_hash_with_separator(inputs, DOM_SEP__ENTRYPOINT_PAYLOAD)
+}
+
+mod test {
+    use crate::protocol::{abis::{gas::Gas, gas_fees::GasFees, gas_settings::GasSettings}, traits::Serialize};
+
+    // The TypeScript builder appends GasSettings.toFields() to the entrypoint payload hash preimage, mirroring
+    // gas_settings.serialize() here. Both this test and its TypeScript counterpart (in account_entrypoint.test.ts)
+    // pin the same field order, so a serialization reorder on either side fails one of them.
+    #[test]
+    fn gas_settings_serialization_order() {
+        let gas_settings = GasSettings::new(
+            Gas::new(1, 2),
+            Gas::new(3, 4),
+            GasFees::new(5, 6),
+            GasFees::new(7, 8),
+        );
+        assert_eq(gas_settings.serialize(), [1, 2, 3, 4, 5, 6, 7, 8]);
+    }
 }
 
 pub struct AccountActions<Context> {
@@ -61,8 +94,10 @@ impl AccountActions<&mut PrivateContext> {
 
     /// Verifies that the entrypoint payload is authorized and executes the `app_payload`.
     ///
-    /// The authorized message binds the app payload together with `fee_payment_method` and `cancellable`, so the
-    /// account's approval covers the fee-payer and cancellation side effects rather than the call list alone.
+    /// The authorized message binds the app payload together with `fee_payment_method`, `cancellable` and the
+    /// transaction's gas settings (read from the context, where the kernel guarantees they match the transaction),
+    /// so the account's approval covers the fee-payer, cancellation and gas side effects rather than the call list
+    /// alone.
     ///
     /// The message is a generic authwit message (`compute_authwit_message_hash`) with the account itself as the
     /// consumer. This shared message space is deliberate: authorizing a witness for a third party is equivalent to
@@ -88,7 +123,12 @@ impl AccountActions<&mut PrivateContext> {
     pub fn entrypoint(self, app_payload: AppPayload, fee_payment_method: u8, cancellable: bool) {
         let valid_fn = self.is_valid_impl;
 
-        let inner_hash = compute_entrypoint_payload_hash(app_payload, fee_payment_method, cancellable);
+        let inner_hash = compute_entrypoint_payload_hash(
+            app_payload,
+            fee_payment_method,
+            cancellable,
+            self.context.gas_settings(),
+        );
         let message_hash = compute_authwit_message_hash(
             self.context.this_address(),
             self.context.chain_id(),

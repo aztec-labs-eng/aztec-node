@@ -12,7 +12,7 @@ import type { GasSettings } from '@aztec/stdlib/gas';
 import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec/stdlib/tx';
 
 import { EncodedAppEntrypointCalls } from './encoding.js';
-import type { ChainInfo, EntrypointInterface } from './interfaces.js';
+import { type ChainInfo, type EntrypointInterface, assertMatchesBoundGasSettings } from './interfaces.js';
 
 /**
  * Implementation for an entrypoint interface that can execute multiple function calls in a single transaction
@@ -25,6 +25,7 @@ export class DefaultMultiCallEntrypoint implements EntrypointInterface {
     gasSettings: GasSettings,
     chainInfo: ChainInfo,
   ): Promise<TxExecutionRequest> {
+    assertMatchesBoundGasSettings(exec, gasSettings);
     const { authWitnesses, capsules, extraHashedArgs } = exec;
     const callData = await this.#buildEntrypointCallData(exec);
 
@@ -43,7 +44,13 @@ export class DefaultMultiCallEntrypoint implements EntrypointInterface {
     return Promise.resolve(txRequest);
   }
 
-  async wrapExecutionPayload(exec: ExecutionPayload, _chainInfo: ChainInfo, _options?: any): Promise<ExecutionPayload> {
+  async wrapExecutionPayload(
+    exec: ExecutionPayload,
+    gasSettings: GasSettings,
+    _chainInfo: ChainInfo,
+    _options?: any,
+  ): Promise<ExecutionPayload> {
+    assertMatchesBoundGasSettings(exec, gasSettings);
     const { authWitnesses, capsules, extraHashedArgs } = exec;
     const callData = await this.#buildEntrypointCallData(exec);
     const entrypointCall = FunctionCall.from({
@@ -63,6 +70,7 @@ export class DefaultMultiCallEntrypoint implements EntrypointInterface {
       capsules,
       [...callData.encodedCalls.hashedArguments, ...extraHashedArgs],
       exec.feePayer,
+      exec.gasSettings,
     );
   }
 
