@@ -53,31 +53,6 @@ export function injectCommands(program: Command, log: LogFn) {
     });
 
   program
-    .command('example-contracts')
-    .description('Lists the example contracts available to deploy from @aztec/noir-contracts.js')
-    .action(async () => {
-      const { exampleContracts } = await import('./example_contracts.js');
-      await exampleContracts(log);
-    });
-
-  program
-    .command('compute-selector')
-    .description('Given a function signature, it computes a selector')
-    .argument('<functionSignature>', 'Function signature to compute selector for e.g. foo(Field)')
-    .action(async (functionSignature: string) => {
-      const { computeSelector } = await import('./compute_selector.js');
-      await computeSelector(functionSignature, log);
-    });
-
-  program
-    .command('generate-secret-and-hash')
-    .description('Generates an arbitrary secret (Fr), and its hash (using aztec-nr defaults)')
-    .action(async () => {
-      const { generateSecretAndHash } = await import('./generate_secret_and_hash.js');
-      await generateSecretAndHash(log);
-    });
-
-  program
     .command('get-canonical-sponsored-fpc-address')
     .description('Gets the canonical SponsoredFPC address for this any testnet running on the same version as this CLI')
     .action(async () => {
