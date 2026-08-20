@@ -40,7 +40,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Nightly branches. Dispatch runs collapse to the single requested branch.
+        # TO ADD A NEW RELEASE LINE to the nightly schedule: extend the LAST
+        # list in this expression, e.g. fromJSON('["main", "v5"]'). Nothing else
+        # changes — no environment, ruleset, or App-installation edits (see the
+        # multi-branch model in the header). The first arm of the expression is
+        # not a branch list: it collapses dispatch runs to the one requested branch.
         branch: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.branch)) || fromJSON('["main"]') }}
     concurrency:
       group: ${{ github.workflow }}-${{ github.repository }}-${{ matrix.branch }}
