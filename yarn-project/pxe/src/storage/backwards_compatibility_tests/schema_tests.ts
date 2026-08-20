@@ -334,6 +334,7 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
       const noteStore = new NoteStore(kvStore);
 
       const changeSetId = 'fixture-change-set';
+      noteStore.beginChangeSet(changeSetId);
 
       // Two contracts so `note_nullifiers_by_contract` exhibits both a multi-value row (contractA → {n1, n2}) and a
       // single-value row (contractB → {n3}).

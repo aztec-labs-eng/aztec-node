@@ -26,6 +26,26 @@ describe('StagedWriteCoordinator', () => {
       coordinator.begin();
       expect(() => coordinator.begin()).toThrow(/already active/);
     });
+
+    it('notifies its stores of the change set it opened', async () => {
+      const opened: ChangeSetId[] = [];
+      const mockStore: StagedStore = {
+        storeName: 'mock_store',
+        beginChangeSet: changeSetId => opened.push(changeSetId),
+        commitStaged: () => Promise.resolve(),
+        discardStaged: () => Promise.resolve(),
+      };
+
+      coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [mockStore] });
+
+      const first = coordinator.begin();
+      expect(opened).toEqual([first]);
+      await coordinator.commit(first);
+
+      const second = coordinator.begin();
+      expect(opened).toEqual([first, second]);
+      await coordinator.abort(second);
+    });
   });
 
   describe('commit', () => {
