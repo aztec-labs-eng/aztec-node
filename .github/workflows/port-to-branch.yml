@@ -1,0 +1,136 @@
+name: Port to Branch
+
+# Ports a merged PR to every branch named by its port-to-<branch> labels
+# (e.g. port-to-main, port-to-v5), as one standalone PR per target — there is
+# no accumulation/staging branch. A clean cherry-pick opens a normal PR; a
+# conflicted one is committed WITH its markers and opened as a draft (no CI,
+# unmergeable) for a human or ClaudeBox to resolve in a follow-up commit.
+#
+# Runs on both `labeled` and `closed` because either can complete the
+# "merged AND labeled" condition: labels are usually applied before merge
+# (fires on closed), but a label added after merge must also port (fires on
+# labeled). The bot PAT is required throughout: PRs created with github.token
+# would never trigger CI.
+#
+# To add a new portable branch, create the port-to-<branch> label in the repo.
+
+on:
+  pull_request_target:
+    types: ["labeled", "closed"]
+
+jobs:
+  port:
+    name: Port PR
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve port targets from labels
+        id: targets
+        env:
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          targets=$(echo "$LABELS_JSON" | jq -c '[.[] | select(startswith("port-to-")) | sub("^port-to-"; "")]')
+          echo "Port targets: $targets"
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "any=$(echo "$targets" | jq 'length > 0')" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: steps.targets.outputs.any == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+
+      - name: Port to each target
+        if: steps.targets.outputs.any == 'true'
+        id: port
+        env:
+          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          TARGETS: ${{ steps.targets.outputs.targets }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RESULTS_FILE: ${{ runner.temp }}/port-results.jsonl
+        run: |
+          # Kludge: the script switches branches while running and bash reads
+          # script files incrementally, so run it from a memory buffer.
+          buffer_script=$(cat ./scripts/port_to_branch.sh)
+          failed=0
+          for target in $(echo "$TARGETS" | jq -r '.[]'); do
+            echo "::group::Porting #$PR_NUMBER to $target"
+            if ! bash <(echo "$buffer_script") "$PR_NUMBER" "$target"; then
+              jq -cn --arg target "$target" \
+                '{target: $target, status: "failed", pr_url: "", branch: "", conflicts: []}' \
+                >> "$RESULTS_FILE"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          echo "Results:"
+          cat "$RESULTS_FILE"
+          exit $failed
+
+      - name: Comment results on the original PR
+        if: always() && steps.port.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          RESULTS_FILE: ${{ runner.temp }}/port-results.jsonl
+        run: |
+          [ -s "$RESULTS_FILE" ] || { echo "No results to report"; exit 0; }
+          BODY=$(jq -r '
+            if .status == "ported" then "✅ Ported to `\(.target)`: \(.pr_url)"
+            elif .status == "conflicts" then "⚠️ Ported to `\(.target)` **with conflicts** (draft): \(.pr_url) — resolve the committed markers in a follow-up commit, then mark ready. Conflicted: \(.conflicts | map("`\(.)`") | join(", "))"
+            elif .status == "skipped" then "ℹ️ `\(.target)`: change already present; nothing to port."
+            elif .status == "exists" then "ℹ️ `\(.target)`: port PR already exists: \(.pr_url)"
+            else "❌ `\(.target)`: port failed — see the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+            end' "$RESULTS_FILE")
+          gh pr comment "${{ github.event.pull_request.number }}" --body "$BODY"
+
+      - name: Notify Slack and dispatch ClaudeBox for conflicts and failures
+        if: always() && steps.port.outcome != 'skipped'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          RESULTS_FILE: ${{ runner.temp }}/port-results.jsonl
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          URL: ${{ github.event.pull_request.html_url }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          [ -s "$RESULTS_FILE" ] || exit 0
+          jq -c 'select(.status == "conflicts" or .status == "failed")' "$RESULTS_FILE" |
+          while read -r result; do
+            TARGET=$(echo "$result" | jq -r '.target')
+            STATUS=$(echo "$result" | jq -r '.status')
+            PORT_PR_URL=$(echo "$result" | jq -r '.pr_url')
+            BRANCH=$(echo "$result" | jq -r '.branch')
+
+            # Post to #backports, derive the permalink for the ClaudeBox context link.
+            if [[ "$STATUS" == "conflicts" ]]; then
+              TEXT=$(printf '⚠️ Port of <%s|#%s %s> to `%s` has conflicts: <%s|draft PR> (author: %s) (🤖)' \
+                "$URL" "$PR" "$TITLE" "$TARGET" "$PORT_PR_URL" "$AUTHOR")
+            else
+              TEXT=$(printf '❌ Port of <%s|#%s %s> to `%s` failed (author: %s) (🤖)' \
+                "$URL" "$PR" "$TITLE" "$TARGET" "$AUTHOR")
+            fi
+            RESP=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+              -H "Content-type: application/json" \
+              -d "$(jq -n --arg c "#backports" --arg t "$TEXT" '{channel:$c, text:$t}')")
+            echo "Slack response: $RESP"
+            TS=$(echo "$RESP" | jq -r '.ts // empty')
+            CHANNEL_ID=$(echo "$RESP" | jq -r '.channel // empty')
+            LINK=""
+            if [[ -n "$TS" && -n "$CHANNEL_ID" ]]; then
+              LINK="https://aztecprotocol.slack.com/archives/$CHANNEL_ID/p${TS//./}"
+            fi
+
+            # ClaudeBox resolves conflicts on the already-pushed draft branch;
+            # plain failures only get the Slack notification.
+            if [[ "$STATUS" == "conflicts" ]]; then
+              gh workflow run claudebox.yml \
+                -f prompt="Port of PR #$PR ($TITLE) to $TARGET has conflicts. The conflicted cherry-pick is committed WITH ITS MARKERS on branch $BRANCH, draft PR: $PORT_PR_URL. Follow .claude/claudebox/port-to-branch.md to resolve the markers in a follow-up commit and mark the PR ready." \
+                -f link="${LINK:-$PORT_PR_URL}" \
+                -f target_ref="origin/$BRANCH" \
+                -f slack_channel="$CHANNEL_ID" \
+                -f slack_thread_ts="$TS"
+            fi
+          done
