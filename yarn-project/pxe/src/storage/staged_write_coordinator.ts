@@ -2,6 +2,9 @@ import { randomBytes } from '@aztec/foundation/crypto/random';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
 import type { AztecAsyncKVStore } from '@aztec/kv-store';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- BaseStagingStore is only used in doc tags
+import type { BaseStagingStore } from './base_staging_store.js';
+
 /**
  * Identifies a change set: the writes staged between a {@link StagedWriteCoordinator.begin} and its matching commit or
  * abort, which are promoted to the database or dropped as a unit.
@@ -20,6 +23,16 @@ export type ChangeSetId = string;
 export interface StagedStore {
   /** Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator) */
   readonly storeName: string;
+
+  /**
+   * Notifies the store that a change set has been opened.
+   *
+   * TODO: make it required once every staged store extends {@link BaseStagingStore}. It is optional only while
+   * they migrate to per-change-set staging.
+   *
+   * @param changeSetId - The change set identifier
+   */
+  beginChangeSet?(changeSetId: ChangeSetId): void;
 
   /**
    * Commits staged data to persistent storage. Will be called within a db transaction for atomicity, alongside the
@@ -90,6 +103,10 @@ export class StagedWriteCoordinator {
     const changeSetId = randomBytes(8).toString('hex');
     this.#currentChangeSetId = changeSetId;
 
+    for (const store of this.#stagedStores.values()) {
+      store.beginChangeSet?.(changeSetId);
+    }
+
     this.#log.debug(`Opened change set ${changeSetId}`, { changeSetId });
     return changeSetId;
   }
@@ -110,7 +127,6 @@ export class StagedWriteCoordinator {
     this.#log.debug(`Committing change set ${changeSetId}`, { changeSetId });
 
     // Commit all stores atomically in a single transaction.
-    // Each store's commit is a no-op if it has no staged data (but that's up to each store to handle).
     await this.#kvStore.transactionAsync(async () => {
       for (const store of this.#stagedStores.values()) {
         await store.commitStaged(changeSetId);
