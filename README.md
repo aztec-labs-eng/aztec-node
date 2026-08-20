@@ -24,7 +24,7 @@ Logging goes through the [Logger](yarn-project/foundation/src/log/) module in Ty
 
 ## Releases
 
-Releases are driven by git tags. Each branch's version is tracked in its `.release-please-manifest.json` at the project root. Tags are created exclusively by the [release tag workflow](./.github/workflows/release-tag.yml) — a ruleset blocks anyone else (admins included) from creating `v*` tags. Nightly tags (`v<ver>-nightly.<date>`) are cut every night for each branch in the workflow's matrix; a real release (`v<ver>`) is a manual dispatch with `kind=release` that pauses for a second person's approval. A new tag triggers `./bootstrap.sh release` to build and deploy the version at that tag.
+Releases are driven by git tags. Each branch's version is tracked in its `.release-please-manifest.json` at the project root. Tags are created exclusively by the [release tag workflow](./.github/workflows/release-tag.yml) — a ruleset blocks anyone else (admins included) from creating `v*` tags. Nightly tags (`v<ver>-nightly.<date>`) are cut every night for each branch in the workflow's matrix; a release candidate (`v<ver>-rc.<n>`, with `n` auto-incremented from origin's existing rc tags) is a manual dispatch with `kind=rc`; a real release (`v<ver>`) is a manual dispatch with `kind=release`. Both rc and release dispatches pause for a second person's approval. A new tag triggers `./bootstrap.sh release` to build and deploy the version at that tag.
 
 ## Contribute
 
