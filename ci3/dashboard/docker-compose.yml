@@ -1,0 +1,44 @@
+# Runs the CI dashboard behind Caddy (TLS) in one stack, replacing the hand-written
+# `docker run` systemd unit that lived only on the ci host. Secrets are NOT inline:
+# they come from /etc/rkapp.env (mode 600, off-repo) — the same pattern as ci3-trigger.
+#
+# Both services use host networking, deliberately unchanged from the old unit: the app
+# reaches ElastiCache and IMDS through the host's network identity, and IMDSv2's default
+# hop limit rejects bridged containers. Caddy therefore reaches the app on loopback.
+#
+# Cutover on the ci host (one-time):
+#   1) create /etc/rkapp.env from the old unit's Environment= lines, chmod 600.
+#      Drop GH_TOKEN: it fed ci-metrics/github_data.py's GitHub poller, which post-
+#      migration points at the wrong system (CI runs on the forge now). Repoint that
+#      poller at the forge API or retire those panels as a separate decision.
+#   2) systemctl disable --now rkapp        # free port 80 for Caddy's ACME
+#   3) docker compose up -d --build
+#   443 must be open on bastion_sg (see the iac change).
+services:
+  rkapp:
+    build: .
+    image: rkapp
+    network_mode: host
+    restart: always
+    env_file: /etc/rkapp.env
+    volumes:
+      - /home/ubuntu/rk/ci-metrics-gcp-credentials.json:/app/ci-metrics-gcp-credentials.json:ro
+      - /home/ubuntu/aztec-packages:/aztec-packages
+      - /logs-disk:/logs-disk
+      - /home/ubuntu/rk/data:/data
+      - /home/ubuntu/.aws:/root/.aws:ro
+    # Bind loopback only: the app is no longer publicly reachable; Caddy fronts it.
+    command: gunicorn -w 50 -b 127.0.0.1:8080 rk:app
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  caddy:
+    image: caddy:2-alpine
+    network_mode: host
+    restart: always
+    depends_on: [rkapp]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /home/ubuntu/rk/caddy/data:/data
+      - /home/ubuntu/rk/caddy/config:/config
