@@ -544,7 +544,7 @@ function release {
 
   projects=(
     yarn-project
-    # aztec-up is omitted until the repo split is complete.
+    aztec-up
     playground
     release-image
   )

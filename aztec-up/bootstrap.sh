@@ -3,24 +3,10 @@ source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 hash=$(hash_str \
   $(cache_content_hash ^aztec-up/) \
-  $(../ipc-runtime/bootstrap.sh hash) \
-  $(../wsdb/bootstrap.sh hash) \
-  $(../barretenberg/ts/bootstrap.sh hash) \
   $(../yarn-project/bootstrap.sh hash))
 
 # Bare aliases ("nightly", "latest") resolve to this major version.
-DEFAULT_MAJOR_VERSION=${AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION:-4}
-
-function wsdb_package_dirs {
-  for package_dir in "$root"/wsdb/ts/packages/*; do
-    [ -d "$package_dir" ] && echo "$package_dir"
-  done
-  echo "$root/wsdb/ts"
-}
-
-function barretenberg_ts_package_dirs {
-  "$root"/barretenberg/ts/bootstrap.sh get_projects
-}
+DEFAULT_MAJOR_VERSION=${AZTEC_TOOLCHAIN_DEFAULT_MAJOR_VERSION:-5}
 
 # Tool versions baked into the install artifacts (uploaded to S3 on release).
 # The installer reads exactly these keys: noir (noirup), foundry (foundryup),
@@ -60,18 +46,14 @@ publish:
   allow_offline: true
 
 packages:
-  # @aztec/viem is a third-party fork published to npm, not built locally.
-  # Match it before @aztec/* so it falls through to the npmjs uplink.
-  "@aztec/viem":
-    access: \$all
-    publish: \$all
-    unpublish: \$all
-    proxy: npmjs
-
+  # The fake-published workspace packages resolve from storage; the rest of @aztec (the
+  # foundation pins from yarn-project's resolutions) falls through to npmjs and caches
+  # into storage for the offline test image.
   "@aztec/*":
     access: \$all
     publish: \$all
     unpublish: \$all
+    proxy: npmjs
 
   "@*/*":
     access: \$all
@@ -129,24 +111,20 @@ EOF
 
     # Deploy all npm packages to local registry.
     version=0.0.1
+    # Scoped fake-publish: workspace-local @aztec deps are co-published at $version, while
+    # foundation deps (bb.js, wsdb, noir packages, ...) keep the versions pinned in
+    # yarn-project's root resolutions and resolve through the npmjs uplink.
+    export NPM_RELEASE_RESOLUTIONS="$(jq -c '.resolutions // {}' $root/yarn-project/package.json)"
     # TODO(AD): we have kludged a retry here. a local NPM install ought to be robust enough not to.
     echo "Deploying packages to local npm registry (version: $version)..."
-    {
-      echo $root/ipc-runtime/ts
-      barretenberg_ts_package_dirs
-      wsdb_package_dirs
-      # l1-artifacts lives under l1-contracts, so it isn't enumerated by yarn-project's get_projects;
-      # publish it explicitly or @aztec/aztec's portal dependency can't resolve from the local registry.
-      echo $root/l1-contracts/l1-artifacts
-      $root/noir/bootstrap.sh get_projects
-      $root/yarn-project/bootstrap.sh get_projects
-    } | DRY_RUN= parallel --tag --line-buffer --halt now,fail=1 "retry 'cd {} && dump_fail \"deploy_npm $version\" >/dev/null'"
+    $root/yarn-project/bootstrap.sh get_projects |
+      DRY_RUN= parallel --tag --line-buffer --halt now,fail=1 "retry 'cd {} && dump_fail \"deploy_npm $version\" >/dev/null'"
 
     # Prime the verdaccio cache by installing the packages we'll use in tests.
     # This fetches all transitive dependencies from npmjs and caches them locally.
     # Use --prefix to avoid modifying the host system's global npm packages.
     echo "Priming verdaccio cache with all dependencies..."
-    retry "npm i -g --prefix /tmp/npm-prime @aztec/aztec@$version @aztec/cli-wallet@$version @aztec/bb.js@$version"
+    retry "npm i -g --prefix /tmp/npm-prime @aztec/aztec@$version @aztec/cli-wallet@$version"
     rm -rf /tmp/npm-prime
 
     docker build -t aztecprotocol/aztec-up-test .
@@ -204,133 +182,6 @@ function release_root_installer {
 
     # Update alias list.
     do_or_dryrun aws s3 cp bin/aliases/index "s3://install.aztec.network/aliases/index"
-}
-
-function prep_test_mac {
-  local verdaccio_port=4873
-  local http_port=4874
-
-  # Ensure we've cross-compiled bb for macos. Normally this is only done on releases.
-  ../barretenberg/cpp/bootstrap.sh build_cross amd64-macos true
-  ../barretenberg/ts/bootstrap.sh cross_copy_bb_js amd64-macos
-  ../barretenberg/ts/bootstrap.sh cross_copy_bb_avm_sim amd64-macos
-
-  # Ensure build artifacts exist.
-  if [ ! -f ./bin/0.0.1/versions ] || [ ! -d ./verdaccio-storage ]; then
-    echo "Build artifacts missing. Running build first..."
-    build
-  fi
-
-  # Cleanup background processes on exit.
-  # Note: can't use local - the trap fires after function scope is gone.
-  _bg_pids=()
-  trap 'kill "${_bg_pids[@]}" &>/dev/null || true' EXIT
-
-  # Start Verdaccio in offline mode (no uplinks), bound to all interfaces.
-  cat > /tmp/verdaccio-mac-test.yaml <<EOF
-storage: $PWD/verdaccio-storage
-max_body_size: 1000mb
-
-packages:
-  "@*/*":
-    access: \$all
-    publish: \$all
-    unpublish: \$all
-
-  "**":
-    access: \$all
-    publish: \$all
-    unpublish: \$all
-
-logs: { type: stdout, format: pretty, level: warn }
-EOF
-
-  verdaccio --config /tmp/verdaccio-mac-test.yaml --listen 0.0.0.0:$verdaccio_port &>/dev/null &
-  _bg_pids+=($!)
-  while ! nc -z localhost $verdaccio_port &>/dev/null; do sleep 1; done
-  echo "Verdaccio running on 0.0.0.0:$verdaccio_port"
-
-  # Serve bin/ directory over HTTP to mimic S3-hosted install scripts.
-  python3 -m http.server $http_port --directory ./bin --bind 0.0.0.0 &>/dev/null &
-  _bg_pids+=($!)
-  while ! nc -z localhost $http_port &>/dev/null; do sleep 1; done
-  echo "HTTP server running on 0.0.0.0:$http_port (serving ./bin/)"
-}
-
-function install_on_mac_vm {
-  local mac_name="${1:?Mac vm name (e.g. 14)}"
-  local host_ip="${HOST_IP:-172.20.0.1}"
-  local verdaccio_port=4873
-  local http_port=4874
-
-  # Run install on the Mac VM via SSH.
-  echo "Running install on Mac VM ($mac_name)..."
-  /mnt/user-data/macos/ssh.sh $mac_name zsh -l <<REMOTE_EOF
-    set -euo pipefail
-
-    # Clean previous install.
-    rm -rf ~/.aztec
-
-    # Point npm at local Verdaccio and scripts at local HTTP server.
-    export npm_config_registry=http://$host_ip:$verdaccio_port
-    export INSTALL_URI=http://$host_ip:$http_port
-    export INFRA_VERSION=0.0.1
-    export NO_NEW_SHELL=1
-
-    touch \$HOME/.zshrc
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
-    . "\$HOME/.nvm/nvm.sh"
-
-    echo
-    echo "Running aztec install script..."
-    bash <(curl -sL \$INSTALL_URI/0.0.1/aztec-install)
-
-    # Fake fresh shell.
-    export PATH="\$HOME/.aztec/current/bin:\$HOME/.aztec/current/node_modules/.bin:\$HOME/.aztec/bin:\$PATH"
-    . "\$HOME/.nvm/nvm.sh"
-
-    # Verify installation.
-    aztec-nargo --version
-    aztec-bb --version
-    aztec --version
-REMOTE_EOF
-}
-
-function launch_and_install_on_mac_vm {
-  set -euo pipefail
-  local version="$1"
-  local name="aztec-up-test-$version"
-  /mnt/user-data/macos/launch_vm.sh $version "" $name
-  local ip=$(docker inspect -f '{{ .NetworkSettings.Networks.bridge.IPAddress }}' macos-$name)
-  echo "Waiting for Mac VM ($name) to be accessible at $ip..."
-  while ! nc -z $ip 22 &>/dev/null; do sleep 0.5; done
-  install_on_mac_vm $name
-  docker stop macos-$name
-}
-
-export -f install_on_mac_vm launch_and_install_on_mac_vm
-
-# Assumes a macos vm is already running.
-# Starts services, and runs install script on the mac vm via ssh.
-function test_on_mac_vm {
-  local mac_name="${1:?Mac vm name (e.g. 14)}"
-  echo_header "aztec-up test_on_mac_vm"
-  prep_test_mac
-  install_on_mac_vm $mac_name
-}
-
-function test_mac {
-  local mac_name="${1:?Mac vm name (e.g. 14)}"
-  echo_header "aztec-up test_mac"
-  prep_test_mac
-  launch_and_install_on_mac_vm $mac_name
-}
-
-# Starts services, launches a mac vm for each version and runs install script via ssh.
-function test_macs {
-  echo_header "aztec-up test_macs"
-  prep_test_mac
-  LIVE_LOGGING=1 PASS_LOG=1 parallelize < <(for mac in 14 15 26; do echo "fake_hash launch_and_install_on_mac_vm $mac"; done) | cat
 }
 
 case "$cmd" in

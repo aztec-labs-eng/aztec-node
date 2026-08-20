@@ -223,7 +223,7 @@ function install_aztec_packages {
   set -euo pipefail
 
   # Install npm packages to the version directory using --prefix
-  npm install @aztec/aztec@$VERSION @aztec/cli-wallet@$VERSION @aztec/bb.js@$VERSION --prefix "$version_path"
+  npm install @aztec/aztec@$VERSION @aztec/cli-wallet@$VERSION --prefix "$version_path"
 }
 
 # Expose every native tool in internal-bin under an aztec-<tool> symlink in bin.
