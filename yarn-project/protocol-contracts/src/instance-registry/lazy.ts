@@ -16,7 +16,9 @@ export async function getContractInstanceRegistryArtifact(): Promise<ContractArt
     // Even if now supported by all major browsers, the MIME type is replaced with
     // "text/javascript"
     // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-    const { default: contractInstanceRegistryJson } = await import('../../artifacts/ContractInstanceRegistry.json');
+    const { default: contractInstanceRegistryJson } = await import('../../artifacts/ContractInstanceRegistry.json', {
+      with: { type: 'json' },
+    });
     protocolContractArtifact = loadContractArtifact(contractInstanceRegistryJson);
   }
   return protocolContractArtifact;

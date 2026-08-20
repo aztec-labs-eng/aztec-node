@@ -19,7 +19,9 @@ export async function getEcdsaRAccountContractArtifact() {
   // Even if now supported by all major browsers, the MIME type is replaced with
   // "text/javascript"
   // In the meantime, this lazy import is INCOMPATIBLE WITH NODEJS
-  const { default: ecdsaKAccountContractJson } = await import('../../../artifacts/EcdsaRAccount.json');
+  const { default: ecdsaKAccountContractJson } = await import('../../../artifacts/EcdsaRAccount.json', {
+    with: { type: 'json' },
+  });
   return loadContractArtifact(ecdsaKAccountContractJson);
 }
 
