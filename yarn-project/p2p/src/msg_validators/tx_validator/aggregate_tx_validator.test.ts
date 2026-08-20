@@ -18,6 +18,20 @@ describe('AggregateTxValidator', () => {
     await expect(agg.validateTx(txs[4])).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
   });
 
+  it('does not run validators after the first failure', async () => {
+    const tx = await mockTx(0);
+    const agg = new AggregateTxValidator(
+      new TxDenyList([tx.getTxHash()]),
+      new (class implements TxValidator<AnyTx> {
+        validateTx(): Promise<TxValidationResult> {
+          throw new Error('Validator after first failure was run');
+        }
+      })(),
+    );
+
+    await expect(agg.validateTx(tx)).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
+  });
+
   class TxDenyList implements TxValidator<AnyTx> {
     denyList: Set<string>;
 
