@@ -2,7 +2,7 @@
 
 There are many ways to contribute to Aztec Monorepo.
 
-Please read our [disclaimer](./DISCLAIMER.md) first
+Please read our [disclaimer](./DISCLAIMER.md) first.
 
 ## Opening an issue
 

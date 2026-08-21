@@ -1,6 +1,6 @@
-# Aztec Monorepo
+# Aztec Labs Repository
 
-All the packages that make up [Aztec](https://docs.aztec.network).
+Projects owned by [Aztec Labs](https://aztec-labs.com/) supporting the [Aztec Network](https://docs.aztec.network).
 
 - [**`noir-projects`**](/noir-projects): Noir code for Aztec contracts and protocol circuits.
 - [**`yarn-project`**](/yarn-project): Typescript code for client and backend
@@ -14,17 +14,9 @@ All the packages that make up [Aztec](https://docs.aztec.network).
 - [Example contracts](./noir-projects/labs/noir-contracts/): Example contracts for the Aztec network, written in Noir.
 - [End to end tests](./yarn-project/end-to-end/): Integration tests written in Typescript--a good reference for how to use the packages for specific tasks.
 
-## Issues Board
-
-All issues being worked on are tracked on the [Aztec Github Project](https://github.com/orgs/AztecProtocol/projects/22). For a higher-level roadmap, check the [milestones overview](https://aztec.network/roadmap) section of our website.
-
-## Debugging
-
-Logging goes through the [Logger](yarn-project/foundation/src/log/) module in Typescript. `LOG_LEVEL` controls the default log level, and one can set alternate levels for specific modules, such as `debug; warn: module1, module2; error: module3`.
-
 ## Releases
 
-Releases are driven by git tags. Each branch's version is tracked in its `.release-please-manifest.json` at the project root. Tags are created exclusively by the [release tag workflow](./.github/workflows/release-tag.yml) — a ruleset blocks anyone else (admins included) from creating `v*` tags. Nightly tags (`v<ver>-nightly.<date>`) are cut every night for each branch in the workflow's matrix; a release candidate (`v<ver>-rc.<n>`, with `n` auto-incremented from origin's existing rc tags) is a manual dispatch with `kind=rc`; a real release (`v<ver>`) is a manual dispatch with `kind=release`. Both rc and release dispatches pause for a second person's approval. A new tag triggers `./bootstrap.sh release` to build and deploy the version at that tag.
+The projects in this repo are released via npm ([@aztec](https://www.npmjs.com/org/aztec)) and DockerHub ([aztecprotocol/aztec](https://hub.docker.com/r/aztecprotocol/aztec)).
 
 ## Contribute
 
