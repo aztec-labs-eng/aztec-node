@@ -262,6 +262,8 @@ export async function createAztecNodeService(
 
     const globalVariableBuilder = new GlobalVariableBuilder(publicClient, globalVariableBuilderConfig);
     const feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig);
+    await feeProvider.start();
+    started.push(feeProvider);
 
     const collectOffenses = !config.disableValidator || config.enableOffenseCollection;
 

@@ -579,6 +579,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     await tryStop(this.automineSequencer);
     await tryStop(this.proverNode);
     await tryStop(this.p2pClient);
+    await tryStop(this.feeProvider);
     // Dispose the AVM backend before world state: it kills the bb-avm-sim processes and closes the CDB IPC
     // server, releasing their connections to the WSDB so it shuts down cleanly (and freeing the
     // Server/Socket/ChildProcess handles that would otherwise keep the process alive after teardown).
