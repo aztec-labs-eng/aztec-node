@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Downloads a build-cache object written by cache_upload_stream and decompresses it to STDOUT,
+# so large artifacts (e.g. docker save output) can be piped straight into their consumer without
+# an intermediate copy on disk. Exits non-zero on a miss; callers run under pipefail, so
+# `if ! cache_download_stream x.zst | consumer; then ...` correctly takes the miss branch.
+# Honors CACHE_LOCAL_DIR the same way cache_download does.
+NO_CD=1 source ${root:-$(git rev-parse --show-toplevel)}/ci3/source
+
+if [ "$#" -ne 1 ]; then
+  echo_stderr "Usage: $0 <name.zst> | <consumer>"
+  exit 1
+fi
+name="$1"
+
+if [[ "$name" == *"disabled-cache"* ]]; then
+  echo_stderr "Not using cache for $name due to uncommitted changes/files."
+  exit 1
+fi
+if [ "${NO_CACHE:-0}" -eq 1 ]; then
+  echo_stderr "Not using cache for $name because NO_CACHE=1."
+  exit 1
+fi
+
+if [ "$CI" -eq 1 ]; then
+  endpoint="http://aztec-ci-artifacts.s3.amazonaws.com/build-cache"
+else
+  endpoint="https://build-cache.aztec-labs.com"
+fi
+
+function download_from_remote {
+  if [[ -n "${S3_BUILD_CACHE_AWS_PARAMS:-}" ]]; then
+    aws $S3_BUILD_CACHE_AWS_PARAMS s3 cp "s3://aztec-ci-artifacts/build-cache/$name" - 2>/dev/null
+  elif [[ -n "${CACHE_SSH_HOST:-}" ]]; then
+    ssh "$CACHE_SSH_HOST" "curl -s -f \"$endpoint/$name\""
+  else
+    curl -s -f "$endpoint/$name"
+  fi
+}
+
+if [[ -n "${CACHE_LOCAL_DIR:-}" ]] && [[ -f "$CACHE_LOCAL_DIR/$name" ]]; then
+  echo_stderr "Local cache hit for $name."
+  zstd -d < "$CACHE_LOCAL_DIR/$name"
+  exit 0
+fi
+
+if ! download_from_remote | zstd -d; then
+  echo_stderr "Cache download of $name failed."
+  exit 1
+fi
+echo_stderr "Cache download of $name complete in ${SECONDS}s."
