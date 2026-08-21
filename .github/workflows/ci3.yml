@@ -47,6 +47,7 @@ jobs:
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token
+      statuses: write # post_github_status posts per-job commit statuses (ci/x-fast etc.) with github.token
     steps:
       # Do NOT bump actions/checkout to v6 here. v6 ("persist creds to a separate file", #2286)
       # stores the persisted github.token in a temp credentials file pulled in via includeIf, which
