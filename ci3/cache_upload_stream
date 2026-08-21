@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Streams stdin to the build cache as a raw zstd-compressed object.
+# Unlike cache_upload there is no tar wrapper around a named file, so large artifacts (e.g. docker
+# save output) upload without an intermediate copy on disk. Pair with cache_download_stream —
+# objects written by this script are NOT readable by cache_download and vice versa.
+# Always consumes stdin fully, even when the upload is skipped, so producers are not killed by
+# SIGPIPE under pipefail.
+NO_CD=1 source ${root:-$(git rev-parse --show-toplevel)}/ci3/source
+
+if [ "$#" -ne 1 ]; then
+  echo_stderr "Usage: <producer> | $0 <name.zst>"
+  exit 1
+fi
+name="$1"
+
+function skip {
+  echo_stderr "$1"
+  cat >/dev/null
+  exit 0
+}
+
+if [[ "$name" == *"disabled-cache"* ]]; then
+  skip "Skipping upload of $name due to uncommitted changes/files."
+fi
+if [[ -z "${S3_FORCE_UPLOAD:-}" && "${CI:-0}" -eq 0 ]]; then
+  skip "Skipping upload because CI=0 and S3_FORCE_UPLOAD not set."
+fi
+if [[ "${NO_CACHE_UPLOAD:-0}" -eq 1 ]]; then
+  skip "Skipping upload because NO_CACHE_UPLOAD=1."
+fi
+# In SSM/instance-profile mode, AWS CLI falls back to IMDS for credentials.
+if [[ "${CI_SSM_MODE:-0}" -eq 0 ]]; then
+  if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]] && ! aws configure get aws_access_key_id &>/dev/null; then
+    skip "Skipping upload, no AWS credentials found."
+  fi
+fi
+if [ -z "${S3_FORCE_UPLOAD:-}" ] && \
+  aws ${S3_BUILD_CACHE_AWS_PARAMS:-} s3 ls "s3://aztec-ci-artifacts/build-cache/$name" &>/dev/null; then
+  skip "Skipping upload, already exists: $name"
+fi
+
+if zstd -T0 | aws ${S3_BUILD_CACHE_AWS_PARAMS:-} s3 cp - "s3://aztec-ci-artifacts/build-cache/$name" &>/dev/null; then
+  echo_stderr "Cache upload of $name complete in ${SECONDS}s."
+else
+  echo_stderr "Cache upload of $name failed."
+fi

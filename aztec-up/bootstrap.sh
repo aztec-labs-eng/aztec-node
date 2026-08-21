@@ -86,8 +86,17 @@ EOF
     docker load < aztec-up-test-base-image
   fi
 
-  if ! cache_download aztec-up-test-image-$hash.zst; then
+  if ! cache_download_stream aztec-up-test-image-$hash.zst | docker load; then
     rm -rf verdaccio-storage
+    # Seed the storage with the proxied npmjs packages from a previous run, keyed on yarn.lock.
+    # The seed is captured from post-prime storage for this exact lockfile, so on a hit the prime
+    # step below is redundant and skipped — the dominant cost of this build (~1-2 min of npm
+    # resolving and extracting ~2000 packages). This freezes in-range transitive resolution between
+    # lockfile changes, which also makes the test image deterministic. The seed contains no
+    # fake-published workspace packages: those are stripped before upload below.
+    local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
+    local seeded=0
+    cache_download aztec-up-verdaccio-cache-$deps_hash.zst && seeded=1
     verdaccio --config /tmp/verdaccio-config.yaml --listen 4873 &>/dev/null &
     verdaccio_pid=$!
     trap 'kill $verdaccio_pid &>/dev/null || true' EXIT
@@ -117,22 +126,44 @@ EOF
     export NPM_RELEASE_RESOLUTIONS="$(jq -c '.resolutions // {}' $root/yarn-project/package.json)"
     # TODO(AD): we have kludged a retry here. a local NPM install ought to be robust enough not to.
     echo "Deploying packages to local npm registry (version: $version)..."
+    local t=$SECONDS
     $root/yarn-project/bootstrap.sh get_projects |
       DRY_RUN= parallel --tag --line-buffer --halt now,fail=1 "retry 'cd {} && dump_fail \"deploy_npm $version\" >/dev/null'"
+    echo "Package deploy took $((SECONDS - t))s."
 
     # Prime the verdaccio cache by installing the packages we'll use in tests.
     # This fetches all transitive dependencies from npmjs and caches them locally.
     # Use --prefix to avoid modifying the host system's global npm packages.
-    echo "Priming verdaccio cache with all dependencies..."
-    retry "npm i -g --prefix /tmp/npm-prime @aztec/aztec@$version @aztec/cli-wallet@$version"
-    rm -rf /tmp/npm-prime
+    # --no-audit --no-fund: nothing gates on them and audit re-scans the whole ~2000-package tree.
+    if [ "$seeded" -eq 1 ]; then
+      echo "Skipping prime: storage was seeded from cache for this yarn.lock."
+    else
+      echo "Priming verdaccio cache with all dependencies..."
+      t=$SECONDS
+      retry "npm i -g --no-audit --no-fund --prefix /tmp/npm-prime @aztec/aztec@$version @aztec/cli-wallet@$version"
+      rm -rf /tmp/npm-prime
+      echo "Prime took $((SECONDS - t))s."
+    fi
 
+    t=$SECONDS
     docker build -t aztecprotocol/aztec-up-test .
-    docker save aztecprotocol/aztec-up-test:latest > aztec-up-test-image
+    echo "Image build took $((SECONDS - t))s."
 
-    cache_upload aztec-up-test-image-$hash.zst aztec-up-test-image
-  else
-    docker load < aztec-up-test-image
+    # Stream the save straight into the compressed upload — no ~900MB intermediate file on disk.
+    t=$SECONDS
+    docker save aztecprotocol/aztec-up-test:latest | cache_upload_stream aztec-up-test-image-$hash.zst
+    echo "Image save and upload took $((SECONDS - t))s."
+
+    # The test image now contains the full storage, so the live copy is free to become the seed
+    # for future runs: strip the fake-published workspace packages (stale fakes must never leak
+    # into a later run's registry) and upload the proxied npmjs remainder. Strip by exact package
+    # name — matching on the fake version would also delete real packages whose upstream version
+    # happens to collide (e.g. concat-map@0.0.1). cache_upload skips existing keys, so this
+    # uploads once per yarn.lock change.
+    $root/yarn-project/bootstrap.sh get_projects | while read -r project; do
+      rm -rf "verdaccio-storage/$(jq -r .name "$project/package.json")"
+    done
+    cache_upload aztec-up-verdaccio-cache-$deps_hash.zst verdaccio-storage
   fi
 }
 
