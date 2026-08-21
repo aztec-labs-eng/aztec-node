@@ -10,7 +10,6 @@ import {
   PRIVATE_KEY,
   l1ChainIdOption,
   nodeOption,
-  parseAztecAddress,
   parseBigint,
   parseEthereumAddress,
 } from '../../utils/commands.js';
@@ -451,45 +450,6 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
         log,
         debugLogger,
       });
-    });
-
-  program
-    .command('bridge-erc20')
-    .description('Bridges ERC20 tokens to L2.')
-    .argument('<amount>', 'The amount of Fee Juice to mint and bridge.', parseBigint)
-    .argument('<recipient>', 'Aztec address of the recipient.', parseAztecAddress)
-    .addOption(l1RpcUrlsOption)
-    .option(
-      '-m, --mnemonic <string>',
-      'The mnemonic to use for deriving the Ethereum address that will mint and bridge',
-      'test test test test test test test test test test test junk',
-    )
-    .option('--mint', 'Mint the tokens on L1', false)
-    .option('--private', 'If the bridge should use the private flow', false)
-    .addOption(l1ChainIdOption)
-    .requiredOption('-t, --token <string>', 'The address of the token to bridge', parseEthereumAddress)
-    .requiredOption('-p, --portal <string>', 'The address of the portal contract', parseEthereumAddress)
-    .option('-f, --faucet <string>', 'The address of the faucet contract (only used if minting)', parseEthereumAddress)
-    .option('--l1-private-key <string>', 'The private key to use for deployment', PRIVATE_KEY)
-    .option('--json', 'Output the claim in JSON format')
-    .action(async (amount, recipient, options) => {
-      const { bridgeERC20 } = await import('./bridge_erc20.js');
-      await bridgeERC20(
-        amount,
-        recipient,
-        options.l1RpcUrls,
-        options.l1ChainId,
-        options.l1PrivateKey,
-        options.mnemonic,
-        options.token,
-        options.faucet,
-        options.portal,
-        options.private,
-        options.mint,
-        options.json,
-        log,
-        debugLogger,
-      );
     });
 
   program
