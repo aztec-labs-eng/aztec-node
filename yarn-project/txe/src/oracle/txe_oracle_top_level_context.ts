@@ -105,29 +105,51 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
 
   private logger: Logger;
 
-  constructor(
-    private stateMachine: TXEStateMachine,
-    private contractStore: ContractStore,
-    private noteStore: NoteStore,
-    private keyStore: KeyStore,
-    private addressStore: AddressStore,
-    private accountStore: TXEAccountStore,
-    private senderTaggingStore: SenderTaggingStore,
-    private recipientTaggingStore: RecipientTaggingStore,
-    private taggingSecretSourcesStore: TaggingSecretSourcesStore,
-    private capsuleStore: CapsuleStore,
-    private factStore: FactStore,
-    private privateEventStore: PrivateEventStore,
-    private nextBlockTimestamp: bigint,
-    private version: Fr,
-    private chainId: Fr,
-    private authwits: Map<string, AuthWitness>,
-    private taggingSecretStrategies: TXETaggingSecretStrategies,
-    private authorizeAllUtilityCallTargets: boolean,
-    private readonly artifactResolver: TXEArtifactResolver,
-    private readonly rootPath: string,
-    private readonly packageName: string,
-  ) {
+  private stateMachine: TXEStateMachine;
+  private contractStore: ContractStore;
+  private noteStore: NoteStore;
+  private keyStore: KeyStore;
+  private addressStore: AddressStore;
+  private accountStore: TXEAccountStore;
+  private senderTaggingStore: SenderTaggingStore;
+  private recipientTaggingStore: RecipientTaggingStore;
+  private taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  private capsuleStore: CapsuleStore;
+  private factStore: FactStore;
+  private privateEventStore: PrivateEventStore;
+  private nextBlockTimestamp: bigint;
+  private chainId: Fr;
+  private version: Fr;
+  private authwits: Map<string, AuthWitness>;
+  private taggingSecretStrategies: TXETaggingSecretStrategies;
+  private authorizeAllUtilityCallTargets: boolean;
+  private readonly artifactResolver: TXEArtifactResolver;
+  private readonly rootPath: string;
+  private readonly packageName: string;
+
+  constructor(args: TXEOracleTopLevelContextCtorArgs) {
+    this.stateMachine = args.stateMachine;
+    this.contractStore = args.contractStore;
+    this.noteStore = args.noteStore;
+    this.keyStore = args.keyStore;
+    this.addressStore = args.addressStore;
+    this.accountStore = args.accountStore;
+    this.senderTaggingStore = args.senderTaggingStore;
+    this.recipientTaggingStore = args.recipientTaggingStore;
+    this.taggingSecretSourcesStore = args.taggingSecretSourcesStore;
+    this.capsuleStore = args.capsuleStore;
+    this.factStore = args.factStore;
+    this.privateEventStore = args.privateEventStore;
+    this.nextBlockTimestamp = args.nextBlockTimestamp;
+    this.chainId = args.chainId;
+    this.version = args.version;
+    this.authwits = args.authwits;
+    this.taggingSecretStrategies = args.taggingSecretStrategies;
+    this.authorizeAllUtilityCallTargets = args.authorizeAllUtilityCallTargets;
+    this.artifactResolver = args.artifactResolver;
+    this.rootPath = args.rootPath;
+    this.packageName = args.packageName;
+
     this.logger = createLogger('txe:top_level_context');
     this.logger.debug('Entering Top Level Context');
   }
@@ -1028,3 +1050,31 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
  */
 export const authorizeAllUtilityCallsHook: NonNullable<ExecutionHooks['authorizeUtilityCall']> = () =>
   Promise.resolve({ authorized: true });
+
+/**
+ * Collaborators and session-scoped values a {@link TXEOracleTopLevelContext} owns. Passed as a single object so that
+ * call sites name each dependency instead of relying on positional order.
+ */
+type TXEOracleTopLevelContextCtorArgs = {
+  stateMachine: TXEStateMachine;
+  contractStore: ContractStore;
+  noteStore: NoteStore;
+  keyStore: KeyStore;
+  addressStore: AddressStore;
+  accountStore: TXEAccountStore;
+  senderTaggingStore: SenderTaggingStore;
+  recipientTaggingStore: RecipientTaggingStore;
+  taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  capsuleStore: CapsuleStore;
+  factStore: FactStore;
+  privateEventStore: PrivateEventStore;
+  nextBlockTimestamp: bigint;
+  chainId: Fr;
+  version: Fr;
+  authwits: Map<string, AuthWitness>;
+  taggingSecretStrategies: TXETaggingSecretStrategies;
+  authorizeAllUtilityCallTargets: boolean;
+  artifactResolver: TXEArtifactResolver;
+  rootPath: string;
+  packageName: string;
+};
