@@ -195,6 +195,39 @@ describe('checkExecutingContractManifest', () => {
     expect(result.issues[0]).toContain('Symbol(boom)');
   });
 
+  it('reports an error whose message getter throws, without caching it', async () => {
+    const evil = new Error('placeholder');
+    Object.defineProperty(evil, 'message', {
+      get(): string {
+        throw new Error('gotcha');
+      },
+    });
+    const first = await checkExecutingContractManifest('0x2468', () => Promise.reject(evil));
+    expect(first.alreadyChecked).toBe(false);
+    expect(first.issues).toHaveLength(1);
+    expect(first.issues[0]).toContain('failed to load the artifact');
+    expect(first.issues[0]).toContain('[object Error]');
+
+    const retry = await checkExecutingContractManifest('0x2468', () => Promise.resolve(artifactWithManifest('')));
+    expect(retry.alreadyChecked).toBe(false);
+    expect(retry.issues).toEqual([]);
+  });
+
+  it('reports a thrown value no conversion can print', async () => {
+    const unprintable = {
+      get [Symbol.toStringTag](): string {
+        throw new Error('tag');
+      },
+      toString(): string {
+        throw new Error('toString');
+      },
+    };
+    const result = await checkExecutingContractManifest('0x8642', () => Promise.reject(unprintable));
+    expect(result.alreadyChecked).toBe(false);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toContain('unprintable thrown value');
+  });
+
   it('reports a missing artifact without caching it', async () => {
     const missing = await checkExecutingContractManifest('0x5678', () => Promise.resolve(undefined));
     expect(missing.alreadyChecked).toBe(false);

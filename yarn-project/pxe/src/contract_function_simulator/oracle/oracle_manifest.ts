@@ -132,7 +132,13 @@ export function checkExecutingContractManifest(
       };
     }
     return { issues: checkArtifactOracleManifest(artifact), cache: true };
-  })();
+  })().catch(() => ({
+    // Absolute backstop for the never-rejects contract: interpolates nothing that could itself throw. A
+    // rejection here would both escape the warn-only callers and skip the eviction below, permanently
+    // caching a rejected promise.
+    issues: [`oracle manifest check failed unexpectedly for contract class ${classId}`],
+    cache: false,
+  }));
 
   // Register the entry only after the loader has been invoked (a synchronously-throwing loader must not end
   // up cached), and evict load failures afterwards — guarded by identity so a retry's newer entry is never
@@ -147,15 +153,18 @@ export function checkExecutingContractManifest(
   return issuesPromise.then(issues => ({ issues, alreadyChecked: false }));
 }
 
-// Total for any thrown value (a Symbol, or an object whose toString itself throws, must not let an error
-// escape the warn-only paths that interpolate it).
+// Total for any thrown value: none of the conversions may escape the warn-only paths that interpolate the
+// result — `err.message` can be a throwing getter, `String(err)` throws for Symbols-in-templates and
+// throwing toStrings, and even `Object.prototype.toString.call` throws through a `Symbol.toStringTag`
+// getter.
 function describeError(err: unknown): string {
-  if (err instanceof Error) {
-    return err.message;
-  }
   try {
-    return String(err);
+    return err instanceof Error ? String(err.message) : String(err);
   } catch {
-    return Object.prototype.toString.call(err);
+    try {
+      return Object.prototype.toString.call(err);
+    } catch {
+      return 'unprintable thrown value';
+    }
   }
 }
