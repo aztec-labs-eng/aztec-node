@@ -128,8 +128,13 @@ function compute_dep_hashes {
   rm -f .test-dep-hashes
 
   # Refuse to build a map from dishonest closures: every detectable dynamic-load site
-  # (workers, non-literal imports, forks) must carry a // @dependency annotation.
+  # (workers, non-literal imports, forks) must carry a // @dependency annotation. The check
+  # is fast and runs everywhere; the map generation below is CI-only — local runs never read
+  # the map (dep_hash prints disabled-cache outside CI), so computing it is wasted minutes.
   node scripts/dep-closures.mjs --check
+  if [ "${CI:-0}" -ne 1 ]; then
+    return
+  fi
 
   local commit=${AZTEC_CACHE_COMMIT:-HEAD}
   local tmp=$(mktemp -d)
