@@ -10,16 +10,10 @@
       "path": "../archiver"
     },
     {
-      "path": "../bb-prover"
-    },
-    {
-      "path": "../blob-client"
+      "path": "../blob-lib"
     },
     {
       "path": "../constants"
-    },
-    {
-      "path": "../epoch-cache"
     },
     {
       "path": "../ethereum"
@@ -34,31 +28,13 @@
       "path": "../p2p"
     },
     {
-      "path": "../protocol-contracts"
-    },
-    {
-      "path": "../prover-client"
-    },
-    {
-      "path": "../sequencer-client"
-    },
-    {
-      "path": "../simulator"
-    },
-    {
       "path": "../stdlib"
     },
     {
       "path": "../telemetry-client"
     },
     {
-      "path": "../validator-client"
-    },
-    {
       "path": "../world-state"
-    },
-    {
-      "path": "../blob-lib"
     },
     {
       "path": "../node-keystore"

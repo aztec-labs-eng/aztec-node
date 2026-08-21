@@ -68,7 +68,6 @@
     "@aztec/constants": "workspace:^",
     "@aztec/foundation": "workspace:^",
     "@aztec/ipc-runtime": "0.1.0-dummy",
-    "@aztec/native": "workspace:^",
     "@aztec/noir-acvm_js": "0.1.0-dummy",
     "@aztec/noir-noirc_abi": "0.1.0-dummy",
     "@aztec/noir-types": "0.1.0-dummy",
@@ -83,7 +82,6 @@
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@aztec/kv-store": "workspace:^",
     "@aztec/noir-contracts.js": "workspace:^",
     "@aztec/noir-test-contracts.js": "workspace:^",
     "@jest/globals": "^30.0.0",

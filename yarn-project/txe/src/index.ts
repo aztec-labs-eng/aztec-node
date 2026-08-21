@@ -1,4 +1,4 @@
-import { Fr } from '@aztec/aztec.js/fields';
+import { Fr } from '@aztec/foundation/curves/bn254';
 import type { Logger } from '@aztec/foundation/log';
 import { cloneEphemeralStoreFrom } from '@aztec/kv-store/lmdb-v2';
 import type { ProtocolContractName } from '@aztec/protocol-contracts';

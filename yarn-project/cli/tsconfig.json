@@ -19,9 +19,6 @@
       "path": "../constants"
     },
     {
-      "path": "../entrypoints"
-    },
-    {
       "path": "../ethereum"
     },
     {
@@ -31,19 +28,10 @@
       "path": "../node-keystore"
     },
     {
-      "path": "../node-lib"
-    },
-    {
       "path": "../p2p"
     },
     {
       "path": "../protocol-contracts"
-    },
-    {
-      "path": "../sequencer-client"
-    },
-    {
-      "path": "../slasher"
     },
     {
       "path": "../stdlib"
@@ -53,15 +41,6 @@
     },
     {
       "path": "../world-state"
-    },
-    {
-      "path": "../aztec-node"
-    },
-    {
-      "path": "../kv-store"
-    },
-    {
-      "path": "../telemetry-client"
     }
   ],
   "include": ["src", "src/**/*.json"],

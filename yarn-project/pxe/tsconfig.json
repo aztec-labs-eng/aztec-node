@@ -10,9 +10,6 @@
       "path": "../bb-prover"
     },
     {
-      "path": "../builder"
-    },
-    {
       "path": "../constants"
     },
     {

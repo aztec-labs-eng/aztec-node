@@ -64,10 +64,8 @@
     ]
   },
   "dependencies": {
-    "@aztec/bb.js": "0.1.0-dummy",
     "@aztec/constants": "workspace:^",
     "@aztec/foundation": "workspace:^",
-    "@aztec/kv-store": "workspace:^",
     "@aztec/protocol-contracts": "workspace:^",
     "@aztec/stdlib": "workspace:^",
     "@aztec/telemetry-client": "workspace:^",

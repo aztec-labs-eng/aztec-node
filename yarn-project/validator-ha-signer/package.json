@@ -75,7 +75,6 @@
     ]
   },
   "dependencies": {
-    "@aztec/ethereum": "workspace:^",
     "@aztec/foundation": "workspace:^",
     "@aztec/kv-store": "workspace:^",
     "@aztec/stdlib": "workspace:^",

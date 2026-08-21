@@ -11,9 +11,6 @@
       "path": "../blob-lib"
     },
     {
-      "path": "../constants"
-    },
-    {
       "path": "../foundation"
     }
   ]

@@ -72,7 +72,6 @@
     "@aztec/accounts": "workspace:^",
     "@aztec/archiver": "workspace:^",
     "@aztec/aztec-node": "workspace:^",
-    "@aztec/aztec.js": "workspace:^",
     "@aztec/bb-prover": "workspace:^",
     "@aztec/bb.js": "0.1.0-dummy",
     "@aztec/constants": "workspace:^",

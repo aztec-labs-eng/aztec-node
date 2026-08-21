@@ -64,6 +64,7 @@
     ]
   },
   "dependencies": {
+    "@aztec/archiver": "workspace:^",
     "@aztec/blob-client": "workspace:^",
     "@aztec/blob-lib": "workspace:^",
     "@aztec/constants": "workspace:^",
@@ -72,22 +73,21 @@
     "@aztec/foundation": "workspace:^",
     "@aztec/node-keystore": "workspace:^",
     "@aztec/p2p": "workspace:^",
-    "@aztec/protocol-contracts": "workspace:^",
     "@aztec/prover-client": "workspace:^",
     "@aztec/simulator": "workspace:^",
     "@aztec/slasher": "workspace:^",
     "@aztec/stdlib": "workspace:^",
     "@aztec/telemetry-client": "workspace:^",
     "@aztec/validator-ha-signer": "workspace:^",
+    "@aztec/world-state": "workspace:^",
     "koa": "^2.16.1",
     "koa-router": "^13.1.1",
     "tslib": "^2.4.0",
     "viem": "npm:@aztec/viem@2.38.2"
   },
   "devDependencies": {
-    "@aztec/archiver": "workspace:^",
     "@aztec/noir-protocol-circuits-types": "workspace:^",
-    "@aztec/world-state": "workspace:^",
+    "@aztec/protocol-contracts": "workspace:^",
     "@electric-sql/pglite": "^0.3.14",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",

@@ -1,11 +1,11 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { type Logger, createLogger } from '@aztec/aztec.js/log';
 import type { BlobClientInterface } from '@aztec/blob-client/client';
 import type { EpochCache } from '@aztec/epoch-cache';
 import type { GovernanceProposerContract, RollupContract } from '@aztec/ethereum/contracts';
 import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
 import type { PublisherFilter, PublisherManager } from '@aztec/ethereum/publisher-manager';
 import { SlotNumber } from '@aztec/foundation/branded-types';
+import { EthAddress } from '@aztec/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec/foundation/log';
 import type { DateProvider } from '@aztec/foundation/timer';
 import type { TelemetryClient } from '@aztec/telemetry-client';
 import { NodeKeystoreAdapter } from '@aztec/validator-client';

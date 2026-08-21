@@ -7,10 +7,7 @@
   },
   "references": [
     {
-      "path": "../aztec.js"
-    },
-    {
-      "path": "../bb-prover"
+      "path": "../archiver"
     },
     {
       "path": "../blob-client"
@@ -37,9 +34,6 @@
       "path": "../p2p"
     },
     {
-      "path": "../protocol-contracts"
-    },
-    {
       "path": "../prover-client"
     },
     {
@@ -61,16 +55,13 @@
       "path": "../validator-ha-signer"
     },
     {
-      "path": "../world-state"
-    },
-    {
-      "path": "../archiver"
-    },
-    {
-      "path": "../kv-store"
-    },
-    {
       "path": "../noir-protocol-circuits-types"
+    },
+    {
+      "path": "../protocol-contracts"
+    },
+    {
+      "path": "../world-state"
     }
   ],
   "include": ["src"]

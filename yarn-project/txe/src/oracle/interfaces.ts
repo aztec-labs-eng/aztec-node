@@ -1,4 +1,3 @@
-import { CompleteAddress } from '@aztec/aztec.js/addresses';
 import { BlockNumber } from '@aztec/foundation/branded-types';
 import type { Fr } from '@aztec/foundation/curves/bn254';
 import type { EthAddress } from '@aztec/foundation/eth-address';
@@ -6,6 +5,7 @@ import type { TaggingSecretStrategy } from '@aztec/pxe/server';
 import type { Option } from '@aztec/pxe/simulator';
 import type { EventSelector, FunctionSelector } from '@aztec/stdlib/abi';
 import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { CompleteAddress } from '@aztec/stdlib/contract';
 import type { GasSettings } from '@aztec/stdlib/gas';
 import type { UInt64 } from '@aztec/stdlib/types';
 

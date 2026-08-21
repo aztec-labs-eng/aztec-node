@@ -1,15 +1,16 @@
-import { type NoirCompiledContract, loadContractArtifact } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import {
-  type ContractInstanceWithAddress,
-  getContractInstanceFromInstantiationParams,
-} from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { PublicKeys, deriveKeys } from '@aztec/aztec.js/keys';
+import { Fr } from '@aztec/foundation/curves/bn254';
 import { createLogger } from '@aztec/foundation/log';
 import type { ContractStore } from '@aztec/pxe/client/lazy';
-import type { ContractArtifactWithHash } from '@aztec/stdlib/contract';
-import { computeArtifactHash } from '@aztec/stdlib/contract';
+import { loadContractArtifact } from '@aztec/stdlib/abi';
+import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import {
+  type ContractArtifactWithHash,
+  type ContractInstanceWithAddress,
+  computeArtifactHash,
+  getContractInstanceFromInstantiationParams,
+} from '@aztec/stdlib/contract';
+import { PublicKeys, deriveKeys } from '@aztec/stdlib/keys';
+import type { NoirCompiledContract } from '@aztec/stdlib/noir';
 
 import { createHash } from 'crypto';
 import { createReadStream } from 'fs';

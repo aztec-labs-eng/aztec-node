@@ -1,4 +1,3 @@
-import { Body } from '@aztec/aztec.js/block';
 import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
 import { times } from '@aztec/foundation/collection';
 import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
@@ -7,7 +6,7 @@ import type { EthAddress } from '@aztec/foundation/eth-address';
 import { Signature } from '@aztec/foundation/eth-signature';
 import type { P2P } from '@aztec/p2p';
 import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { CommitteeAttestation, L2Block } from '@aztec/stdlib/block';
+import { Body, CommitteeAttestation, L2Block } from '@aztec/stdlib/block';
 import { DEFAULT_BLOCK_DURATION_MS } from '@aztec/stdlib/config';
 import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
 import { BlockProposal, CheckpointAttestation, CheckpointProposal, ConsensusPayload } from '@aztec/stdlib/p2p';

@@ -33,7 +33,6 @@
     "@aztec/entrypoints": "workspace:^",
     "@aztec/foundation": "workspace:^",
     "@aztec/kv-store": "workspace:^",
-    "@aztec/protocol-contracts": "workspace:^",
     "@aztec/pxe": "workspace:^",
     "@aztec/standard-contracts": "workspace:^",
     "@aztec/stdlib": "workspace:^",

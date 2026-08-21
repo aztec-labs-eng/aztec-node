@@ -7,6 +7,9 @@
   },
   "references": [
     {
+      "path": "../archiver"
+    },
+    {
       "path": "../blob-client"
     },
     {
@@ -31,9 +34,6 @@
       "path": "../p2p"
     },
     {
-      "path": "../protocol-contracts"
-    },
-    {
       "path": "../prover-client"
     },
     {
@@ -52,13 +52,13 @@
       "path": "../validator-ha-signer"
     },
     {
-      "path": "../archiver"
+      "path": "../world-state"
     },
     {
       "path": "../noir-protocol-circuits-types"
     },
     {
-      "path": "../world-state"
+      "path": "../protocol-contracts"
     }
   ],
   "include": ["src"]
