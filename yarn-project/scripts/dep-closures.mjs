@@ -56,14 +56,18 @@ const args = process.argv.slice(2);
 const all = args.includes('--all');
 const diffExcluded = args.includes('--diff-excluded');
 const checkMode = args.includes('--check');
-const files = args.filter(a => !a.startsWith('--'));
+const verbose = args.includes('--verbose') || args.includes('-v');
+const files = args.filter(a => !a.startsWith('-'));
 
 if (files.length === 0 && !checkMode) {
-  console.error('Usage: node scripts/dep-closures.mjs [--all] [--diff-excluded] <file.ts> [more files...]');
+  console.error(
+    'Usage: node scripts/dep-closures.mjs [--all] [--diff-excluded] [--verbose|-v] <file.ts> [more files...]',
+  );
   console.error('       node scripts/dep-closures.mjs --check');
   console.error('  --all            also list node_modules dependencies');
   console.error('  --diff-excluded  show touched packages exhaustively: "+ included" / "- not included"');
   console.error('  --check          verify dynamic-load sites carry a // @dependency annotation');
+  console.error('  --verbose, -v    print the per-entry summary line (file counts) to stderr');
   process.exit(1);
 }
 
@@ -379,16 +383,20 @@ for (const [cfgPath, entries] of groups) {
       for (const f of [...repoFiles, ...excluded].sort()) {
         console.log(`${repoFiles.has(f) ? '+' : '-'} ${f}`);
       }
-      console.error(
-        `# ${path.relative(repoRoot, entry)}: ${repoFiles.size} included, ${excluded.size} excluded` +
-          (all ? '' : `, ${external} node_modules files omitted (--all to include)`),
-      );
+      if (verbose) {
+        console.error(
+          `# ${path.relative(repoRoot, entry)}: ${repoFiles.size} included, ${excluded.size} excluded` +
+            (all ? '' : `, ${external} node_modules files omitted (--all to include)`),
+        );
+      }
     } else {
       for (const f of [...repoFiles].sort()) console.log(f);
-      console.error(
-        `# ${path.relative(repoRoot, entry)}: ${repoFiles.size} files listed` +
-          (all ? '' : `, ${external} node_modules files omitted (--all to include)`),
-      );
+      if (verbose) {
+        console.error(
+          `# ${path.relative(repoRoot, entry)}: ${repoFiles.size} files listed` +
+            (all ? '' : `, ${external} node_modules files omitted (--all to include)`),
+        );
+      }
     }
   }
 }
