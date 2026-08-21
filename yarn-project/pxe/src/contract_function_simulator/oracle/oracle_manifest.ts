@@ -71,11 +71,20 @@ export function checkOracleManifest(manifestLines: readonly string[], served: Re
 
 /**
  * Validates a contract artifact's embedded oracle manifest against everything this environment serves during
- * contract execution. A missing manifest (artifact compiled by an aztec-nr predating manifest emission) is
- * itself reported as an issue. Issue strings carry no contract identification — callers add their own context.
+ * contract execution. A missing manifest (artifact compiled by an aztec-nr predating manifest emission) and a
+ * malformed one (the reader's validation errors) are themselves reported as issues — this never throws, so
+ * warn-mode callers stay warn-only. Issue strings carry no contract identification — callers add their own
+ * context.
  */
 export function checkArtifactOracleManifest(artifact: ContractArtifact): string[] {
-  const manifest = getContractOracleManifest(artifact);
+  let manifest: string[] | undefined;
+  try {
+    manifest = getContractOracleManifest(artifact);
+  } catch (err) {
+    return [
+      `carries a malformed oracle manifest (${err instanceof Error ? err.message : err}); oracle compatibility cannot be verified`,
+    ];
+  }
   if (manifest === undefined) {
     return [
       'compiled without an oracle manifest (an aztec-nr predating manifest emission); oracle compatibility cannot be verified',
@@ -87,31 +96,41 @@ export function checkArtifactOracleManifest(artifact: ContractArtifact): string[
 /**
  * Per-process cache of manifest check results, keyed by contract class id. The manifest is class-invariant
  * and the served registries are process-constant, so each class is validated once, not once per executed
- * function or per session.
+ * function or per session. The in-flight promise is cached, so concurrent first checks of one class share a
+ * single validation (and its single round of warnings).
  */
-const checkedClasses = new Map<string, string[]>();
+const checkedClasses = new Map<string, Promise<string[]>>();
 
 /**
  * Runs {@link checkArtifactOracleManifest} for an executing contract's class, caching per class id.
- * `alreadyChecked` tells the caller whether this class was validated before, so warnings are logged once.
- * A missing artifact is reported but not cached, since it may simply not be registered yet.
+ * `alreadyChecked` tells the caller whether this class's validation was already underway, so warnings are
+ * logged once. A missing artifact (or a failing load) is reported but not cached, since the artifact may
+ * simply not be registered yet. Never rejects.
  */
-export async function checkExecutingContractManifest(
+export function checkExecutingContractManifest(
   classId: string,
   loadArtifact: () => Promise<ContractArtifact | undefined>,
 ): Promise<{ issues: string[]; alreadyChecked: boolean }> {
   const cached = checkedClasses.get(classId);
   if (cached !== undefined) {
-    return { issues: cached, alreadyChecked: true };
+    return cached.then(issues => ({ issues, alreadyChecked: true }));
   }
-  const artifact = await loadArtifact();
-  if (!artifact) {
-    return {
-      issues: [`no artifact available for contract class ${classId}; oracle compatibility cannot be verified`],
-      alreadyChecked: false,
-    };
-  }
-  const issues = checkArtifactOracleManifest(artifact);
-  checkedClasses.set(classId, issues);
-  return { issues, alreadyChecked: false };
+  const pending = (async () => {
+    let artifact: ContractArtifact | undefined;
+    try {
+      artifact = await loadArtifact();
+    } catch (err) {
+      checkedClasses.delete(classId);
+      return [
+        `failed to load the artifact for contract class ${classId} (${err instanceof Error ? err.message : err}); oracle compatibility cannot be verified`,
+      ];
+    }
+    if (!artifact) {
+      checkedClasses.delete(classId);
+      return [`no artifact available for contract class ${classId}; oracle compatibility cannot be verified`];
+    }
+    return checkArtifactOracleManifest(artifact);
+  })();
+  checkedClasses.set(classId, pending);
+  return pending.then(issues => ({ issues, alreadyChecked: false }));
 }

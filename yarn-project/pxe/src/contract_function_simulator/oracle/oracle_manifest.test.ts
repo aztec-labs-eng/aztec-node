@@ -114,6 +114,25 @@ describe('checkArtifactOracleManifest', () => {
     );
     expect(issues).toHaveLength(2);
   });
+
+  it('reports a malformed manifest as an issue instead of throwing', () => {
+    // Only an imported contract's pooled manifest, none matching this contract's name.
+    const pooledOnly = artifactWithManifest('');
+    pooledOnly.outputs.globals.oracles = [
+      { name: 'AZTEC_ORACLE_MANIFEST_ImportedContract', value: { kind: 'string', value: '' } },
+    ];
+    const pooledIssues = checkArtifactOracleManifest(pooledOnly);
+    expect(pooledIssues).toHaveLength(1);
+    expect(pooledIssues[0]).toContain('malformed oracle manifest');
+
+    const nonString = artifactWithManifest('');
+    nonString.outputs.globals.oracles = [
+      { name: 'AZTEC_ORACLE_MANIFEST_TestContract', value: { kind: 'integer', sign: false, value: '01' } },
+    ];
+    const nonStringIssues = checkArtifactOracleManifest(nonString);
+    expect(nonStringIssues).toHaveLength(1);
+    expect(nonStringIssues[0]).toContain('malformed oracle manifest');
+  });
 });
 
 describe('checkExecutingContractManifest', () => {
@@ -132,6 +151,27 @@ describe('checkExecutingContractManifest', () => {
     expect(second.alreadyChecked).toBe(true);
     expect(second.issues).toEqual(first.issues);
     expect(loads).toBe(1);
+  });
+
+  it('shares one validation between concurrent first checks', async () => {
+    let loads = 0;
+    let releaseLoad!: () => void;
+    const gate = new Promise<void>(resolve => (releaseLoad = resolve));
+    const loader = async () => {
+      loads++;
+      await gate;
+      return artifactWithManifest('aztec_misc_getRandomField:->u32');
+    };
+
+    const first = checkExecutingContractManifest('0x9abc', loader);
+    const second = checkExecutingContractManifest('0x9abc', loader);
+    releaseLoad();
+
+    const [a, b] = await Promise.all([first, second]);
+    expect(loads).toBe(1);
+    expect(a.alreadyChecked).toBe(false);
+    expect(b.alreadyChecked).toBe(true);
+    expect(b.issues).toEqual(a.issues);
   });
 
   it('reports a missing artifact without caching it', async () => {
