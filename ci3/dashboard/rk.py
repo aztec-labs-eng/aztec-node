@@ -181,35 +181,58 @@ def get_github_actions_status():
             _github_status_cache["ts"] = now
             return result
 
+def list_dashboards() -> list[str]:
+    """Live dashboards from the self-registering `ci-run-sections` index.
+
+    Each member is an "<org>/<repo>/<section>" string written by log_ci_run. A
+    section ZSET carries a sliding 90-day TTL, so one that has expired (no runs in
+    90 days) is retired: we drop it from the index on read. O(sections), no scan.
+    """
+    live = []
+    for raw in r.smembers('ci-run-sections'):
+        name = raw.decode() if isinstance(raw, bytes) else raw
+        if r.exists('ci-run-' + name):
+            live.append(name)
+        else:
+            r.srem('ci-run-sections', raw)
+    return sorted(live)
+
+
+def _split_dashboard(d: str) -> tuple[str, str]:
+    """'org/repo/section' -> ('org/repo', 'section'); legacy unscoped -> ('', d)."""
+    parts = d.split('/')
+    if len(parts) >= 3:
+        return '/'.join(parts[:-1]), parts[-1]
+    return '', d
+
+
 def root() -> str:
-    # Show the default (no section) view with updated links
-    return (
-        update_status(0, '', '') +
-        f"\n"
-        f"Select a filter:\n"
-        f"\n{YELLOW}"
-        f"{hyperlink('/section/main', 'main queue')}\n"
-        f"{hyperlink('/section/prs', 'prs')}\n"
-        f"{hyperlink('/section/releases', 'releases')}\n"
-        f"{hyperlink('/section/nightly', 'nightly')}\n"
-        f"{hyperlink('/section/network', 'network')}\n"
-        f"{hyperlink('/section/deflake', 'deflake')}\n"
-        f"{RESET}"
-        f"\n"
-        f"Benchmarks:\n"
-        f"\n{YELLOW}"
-        f"{hyperlink('https://aztecprotocol.github.io/benchmark-page-data/bench?branch=main', 'main')}\n"
-        f"{hyperlink('https://aztecprotocol.github.io/benchmark-page-data/bench?branch=prs', 'prs')}\n"
-        f"{hyperlink('/chonk-breakdowns', 'chonk breakdowns')}\n"
-        f"{RESET}"
-        f"\n"
+    out = update_status(0, '', '') + "\nCI runs:\n\n"
+
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for d in list_dashboards():
+        repo, section = _split_dashboard(d)
+        grouped.setdefault(repo, []).append((section, d))
+
+    if not grouped:
+        out += f"{YELLOW}(no active dashboards yet){RESET}\n"
+    for repo in sorted(grouped):
+        if repo:
+            out += f"{BOLD}{repo}{RESET}\n"
+        for section, d in sorted(grouped[repo]):
+            out += f"  {YELLOW}{hyperlink('/section/' + d, section)}{RESET}\n"
+        out += "\n"
+
+    out += (
         f"CI Metrics:\n"
         f"\n{YELLOW}"
         f"{hyperlink('/cost-overview', 'cost overview (AWS + GCP)')}\n"
         f"{hyperlink('/namespace-billing', 'namespace billing')}\n"
         f"{hyperlink('/ci-insights', 'ci insights')}\n"
+        f"{hyperlink('/chonk-breakdowns', 'chonk breakdowns')}\n"
         f"{RESET}"
     )
+    return out
 
 def section_view(section: str) -> str:
     offset = int(request.args.get('offset', 0))
@@ -391,7 +414,9 @@ def show_root():
         filter_prop=''
     )
 
-@app.route('/section/<section>')
+# <path:section> so org/repo/section dashboards (with slashes) route correctly —
+# same reason as /list/<path:key> below (WSGI decodes %2F to / before routing).
+@app.route('/section/<path:section>')
 @optional_auth
 def show_section(section):
     return render_template_string(
