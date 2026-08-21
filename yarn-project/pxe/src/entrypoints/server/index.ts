@@ -10,7 +10,7 @@ export * from './store.js';
 export { NoteService } from '../../notes/note_service.js';
 export { ORACLE_VERSION_MAJOR, ORACLE_VERSION_MINOR } from '../../oracle_version.js';
 export { type PXECreationOptions } from '../pxe_creation_options.js';
-export { StagedWriteCoordinator, type ChangeSetId } from '../../storage/staged_write_coordinator.js';
+export { type ChangeSetId, StagedWriteCoordinator } from '../../storage/staged_write_coordinator.js';
 export { runOperation, type OperationContributor } from '../../operation_lifecycle.js';
 export { ContractSyncService } from '../../contract/contract_sync_service.js';
 export { ContractClassService } from '../../contract/contract_class_service.js';

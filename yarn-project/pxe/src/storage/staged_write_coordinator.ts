@@ -3,19 +3,27 @@ import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundatio
 import type { AztecAsyncKVStore } from '@aztec/kv-store';
 
 /**
- * Identifies one change set: the writes staged together between a `begin` and its matching commit or abort.
+ * Identifies a change set: the writes staged between a {@link StagedWriteCoordinator.begin} and its matching commit or
+ * abort, which are promoted to the database or dropped as a unit.
  */
 export type ChangeSetId = string;
 
 /**
- * Interface that stores must implement to support staged writes.
+ * A store that buffers its writes per change set instead of sending them straight to the database.
+ *
+ * Every read and write on such a store takes a change set ID. Writes are held under that ID; a read sees the database
+ * plus whatever its own change set has staged, never another's.
+ *
+ * {@link StagedWriteCoordinator} ends a change set by calling {@link commitStaged}, which promotes its staged writes
+ * to the database, or {@link discardStaged}, which throws them away.
  */
 export interface StagedStore {
   /** Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator) */
   readonly storeName: string;
 
   /**
-   * Commits staged data to main storage. Should be called within a transaction for atomicity.
+   * Commits staged data to persistent storage. Will be called within a db transaction for atomicity, alongside the
+   * writes of all other staged stores for the same change set.
    *
    * @param changeSetId - The change set identifier
    */
@@ -30,23 +38,27 @@ export interface StagedStore {
 }
 
 /**
- * StagedWriteCoordinator simulates a database transaction across the PXE stores, which the underlying KV store
- * (e.g. IndexedDB) cannot provide on its own for long-running async operations. It also provides crash resilience:
- * staged data that was never committed is simply never promoted to main storage.
+ * StagedWriteCoordinator simulates a database transaction across the PXE stores, which some underlying KV stores
+ * (e.g. IndexedDB) cannot provide on their own for long-running async operations.
  *
  * It uses a staged writes pattern:
  * 1. When a change set is opened, a unique ID is created
  * 2. While a change set is open, all writes are staged under its ID, and reads observe the staged data
- * 3. On commit, the staged data is promoted to main storage
+ * 3. On commit, the staged data is promoted to persistent storage
  * 4. On abort, staged data is discarded
  *
- * Note: change sets must be serialized — {@link begin} throws if one is already open. We still key staged data by
- * change set ID because aborting doesn't cancel in-flight async work: a late write from an aborted change set lands
- * under its old ID and is never promoted, instead of leaking into the next change set.
+ * Only one change set can be open at a time: {@link begin} throws if one already is. Supporting overlapping change
+ * sets would mean merging them when one of them commits — a problem in its own right, and one no caller needs solved.
+ * Avoiding that throw is up to the caller, which must serialize whatever opens change sets, e.g. with a queue.
+ *
+ * Staged data is nonetheless keyed by change set ID, because aborting a change set does not cancel the async work it
+ * started. An oracle that was mid-write when the operation failed still finishes writing afterwards, and stages its
+ * write under the aborted ID, which nothing will ever promote. Were staged data not keyed by ID, that late write
+ * would instead sit in the store and be promoted by whichever change set commits next.
  */
 export class StagedWriteCoordinator {
   readonly #kvStore: AztecAsyncKVStore;
-  readonly #stores: Map<string, StagedStore> = new Map();
+  readonly #stagedStores: Map<string, StagedStore> = new Map();
   readonly #log: Logger;
 
   #currentChangeSetId: ChangeSetId | undefined;
@@ -54,11 +66,11 @@ export class StagedWriteCoordinator {
   constructor(args: StagedWriteCoordinatorArgs) {
     this.#kvStore = args.kvStore;
     this.#log = createLogger('pxe:staged_write_coordinator', args.bindings);
-    for (const store of args.stores) {
-      if (this.#stores.has(store.storeName)) {
+    for (const store of args.stagedStores) {
+      if (this.#stagedStores.has(store.storeName)) {
         throw new Error(`Store "${store.storeName}" is already registered`);
       }
-      this.#stores.set(store.storeName, store);
+      this.#stagedStores.set(store.storeName, store);
     }
   }
 
@@ -83,7 +95,7 @@ export class StagedWriteCoordinator {
   }
 
   /**
-   * Commits by promoting all staged data to main storage.
+   * Commits by promoting all staged data to persistent storage.
    *
    * @param changeSetId - The change set ID returned from begin
    */
@@ -100,7 +112,7 @@ export class StagedWriteCoordinator {
     // Commit all stores atomically in a single transaction.
     // Each store's commit is a no-op if it has no staged data (but that's up to each store to handle).
     await this.#kvStore.transactionAsync(async () => {
-      for (const store of this.#stores.values()) {
+      for (const store of this.#stagedStores.values()) {
         await store.commitStaged(changeSetId);
       }
     });
@@ -124,7 +136,7 @@ export class StagedWriteCoordinator {
 
     this.#log.debug(`Aborting change set ${changeSetId}`, { changeSetId });
 
-    for (const store of this.#stores.values()) {
+    for (const store of this.#stagedStores.values()) {
       await store.discardStaged(changeSetId);
     }
 
@@ -136,6 +148,6 @@ export class StagedWriteCoordinator {
 /** Dependencies of the {@link StagedWriteCoordinator}. */
 type StagedWriteCoordinatorArgs = {
   kvStore: AztecAsyncKVStore;
-  stores: StagedStore[];
+  stagedStores: StagedStore[];
   bindings?: LoggerBindings;
 };

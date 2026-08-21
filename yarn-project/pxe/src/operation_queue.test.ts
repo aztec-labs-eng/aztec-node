@@ -39,7 +39,7 @@ describe('OperationQueue', () => {
         return Promise.resolve();
       },
     };
-    coordinator = new StagedWriteCoordinator({ kvStore: store, stores: [recordingStore] });
+    coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [recordingStore] });
 
     node = mock<CachingAztecNode>();
     node.startRecording.mockReturnValue(mock<Recording>());

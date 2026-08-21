@@ -344,7 +344,7 @@ export class PXE {
 
     const stagedWriteCoordinator = new StagedWriteCoordinator({
       kvStore: store,
-      stores: [capsuleStore, senderTaggingStore, recipientTaggingStore, privateEventStore, noteStore, factStore],
+      stagedStores: [capsuleStore, senderTaggingStore, recipientTaggingStore, privateEventStore, noteStore, factStore],
       bindings,
     });
 

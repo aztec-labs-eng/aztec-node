@@ -340,7 +340,7 @@ export class TXESession implements TXESessionStateHandler {
 
     const stagedWriteCoordinator = new StagedWriteCoordinator({
       kvStore: store,
-      stores: [capsuleStore, factStore, senderTaggingStore, recipientTaggingStore, privateEventStore, noteStore],
+      stagedStores: [capsuleStore, factStore, senderTaggingStore, recipientTaggingStore, privateEventStore, noteStore],
     });
 
     const nextBlockTimestamp = BigInt(Math.floor(new Date().getTime() / 1000));

@@ -33,7 +33,7 @@ describe('runOperation', () => {
         return Promise.resolve();
       },
     };
-    coordinator = new StagedWriteCoordinator({ kvStore: store, stores: [recordingStore] });
+    coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [recordingStore] });
   });
 
   it('commits the change set and returns the result when the operation succeeds', async () => {

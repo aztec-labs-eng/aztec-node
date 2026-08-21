@@ -13,6 +13,12 @@ import type { ChangeSetId, StagedWriteCoordinator } from './storage/staged_write
 
 /** What a synced operation receives: its change set id, the anchor its sync established, and its instrumentation. */
 export type SyncedOperationContext = {
+  /**
+   * The change set the operation's writes are staged under. A synced operation runs inside exactly one change set,
+   * which is committed if it succeeds and discarded if it fails, so this ID doubles as the operation's identity:
+   * bookkeeping that must be kept or thrown away along with the operation is keyed on it, whether or not it lives in
+   * a store.
+   */
   changeSetId: ChangeSetId;
   /** Duration of the sync, for timing stats. */
   syncTime: number;
