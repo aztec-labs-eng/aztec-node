@@ -279,11 +279,11 @@ describe('BlockSynchronizer', () => {
       }
     });
 
-    it('undoes earlier rollbacks and leaves the anchor and tips cursor untouched when a store fails', async () => {
+    it('undoes a failed prune, leaving the event to be re-emitted and applied on the next sync', async () => {
       // The note store rolls back first and succeeds; the store behind it then throws, so the note it deleted is only
       // restored if the whole prune shares one transaction.
       const failingStore = mock<Rollbackable>();
-      failingStore.rollbackToBlock.mockRejectedValue(new Error('rollback blocked by an in-flight change set'));
+      failingStore.rollbackToBlock.mockRejectedValue(new Error('store rollback failed'));
       synchronizer = createSynchronizer({}, [noteStore, failingStore]);
 
       const contract = await AztecAddress.random();
@@ -296,14 +296,24 @@ describe('BlockSynchronizer', () => {
       await stagePruneTo(forkBlock, BlockNumber(5));
 
       await expect(synchronizer.handleBlockStreamEvent(prunedEvent(await blockId(forkBlock)))).rejects.toThrow(
-        'rollback blocked by an in-flight change set',
+        'store rollback failed',
       );
 
+      // Nothing from the failed attempt stuck: the orphaned note is back, the anchor still sits above the fork, and
+      // the tips cursor never advanced onto the prune target.
       expect(await noteStore.nullifiersOfNotesAtBlock(4)).toEqual([orphanedNote.siloedNullifier.toString()]);
-      // The anchor stayed above the fork and the tips cursor never advanced onto the prune target, so the stream
-      // re-emits the event on the next sync rather than silently skipping the rollback.
       expect((await anchorBlockStore.getBlockHeader()).getBlockNumber()).toBe(5);
       expect((await tipsStore.getL2Tips()).proposed.number).toBe(0);
+
+      // Because the cursor stayed put, the next sync re-emits the very same prune event. This time the failing store
+      // recovers (say the node was restarted), so the reorg is processed to completion instead of being lost.
+      failingStore.rollbackToBlock.mockResolvedValue(undefined);
+
+      await synchronizer.handleBlockStreamEvent(prunedEvent(await blockId(forkBlock)));
+
+      expect(await noteStore.nullifiersOfNotesAtBlock(4)).toHaveLength(0);
+      expect((await anchorBlockStore.getBlockHeader()).getBlockNumber()).toBe(3);
+      expect((await tipsStore.getL2Tips()).proposed.number).toBe(3);
     });
 
     it('deletes rows above the fork when wired to a real store', async () => {
