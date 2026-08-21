@@ -159,6 +159,116 @@ comptime fn is_declared(
     declared
 }
 
+/// Quotes the execution manifest's `#[abi(oracles)]` global, injected into every contract module by the
+/// `#[aztec]` macro. The global's value lands in the artifact JSON under `outputs.globals.oracles`, embedding
+/// the oracle surface of the aztec-nr the contract compiled against. The global's name carries the contract
+/// name because compiling a contract that imports other contract crates pools every `#[abi]` global into the
+/// artifact (as with `STORAGE_LAYOUT_<name>`) — readers select their contract's entry by name.
+pub(crate) comptime fn generate_execution_manifest_global(m: Module) -> Quoted {
+    let module_name = m.name();
+    let global_name = f"AZTEC_ORACLE_MANIFEST_{module_name}".quoted_contents();
+    let (manifest_literal, len) = render_manifest(EXECUTION_ORACLE_MANIFEST);
+    let len_quoted = f"{len}".quoted_contents();
+    quote {
+        #[abi(oracles)]
+        pub global $global_name: str<$len_quoted> = $manifest_literal;
+    }
+}
+
+/// Quotes the TXE manifest's canonical rendering as a string literal, spliced into the `TestEnvironment`
+/// creation path that transports it to the TXE. Not embedded in artifacts.
+pub(crate) comptime fn txe_manifest_str() -> Quoted {
+    let (manifest_literal, _len) = render_manifest(TXE_ORACLE_MANIFEST);
+    manifest_literal
+}
+
+/// Renders a manifest in its canonical form — one line per oracle, sorted by byte order, `\n`-joined — as a
+/// quoted string literal plus its byte length. Sorting keeps the rendering (and with it every artifact hash)
+/// independent of declaration order, so moving an oracle between modules cannot move contract class ids.
+comptime fn render_manifest(manifest: BoundedVec<(CtString, CtString), MAX_ORACLES_PER_MANIFEST>) -> (Quoted, u32) {
+    // Join in entry order first: one unquote of the joined literal yields every line's bytes (for sorting)
+    // and the total byte length (for the rendered `str<N>` type).
+    let mut joined = CtString::new();
+    for i in 0..manifest.len() {
+        if i != 0 {
+            joined = joined.append_str("\n");
+        }
+        joined = joined.append(manifest.get(i).1);
+    }
+    let joined_literal = joined.as_quoted_str();
+    let bytes: [u8] = unquote!(
+        quote { $joined_literal.as_bytes().fold(@[], |acc: [u8], byte: u8| acc.push_back(byte)) },
+    );
+
+    let order = sorted_line_order(bytes, manifest.len());
+
+    let mut sorted = CtString::new();
+    for k in 0..order.len() {
+        if k != 0 {
+            sorted = sorted.append_str("\n");
+        }
+        sorted = sorted.append(manifest.get(order[k]).1);
+    }
+    (sorted.as_quoted_str(), bytes.len())
+}
+
+/// The entry indices of a `\n`-joined rendering, sorted by byte-lexicographic line order.
+comptime fn sorted_line_order(bytes: [u8], count: u32) -> [u32] {
+    let mut starts: [u32] = @[];
+    let mut lens: [u32] = @[];
+    let mut start: u32 = 0;
+    for i in 0..bytes.len() {
+        if bytes[i] == 10 {
+            starts = starts.push_back(start);
+            lens = lens.push_back(i - start);
+            start = i + 1;
+        }
+    }
+    if count > 0 {
+        starts = starts.push_back(start);
+        lens = lens.push_back(bytes.len() - start);
+    }
+    assert(starts.len() == count, "manifest lines must not contain newlines");
+
+    let mut order: [u32] = @[];
+    for i in 0..count {
+        let mut inserted = false;
+        let mut next: [u32] = @[];
+        for k in 0..order.len() {
+            let existing = order[k];
+            if !inserted & line_less_than(bytes, starts[i], lens[i], starts[existing], lens[existing]) {
+                next = next.push_back(i);
+                inserted = true;
+            }
+            next = next.push_back(existing);
+        }
+        if !inserted {
+            next = next.push_back(i);
+        }
+        order = next;
+    }
+    order
+}
+
+comptime fn line_less_than(bytes: [u8], a_start: u32, a_len: u32, b_start: u32, b_len: u32) -> bool {
+    let min_len = if a_len < b_len { a_len } else { b_len };
+    let mut decided = false;
+    let mut less = false;
+    for i in 0..min_len {
+        let a = bytes[a_start + i];
+        let b = bytes[b_start + i];
+        if !decided & (a != b) {
+            decided = true;
+            less = a < b;
+        }
+    }
+    if decided {
+        less
+    } else {
+        a_len < b_len
+    }
+}
+
 /// Renders a full manifest line: `wire_name:param,param->return`, with `()` as the return of a valueless
 /// oracle and an empty parameter list for a parameterless one (`name:->field`).
 pub(crate) comptime fn manifest_line(wire_name: CtString, params: [(Quoted, Type)], return_type: Type) -> CtString {
@@ -477,8 +587,12 @@ comptime fn push_generic_length(length_type: Type, acc: [Quoted]) -> [Quoted] {
 }
 
 mod test {
-    use super::{compose_wire_name, derive_wire_method_name, generate_oracle_stub, label_of, manifest_line};
-    use std::meta::ctstring::AsCtString;
+    use super::{
+        compose_wire_name, derive_wire_method_name, generate_oracle_stub, label_of, manifest_line,
+        MAX_ORACLES_PER_MANIFEST, render_manifest,
+    };
+    use std::collections::bounded_vec::BoundedVec;
+    use std::meta::{ctstring::AsCtString, unquote};
 
     /// Compile-time probe of the full declaration pipeline over a real `FunctionDefinition` — everything
     /// [`super::declare_oracle`] does except the manifest append, so the probe never pollutes the manifests
@@ -603,6 +717,34 @@ mod test {
             let _ = super::TXE_ORACLE_MANIFEST.pop();
             assert(super::EXECUTION_ORACLE_MANIFEST.len() == execution_len);
             assert(super::TXE_ORACLE_MANIFEST.len() == txe_len);
+        }
+    }
+
+    #[test]
+    fn renders_manifests_sorted_by_byte_order() {
+        comptime {
+            let mut manifest: BoundedVec<(CtString, CtString), MAX_ORACLES_PER_MANIFEST> = BoundedVec::new();
+            manifest.push(("b".as_ctstring(), "b:u32->()".as_ctstring()));
+            manifest.push(("aa".as_ctstring(), "aa:->field".as_ctstring()));
+            manifest.push(("a".as_ctstring(), "a:field->()".as_ctstring()));
+
+            let (literal, len) = render_manifest(manifest);
+            // Splicing the rendered literal back into comptime code recovers its contents for comparison.
+            let rendered = unquote!(quote { $literal.as_ctstring() });
+            // Byte order: ':' sorts before 'a', so "a:field->()" precedes "aa:->field".
+            assert(rendered == "a:field->()\naa:->field\nb:u32->()".as_ctstring());
+            assert(len == 32);
+        }
+    }
+
+    #[test]
+    fn renders_empty_manifest() {
+        comptime {
+            let empty: BoundedVec<(CtString, CtString), MAX_ORACLES_PER_MANIFEST> = BoundedVec::new();
+            let (literal, len) = render_manifest(empty);
+            let rendered = unquote!(quote { $literal.as_ctstring() });
+            assert(rendered == "".as_ctstring());
+            assert(len == 0);
         }
     }
 

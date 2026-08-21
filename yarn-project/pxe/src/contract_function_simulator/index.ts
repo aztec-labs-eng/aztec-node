@@ -73,6 +73,12 @@ export {
   type TypeMapping,
   type VectorMapping,
 } from './oracle/oracle_type_mappings.js';
+export {
+  checkArtifactOracleManifest,
+  checkOracleManifest,
+  getManifestSignature,
+  getServedExecutionOracleSignatures,
+} from './oracle/oracle_manifest.js';
 export { ExecutionNoteCache } from './execution_note_cache.js';
 export { ExecutionTaggingIndexCache } from './execution_tagging_index_cache.js';
 export { HashedValuesCache } from './hashed_values_cache.js';

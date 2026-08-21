@@ -696,6 +696,7 @@ impl TestEnvironment {
     pub unconstrained fn new_opts(options: TestEnvironmentOptions) -> Self {
         assert_compatible_oracle_version();
         txe_oracles::assert_compatible_txe_oracle_version();
+        txe_oracles::assert_compatible_oracle_manifest(crate::macros::oracle_declaration::txe_manifest_str!());
 
         txe_oracles::set_tagging_secret_strategies(
             options.default_unconstrained_tagging_secret_strategy,

@@ -33,6 +33,17 @@ pub unconstrained fn assert_compatible_txe_oracle_version() {
 #[oracle(aztec_txe_assertCompatibleOracleVersion)]
 unconstrained fn assert_compatible_txe_oracle_version_oracle_call(major: Field, minor: Field) {}
 
+/// Transports the TXE oracle manifest (the `txe`/`avm` declarations, which are never embedded in contract
+/// artifacts) for the TXE to validate against the oracles it serves. Called at `TestEnvironment` creation
+/// with the canonical rendering of the manifest.
+// The manifest transport is exercised at every `TestEnvironment` creation; its generic length has no
+// synthesizer fixture, so we don't roundtrip-test it.
+#[skip_oracle_test]
+#[txe_oracle]
+pub unconstrained fn assert_compatible_oracle_manifest<let N: u32>(manifest: str<N>) {
+    assert_compatible_oracle_manifest_oracle(manifest)
+}
+
 /// Upper bound on the number of raw offchain effects the TXE test environment will surface
 /// to Noir in a single `get_last_call_offchain_effects` query.
 pub(crate) global MAX_OFFCHAIN_EFFECTS_PER_TXE_QUERY: u32 = 64;

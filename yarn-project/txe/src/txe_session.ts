@@ -34,6 +34,7 @@ import {
   TransientArrayService,
   UtilityExecutionOracle,
   buildACIRCallback,
+  checkOracleManifest,
 } from '@aztec/pxe/simulator';
 import {
   ExecutionError,
@@ -63,7 +64,7 @@ import {
   makeResolveTaggingSecretStrategyHook,
 } from './oracle/tagging_secret_strategy.js';
 import { TXEOraclePublicContext } from './oracle/txe_oracle_public_context.js';
-import { callTxeLegacyHandler } from './oracle/txe_oracle_registry.js';
+import { callTxeLegacyHandler, getServedTxeOracleSignatures } from './oracle/txe_oracle_registry.js';
 import { TXEOracleTopLevelContext, authorizeAllUtilityCallsHook } from './oracle/txe_oracle_top_level_context.js';
 import { TXE_ORACLE_VERSION_MAJOR, TXE_ORACLE_VERSION_MINOR } from './oracle/txe_oracle_version.js';
 import { TXEPrivateExecutionOracle } from './oracle/txe_private_execution_oracle.js';
@@ -129,6 +130,9 @@ export type TXEOracleFunctionName = Exclude<
 export interface TXESessionStateHandler {
   /** Records the TXE oracle version reported by the Noir test code for diagnostics. */
   setTxeOracleVersion(major: number, minor: number): void;
+
+  /** Validates the TXE oracle manifest transported by the Noir test code against the oracles the TXE serves. */
+  checkTxeOracleManifest(manifest: string): void;
 
   enterTopLevelState(): Promise<void>;
   enterPublicState(contractAddress: Option<AztecAddress>): Promise<void>;
@@ -651,6 +655,17 @@ export class TXESession implements TXESessionStateHandler {
 
     this.txeOracleVersion = { major, minor };
     this.logger.debug(`Test compiled with test oracle version ${major}.${minor}`);
+  }
+
+  /**
+   * Validates the TXE oracle manifest transported at `TestEnvironment` creation against the oracles this TXE
+   * serves. Warn-only for now: incompatibilities are logged per oracle but never throw.
+   */
+  checkTxeOracleManifest(manifest: string): void {
+    const lines = manifest.length === 0 ? [] : manifest.split('\n');
+    for (const issue of checkOracleManifest(lines, getServedTxeOracleSignatures())) {
+      this.logger.warn(`TXE oracle manifest check: ${issue}`);
+    }
   }
 
   async enterTopLevelState() {

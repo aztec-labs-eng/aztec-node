@@ -42,6 +42,7 @@ import {
   U128,
   VECTOR,
   buildACIRCallback,
+  getManifestSignature,
   makeEntry,
 } from '@aztec/pxe/simulator';
 import { EventSelector } from '@aztec/stdlib/abi';
@@ -202,6 +203,12 @@ export const TXE_ORACLE_REGISTRY = {
       { name: 'major', type: U32 },
       { name: 'minor', type: U32 },
     ],
+  }),
+
+  // Transports the aztec-nr TXE oracle manifest (the txe/avm declarations, which are never embedded in
+  // contract artifacts) at `TestEnvironment` creation, for validation against this registry.
+  aztec_txe_assertCompatibleOracleManifest: makeEntry({
+    params: [{ name: 'manifest', type: STR }],
   }),
 
   aztec_txe_setTopLevelTxeContext: makeEntry(),
@@ -494,6 +501,22 @@ export const TXE_ORACLE_REGISTRY = {
     returnType: CONTRACT_INSTANCE_MEMBER,
   }),
 } satisfies Record<string, OracleRegistryEntry>;
+
+let servedTxeSignatures: Map<string, string> | undefined;
+
+/**
+ * The canonical signature of every oracle the TXE serves, keyed by wire name: its own txe/avm oracles plus
+ * the execution oracles it implements. Compared against the manifest aztec-nr transports at `TestEnvironment`
+ * creation.
+ */
+export function getServedTxeOracleSignatures(): ReadonlyMap<string, string> {
+  if (!servedTxeSignatures) {
+    servedTxeSignatures = new Map(
+      Object.entries(TXE_ORACLE_REGISTRY).map(([name, entry]) => [name, getManifestSignature(name, entry)]),
+    );
+  }
+  return servedTxeSignatures;
+}
 
 export function toInputSlots(inputs: ForeignCallArgs): InputSlot[] {
   // TXE foreign calls use bare hex strings, but Fr.fromString requires a 0x prefix to parse as hex.

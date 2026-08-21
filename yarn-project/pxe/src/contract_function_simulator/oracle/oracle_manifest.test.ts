@@ -1,0 +1,146 @@
+import type { ContractArtifact } from '@aztec/stdlib/abi';
+
+import {
+  checkArtifactOracleManifest,
+  checkExecutingContractManifest,
+  checkOracleManifest,
+  getManifestSignature,
+  getServedExecutionOracleSignatures,
+} from './oracle_manifest.js';
+import { ORACLE_REGISTRY } from './oracle_registry.js';
+
+function artifactWithManifest(manifest: string | undefined): ContractArtifact {
+  return {
+    name: 'TestContract',
+    aztecVersion: '1.0.0',
+    functions: [],
+    nonDispatchPublicFunctions: [],
+    outputs: {
+      structs: {},
+      globals:
+        manifest === undefined
+          ? {}
+          : { oracles: [{ name: 'AZTEC_ORACLE_MANIFEST_TestContract', value: { kind: 'string', value: manifest } }] },
+    },
+    fileMap: {},
+    storageLayout: {},
+  };
+}
+
+describe('getManifestSignature', () => {
+  it('renders the canonical wire-structural grammar', () => {
+    expect(getManifestSignature('aztec_misc_getRandomField', ORACLE_REGISTRY.aztec_misc_getRandomField)).toEqual(
+      'aztec_misc_getRandomField:->field',
+    );
+    expect(
+      getManifestSignature(
+        'aztec_misc_assertCompatibleOracleVersion',
+        ORACLE_REGISTRY.aztec_misc_assertCompatibleOracleVersion,
+      ),
+    ).toEqual('aztec_misc_assertCompatibleOracleVersion:u32,u32->()');
+    expect(getManifestSignature('aztec_utl_getAuthWitness', ORACLE_REGISTRY.aztec_utl_getAuthWitness)).toEqual(
+      'aztec_utl_getAuthWitness:field->array(field)',
+    );
+  });
+});
+
+describe('getServedExecutionOracleSignatures', () => {
+  it('serves every live registry oracle', () => {
+    const served = getServedExecutionOracleSignatures();
+    for (const [name, entry] of Object.entries(ORACLE_REGISTRY)) {
+      expect(served.get(name)).toEqual(getManifestSignature(name, entry));
+    }
+  });
+
+  it('serves legacy oracles with their effective wire', () => {
+    const served = getServedExecutionOracleSignatures();
+    // Legacy params override, return inherited from the modern oracle.
+    expect(served.get('aztec_utl_getL1ToL2MembershipWitness')).toEqual(
+      'aztec_utl_getL1ToL2MembershipWitness:aztec-address,field,field->{field,array(field,36)}',
+    );
+  });
+});
+
+describe('checkOracleManifest', () => {
+  const served = getServedExecutionOracleSignatures();
+
+  it('accepts a manifest of served oracles', () => {
+    expect(
+      checkOracleManifest(
+        ['aztec_misc_getRandomField:->field', 'aztec_utl_getAuthWitness:field->array(field)'],
+        served,
+      ),
+    ).toEqual([]);
+  });
+
+  it('accepts an empty manifest', () => {
+    expect(checkOracleManifest([], served)).toEqual([]);
+  });
+
+  it('reports an unserved oracle', () => {
+    const issues = checkOracleManifest(['aztec_utl_nonexistentOracle:field->()'], served);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("'aztec_utl_nonexistentOracle' is not served");
+    expect(issues[0]).toContain('aztec_utl_nonexistentOracle:field->()');
+  });
+
+  it('reports a signature mismatch with both sides', () => {
+    const issues = checkOracleManifest(['aztec_misc_getRandomField:->u32'], served);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("'aztec_misc_getRandomField' signature mismatch");
+    expect(issues[0]).toContain("expects 'aztec_misc_getRandomField:->u32'");
+    expect(issues[0]).toContain("serves 'aztec_misc_getRandomField:->field'");
+  });
+});
+
+describe('checkArtifactOracleManifest', () => {
+  it('reports a missing manifest', () => {
+    const issues = checkArtifactOracleManifest(artifactWithManifest(undefined));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain('compiled without an oracle manifest');
+  });
+
+  it('accepts an artifact whose manifest is served', () => {
+    expect(
+      checkArtifactOracleManifest(
+        artifactWithManifest('aztec_misc_getRandomField:->field\naztec_utl_getAuthWitness:field->array(field)'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports each incompatible oracle', () => {
+    const issues = checkArtifactOracleManifest(
+      artifactWithManifest('aztec_misc_getRandomField:->u32\naztec_utl_nonexistentOracle:->()'),
+    );
+    expect(issues).toHaveLength(2);
+  });
+});
+
+describe('checkExecutingContractManifest', () => {
+  it('validates the class once and caches the result', async () => {
+    let loads = 0;
+    const loader = () => {
+      loads++;
+      return Promise.resolve(artifactWithManifest('aztec_misc_getRandomField:->u32'));
+    };
+
+    const first = await checkExecutingContractManifest('0x1234', loader);
+    expect(first.alreadyChecked).toBe(false);
+    expect(first.issues).toHaveLength(1);
+
+    const second = await checkExecutingContractManifest('0x1234', loader);
+    expect(second.alreadyChecked).toBe(true);
+    expect(second.issues).toEqual(first.issues);
+    expect(loads).toBe(1);
+  });
+
+  it('reports a missing artifact without caching it', async () => {
+    const missing = await checkExecutingContractManifest('0x5678', () => Promise.resolve(undefined));
+    expect(missing.alreadyChecked).toBe(false);
+    expect(missing.issues[0]).toContain('no artifact available');
+
+    const retry = await checkExecutingContractManifest('0x5678', () => Promise.resolve(artifactWithManifest('')));
+    expect(retry.alreadyChecked).toBe(false);
+    expect(retry.issues).toEqual([]);
+  });
+});

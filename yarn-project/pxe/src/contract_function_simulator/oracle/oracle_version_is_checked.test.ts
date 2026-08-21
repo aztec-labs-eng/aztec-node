@@ -65,6 +65,9 @@ describe('Oracle Version Check test suite', () => {
   let assertCompatibleOracleVersionSpy: jest.SpiedFunction<
     typeof UtilityExecutionOracle.prototype.assertCompatibleOracleVersion
   >;
+  let assertCompatibleOracleManifestSpy: jest.SpiedFunction<
+    typeof UtilityExecutionOracle.prototype.assertCompatibleOracleManifest
+  >;
 
   beforeEach(async () => {
     contractStore = mock<ContractStore>();
@@ -82,7 +85,9 @@ describe('Oracle Version Check test suite', () => {
     txResolver = mock<TxResolverService>();
     l2TipsStore = mock<L2TipsProvider>();
     assertCompatibleOracleVersionSpy = jest.spyOn(UtilityExecutionOracle.prototype, 'assertCompatibleOracleVersion');
+    assertCompatibleOracleManifestSpy = jest.spyOn(UtilityExecutionOracle.prototype, 'assertCompatibleOracleManifest');
     assertCompatibleOracleVersionSpy.mockClear();
+    assertCompatibleOracleManifestSpy.mockClear();
 
     aztecNode.getPublicStorageAt.mockResolvedValue(Fr.ZERO);
     anchorBlockHeader = BlockHeader.random();
@@ -179,6 +184,7 @@ describe('Oracle Version Check test suite', () => {
       });
 
       expect(assertCompatibleOracleVersionSpy).toHaveBeenCalledTimes(1);
+      expect(assertCompatibleOracleManifestSpy).toHaveBeenCalledTimes(1);
     }, 30_000);
   });
 
@@ -208,6 +214,7 @@ describe('Oracle Version Check test suite', () => {
       await acirSimulator.runUtility(execRequest, [], anchorBlockHeader, [], 'test');
 
       expect(assertCompatibleOracleVersionSpy).toHaveBeenCalledTimes(1);
+      expect(assertCompatibleOracleManifestSpy).toHaveBeenCalledTimes(1);
     }, 30_000);
   });
 

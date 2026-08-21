@@ -172,6 +172,7 @@ pub(crate) comptime fn generate_private_external(f: FunctionDefinition) -> Quote
 
     let to_prepend = quote {
         aztec::oracle::version::assert_compatible_oracle_version();
+        aztec::oracle::manifest::assert_compatible_oracle_manifest();
         $contract_self_creation
         $initial_phase_store
         $assert_initializer

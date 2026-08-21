@@ -302,6 +302,31 @@ export function getGlobalsByTag(artifact: ContractArtifact, tag: string): Record
 }
 
 /**
+ * Returns the oracle manifest embedded in the artifact under `#[abi(oracles)]` — one line per oracle the
+ * contract compiled against, in the canonical `wire_name:param,param->return` wire-structural grammar —
+ * or undefined if the contract was compiled by an aztec-nr predating manifest emission.
+ *
+ * The manifest global is named `AZTEC_ORACLE_MANIFEST_<contract name>`: compiling a contract that imports
+ * other contract crates pools every `#[abi]` global into the artifact (as with `STORAGE_LAYOUT_<name>`), so
+ * the contract's own entry is selected by name and the imported contracts' entries are ignored.
+ */
+export function getContractOracleManifest(artifact: ContractArtifact): string[] | undefined {
+  const globals = getGlobalsByTag(artifact, 'oracles');
+  if (Object.keys(globals).length === 0) {
+    return undefined;
+  }
+  const name = `AZTEC_ORACLE_MANIFEST_${artifact.name}`;
+  const value = globals[name];
+  if (value === undefined) {
+    throw new Error(`Contract ${artifact.name} exports oracle manifest globals but none named '${name}'`);
+  }
+  if (value.kind !== 'string') {
+    throw new Error(`Oracle manifest global '${name}' in contract ${artifact.name} is not a string`);
+  }
+  return value.value.length === 0 ? [] : value.value.split('\n');
+}
+
+/**
  * Given a post-processed Nargo output defined as `contract` generates an Aztec-compatible contract artifact.
  *
  * Does not include public bytecode, apart from the public_dispatch function.

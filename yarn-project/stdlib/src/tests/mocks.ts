@@ -492,18 +492,22 @@ export async function mockCheckpointAndMessages(
   return { checkpoint, messages, lastArchive };
 }
 
-export const randomContractArtifact = (): ContractArtifact => ({
-  name: randomBytes(4).toString('hex'),
-  aztecVersion: DEV_VERSION,
-  functions: [],
-  nonDispatchPublicFunctions: [],
-  outputs: {
-    structs: {},
-    globals: {},
-  },
-  fileMap: {},
-  storageLayout: {},
-});
+export const randomContractArtifact = (): ContractArtifact => {
+  const name = randomBytes(4).toString('hex');
+  return {
+    name,
+    aztecVersion: DEV_VERSION,
+    functions: [],
+    nonDispatchPublicFunctions: [],
+    outputs: {
+      structs: {},
+      // An empty oracle manifest: valid (and trivially compatible) under the oracle manifest checks.
+      globals: { oracles: [{ name: `AZTEC_ORACLE_MANIFEST_${name}`, value: { kind: 'string', value: '' } }] },
+    },
+    fileMap: {},
+    storageLayout: {},
+  };
+};
 
 export const randomContractInstanceWithAddress = async (
   opts: { contractClassId?: Fr } = {},

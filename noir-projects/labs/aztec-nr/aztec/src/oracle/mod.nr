@@ -55,6 +55,8 @@ pub mod key_validation_request;
 #[generate_oracle_tests]
 pub mod logs;
 #[generate_oracle_tests]
+pub mod manifest;
+#[generate_oracle_tests]
 pub mod message_processing;
 #[generate_oracle_tests]
 pub mod notes;
