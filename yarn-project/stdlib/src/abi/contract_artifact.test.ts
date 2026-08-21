@@ -7,6 +7,7 @@ import type { AbiNamedValue, AbiValue } from './abi.js';
 import {
   contractArtifactFromBuffer,
   contractArtifactToBuffer,
+  getContractOracleManifest,
   getGlobalsByTag,
   loadContractArtifact,
 } from './contract_artifact.js';
@@ -109,6 +110,71 @@ describe('contract_artifact', () => {
         }),
       );
       expect(() => getGlobalsByTag(artifact, 'constants')).toThrow(/Duplicate global 'MY_FIELD'/);
+    });
+  });
+
+  describe('getContractOracleManifest', () => {
+    // contractWithGlobals names its contract 'TestContract'.
+    const manifestGlobal = (value: AbiValue): AbiNamedValue => ({ name: 'AZTEC_ORACLE_MANIFEST_TestContract', value });
+
+    it('returns undefined when the artifact has no oracles global', () => {
+      const artifact = loadContractArtifact(contractWithGlobals({}));
+      expect(getContractOracleManifest(artifact)).toBeUndefined();
+    });
+
+    it('returns an empty manifest for an empty string', () => {
+      const artifact = loadContractArtifact(
+        contractWithGlobals({ oracles: [manifestGlobal({ kind: 'string', value: '' })] }),
+      );
+      expect(getContractOracleManifest(artifact)).toEqual([]);
+    });
+
+    it('splits the manifest into lines', () => {
+      const artifact = loadContractArtifact(
+        contractWithGlobals({
+          oracles: [
+            manifestGlobal({
+              kind: 'string',
+              value: 'aztec_misc_getRandomField:->field\naztec_utl_getAuthWitness:field->array(field)',
+            }),
+          ],
+        }),
+      );
+      expect(getContractOracleManifest(artifact)).toEqual([
+        'aztec_misc_getRandomField:->field',
+        'aztec_utl_getAuthWitness:field->array(field)',
+      ]);
+    });
+
+    it('throws on a non-string manifest global', () => {
+      const artifact = loadContractArtifact(
+        contractWithGlobals({ oracles: [manifestGlobal({ kind: 'integer', sign: false, value: '01' })] }),
+      );
+      expect(() => getContractOracleManifest(artifact)).toThrow(/not a string/);
+    });
+
+    it('selects its own entry among manifests pooled from imported contracts', () => {
+      const artifact = loadContractArtifact(
+        contractWithGlobals({
+          oracles: [
+            {
+              name: 'AZTEC_ORACLE_MANIFEST_ImportedContract',
+              value: { kind: 'string', value: 'aztec_prv_other:->()' },
+            },
+            manifestGlobal({ kind: 'string', value: 'aztec_misc_getRandomField:->field' }),
+          ],
+        }),
+      );
+      expect(getContractOracleManifest(artifact)).toEqual(['aztec_misc_getRandomField:->field']);
+    });
+
+    it('throws when manifests exist but none matches the contract name', () => {
+      const artifact = loadContractArtifact(
+        contractWithGlobals({
+          oracles: [{ name: 'AZTEC_ORACLE_MANIFEST_ImportedContract', value: { kind: 'string', value: '' } }],
+        }),
+      );
+      expect(() => getContractOracleManifest(artifact)).toThrow(/none named/);
     });
   });
 });

@@ -146,6 +146,12 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     this.contractOracleVersion = { major, minor };
   }
 
+  // At top level there is no executing contract, so there is no embedded manifest to validate; contract
+  // executions run through the utility/private oracles, whose handler performs the actual check.
+  assertCompatibleOracleManifest(): void {
+    this.logger.debug('Oracle manifest check: no executing contract at top level; nothing to validate');
+  }
+
   // Prefixed with "nonOracleFunction" as it is not used as an oracle handler.
   nonOracleFunctionGetContractOracleVersion(): { major: number; minor: number } | undefined {
     return this.contractOracleVersion;

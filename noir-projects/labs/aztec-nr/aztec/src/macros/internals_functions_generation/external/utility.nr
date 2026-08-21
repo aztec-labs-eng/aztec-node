@@ -52,6 +52,7 @@ pub(crate) comptime fn generate_utility_external(f: FunctionDefinition) -> Quote
     // A quote to be injected at the beginning of the function body.
     let to_prepend = quote {
         aztec::oracle::version::assert_compatible_oracle_version();
+        aztec::oracle::manifest::assert_compatible_oracle_manifest();
         $contract_self_creation
         $init_check
     };

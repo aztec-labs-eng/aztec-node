@@ -9,15 +9,11 @@ use crate::protocol::address::aztec_address::AztecAddress;
 pub fn notify_created_nullifier(inner_nullifier: Field) {
     // Safety: This oracle call returns nothing: we only call it for its side effects. It is therefore always safe to
     // call.
-    unsafe { notify_created_nullifier_oracle_proxy(inner_nullifier) };
+    unsafe { notify_created_nullifier_internal(inner_nullifier) };
 }
 
 // Compiles to a brillig entry point (it is called from constrained code), and entry points embed their function
 // name in artifact bytecode: renaming this function would change every artifact hash and class ID.
-unconstrained fn notify_created_nullifier_oracle_proxy(inner_nullifier: Field) {
-    notify_created_nullifier_internal(inner_nullifier);
-}
-
 #[prv_oracle]
 unconstrained fn notify_created_nullifier_internal(inner_nullifier: Field) {
     notify_created_nullifier_internal_oracle(inner_nullifier)

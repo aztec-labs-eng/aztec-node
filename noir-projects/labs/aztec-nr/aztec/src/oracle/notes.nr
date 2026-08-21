@@ -18,7 +18,7 @@ pub fn notify_created_note<let N: u32>(
     // Safety: This oracle call returns nothing: we only call it for its side effects. It is therefore always safe to
     // call.
     unsafe {
-        notify_created_note_oracle_wrapper(
+        notify_created_note_internal(
             owner,
             storage_slot,
             randomness,
@@ -36,31 +36,11 @@ pub fn notify_created_note<let N: u32>(
 pub fn notify_nullified_note(nullifier: Field, note_hash: Field, counter: u32) {
     // Safety: This oracle call returns nothing: we only call it for its side effects. It is therefore always safe to
     // call.
-    unsafe { notify_nullified_note_oracle_wrapper(nullifier, note_hash, counter) };
+    unsafe { notify_nullified_note_internal(nullifier, note_hash, counter) };
 }
 
 // Compiles to a brillig entry point (it is called from constrained code), and entry points embed their function
 // name in artifact bytecode: renaming this function would change every artifact hash and class ID.
-unconstrained fn notify_created_note_oracle_wrapper<let N: u32>(
-    owner: AztecAddress,
-    storage_slot: Field,
-    randomness: Field,
-    note_type_id: Field,
-    packed_note: [Field; N],
-    note_hash: Field,
-    counter: u32,
-) {
-    notify_created_note_internal(
-        owner,
-        storage_slot,
-        randomness,
-        note_type_id,
-        packed_note,
-        note_hash,
-        counter,
-    );
-}
-
 #[prv_oracle]
 unconstrained fn notify_created_note_internal<let N: u32>(
     owner: AztecAddress,
@@ -84,10 +64,6 @@ unconstrained fn notify_created_note_internal<let N: u32>(
 
 // Compiles to a brillig entry point (it is called from constrained code), and entry points embed their function
 // name in artifact bytecode: renaming this function would change every artifact hash and class ID.
-unconstrained fn notify_nullified_note_oracle_wrapper(nullifier: Field, note_hash: Field, counter: u32) {
-    notify_nullified_note_internal(nullifier, note_hash, counter);
-}
-
 #[prv_oracle]
 unconstrained fn notify_nullified_note_internal(nullifier: Field, note_hash: Field, counter: u32) {
     notify_nullified_note_internal_oracle(nullifier, note_hash, counter);

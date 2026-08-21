@@ -67,6 +67,7 @@ import {
   ContractFunctionSimulator,
   generateSimulatedProvingResult,
 } from './contract_function_simulator/contract_function_simulator.js';
+import { checkArtifactOracleManifest } from './contract_function_simulator/oracle/oracle_manifest.js';
 import { displayDebugLogs } from './contract_logging.js';
 import { PXEDebugUtils } from './debug/pxe_debug_utils.js';
 import { enrichPublicSimulationError, enrichSimulationError } from './error_enriching.js';
@@ -535,6 +536,7 @@ export class PXE {
           const { address, instance, artifact } =
             await this.protocolContractsProvider.getProtocolContractArtifact(name);
           await this.contractStore.addContractArtifact(artifact);
+          this.#warnOnOracleManifestIssues(artifact);
           await this.contractStore.addContractInstance(instance);
           return [name, address.toString()] as const;
         }),
@@ -985,6 +987,7 @@ export class PXE {
    */
   public async registerContractClass(artifact: ContractArtifact): Promise<void> {
     const contractClassId = await this.contractStore.addContractArtifact(artifact);
+    this.#warnOnOracleManifestIssues(artifact);
     // Publishing the artifact's public function signatures to the node is part of "registering a class", so that
     // node-side debugging works regardless of which entrypoint (registerContractClass or registerContract) was used.
     const publicFunctionSignatures = artifact.functions
@@ -994,6 +997,28 @@ export class PXE {
       await this.nodeDebug?.registerContractFunctionSignatures(publicFunctionSignatures);
     }
     this.log.info(`Added contract class ${artifact.name} with id ${contractClassId}`);
+  }
+
+  /**
+   * Checks whether this PXE can serve every oracle a contract artifact was compiled against. The same
+   * validation runs (warn-only) when a class is registered; this method exposes it as a query.
+   *
+   * @param artifact - The build artifact for the contract class.
+   * @returns Whether the artifact is compatible, with one human-readable issue per incompatible oracle. An
+   * artifact with no embedded oracle manifest reports a single issue saying compatibility cannot be verified.
+   */
+  public checkContractOracleCompatibility(artifact: ContractArtifact): Promise<{
+    compatible: boolean;
+    issues: string[];
+  }> {
+    const issues = checkArtifactOracleManifest(artifact);
+    return Promise.resolve({ compatible: issues.length === 0, issues });
+  }
+
+  #warnOnOracleManifestIssues(artifact: ContractArtifact) {
+    for (const issue of checkArtifactOracleManifest(artifact)) {
+      this.log.warn(`Oracle manifest check for contract '${artifact.name}': ${issue}`);
+    }
   }
 
   /**

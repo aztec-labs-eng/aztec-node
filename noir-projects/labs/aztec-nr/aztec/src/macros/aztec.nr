@@ -13,6 +13,7 @@ use crate::{
             OFFCHAIN_RECEIVE_FN_NAME, OFFCHAIN_RECEIVE_PARAM_NAME, offchain_receive_param_type,
             OFFCHAIN_RECEIVE_RETURN_TYPE,
         },
+        oracle_declaration::generate_execution_manifest_global,
         storage::STORAGE_LAYOUT_NAME,
         utils::{is_fn_contract_library_method, is_fn_external, is_fn_internal, is_fn_test, module_has_storage},
     },
@@ -173,6 +174,10 @@ pub comptime fn aztec(m: Module, args: [AztecConfig]) -> Quoted {
     let (has_public_init_nullifier_fn, emit_public_init_nullifier_fn_body) = generate_emit_public_init_nullifier(m);
     let public_dispatch = generate_public_dispatch(m, has_public_init_nullifier_fn);
 
+    // The oracle surface this contract compiled against, embedded in the artifact for the executing
+    // environment to validate.
+    let oracle_manifest_global = generate_execution_manifest_global(m);
+
     quote {
         $interface
         $self_call_structs
@@ -184,6 +189,7 @@ pub comptime fn aztec(m: Module, args: [AztecConfig]) -> Quoted {
         $sync_state_fn_and_abi_export
         $emit_public_init_nullifier_fn_body
         $offchain_receive_fn_and_abi_export
+        $oracle_manifest_global
     }
 }
 

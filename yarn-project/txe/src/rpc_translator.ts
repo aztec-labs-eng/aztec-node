@@ -86,6 +86,17 @@ export class RPCTranslator {
     });
   }
 
+  // eslint-disable-next-line camelcase
+  aztec_txe_assertCompatibleOracleManifest(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_txe_assertCompatibleOracleManifest',
+      inputs,
+      handler: ([manifest]) => {
+        this.stateHandler.checkTxeOracleManifest(manifest);
+      },
+    });
+  }
+
   // TXE session state transition functions - these get handled by the state handler
 
   // eslint-disable-next-line camelcase
@@ -248,6 +259,15 @@ export class RPCTranslator {
       oracle: 'aztec_misc_assertCompatibleOracleVersion',
       inputs,
       handler: ([major, minor]) => this.handlerAsMisc().assertCompatibleOracleVersion(major, minor),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
+  aztec_misc_assertCompatibleOracleManifest() {
+    return callTxeHandler({
+      oracle: 'aztec_misc_assertCompatibleOracleManifest',
+      inputs: [],
+      handler: () => this.handlerAsMisc().assertCompatibleOracleManifest(),
     });
   }
 

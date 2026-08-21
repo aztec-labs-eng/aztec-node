@@ -89,6 +89,7 @@ import { pickNotes } from '../pick_notes.js';
 import type { TransientArrayService } from '../transient_array_service.js';
 import { buildACIRCallback } from './acir_callback.js';
 import type { IMiscOracle, IUtilityExecutionOracle } from './interfaces.js';
+import { checkExecutingContractManifest } from './oracle_manifest.js';
 
 /** Args for UtilityExecutionOracle constructor. */
 export type UtilityExecutionOracleArgs = {
@@ -208,6 +209,29 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     }
 
     this.contractOracleVersion = { major, minor };
+  }
+
+  /**
+   * Validates the executing contract's embedded oracle manifest against the oracles this environment serves.
+   * Warn-only for now: incompatibilities are logged per oracle (once per contract class) but never throw.
+   */
+  public async assertCompatibleOracleManifest(): Promise<void> {
+    const contractAddress = this.callContext.contractAddress;
+    const classId = await this.anchoredContractData.getCurrentClassId(contractAddress);
+    if (!classId) {
+      this.logger.warn(
+        `Oracle manifest check: no contract class found at executing address ${contractAddress}; oracle compatibility cannot be verified`,
+      );
+      return;
+    }
+    const { issues, alreadyChecked } = await checkExecutingContractManifest(classId.toString(), () =>
+      this.anchoredContractData.getContractArtifact(contractAddress),
+    );
+    if (!alreadyChecked) {
+      for (const issue of issues) {
+        this.logger.warn(`Oracle manifest check for contract at ${contractAddress} (class ${classId}): ${issue}`);
+      }
+    }
   }
 
   // Prefixed with "nonOracleFunction" as it is not used as an oracle handler.

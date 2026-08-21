@@ -95,6 +95,11 @@ export const ORACLE_REGISTRY = {
     ],
   }),
 
+  // Carries no payload: the environment already holds the executing contract's embedded oracle manifest
+  // (the artifact's `outputs.globals.oracles`), so the call is a trigger for it to validate that manifest
+  // against the oracles it serves.
+  aztec_misc_assertCompatibleOracleManifest: makeEntry(),
+
   aztec_misc_getRandomField: makeEntry({ returnType: FIELD }),
 
   aztec_misc_log: makeEntry({

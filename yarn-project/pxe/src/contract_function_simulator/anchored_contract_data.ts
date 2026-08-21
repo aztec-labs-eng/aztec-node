@@ -1,5 +1,5 @@
 import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { FunctionArtifactWithContractName, FunctionSelector } from '@aztec/stdlib/abi';
+import type { ContractArtifact, FunctionArtifactWithContractName, FunctionSelector } from '@aztec/stdlib/abi';
 import type { AztecAddress } from '@aztec/stdlib/aztec-address';
 import type { ContractInstancePreimageWithAddress } from '@aztec/stdlib/contract';
 import type { BlockHeader, ContractOverrides } from '@aztec/stdlib/tx';
@@ -52,6 +52,12 @@ export class AnchoredContractData {
   ): Promise<FunctionArtifactWithContractName | undefined> {
     const classId = await this.getCurrentClassId(address);
     return classId ? this.store.getFunctionArtifact(classId, selector) : undefined;
+  }
+
+  /** Returns the full contract artifact of the class `address` runs in this simulation. */
+  async getContractArtifact(address: AztecAddress): Promise<ContractArtifact | undefined> {
+    const classId = await this.getCurrentClassId(address);
+    return classId ? this.store.getContractArtifact(classId) : undefined;
   }
 
   async getFunctionArtifactWithDebugMetadata(

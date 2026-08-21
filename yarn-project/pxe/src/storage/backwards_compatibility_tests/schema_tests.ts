@@ -789,7 +789,14 @@ function buildSchemaContractArtifact(): ContractArtifact {
     ],
     outputs: {
       structs: { my_struct: [{ kind: 'field' }, { kind: 'boolean' }] },
-      globals: {},
+      globals: {
+        oracles: [
+          {
+            name: 'AZTEC_ORACLE_MANIFEST_SchemaFixtureContract',
+            value: { kind: 'string', value: 'aztec_misc_getRandomField:->field' },
+          },
+        ],
+      },
     },
     storageLayout: { my_field: { slot: new Fr(11n) } },
     fileMap: {
