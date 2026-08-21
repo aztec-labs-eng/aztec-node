@@ -309,18 +309,9 @@ Conventional commit types, branch strategy, and base-branch detection live in th
 
 When porting PRs between branches, include reference to original PR(s) in the PR body. Use the exact same commit message with the original PR number.
 
-### PR Merging
-
-Every PR is required by CI to consist of a single commit in order to be merged.
-
-For PRs with multiple commits that should be preserved (e.g., porting multiple PRs):
-
-1. Ensure each commit follows conventional commit format
-2. Add label `ci-no-squash` to the PR
-
 ### Fixing PRs
 
-PRs are squashed to a single commit on merge, so during development just create normal commits. Only amend when explicitly asked or when using the `/fix-pr` skill on a PR targeting `main`.
+During development just create normal commits. Only amend when explicitly asked or when using the `/fix-pr` skill on a PR targeting `main`.
 
 ```bash
 git add .
@@ -339,5 +330,4 @@ Do not use checklists (`- [ ]`) in PR descriptions unless explicitly requestedâ€
 
 ### CI Labels
 
-- **`ci-no-squash`**: Preserve individual commits (don't squash on merge)
 - **`ci-no-fail-fast`**: Run all tests even if some fail (useful for surveying multiple failures)

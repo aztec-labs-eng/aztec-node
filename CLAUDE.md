@@ -33,7 +33,7 @@ Use the base in `git diff origin/<base>...HEAD` and `git log origin/<base>..HEAD
 </base_branch>
 
 <commits_and_prs>
-Follow Conventional Commits: `fix:`, `feat:`, `chore:`, `refactor:`, `docs:`, `test:`. PRs are squashed to a single commit on merge, so during development just create normal commits — do not amend unless explicitly asked.
+Follow Conventional Commits: `fix:`, `feat:`, `chore:`, `refactor:`, `docs:`, `test:`. During development just create normal commits — do not amend unless explicitly asked.
 </commits_and_prs>
 
 <git_staging>
