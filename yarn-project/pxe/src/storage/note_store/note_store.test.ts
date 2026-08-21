@@ -604,8 +604,11 @@ describe('NoteStore', () => {
         ),
       );
 
-      // Simulate concurrent validateAndStoreNote calls where each note is added and immediately nullified
-      await switchToChangeSet(noteStore, 'test', 'concurrent-change-set');
+      // Simulate concurrent validateAndStoreNote calls where each note is added and immediately nullified. Only one
+      // change set can be open at a time, so the setup one is closed first; discarding it throws nothing away, since
+      // setup already committed.
+      await noteStore.discardStaged('test');
+      noteStore.beginChangeSet('concurrent-change-set');
       const concurrentStoreNoteCalls = notes.map(async note => {
         await noteStore.addNotes([note], SCOPE_1, 'concurrent-change-set');
         const nullifiers = [mkNullifier(note)];
@@ -644,7 +647,8 @@ describe('NoteStore', () => {
 
       // note1 is from setup and committed (i.e.: it's persisted) We should be able to nullify it in a new change set
       const nullifiers = [mkNullifier(note1)];
-      await switchToChangeSet(noteStore, 'test', 'new-change-set');
+      await noteStore.discardStaged('test');
+      noteStore.beginChangeSet('new-change-set');
       await expect(noteStore.applyNullifiers(nullifiers, 'new-change-set')).resolves.toEqual([note1]);
 
       // Verify the note is in nullified state
@@ -925,12 +929,3 @@ describe('NoteStore.rollbackToBlock', () => {
     return readNotes(store, { ...activeFilter, status });
   }
 });
-
-/**
- * Ends the store's open change set and opens `to` in its place. Only one change set can be open at a time, so a test
- * that needs a second one has to close the first. Here that discards nothing, since setup already committed.
- */
-async function switchToChangeSet(store: NoteStore, from: ChangeSetId, to: ChangeSetId): Promise<void> {
-  await store.discardStaged(from);
-  store.beginChangeSet(to);
-}
