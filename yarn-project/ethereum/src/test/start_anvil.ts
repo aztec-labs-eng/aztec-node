@@ -28,6 +28,11 @@ export interface Anvil {
 // so trapping the kill directly on TERM would leave the poll loop running and the caller's teardown
 // hanging until its SIGKILL escalation. `sleep & wait` makes the poll interruptible, so INT/TERM are
 // handled immediately rather than after the current `sleep` returns.
+//
+// The poll loop also exits when ANVIL itself dies: startAnvil detects a failed start via the
+// supervisor's 'close' event, so a supervisor that outlived a dead anvil (e.g. port already in use,
+// unsupported flag) would turn a loud startup error into an unresolvable await — the caller would
+// hang until an outer timeout with no output at all.
 const ANVIL_WATCHDOG = `
 set -u
 parent=$PPID
@@ -35,7 +40,7 @@ parent=$PPID
 anvil_pid=$!
 trap 'kill "$anvil_pid" 2>/dev/null' EXIT
 trap 'exit 0' INT TERM
-while kill -0 "$parent" 2>/dev/null; do sleep 1 & wait $!; done
+while kill -0 "$parent" 2>/dev/null && kill -0 "$anvil_pid" 2>/dev/null; do sleep 1 & wait $!; done
 `;
 
 /**
