@@ -94,3 +94,7 @@ cd yarn-project
 ./bootstrap.sh instrumented_profile "cd end-to-end; LOG_LEVEL=info yarn test e2e_prover/client"
 scripts/instrumenting-profiler/print.mjs end-to-end/profile-0.json --min-ms 100 --exclude anon
 ```
+
+## Debugging
+
+Logging goes through the [Logger](foundation/src/log/) module in Typescript. `LOG_LEVEL` controls the default log level, and one can set alternate levels for specific modules, such as `debug; warn: module1, module2; error: module3`.
