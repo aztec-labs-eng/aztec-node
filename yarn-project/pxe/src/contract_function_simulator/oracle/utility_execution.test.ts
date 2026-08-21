@@ -261,7 +261,7 @@ describe('Utility Execution test suite', () => {
       [],
       anchorBlockHeader,
       [],
-      'test-job-id',
+      'test-change-set-id',
     );
 
     expect(result).toEqual([new Fr(9)]);
@@ -349,7 +349,7 @@ describe('Utility Execution test suite', () => {
 
     const results = await Promise.all(
       Array.from({ length: N }, (_, i) =>
-        acirSimulator.runUtility(execRequest, [], anchorBlockHeader, [], `reentrance-job-${i}`),
+        acirSimulator.runUtility(execRequest, [], anchorBlockHeader, [], `reentrance-change set-${i}`),
       ),
     );
 
@@ -399,15 +399,21 @@ describe('Utility Execution test suite', () => {
         utilityExecutionOracle.deleteCapsule(contractAddress, slot, scope);
         await utilityExecutionOracle.copyCapsule(contractAddress, srcSlot, dstSlot, 1, scope);
 
-        expect(capsuleStore.setCapsule).toHaveBeenCalledWith(contractAddress, slot, capsule, 'test-job-id', scope);
-        expect(capsuleStore.getCapsule).toHaveBeenCalledWith(contractAddress, slot, 'test-job-id', scope);
-        expect(capsuleStore.deleteCapsule).toHaveBeenCalledWith(contractAddress, slot, 'test-job-id', scope);
+        expect(capsuleStore.setCapsule).toHaveBeenCalledWith(
+          contractAddress,
+          slot,
+          capsule,
+          'test-change-set-id',
+          scope,
+        );
+        expect(capsuleStore.getCapsule).toHaveBeenCalledWith(contractAddress, slot, 'test-change-set-id', scope);
+        expect(capsuleStore.deleteCapsule).toHaveBeenCalledWith(contractAddress, slot, 'test-change-set-id', scope);
         expect(capsuleStore.copyCapsule).toHaveBeenCalledWith(
           contractAddress,
           srcSlot,
           dstSlot,
           1,
-          'test-job-id',
+          'test-change-set-id',
           scope,
         );
       });
@@ -1027,7 +1033,7 @@ describe('Utility Execution test suite', () => {
         privateEventStore,
         txResolver,
         contractSyncService,
-        jobId: 'test-job-id',
+        changeSetId: 'test-change-set-id',
         scopes,
         l2TipsStore,
         simulator,

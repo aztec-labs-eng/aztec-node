@@ -106,6 +106,7 @@ import { FactService } from '../storage/fact_store/index.js';
 import type { FactStore } from '../storage/fact_store/index.js';
 import type { NoteStore } from '../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../storage/private_event_store/private_event_store.js';
+import type { ChangeSetId } from '../storage/staged_write_coordinator.js';
 import type { RecipientTaggingStore } from '../storage/tagging_store/recipient_tagging_store.js';
 import type { SenderTaggingStore } from '../storage/tagging_store/sender_tagging_store.js';
 import type { TaggingSecretSourcesStore } from '../storage/tagging_store/tagging_secret_sources_store.js';
@@ -129,8 +130,8 @@ export type ContractSimulatorRunOpts = {
   senderForTags?: AztecAddress;
   /** The accounts whose notes we can access in this call. */
   scopes: AztecAddress[];
-  /** The job ID for staged writes. */
-  jobId: string;
+  /** The change set ID for staged writes. */
+  changeSetId: ChangeSetId;
 };
 
 /** Args for ContractFunctionSimulator constructor. */
@@ -213,7 +214,7 @@ export class ContractFunctionSimulator {
       anchorBlockHeader,
       senderForTags,
       scopes,
-      jobId,
+      changeSetId,
     }: ContractSimulatorRunOpts,
   ): Promise<PrivateExecutionResult> {
     const simulatorSetupTimer = new Timer();
@@ -268,7 +269,7 @@ export class ContractFunctionSimulator {
       callContext,
       anchorBlockHeader,
       utilityExecutor: async (call, execScopes) => {
-        await this.runUtility(call, [], anchorBlockHeader, execScopes, jobId);
+        await this.runUtility(call, [], anchorBlockHeader, execScopes, changeSetId);
       },
       authWitnesses: request.authWitnesses,
       capsules: request.capsules,
@@ -288,7 +289,7 @@ export class ContractFunctionSimulator {
       privateEventStore: this.privateEventStore,
       txResolver: this.txResolver,
       contractSyncService: this.contractSyncService,
-      jobId,
+      changeSetId,
       totalPublicCalldataCount: 0,
       sideEffectCounter: startSideEffectCounter,
       scopes,
@@ -356,7 +357,7 @@ export class ContractFunctionSimulator {
     authwits: AuthWitness[],
     anchorBlockHeader: BlockHeader,
     scopes: AztecAddress[],
-    jobId: string,
+    changeSetId: ChangeSetId,
   ): Promise<{ result: Fr[]; offchainEffects: OffchainEffect[] }> {
     const anchoredContractData = new AnchoredContractData(
       this.contractStore,
@@ -378,7 +379,7 @@ export class ContractFunctionSimulator {
     }
 
     const utilityExecutor = async (syncCall: FunctionCall, execScopes: AztecAddress[]) => {
-      await this.runUtility(syncCall, [], anchorBlockHeader, execScopes, jobId);
+      await this.runUtility(syncCall, [], anchorBlockHeader, execScopes, changeSetId);
     };
 
     const oracle = new UtilityExecutionOracle({
@@ -404,7 +405,7 @@ export class ContractFunctionSimulator {
       txResolver: this.txResolver,
       contractSyncService: this.contractSyncService,
       l2TipsStore: this.l2TipsStore,
-      jobId,
+      changeSetId,
       scopes,
       simulator: this.simulator,
       hooks: this.hooks,
