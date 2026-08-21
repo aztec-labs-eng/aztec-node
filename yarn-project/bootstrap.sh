@@ -492,8 +492,10 @@ function release_packages {
   cd "$dir"
   do_or_dryrun npm init -y
   # NOTE: originally this was on one line, but sometimes snagged downloading end-to-end (most recently published package).
+  # --no-audit --no-fund: npm's implicit audit re-scans the whole cumulative tree on every install, dominating
+  # release time. Dependency vulnerabilities are covered by the weekly socket-fix workflow instead.
   for package in "${package_list[@]}"; do
-    retry "do_or_dryrun npm install $package"
+    retry "do_or_dryrun npm install --no-audit --no-fund $package"
   done
   rm -rf "$dir"
 }
