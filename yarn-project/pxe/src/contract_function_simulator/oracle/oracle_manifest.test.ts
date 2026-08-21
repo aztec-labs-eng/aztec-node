@@ -174,6 +174,27 @@ describe('checkExecutingContractManifest', () => {
     expect(b.issues).toEqual(a.issues);
   });
 
+  it('does not cache a synchronously throwing loader', async () => {
+    const first = await checkExecutingContractManifest('0xdef0', () => {
+      throw new Error('store exploded');
+    });
+    expect(first.alreadyChecked).toBe(false);
+    expect(first.issues[0]).toContain('failed to load the artifact');
+    expect(first.issues[0]).toContain('store exploded');
+
+    const retry = await checkExecutingContractManifest('0xdef0', () => Promise.resolve(artifactWithManifest('')));
+    expect(retry.alreadyChecked).toBe(false);
+    expect(retry.issues).toEqual([]);
+  });
+
+  it('reports a non-Error rejection reason without throwing', async () => {
+    const result = await checkExecutingContractManifest('0x1357', () => Promise.reject(Symbol('boom')));
+    expect(result.alreadyChecked).toBe(false);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toContain('failed to load the artifact');
+    expect(result.issues[0]).toContain('Symbol(boom)');
+  });
+
   it('reports a missing artifact without caching it', async () => {
     const missing = await checkExecutingContractManifest('0x5678', () => Promise.resolve(undefined));
     expect(missing.alreadyChecked).toBe(false);

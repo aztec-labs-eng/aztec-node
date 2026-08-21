@@ -81,9 +81,7 @@ export function checkArtifactOracleManifest(artifact: ContractArtifact): string[
   try {
     manifest = getContractOracleManifest(artifact);
   } catch (err) {
-    return [
-      `carries a malformed oracle manifest (${err instanceof Error ? err.message : err}); oracle compatibility cannot be verified`,
-    ];
+    return [`carries a malformed oracle manifest (${describeError(err)}); oracle compatibility cannot be verified`];
   }
   if (manifest === undefined) {
     return [
@@ -120,17 +118,44 @@ export function checkExecutingContractManifest(
     try {
       artifact = await loadArtifact();
     } catch (err) {
-      checkedClasses.delete(classId);
-      return [
-        `failed to load the artifact for contract class ${classId} (${err instanceof Error ? err.message : err}); oracle compatibility cannot be verified`,
-      ];
+      return {
+        issues: [
+          `failed to load the artifact for contract class ${classId} (${describeError(err)}); oracle compatibility cannot be verified`,
+        ],
+        cache: false,
+      };
     }
     if (!artifact) {
-      checkedClasses.delete(classId);
-      return [`no artifact available for contract class ${classId}; oracle compatibility cannot be verified`];
+      return {
+        issues: [`no artifact available for contract class ${classId}; oracle compatibility cannot be verified`],
+        cache: false,
+      };
     }
-    return checkArtifactOracleManifest(artifact);
+    return { issues: checkArtifactOracleManifest(artifact), cache: true };
   })();
-  checkedClasses.set(classId, pending);
-  return pending.then(issues => ({ issues, alreadyChecked: false }));
+
+  // Register the entry only after the loader has been invoked (a synchronously-throwing loader must not end
+  // up cached), and evict load failures afterwards — guarded by identity so a retry's newer entry is never
+  // dropped by an older check's eviction.
+  const issuesPromise = pending.then(({ issues }) => issues);
+  checkedClasses.set(classId, issuesPromise);
+  void pending.then(({ cache }) => {
+    if (!cache && checkedClasses.get(classId) === issuesPromise) {
+      checkedClasses.delete(classId);
+    }
+  });
+  return issuesPromise.then(issues => ({ issues, alreadyChecked: false }));
+}
+
+// Total for any thrown value (a Symbol, or an object whose toString itself throws, must not let an error
+// escape the warn-only paths that interpolate it).
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  try {
+    return String(err);
+  } catch {
+    return Object.prototype.toString.call(err);
+  }
 }
