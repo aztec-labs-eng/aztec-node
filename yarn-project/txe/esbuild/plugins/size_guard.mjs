@@ -20,7 +20,7 @@ export const sizeLimits = [
   { pattern: /^dest\/[A-Z][A-Za-z]+-[A-Z0-9]+\.js$/, maxKB: 800, description: 'contract artifact chunk' },
   // Tiny entry stubs that just re-export from the shared chunks.
   { pattern: /^dest\/(worker|server)\.bundle\.js$/, maxKB: 8, description: 'entrypoint stub' },
-  { pattern: /^dest\/bin\/index\.js$/, maxKB: 8, description: 'CLI entrypoint stub' },
+  { pattern: /^dest\/bin\/index\.bundle\.js$/, maxKB: 8, description: 'CLI entrypoint stub' },
 ];
 
 export const totalLimitMiB = 14.5;
