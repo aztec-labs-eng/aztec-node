@@ -9,6 +9,17 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [CLI] Removed `get-canonical-sponsored-fpc-address`, replaced by a wallet alias
+
+`aztec-wallet` now aliases the canonical SponsoredFPC as `contracts:SponsoredFPC` on startup, alongside the protocol and standard contracts, so commands can name it instead of taking its address:
+
+```bash
+aztec-wallet register-contract contracts:SponsoredFPC SponsoredFPC --salt 0
+aztec-wallet send transfer --payment method=fpc-sponsored,fpc=contracts:SponsoredFPC ...
+```
+
+If you need the address itself (for a script or a non-wallet consumer), use `getSponsoredFPCAddress` from `@aztec/cli/cli-utils`.
+
 ### [CLI] Removed `inspect-contract`, `compute-selector`, `generate-secret-and-hash`, `parse-parameter-struct`, and `example-contracts`
 
 The `aztec` CLI no longer includes these contract-inspection helpers, which predate the current tooling and had no remaining use:

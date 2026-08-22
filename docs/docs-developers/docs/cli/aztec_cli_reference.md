@@ -37,7 +37,6 @@ sidebar_position: 1
   - [aztec generate-l1-account](#aztec-generate-l1-account)
   - [aztec generate-p2p-private-key](#aztec-generate-p2p-private-key)
   - [aztec get-block](#aztec-get-block)
-  - [aztec get-canonical-sponsored-fpc-address](#aztec-get-canonical-sponsored-fpc-address)
   - [aztec get-current-min-fee](#aztec-get-current-min-fee)
   - [aztec get-l1-addresses](#aztec-get-l1-addresses)
   - [aztec get-l1-balance](#aztec-get-l1-balance)
@@ -95,7 +94,6 @@ aztec [options] [command]
 - `generate-l1-account [options]` - Generates a new private key for an account on L1.
 - `generate-p2p-private-key` - Generates a LibP2P peer private key.
 - `get-block [options] [blockNumber]` - Gets info for a given block or latest.
-- `get-canonical-sponsored-fpc-address` - Gets the canonical SponsoredFPC address for this any testnet running on the same version as this CLI
 - `get-current-min-fee [options]` - Gets the current base fee.
 - `get-l1-addresses [options]` - Gets the addresses of the L1 contracts.
 - `get-l1-balance [options] <who>` - Gets the balance of an ERC token in L1 for the given Ethereum address.
@@ -467,19 +465,6 @@ aztec get-block [options] [blockNumber]
 **Options:**
 
 - `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
-- `-h, --help` - display help for command
-
-### aztec get-canonical-sponsored-fpc-address
-
-Gets the canonical SponsoredFPC address for this any testnet running on the same version as this CLI
-
-**Usage:**
-```bash
-aztec get-canonical-sponsored-fpc-address [options]
-```
-
-**Options:**
-
 - `-h, --help` - display help for command
 
 ### aztec get-current-min-fee
