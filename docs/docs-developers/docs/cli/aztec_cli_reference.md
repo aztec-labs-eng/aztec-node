@@ -20,7 +20,6 @@ sidebar_position: 1
   - [aztec add-l1-validator](#aztec-add-l1-validator)
   - [aztec advance-epoch](#aztec-advance-epoch)
   - [aztec block-number](#aztec-block-number)
-  - [aztec bridge-erc20](#aztec-bridge-erc20)
   - [aztec codegen](#aztec-codegen)
   - [aztec compile](#aztec-compile)
   - [aztec compute-genesis-values](#aztec-compute-genesis-values)
@@ -77,7 +76,6 @@ aztec [options] [command]
 - `add-l1-validator [options]` - Adds a validator to the L1 rollup contract via a direct deposit.
 - `advance-epoch [options]` - Use L1 cheat codes to warp time until the next epoch.
 - `block-number [options]` - Gets the current Aztec L2 block number.
-- `bridge-erc20 [options] <amount> <recipient>` - Bridges ERC20 tokens to L2.
 - `codegen [options] <noir-abi-path>` - Validates and generates an Aztec Contract ABI from Noir ABI.
 - `compile [nargo-args...]` - Compile Aztec Noir contracts using nargo and postprocess them to generate transpiled artifacts and verification keys. All options are forwarded to nargo compile.
 - `compute-genesis-values [options]` - Computes genesis values (VK tree root, protocol contracts hash, genesis archive root).
@@ -173,29 +171,6 @@ aztec block-number [options]
 **Options:**
 
 - `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
-- `-h, --help` - display help for command
-
-### aztec bridge-erc20
-
-Bridges ERC20 tokens to L2.
-
-**Usage:**
-```bash
-aztec bridge-erc20 [options] <amount> <recipient>
-```
-
-**Options:**
-
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
-- `-m, --mnemonic <string>` - The mnemonic to use for deriving the Ethereum address that will mint and bridge (default: "test test test test test test test test test test test junk")
-- `--mint` - Mint the tokens on L1 (default: false)
-- `--private` - If the bridge should use the private flow (default: false)
-- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
-- `-t, --token <string>` - The address of the token to bridge
-- `-p, --portal <string>` - The address of the portal contract
-- `-f, --faucet <string>` - The address of the faucet contract (only used if minting)
-- `--l1-private-key <string>` - The private key to use for deployment
-- `--json` - Output the claim in JSON format
 - `-h, --help` - display help for command
 
 ### aztec codegen
