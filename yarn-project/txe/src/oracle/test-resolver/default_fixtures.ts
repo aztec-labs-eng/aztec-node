@@ -17,6 +17,7 @@ import {
   NOTE_SELECTOR,
   Option,
   type OracleRegistryEntry,
+  SIDE_EFFECT_COUNTER,
   SLOT_NUMBER,
   type StructMapping,
   TX_HASH,
@@ -70,6 +71,7 @@ export function synthesizeDefaultFixtures(
 const SCALAR_IMPLS: ScalarImpl[] = [
   scalar(FIELD, seed => new Fr(seed)),
   scalar(U32, seed => seed),
+  scalar(SIDE_EFFECT_COUNTER, seed => new Fr(seed)),
   scalar(BLOCK_NUMBER, seed => BlockNumber(seed)),
   scalar(BIGINT, seed => BigInt(seed)),
   scalar(U64, seed => BigInt(seed)),
@@ -223,7 +225,7 @@ export function testValueFor(type: TypeMapping<any>, seed: number): unknown {
   return scenariosForType(type, seed)[0].value;
 }
 
-class UnsynthesizableTypeError extends Error {
+export class UnsynthesizableTypeError extends Error {
   constructor(type: TypeMapping<any>, detail?: string) {
     super(detail ?? `No test-value impl for type: ${JSON.stringify(Object.keys(type))}`);
     this.name = 'UnsynthesizableTypeError';

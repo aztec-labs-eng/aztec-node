@@ -307,10 +307,18 @@ export const POINT: TypeMapping<EmbeddedCurvePoint> = STRUCT([
   { name: 'y', type: FIELD },
 ]);
 
-const LOG_SOURCE: TypeMapping<LogSource> = SCALAR({
-  kind: 'log-source',
-  serialization: { fn: v => [new Fr(v)] },
-  deserialization: { fn: ([reader]) => logSourceFromField(reader.readField()) },
+// The Noir `LogRetrievalRequest` declares its `source` as a plain `Field` (see its `LogSourceEnum` constants), so a
+// field is what the wire carries; the range validation lives in the conversion.
+const LOG_SOURCE: TypeMapping<LogSource> = ALIAS(FIELD, {
+  wrap: f => logSourceFromField(f),
+  unwrap: v => new Fr(v),
+});
+
+// The Noir `LogRetrievalRequest` declares its block bounds as `Option<Field>`, so a field is what the wire carries;
+// the u32 range check lives in the conversion.
+const BLOCK_NUMBER_FROM_FIELD: TypeMapping<BlockNumber> = ALIAS(FIELD, {
+  wrap: f => BlockNumber(Number(uintFromField(f, 32))),
+  unwrap: v => new Fr(v),
 });
 
 export const ETH_ADDRESS: TypeMapping<EthAddress> = SCALAR({
@@ -424,8 +432,15 @@ export const UTILITY_CONTEXT: TypeMapping<UtilityContext> = STRUCT<UtilityContex
   { name: 'msgSender', type: AZTEC_ADDRESS },
 ]);
 
+// The Noir side declares the end counter as `u32`, matching the `u32` start counter this oracle takes as a parameter;
+// the handler API keeps the `Fr` the kernel outputs carry, so the label lives in this alias.
+export const SIDE_EFFECT_COUNTER: TypeMapping<Fr> = ALIAS(U32, {
+  wrap: v => new Fr(v),
+  unwrap: v => v.toNumber(),
+});
+
 export const CALL_PRIVATE_RESULT: TypeMapping<{ endSideEffectCounter: Fr; returnsHash: Fr }> = STRUCT([
-  { name: 'endSideEffectCounter', type: FIELD },
+  { name: 'endSideEffectCounter', type: SIDE_EFFECT_COUNTER },
   { name: 'returnsHash', type: FIELD },
 ]);
 
@@ -515,8 +530,8 @@ export const LOG_RETRIEVAL_REQUEST: TypeMapping<LogRetrievalRequest> = STRUCT<Lo
   { name: 'contractAddress', type: AZTEC_ADDRESS },
   { name: 'tag', type: TAG },
   { name: 'source', type: LOG_SOURCE },
-  { name: 'fromBlock', type: OPTION(BLOCK_NUMBER) },
-  { name: 'toBlock', type: OPTION(BLOCK_NUMBER) },
+  { name: 'fromBlock', type: OPTION(BLOCK_NUMBER_FROM_FIELD) },
+  { name: 'toBlock', type: OPTION(BLOCK_NUMBER_FROM_FIELD) },
 ]);
 
 export const LOG_RETRIEVAL_RESPONSE: TypeMapping<LogRetrievalResponse> = STRUCT<LogRetrievalResponse>([

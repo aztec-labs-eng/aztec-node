@@ -1,4 +1,5 @@
 import type { IMiscOracle, IPrivateExecutionOracle, IUtilityExecutionOracle } from '@aztec/pxe/simulator';
+import { AztecAddress } from '@aztec/stdlib/aztec-address';
 
 import type { IAvmExecutionOracle, ITxeExecutionOracle } from './oracle/interfaces.js';
 import { callTxeHandler } from './oracle/txe_oracle_registry.js';
@@ -178,7 +179,7 @@ export class RPCTranslator {
     return callTxeHandler({
       oracle: 'aztec_txe_deploy',
       inputs,
-      handler: ([contractPath, initializer, _, args, secret, salt, deployer]) =>
+      handler: ([contractPath, initializer, args, secret, salt, deployer]) =>
         this.handlerAsTxe().deploy(contractPath, initializer, args, secret, salt, deployer),
     });
   }
@@ -939,7 +940,8 @@ export class RPCTranslator {
     return callTxeHandler({
       oracle: 'aztec_avm_storageRead',
       inputs,
-      handler: ([slot, contractAddress]) => this.handlerAsAvm().storageRead(slot, contractAddress),
+      handler: ([slot, contractAddress]) =>
+        this.handlerAsAvm().storageRead(slot, AztecAddress.fromFieldUnsafe(contractAddress)),
     });
   }
 
