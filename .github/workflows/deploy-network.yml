@@ -248,7 +248,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
           REF_NAME: ${{ inputs.semver && format('v{0}', inputs.semver) || '' }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NAMESPACE: ${{ inputs.namespace }}
           AZTEC_DOCKER_IMAGE: ${{ env.AZTEC_DOCKER_IMAGE }}
           CREATE_ROLLUP_CONTRACTS: ${{ inputs.deploy_contracts == true && 'true' || '' }}
