@@ -394,60 +394,6 @@ function test {
   test_cmds | filter_test_cmds | parallelize
 }
 
-##############################################################################
-# CI failure handling - send Slack notifications instead of blocking the build
-##############################################################################
-
-# Get PR number (returns empty string if not in PR context)
-function get_pr_number {
-  if [[ -z "${CI:-}" ]] || ! command -v gh &>/dev/null; then
-    return
-  fi
-
-  local branch="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null)}"
-
-  if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
-    gh pr list --head "$branch" --json number --jq '.[0].number' 2>/dev/null || echo "Failed to query PR number from branch $branch" >&2
-  fi
-}
-
-function send_slack_message {
-  local message=$1
-  local channel=${2:-"#docs-alerts"}
-  if [[ -z "${AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN:-}" ]]; then
-    echo "AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN not set, skipping Slack notification"
-    return 0
-  fi
-
-  local data
-  data=$(jq -n --arg channel "$channel" --arg text "$message" \
-    '{channel: $channel, text: $text}')
-
-  local response
-  if ! response=$(curl -s --fail-with-body -X POST https://slack.com/api/chat.postMessage \
-    -H "Authorization: Bearer $AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN" \
-    -H "Content-type: application/json" \
-    --data "$data"); then
-    echo "Slack API request failed (curl error)" >&2
-    return 1
-  fi
-
-  local ok
-  if ! ok=$(echo "$response" | jq -r '.ok' 2>/dev/null); then
-    echo "Slack API returned invalid JSON: $response" >&2
-    return 1
-  fi
-
-  if [[ "$ok" != "true" ]]; then
-    local error
-    error=$(echo "$response" | jq -r '.error // "unknown error"' 2>/dev/null)
-    echo "Slack API error: $error" >&2
-    return 1
-  fi
-
-  return 0
-}
-
 # Arrays to collect failures across all steps
 FAILED_STEPS=()
 FAILED_OUTPUTS=()
@@ -484,39 +430,6 @@ function run_step {
   fi
 }
 
-# Send a consolidated Slack message for all failed steps
-function send_failure_slack_message {
-  local branch="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")}"
-  local context="branch: \`${branch}\`"
-
-  local pr_number
-  pr_number=$(get_pr_number)
-  if [[ -n "$pr_number" ]]; then
-    local pr_url
-    pr_url=$(gh pr view "$pr_number" --json url --jq '.url' 2>/dev/null || echo "")
-    if [[ -n "$pr_url" ]]; then
-      context="<${pr_url}|PR #${pr_number}>"
-    else
-      context="PR #${pr_number}"
-    fi
-  fi
-
-  local max_chars_per_failure=$((2500 / ${#FAILED_STEPS[@]}))
-  local message=":warning: *Docs Examples Validation Failed* (${context})"$'\n\n'
-
-  for i in "${!FAILED_STEPS[@]}"; do
-    local output="${FAILED_OUTPUTS[$i]}"
-    if [[ ${#output} -gt $max_chars_per_failure ]]; then
-      output="(truncated)..."$'\n'"${output: -$max_chars_per_failure}"
-    fi
-    message+="*${FAILED_STEPS[$i]}*"$'\n'"\`\`\`"$'\n'"$output"$'\n'"\`\`\`"$'\n\n'
-  done
-
-  message+="*Action required:* Please fix the docs examples or update them to match the current API."
-
-  send_slack_message "$message"
-}
-
 case "$cmd" in
   "")
     run_step "Compile (Noir circuits)" compile-circuits
@@ -526,8 +439,6 @@ case "$cmd" in
     run_step "Webapp tutorial build" validate-webapp-tutorial
 
     if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then
-      send_failure_slack_message
-
       # Print a prominent error summary at the bottom of the log
       echo ""
       echo "============================================================"
