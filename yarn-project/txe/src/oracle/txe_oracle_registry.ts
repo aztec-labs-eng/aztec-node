@@ -371,8 +371,6 @@ export const TXE_ORACLE_REGISTRY = {
     returnType: BOOL,
   }),
 
-  // The address parameter is labelled `field` because that is what the Noir declaration sends (its callers convert
-  // with `to_field()`).
   aztec_avm_storageRead: makeEntry({
     params: [
       { name: 'slot', type: FIELD },

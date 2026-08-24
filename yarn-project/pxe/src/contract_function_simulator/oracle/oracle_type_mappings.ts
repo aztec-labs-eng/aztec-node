@@ -307,15 +307,11 @@ export const POINT: TypeMapping<EmbeddedCurvePoint> = STRUCT([
   { name: 'y', type: FIELD },
 ]);
 
-// The Noir `LogRetrievalRequest` declares its `source` as a plain `Field` (see its `LogSourceEnum` constants), so a
-// field is what the wire carries; the range validation lives in the conversion.
 const LOG_SOURCE: TypeMapping<LogSource> = ALIAS(FIELD, {
   wrap: f => logSourceFromField(f),
   unwrap: v => new Fr(v),
 });
 
-// The Noir `LogRetrievalRequest` declares its block bounds as `Option<Field>`, so a field is what the wire carries;
-// the u32 range check lives in the conversion.
 const BLOCK_NUMBER_FROM_FIELD: TypeMapping<BlockNumber> = ALIAS(FIELD, {
   wrap: f => BlockNumber(Number(uintFromField(f, 32))),
   unwrap: v => new Fr(v),
@@ -432,8 +428,7 @@ export const UTILITY_CONTEXT: TypeMapping<UtilityContext> = STRUCT<UtilityContex
   { name: 'msgSender', type: AZTEC_ADDRESS },
 ]);
 
-// The Noir side declares the end counter as `u32`, matching the `u32` start counter this oracle takes as a parameter;
-// the handler API keeps the `Fr` the kernel outputs carry, so the label lives in this alias.
+// The handler API keeps the `Fr` the kernel outputs carry, so the u32 wire label lives in this alias.
 export const SIDE_EFFECT_COUNTER: TypeMapping<Fr> = ALIAS(U32, {
   wrap: v => new Fr(v),
   unwrap: v => v.toNumber(),
