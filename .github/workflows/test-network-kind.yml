@@ -1,0 +1,68 @@
+# KIND-based e2e tests that run on a local Kubernetes cluster on an EC2 instance.
+#
+# Two entry points:
+# - workflow_dispatch: manual runs against an arbitrary ref.
+# - workflow_call: from ci3.yml via the one-time-use ci-network-kind PR label.
+name: Test Network KIND
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to checkout for the KIND test runner.
+        required: false
+        type: string
+        default: main
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to checkout. Empty checks out the caller's commit.
+        required: false
+        type: string
+        default: ""
+
+# id-token: write lets the job assume the AWS role via OIDC.
+# pull-requests: write removes the one-time-use label on workflow_call from a PR.
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  kind-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180 # 3 hours for KIND tests
+    steps:
+      - name: Remove label (one-time use)
+        if: github.event.pull_request && contains(github.event.pull_request.labels.*.name, 'ci-network-kind')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-network-kind --repo ${{ github.repository }} || true
+
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: test-network-kind-${{ github.run_id }}
+          role-duration-seconds: 12600 # 3.5h – covers AWS_SHUTDOWN_TIME (180 min) + 30 min buffer
+
+      - name: Run KIND Test
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
+          RUN_ID: ${{ github.run_id }}
+          AWS_SHUTDOWN_TIME: 180
+        run: |
+          ./.github/ci3.sh network-tests-kind
