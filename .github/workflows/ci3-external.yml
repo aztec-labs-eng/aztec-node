@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      id-token: write # OIDC assume-role with AWS
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -97,16 +98,21 @@ jobs:
           mapfile -t LABELS < <(echo "$PR_LABELS_JSON" | jq -r '.[]')
           ./.github/ci3_labels_to_env.sh "${LABELS[@]}"
 
+      # These creds start the AWS ec2 instance. They are not injected into that
+      # instance: it has minimal creds (via instance profile) for uploading to cache.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: ci3-external-${{ github.run_id }}
+          role-duration-seconds: 7200 # 2h – covers max AWS_SHUTDOWN_TIME (90 min ARM) + 30 min buffer
+
       - name: Run
         env:
           REF_NAME: repo-fork/${{ github.repository }}/${{ github.head_ref }}
           # We only test on amd64.
           ARCH: amd64
-          # We need to pass these creds to start the AWS ec2 instance.
-          # They are not injected into that instance. Instead, it has minimal
-          # creds for being able to upload to cache.
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           # DO NOT allow build instance key access to external jobs.
@@ -120,7 +126,4 @@ jobs:
         if: always()
         env:
           BENCH_UPLOAD: "0"
-          # For updating success cache.
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: ./.github/ci3_success.sh

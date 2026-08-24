@@ -106,9 +106,11 @@ concurrency:
 # actions: write lets the failure handler dispatch claudebox.yml with the built-in token
 # (workflow_dispatch is exempt from the github.token no-retrigger rule). On workflow_call
 # these are capped by the caller's permissions, so callers must grant at least this much.
+# id-token: write lets the job assume the AWS role via OIDC.
 permissions:
   contents: read
   actions: write
+  id-token: write
 
 jobs:
   deploy-network:
@@ -239,11 +241,17 @@ jobs:
             chmod 600 ~/.ssh/build_instance_key
           fi
 
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: deploy-network-${{ github.run_id }}
+          role-duration-seconds: 7200 # 2h
+
       - name: Deploy network
         id: deploy-network
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           RUN_ID: ${{ github.run_id }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}

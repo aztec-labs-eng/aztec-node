@@ -305,6 +305,7 @@ jobs:
     name: ${{ matrix.bench_type }}
     runs-on: ubuntu-latest
     permissions:
+      id-token: write # OIDC assume-role with AWS
       contents: read # EC2 instance clones the repo with the token
       pull-requests: write # remove the one-time-use label
     strategy:
@@ -336,11 +337,17 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: ci3-network-bench-${{ github.run_id }}
+          role-duration-seconds: 19800 # 5.5h – covers the longest matrix timeout (300 min) + 30 min buffer
+
       - name: Run Network Benchmarks
         timeout-minutes: ${{ matrix.timeout }}
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
@@ -361,8 +368,6 @@ jobs:
       - name: Cleanup network resources
         if: always()
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
@@ -372,9 +377,6 @@ jobs:
 
       - name: Download benchmarks
         if: always()
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           if ./ci.sh ${{ matrix.download_cmd }}; then
             echo "ENABLE_DEPLOY_BENCH=1" >> $GITHUB_ENV

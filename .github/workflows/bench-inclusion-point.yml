@@ -39,6 +39,7 @@ on:
 # On workflow_call this is capped by the caller's permissions.
 permissions:
   contents: read
+  id-token: write # OIDC assume-role with AWS
 
 jobs:
   bench:
@@ -47,11 +48,16 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ inputs.source_ref }}
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: bench-inclusion-point-${{ github.run_id }}
+          role-duration-seconds: 9000 # 2.5h – covers the 2h step timeout + buffer
       - name: Run ${{ inputs.tps }} TPS inclusion point
         timeout-minutes: 120
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
