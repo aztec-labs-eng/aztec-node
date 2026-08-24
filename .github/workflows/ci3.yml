@@ -177,7 +177,9 @@ jobs:
         test_set: ["1", "2"]
     # We run on the current main (v6) public nightly tag, or when the ci-network-scenario label is present in a PR.
     needs: [ci, validate-nightly-tag]
+    # TODO(A-1813): Disabled.
     if: |
+      false &&
       always()
       && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
       && github.event.pull_request.head.repo.fork != true
@@ -317,7 +319,8 @@ jobs:
             download_cmd: gh-spartan-proving-bench
             timeout: 240
     needs: ci
-    if: github.event.pull_request.head.repo.fork != true && github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'ci-network-bench') && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
+    # TODO(A-1813): Disabled.
+    if: false && github.event.pull_request.head.repo.fork != true && github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'ci-network-bench') && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     steps:
       - name: Remove label (one-time use)
         env:
@@ -391,7 +394,8 @@ jobs:
       contents: read # EC2 instance clones the repo with the token
       pull-requests: write # remove the one-time-use label
     needs: ci
-    if: github.event.pull_request.head.repo.fork != true && github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'ci-network-kind')
+    # TODO(A-1813): Disabled.
+    if: false && github.event.pull_request.head.repo.fork != true && github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'ci-network-kind')
     timeout-minutes: 180 # 3 hours for KIND tests
     steps:
       - name: Remove label
