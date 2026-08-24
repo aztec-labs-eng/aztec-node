@@ -490,7 +490,9 @@ case "$cmd" in
         echo "No redis available and CI_PASSWORD not set for http fallback."
         exit 1
       fi
-      curl -sf "http://aztec:$CI_PASSWORD@ci.aztec-labs.com/$key.txt" | $pager
+      # https, not http: the dashboard now redirects 80->443, and curl won't resend
+      # inline basic-auth across an http->https redirect (would need --location-trusted).
+      curl -sf "https://aztec:$CI_PASSWORD@ci.aztec-labs.com/$key.txt" | $pager
       if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "Failed to fetch log via http."
         exit 1

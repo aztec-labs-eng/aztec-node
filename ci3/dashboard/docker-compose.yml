@@ -6,14 +6,12 @@
 # reaches ElastiCache and IMDS through the host's network identity, and IMDSv2's default
 # hop limit rejects bridged containers. Caddy therefore reaches the app on loopback.
 #
-# Cutover on the ci host (one-time):
-#   1) create /etc/rkapp.env from the old unit's Environment= lines, chmod 600.
-#      Drop GH_TOKEN: it fed ci-metrics/github_data.py's GitHub poller, which post-
-#      migration points at the wrong system (CI runs on the forge now). Repoint that
-#      poller at the forge API or retire those panels as a separate decision.
-#   2) systemctl disable --now rkapp        # free port 80 for Caddy's ACME
-#   3) docker compose up -d --build
-#   443 must be open on bastion_sg (see the iac change).
+# deploy.sh does the whole rollout (build, retire the old rkapp unit, compose up).
+# It requires /etc/rkapp.env (mode 600) to already exist on the host — the app secrets
+# (REDIS_HOST, CI_REDIS, DASHBOARD_PASSWORD, the GCP creds path, AWS region). GH_TOKEN
+# and REPO_PATH from the old unit are deliberately dropped: GH_TOKEN is dead and fed a
+# now-misdirected GitHub poller; REPO_PATH only served the removed /grind route.
+# 443 must be open on bastion_sg (iac change, already applied).
 services:
   rkapp:
     build: .
@@ -23,7 +21,6 @@ services:
     env_file: /etc/rkapp.env
     volumes:
       - /home/ubuntu/rk/ci-metrics-gcp-credentials.json:/app/ci-metrics-gcp-credentials.json:ro
-      - /home/ubuntu/aztec-packages:/aztec-packages
       - /logs-disk:/logs-disk
       - /home/ubuntu/rk/data:/data
       - /home/ubuntu/.aws:/root/.aws:ro
