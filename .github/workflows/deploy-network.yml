@@ -145,7 +145,7 @@ jobs:
 
       - name: Validate inputs
         env:
-          INTERNAL_DOCKER_REGISTRY: ${{ secrets.INTERNAL_DOCKER_REGISTRY }}
+          INTERNAL_DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
         run: |
           # Validate network
           if [[ ! -f "spartan/environments/${{ inputs.network }}.env" ]]; then
