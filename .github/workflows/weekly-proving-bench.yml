@@ -16,9 +16,11 @@ concurrency:
 
 # actions: write lets the failure paths dispatch claudebox.yml with the built-in token
 # and caps the called deploy-network.yml high enough for its failure handler.
+# id-token: write lets this and the called workflows assume the AWS role via OIDC.
 permissions:
   contents: read
   actions: write
+  id-token: write
 
 jobs:
   select-image:
@@ -121,11 +123,17 @@ jobs:
         with:
           ref: ${{ needs.select-image.outputs.source_ref }}
 
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: weekly-proving-bench-${{ github.run_id }}
+          role-duration-seconds: 12600 # 3.5h – covers the 3h step timeout + buffer
+
       - name: Run real proving benchmarks
         timeout-minutes: 180
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
@@ -157,10 +165,16 @@ jobs:
         with:
           ref: ${{ needs.select-image.outputs.source_ref }}
 
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: weekly-proving-cleanup-${{ github.run_id }}
+          role-duration-seconds: 3600
+
       - name: Cleanup network resources
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
