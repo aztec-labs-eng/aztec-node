@@ -513,13 +513,9 @@ Each migration item should include:
 + new_code()
 ```
 
-## Automated Review Requests
+## Documentation References
 
-The documentation system includes automated workflows to ensure documentation stays synchronized with code changes.
-
-### DevRel Review Automation
-
-When documentation references source code files, the CI system can automatically request reviews from the DevRel team when those files change.
+Documentation pages can declare which source files they document via a `references` field in their frontmatter. CI validates that every referenced path still exists, so a refactor that moves or deletes a documented file fails the build until the frontmatter is updated.
 
 **How it works:**
 
@@ -541,20 +537,9 @@ When documentation references source code files, the CI system can automatically
    ---
    ```
 
-2. **Automatic Detection**: During CI builds (`bootstrap.sh`), the system:
-   - Extracts all referenced paths from documentation frontmatter
-   - Checks if any referenced files (or files within referenced directories) changed in the current PR
-   - Automatically requests `@AztecProtocol/devrel` as reviewers if:
-     - The PR is not a draft
-     - DevRel team is not already requested
-     - No DevRel team member has already approved
+2. **Validation**: During CI builds (`bootstrap.sh`), the system extracts all referenced paths from documentation frontmatter and fails the build if any of them no longer exist; update the `references` frontmatter in the affected doc.
 
-3. **Graceful Failures**: If the automated request fails:
-   - The build continues without blocking
-   - A comment is added to the PR notifying about the failure
-   - Manual review request may be needed
-
-**Implementation**: The automation is handled by `scripts/check_doc_references.sh`, which runs as part of the docs CI pipeline.
+**Implementation**: The check is `scripts/check_doc_references.sh` (with `scripts/lib/extract_doc_references.sh` for frontmatter parsing), which runs as part of the docs CI pipeline.
 
 **Path Format**:
 
@@ -562,50 +547,9 @@ When documentation references source code files, the CI system can automatically
 - For individual files: `"path/to/file.ts"`
 - For directories (all files within): `"path/to/directory/*"`
 
-### Automatic Documentation Update Notifications
-
-Building on the DevRel review automation, the docs CI can analyze PRs and notify the team when documentation updates may be needed.
-
-**How it works:**
-
-1. **Detection**: When a PR modifies files that are referenced in documentation (via the `references` frontmatter), the system detects which docs may need updates.
-
-2. **AI Analysis**: The system uses Claude Code to:
-   - Analyze the code changes (diffs) in the PR
-   - Review the affected documentation files
-   - Determine if documentation updates are needed
-   - Generate suggested documentation changes
-
-3. **Slack Notification**: If documentation updates are suggested:
-   - A message is sent to the configured Slack channel (default: `#docs-alerts`)
-   - The message includes the PR details, affected docs, and suggested changes
-   - The DevRel team can review and apply the changes manually
-
-**Requirements**:
-
-- `ANTHROPIC_API_KEY` must be set in CI secrets
-- `AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN` must be set for Slack notifications (this bot has access to `#docs-alerts`)
-- Claude Code CLI must be installed (`@anthropic-ai/claude-code`)
-- The PR must not be a draft
-
-**Environment Variables**:
-
-- `SLACK_DOC_UPDATE_CHANNEL` - Slack channel for notifications (default: `#docs-alerts`)
-- `DRY_RUN=1` - Skip Slack notification, just print what would be sent
-
-**Implementation**: The automation is handled by `scripts/check_doc_references.sh`, which detects changed references, requests devrel review, sends a Slack notification, and dispatches ClaudeBox — all in a single pass.
-
-**Script Architecture**:
-
-- `scripts/check_doc_references.sh` - Main script that handles detection, review requests, Slack, and ClaudeBox dispatch
-- `scripts/lib/extract_doc_references.sh` - Shared library for parsing frontmatter references
-- `scripts/lib/create_doc_update_pr.sh` - (Reserved for future use) PR creation logic
-
 **Limitations**:
 
-- Only analyzes documentation in the source folders (`docs-developers/`, `docs-operate/`, `docs-participate/`), not versioned docs
-- Suggested changes should always be reviewed by a human before applying
-- The AI may occasionally suggest unnecessary or incorrect changes
+- Only checks documentation in the source folders (`docs-developers/`, `docs-operate/`, `docs-participate/`), not versioned docs
 
 ## Contributing
 

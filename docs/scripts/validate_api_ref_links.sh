@@ -180,124 +180,6 @@ resolve_static_path() {
   return 0
 }
 
-
-# Get PR context for Slack messages (returns formatted PR link or branch name)
-get_pr_context() {
-  if ! command -v gh &>/dev/null; then
-    echo "unknown branch"
-    return
-  fi
-
-  local branch="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")}"
-
-  if [[ -z "$branch" || "$branch" == "HEAD" ]]; then
-    echo "unknown branch"
-    return
-  fi
-
-  local pr_number
-  pr_number=$(gh pr list --head "$branch" --json number --jq '.[0].number' 2>/dev/null || echo "")
-
-  if [[ -n "$pr_number" ]]; then
-    local pr_url
-    pr_url=$(gh pr view "$pr_number" --json url --jq '.url' 2>/dev/null || echo "")
-    if [[ -n "$pr_url" ]]; then
-      echo "<${pr_url}|PR #${pr_number}>"
-    else
-      echo "PR #${pr_number}"
-    fi
-  else
-    echo "branch: \`${branch}\`"
-  fi
-}
-
-# Send a Slack message to #docs-alerts
-# Args: $1 = message text
-send_slack_message() {
-  local message=$1
-  if [[ -z "${AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN:-}" ]]; then
-    echo "AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN not set, skipping Slack notification"
-    return 0
-  fi
-
-  local data
-  data=$(jq -n --arg channel "#docs-alerts" --arg text "$message" \
-    '{channel: $channel, text: $text}')
-
-  local response
-  if ! response=$(curl -s --fail-with-body -X POST https://slack.com/api/chat.postMessage \
-    -H "Authorization: Bearer $AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN" \
-    -H "Content-type: application/json" \
-    --data "$data"); then
-    echo "Slack API request failed (curl error)" >&2
-    return 1
-  fi
-
-  local ok
-  if ! ok=$(echo "$response" | jq -r '.ok' 2>/dev/null); then
-    echo "Slack API returned invalid JSON: $response" >&2
-    return 1
-  fi
-
-  if [[ "$ok" != "true" ]]; then
-    local error
-    error=$(echo "$response" | jq -r '.error // "unknown error"' 2>/dev/null)
-    echo "Slack API error: $error" >&2
-    return 1
-  fi
-
-  return 0
-}
-
-# Build and send Slack alert for broken links / case mismatches
-send_alert() {
-  if [[ "${CI:-}" != "1" ]]; then
-    echo "Not in CI, skipping Slack notification."
-    return 0
-  fi
-
-  local context
-  context=$(get_pr_context)
-
-  local issue_summary="${BROKEN_COUNT} broken, ${VERSION_MISMATCH_COUNT} version mismatch(es)"
-  local message=":warning: *API Reference Link Issues* (${context})"$'\n\n'
-  message+="*Summary:* ${issue_summary} out of ${TOTAL_COUNT} total links checked."$'\n'
-
-  if [[ $BROKEN_COUNT -gt 0 ]]; then
-    message+=$'\n'"*Broken links:*"$'\n'
-    local count=0
-    for detail in "${BROKEN_DETAILS[@]}"; do
-      if [[ $count -ge 15 ]]; then
-        message+="  ... and $((BROKEN_COUNT - 15)) more"$'\n'
-        break
-      fi
-      message+="  • \`${detail}\`"$'\n'
-      count=$((count + 1))
-    done
-  fi
-
-  if [[ $VERSION_MISMATCH_COUNT -gt 0 ]]; then
-    message+=$'\n'"*Version mismatches:*"$'\n'
-    local count=0
-    for detail in "${VERSION_MISMATCH_DETAILS[@]}"; do
-      if [[ $count -ge 15 ]]; then
-        message+="  ... and $((VERSION_MISMATCH_COUNT - 15)) more"$'\n'
-        break
-      fi
-      message+="  • \`${detail}\`"$'\n'
-      count=$((count + 1))
-    done
-  fi
-
-  message+=$'\n'"*Action required:* Run \`yarn generate:aztec-nr-api\` and/or \`yarn generate:typescript-api\` to regenerate the API docs."
-
-  if send_slack_message "$message"; then
-    echo "Slack notification sent to #docs-alerts."
-  else
-    echo "WARNING: Failed to send Slack notification." >&2
-  fi
-}
-
 # Determine the expected API version from a docs directory path.
 # Uses the version config file for explicit type resolution.
 # Args: $1 = search directory path
@@ -553,10 +435,6 @@ if [[ $VERSION_MISMATCH_COUNT -gt 0 ]]; then
   echo ""
   echo "WARNING: $VERSION_MISMATCH_COUNT version mismatch(es) found."
   echo "These links reference the wrong API version for their docs directory."
-fi
-
-if [[ $BROKEN_COUNT -gt 0 ]] || [[ $VERSION_MISMATCH_COUNT -gt 0 ]]; then
-  send_alert
 fi
 
 # Exit 0 with warnings to avoid breaking builds initially

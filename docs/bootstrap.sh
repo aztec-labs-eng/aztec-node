@@ -112,21 +112,8 @@ function check_orphaned_urls {
 }
 
 function check_references {
-  if [[ "${GITHUB_EVENT_NAME:-}" != "merge_group" ]]; then
-    echo "Skipping doc reference check (only runs in merge queue)."
-    return
-  fi
   echo_header "Check doc references"
-  if ! ./scripts/check_doc_references.sh docs; then
-    echo "⚠ Doc reference check failed (non-blocking)."
-    if [[ -n "${AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN:-}" ]]; then
-      curl -s -X POST https://slack.com/api/chat.postMessage \
-        -H "Authorization: Bearer $AZTEC_FOUNDATION_CI_SLACK_BOT_TOKEN" \
-        -H "Content-type: application/json" \
-        -d "{\"channel\": \"#docs-alerts\", \"text\": \"⚠️ Doc reference check script failed for ref \`${GITHUB_REF_NAME:-unknown}\`. Check CI logs.\"}" \
-        > /dev/null 2>&1 || true
-    fi
-  fi
+  ./scripts/check_doc_references.sh docs
 }
 
 function build_examples {
