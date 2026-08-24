@@ -139,7 +139,7 @@ jobs:
           install_components: gke-gcloud-auth-plugin
       - name: Wait for first L2 block
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NAMESPACE: bench-inclusion-sweep
         run: cd spartan && ./bootstrap.sh wait_for_l2_block bench-inclusion-sweep
 
@@ -197,7 +197,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NO_SPOT: 1
         run: ./.github/ci3.sh network-teardown bench-inclusion-sweep bench-inclusion-sweep
 

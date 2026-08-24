@@ -61,7 +61,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: 360
           NO_SPOT: 1
@@ -79,7 +79,7 @@ jobs:
           env_file: ${{ inputs.env_file }}
           namespace: ${{ env.NAMESPACE }}-${{ matrix.test_set }}
           gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
-          gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Notify Slack and dispatch ClaudeBox on failure
         if: failure()

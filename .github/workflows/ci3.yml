@@ -92,16 +92,13 @@ jobs:
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          # For automatic documentation updates via Claude Code
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # Nightly test env vars.
-          EXTERNAL_ETHEREUM_HOSTS: "https://json-rpc.${{ secrets.GCP_SEPOLIA_URL }}?key=${{ secrets.GCP_SEPOLIA_API_KEY }},${{ secrets.INFURA_SEPOLIA_URL }}"
+          EXTERNAL_ETHEREUM_HOSTS: "https://json-rpc.${{ secrets.GCP_SEPOLIA_URL }}?key=${{ secrets.GCP_SEPOLIA_API_KEY }}"
           EXTERNAL_ETHEREUM_CONSENSUS_HOST: "https://beacon.${{ secrets.GCP_SEPOLIA_URL }}"
           EXTERNAL_ETHEREUM_CONSENSUS_HOST_API_KEY: ${{ secrets.GCP_SEPOLIA_API_KEY }}
           EXTERNAL_ETHEREUM_CONSENSUS_HOST_API_KEY_HEADER: "X-goog-api-key"
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           # Internal GCP Artifact Registry that private releases push the docker image to (see
           # bootstrap.sh::private_release). Empty here, where releases publish normally.
           INTERNAL_DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
@@ -223,12 +220,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           # For pushing docker images (only for PR label, otherwise we use the tag)
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          INTERNAL_DOCKER_REGISTRY: ${{ secrets.INTERNAL_DOCKER_REGISTRY }}
+          INTERNAL_DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
           CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
           CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           RUN_ID: ${{ github.run_id }}
@@ -261,7 +258,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
           CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           NO_SPOT: 1
@@ -344,7 +341,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           # For pushing docker images built from the PR
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -366,7 +363,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NO_SPOT: 1
         run: ./.github/ci3.sh network-teardown ${{ matrix.scenario }} "${NAMESPACE}" || true
 
@@ -423,7 +420,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
