@@ -60,6 +60,12 @@ if [ "$dry_run" -eq 1 ]; then
 else
   # Check if version exists.
   if npm view "$package_name@$version" version >/dev/null 2>&1; then
+    # Never move the dist-tag backwards: re-running an old release tag's workflow is idempotent by
+    # design, and must not repoint 'latest'/'prerelease' at the older version it re-publishes.
+    if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
+      echo "Not moving dist-tag $npm_tag backwards from $published_version to $version. Skipping."
+      exit 0
+    fi
     # Tag the existing version.
     npm dist-tag add $package_name@$version $npm_tag
   else
