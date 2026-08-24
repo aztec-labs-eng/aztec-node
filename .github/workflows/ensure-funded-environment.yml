@@ -99,7 +99,7 @@ jobs:
 
       - name: Fetch secrets from GCP
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           # Fetch the environment-specific secrets
           FUNDING_PRIVATE_KEY=$(gcloud secrets versions access latest --secret="sepolia-funding-private-key" --project="$GCP_PROJECT_ID")
@@ -115,7 +115,7 @@ jobs:
 
       - name: Ensure funded environment
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NAMESPACE: ${{ inputs.namespace }}
         run: |
           cd spartan/scripts

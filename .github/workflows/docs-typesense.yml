@@ -33,7 +33,7 @@ jobs:
           # ~12k to 48 records) into a loud CI failure.
           MIN_HITS: "5000"
           TYPESENSE_API_KEY: ${{ secrets.TYPESENSE_API_KEY }}
-          TYPESENSE_HOST: ${{ secrets.TYPESENSE_HOST }}
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
         run: |
           set -euo pipefail
 
