@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Adjusts the test commands on stdin for a repo that drives this one as a subdirectory and runs
+# them under its own test engine, from its own root:
+# - TEST_CMD_PREFIX is inserted after the hash prefix (a cd into this checkout), so the
+#   root-relative commands emitted here resolve.
+# - Commands matching TEST_CMD_SKIP (an awk regex) are dropped. The driver cannot run every
+#   test: the compose-based e2e flavours mount only this checkout into their containers, where
+#   the manifests it rewrote to consume its own tree do not resolve.
+# Both empty: lines pass through unchanged.
+awk -v p="${TEST_CMD_PREFIX:-}" -v skip="${TEST_CMD_SKIP:-}" "
+  skip != \"\" && \$0 ~ skip { skipped++; next }
+  { i = index(\$0, \" \"); print substr(\$0, 1, i) p substr(\$0, i + 1) }
+  END { if (skipped) print \"prefix_test_cmds: skipped \" skipped \" commands matching TEST_CMD_SKIP\" > \"/dev/stderr\" }"
