@@ -47,9 +47,11 @@ function versionsIn(text, regex, expected, offset = 0) {
 
 // Where each @aztec npm resolution lives inside a foundation checkout, as
 // "<yarn protocol><foundation-relative path>"; use-local relativizes the path from the
-// consuming manifest's directory. null marks packages whose installable content is staged
-// only by the foundation release flow — their in-tree dirs hold no consumable package in an
-// ordinary build — so they stay pinned to the published release even in use-local mode.
+// consuming manifest's directory. null marks packages with no consumable package dir in
+// the foundation tree, which stay pinned to the published release even in use-local mode.
+// The *-artifacts packages point at dist/ directories assembled from the built circuits
+// (noir-projects/fnd/bootstrap.sh stage_packages); the foundation build stages them
+// before driving this repo, so local circuit changes reach use-local consumers.
 const LOCAL_PACKAGES = {
   "@aztec/bb-avm-sim": "portal:barretenberg/ts/bb-avm-sim",
   "@aztec/bb-avm-sim-darwin-arm64":
@@ -65,9 +67,12 @@ const LOCAL_PACKAGES = {
   "@aztec/constants-codegen": "portal:protocol/constants-codegen",
   "@aztec/ipc-runtime": "portal:ipc-runtime/ts",
   "@aztec/l1-artifacts": "portal:l1-contracts/l1-artifacts",
-  "@aztec/mock-protocol-circuits-artifacts": null,
-  "@aztec/protocol-circuits-artifacts": null,
-  "@aztec/protocol-contracts-artifacts": null,
+  "@aztec/mock-protocol-circuits-artifacts":
+    "portal:noir-projects/fnd/mock-protocol-circuits-artifacts/dist",
+  "@aztec/protocol-circuits-artifacts":
+    "portal:noir-projects/fnd/protocol-circuits-artifacts/dist",
+  "@aztec/protocol-contracts-artifacts":
+    "portal:noir-projects/fnd/protocol-contracts-artifacts/dist",
   "@aztec/wsdb": "portal:wsdb/ts",
   "@aztec/wsdb-darwin-arm64": "portal:wsdb/ts/packages/wsdb-darwin-arm64",
   "@aztec/wsdb-darwin-x64": "portal:wsdb/ts/packages/wsdb-darwin-x64",
