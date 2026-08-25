@@ -153,13 +153,6 @@ yq eval ".metadata.name = \"${DEPLOYMENT_NAME}\" |
          .spec.selector.app = \"${DEPLOYMENT_NAME}\"" \
     "$BASE_DIR/kubernetes/monitoring-service.yaml" | kubectl -n "$MONITORING_NAMESPACE" apply -f -
 
-# Build image if missing (initial install path only)
-SCRIPT_BUILD="$SCRIPT_DIR/build-and-publish.sh"
-if [ -x "$SCRIPT_BUILD" ]; then
-  echo "Ensuring image ${IMAGE} exists..."
-  "$SCRIPT_BUILD" "$IMAGE"
-fi
-
 echo "Applying Deployment..."
 yq eval ".metadata.name = \"${DEPLOYMENT_NAME}\" |
          .metadata.labels.app = \"${DEPLOYMENT_NAME}\" |
