@@ -2,10 +2,32 @@ import { type Logger, createLogger } from '@aztec/foundation/log';
 import { sleep } from '@aztec/foundation/sleep';
 import { TestDateProvider } from '@aztec/foundation/timer';
 
+import { existsSync } from 'fs';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
+
+describe('startAnvil with a binary that exits before listening', () => {
+  it('rejects instead of hanging', async () => {
+    // `false` lives at /bin/false on Linux but /usr/bin/false on macOS; resolveFoundryBinary
+    // requires $ANVIL_BIN to be an existing executable, so pick whichever is present.
+    const falseBin = ['/bin/false', '/usr/bin/false'].find(p => existsSync(p)) ?? '/bin/false';
+    const prev = process.env.ANVIL_BIN;
+    process.env.ANVIL_BIN = falseBin;
+    try {
+      // Must settle (via the retry loop, ~15s of backoff) rather than await a "Listening on" line
+      // that never comes.
+      await expect(startAnvil({ port: 0 })).rejects.toThrow(/before listening/);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.ANVIL_BIN;
+      } else {
+        process.env.ANVIL_BIN = prev;
+      }
+    }
+  }, 30_000);
+});
 
 describe('start_anvil', () => {
   let logger: Logger;
