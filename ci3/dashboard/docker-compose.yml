@@ -1,0 +1,41 @@
+# Runs the CI dashboard behind Caddy (TLS) in one stack, replacing the hand-written
+# `docker run` systemd unit that lived only on the ci host. Secrets are NOT inline:
+# they come from /etc/rkapp.env (mode 600, off-repo) — the same pattern as ci3-trigger.
+#
+# Both services use host networking, deliberately unchanged from the old unit: the app
+# reaches ElastiCache and IMDS through the host's network identity, and IMDSv2's default
+# hop limit rejects bridged containers. Caddy therefore reaches the app on loopback.
+#
+# deploy.sh does the whole rollout (build, retire the old rkapp unit, compose up).
+# It requires /etc/rkapp.env (mode 600) to already exist on the host — the app secrets
+# (REDIS_HOST, CI_REDIS, DASHBOARD_PASSWORD, the GCP creds path, AWS region). GH_TOKEN
+# and REPO_PATH from the old unit are deliberately dropped: GH_TOKEN is dead and fed a
+# now-misdirected GitHub poller; REPO_PATH only served the removed /grind route.
+# 443 must be open on bastion_sg (iac change, already applied).
+services:
+  rkapp:
+    build: .
+    image: rkapp
+    network_mode: host
+    restart: always
+    env_file: /etc/rkapp.env
+    volumes:
+      - /home/ubuntu/rk/ci-metrics-gcp-credentials.json:/app/ci-metrics-gcp-credentials.json:ro
+      - /logs-disk:/logs-disk
+      - /home/ubuntu/rk/data:/data
+      - /home/ubuntu/.aws:/root/.aws:ro
+    # Bind loopback only: the app is no longer publicly reachable; Caddy fronts it.
+    command: gunicorn -w 50 -b 127.0.0.1:8080 rk:app
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  caddy:
+    image: caddy:2-alpine
+    network_mode: host
+    restart: always
+    depends_on: [rkapp]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /home/ubuntu/rk/caddy/data:/data
+      - /home/ubuntu/rk/caddy/config:/config

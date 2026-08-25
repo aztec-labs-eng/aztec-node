@@ -181,35 +181,58 @@ def get_github_actions_status():
             _github_status_cache["ts"] = now
             return result
 
+def list_dashboards() -> list[str]:
+    """Live dashboards from the self-registering `ci-run-sections` index.
+
+    Each member is an "<org>/<repo>/<section>" string written by log_ci_run. A
+    section ZSET carries a sliding 90-day TTL, so one that has expired (no runs in
+    90 days) is retired: we drop it from the index on read. O(sections), no scan.
+    """
+    live = []
+    for raw in r.smembers('ci-run-sections'):
+        name = raw.decode() if isinstance(raw, bytes) else raw
+        if r.exists('ci-run-' + name):
+            live.append(name)
+        else:
+            r.srem('ci-run-sections', raw)
+    return sorted(live)
+
+
+def _split_dashboard(d: str) -> tuple[str, str]:
+    """'org/repo/section' -> ('org/repo', 'section'); legacy unscoped -> ('', d)."""
+    parts = d.split('/')
+    if len(parts) >= 3:
+        return '/'.join(parts[:-1]), parts[-1]
+    return '', d
+
+
 def root() -> str:
-    # Show the default (no section) view with updated links
-    return (
-        update_status(0, '', '') +
-        f"\n"
-        f"Select a filter:\n"
-        f"\n{YELLOW}"
-        f"{hyperlink('/section/main', 'main queue')}\n"
-        f"{hyperlink('/section/prs', 'prs')}\n"
-        f"{hyperlink('/section/releases', 'releases')}\n"
-        f"{hyperlink('/section/nightly', 'nightly')}\n"
-        f"{hyperlink('/section/network', 'network')}\n"
-        f"{hyperlink('/section/deflake', 'deflake')}\n"
-        f"{RESET}"
-        f"\n"
-        f"Benchmarks:\n"
-        f"\n{YELLOW}"
-        f"{hyperlink('https://aztecprotocol.github.io/benchmark-page-data/bench?branch=main', 'main')}\n"
-        f"{hyperlink('https://aztecprotocol.github.io/benchmark-page-data/bench?branch=prs', 'prs')}\n"
-        f"{hyperlink('/chonk-breakdowns', 'chonk breakdowns')}\n"
-        f"{RESET}"
-        f"\n"
+    out = update_status(0, '', '') + "\nCI runs:\n\n"
+
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for d in list_dashboards():
+        repo, section = _split_dashboard(d)
+        grouped.setdefault(repo, []).append((section, d))
+
+    if not grouped:
+        out += f"{YELLOW}(no active dashboards yet){RESET}\n"
+    for repo in sorted(grouped):
+        if repo:
+            out += f"{BOLD}{repo}{RESET}\n"
+        for section, d in sorted(grouped[repo]):
+            out += f"  {YELLOW}{hyperlink('/section/' + d, section)}{RESET}\n"
+        out += "\n"
+
+    out += (
         f"CI Metrics:\n"
         f"\n{YELLOW}"
         f"{hyperlink('/cost-overview', 'cost overview (AWS + GCP)')}\n"
         f"{hyperlink('/namespace-billing', 'namespace billing')}\n"
         f"{hyperlink('/ci-insights', 'ci insights')}\n"
+        f"{hyperlink('/chonk-breakdowns', 'chonk breakdowns')}\n"
         f"{RESET}"
     )
+    return out
 
 def section_view(section: str) -> str:
     offset = int(request.args.get('offset', 0))
@@ -391,7 +414,9 @@ def show_root():
         filter_prop=''
     )
 
-@app.route('/section/<section>')
+# <path:section> so org/repo/section dashboards (with slashes) route correctly —
+# same reason as /list/<path:key> below (WSGI decodes %2F to / before routing).
+@app.route('/section/<path:section>')
 @optional_auth
 def show_section(section):
     return render_template_string(
@@ -469,122 +494,6 @@ def get_breakdown(runtime, flow_name, sha):
         return Response(breakdown_data, mimetype='application/json')
 
     return Response('{"error": "Breakdown not found"}', mimetype='application/json', status=404)
-
-
-@app.route('/grind')
-@optional_auth
-def trigger_grind():
-    """Trigger a grind job for a flaky test."""
-    from urllib.parse import urlencode as url_encode
-
-    full_cmd = request.args.get('cmd')
-    commit = request.args.get('commit', 'HEAD')
-    run_id = request.args.get('run')  # Pre-generated run_id from selection page
-    start = request.args.get('start')  # If set, start the grind
-
-    # Configurable options with defaults
-    grind_time = request.args.get('time', '20m')
-    cpus = request.args.get('cpus', '192')
-    jobs_pct = request.args.get('jobs', '200')
-    memsuspend_pct = request.args.get('memsuspend', '50')
-
-    if not full_cmd:
-        return "Missing cmd parameter", 400
-
-    # If run_id is provided and already has a log, redirect to it (back-button protection)
-    if run_id and r.exists(run_id):
-        return redirect(f'/{run_id}')
-
-    # If start not requested, show configuration page
-    if not start:
-        # Generate one run_id for all links on this page load
-        page_run_id = uuid.uuid4().hex[:16]
-
-        # Helper to build option links
-        def make_options(param_name, options, current_value, suffix=''):
-            links = []
-            for opt in options:
-                is_selected = str(opt) == str(current_value)
-                if is_selected:
-                    links.append(f"{BOLD}{BLUE}{opt}{suffix}{RESET}")
-                else:
-                    params = {
-                        'cmd': full_cmd, 'commit': commit, 'run': page_run_id,
-                        'time': grind_time, 'cpus': cpus, 'jobs': jobs_pct, 'memsuspend': memsuspend_pct
-                    }
-                    params[param_name] = opt
-                    url = f"/grind?{url_encode(params)}"
-                    links.append(f"{YELLOW}{hyperlink(url, f'{opt}{suffix}')}{RESET}")
-            return ' | '.join(links)
-
-        time_options = make_options('time', ['5m', '10m', '20m', '30m', '1h'], grind_time)
-        cpus_options = make_options('cpus', ['16', '32', '64', '128', '192'], cpus)
-        jobs_options = make_options('jobs', ['10', '25', '50', '75', '100', '200', '400'], jobs_pct, '%')
-        memsuspend_options = make_options('memsuspend', ['25', '50', '75'], memsuspend_pct, '%')
-
-        # Start grind button
-        start_params = {
-            'cmd': full_cmd, 'commit': commit, 'run': page_run_id,
-            'time': grind_time, 'cpus': cpus, 'jobs': jobs_pct, 'memsuspend': memsuspend_pct,
-            'start': '1'
-        }
-        start_url = f"/grind?{url_encode(start_params)}"
-        start_button = f"{BOLD}{GREEN}{hyperlink(start_url, '[ Start Grind ]')}{RESET}"
-
-        page = (
-            f"{BOLD}Grind Test{RESET}\n\n"
-            f"Command: {full_cmd}\n"
-            f"Commit: {commit}\n\n"
-            f"Duration:   {time_options}\n"
-            f"CPUs:       {cpus_options}\n"
-            f"Jobs:       {jobs_options}\n"
-            f"Memsuspend: {memsuspend_options}\n\n"
-            f"{start_button}\n"
-        )
-        return render_template_string(TEMPLATE, value=ansi_to_html(page), filter_str='grind', follow='top')
-
-    # Start requested - run the grind
-    # Use run_id from URL, or generate new one if not provided
-    if not run_id:
-        run_id = uuid.uuid4().hex[:16]
-
-    # Initialize the log key so redirect doesn't show "Key not found"
-    r.setex(run_id, 86400, b'Starting grind...\n')
-
-    # Start grind job in background
-    # Dashboard server needs local repo checkout at REPO_PATH
-    repo_path = os.environ.get('REPO_PATH')
-    if repo_path:
-        # Refresh the launcher checkout to current origin/main before launching.
-        # REPO_PATH only supplies the orchestration scripts (ci.sh/bootstrap_ec2);
-        # the grind target commit is checked out on the remote box. The launcher
-        # must stay current so grind uses the same transport (SSM) as the rest of
-        # CI -- a drifted checkout silently falls back to the retired SSH path and
-        # every instance times out waiting for SSH.
-        refresh = subprocess.run(
-            ['git', '-C', repo_path, 'fetch', '--quiet', 'origin', 'main'],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-        )
-        if refresh.returncode == 0:
-            refresh = subprocess.run(
-                ['git', '-C', repo_path, 'checkout', '--quiet', '--force', 'origin/main'],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-            )
-        if refresh.returncode != 0:
-            r.setex(run_id, 86400,
-                    f'Failed to refresh launcher checkout at {repo_path}:\n{refresh.stdout}\n'.encode())
-            return redirect(f'/{run_id}')
-
-        subprocess.Popen(
-            ['bash', '-c', f'cd {repo_path} && RUN_ID={run_id} CPUS={cpus} ./ci.sh grind-test {shlex.quote(full_cmd)} {grind_time} {jobs_pct} {memsuspend_pct} {commit}'],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
-        )
-
-    # Redirect to log view.
-    return redirect(f'/{run_id}')
-
 
 # ---- Reverse proxy to ci-metrics server ----
 
