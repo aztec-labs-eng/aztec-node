@@ -202,7 +202,11 @@ function install_foundry {
   # puts foundryup somewhere we don't expect. We'll pin FOUNDRY_DIR so we control the install
   # location regardless of the caller's environment.
   local foundry_home="$HOME/.foundry"
-  FOUNDRY_DIR="$foundry_home" curl --max-time 30 -L https://foundry.paradigm.xyz | FOUNDRY_DIR="$foundry_home" bash
+  # Pin foundryup: aztec-up fetches this installer from S3 per released version and never rewrites
+  # it, so a breaking foundryup release would break every existing version with no way to patch it.
+  local foundryup_version="0.0.8"
+  FOUNDRY_DIR="$foundry_home" curl --max-time 30 -L https://foundry.paradigm.xyz | \
+    FOUNDRY_DIR="$foundry_home" FOUNDRYUP_VERSION="$foundryup_version" bash
 
   # Install foundry to temp location and move to version directory
   FOUNDRY_DIR="$temp_foundry_dir" timeout 30 "$foundry_home/bin/foundryup" -i "$foundry_version"
