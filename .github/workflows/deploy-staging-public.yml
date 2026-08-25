@@ -24,6 +24,9 @@ concurrency:
 permissions:
   contents: read
   actions: write
+  # deploy-network.yml (reusable) assumes the AWS role via OIDC; a called workflow's
+  # permissions are capped by the caller's, so the grant must exist here too.
+  id-token: write
 
 env:
   GITHUB_TOKEN: ${{ github.token }}
