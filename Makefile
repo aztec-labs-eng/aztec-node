@@ -41,9 +41,13 @@ endef
 # Writes the full output to /tmp/test_cmds atomically.
 # The test engine is expected to be running and it will read commands from this file.
 # MAKEFILE_TARGET is exported so filter_test_cmds can inject it into the hash prefix for targeted rebuilds.
+# prefix_test_cmds inserts TEST_CMD_PREFIX between the hash prefix and the command: a repo that
+# drives this one as a subdirectory runs the test engine from its own root, so it prefixes the
+# commands with a cd into this checkout. It runs before the filter so the cached-test check
+# hashes the same line the engine records.
 define test
 	$(call run_command,$(1),$(ROOT)/$(2),\
-	  export MAKEFILE_TARGET=$(1) && ./bootstrap.sh test_cmds $(3) | $(ROOT)/ci3/filter_test_cmds | $(ROOT)/ci3/atomic_append /tmp/test_cmds)
+	  export MAKEFILE_TARGET=$(1) && ./bootstrap.sh test_cmds $(3) | $(ROOT)/ci3/prefix_test_cmds | $(ROOT)/ci3/filter_test_cmds | $(ROOT)/ci3/atomic_append /tmp/test_cmds)
 endef
 
 #==============================================================================
