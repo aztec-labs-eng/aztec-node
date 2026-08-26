@@ -705,7 +705,7 @@ describe('PrivateEventStore', () => {
         'PXE private event store rollback is not allowed while staged writes are pending',
       );
 
-      await privateEventStore.discardStaged('uncommitted-change-set');
+      privateEventStore.discardStaged('uncommitted-change-set');
 
       await expect(kvStore.transactionAsync(() => privateEventStore.rollbackToBlock(0))).resolves.not.toThrow();
     });
@@ -914,7 +914,7 @@ describe('PrivateEventStore', () => {
       );
 
       // Discard change set
-      await privateEventStore.discardStaged(stagedChangeSetId);
+      privateEventStore.discardStaged(stagedChangeSetId);
 
       // Should only see committed event
       const events = await privateEventStore.getPrivateEvents(eventSelector, {

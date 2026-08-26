@@ -346,7 +346,7 @@ describe('FactStore', () => {
       expect(
         (await store.getFactCollection(collectionKey1, CHANGE_SET))!.facts.map(f => f.originBlock?.blockNumber),
       ).toEqual([5]);
-      await store.discardStaged(CHANGE_SET);
+      store.discardStaged(CHANGE_SET);
 
       await kv.transactionAsync(() => store.rollbackToBlock(4));
       expect(await store.getFactCollection(collectionKey1, CHANGE_SET)).toBeUndefined();
@@ -357,7 +357,7 @@ describe('FactStore', () => {
       await expect(kv.transactionAsync(() => store.rollbackToBlock(0))).rejects.toThrow(
         'PXE fact store rollback is not allowed while staged writes are pending',
       );
-      await store.discardStaged('uncommitted-change-set');
+      store.discardStaged('uncommitted-change-set');
       await expect(kv.transactionAsync(() => store.rollbackToBlock(0))).resolves.not.toThrow();
     });
 
@@ -366,7 +366,7 @@ describe('FactStore', () => {
       await expect(kv.transactionAsync(() => store.rollbackToBlock(0))).rejects.toThrow(
         'PXE fact store rollback is not allowed while staged writes are pending',
       );
-      await store.discardStaged('reader-change-set');
+      store.discardStaged('reader-change-set');
       await expect(kv.transactionAsync(() => store.rollbackToBlock(0))).resolves.not.toThrow();
     });
   });
@@ -446,7 +446,7 @@ describe('FactStore', () => {
       const CHANGE_SET_2 = 'discarded-change-set';
       await store.recordFact(collectionKey2, factTypeA, [Fr.random()], undefined, CHANGE_SET_2);
       await store.recordFact(collectionKey1, factTypeB, [Fr.random()], undefined, CHANGE_SET_2);
-      await store.discardStaged(CHANGE_SET_2);
+      store.discardStaged(CHANGE_SET_2);
 
       expect(collectionIdsOf(await store.getFactCollectionsByType(typeKey, CHANGE_SET_2))).toEqual([collectionId1]);
       await kv.transactionAsync(() => store.commitStaged(CHANGE_SET_2));

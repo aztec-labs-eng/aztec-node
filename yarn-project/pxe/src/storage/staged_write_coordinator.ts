@@ -44,7 +44,7 @@ export interface StagedStore {
    *
    * @param changeSetId - The change set identifier
    */
-  discardStaged(changeSetId: ChangeSetId): Promise<void>;
+  discardStaged(changeSetId: ChangeSetId): void;
 }
 
 /**
@@ -139,7 +139,7 @@ export class StagedWriteCoordinator {
    *
    * @param changeSetId - The change set ID returned from begin
    */
-  async abort(changeSetId: ChangeSetId): Promise<void> {
+  abort(changeSetId: ChangeSetId): void {
     if (this.#currentChangeSetId !== changeSetId) {
       throw new Error(
         `Cannot abort change set ${changeSetId}: no matching change set active. ` +
@@ -150,7 +150,7 @@ export class StagedWriteCoordinator {
     this.#log.debug(`Aborting change set ${changeSetId}`, { changeSetId });
 
     for (const store of this.#stagedStores.values()) {
-      await store.discardStaged(changeSetId);
+      store.discardStaged(changeSetId);
     }
 
     this.#currentChangeSetId = undefined;

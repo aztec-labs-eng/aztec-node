@@ -30,7 +30,6 @@ describe('runOperation', () => {
       },
       discardStaged: id => {
         discarded.push(id);
-        return Promise.resolve();
       },
     };
     coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [recordingStore] });

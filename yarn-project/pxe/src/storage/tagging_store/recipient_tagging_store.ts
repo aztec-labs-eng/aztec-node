@@ -98,13 +98,12 @@ export class RecipientTaggingStore implements StagedStore {
       }
     }
 
-    return this.discardStaged(changeSetId);
+    this.discardStaged(changeSetId);
   }
 
-  discardStaged(changeSetId: ChangeSetId): Promise<void> {
+  discardStaged(changeSetId: ChangeSetId): void {
     this.#highestAgedIndexForChangeSet.delete(changeSetId);
     this.#highestFinalizedIndexForChangeSet.delete(changeSetId);
-    return Promise.resolve();
   }
 
   getHighestAgedIndex(secret: AppTaggingSecret, changeSetId: ChangeSetId): Promise<number | undefined> {

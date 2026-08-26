@@ -69,7 +69,7 @@ export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Ro
           `"${this.#current.changeSetId}" is already open`,
       );
     }
-    this.#current = { changeSetId, staging: this.#buildStaging() };
+    this.#current = { changeSetId, staging: this.#buildStaging(), inFlight: 0 };
   }
 
   /**
@@ -78,18 +78,23 @@ export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Ro
    *
    * Not meant to be overridden: subclasses implement {@link flushStaged}.
    *
-   * @throws If the change set is not open.
+   * @throws If the change set is not open, or still has operations in flight.
    */
   async commitStaged(changeSetId: ChangeSetId): Promise<void> {
     const current = this.#currentOrThrow(changeSetId);
+    if (current.inFlight > 0) {
+      throw new Error(
+        `Store "${this.storeName}": cannot commit change set "${changeSetId}" while ${current.inFlight} of its ` +
+          `operations are in flight`,
+      );
+    }
     await this.flushStaged(current.staging, this.#db);
     this.#closeChangeSet(changeSetId);
   }
 
   /** Closes the change set, discarding any staged data without committing. A no-op if it is not open. */
-  discardStaged(changeSetId: ChangeSetId): Promise<void> {
+  discardStaged(changeSetId: ChangeSetId): void {
     this.#closeChangeSet(changeSetId);
-    return Promise.resolve();
   }
 
   /**
@@ -112,14 +117,13 @@ export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Ro
 
   /**
    * Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not
-   * open a transaction of its own or call {@link withStaging}, which would deadlock on the store's lock.
+   * open a transaction of its own or call {@link withStaging}.
    */
   protected abstract flushStaged(staging: TStaging, db: TDb): Promise<void>;
 
   /**
    * Deletes the state originating from blocks strictly above `toBlock`. Runs inside the transaction owned by
-   * {@link rollbackToBlock}'s caller: it must not open a transaction of its own or call {@link withStaging}, which
-   * would deadlock on the store's lock.
+   * {@link rollbackToBlock}'s caller: it must not open a transaction of its own or call {@link withStaging}.
    */
   protected abstract applyRollback(toBlock: number, db: TDb): Promise<void>;
 
@@ -137,16 +141,22 @@ export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Ro
     changeSetId: ChangeSetId,
     fn: (staging: TStaging, db: ReadonlyDb<TDb>) => Promise<R>,
   ): Promise<R> {
-    this.#currentOrThrow(changeSetId);
-    await this.#lock.acquire();
+    const entered = this.#currentOrThrow(changeSetId);
+    entered.inFlight++;
     try {
-      return await this.#store.transactionAsync(() => {
-        // Re-resolve after the wait: the change set may have ended while this operation queued on the lock.
-        const current = this.#currentOrThrow(changeSetId);
-        return fn(current.staging, this.#db);
-      });
+      await this.#lock.acquire();
+      try {
+        return await this.#store.transactionAsync(() => {
+          // Re-resolve after the wait: the change set may have been discarded while this operation queued on the lock.
+          const current = this.#currentOrThrow(changeSetId);
+          return fn(current.staging, this.#db);
+        });
+      } finally {
+        this.#lock.release();
+      }
     } finally {
-      this.#lock.release();
+      // Count down on the change set this operation entered, which may no longer be the open one.
+      entered.inFlight--;
     }
   }
 
@@ -184,5 +194,8 @@ type ReadMethod =
   | 'getValuesAsync'
   | 'getValueCountAsync';
 
-/** The change set in progress: its id and its staged data, created empty when the change set opens. */
-type OpenChangeSet<T> = { changeSetId: ChangeSetId; staging: T };
+/**
+ * The change set in progress: its id, its staged data (created empty when it opens), and how many of its operations
+ * are still running.
+ */
+type OpenChangeSet<T> = { changeSetId: ChangeSetId; staging: T; inFlight: number };

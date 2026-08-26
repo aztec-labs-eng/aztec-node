@@ -607,7 +607,7 @@ describe('NoteStore', () => {
       // Simulate concurrent validateAndStoreNote calls where each note is added and immediately nullified. Only one
       // change set can be open at a time, so the setup one is closed first; discarding it throws nothing away, since
       // setup already committed.
-      await noteStore.discardStaged('test');
+      noteStore.discardStaged('test');
       noteStore.beginChangeSet('concurrent-change-set');
       const concurrentStoreNoteCalls = notes.map(async note => {
         await noteStore.addNotes([note], SCOPE_1, 'concurrent-change-set');
@@ -647,7 +647,7 @@ describe('NoteStore', () => {
 
       // note1 is from setup and committed (i.e.: it's persisted) We should be able to nullify it in a new change set
       const nullifiers = [mkNullifier(note1)];
-      await noteStore.discardStaged('test');
+      noteStore.discardStaged('test');
       noteStore.beginChangeSet('new-change-set');
       await expect(noteStore.applyNullifiers(nullifiers, 'new-change-set')).resolves.toEqual([note1]);
 
@@ -767,7 +767,7 @@ describe('NoteStore', () => {
       expect(await noteStore.getNotes(activeFilter, CHANGE_SET)).toHaveLength(1);
 
       // The staged note was never committed: once the change set ends, the next one does not see it.
-      await noteStore.discardStaged(CHANGE_SET);
+      noteStore.discardStaged(CHANGE_SET);
       noteStore.beginChangeSet('other-change-set');
       expect(await noteStore.getNotes(activeFilter, 'other-change-set')).toHaveLength(0);
     });
@@ -781,7 +781,7 @@ describe('NoteStore', () => {
         CHANGE_SET,
       );
 
-      await noteStore.discardStaged(CHANGE_SET);
+      noteStore.discardStaged(CHANGE_SET);
       noteStore.beginChangeSet('fresh-change-set');
 
       // A fresh change set sees nothing committed — both the note and the nullification were discarded.
@@ -915,7 +915,7 @@ describe('NoteStore.rollbackToBlock', () => {
       `Store "note": cannot roll back while change set "${CHANGE_SET}" is open`,
     );
 
-    await store.discardStaged(CHANGE_SET);
+    store.discardStaged(CHANGE_SET);
 
     await expect(kv.transactionAsync(() => store.rollbackToBlock(0))).resolves.not.toThrow();
   });

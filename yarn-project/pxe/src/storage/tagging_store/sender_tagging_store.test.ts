@@ -829,7 +829,7 @@ describe('SenderTaggingStore', () => {
         const txHash3 = TxHash.random();
         await taggingStore.storePendingIndexes([range(secret1, 7)], txHash3, stagedChangeSetId);
         await taggingStore.finalizePendingIndexes([txHash3], stagedChangeSetId);
-        await taggingStore.discardStaged(stagedChangeSetId);
+        taggingStore.discardStaged(stagedChangeSetId);
       }
 
       // Should still get the committed finalized index

@@ -304,9 +304,8 @@ export class PrivateEventStore implements StagedStore, Rollbackable {
   /**
    * Discards in-memory staged data without persisting it.
    */
-  discardStaged(changeSetId: ChangeSetId): Promise<void> {
+  discardStaged(changeSetId: ChangeSetId): void {
     this.#clearChangeSetData(changeSetId);
-    return Promise.resolve();
   }
 
   /**

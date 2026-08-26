@@ -612,7 +612,7 @@ describe('capsule data provider', () => {
       await capsuleStore.commitStaged(commitChangeSetId);
       capsuleStore.setCapsule(contract, slot, stagedValues, stagedChangeSetId, scope);
 
-      await capsuleStore.discardStaged(stagedChangeSetId);
+      capsuleStore.discardStaged(stagedChangeSetId);
 
       // Should still get committed capsule
       expect(await capsuleStore.getCapsule(contract, slot, 'any-change-set', scope)).toEqual(committedValues);

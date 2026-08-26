@@ -33,7 +33,7 @@ describe('StagedWriteCoordinator', () => {
         storeName: 'mock_store',
         beginChangeSet: changeSetId => opened.push(changeSetId),
         commitStaged: () => Promise.resolve(),
-        discardStaged: () => Promise.resolve(),
+        discardStaged: () => {},
       };
 
       coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [mockStore] });
@@ -44,7 +44,7 @@ describe('StagedWriteCoordinator', () => {
 
       const second = coordinator.begin();
       expect(opened).toEqual([first, second]);
-      await coordinator.abort(second);
+      coordinator.abort(second);
     });
   });
 
@@ -89,7 +89,7 @@ describe('StagedWriteCoordinator', () => {
           committed.push({ changeSetId, inTransaction });
           return Promise.resolve();
         },
-        discardStaged: () => Promise.resolve(),
+        discardStaged: () => {},
       };
 
       coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [mockStore] });
@@ -106,30 +106,30 @@ describe('StagedWriteCoordinator', () => {
     it('clears change set marker on abort', async () => {
       const changeSetId = coordinator.begin();
 
-      await coordinator.abort(changeSetId);
+      coordinator.abort(changeSetId);
 
       expect(() => coordinator.begin()).not.toThrow();
     });
 
     it('throws if no matching change set active', async () => {
       const changeSetId = coordinator.begin();
-      await coordinator.abort(changeSetId);
+      coordinator.abort(changeSetId);
 
-      await expect(coordinator.abort(changeSetId)).rejects.toThrow(/no matching change set/);
+      expect(() => coordinator.abort(changeSetId)).toThrow(/no matching change set/);
     });
 
     it('throws if no change set was ever opened', async () => {
-      await expect(coordinator.abort('deadbeef')).rejects.toThrow(/no matching change set/);
+      expect(() => coordinator.abort('deadbeef')).toThrow(/no matching change set/);
     });
 
     it('throws if the change set id does not match the open one', async () => {
       coordinator.begin();
-      await expect(coordinator.abort('deadbeef')).rejects.toThrow(/no matching change set/);
+      expect(() => coordinator.abort('deadbeef')).toThrow(/no matching change set/);
     });
 
     it('calls discardStaged on all its stores', async () => {
       const commitMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-      const discardStagedMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+      const discardStagedMock = jest.fn<() => void>();
       const mockStore: StagedStore = {
         storeName: 'mock_store',
         commitStaged: commitMock,
@@ -140,7 +140,7 @@ describe('StagedWriteCoordinator', () => {
 
       const changeSetId = coordinator.begin();
 
-      await coordinator.abort(changeSetId);
+      coordinator.abort(changeSetId);
 
       expect(discardStagedMock).toHaveBeenCalledWith(changeSetId);
     });
@@ -149,7 +149,7 @@ describe('StagedWriteCoordinator', () => {
   describe('construction', () => {
     it('throws on stores with duplicate names', () => {
       const commitMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-      const discardStagedMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+      const discardStagedMock = jest.fn<() => void>();
       const mockStore: StagedStore = {
         storeName: 'mock_store',
         commitStaged: commitMock,

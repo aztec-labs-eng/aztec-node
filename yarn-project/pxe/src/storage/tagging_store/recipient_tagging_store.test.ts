@@ -75,13 +75,13 @@ describe('RecipientTaggingStore', () => {
 
     it('discards staged highest aged index without persisting', async () => {
       await taggingStore.updateHighestAgedIndex(secret1, 5, 'change-set-1');
-      await taggingStore.discardStaged('change-set-1');
+      taggingStore.discardStaged('change-set-1');
       expect(await taggingStore.getHighestAgedIndex(secret1, 'change-set-1')).toBeUndefined();
     });
 
     it('discards staged highest finalized index without persisting', async () => {
       await taggingStore.updateHighestFinalizedIndex(secret1, 5, 'change-set-1');
-      await taggingStore.discardStaged('change-set-1');
+      taggingStore.discardStaged('change-set-1');
       expect(await taggingStore.getHighestFinalizedIndex(secret1, 'change-set-1')).toBeUndefined();
     });
   });

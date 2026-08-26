@@ -123,13 +123,12 @@ export class SenderTaggingStore implements StagedStore {
       }
     }
 
-    return this.discardStaged(changeSetId);
+    this.discardStaged(changeSetId);
   }
 
-  discardStaged(changeSetId: ChangeSetId): Promise<void> {
+  discardStaged(changeSetId: ChangeSetId): void {
     this.#pendingIndexesForChangeSet.delete(changeSetId);
     this.#lastFinalizedIndexesForChangeSet.delete(changeSetId);
-    return Promise.resolve();
   }
 
   /**

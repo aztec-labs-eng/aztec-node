@@ -183,9 +183,8 @@ export class FactStore implements StagedStore, Rollbackable {
   }
 
   /** Discards all staged operations for the given change set without persisting them. */
-  discardStaged(changeSetId: ChangeSetId): Promise<void> {
+  discardStaged(changeSetId: ChangeSetId): void {
     this.#clearChangeSetData(changeSetId);
-    return Promise.resolve();
   }
 
   /**

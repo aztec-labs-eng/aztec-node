@@ -117,9 +117,8 @@ export class CapsuleStore implements StagedStore {
   /**
    * Discards staged data without committing.
    */
-  discardStaged(changeSetId: ChangeSetId): Promise<void> {
+  discardStaged(changeSetId: ChangeSetId): void {
     this.#stagedCapsules.delete(changeSetId);
-    return Promise.resolve();
   }
 
   /**
