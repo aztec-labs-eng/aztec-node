@@ -111,8 +111,14 @@ VERSION=<version> bash -i <(curl -sL https://install.aztec.network/<version>)
 
 ### Step 4: Get Sponsored FPC Address
 
+The address is a hash of the SponsoredFPC contract class and a zero salt, so derive it from
+the tag checked out in Step 2 (needs `yarn-project` built, as in Step 6):
+
 ```bash
-aztec get-canonical-sponsored-fpc-address
+cd yarn-project && node --input-type=module -e "
+import { getSponsoredFPCAddress } from '@aztec/cli/cli-utils';
+console.log((await getSponsoredFPCAddress()).toString());
+"
 ```
 
 Store the address and update it wherever it appears in the versioned docs.
@@ -431,7 +437,9 @@ versioned docs at cut time in Step 11)
   RPC endpoint in `docs/docs/networks.md` (Step 9). These two are maintained
   separately, so a `networks.md` RPC change that isn't mirrored here leaves the
   guide's first command pointing at a dead host.
-- Update `SPONSORED_FPC_ADDRESS` from Step 4.
+- The source page names the FPC by its `contracts:SponsoredFPC` alias rather than hardcoding
+  an address, so there is nothing to update here from Step 4. Older versioned snapshots still
+  hardcode `SPONSORED_FPC_ADDRESS` and do need it (see below).
 - Update the install command and any hardcoded version references to the new version.
 - Review the page for correctness: CLI commands, FPC registration, fee payment
   instructions, block explorer links.

@@ -9,11 +9,7 @@ local_network_pid=$!
 trap 'set +e; kill $local_network_pid &>/dev/null; wait $local_network_pid' EXIT
 wait_for_local_network $local_network_pid
 
-canonical_sponsored_fpc_address=$(aztec \
-  get-canonical-sponsored-fpc-address \
-  | awk '{print $NF}')
-
-SPONSORED_FPC_PAYMENT_METHOD="--payment method=fpc-sponsored,fpc=${canonical_sponsored_fpc_address}"
+SPONSORED_FPC_PAYMENT_METHOD="--payment method=fpc-sponsored,fpc=contracts:SponsoredFPC"
 
 # Execute wallet commands as per: https://docs.aztec.network/guides/getting_started
 # Note that we are only proving the AMM specific transactions due to the test being lengthy if any other
@@ -27,7 +23,7 @@ aztec-wallet \
   --register-only
 
 aztec-wallet \
-  register-contract $canonical_sponsored_fpc_address SponsoredFPC \
+  register-contract contracts:SponsoredFPC SponsoredFPC \
   --salt 0
 
 aztec-wallet \
