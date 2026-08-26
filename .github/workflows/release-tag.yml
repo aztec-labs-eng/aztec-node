@@ -128,7 +128,7 @@ jobs:
           response=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H "Content-type: application/json" \
-            --data "$(jq -n --arg c '#team-alpha' --arg t "$TEXT" '{channel:$c, text:$t}')")
+            --data "$(jq -n --arg c '#team-alpha-ci' --arg t "$TEXT" '{channel:$c, text:$t}')")
           # Slack returns 200 on errors, so surface a bad channel/token instead of dropping it.
           if [ "$(jq -r '.ok // false' <<<"$response")" != "true" ]; then
             echo "Failed to post to Slack: $(jq -r '.error // empty' <<<"$response")" >&2
