@@ -124,14 +124,12 @@ function test_cmds {
   echo "$hash docker run --rm aztecprotocol/aztec --version"
 }
 
-function release {
-  echo_header "release-image release"
-
-  # In a private release we push to our internal GCP Artifact Registry (the INTERNAL_DOCKER_REGISTRY
-  # that GKE/staging pulls from) rather than Docker Hub. Auth via the CI service-account key
-  # (gcp_artifact_login). INTERNAL_DOCKER_REGISTRY is the AR repo path, e.g.
-  # us-west1-docker.pkg.dev/<project>/<repo>.
-  local repo
+# Resolve the registry to release to and log docker into it, assigning the repo path to the
+# caller's $repo. In a private release we push to our internal GCP Artifact Registry (the
+# INTERNAL_DOCKER_REGISTRY that GKE/staging pulls from) rather than Docker Hub. Auth via the CI
+# service-account key (gcp_artifact_login). INTERNAL_DOCKER_REGISTRY is the AR repo path, e.g.
+# us-west1-docker.pkg.dev/<project>/<repo>.
+function release_registry_login {
   if [ "${PRIVATE_RELEASE:-0}" = 1 ]; then
     : "${INTERNAL_DOCKER_REGISTRY:?INTERNAL_DOCKER_REGISTRY required for a private release}"
     gcp_artifact_login
@@ -144,6 +142,13 @@ function release {
     echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
     repo="aztecprotocol"
   fi
+}
+
+function release {
+  echo_header "release-image release"
+
+  local repo
+  release_registry_login
 
   # We strip leading 'v' so that this is a valid semver.
   tag=${REF_NAME#v}
@@ -152,34 +157,29 @@ function release {
 
   docker tag aztecprotocol/aztec-prover-agent:$COMMIT_HASH $repo/aztec-prover-agent:$tag-$(arch)
   do_or_dryrun docker push $repo/aztec-prover-agent:$tag-$(arch)
+}
 
-  # If doing a release in CI, update the remote manifest if we're the arm build.
-  if [ "${DRY_RUN:-0}" == 0 ] && [ "$(arch)" == "arm64" ] && [ "${CI:-0}" -eq 1 ]; then
-    # Wait for amd64 image to be available.
-    while ! docker manifest inspect $repo/aztec:$tag-amd64 &>/dev/null; do
-      echo "Waiting for amd64 image to be pushed..."
-      sleep 10
-    done
+# Assemble the multi-arch manifest lists (e.g. aztec:1.0.0 from aztec:1.0.0-amd64 and
+# aztec:1.0.0-arm64). Run from the release orchestrator (ci.sh release) after both arch jobs
+# have pushed their images; imagetools only talks to the registry, so no local images are needed.
+function release_docker_manifest {
+  echo_header "release-image manifest"
 
-    # We release with our tag, e.g. 1.0.0
-    docker buildx imagetools create -t $repo/aztec:$tag \
-      $repo/aztec:$tag-amd64 \
-      $repo/aztec:$tag-arm64
+  local repo
+  release_registry_login
 
-    while ! docker manifest inspect $repo/aztec-prover-agent:$tag-amd64 &>/dev/null; do
-      echo "Waiting for amd64 prover-agent image to be pushed..."
-      sleep 10
-    done
+  local tag=${REF_NAME#v}
+  local image
+  for image in aztec aztec-prover-agent; do
+    do_or_dryrun docker buildx imagetools create -t $repo/$image:$tag \
+      $repo/$image:$tag-amd64 \
+      $repo/$image:$tag-arm64
+  done
 
-    docker buildx imagetools create -t $repo/aztec-prover-agent:$tag \
-      $repo/aztec-prover-agent:$tag-amd64 \
-      $repo/aztec-prover-agent:$tag-arm64
-
-    # We also release with our dist_tag, e.g. 'latest', 'staging' or 'nightly'.
-    # docker buildx imagetools create -t $repo/aztec:$(dist_tag) \
-    #   $repo/aztec:$tag-amd64 \
-    #   $repo/aztec:$tag-arm64
-  fi
+  # We also release with our dist_tag, e.g. 'latest', 'staging' or 'nightly'.
+  # docker buildx imagetools create -t $repo/aztec:$(dist_tag) \
+  #   $repo/aztec:$tag-amd64 \
+  #   $repo/aztec:$tag-arm64
 }
 
 function push {
