@@ -205,7 +205,9 @@ case "$cmd" in
   full|full-no-test-cache)
     # CI_DASHBOARD is left for multi_job_run to default: "main" for main-branch
     # runs (post-merge full CI), "prs" otherwise.
-    export AWS_SHUTDOWN_TIME=75
+    # Roomier than the 75-min default: full CI also runs the backwards-compat e2e sweep
+    # (~5 min per stable release with committed artifacts in legacy-contracts/).
+    export AWS_SHUTDOWN_TIME=90
     multi_job_run "x-$cmd amd64 ci-$cmd"
     ;;
   grind)
@@ -381,11 +383,11 @@ case "$cmd" in
   # RELEASES #
   ############
   release)
-    # Spin up ec2 instances (amd64 + arm64) and run the full release flow: backwards-compat e2e
-    # checks, build, and publish. Set DRY_RUN=1 to exercise the whole flow without publishing.
+    # Spin up ec2 instances (amd64 + arm64) and run the full release flow: build and publish.
+    # Set DRY_RUN=1 to exercise the whole flow without publishing.
     export CI_DASHBOARD="releases"
-    # Roomier instance lifetime than a standard run: the amd64 job builds, runs the backwards-compat
-    # e2e suite, and then publishes, which together exceed the default 75 min shutdown.
+    # Roomier instance lifetime than a standard run: the amd64 job builds and then publishes,
+    # which together exceed the default 75 min shutdown.
     export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-180}
     multi_job_run \
       'x-release amd64 ci-release' \
