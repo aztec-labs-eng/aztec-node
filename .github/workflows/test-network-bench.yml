@@ -1,0 +1,134 @@
+# Spartan network benchmarks: TPS and proving benchmarks against a deployed network.
+# Results upload to a PR-specific path on the benchmark dashboard so nightly
+# (bench/main) is never affected.
+#
+# Two entry points:
+# - workflow_dispatch: manual runs against an arbitrary ref.
+# - workflow_call: from ci3.yml via the one-time-use ci-network-bench PR label.
+name: Test Network Bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      bench_type:
+        description: Benchmark to run (benchmark, proving-benchmark, or empty for both in parallel)
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: Git ref to checkout for the benchmark runner.
+        required: false
+        type: string
+        default: main
+      pr_number:
+        description: PR number for the bench/pr-<N> upload path. Empty skips the upload.
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      bench_type:
+        description: Benchmark to run (benchmark, proving-benchmark, or empty for both in parallel)
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: Git ref to checkout. Empty checks out the caller's commit.
+        required: false
+        type: string
+        default: ""
+      pr_number:
+        description: PR number for the bench/pr-<N> upload path. Empty uses the caller's PR.
+        required: false
+        type: string
+        default: ""
+
+# id-token: write lets the job assume the AWS role via OIDC.
+# pull-requests: write removes the one-time-use label on workflow_call from a PR.
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  bench:
+    name: ${{ matrix.bench_type }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # An empty bench_type input runs both benchmarks in parallel; otherwise just the selected one.
+      matrix:
+        include: ${{ fromJSON(inputs.bench_type == 'benchmark' && '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","download_cmd":"gh-spartan-bench","timeout":300}]' || inputs.bench_type == 'proving-benchmark' && '[{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","download_cmd":"gh-spartan-proving-bench","timeout":240}]' || '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","download_cmd":"gh-spartan-bench","timeout":300},{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","download_cmd":"gh-spartan-proving-bench","timeout":240}]') }}
+    steps:
+      - name: Remove label (one-time use)
+        if: github.event.pull_request && contains(github.event.pull_request.labels.*.name, 'ci-network-bench')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-network-bench --repo ${{ github.repository }} || true
+
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: test-network-bench-${{ github.run_id }}
+          role-duration-seconds: 19800 # 5.5h – covers the longest matrix timeout (300 min) + 30 min buffer
+
+      - name: Run Network Benchmarks
+        timeout-minutes: ${{ matrix.timeout }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          # For pushing docker images built from the PR
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
+          RUN_ID: ${{ github.run_id }}
+          AWS_SHUTDOWN_TIME: ${{ matrix.timeout }}
+          NO_SPOT: 1
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+        run: |
+          namespace=${PR_NUMBER:+pr-$PR_NUMBER}
+          namespace=${namespace:-run-$RUN_ID}-${{ matrix.namespace_suffix }}
+          echo "NAMESPACE=$namespace" >> $GITHUB_ENV
+          set -x
+          ./.github/ci3.sh ${{ matrix.ci3_cmd }} ${{ matrix.scenario }} "$namespace"
+
+      - name: Cleanup network resources
+        if: always()
+        continue-on-error: true
+        uses: ./.github/actions/network-teardown
+        with:
+          env_file: ${{ matrix.scenario }}
+          namespace: ${{ env.NAMESPACE }}
+          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Download benchmarks
+        if: always()
+        run: |
+          if ./ci.sh ${{ matrix.download_cmd }}; then
+            echo "ENABLE_DEPLOY_BENCH=1" >> $GITHUB_ENV
+          fi
+
+      - name: Upload benchmarks
+        if: always() && env.ENABLE_DEPLOY_BENCH == '1'
+        env:
+          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+        run: |
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "No PR number; skipping benchmark upload."
+            exit 0
+          fi
+          ./ci3/upload_benchmarks "Spartan" "bench/pr-$PR_NUMBER" ./bench-out/bench.json "$COMMIT_SHA"

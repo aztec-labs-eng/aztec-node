@@ -52,18 +52,17 @@ Set the required environment variables:
 
 ```bash
 export NODE_URL=https://v5.testnet.rpc.aztec-labs.com
-export SPONSORED_FPC_ADDRESS=0x130925fbd734a252e3d8ddff87f6c346052dd5c13314eb96026b32baa1923296
 ```
 
 ### Step 2: Register the Sponsored FPC
 
-The Sponsored FPC (Fee Payment Contract) pays transaction fees on your behalf, so you don't need to bridge Fee Juice from L1. Register it in your wallet:
+The Sponsored FPC (Fee Payment Contract) pays transaction fees on your behalf, so you don't need to bridge Fee Juice from L1. Your wallet already knows its address under the `contracts:SponsoredFPC` alias, but it still needs the contract's artifact to build transactions that use it. Register it in your wallet:
 
 ```bash
 aztec-wallet register-contract \
     --node-url $NODE_URL \
     --alias sponsoredfpc \
-    $SPONSORED_FPC_ADDRESS SponsoredFPC \
+    contracts:SponsoredFPC SponsoredFPC \
     --salt 0
 ```
 
@@ -75,7 +74,7 @@ Unlike the local network, testnet has no pre-deployed accounts. Create and deplo
 aztec-wallet create-account \
     --node-url $NODE_URL \
     --alias my-wallet \
-    --payment method=fpc-sponsored,fpc=$SPONSORED_FPC_ADDRESS
+    --payment method=fpc-sponsored,fpc=contracts:SponsoredFPC
 ```
 
 :::note
@@ -90,7 +89,7 @@ Deploy a token contract as an example:
 aztec-wallet deploy \
     --node-url $NODE_URL \
     --from accounts:my-wallet \
-    --payment method=fpc-sponsored,fpc=$SPONSORED_FPC_ADDRESS \
+    --payment method=fpc-sponsored,fpc=contracts:SponsoredFPC \
     --alias token \
     TokenContract \
     --args accounts:my-wallet Token TOK 18
@@ -112,7 +111,7 @@ Mint some tokens:
 aztec-wallet send mint_to_public \
     --node-url $NODE_URL \
     --from accounts:my-wallet \
-    --payment method=fpc-sponsored,fpc=$SPONSORED_FPC_ADDRESS \
+    --payment method=fpc-sponsored,fpc=contracts:SponsoredFPC \
     --contract-address token \
     --args accounts:my-wallet 100
 ```
@@ -139,7 +138,7 @@ Move tokens to private state:
 aztec-wallet send transfer_to_private \
     --node-url $NODE_URL \
     --from accounts:my-wallet \
-    --payment method=fpc-sponsored,fpc=$SPONSORED_FPC_ADDRESS \
+    --payment method=fpc-sponsored,fpc=contracts:SponsoredFPC \
     --contract-address token \
     --args accounts:my-wallet 25
 ```

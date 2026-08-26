@@ -1,11 +1,22 @@
-# Ensure multiple environments have all publisher keys and bot accounts funded
-# This workflow checks and funds publisher keys and bot accounts for all environments
-# including dynamically discovered devnet iterations.
+# Ensure environments have all publisher keys and bot accounts funded.
+# Runs daily over all environments, or on demand for one (or all) of them.
 name: Ensure Funded Environments
 
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Environment to fund"
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - staging-public
+          - staging-internal
+          - next-net
+          - testnet
+          - tps-scenario
       low_watermark:
         description: "Minimum ETH balance"
         required: false
@@ -25,54 +36,102 @@ concurrency:
   cancel-in-progress: false # Don't cancel funding operations
 
 jobs:
-  discover:
+  fund:
+    name: ${{ matrix.environment }}
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    strategy:
+      # we can only run one funding operation at a time because all jobs fund from the same address
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON((inputs.environment == '' || inputs.environment == 'all') && '["staging-public","staging-internal","next-net","testnet"]' || format('["{0}"]', inputs.environment)) }}
+    env:
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Discover active devnets
-        id: discover
-        run: spartan/scripts/get_active_devnets.ts
-
-      - name: Build funding matrix
-        id: build-matrix
+      - name: Validate inputs
         run: |
-          # Static environments
-          static='[
-            {"environment":"staging-public"},
-            {"environment":"staging-internal"},
-            {"environment":"next-net"},
-            {"environment":"testnet"}
-          ]'
+          # Validate environment
+          if [[ ! -f "spartan/environments/${{ matrix.environment }}.env" ]]; then
+            echo "Error: Environment file not found for environment '${{ matrix.environment }}'"
+            echo "Available environments:"
+            ls -1 spartan/environments/ | grep -v '\.local\.env$' || echo "No environment files found"
+            exit 1
+          fi
 
-          # Convert devnet namespaces to matrix entries
-          devnets=$(echo '${{ steps.discover.outputs.devnets }}' \
-            | jq -c '[.[] | {environment: "devnet", namespace: .}]')
+      - name: Store the GCP key in a file
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set +x
+          umask 077
+          printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          jq -e . "$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null
 
-          matrix=$(jq -c -n --argjson s "$static" --argjson d "$devnets" '{"include": ($s + $d)}')
-          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+      - name: Setup GCP authentication
+        run: |
+          gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
 
-  fund:
-    needs: discover
-    strategy:
-      # we can only run one funding operation at a time because all jobs fund from the same address
-      max-parallel: 1
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
-    uses: ./.github/workflows/ensure-funded-environment.yml
-    with:
-      environment: ${{ matrix.environment }}
-      namespace: ${{ matrix.namespace }}
-      low_watermark: ${{ inputs.low_watermark || '5.0' }}
-      high_watermark: ${{ inputs.high_watermark || '10.0' }}
-    secrets: inherit
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install bc
+        run: sudo apt-get update && sudo apt-get install -y bc
+
+      - name: Fetch secrets from GCP
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          # Fetch the environment-specific secrets
+          FUNDING_PRIVATE_KEY=$(gcloud secrets versions access latest --secret="sepolia-funding-private-key" --project="$GCP_PROJECT_ID")
+          EXTERNAL_ETHEREUM_HOST=$(gcloud secrets versions access latest --secret="sepolia-external-ethereum-host" --project="$GCP_PROJECT_ID")
+          echo "::add-mask::$FUNDING_PRIVATE_KEY"
+          echo "::add-mask::$EXTERNAL_ETHEREUM_HOST"
+
+          # Export to environment
+          {
+            printf 'FUNDING_PRIVATE_KEY=%s\n' "$FUNDING_PRIVATE_KEY"
+            printf 'EXTERNAL_ETHEREUM_HOST=%s\n' "$EXTERNAL_ETHEREUM_HOST"
+          } >> "$GITHUB_ENV"
+
+      - name: Ensure funded environment
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          cd spartan/scripts
+
+          # Run the funding script (scheduled runs have no inputs and use the higher watermarks)
+          ./ensure_funded_environment.sh \
+            "${{ matrix.environment }}" \
+            "$FUNDING_PRIVATE_KEY" \
+            "${{ inputs.low_watermark || '5.0' }}" \
+            "${{ inputs.high_watermark || '10.0' }}"
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          if [[ "${{ matrix.environment }}" == "tps-scenario" ]]; then
+            export ALERT_CHANNEL="#alerts-next-net"
+          else
+            export ALERT_CHANNEL="#alerts-${{ matrix.environment }}"
+          fi
+
+          if [ -n "${SLACK_BOT_TOKEN}" ]; then
+            read -r -d '' data <<EOF || true
+            {
+              "channel": "$ALERT_CHANNEL",
+              "text": "Ensure Funded Environments workflow FAILED for *${{ matrix.environment }}*: <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+            }
+          EOF
+            curl -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+              -H "Content-type: application/json" \
+              --data "$data"
+          fi

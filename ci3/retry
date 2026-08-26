@@ -45,7 +45,10 @@ for i in $(seq 1 $ATTEMPTS); do
     >&2 echo "Not retrying: failure (code $code) did not match retry pattern: $pattern"
     exit $code
   fi
-  [ "$i" != "$ATTEMPTS" ] && sleep ${RETRY_SLEEP:-5}
+  if [ "$i" != "$ATTEMPTS" ]; then
+    >&2 echo "Attempt $i/$ATTEMPTS failed (exit code $code), retrying in ${RETRY_SLEEP:-5}s: $1"
+    sleep ${RETRY_SLEEP:-5}
+  fi
 done
 
 >&2 echo "Failed after $ATTEMPTS attempts: $1"

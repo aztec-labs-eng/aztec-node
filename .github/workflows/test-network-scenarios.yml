@@ -1,6 +1,12 @@
-# CI for Aztec Network Scenarios.
-# Manually triggered to deploy and test a network.
+# CI for Aztec Network Scenarios: deploys a network and runs scenario tests against it.
 # If test_set is empty, runs both sets in parallel.
+#
+# Two entry points:
+# - workflow_dispatch: manual runs against an explicit docker image and namespace.
+# - workflow_call: from ci3.yml, on the current nightly tag or the ci-network-scenario
+#   PR label. Empty inputs are derived from the trigger context: a v* tag uses the
+#   release image and a v<major>-scenario namespace; a PR builds and pushes an image
+#   from the branch and uses a pr-<branch> namespace.
 name: Test Network Scenarios
 
 on:
@@ -29,18 +35,49 @@ on:
         required: false
         type: string
         default: ""
+  workflow_call:
+    inputs:
+      docker_image:
+        description: Complete docker image to use. Empty derives it from the caller context.
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: Git ref to checkout. Empty checks out the caller's commit.
+        required: false
+        type: string
+        default: ""
+      namespace:
+        description: Kubernetes namespace. Empty derives it from the caller context.
+        required: false
+        type: string
+        default: ""
+      env_file:
+        description: Network configuration to use.
+        required: false
+        type: string
+        default: next-scenario
+      test_set:
+        description: Test set to run (1, 2, or empty for both in parallel)
+        required: false
+        type: string
+        default: ""
 
+# Only applies to workflow_dispatch runs: for workflow_call the caller's
+# concurrency group (ci3-<ref>) governs the run.
 concurrency:
-  group: test-network-scenarios-${{ inputs.namespace }}
+  group: test-network-scenarios-${{ inputs.namespace || github.ref_name }}
   cancel-in-progress: true
 
 # actions: write lets the failure handler dispatch claudebox.yml with the built-in
 # token (workflow_dispatch is exempt from the github.token no-retrigger rule).
 # id-token: write lets the job assume the AWS role via OIDC.
+# pull-requests: write removes the one-time-use label on workflow_call from a PR.
 permissions:
   contents: read
   actions: write
   id-token: write
+  pull-requests: write
 
 jobs:
   deploy-and-test:
@@ -50,10 +87,16 @@ jobs:
       matrix:
         test_set: ${{ fromJSON(inputs.test_set == '' && '["1","2"]' || format('["{0}"]', inputs.test_set)) }}
     steps:
+      - name: Remove label (one-time use)
+        if: github.event.pull_request && contains(github.event.pull_request.labels.*.name, 'ci-network-scenario')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-network-scenario --repo ${{ github.repository }} || true
+
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -63,6 +106,31 @@ jobs:
           role-session-name: test-network-scenarios-${{ github.run_id }}
           role-duration-seconds: 23400 # 6.5h – covers AWS_SHUTDOWN_TIME (360 min) + 30 min buffer
 
+      - name: Resolve docker image and namespace
+        env:
+          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
+          INPUT_NAMESPACE: ${{ inputs.namespace }}
+          GIT_REF: ${{ github.ref }}
+          GIT_REF_NAME: ${{ github.ref_name }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if [[ -n "$INPUT_NAMESPACE" ]]; then
+            namespace=$(echo "$INPUT_NAMESPACE" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20)
+          elif [[ "$GIT_REF" == refs/tags/v* ]]; then
+            major_version=$(./ci3/semver major "${GIT_REF_NAME#v}")
+            namespace="v${major_version}-scenario"
+          else
+            namespace=pr-$(echo "$HEAD_REF" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20 | sed 's/-*$//')
+          fi
+          docker_image="$INPUT_DOCKER_IMAGE"
+          # For release tags, default to the release image; for PRs, leave empty so the
+          # scenario runner builds from the branch and pushes to aztecdev.
+          if [[ -z "$docker_image" && "$GIT_REF" == refs/tags/v* ]]; then
+            docker_image="aztecprotocol/aztec:${GIT_REF_NAME#v}"
+          fi
+          echo "NAMESPACE=$namespace" >> $GITHUB_ENV
+          echo "DOCKER_IMAGE=$docker_image" >> $GITHUB_ENV
+
       - name: Run Network Scenarios
         timeout-minutes: 350
         env:
@@ -70,17 +138,23 @@ jobs:
           BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          # For pushing docker images built from a PR branch (empty DOCKER_IMAGE).
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          INTERNAL_DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: 360
           NO_SPOT: 1
         run: |
-          namespace=$(echo "${{ inputs.namespace }}" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20)
-          echo "NAMESPACE=$namespace" >> $GITHUB_ENV
-          # Run scenario tests for the selected set (matrix expands to 1 or 2).
-          ./.github/ci3.sh network-scenarios "${{ inputs.env_file }}" "$namespace" "${{ inputs.docker_image }}" "${{ matrix.test_set }}"
+          set -x # print next line
+          ./.github/ci3.sh network-scenarios "${{ inputs.env_file }}" "$NAMESPACE" "$DOCKER_IMAGE" "${{ matrix.test_set }}"
 
       - name: Cleanup network resources
-        if: always()
+        # Clean up manual runs, PR runs, and nightly tags; keep the network for real release tags.
+        if: always() && (!startsWith(github.ref, 'refs/tags/v') || contains(github.ref_name, '-nightly.'))
         continue-on-error: true
         uses: ./.github/actions/network-teardown
         with:
@@ -89,6 +163,22 @@ jobs:
           gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      #############
+      # Benchmarks
+      #############
+      - name: Download deploy benchmarks
+        if: always() && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if ./ci.sh gh-deploy-bench; then
+            echo "ENABLE_DEPLOY_BENCH=1" >> $GITHUB_ENV
+          fi
+
+      - name: Upload benchmarks
+        if: env.ENABLE_DEPLOY_BENCH == '1'
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./ci3/upload_benchmarks "Aztec Benchmarks" "bench/${BENCH_BRANCH:-}" ./bench-out/bench.json "$COMMIT_SHA"
+
       - name: Notify Slack and dispatch ClaudeBox on failure
         if: failure()
         env:
@@ -96,7 +186,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-built-from-branch}, env ${{ inputs.env_file }}, ref ${{ github.ref_name }}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
-            "Scenario Tests FAILED (set ${{ matrix.test_set }}, image ${{ inputs.docker_image }}, env ${{ inputs.env_file }}): <${RUN_URL}|View Run> (🤖)" \
-            "Scenario tests failed (set ${{ matrix.test_set }}, image ${{ inputs.docker_image }}, env ${{ inputs.env_file }}). CI run: ${RUN_URL}. Investigate the scenario test failure and identify the root cause." \
+            "Scenario Tests FAILED (${CONTEXT}): <${RUN_URL}|View Run> (🤖)" \
+            "Scenario tests failed (${CONTEXT}). CI run: ${RUN_URL}. Investigate the scenario test failure and identify the root cause." \
             --link "$RUN_URL"

@@ -106,3 +106,30 @@ jobs:
           fi
           git tag -a "$tag" -m "$tag"
           git push origin "$tag"
+
+      # Nightly tagging is unattended, so a failure here is otherwise invisible: no tag is
+      # pushed and the release run that would report it never starts. Posted inline rather
+      # than via ci3/slack_notify because two of the three steps above can fail before the
+      # repo is checked out.
+      - name: Notify Slack on tagging failure
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
+          BRANCH: ${{ matrix.branch }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "${SLACK_BOT_TOKEN:-}" ]; then
+            echo "No SLACK_BOT_TOKEN, skipping notification"
+            exit 0
+          fi
+          TEXT="Release tagging FAILED (${KIND}, branch *${BRANCH}*, ${ACTOR}): <${RUN_URL}|View Run>"
+          response=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-type: application/json" \
+            --data "$(jq -n --arg c '#team-alpha-ci' --arg t "$TEXT" '{channel:$c, text:$t}')")
+          # Slack returns 200 on errors, so surface a bad channel/token instead of dropping it.
+          if [ "$(jq -r '.ok // false' <<<"$response")" != "true" ]; then
+            echo "Failed to post to Slack: $(jq -r '.error // empty' <<<"$response")" >&2
+          fi

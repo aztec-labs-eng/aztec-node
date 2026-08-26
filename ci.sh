@@ -390,6 +390,10 @@ case "$cmd" in
     multi_job_run \
       'x-release amd64 ci-release' \
       'a-release arm64 ci-release'
+    # Both arch jobs have pushed their per-arch images (multi_job_run fails fast if either
+    # died), so assemble the multi-arch manifest lists from here. imagetools only talks to
+    # the registry: no local images or extra instance needed.
+    release-image/bootstrap.sh release_docker_manifest
     ;;
   ci-private-release)
     # Run the private release flow LOCALLY (no EC2): dry-run every project except release-image, then

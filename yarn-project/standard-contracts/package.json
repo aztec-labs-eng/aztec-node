@@ -8,6 +8,7 @@
     ".": "./dest/index.js",
     "./*": "./dest/*/index.js",
     "./*/lazy": "./dest/*/lazy.js",
+    "./data": "./dest/standard_contract_data.js",
     "./auth-registry/constants": "./dest/auth-registry/constants.js",
     "./public-checks/constants": "./dest/public-checks/constants.js",
     "./multi-call-entrypoint/constants": "./dest/multi-call-entrypoint/constants.js",
