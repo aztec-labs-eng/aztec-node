@@ -137,6 +137,7 @@ describe('EpochSession', () => {
   describe('publishing outcome → terminal state', () => {
     it.each<[PublishOutcome, string]>([
       ['published', 'completed'],
+      ['already-submitted', 'completed'],
       ['superseded', 'superseded'],
       ['expired', 'timed-out'],
     ])('maps "%s" → "%s"', async (outcome, expected) => {
