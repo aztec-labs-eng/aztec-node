@@ -9,6 +9,21 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [CLI] Removed `bridge-erc20`
+
+`aztec bridge-erc20` performed only the L1 half of a token bridge deposit: it approved the ERC20 and called `depositToAztecPublic` (or `depositToAztecPrivate`) on a TokenPortal you supplied, then printed a claim secret for you to redeem on L2 yourself. Using it required already having deployed your own L1 TokenPortal and its L2 counterpart.
+
+Use `L1ToL2TokenPortalManager` from `@aztec/aztec.js/ethereum` instead, which is what the command wrapped:
+
+```ts
+import { L1ToL2TokenPortalManager } from '@aztec/aztec.js/ethereum';
+
+const manager = new L1ToL2TokenPortalManager(portalAddress, tokenAddress, handlerAddress, l1Client, logger);
+const { claimAmount, claimSecret } = await manager.bridgeTokensPublic(recipient, amount, mint);
+```
+
+Fee juice bridging is unaffected: keep using `aztec-wallet bridge-fee-juice`.
+
 ### [CLI] Removed `get-canonical-sponsored-fpc-address`, replaced by a wallet alias
 
 `aztec-wallet` now aliases the canonical SponsoredFPC as `contracts:SponsoredFPC` on startup, alongside the protocol and standard contracts, so commands can name it instead of taking its address:
