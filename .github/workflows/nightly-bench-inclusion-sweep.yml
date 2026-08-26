@@ -202,7 +202,6 @@ jobs:
       - name: Cleanup network resources
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          BUILD_INSTANCE_SSH_KEY: ${{ secrets.BUILD_INSTANCE_SSH_KEY }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NO_SPOT: 1

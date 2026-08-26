@@ -22,14 +22,6 @@ function setup_environment {
     jq -e . "$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null
     echo "GCP key stored"
   fi
-  # Setup SSH key — needed for the Redis tunnel (denoise logs) even in SSM mode,
-  # and for direct SSH bootstrap when CI_USE_SSH=1.
-  if [ -n "${BUILD_INSTANCE_SSH_KEY:-}" ]; then
-    mkdir -p ~/.ssh
-    echo "${BUILD_INSTANCE_SSH_KEY}" | base64 --decode > ~/.ssh/build_instance_key
-    chmod 600 ~/.ssh/build_instance_key
-    echo "SSH key configured"
-  fi
   # Log SSM mode settings (defaults are baked into aws_request_instance_type).
   if [ "${CI_USE_SSH:-0}" -eq 0 ]; then
     echo "SSM mode: instance profile ${CI3_INSTANCE_PROFILE_NAME:-ci3-build-instance-profile}, SG ${CI3_SECURITY_GROUP_ID:-sg-01fe61a1c1aaeb393}"
