@@ -32,8 +32,8 @@ describe('StagedWriteCoordinator', () => {
       const mockStore: StagedStore = {
         storeName: 'mock_store',
         beginChangeSet: changeSetId => opened.push(changeSetId),
-        commitStaged: () => Promise.resolve(),
-        discardStaged: () => {},
+        commitChangeSet: () => Promise.resolve(),
+        discardChangeSet: () => {},
       };
 
       coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [mockStore] });
@@ -70,7 +70,7 @@ describe('StagedWriteCoordinator', () => {
       await expect(coordinator.commit('deadbeef')).rejects.toThrow(/no matching change set/);
     });
 
-    it('calls commitStaged on its stores within a single kv transaction', async () => {
+    it('calls commitChangeSet on its stores within a single kv transaction', async () => {
       const realTransactionAsync = store.transactionAsync.bind(store);
       let inTransaction = false;
       jest.spyOn(store, 'transactionAsync').mockImplementation(async callback => {
@@ -85,11 +85,11 @@ describe('StagedWriteCoordinator', () => {
       const committed: { changeSetId: ChangeSetId; inTransaction: boolean }[] = [];
       const mockStore: StagedStore = {
         storeName: 'mock_store',
-        commitStaged: changeSetId => {
+        commitChangeSet: changeSetId => {
           committed.push({ changeSetId, inTransaction });
           return Promise.resolve();
         },
-        discardStaged: () => {},
+        discardChangeSet: () => {},
       };
 
       coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [mockStore] });
@@ -103,7 +103,7 @@ describe('StagedWriteCoordinator', () => {
   });
 
   describe('abort', () => {
-    it('clears change set marker on abort', async () => {
+    it('clears change set marker on abort', () => {
       const changeSetId = coordinator.begin();
 
       coordinator.abort(changeSetId);
@@ -111,29 +111,29 @@ describe('StagedWriteCoordinator', () => {
       expect(() => coordinator.begin()).not.toThrow();
     });
 
-    it('throws if no matching change set active', async () => {
+    it('throws if no matching change set active', () => {
       const changeSetId = coordinator.begin();
       coordinator.abort(changeSetId);
 
       expect(() => coordinator.abort(changeSetId)).toThrow(/no matching change set/);
     });
 
-    it('throws if no change set was ever opened', async () => {
+    it('throws if no change set was ever opened', () => {
       expect(() => coordinator.abort('deadbeef')).toThrow(/no matching change set/);
     });
 
-    it('throws if the change set id does not match the open one', async () => {
+    it('throws if the change set id does not match the open one', () => {
       coordinator.begin();
       expect(() => coordinator.abort('deadbeef')).toThrow(/no matching change set/);
     });
 
-    it('calls discardStaged on all its stores', async () => {
+    it('calls discardChangeSet on all its stores', () => {
       const commitMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-      const discardStagedMock = jest.fn<() => void>();
+      const discardChangeSetMock = jest.fn<() => void>();
       const mockStore: StagedStore = {
         storeName: 'mock_store',
-        commitStaged: commitMock,
-        discardStaged: discardStagedMock,
+        commitChangeSet: commitMock,
+        discardChangeSet: discardChangeSetMock,
       };
 
       coordinator = new StagedWriteCoordinator({ kvStore: store, stagedStores: [mockStore] });
@@ -142,18 +142,18 @@ describe('StagedWriteCoordinator', () => {
 
       coordinator.abort(changeSetId);
 
-      expect(discardStagedMock).toHaveBeenCalledWith(changeSetId);
+      expect(discardChangeSetMock).toHaveBeenCalledWith(changeSetId);
     });
   });
 
   describe('construction', () => {
     it('throws on stores with duplicate names', () => {
       const commitMock = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
-      const discardStagedMock = jest.fn<() => void>();
+      const discardChangeSetMock = jest.fn<() => void>();
       const mockStore: StagedStore = {
         storeName: 'mock_store',
-        commitStaged: commitMock,
-        discardStaged: discardStagedMock,
+        commitChangeSet: commitMock,
+        discardChangeSet: discardChangeSetMock,
       };
 
       expect(() => new StagedWriteCoordinator({ kvStore: store, stagedStores: [mockStore, mockStore] })).toThrow(

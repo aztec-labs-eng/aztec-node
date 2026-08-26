@@ -293,7 +293,7 @@ describe('BlockSynchronizer', () => {
       const orphanedNote = await noteAt(contract, makeL2BlockId(BlockNumber(4), Fr.random().toString()));
       noteStore.beginChangeSet('note-change-set');
       await noteStore.addNotes([orphanedNote], scope, 'note-change-set');
-      await noteStore.commitStaged('note-change-set');
+      await noteStore.commitChangeSet('note-change-set');
 
       await stagePruneTo(forkBlock, BlockNumber(5));
 
@@ -340,7 +340,7 @@ describe('BlockSynchronizer', () => {
       const orphanedNote = await noteAt(contract, makeL2BlockId(BlockNumber(4), Fr.random().toString()));
       noteStore.beginChangeSet('note-change-set');
       await noteStore.addNotes([noteAtFork, orphanedNote], scope, 'note-change-set');
-      await noteStore.commitStaged('note-change-set');
+      await noteStore.commitChangeSet('note-change-set');
 
       await stagePruneTo(forkBlock, BlockNumber(5));
 

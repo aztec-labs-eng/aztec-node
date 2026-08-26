@@ -86,7 +86,7 @@ describe('NoteService', () => {
 
     // Verify that the changes persist after change set commit
     {
-      await noteStore.commitStaged('test');
+      await noteStore.commitChangeSet('test');
       noteStore.beginChangeSet('fresh-change-set');
       const remainingNotes = await noteStore.getNotes(
         {
@@ -123,7 +123,7 @@ describe('NoteService', () => {
 
     // Verify that the changes persist after change set commit
     {
-      await noteStore.commitStaged('test');
+      await noteStore.commitChangeSet('test');
       noteStore.beginChangeSet('fresh-change-set');
       const remainingNotes = await noteStore.getNotes(
         {
@@ -170,7 +170,7 @@ describe('NoteService', () => {
 
     // Verify that the changes persist after change set commit
     {
-      await noteStore.commitStaged('test');
+      await noteStore.commitChangeSet('test');
       noteStore.beginChangeSet('fresh-change-set');
       const remainingNotes = await noteStore.getNotes(
         {
@@ -287,7 +287,7 @@ describe('NoteService', () => {
 
       // Verify note is still stored after committing the change set
       {
-        await noteStore.commitStaged('test');
+        await noteStore.commitChangeSet('test');
         noteStore.beginChangeSet('fresh-change-set');
 
         const notes = await noteStore.getNotes({ contractAddress, scopes: [recipient.address] }, 'fresh-change-set');
@@ -398,7 +398,7 @@ describe('NoteService', () => {
 
       // Verify store behaves correctly pre and post commit
       await verifyNoteNullifiedInChangeSetContext('test');
-      await noteStore.commitStaged('test');
+      await noteStore.commitChangeSet('test');
       noteStore.beginChangeSet('fresh-change-set');
       await verifyNoteNullifiedInChangeSetContext('fresh-change-set');
     });

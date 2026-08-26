@@ -14,8 +14,8 @@ export type ChangeSetId = string;
  * Every read and write on such a store takes a change set ID. Writes are held under that ID; a read sees the database
  * plus whatever its own change set has staged, never another's.
  *
- * {@link StagedWriteCoordinator} ends a change set by calling {@link commitStaged}, which promotes its staged writes
- * to the database, or {@link discardStaged}, which throws them away.
+ * {@link StagedWriteCoordinator} ends a change set by calling {@link commitChangeSet}, which promotes its staged writes
+ * to the database, or {@link discardChangeSet}, which throws them away.
  */
 export interface StagedStore {
   /** Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator) */
@@ -37,14 +37,14 @@ export interface StagedStore {
    *
    * @param changeSetId - The change set identifier
    */
-  commitStaged(changeSetId: ChangeSetId): Promise<void>;
+  commitChangeSet(changeSetId: ChangeSetId): Promise<void>;
 
   /**
    * Discards staged data without committing. Called on abort.
    *
    * @param changeSetId - The change set identifier
    */
-  discardStaged(changeSetId: ChangeSetId): void;
+  discardChangeSet(changeSetId: ChangeSetId): void;
 }
 
 /**
@@ -126,7 +126,7 @@ export class StagedWriteCoordinator {
     // Commit all stores atomically in a single transaction.
     await this.#kvStore.transactionAsync(async () => {
       for (const store of this.#stagedStores.values()) {
-        await store.commitStaged(changeSetId);
+        await store.commitChangeSet(changeSetId);
       }
     });
 
@@ -150,7 +150,7 @@ export class StagedWriteCoordinator {
     this.#log.debug(`Aborting change set ${changeSetId}`, { changeSetId });
 
     for (const store of this.#stagedStores.values()) {
-      store.discardStaged(changeSetId);
+      store.discardChangeSet(changeSetId);
     }
 
     this.#currentChangeSetId = undefined;

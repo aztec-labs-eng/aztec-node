@@ -11,6 +11,6 @@ export async function readNotes(store: NoteStore, filter: NotesFilter): Promise<
   const changeSetId = 'read-change-set';
   store.beginChangeSet(changeSetId);
   const notes = await store.getNotes(filter, changeSetId);
-  store.discardStaged(changeSetId);
+  store.discardChangeSet(changeSetId);
   return notes;
 }

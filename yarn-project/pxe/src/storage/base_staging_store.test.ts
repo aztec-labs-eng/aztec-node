@@ -15,7 +15,7 @@ describe('BaseStagingStore', () => {
     store = new TestStore(kv);
   });
 
-  describe('withStaging', () => {
+  describe('withChangeSet', () => {
     it('accepts operations between beginChangeSet and the end of the change set', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
@@ -36,7 +36,7 @@ describe('BaseStagingStore', () => {
     it('rejects operations for a change set that was committed', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
-      await store.commitStaged('cs1');
+      await store.commitChangeSet('cs1');
       await expect(store.write('key', 2, 'cs1')).rejects.toThrow('Store "test": change set "cs1" is not open');
       await expect(store.readStaged('key', 'cs1')).rejects.toThrow('Store "test": change set "cs1" is not open');
     });
@@ -44,7 +44,7 @@ describe('BaseStagingStore', () => {
     it('rejects operations for a change set that was discarded', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
-      store.discardStaged('cs1');
+      store.discardChangeSet('cs1');
       await expect(store.write('key', 2, 'cs1')).rejects.toThrow('Store "test": change set "cs1" is not open');
     });
 
@@ -92,7 +92,7 @@ describe('BaseStagingStore', () => {
       // Only end the change set once the first operation is inside its body, so it is the queued write that finds it
       // closed.
       await entered.promise;
-      store.discardStaged('cs1');
+      store.discardChangeSet('cs1');
       gate.resolve();
 
       await holding;
@@ -108,7 +108,7 @@ describe('BaseStagingStore', () => {
       const holdTx = kv.transactionAsync(() => gate.promise);
       const queuedWrite = store.write('key', 1, 'cs1');
 
-      store.discardStaged('cs1');
+      store.discardChangeSet('cs1');
       gate.resolve();
       await holdTx;
 
@@ -132,16 +132,16 @@ describe('BaseStagingStore', () => {
 
     it('accepts a new change set once the previous one ended', async () => {
       store.beginChangeSet('cs1');
-      await store.commitStaged('cs1');
+      await store.commitChangeSet('cs1');
       expect(() => store.beginChangeSet('cs2')).not.toThrow();
     });
   });
 
-  describe('commitStaged', () => {
+  describe('commitChangeSet', () => {
     it('flushes staged data to the db', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
-      await store.commitStaged('cs1');
+      await store.commitChangeSet('cs1');
       await expect(store.committed('key')).resolves.toBe(1);
     });
 
@@ -150,51 +150,51 @@ describe('BaseStagingStore', () => {
       const entered = promiseWithResolvers<void>();
       const gate = promiseWithResolvers<void>();
 
-      const inFlight = store.op(async staging => {
+      const inFlight = store.op(async changeSet => {
         entered.resolve();
         await gate.promise;
-        staging.set('key', 1);
+        changeSet.set('key', 1);
       }, 'cs1');
 
       await entered.promise;
-      await expect(store.commitStaged('cs1')).rejects.toThrow(
+      await expect(store.commitChangeSet('cs1')).rejects.toThrow(
         'Store "test": cannot commit change set "cs1" while 1 of its operations are in flight',
       );
 
       gate.resolve();
       await inFlight;
-      await store.commitStaged('cs1');
+      await store.commitChangeSet('cs1');
       await expect(store.committed('key')).resolves.toBe(1);
     });
 
     it('ends the change set even when nothing was staged', async () => {
       store.beginChangeSet('cs1');
-      await store.commitStaged('cs1');
+      await store.commitChangeSet('cs1');
       await expect(store.write('key', 1, 'cs1')).rejects.toThrow('Store "test": change set "cs1" is not open');
     });
 
     it('rejects a change set that was never opened', async () => {
-      await expect(store.commitStaged('never-opened')).rejects.toThrow(
+      await expect(store.commitChangeSet('never-opened')).rejects.toThrow(
         'Store "test": change set "never-opened" is not open',
       );
     });
   });
 
-  describe('discardStaged', () => {
+  describe('discardChangeSet', () => {
     it('leaves the open change set alone when discarding a different one', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
 
-      store.discardStaged('never-opened');
+      store.discardChangeSet('never-opened');
 
       await expect(store.readStaged('key', 'cs1')).resolves.toBe(1);
     });
 
-    it('tolerates a repeated discard', async () => {
+    it('tolerates a repeated discard', () => {
       store.beginChangeSet('cs1');
-      store.discardStaged('cs1');
+      store.discardChangeSet('cs1');
 
-      expect(() => store.discardStaged('cs1')).not.toThrow();
+      expect(() => store.discardChangeSet('cs1')).not.toThrow();
     });
   });
 
@@ -215,7 +215,7 @@ describe('BaseStagingStore', () => {
     it('rolls back again once the change set is discarded', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
-      store.discardStaged('cs1');
+      store.discardChangeSet('cs1');
       await store.rollbackToBlock(7);
       expect(store.rollbacks).toEqual([7]);
     });
@@ -223,7 +223,7 @@ describe('BaseStagingStore', () => {
     it('rolls back again once the change set is committed', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
-      await store.commitStaged('cs1');
+      await store.commitChangeSet('cs1');
       await store.rollbackToBlock(7);
       expect(store.rollbacks).toEqual([7]);
     });
@@ -245,14 +245,14 @@ class TestStore extends BaseStagingStore<Map<string, number>, TestDb> {
     super({
       storeName: 'test',
       store,
-      buildStaging: () => new Map(),
+      buildChangeSet: () => new Map(),
       buildDb: db => ({ values: db.openMap(VALUES_MAP) }),
     });
     this.#committedValues = store.openMap(VALUES_MAP);
   }
 
-  protected async flushStaged(staging: Map<string, number>, db: TestDb): Promise<void> {
-    for (const [key, value] of staging) {
+  protected async flushChangeSet(changeSet: Map<string, number>, db: TestDb): Promise<void> {
+    for (const [key, value] of changeSet) {
       await db.values.set(key, value);
     }
   }
@@ -263,19 +263,19 @@ class TestStore extends BaseStagingStore<Map<string, number>, TestDb> {
   }
 
   write(key: string, value: number, changeSetId: ChangeSetId): Promise<void> {
-    return this.withStaging(changeSetId, staging => {
-      staging.set(key, value);
+    return this.withChangeSet(changeSetId, changeSet => {
+      changeSet.set(key, value);
       return Promise.resolve();
     });
   }
 
   // Runs an arbitrary operation body under the change set's lock.
-  op<R>(fn: (staging: Map<string, number>) => Promise<R>, changeSetId: ChangeSetId): Promise<R> {
-    return this.withStaging(changeSetId, staging => fn(staging));
+  op<R>(fn: (changeSet: Map<string, number>) => Promise<R>, changeSetId: ChangeSetId): Promise<R> {
+    return this.withChangeSet(changeSetId, changeSet => fn(changeSet));
   }
 
   readStaged(key: string, changeSetId: ChangeSetId): Promise<number | undefined> {
-    return this.withStaging(changeSetId, staging => Promise.resolve(staging.get(key)));
+    return this.withChangeSet(changeSetId, changeSet => Promise.resolve(changeSet.get(key)));
   }
 
   committed(key: string): Promise<number | undefined> {

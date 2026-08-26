@@ -21,14 +21,14 @@ import { StoredNote } from './stored_note.js';
  * Reorgs are handled by delete-on-prune: the `chain-pruned` event triggers deletion of every note and nullifier
  * originating on a reorg'd block.
  */
-export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
+export class NoteStore extends BaseStagingStore<NoteStoreChangeSet, NoteStoreDb> {
   readonly #logger = createLogger('note_store');
 
   constructor(store: AztecAsyncKVStore) {
     super({
       storeName: 'note',
       store,
-      buildStaging: () => ({ notes: new Map(), nullifierEmissions: new Map() }),
+      buildChangeSet: () => ({ notes: new Map(), nullifierEmissions: new Map() }),
       buildDb: db => ({
         notes: db.openMap('notes'),
         notesByContractAddress: db.openMultiMap('note_nullifiers_by_contract'),
@@ -50,27 +50,27 @@ export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
    * @param changeSetId - The change set to stage writes under
    */
   public addNotes(notes: NoteDao[], scope: AztecAddress, changeSetId: ChangeSetId): Promise<void[]> {
-    return this.withStaging(changeSetId, (staging, db) =>
+    return this.withChangeSet(changeSetId, (changeSet, db) =>
       allToCompletion(
         notes.map(async note => {
           const noteForChangeSet =
-            (await this.#readNote(staging, db, note.siloedNullifier.toString())) ?? new StoredNote(note, new Set());
+            (await this.#readNote(changeSet, db, note.siloedNullifier.toString())) ?? new StoredNote(note, new Set());
           noteForChangeSet.addScope(scope.toString());
-          staging.notes.set(note.siloedNullifier.toString(), noteForChangeSet);
+          changeSet.notes.set(note.siloedNullifier.toString(), noteForChangeSet);
         }),
       ),
     );
   }
 
   async #readNote(
-    staging: NoteStoreStaging,
+    changeSet: NoteStoreChangeSet,
     db: ReadonlyDb<NoteStoreDb>,
     nullifier: string,
   ): Promise<StoredNote | undefined> {
     // Always issue DB read to keep IndexedDB transaction alive (they auto-commit when a new micro-task starts and there
     // are no pending read requests). The staged value still takes precedence if it exists.
     const noteBuffer = await db.notes.getAsync(nullifier);
-    const noteForChangeSet = staging.notes.get(nullifier);
+    const noteForChangeSet = changeSet.notes.get(nullifier);
     return noteForChangeSet ?? (noteBuffer ? StoredNote.fromBuffer(noteBuffer) : undefined);
   }
 
@@ -80,14 +80,14 @@ export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
    * nullifier has been emitted (committed or currently staged), or `undefined` if it has not.
    */
   async #readNullifierEmission(
-    staging: NoteStoreStaging,
+    changeSet: NoteStoreChangeSet,
     db: ReadonlyDb<NoteStoreDb>,
     nullifier: string,
   ): Promise<number | undefined> {
     // Always issue the DB read to keep the IndexedDB transaction alive (see #readNote); the staged emission still takes
     // precedence if present.
     const committed = await db.nullifierEmissions.getAsync(nullifier);
-    return staging.nullifierEmissions.get(nullifier) ?? committed;
+    return changeSet.nullifierEmissions.get(nullifier) ?? committed;
   }
 
   /**
@@ -103,7 +103,7 @@ export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
    * @returns Filtered and deduplicated notes (a note might be present in multiple scopes, but returned at most once)
    */
   getNotes(filter: NotesFilter, changeSetId: ChangeSetId): Promise<NoteDao[]> {
-    return this.withStaging(changeSetId, async (staging, db) => {
+    return this.withChangeSet(changeSetId, async (changeSet, db) => {
       if (filter.scopes.length === 0) {
         return [];
       }
@@ -121,19 +121,19 @@ export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
       // Committed notes indexed by contract address
       for await (const nullifier of db.notesByContractAddress.getValuesAsync(filter.contractAddress.toString())) {
         candidates.set(nullifier, {
-          notePromise: this.#readNote(staging, db, nullifier),
-          nullificationPromise: this.#readNullifierEmission(staging, db, nullifier),
+          notePromise: this.#readNote(changeSet, db, nullifier),
+          nullificationPromise: this.#readNullifierEmission(changeSet, db, nullifier),
         });
       }
 
       // Staged notes from the current change set (not yet committed to the DB index)
-      for (const storedNote of staging.notes.values()) {
+      for (const storedNote of changeSet.notes.values()) {
         if (storedNote.noteDao.contractAddress.equals(filter.contractAddress)) {
           const nullifier = storedNote.noteDao.siloedNullifier.toString();
           if (!candidates.has(nullifier)) {
             candidates.set(nullifier, {
               notePromise: Promise.resolve(storedNote),
-              nullificationPromise: this.#readNullifierEmission(staging, db, nullifier),
+              nullificationPromise: this.#readNullifierEmission(changeSet, db, nullifier),
             });
           }
         }
@@ -227,15 +227,15 @@ export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
       return Promise.reject(new Error('applyNullifiers: nullifiers cannot have been emitted at block 0'));
     }
 
-    return this.withStaging(changeSetId, async (staging, db) => {
+    return this.withChangeSet(changeSetId, async (changeSet, db) => {
       // Kick off the note read and the existing-emission read together during the synchronous map so all are in
       // flight before the first await, which keeps the IndexedDB transaction alive.
       const resolved = await allToCompletion(
         siloedNullifiers.map(async nullifier => {
           const key = nullifier.data.toString();
           const [storedNote, existingEmission] = await allToCompletion([
-            this.#readNote(staging, db, key),
-            this.#readNullifierEmission(staging, db, key),
+            this.#readNote(changeSet, db, key),
+            this.#readNullifierEmission(changeSet, db, key),
           ]);
           if (!storedNote) {
             throw new Error(`Attempted to mark a note as nullified which does not exist in PXE DB: ${key}`);
@@ -251,7 +251,7 @@ export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
         if (alreadyEmitted) {
           continue;
         }
-        staging.nullifierEmissions.set(nullifier.data.toString(), nullifier.l2BlockNumber);
+        changeSet.nullifierEmissions.set(nullifier.data.toString(), nullifier.l2BlockNumber);
         affected.push(storedNote.noteDao);
       }
 
@@ -259,14 +259,14 @@ export class NoteStore extends BaseStagingStore<NoteStoreStaging, NoteStoreDb> {
     });
   }
 
-  protected async flushStaged(staging: NoteStoreStaging, db: NoteStoreDb): Promise<void> {
-    for (const [nullifier, storedNote] of staging.notes) {
+  protected async flushChangeSet(changeSet: NoteStoreChangeSet, db: NoteStoreDb): Promise<void> {
+    for (const [nullifier, storedNote] of changeSet.notes) {
       await db.notes.set(nullifier, storedNote.toBuffer());
       await db.notesByContractAddress.set(storedNote.noteDao.contractAddress.toString(), nullifier);
       await db.notesByBlockNumber.set(storedNote.noteDao.l2BlockNumber, nullifier);
     }
 
-    for (const [nullifier, blockNumber] of staging.nullifierEmissions) {
+    for (const [nullifier, blockNumber] of changeSet.nullifierEmissions) {
       await db.nullifierEmissions.set(nullifier, blockNumber);
       await db.nullifierEmissionsByBlockNumber.set(blockNumber, nullifier);
     }
@@ -335,7 +335,7 @@ type StoredNoteBuffer = Buffer;
 /**
  * A change set's staged data, created and discarded as a unit: notes plus nullifier emissions, both keyed by nullifier.
  */
-type NoteStoreStaging = {
+type NoteStoreChangeSet = {
   notes: Map<SiloedNullifier, StoredNote>;
   nullifierEmissions: Map<SiloedNullifier, BlockNum>;
 };
