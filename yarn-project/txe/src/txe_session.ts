@@ -250,37 +250,62 @@ export class TXESession implements TXESessionStateHandler {
 
   private disposed = false;
 
-  constructor(
-    private logger: Logger,
-    private sessionStore: AztecAsyncKVStore,
-    private stateMachine: TXEStateMachine,
-    private oracleHandler:
-      | IMiscOracle
-      | IUtilityExecutionOracle
-      | IPrivateExecutionOracle
-      | IAvmExecutionOracle
-      | ITxeExecutionOracle,
-    private contractStore: ContractStore,
-    private noteStore: NoteStore,
-    private keyStore: KeyStore,
-    private addressStore: AddressStore,
-    private accountStore: TXEAccountStore,
-    private senderTaggingStore: SenderTaggingStore,
-    private recipientTaggingStore: RecipientTaggingStore,
-    private taggingSecretSourcesStore: TaggingSecretSourcesStore,
-    private capsuleStore: CapsuleStore,
-    private factStore: FactStore,
-    private privateEventStore: PrivateEventStore,
-    private readonly stagedWriteCoordinator: StagedWriteCoordinator,
-    private readonly operationContributors: OperationContributor[],
-    private currentChangeSetId: ChangeSetId,
-    private chainId: Fr,
-    private version: Fr,
-    private nextBlockTimestamp: bigint,
-    private readonly artifactResolver: TXEArtifactResolver,
-    private readonly rootPath: string,
-    private readonly packageName: string,
-  ) {}
+  private logger: Logger;
+  private sessionStore: AztecAsyncKVStore;
+  private stateMachine: TXEStateMachine;
+  private oracleHandler:
+    | IMiscOracle
+    | IUtilityExecutionOracle
+    | IPrivateExecutionOracle
+    | IAvmExecutionOracle
+    | ITxeExecutionOracle;
+  private contractStore: ContractStore;
+  private noteStore: NoteStore;
+  private keyStore: KeyStore;
+  private addressStore: AddressStore;
+  private accountStore: TXEAccountStore;
+  private senderTaggingStore: SenderTaggingStore;
+  private recipientTaggingStore: RecipientTaggingStore;
+  private taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  private capsuleStore: CapsuleStore;
+  private factStore: FactStore;
+  private privateEventStore: PrivateEventStore;
+  private readonly stagedWriteCoordinator: StagedWriteCoordinator;
+  private readonly operationContributors: OperationContributor[];
+  private currentChangeSetId: ChangeSetId;
+  private chainId: Fr;
+  private version: Fr;
+  private nextBlockTimestamp: bigint;
+  private readonly artifactResolver: TXEArtifactResolver;
+  private readonly rootPath: string;
+  private readonly packageName: string;
+
+  constructor(args: TXESessionCtorArgs) {
+    this.logger = args.logger;
+    this.sessionStore = args.sessionStore;
+    this.stateMachine = args.stateMachine;
+    this.oracleHandler = args.oracleHandler;
+    this.contractStore = args.contractStore;
+    this.noteStore = args.noteStore;
+    this.keyStore = args.keyStore;
+    this.addressStore = args.addressStore;
+    this.accountStore = args.accountStore;
+    this.senderTaggingStore = args.senderTaggingStore;
+    this.recipientTaggingStore = args.recipientTaggingStore;
+    this.taggingSecretSourcesStore = args.taggingSecretSourcesStore;
+    this.capsuleStore = args.capsuleStore;
+    this.factStore = args.factStore;
+    this.privateEventStore = args.privateEventStore;
+    this.stagedWriteCoordinator = args.stagedWriteCoordinator;
+    this.operationContributors = args.operationContributors;
+    this.currentChangeSetId = args.currentChangeSetId;
+    this.chainId = args.chainId;
+    this.version = args.version;
+    this.nextBlockTimestamp = args.nextBlockTimestamp;
+    this.artifactResolver = args.artifactResolver;
+    this.rootPath = args.rootPath;
+    this.packageName = args.packageName;
+  }
 
   /**
    * Tears down the per-session AVM simulator (process pool + CDB server), the `NativeWorldStateService`,
@@ -351,7 +376,7 @@ export class TXESession implements TXESessionStateHandler {
 
     const initialChangeSetId = stagedWriteCoordinator.begin();
 
-    const topLevelOracleHandler = new TXEOracleTopLevelContext(
+    const topLevelOracleHandler = new TXEOracleTopLevelContext({
       stateMachine,
       contractStore,
       noteStore,
@@ -365,23 +390,23 @@ export class TXESession implements TXESessionStateHandler {
       factStore,
       privateEventStore,
       nextBlockTimestamp,
-      version,
       chainId,
-      new Map(),
-      new Map(),
-      false, // authorizeAllUtilityCallTargets
+      version,
+      authwits: new Map(),
+      taggingSecretStrategies: new Map(),
+      authorizeAllUtilityCallTargets: false,
       artifactResolver,
       rootPath,
       packageName,
-    );
+    });
 
     await topLevelOracleHandler.mineDeploymentNullifiers([STANDARD_AUTH_REGISTRY_ADDRESS]);
 
-    return new TXESession(
+    return new TXESession({
       logger,
-      store,
+      sessionStore: store,
       stateMachine,
-      topLevelOracleHandler,
+      oracleHandler: topLevelOracleHandler,
       contractStore,
       noteStore,
       keyStore,
@@ -394,15 +419,15 @@ export class TXESession implements TXESessionStateHandler {
       factStore,
       privateEventStore,
       stagedWriteCoordinator,
-      [stateMachine.contractSyncService], // operationContributors
-      initialChangeSetId,
-      version,
+      operationContributors: [stateMachine.contractSyncService],
+      currentChangeSetId: initialChangeSetId,
       chainId,
+      version,
       nextBlockTimestamp,
       artifactResolver,
       rootPath,
       packageName,
-    );
+    });
   }
 
   /**
@@ -686,29 +711,29 @@ export class TXESession implements TXESessionStateHandler {
     // Commit all staged stores from the change set that was just completed, then begin a new change set
     await this.cycleOperation();
 
-    this.oracleHandler = new TXEOracleTopLevelContext(
-      this.stateMachine,
-      this.contractStore,
-      this.noteStore,
-      this.keyStore,
-      this.addressStore,
-      this.accountStore,
-      this.senderTaggingStore,
-      this.recipientTaggingStore,
-      this.taggingSecretSourcesStore,
-      this.capsuleStore,
-      this.factStore,
-      this.privateEventStore,
-      this.nextBlockTimestamp,
-      this.version,
-      this.chainId,
-      this.authwits,
-      this.taggingSecretStrategies,
-      this.authorizeAllUtilityCallTargets,
-      this.artifactResolver,
-      this.rootPath,
-      this.packageName,
-    );
+    this.oracleHandler = new TXEOracleTopLevelContext({
+      stateMachine: this.stateMachine,
+      contractStore: this.contractStore,
+      noteStore: this.noteStore,
+      keyStore: this.keyStore,
+      addressStore: this.addressStore,
+      accountStore: this.accountStore,
+      senderTaggingStore: this.senderTaggingStore,
+      recipientTaggingStore: this.recipientTaggingStore,
+      taggingSecretSourcesStore: this.taggingSecretSourcesStore,
+      capsuleStore: this.capsuleStore,
+      factStore: this.factStore,
+      privateEventStore: this.privateEventStore,
+      nextBlockTimestamp: this.nextBlockTimestamp,
+      chainId: this.chainId,
+      version: this.version,
+      authwits: this.authwits,
+      taggingSecretStrategies: this.taggingSecretStrategies,
+      authorizeAllUtilityCallTargets: this.authorizeAllUtilityCallTargets,
+      artifactResolver: this.artifactResolver,
+      rootPath: this.rootPath,
+      packageName: this.packageName,
+    });
 
     this.state = { name: 'TOP_LEVEL' };
     this.logger.debug(`Entered state ${this.state.name}`);
@@ -1045,3 +1070,39 @@ export class TXESession implements TXESessionStateHandler {
     });
   }
 }
+
+/**
+ * Collaborators and session-scoped values a {@link TXESession} owns. Built by {@link TXESession.init}; passed as a
+ * single object so that call sites name each dependency instead of relying on positional order.
+ */
+type TXESessionCtorArgs = {
+  logger: Logger;
+  sessionStore: AztecAsyncKVStore;
+  stateMachine: TXEStateMachine;
+  oracleHandler:
+    | IMiscOracle
+    | IUtilityExecutionOracle
+    | IPrivateExecutionOracle
+    | IAvmExecutionOracle
+    | ITxeExecutionOracle;
+  contractStore: ContractStore;
+  noteStore: NoteStore;
+  keyStore: KeyStore;
+  addressStore: AddressStore;
+  accountStore: TXEAccountStore;
+  senderTaggingStore: SenderTaggingStore;
+  recipientTaggingStore: RecipientTaggingStore;
+  taggingSecretSourcesStore: TaggingSecretSourcesStore;
+  capsuleStore: CapsuleStore;
+  factStore: FactStore;
+  privateEventStore: PrivateEventStore;
+  stagedWriteCoordinator: StagedWriteCoordinator;
+  operationContributors: OperationContributor[];
+  currentChangeSetId: ChangeSetId;
+  chainId: Fr;
+  version: Fr;
+  nextBlockTimestamp: bigint;
+  artifactResolver: TXEArtifactResolver;
+  rootPath: string;
+  packageName: string;
+};
