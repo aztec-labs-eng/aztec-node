@@ -55,11 +55,6 @@ function main {
     echo "NO_FAIL_FAST=1" >> $GITHUB_ENV
   fi
 
-  # Handle skip-compat-e2e label (escape hatch for backwards compat test failures on release PRs)
-  if has_label "ci-skip-compat-e2e"; then
-    echo "SKIP_COMPAT_E2E=1" >> $GITHUB_ENV
-  fi
-
   local ci_skip_requested=0
   if has_label "ci-skip" || head_commit_has_marker "--ci-skip"; then
     ci_skip_requested=1
@@ -120,7 +115,6 @@ function main {
   if [ "$ci_mode" = "release" ] &&
      [ "$(printf '%s' "${GITHUB_REPOSITORY:-}" | tr 'A-Z' 'a-z')" != "aztec-labs-eng/aztec-node" ]; then
     echo "PRIVATE_RELEASE=1" >> $GITHUB_ENV
-    echo "SKIP_COMPAT_E2E=1" >> $GITHUB_ENV
   fi
 
   # Benching modes run their benches on a dedicated, fixed-hardware box (stable numbers)
