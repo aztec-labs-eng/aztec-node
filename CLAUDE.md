@@ -27,7 +27,7 @@ The default branch and standard PR base is `main`. If a PR is already open, its 
 gh pr view --json baseRefName -q '.baseRefName'
 ```
 
-Backport and forward-port PRs target their staging branches (`backport-to-*-staging`, `port-to-main-staging`) rather than `main`. Never present internal branch names, or `spartan` (the deployment infrastructure in `spartan/`), to a user as something to install or migrate to — releases are version tags (e.g. v5) and networks are named (e.g. testnet).
+Port PRs (branches named `port-<PR>-to-<target>`) target the port's target branch rather than `main`. Never present internal branch names, or `spartan` (the deployment infrastructure in `spartan/`), to a user as something to install or migrate to — releases are version tags (e.g. v5) and networks are named (e.g. testnet).
 
 Use the base in `git diff origin/<base>...HEAD` and `git log origin/<base>..HEAD`. Always `git fetch` before creating branches so the base is not stale.
 </base_branch>
