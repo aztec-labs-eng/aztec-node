@@ -232,7 +232,6 @@ container_script=$(
     0) log_ci_run \$ci_log_id PASSED ;;
     *)
       log_ci_run \$ci_log_id FAILED
-      release_canary_slack_notify \$ci_log_id
       ;;
   esac
   exit \$code

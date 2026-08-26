@@ -116,19 +116,25 @@ jobs:
       # A pushed v* tag is the release path (ci3_labels_to_env.sh selects ci_mode=release on
       # exactly this condition), so this covers nightly, rc and stable releases. Gating on the
       # ref rather than env.CI_MODE also keeps it working when the job dies before the mode is
-      # computed. Canary tags from the ci-release-pr label are excluded: they get their own
-      # alert from ci3/release_canary_slack_notify.
+      # computed.
       - name: Notify Slack on release failure
-        if: failure() && startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref, 'refs/tags/v0.0.1-commit.')
+        if: failure() && startsWith(github.ref, 'refs/tags/v')
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           TAG: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          case "$TAG" in
-            *-nightly.*) kind="Nightly release" ;;
-            *-rc.*) kind="Release candidate" ;;
+          # The release channel, not the tag name, decides whether this is worth reporting:
+          # 'commit' is a ci-release-pr canary tag, which nobody wants alerts for.
+          channel=$(./ci3/dist_tag)
+          if [ "$channel" = "commit" ]; then
+            echo "Canary release ($TAG); not notifying."
+            exit 0
+          fi
+          case "$channel" in
+            nightly) kind="Nightly release" ;;
+            rc) kind="Release candidate" ;;
             *) kind="Release" ;;
           esac
           text="$kind FAILED for *${TAG}* (${ACTOR}): <${RUN_URL}|View Run>"
