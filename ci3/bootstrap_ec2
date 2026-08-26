@@ -25,6 +25,11 @@ export CI_LOG_ID=$(date +%s%3N)$((100 + RANDOM % 900))
 echo "CI booting..." | redis_setexz "$CI_LOG_ID" 300
 log_url="http://ci.aztec-labs.com/$CI_LOG_ID"
 echo -e "CI Log: ${yellow}$log_url${reset}"
+# Publish the id to later workflow steps so a failure notification can link the build
+# log itself, not just the GitHub run (the real error is in the former).
+if [ -n "${GITHUB_ENV:-}" ]; then
+  echo "CI_LOG_ID=$CI_LOG_ID" >>"$GITHUB_ENV"
+fi
 if [ -n "${CI_DASHBOARD:-}" ]; then
   echo "CI dashboard: http://ci.aztec-labs.com/section/$CI_DASHBOARD"
 fi
