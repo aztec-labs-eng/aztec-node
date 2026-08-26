@@ -2,8 +2,7 @@ import { Semaphore } from '@aztec/foundation/queue';
 import type { AztecAsyncKVStore } from '@aztec/kv-store';
 
 import type { Rollbackable } from './rollbackable.js';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- StagedWriteCoordinator is only used in doc tags
-import type { ChangeSetId, StagedStore, StagedWriteCoordinator } from './staged_write_coordinator.js';
+import type { ChangeSetId, StagedStore } from './staged_write_coordinator.js';
 
 /**
  * Base class for stores that stage their writes per change set, flushing them on commit and dropping them on abort.
@@ -15,6 +14,16 @@ import type { ChangeSetId, StagedStore, StagedWriteCoordinator } from './staged_
  * The staged data and the store's kv handles live in this base class and are only reachable through
  * {@link withStaging} (change set operations, with the DB read-only), {@link flushStaged} (the commit-time
  * write-back) and {@link applyRollback} (the reorg truncation).
+ *
+ * The class is thread safe: an internal lock serializes the operations run through {@link withStaging}, so two of
+ * them issued concurrently (e.g. under `Promise.all`) never interleave across awaits. Subclasses can therefore read
+ * staged data and write it back without handling atomicity themselves.
+ *
+ * @typeParam TStaging - The in-memory buffer a change set accumulates its writes in, built empty by `buildStaging`
+ * on every {@link beginChangeSet} and dropped when the change set ends. A store keyed by id might stage
+ * `{ items: Map<string, Item> }`.
+ * @typeParam TDb - The store's kv handles, opened once at construction by `buildDb` and shared by every change set.
+ * That same store would open `{ items: AztecAsyncMap<string, Buffer>; itemsByBlockNumber: AztecAsyncMultiMap }`.
  */
 export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Rollbackable {
   public readonly storeName: string;
@@ -51,11 +60,14 @@ export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Ro
   /**
    * Opens the change set, so its operations are accepted until {@link commitStaged} or {@link discardStaged}.
    *
-   * @throws If a change set is already open: opening another would silently discard its staged data.
+   * @throws If a change set is already open.
    */
   beginChangeSet(changeSetId: ChangeSetId): void {
     if (this.#current !== undefined) {
-      throw new Error(`Store "${this.storeName}" has change set "${this.#current.changeSetId}" open`);
+      throw new Error(
+        `Store "${this.storeName}": cannot open change set "${changeSetId}" because change set ` +
+          `"${this.#current.changeSetId}" is already open`,
+      );
     }
     this.#current = { changeSetId, staging: this.#buildStaging() };
   }
@@ -100,13 +112,14 @@ export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Ro
 
   /**
    * Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not
-   * open a transaction of its own or take the store's lock.
+   * open a transaction of its own or call {@link withStaging}, which would deadlock on the store's lock.
    */
   protected abstract flushStaged(staging: TStaging, db: TDb): Promise<void>;
 
   /**
    * Deletes the state originating from blocks strictly above `toBlock`. Runs inside the transaction owned by
-   * {@link rollbackToBlock}'s caller: it must not open a transaction of its own or take the store's lock.
+   * {@link rollbackToBlock}'s caller: it must not open a transaction of its own or call {@link withStaging}, which
+   * would deadlock on the store's lock.
    */
   protected abstract applyRollback(toBlock: number, db: TDb): Promise<void>;
 
@@ -115,8 +128,8 @@ export abstract class BaseStagingStore<TStaging, TDb> implements StagedStore, Ro
    * change set's staged data and a read-only view of the DB (writes are staged in memory until {@link flushStaged}
    * runs on commit).
    *
-   * The lock serializes the change set's operations: staged data lives in JS memory, outside the DB transaction's
-   * isolation, so two operations interleaving across awaits could lose an update.
+   * The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot
+   * interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
    *
    * @throws If the change set is not open.
    */

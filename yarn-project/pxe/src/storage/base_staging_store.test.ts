@@ -124,7 +124,9 @@ describe('BaseStagingStore', () => {
     it('rejects opening a change set while another is open', async () => {
       store.beginChangeSet('cs1');
       await store.write('key', 1, 'cs1');
-      expect(() => store.beginChangeSet('cs2')).toThrow('Store "test" has change set "cs1" open');
+      expect(() => store.beginChangeSet('cs2')).toThrow(
+        'Store "test": cannot open change set "cs2" because change set "cs1" is already open',
+      );
       await expect(store.readStaged('key', 'cs1')).resolves.toBe(1);
     });
 

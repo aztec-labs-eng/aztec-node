@@ -2,9 +2,6 @@ import { randomBytes } from '@aztec/foundation/crypto/random';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
 import type { AztecAsyncKVStore } from '@aztec/kv-store';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- BaseStagingStore is only used in doc tags
-import type { BaseStagingStore } from './base_staging_store.js';
-
 /**
  * Identifies a change set: the writes staged between a {@link StagedWriteCoordinator.begin} and its matching commit or
  * abort, which are promoted to the database or dropped as a unit.
@@ -27,7 +24,7 @@ export interface StagedStore {
   /**
    * Notifies the store that a change set has been opened.
    *
-   * TODO: make it required once every staged store extends {@link BaseStagingStore}. It is optional only while
+   * TODO: make it required once every staged store extends `BaseStagingStore`. It is optional only while
    * they migrate to per-change-set staging.
    *
    * @param changeSetId - The change set identifier
