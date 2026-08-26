@@ -142,7 +142,7 @@ jobs:
           if [ -n "${CI_LOG_ID:-}" ]; then
             text="${text} | <http://ci.aztec-labs.com/${CI_LOG_ID}|Build Log>"
           fi
-          ./ci3/slack_notify "$text" "#team-alpha"
+          ./ci3/slack_notify "$text" "#team-alpha-ci"
 
       # Uses ci3/upload_benchmarks rather than github-action-benchmark: the action full-clones
       # the multi-GB data repo per upload; the script does a shallow sparse clone instead.
