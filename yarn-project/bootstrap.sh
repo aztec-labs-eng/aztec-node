@@ -7,7 +7,7 @@ function hash {
   # package, hashed via yarn.lock (covered by the yarn-project patterns).
   hash_str \
     $(../labs-aztec-toolchain/bootstrap.sh hash) \
-    $(../noir-projects/labs/noir-contracts/bootstrap.sh hash) \
+    $(../noir-projects/noir-contracts/bootstrap.sh hash) \
     $(cache_content_hash ../yarn-project/.rebuild_patterns)
 }
 

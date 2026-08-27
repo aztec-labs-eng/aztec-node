@@ -99,7 +99,7 @@ const SITES = [
     // aztec-nr is fetched from github by external contract projects, so its manifest must
     // always carry a resolvable release tag: losing the pin entirely (a committed use-local
     // rewrite, a switch to a path dep) must fail the check, not shrink its coverage.
-    required: ["noir-projects/labs/aztec-nr/aztec/Nargo.toml"],
+    required: ["noir-projects/aztec-nr/aztec/Nargo.toml"],
     // Only single-line inline dep tables are supported: a multi-line [dependencies.x] table
     // puts the url and tag on separate lines and is reported as a tagless dep rather than
     // matched. Dependency tables order their keys freely, so the url and the tag are only
