@@ -92,21 +92,21 @@ jobs:
       deploy_contracts: ${{ github.event_name == 'schedule' || inputs.deploy_contracts == true }}
     secrets: inherit
 
-  # next-net is recreated from scratch every night: deploy_network.sh deletes the
-  # namespace before it applies anything. Nothing else ever cleans up, so a deploy that
-  # fails after that point leaves a half-built network that lives until some later
-  # deploy gets far enough to delete it — indefinitely if the nightly tag is missing or
-  # CI3 stays red. A stale network keeps paging #alerts-next-net and shows up as live in
-  # the daily healthcheck, so tear it down here instead of leaving it for days.
+  # next-net must never outlive its nightly: it exists to exercise the latest tag, so a
+  # network left over from an older one misleads anyone testing against it and keeps
+  # burning cluster resources. The only thing that ever deletes the namespace is
+  # deploy_network.sh, and only once a deploy gets far enough to run it, so any run that
+  # does not complete a successful deploy leaves the previous network up until some later
+  # run succeeds — days, if the nightly tag never lands or CI3 stays red.
   #
-  # Gated on the deploy job itself failing. If get-image-tag or wait-for-ci3 failed,
-  # nothing new was deployed and the previous network is still healthy — deleting it
-  # then would cause the very outage this job exists to prevent. Cancellations are
-  # excluded too: cancel-in-progress means a superseding run is already about to
-  # delete the namespace on its own.
-  teardown-failed-deploy:
+  # Hence the gate is "the deploy did not succeed", not "the deploy failed": a missing
+  # tag or a red CI3 gate stalls this workflow before the deploy job starts, which is
+  # exactly the case that strands a stale network. Tearing down then is deliberate — no
+  # next-net at all is preferable to one serving state from an unknown-age tag, and its
+  # absence is visible where staleness is not.
+  teardown-stale-network:
     needs: deploy-next-net
-    if: always() && needs.deploy-next-net.result == 'failure'
+    if: always() && needs.deploy-next-net.result != 'success'
     runs-on: ubuntu-latest
     steps:
       # A local action needs the repo on disk. No ref: this run's own commit is enough,
@@ -142,7 +142,7 @@ jobs:
           kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp | tail -50 || true
           helm list -n "$NAMESPACE" || true
 
-      - name: Tear down failed deployment
+      - name: Tear down stale network
         continue-on-error: true
         uses: ./.github/actions/network-teardown
         with:
