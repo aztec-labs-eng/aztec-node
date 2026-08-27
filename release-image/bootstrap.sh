@@ -202,6 +202,10 @@ function push {
 # lifecycle, and mixing thousands of them into the repo operators pull from would bury the
 # released versions. Nothing outside CI is expected to pull aztec-dev, and its tags may be
 # pruned at any time.
+#
+# Only the node image is pushed. Deployments leave PROVER_AGENT_DOCKER_IMAGE unset, so the prover
+# agents run this same image; the dedicated prover-agent image only exists to bake in the CRS, and
+# is only built for tagged releases anyway.
 function push_pr {
   echo_header "release-image push_pr"
 
@@ -212,14 +216,6 @@ function push_pr {
   echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
   docker tag azteclabs/aztec:$COMMIT_HASH azteclabs/aztec-dev:$COMMIT_HASH
   do_or_dryrun docker push azteclabs/aztec-dev:$COMMIT_HASH
-  # The prover-agent image is only built on tagged releases, so on a PR build there is nothing to
-  # tag here. Deployments fall back to AZTEC_DOCKER_IMAGE for the prover agent, which serves the
-  # same purpose minus the baked-in CRS, so a missing image is not fatal.
-  if docker tag azteclabs/aztec-prover-agent:$COMMIT_HASH azteclabs/aztec-prover-agent-dev:$COMMIT_HASH 2>/dev/null; then
-    do_or_dryrun docker push azteclabs/aztec-prover-agent-dev:$COMMIT_HASH || echo "Warning: failed to push prover-agent-dev image, continuing."
-  else
-    echo "Warning: prover-agent image not found locally, skipping push."
-  fi
 }
 
 case "$cmd" in
