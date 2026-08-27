@@ -1,11 +1,16 @@
 # KIND-based e2e tests that run on a local Kubernetes cluster on an EC2 instance.
 #
 # Two entry points:
+# - schedule (currently disabled): runs against today's nightly release once its CI3
+#   run has finished (select-image + wait-for-ci3, same model as deploy-next-net.yml).
+#   A day with no nightly tag fails loudly at select-image.
 # - workflow_dispatch: manual runs against an arbitrary ref.
-# - workflow_call: from ci3.yml via the one-time-use ci-network-kind PR label.
 name: Test Network KIND
 
 on:
+  # schedule:
+  #   # Run every morning at 6:00 AM UTC, after the nightly tag (04:00 UTC) has built.
+  #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       ref:
@@ -13,36 +18,76 @@ on:
         required: false
         type: string
         default: main
-  workflow_call:
-    inputs:
-      ref:
-        description: Git ref to checkout. Empty checks out the caller's commit.
-        required: false
-        type: string
-        default: ""
 
 # id-token: write lets the job assume the AWS role via OIDC.
-# pull-requests: write removes the one-time-use label on workflow_call from a PR.
+# actions: read covers wait_for_ci3's workflow-run queries on scheduled runs.
 permissions:
   contents: read
+  actions: read
   id-token: write
-  pull-requests: write
 
 jobs:
-  kind-test:
+  # Scheduled runs only: construct today's nightly tag (never "latest", so a broken
+  # tag cron fails here instead of silently re-testing an old release).
+  select-image:
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 180 # 3 hours for KIND tests
+    outputs:
+      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
     steps:
-      - name: Remove label (one-time use)
-        if: github.event.pull_request && contains(github.event.pull_request.labels.*.name, 'ci-network-kind')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-network-kind --repo ${{ github.repository }} || true
-
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          ref: main
+
+      - name: Determine nightly tag
+        id: nightly-tag
+        run: |
+          current_version=$(jq -r '."."' .release-please-manifest.json)
+          source_ref="v${current_version}-nightly.$(date -u +%Y%m%d)"
+          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
+          echo "Using nightly tag: $source_ref"
+
+      - name: Verify source git ref
+        run: |
+          set -euo pipefail
+          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
+          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
+          echo "Nightly source commit: $(git rev-parse "${source_ref}^{}")"
+
+  # Block until the nightly tag's release CI has succeeded, so we only test releases
+  # that actually shipped.
+  wait-for-ci3:
+    needs: select-image
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22
+
+      - name: Wait for CI3
+        run: spartan/scripts/wait_for_ci3.ts "${{ needs.select-image.outputs.source_ref }}"
+
+  kind-test:
+    needs: [select-image, wait-for-ci3]
+    # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-ci3.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180 # 3 hours for KIND tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Scheduled runs check out the nightly tag so the tests match the release.
+          ref: ${{ inputs.ref || needs.select-image.outputs.source_ref }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

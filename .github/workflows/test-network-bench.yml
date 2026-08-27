@@ -3,11 +3,16 @@
 # (bench/main) is never affected.
 #
 # Two entry points:
+# - schedule (currently disabled): runs against today's nightly release once its CI3
+#   run has finished (select-image + wait-for-ci3, same model as deploy-next-net.yml).
+#   Scheduled runs have no PR number, so results are observational (no upload).
 # - workflow_dispatch: manual runs against an arbitrary ref.
-# - workflow_call: from ci3.yml via the one-time-use ci-network-bench PR label.
 name: Test Network Bench
 
 on:
+  # schedule:
+  #   # Run every morning at 6:00 AM UTC, after the nightly tag (04:00 UTC) has built.
+  #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       bench_type:
@@ -25,34 +30,69 @@ on:
         required: false
         type: string
         default: ""
-  workflow_call:
-    inputs:
-      bench_type:
-        description: Benchmark to run (benchmark, proving-benchmark, or empty for both in parallel)
-        required: false
-        type: string
-        default: ""
-      ref:
-        description: Git ref to checkout. Empty checks out the caller's commit.
-        required: false
-        type: string
-        default: ""
-      pr_number:
-        description: PR number for the bench/pr-<N> upload path. Empty uses the caller's PR.
-        required: false
-        type: string
-        default: ""
 
 # id-token: write lets the job assume the AWS role via OIDC.
-# pull-requests: write removes the one-time-use label on workflow_call from a PR.
+# actions: read covers wait_for_ci3's workflow-run queries on scheduled runs.
 permissions:
   contents: read
+  actions: read
   id-token: write
-  pull-requests: write
 
 jobs:
+  # Scheduled runs only: construct today's nightly tag (never "latest", so a broken
+  # tag cron fails here instead of silently re-benching an old release).
+  select-image:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: main
+
+      - name: Determine nightly tag
+        id: nightly-tag
+        run: |
+          current_version=$(jq -r '."."' .release-please-manifest.json)
+          source_ref="v${current_version}-nightly.$(date -u +%Y%m%d)"
+          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
+          echo "Using nightly tag: $source_ref"
+
+      - name: Verify source git ref
+        run: |
+          set -euo pipefail
+          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
+          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
+          echo "Nightly source commit: $(git rev-parse "${source_ref}^{}")"
+
+  # Block until the nightly tag's release build has published the docker image,
+  # so the deploys below don't race the build and hit ImagePullBackOff.
+  wait-for-ci3:
+    needs: select-image
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22
+
+      - name: Wait for CI3
+        run: spartan/scripts/wait_for_ci3.ts "${{ needs.select-image.outputs.source_ref }}"
+
   bench:
     name: ${{ matrix.bench_type }}
+    needs: [select-image, wait-for-ci3]
+    # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-ci3.result == 'success') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -60,16 +100,11 @@ jobs:
       matrix:
         include: ${{ fromJSON(inputs.bench_type == 'benchmark' && '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","download_cmd":"gh-spartan-bench","timeout":300}]' || inputs.bench_type == 'proving-benchmark' && '[{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","download_cmd":"gh-spartan-proving-bench","timeout":240}]' || '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","download_cmd":"gh-spartan-bench","timeout":300},{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","download_cmd":"gh-spartan-proving-bench","timeout":240}]') }}
     steps:
-      - name: Remove label (one-time use)
-        if: github.event.pull_request && contains(github.event.pull_request.labels.*.name, 'ci-network-bench')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-network-bench --repo ${{ github.repository }} || true
-
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          # Scheduled runs check out the nightly tag so the runner matches the release.
+          ref: ${{ inputs.ref || needs.select-image.outputs.source_ref }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -85,7 +120,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          # For pushing docker images built from the PR
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -94,7 +128,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: ${{ matrix.timeout }}
           NO_SPOT: 1
-          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           namespace=${PR_NUMBER:+pr-$PR_NUMBER}
           namespace=${namespace:-run-$RUN_ID}-${{ matrix.namespace_suffix }}
@@ -123,8 +157,8 @@ jobs:
         if: always() && env.ENABLE_DEPLOY_BENCH == '1'
         env:
           GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           if [[ -z "$PR_NUMBER" ]]; then
             echo "No PR number; skipping benchmark upload."

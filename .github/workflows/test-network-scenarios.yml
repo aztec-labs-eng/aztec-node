@@ -2,14 +2,17 @@
 # If test_set is empty, runs both sets in parallel.
 #
 # Two entry points:
+# - schedule (currently disabled): runs against today's nightly release once its CI3
+#   run has published the image (select-image + wait-for-ci3, same model as
+#   deploy-next-net.yml). A day with no nightly tag fails loudly at select-image
+#   rather than silently re-testing yesterday's image.
 # - workflow_dispatch: manual runs against an explicit docker image and namespace.
-# - workflow_call: from ci3.yml, on the current nightly tag or the ci-network-scenario
-#   PR label. Empty inputs are derived from the trigger context: a v* tag uses the
-#   release image and a v<major>-scenario namespace; a PR builds and pushes an image
-#   from the branch and uses a pr-<branch> namespace.
 name: Test Network Scenarios
 
 on:
+  # schedule:
+  #   # Run every morning at 6:00 AM UTC, after the nightly tag (04:00 UTC) has built.
+  #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       docker_image:
@@ -35,68 +38,90 @@ on:
         required: false
         type: string
         default: ""
-  workflow_call:
-    inputs:
-      docker_image:
-        description: Complete docker image to use. Empty derives it from the caller context.
-        required: false
-        type: string
-        default: ""
-      ref:
-        description: Git ref to checkout. Empty checks out the caller's commit.
-        required: false
-        type: string
-        default: ""
-      namespace:
-        description: Kubernetes namespace. Empty derives it from the caller context.
-        required: false
-        type: string
-        default: ""
-      env_file:
-        description: Network configuration to use.
-        required: false
-        type: string
-        default: next-scenario
-      test_set:
-        description: Test set to run (1, 2, or empty for both in parallel)
-        required: false
-        type: string
-        default: ""
 
-# Only applies to workflow_dispatch runs: for workflow_call the caller's
-# concurrency group (ci3-<ref>) governs the run.
 concurrency:
-  group: test-network-scenarios-${{ inputs.namespace || github.ref_name }}
+  group: test-network-scenarios-${{ inputs.namespace || 'nightly' }}
   cancel-in-progress: true
 
 # actions: write lets the failure handler dispatch claudebox.yml with the built-in
-# token (workflow_dispatch is exempt from the github.token no-retrigger rule).
+# token (and covers wait_for_ci3's workflow-run queries on scheduled runs).
 # id-token: write lets the job assume the AWS role via OIDC.
-# pull-requests: write removes the one-time-use label on workflow_call from a PR.
 permissions:
   contents: read
   actions: write
   id-token: write
-  pull-requests: write
 
 jobs:
+  # Scheduled runs only: construct today's nightly tag (never "latest", so a broken
+  # tag cron fails here instead of silently re-testing an old image).
+  select-image:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.nightly-tag.outputs.semver }}
+      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
+      source_sha: ${{ steps.verify.outputs.source_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: main
+
+      - name: Determine nightly tag
+        id: nightly-tag
+        run: |
+          current_version=$(jq -r '."."' .release-please-manifest.json)
+          semver="${current_version}-nightly.$(date -u +%Y%m%d)"
+          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          echo "source_ref=v$semver" >> "$GITHUB_OUTPUT"
+          echo "Using nightly tag: v$semver"
+
+      - name: Verify source git ref
+        id: verify
+        run: |
+          set -euo pipefail
+          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
+          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
+          source_sha=$(git rev-parse "${source_ref}^{}")
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "Nightly source commit: $source_sha"
+
+  # Block until the nightly tag's release build has published the docker image,
+  # so the deploy below doesn't race the build and hit ImagePullBackOff.
+  wait-for-ci3:
+    needs: select-image
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22
+
+      - name: Wait for CI3
+        run: spartan/scripts/wait_for_ci3.ts "${{ needs.select-image.outputs.source_ref }}"
+
   deploy-and-test:
+    needs: [select-image, wait-for-ci3]
+    # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-ci3.result == 'success') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         test_set: ${{ fromJSON(inputs.test_set == '' && '["1","2"]' || format('["{0}"]', inputs.test_set)) }}
     steps:
-      - name: Remove label (one-time use)
-        if: github.event.pull_request && contains(github.event.pull_request.labels.*.name, 'ci-network-scenario')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label ci-network-scenario --repo ${{ github.repository }} || true
-
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          # Scheduled runs check out the nightly tag so the runner matches the release.
+          ref: ${{ inputs.ref || needs.select-image.outputs.source_ref }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -110,23 +135,18 @@ jobs:
         env:
           INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
           INPUT_NAMESPACE: ${{ inputs.namespace }}
-          GIT_REF: ${{ github.ref }}
-          GIT_REF_NAME: ${{ github.ref_name }}
-          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          NIGHTLY_SEMVER: ${{ needs.select-image.outputs.semver }}
         run: |
           if [[ -n "$INPUT_NAMESPACE" ]]; then
             namespace=$(echo "$INPUT_NAMESPACE" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20)
-          elif [[ "$GIT_REF" == refs/tags/v* ]]; then
-            major_version=$(./ci3/semver major "${GIT_REF_NAME#v}")
+            docker_image="$INPUT_DOCKER_IMAGE"
+          elif [[ -n "$NIGHTLY_SEMVER" ]]; then
+            major_version=$(./ci3/semver major "$NIGHTLY_SEMVER")
             namespace="v${major_version}-scenario"
+            docker_image="aztecprotocol/aztec:${NIGHTLY_SEMVER}"
           else
-            namespace=pr-$(echo "$HEAD_REF" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20 | sed 's/-*$//')
-          fi
-          docker_image="$INPUT_DOCKER_IMAGE"
-          # For release tags, default to the release image; for PRs, leave empty so the
-          # scenario runner builds from the branch and pushes to aztecdev.
-          if [[ -z "$docker_image" && "$GIT_REF" == refs/tags/v* ]]; then
-            docker_image="aztecprotocol/aztec:${GIT_REF_NAME#v}"
+            echo "No namespace input and no nightly tag context." >&2
+            exit 1
           fi
           echo "NAMESPACE=$namespace" >> $GITHUB_ENV
           echo "DOCKER_IMAGE=$docker_image" >> $GITHUB_ENV
@@ -137,7 +157,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          # For pushing docker images built from a PR branch (empty DOCKER_IMAGE).
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -149,15 +168,14 @@ jobs:
           NO_SPOT: 1
         run: |
           set -x # print next line
-          ./.github/ci3.sh network-scenarios "${{ inputs.env_file }}" "$NAMESPACE" "$DOCKER_IMAGE" "${{ matrix.test_set }}"
+          ./.github/ci3.sh network-scenarios "${{ inputs.env_file || 'next-scenario' }}" "$NAMESPACE" "$DOCKER_IMAGE" "${{ matrix.test_set }}"
 
       - name: Cleanup network resources
-        # Clean up manual runs, PR runs, and nightly tags; keep the network for real release tags.
-        if: always() && (!startsWith(github.ref, 'refs/tags/v') || contains(github.ref_name, '-nightly.'))
+        if: always()
         continue-on-error: true
         uses: ./.github/actions/network-teardown
         with:
-          env_file: ${{ inputs.env_file }}
+          env_file: ${{ inputs.env_file || 'next-scenario' }}
           namespace: ${{ env.NAMESPACE }}-${{ matrix.test_set }}
           gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
@@ -166,7 +184,7 @@ jobs:
       # Benchmarks
       #############
       - name: Download deploy benchmarks
-        if: always() && startsWith(github.ref, 'refs/tags/v')
+        if: always() && github.event_name == 'schedule'
         run: |
           if ./ci.sh gh-deploy-bench; then
             echo "ENABLE_DEPLOY_BENCH=1" >> $GITHUB_ENV
@@ -175,7 +193,7 @@ jobs:
       - name: Upload benchmarks
         if: env.ENABLE_DEPLOY_BENCH == '1'
         env:
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          COMMIT_SHA: ${{ needs.select-image.outputs.source_sha || github.sha }}
         run: ./ci3/upload_benchmarks "Aztec Benchmarks" "bench/${BENCH_BRANCH:-}" ./bench-out/bench.json "$COMMIT_SHA"
 
       - name: Notify Slack and dispatch ClaudeBox on failure
@@ -185,7 +203,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-built-from-branch}, env ${{ inputs.env_file }}, ref ${{ github.ref_name }}"
+          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-unset}, env ${{ inputs.env_file || 'next-scenario' }}, ref ${{ github.ref_name }}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
             "Scenario Tests FAILED (${CONTEXT}): <${RUN_URL}|View Run> (🤖)" \
             "Scenario tests failed (${CONTEXT}). CI run: ${RUN_URL}. Investigate the scenario test failure and identify the root cause." \
