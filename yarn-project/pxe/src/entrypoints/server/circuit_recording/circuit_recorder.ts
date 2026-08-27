@@ -2,11 +2,9 @@ import { sha512 } from '@aztec/foundation/crypto/sha512';
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec/foundation/log';
 import { Timer } from '@aztec/foundation/timer';
 import type { ForeignCallHandler, ForeignCallInput, ForeignCallOutput } from '@aztec/noir-acvm_js';
+import type { ACIRCallback, ACVMWitness } from '@aztec/simulator/client';
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-
-import type { ACIRCallback } from '../acvm/acvm.js';
-import type { ACVMWitness } from '../acvm/acvm_types.js';
 
 export type OracleCall = {
   name: string;
