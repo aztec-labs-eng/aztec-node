@@ -859,7 +859,7 @@ case "$cmd" in
     export CI=1
     [ "${SKIP_BUILD:-0}" -eq 0 ] && build
     # Set the docker image to the locally built image and load it into KIND
-    export AZTEC_DOCKER_IMAGE="aztecprotocol/aztec:$(git rev-parse HEAD)"
+    export AZTEC_DOCKER_IMAGE="azteclabs/aztec:$(git rev-parse HEAD)"
     spartan/bootstrap.sh kind
     kind load docker-image "$AZTEC_DOCKER_IMAGE"
     # Just one test for now

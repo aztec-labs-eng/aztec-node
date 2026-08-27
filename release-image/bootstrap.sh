@@ -28,16 +28,16 @@ function build_prover_agent_image {
   set -euo pipefail
   local tag=$(git rev-parse HEAD)
 
-  if ! docker image inspect aztecprotocol/aztec:$tag &>/dev/null; then
-    echo "Base image aztecprotocol/aztec:$tag not found. Run 'release-image/bootstrap.sh' first."
+  if ! docker image inspect azteclabs/aztec:$tag &>/dev/null; then
+    echo "Base image azteclabs/aztec:$tag not found. Run 'release-image/bootstrap.sh' first."
     exit 1
   fi
 
   prepare_crs
   echo_header "build prover-agent image"
   docker build -f Dockerfile.prover-agent --build-arg AZTEC_IMAGE_TAG=$tag \
-    -t aztecprotocol/aztec-prover-agent:$tag .
-  docker tag aztecprotocol/aztec-prover-agent:$tag aztecprotocol/aztec-prover-agent:latest
+    -t azteclabs/aztec-prover-agent:$tag .
+  docker tag azteclabs/aztec-prover-agent:$tag azteclabs/aztec-prover-agent:latest
 }
 export -f build_prover_agent_image
 
@@ -75,17 +75,17 @@ function build_image {
     # Otherwise, use the commit hash as the version.
     local version=$(git rev-parse HEAD)
   fi
-  local previous_ids=$(docker images aztecprotocol/aztec --format "{{.ID}}" | uniq)
-  docker build -f release-image/Dockerfile --build-arg VERSION=$version -t aztecprotocol/aztec:$(git rev-parse HEAD) .
-  docker tag aztecprotocol/aztec:$(git rev-parse HEAD) aztecprotocol/aztec:latest
+  local previous_ids=$(docker images azteclabs/aztec --format "{{.ID}}" | uniq)
+  docker build -f release-image/Dockerfile --build-arg VERSION=$version -t azteclabs/aztec:$(git rev-parse HEAD) .
+  docker tag azteclabs/aztec:$(git rev-parse HEAD) azteclabs/aztec:latest
 
   # In CI, dump all files under /usr/src.
   if [ "$CI" -eq 1 ]; then
-    docker run --rm --entrypoint /bin/bash aztecprotocol/aztec:latest -c 'cd /usr/src && find . -print | grep -v node_modules'
+    docker run --rm --entrypoint /bin/bash azteclabs/aztec:latest -c 'cd /usr/src && find . -print | grep -v node_modules'
   fi
 
   # If we actually built a new image (not from cache), remove all but the just-built image.
-  local new_ids=$(docker images aztecprotocol/aztec --format "{{.ID}}" | uniq)
+  local new_ids=$(docker images azteclabs/aztec --format "{{.ID}}" | uniq)
   if [ "$previous_ids" != "$new_ids" ]; then
     echo "$previous_ids" | xargs -r docker rmi -f
   fi
@@ -121,7 +121,7 @@ function test_cmds {
   fi
 
   # Very simple sanity test.
-  echo "$hash docker run --rm aztecprotocol/aztec --version"
+  echo "$hash docker run --rm azteclabs/aztec --version"
 }
 
 # Resolve the registry to release to and log docker into it, assigning the repo path to the
@@ -152,10 +152,10 @@ function release {
 
   # We strip leading 'v' so that this is a valid semver.
   tag=${REF_NAME#v}
-  docker tag aztecprotocol/aztec:$COMMIT_HASH $repo/aztec:$tag-$(arch)
+  docker tag azteclabs/aztec:$COMMIT_HASH $repo/aztec:$tag-$(arch)
   do_or_dryrun docker push $repo/aztec:$tag-$(arch)
 
-  docker tag aztecprotocol/aztec-prover-agent:$COMMIT_HASH $repo/aztec-prover-agent:$tag-$(arch)
+  docker tag azteclabs/aztec-prover-agent:$COMMIT_HASH $repo/aztec-prover-agent:$tag-$(arch)
   do_or_dryrun docker push $repo/aztec-prover-agent:$tag-$(arch)
 }
 
@@ -190,8 +190,8 @@ function push {
     exit 1
   fi
   echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  do_or_dryrun docker push aztecprotocol/aztec:$COMMIT_HASH
-  do_or_dryrun docker push aztecprotocol/aztec-prover-agent:$COMMIT_HASH
+  do_or_dryrun docker push azteclabs/aztec:$COMMIT_HASH
+  do_or_dryrun docker push azteclabs/aztec-prover-agent:$COMMIT_HASH
 }
 
 function push_pr {
@@ -202,10 +202,10 @@ function push_pr {
     exit 1
   fi
   echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  docker tag aztecprotocol/aztec:$COMMIT_HASH aztecprotocol/aztecdev:$COMMIT_HASH
+  docker tag azteclabs/aztec:$COMMIT_HASH aztecprotocol/aztecdev:$COMMIT_HASH
   do_or_dryrun docker push aztecprotocol/aztecdev:$COMMIT_HASH
   # Best-effort: push prover-agent image if available.
-  if docker tag aztecprotocol/aztec-prover-agent:$COMMIT_HASH aztecprotocol/aztec-prover-agent-dev:$COMMIT_HASH 2>/dev/null; then
+  if docker tag azteclabs/aztec-prover-agent:$COMMIT_HASH aztecprotocol/aztec-prover-agent-dev:$COMMIT_HASH 2>/dev/null; then
     do_or_dryrun docker push aztecprotocol/aztec-prover-agent-dev:$COMMIT_HASH || echo "Warning: failed to push prover-agent-dev image, continuing."
   else
     echo "Warning: prover-agent image not found locally, skipping push."
