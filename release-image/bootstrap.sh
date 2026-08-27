@@ -140,7 +140,7 @@ function release_registry_login {
       exit 1
     fi
     echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-    repo="aztecprotocol"
+    repo="azteclabs"
   fi
 }
 

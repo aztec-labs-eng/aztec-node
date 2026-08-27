@@ -7,7 +7,7 @@ L1_CHAIN_ID=${4:-}
 TAG=${5:-"latest"}
 
 function get_enr {
-  docker run --rm aztecprotocol/aztec:$TAG generate-bootnode-enr $PRIVATE_KEY $P2P_IP $P2P_PORT -c $L1_CHAIN_ID
+  docker run --rm azteclabs/aztec:$TAG generate-bootnode-enr $PRIVATE_KEY $P2P_IP $P2P_PORT -c $L1_CHAIN_ID
 }
 
 OUTPUT="$(get_enr)"

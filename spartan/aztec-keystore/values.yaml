@@ -1,6 +1,6 @@
 global:
   aztecImage:
-    repository: aztecprotocol/aztec
+    repository: azteclabs/aztec
     tag: latest
     pullPolicy: IfNotPresent
   kubectlImage:

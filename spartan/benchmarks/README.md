@@ -24,7 +24,7 @@ Every benchmark follows the same phases:
 
 1. **Select image.** Resolve the nightly Docker image and the matching git ref. With no
    `workflow_dispatch` input the tag is `<version>-nightly.<YYYYMMDD>`, where `<version>` comes from
-   `.release-please-manifest.json`, giving image `aztecprotocol/aztec:<tag>` and source ref `v<tag>`.
+   `.release-please-manifest.json`, giving image `azteclabs/aztec:<tag>` and source ref `v<tag>`.
    The workflow then verifies the git tag resolves and that `docker manifest inspect` succeeds, so a
    missing nightly build fails fast instead of producing `ImagePullBackOff` later.
 2. **Deploy.** `deploy-network.yml` deploys the environment's Helm/Terraform stack into its namespace.

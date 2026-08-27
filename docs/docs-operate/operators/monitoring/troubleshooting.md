@@ -12,7 +12,7 @@ Here's a complete example with all monitoring components integrated with your Az
 services:
   # Your Aztec node (example for full node)
   aztec-node:
-    image: "aztecprotocol/aztec:#release_version"
+    image: "azteclabs/aztec:#release_version"
     container_name: "aztec-node"
     ports:
       - ${AZTEC_PORT}:${AZTEC_PORT}

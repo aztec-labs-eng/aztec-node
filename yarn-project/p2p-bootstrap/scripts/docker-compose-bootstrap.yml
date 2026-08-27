@@ -1,7 +1,7 @@
 version: '3'
 services:
   p2p-bootstrap:
-    image: aztecprotocol/aztec:latest
+    image: azteclabs/aztec:latest
     command: 'start --p2p-bootstrap'
     ports:
       - '40400:40400'

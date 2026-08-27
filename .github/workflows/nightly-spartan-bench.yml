@@ -58,7 +58,7 @@ jobs:
             docker_image=""
             image_label="internal/aztec:${nightly_tag}"
           else
-            docker_image="aztecprotocol/aztec:${nightly_tag}"
+            docker_image="azteclabs/aztec:${nightly_tag}"
             image_label="$docker_image"
           fi
 

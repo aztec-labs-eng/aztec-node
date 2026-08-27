@@ -54,4 +54,4 @@ export FORK_URL=<YOUR_RPC_URL e.g. https://mainnet.infura.io/v3/API_KEY>
 ## Publishing
 
 This package is set-up to be published on dockerhub by CI whenever there's a tagged release on `master` branch.
-It's published under the tags `aztecprotocol/aztec:latest` & `aztecprotocol/aztec:<version-tag>`.
+It's published under the tags `azteclabs/aztec:latest` & `azteclabs/aztec:<version-tag>`.

@@ -412,7 +412,7 @@ This macro is release-type-aware and automatically resolves to the appropriate v
 | testnet      | `TESTNET_TAG`                              | `2.1.11`                 |
 | mainnet      | `MAINNET_TAG`                              | `2.1.11`                 |
 
-Usage: `aztecprotocol/aztec:#release_version`
+Usage: `azteclabs/aztec:#release_version`
 
 ### `#release_network`
 
