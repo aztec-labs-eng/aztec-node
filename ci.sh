@@ -270,7 +270,7 @@ case "$cmd" in
     ;;
   network-deploy)
     # Args: <scenario> <namespace> [docker_image]
-    # If docker_image is not provided, ci-network-deploy will build and push to aztecdev.
+    # If docker_image is not provided, ci-network-deploy will build and push to aztec-dev.
     export CI_DASHBOARD="network"
     export JOB_ID="x-${2:?namespace is required}-network-deploy"
     export INSTANCE_POSTFIX="n-deploy"
@@ -292,7 +292,7 @@ case "$cmd" in
     ;;
   network-bench)
     # Args: <scenario> <namespace> [docker_image]
-    # If docker_image is not provided, ci-network-bench will build and push to aztecdev.
+    # If docker_image is not provided, ci-network-bench will build and push to aztec-dev.
     # Set SKIP_NETWORK_DEPLOY=1 to run against an existing network.
     export CI_DASHBOARD="network"
     export JOB_ID="x-${2:?namespace is required}-network-bench"

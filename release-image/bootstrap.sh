@@ -194,6 +194,14 @@ function push {
   do_or_dryrun docker push azteclabs/aztec-prover-agent:$COMMIT_HASH
 }
 
+# Publish the just-built image so a Kubernetes cluster can pull it. The network deploy and bench
+# jobs run against real GKE namespaces, which cannot use an image that only exists in the local
+# docker daemon, so an unreleased commit needs to reach a registry before it can be deployed.
+#
+# These go to aztec-dev rather than aztec: the tags are per-commit build artifacts with no
+# lifecycle, and mixing thousands of them into the repo operators pull from would bury the
+# released versions. Nothing outside CI is expected to pull aztec-dev, and its tags may be
+# pruned at any time.
 function push_pr {
   echo_header "release-image push_pr"
 
@@ -202,11 +210,13 @@ function push_pr {
     exit 1
   fi
   echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  docker tag azteclabs/aztec:$COMMIT_HASH aztecprotocol/aztecdev:$COMMIT_HASH
-  do_or_dryrun docker push aztecprotocol/aztecdev:$COMMIT_HASH
-  # Best-effort: push prover-agent image if available.
-  if docker tag azteclabs/aztec-prover-agent:$COMMIT_HASH aztecprotocol/aztec-prover-agent-dev:$COMMIT_HASH 2>/dev/null; then
-    do_or_dryrun docker push aztecprotocol/aztec-prover-agent-dev:$COMMIT_HASH || echo "Warning: failed to push prover-agent-dev image, continuing."
+  docker tag azteclabs/aztec:$COMMIT_HASH azteclabs/aztec-dev:$COMMIT_HASH
+  do_or_dryrun docker push azteclabs/aztec-dev:$COMMIT_HASH
+  # The prover-agent image is only built on tagged releases, so on a PR build there is nothing to
+  # tag here. Deployments fall back to AZTEC_DOCKER_IMAGE for the prover agent, which serves the
+  # same purpose minus the baked-in CRS, so a missing image is not fatal.
+  if docker tag azteclabs/aztec-prover-agent:$COMMIT_HASH azteclabs/aztec-prover-agent-dev:$COMMIT_HASH 2>/dev/null; then
+    do_or_dryrun docker push azteclabs/aztec-prover-agent-dev:$COMMIT_HASH || echo "Warning: failed to push prover-agent-dev image, continuing."
   else
     echo "Warning: prover-agent image not found locally, skipping push."
   fi
