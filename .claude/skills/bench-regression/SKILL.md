@@ -72,7 +72,7 @@ Read the JSON and keep a regression only if **all** hold:
 - **Plausibly caused by the PR:** map the bench `name` prefix to the PR's changed areas. Get the diff
   with `git diff --name-only $(git merge-base HEAD origin/main)..HEAD | cut -d/ -f1-2 | sort -u`, then
   keep benches whose names start with a touched area (`yarn-project/simulator`,
-  `noir-projects/labs/noir-contracts`, …) and treat far-away regressions (a docs-only PR moving a
+  `noir-projects/noir-contracts`, …) and treat far-away regressions (a docs-only PR moving a
   proving bench) as drift/noise, not this PR.
 
 ### 5. Report

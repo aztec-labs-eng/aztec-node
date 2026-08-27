@@ -3,7 +3,7 @@
 ///   - `major` = backward-breaking changes (must match exactly between PXE and Aztec.nr)
 ///   - `minor` = oracle additions (non-breaking; PXE minor >= contract minor)
 ///
-/// The Noir counterparts are in `noir-projects/labs/aztec-nr/aztec/src/oracle/version.nr`.
+/// The Noir counterparts are in `noir-projects/aztec-nr/aztec/src/oracle/version.nr`.
 ///
 /// @dev Whenever a contract function or Noir test is run, the `aztec_misc_assertCompatibleOracleVersion` oracle is called.
 /// If the major version is incompatible, an error is thrown immediately. The minor version is recorded by the PXE and
@@ -18,5 +18,5 @@ export const ORACLE_VERSION_MINOR = 8;
 /// - increment `ORACLE_VERSION_MAJOR` and reset `ORACLE_VERSION_MINOR` to zero if the change is breaking, or
 /// - increment only `ORACLE_VERSION_MINOR` if the change is additive (a new oracle was added).
 ///
-/// These constants must be kept in sync between this file and `noir-projects/labs/aztec-nr/aztec/src/oracle/version.nr`.
+/// These constants must be kept in sync between this file and `noir-projects/aztec-nr/aztec/src/oracle/version.nr`.
 export const ORACLE_INTERFACE_HASH = '16a4ca6f5342a5b7a12fe9ec3aa88be16c40cf685f5a205a58187c2c41bb2661';
