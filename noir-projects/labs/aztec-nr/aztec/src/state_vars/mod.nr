@@ -168,7 +168,7 @@ pub use public_immutable::PublicImmutable;
 mod public_mutable;
 pub use public_mutable::PublicMutable;
 mod delayed_public_mutable;
-pub use delayed_public_mutable::DelayedPublicMutable;
+pub use delayed_public_mutable::{DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY, DelayedPublicMutable};
 
 mod storable;
 pub use storable::Storable;
