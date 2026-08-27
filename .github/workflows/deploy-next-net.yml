@@ -41,6 +41,7 @@ jobs:
     outputs:
       tag: ${{ steps.determine_tag.outputs.TAG }}
       semver: ${{ steps.determine_tag.outputs.SEMVER }}
+      sha: ${{ steps.determine_tag.outputs.SHA }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -64,6 +65,10 @@ jobs:
 
           echo "SEMVER=$SEMVER" >> "$GITHUB_OUTPUT"
           echo "TAG=v${SEMVER}" >> "$GITHUB_OUTPUT"
+          # Pin main once here. The deploy and the teardown below both check out this
+          # commit, so the teardown reads the env file that created the resources even
+          # if main moves while wait-for-ci3 is polling.
+          echo "SHA=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   wait-for-ci3:
     needs: get-image-tag
@@ -88,7 +93,79 @@ jobs:
       network: next-net
       semver: ${{ needs.get-image-tag.outputs.semver }}
       source_tag: ${{ needs.get-image-tag.outputs.tag }}
-      ref: main
+      ref: ${{ needs.get-image-tag.outputs.sha }}
       deploy_contracts: ${{ github.event_name == 'schedule' || inputs.deploy_contracts == true }}
-      teardown_on_failure: true
     secrets: inherit
+
+  # next-net is recreated from scratch every night: deploy_network.sh deletes the
+  # namespace before it applies anything. Nothing else ever cleans up, so a deploy that
+  # fails after that point leaves a half-built network that lives until some later
+  # deploy gets far enough to delete it — indefinitely if the nightly tag is missing or
+  # CI3 stays red. A stale network keeps paging #alerts-next-net and shows up as live in
+  # the daily healthcheck, so tear it down here instead of leaving it for days.
+  #
+  # Gated on the deploy job itself failing. If get-image-tag or wait-for-ci3 failed,
+  # nothing new was deployed and the previous network is still healthy — deleting it
+  # then would cause the very outage this job exists to prevent. Cancellations are
+  # excluded too: cancel-in-progress means a superseding run is already about to
+  # delete the namespace on its own.
+  teardown-failed-deploy:
+    needs: [get-image-tag, deploy-next-net]
+    if: always() && needs.deploy-next-net.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ needs.get-image-tag.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Verify next-net is still ephemeral
+        id: ephemeral
+        run: |
+          # Deleting the namespace outright is only safe while next-net is rebuilt from
+          # scratch on every deploy. If it is ever promoted to a long-lived network this
+          # job must stop doing that, so fail loud rather than destroying state.
+          if grep -q '^DESTROY_NAMESPACE=true' spartan/environments/next-net.env; then
+            echo "result=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "next-net.env no longer sets DESTROY_NAMESPACE=true; refusing to delete the namespace"
+            echo "result=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Capture cluster diagnostics before teardown
+        if: steps.ephemeral.outputs.result == 'true'
+        continue-on-error: true
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
+          CI: "1"
+        run: |
+          set -euo pipefail
+          # The ClaudeBox deploy investigation dispatched by deploy-network.yml reads pod
+          # state from this namespace, and runs after teardown has deleted it. Cloud
+          # Logging keeps whatever the pods emitted; pod status, events and helm release
+          # state only survive if they are dumped here. Best effort — the deploy may have
+          # failed before the cluster was ever reachable.
+          set +x
+          umask 077
+          printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          cd spartan
+          gcloud components install gke-gcloud-auth-plugin --quiet || true
+          source ./scripts/source_env_basic.sh
+          source ./scripts/gcp_auth.sh
+          source_env_basic next-net
+          gcp_auth
+          kubectl get pods -o wide -n "$NAMESPACE" || true
+          kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp | tail -50 || true
+          helm list -n "$NAMESPACE" || true
+
+      - name: Tear down failed deployment
+        if: steps.ephemeral.outputs.result == 'true'
+        continue-on-error: true
+        uses: ./.github/actions/network-teardown
+        with:
+          env_file: next-net
+          namespace: next-net
+          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}

@@ -52,15 +52,6 @@ on:
         required: false
         type: boolean
         default: false
-      teardown_on_failure:
-        description: >
-          Delete the namespace when the deploy fails. Only honoured for environments
-          whose env file sets DESTROY_NAMESPACE=true, so it can never touch a
-          long-lived network. Callers that run their own always() cleanup job should
-          leave this false.
-        required: false
-        type: boolean
-        default: false
   workflow_dispatch:
     inputs:
       network:
@@ -342,44 +333,6 @@ jobs:
             -f target_ref="${{ steps.checkout-ref.outputs.ref }}" \
             -f slack_channel="$CHANNEL_ID" \
             -f slack_thread_ts="$TS" || true
-
-      # Second gate on the env file, so a caller passing teardown_on_failure for a
-      # long-lived network still cannot delete it.
-      - name: Check whether the namespace is ephemeral
-        id: ephemeral
-        if: failure() && inputs.teardown_on_failure
-        run: |
-          if grep -q '^DESTROY_NAMESPACE=true' "spartan/environments/${{ inputs.network }}.env"; then
-            echo "result=true" >> $GITHUB_OUTPUT
-          else
-            echo "${{ inputs.network }} is not an ephemeral environment, leaving the deployment in place"
-            echo "result=false" >> $GITHUB_OUTPUT
-          fi
-
-      # ClaudeBox investigates this failure against the namespace, which teardown is
-      # about to delete. Cloud Logging keeps what the pods already emitted; pod status
-      # and events only survive here, in this job's log.
-      - name: Capture cluster diagnostics before teardown
-        if: failure() && steps.ephemeral.outputs.result == 'true'
-        continue-on-error: true
-        env:
-          NAMESPACE: ${{ inputs.namespace || inputs.network }}
-        run: |
-          kubectl get pods -o wide -n "$NAMESPACE" || true
-          kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp | tail -50 || true
-          helm list -n "$NAMESPACE" || true
-
-      # continue-on-error keeps this step's conclusion green, so the ClaudeBox
-      # investigation still resolves the deploy step as the failing one.
-      - name: Tear down failed deployment
-        if: failure() && steps.ephemeral.outputs.result == 'true'
-        continue-on-error: true
-        uses: ./.github/actions/network-teardown
-        with:
-          env_file: ${{ inputs.network }}
-          namespace: ${{ inputs.namespace || inputs.network }}
-          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
-          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
 
   update-irm:
     needs: deploy-network
