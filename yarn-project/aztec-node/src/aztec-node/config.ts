@@ -1,34 +1,33 @@
-import { type ArchiverConfig, archiverConfigMappings } from '@aztec/archiver/config';
-import { type GenesisStateConfig, genesisStateConfigMappings } from '@aztec/ethereum/config';
-import { type ConfigMappingsType, booleanConfigHelper, getConfigFromMappings } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { type ArchiverConfig, archiverConfigMappings } from '@aztec-labs/archiver/config';
+import { type GenesisStateConfig, genesisStateConfigMappings } from '@aztec-labs/ethereum/config';
+import { type ConfigMappingsType, booleanConfigHelper, getConfigFromMappings } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
   type KeyStore,
   type ValidatorKeyStore,
   ethPrivateKeySchema,
   keyStoreConfigMappings,
-} from '@aztec/node-keystore';
-import { type SharedNodeConfig, sharedNodeConfigMappings } from '@aztec/node-lib/config';
-import { type P2PConfig, p2pConfigMappings } from '@aztec/p2p/config';
-import { type ProverClientUserConfig, proverClientConfigMappings } from '@aztec/prover-client/config';
+} from '@aztec-labs/node-keystore';
+import { type SharedNodeConfig, sharedNodeConfigMappings } from '@aztec-labs/node-lib/config';
+import { type P2PConfig, p2pConfigMappings } from '@aztec-labs/p2p/config';
+import { type ProverClientUserConfig, proverClientConfigMappings } from '@aztec-labs/prover-client/config';
 import {
   type ProverNodeConfig,
   proverNodeConfigMappings,
   specificProverNodeConfigMappings,
-} from '@aztec/prover-node/config';
+} from '@aztec-labs/prover-node/config';
 import {
   type SequencerClientConfig,
   type SequencerTxSenderConfig,
   sequencerClientConfigMappings,
-} from '@aztec/sequencer-client/config';
-import { slasherConfigMappings } from '@aztec/slasher';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type NodeRPCConfig, nodeRpcConfigMappings } from '@aztec/stdlib/config';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import { type DataStoreConfig, dataConfigMappings } from '@aztec/stdlib/kv-store';
-import { type ValidatorClientConfig, validatorClientConfigMappings } from '@aztec/validator-client/config';
-import { type WorldStateConfig, worldStateConfigMappings } from '@aztec/world-state/config';
-
+} from '@aztec-labs/sequencer-client/config';
+import { slasherConfigMappings } from '@aztec-labs/slasher';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type NodeRPCConfig, nodeRpcConfigMappings } from '@aztec-labs/stdlib/config';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
+import { type ValidatorClientConfig, validatorClientConfigMappings } from '@aztec-labs/validator-client/config';
+import { type WorldStateConfig, worldStateConfigMappings } from '@aztec-labs/world-state/config';
 import { privateKeyToAddress } from 'viem/accounts';
 
 import { type SentinelConfig, sentinelConfigMappings } from '../sentinel/config.js';

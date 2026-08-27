@@ -5,18 +5,18 @@
  * This ensures that even with multiple validator nodes running, only one
  * node will sign for a given duty (slot + duty type).
  */
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { type DateProvider, executeTimeout } from '@aztec/foundation/timer';
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { type DateProvider, executeTimeout } from '@aztec-labs/foundation/timer';
 import {
   type BaseSignerConfig,
   DutyType,
   type HAProtectedSigningContext,
   getBlockNumberFromSigningContext,
   getCheckpointNumberFromSigningContext,
-} from '@aztec/stdlib/ha-signing';
+} from '@aztec-labs/stdlib/ha-signing';
 
 import type { DutyIdentifier } from './db/types.js';
 import { SigningLockLostError } from './errors.js';

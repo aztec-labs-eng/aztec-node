@@ -1,6 +1,5 @@
-import { SecretValue } from '@aztec/foundation/config';
-import { DEFAULT_P2P_PORT } from '@aztec/p2p/config';
-
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { DEFAULT_P2P_PORT } from '@aztec-labs/p2p/config';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { Command } from 'commander';
 

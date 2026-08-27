@@ -1,8 +1,8 @@
-import { VK_TREE_HEIGHT } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, type Tuple, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex } from '@aztec/foundation/string';
+import { VK_TREE_HEIGHT } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, type Tuple, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 
 import type { UInt32 } from '../types/shared.js';
 import { VerificationKeyData } from './verification_key.js';

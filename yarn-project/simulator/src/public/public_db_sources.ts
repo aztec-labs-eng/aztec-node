@@ -3,15 +3,15 @@ import {
   NOTE_HASH_TREE_LEAF_COUNT,
   NULLIFIER_SUBTREE_HEIGHT,
   PUBLIC_DATA_SUBTREE_HEIGHT,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import { ContractClassPublishedEvent } from '@aztec/protocol-contracts/class-registry';
-import { ContractInstancePublishedEvent } from '@aztec/protocol-contracts/instance-registry';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { ContractClassPublishedEvent } from '@aztec-labs/protocol-contracts/class-registry';
+import { ContractInstancePublishedEvent } from '@aztec-labs/protocol-contracts/instance-registry';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   AllContractDeploymentData,
   type ContractClassPublic,
@@ -19,20 +19,19 @@ import {
   type ContractDeploymentData,
   type ContractInstanceWithAddress,
   computePublicBytecodeCommitment,
-} from '@aztec/stdlib/contract';
-import { computePublicDataTreeLeafSlot } from '@aztec/stdlib/hash';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import type { PublicDBAccessStats } from '@aztec/stdlib/stats';
+} from '@aztec-labs/stdlib/contract';
+import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import type { PublicDBAccessStats } from '@aztec-labs/stdlib/stats';
 import {
   MerkleTreeId,
   NullifierLeaf,
   PublicDataTreeLeaf,
   type PublicDataTreeLeafPreimage,
   getTreeName,
-} from '@aztec/stdlib/trees';
-import { TreeSnapshots, type Tx } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
-
+} from '@aztec-labs/stdlib/trees';
+import { TreeSnapshots, type Tx } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 import { strict as assert } from 'assert';
 
 import { ContractsDbCheckpoint } from './contracts_db_checkpoint.js';

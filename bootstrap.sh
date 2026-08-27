@@ -584,12 +584,14 @@ function private_release {
   export NPM_TOKEN=$(gcloud auth print-access-token)
   # Route our scope to the internal npm registry; public deps still resolve from the default registry
   # (npmjs), so publishes and yarn-project's install smoke-test both work. Everything we publish is
-  # @aztec-scoped. Exported so deploy_npm and that smoke-test share one config.
+  # @aztec-labs-scoped, and the foundation packages we depend on are @aztec-scoped and mirrored
+  # in below, so both scopes route there. Exported so deploy_npm and that smoke-test share one config.
   local npmrc reg
   reg="${INTERNAL_NPM_REGISTRY%/}/"
   npmrc=$(mktemp)
   (umask 077; {
     echo "@aztec:registry=$reg"
+    echo "@aztec-labs:registry=$reg"
     echo "${reg#https:}:_authToken=\${NPM_TOKEN}"
   } > "$npmrc")
   export NPM_CONFIG_GLOBALCONFIG="$npmrc"

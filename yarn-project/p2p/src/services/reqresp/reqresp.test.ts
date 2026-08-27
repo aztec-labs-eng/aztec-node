@@ -1,8 +1,7 @@
-import { sleep } from '@aztec/foundation/sleep';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { mockTx } from '@aztec/stdlib/testing';
-import { Tx, TxArray, TxHash, TxHashArray } from '@aztec/stdlib/tx';
-
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import { Tx, TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it, jest } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
 import { type MockProxy, mock } from 'jest-mock-extended';

@@ -1,5 +1,5 @@
-import { computeAuthWitMessageHash } from '@aztec/aztec.js/authorization';
-import { Fr } from '@aztec/aztec.js/fields';
+import { computeAuthWitMessageHash } from '@aztec-labs/aztec.js/authorization';
+import { Fr } from '@aztec-labs/aztec.js/fields';
 
 import { simulateThroughAuthwitProxy } from '../../fixtures/authwit_proxy.js';
 import { BlacklistTokenContractTest } from './blacklist_token_contract_test.js';

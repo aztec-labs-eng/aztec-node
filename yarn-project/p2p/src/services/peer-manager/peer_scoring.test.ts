@@ -1,6 +1,5 @@
-import { ManualDateProvider } from '@aztec/foundation/timer';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-
+import { ManualDateProvider } from '@aztec-labs/foundation/timer';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
 
 import { getP2PDefaultConfig } from '../../config.js';

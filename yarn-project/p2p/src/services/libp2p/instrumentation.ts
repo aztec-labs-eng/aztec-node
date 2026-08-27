@@ -1,5 +1,5 @@
-import type { Timer } from '@aztec/foundation/timer';
-import { TopicType } from '@aztec/stdlib/p2p';
+import type { Timer } from '@aztec-labs/foundation/timer';
+import { TopicType } from '@aztec-labs/stdlib/p2p';
 import {
   Attributes,
   type BatchObservableResult,
@@ -9,8 +9,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { type RecordableHistogram, createHistogram } from 'node:perf_hooks';
 
 export class P2PInstrumentation {

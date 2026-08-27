@@ -1,6 +1,6 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import type { AppTaggingSecret } from '@aztec/stdlib/logs';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import type { AppTaggingSecret } from '@aztec-labs/stdlib/logs';
 
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';

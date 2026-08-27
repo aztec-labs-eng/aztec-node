@@ -1,5 +1,5 @@
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { makeAvmCircuitInputs } from '../tests/factories.js';
 import { AvmCircuitInputs } from './avm.js';

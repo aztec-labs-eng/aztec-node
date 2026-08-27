@@ -1,12 +1,11 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall, type ContractInstanceWithAddress } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TxExecutionResult } from '@aztec/aztec.js/tx';
-import type { PublicStorageOverride, Wallet } from '@aztec/aztec.js/wallet';
-import { AvmInitializerTestContract } from '@aztec/noir-test-contracts.js/AvmInitializerTest';
-import { AvmTestContract } from '@aztec/noir-test-contracts.js/AvmTest';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall, type ContractInstanceWithAddress } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
+import type { PublicStorageOverride, Wallet } from '@aztec-labs/aztec.js/wallet';
+import { AvmInitializerTestContract } from '@aztec-labs/noir-test-contracts.js/AvmInitializerTest';
+import { AvmTestContract } from '@aztec-labs/noir-test-contracts.js/AvmTest';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

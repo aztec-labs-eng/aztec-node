@@ -1,10 +1,10 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { TestAztecNodeService } from '@aztec/aztec-node/test';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryUntil } from '@aztec/foundation/retry';
-import { OffenseType } from '@aztec/slasher';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { OffenseType } from '@aztec-labs/slasher';
 
 import {
   MultiNodeTestContext,

@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { DEFAULT_TAGGING_SECRET_STRATEGY, type TaggingSecretStrategy } from '@aztec/pxe/server';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { AppTaggingSecretKind } from '@aztec/stdlib/logs';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { DEFAULT_TAGGING_SECRET_STRATEGY, type TaggingSecretStrategy } from '@aztec-labs/pxe/server';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
 import { makeResolveTaggingSecretStrategyHook } from './tagging_secret_strategy.js';
 

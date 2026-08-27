@@ -4,7 +4,7 @@ import {
   booleanConfigHelper,
   getConfigFromMappings,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
+} from '@aztec-labs/foundation/config';
 
 import { type BlobArchiveApiConfig, blobArchiveApiConfigMappings } from '../archive/config.js';
 

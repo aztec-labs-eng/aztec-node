@@ -1,7 +1,7 @@
-import { PRIVATE_CIRCUIT_PUBLIC_INPUTS_LENGTH, PRIVATE_CONTEXT_INPUTS_LENGTH } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
+import { PRIVATE_CIRCUIT_PUBLIC_INPUTS_LENGTH, PRIVATE_CONTEXT_INPUTS_LENGTH } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import {
   type ACVMWitness,
   type CircuitSimulator,
@@ -9,17 +9,17 @@ import {
   extractCallStack,
   resolveAssertionMessageFromError,
   witnessMapToFields,
-} from '@aztec/simulator/client';
+} from '@aztec-labs/simulator/client';
 import {
   type FunctionArtifact,
   type FunctionArtifactWithContractName,
   type FunctionSelector,
   countArgumentsSize,
-} from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { PrivateCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import type { CircuitWitnessGenerationStats } from '@aztec/stdlib/stats';
-import { PrivateCallExecutionResult } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { PrivateCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import type { CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
+import { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
 
 import { buildACIRCallback } from './acir_callback.js';
 import type { PrivateExecutionOracle } from './private_execution_oracle.js';

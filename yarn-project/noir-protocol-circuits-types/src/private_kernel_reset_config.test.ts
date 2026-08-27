@@ -5,8 +5,7 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_NULLIFIER_READ_REQUESTS_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
-} from '@aztec/constants';
-
+} from '@aztec-labs/constants';
 import { readFileSync } from 'fs';
 import { createRequire } from 'module';
 

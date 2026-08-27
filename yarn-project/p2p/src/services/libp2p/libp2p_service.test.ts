@@ -1,16 +1,16 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { BlockNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { getDefaultConfig } from '@aztec/foundation/config';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { openTmpStore } from '@aztec/kv-store/lmdb';
-import type { L2Block, L2BlockSource } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { ClientProtocolCircuitVerifier } from '@aztec/stdlib/interfaces/server';
-import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec/stdlib/p2p';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { BlockNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { getDefaultConfig } from '@aztec-labs/foundation/config';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
+import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
+import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
@@ -19,12 +19,11 @@ import {
   makeCheckpointHeader,
   makeCheckpointProposal,
   mockTx,
-} from '@aztec/stdlib/testing';
-import { TX_ERROR_INCORRECT_VK_TREE_ROOT, TxArray, TxHash, TxHashArray } from '@aztec/stdlib/tx';
-import { InvalidBlockProposalTxsError } from '@aztec/stdlib/validators';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-import { ServerWorldStateSynchronizer } from '@aztec/world-state';
-
+} from '@aztec-labs/stdlib/testing';
+import { TX_ERROR_INCORRECT_VK_TREE_ROOT, TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
+import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { ServerWorldStateSynchronizer } from '@aztec-labs/world-state';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { Message, PeerId } from '@libp2p/interface';
 import { TopicValidatorResult } from '@libp2p/interface';

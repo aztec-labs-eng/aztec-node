@@ -1,7 +1,7 @@
-import { MAX_CHECKPOINTS_PER_EPOCH, MAX_L2_TO_L1_MSGS_PER_TX, OUT_HASH_TREE_HEIGHT } from '@aztec/constants';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { sha256Trunc } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { MAX_CHECKPOINTS_PER_EPOCH, MAX_L2_TO_L1_MSGS_PER_TX, OUT_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { sha256Trunc } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import {
   type L2ToL1MembershipWitness,

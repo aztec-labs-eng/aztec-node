@@ -1,10 +1,9 @@
-import { BatchedBlob, Blob, getEthBlobEvaluationInputs, getPrefixedEthBlobCommitments } from '@aztec/blob-lib';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { L2Block } from '@aztec/stdlib/block';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-
+import { BatchedBlob, Blob, getEthBlobEvaluationInputs, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { L2Block } from '@aztec-labs/stdlib/block';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { writeFile } from 'fs/promises';
 
 const AZTEC_GENERATE_TEST_DATA = !!process.env.AZTEC_GENERATE_TEST_DATA;

@@ -1,19 +1,19 @@
 /**
  * Wallet-layer helpers for opening the embedded wallet's two encrypted stores (PXE + walletDB) as a cohesive unit.
  *
- * Sits on top of `@aztec/kv-store/sqlite-opfs`'s typed `SqliteEncryptionError` and adds:
+ * Sits on top of `@aztec-labs/kv-store/sqlite-opfs`'s typed `SqliteEncryptionError` and adds:
  *
  *   - `storeName: 'pxe' | 'wallet'`, telling callers WHICH store failed.
  *   - Cleanup: when the wallet store fails to open, ensures the already-opened PXE store is closed before the error
  *     surfaces, so callers don't leak the SAH Pool's OPFS lock.
  */
-import type { Logger } from '@aztec/foundation/log';
+import type { Logger } from '@aztec-labs/foundation/log';
 import {
   AztecSQLiteOPFSStore,
   SqliteCorruptionError,
   SqliteEncryptionError,
   deletePoolDirectory,
-} from '@aztec/kv-store/sqlite-opfs';
+} from '@aztec-labs/kv-store/sqlite-opfs';
 
 /** Which of the embedded wallet's two stores failed to open. */
 export type EmbeddedStoreName = 'pxe' | 'wallet';

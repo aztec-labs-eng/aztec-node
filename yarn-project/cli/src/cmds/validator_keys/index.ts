@@ -1,5 +1,4 @@
-import type { LogFn } from '@aztec/foundation/log';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { Command, Option } from 'commander';
 
 import { parseAztecAddress, parseEthereumAddress, parseHex, parseOptionalInteger } from '../../utils/commands.js';

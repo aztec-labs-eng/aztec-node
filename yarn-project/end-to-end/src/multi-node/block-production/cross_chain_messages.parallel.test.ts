@@ -1,12 +1,12 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { generateClaimSecret } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/aztec.js/fields';
-import { isL1ToL2MessageReady } from '@aztec/aztec.js/messaging';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { retryUntil } from '@aztec/foundation/retry';
-import { executeTimeout } from '@aztec/foundation/timer';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { isL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 
 import { sendL1ToL2Message } from '../../fixtures/l1_to_l2_messaging.js';
 import { waitForBlockNumber, waitForTxs } from '../../fixtures/wait_helpers.js';

@@ -1,5 +1,4 @@
-import { TxArray, TxHashArray } from '@aztec/stdlib/tx';
-
+import { TxArray, TxHashArray } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { P2PReqRespConfig } from './config.js';

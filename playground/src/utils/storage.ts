@@ -1,10 +1,10 @@
-import type { ContractArtifact } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Aliased } from '@aztec/aztec.js/wallet';
-import type { AuthWitness } from '@aztec/aztec.js/authorization';
-import { type TxHash, type TxReceipt, TxStatus } from '@aztec/aztec.js/tx';
-import type { LogFn } from '@aztec/foundation/log';
-import { type AztecAsyncMap, type AztecAsyncKVStore, type AztecAsyncMultiMap } from '@aztec/kv-store';
+import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Aliased } from '@aztec-labs/aztec.js/wallet';
+import type { AuthWitness } from '@aztec-labs/aztec.js/authorization';
+import { type TxHash, type TxReceipt, TxStatus } from '@aztec-labs/aztec.js/tx';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { type AztecAsyncMap, type AztecAsyncKVStore, type AztecAsyncMultiMap } from '@aztec-labs/kv-store';
 import { stringify } from 'buffer-json';
 
 export const Aliases = ['accounts', 'artifacts', 'secrets', 'transactions', 'authwits', 'contracts'] as const;

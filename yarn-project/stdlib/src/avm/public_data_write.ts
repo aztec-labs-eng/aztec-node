@@ -1,10 +1,9 @@
-import { PUBLIC_DATA_WRITE_LENGTH } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, FieldReader, serializeToBuffer, serializeToFields } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { PUBLIC_DATA_WRITE_LENGTH } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, FieldReader, serializeToBuffer, serializeToFields } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 /**

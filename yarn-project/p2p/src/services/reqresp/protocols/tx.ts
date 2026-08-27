@@ -1,7 +1,6 @@
-import { chunk } from '@aztec/foundation/collection';
-import { MAX_TX_SIZE_KB } from '@aztec/stdlib/p2p';
-import { TxArray, TxHash, TxHashArray } from '@aztec/stdlib/tx';
-
+import { chunk } from '@aztec-labs/foundation/collection';
+import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
+import { TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { MemPools } from '../../../mem_pools/interface.js';

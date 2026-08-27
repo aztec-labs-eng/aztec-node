@@ -66,8 +66,8 @@ The nullifier hiding key (`nhk`) — sometimes referred to in older documentatio
 |---------|----------|----------------|
 | Private (constrained) | `context.request_nhk_app(owner_npk_m_hash)` | Called on `&mut PrivateContext` |
 | Unconstrained | `get_nhk_app(owner_npk_m_hash)` | `use aztec::keys::getters::get_nhk_app` |
-| TypeScript (master key) | `deriveMasterNullifierHidingSecretKey(secretKey)` | `import { deriveMasterNullifierHidingSecretKey } from '@aztec/aztec.js/keys'` |
-| TypeScript (app-siloed) | `computeAppNullifierHidingKey(nhkM, app)` | `import { computeAppNullifierHidingKey } from '@aztec/aztec.js/keys'` |
+| TypeScript (master key) | `deriveMasterNullifierHidingSecretKey(secretKey)` | `import { deriveMasterNullifierHidingSecretKey } from '@aztec-labs/aztec.js/keys'` |
+| TypeScript (app-siloed) | `computeAppNullifierHidingKey(nhkM, app)` | `import { computeAppNullifierHidingKey } from '@aztec-labs/aztec.js/keys'` |
 
 To get the owner's master nullifier public key hash (needed as input):
 

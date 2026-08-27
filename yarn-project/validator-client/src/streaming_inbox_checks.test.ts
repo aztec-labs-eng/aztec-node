@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { InboxBucket } from '@aztec/stdlib/messaging';
-import { InboxBucketRef } from '@aztec/stdlib/messaging';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { InboxBucket } from '@aztec-labs/stdlib/messaging';
+import { InboxBucketRef } from '@aztec-labs/stdlib/messaging';
 import { describe, expect, it } from '@jest/globals';
 
 import {

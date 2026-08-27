@@ -1,5 +1,5 @@
-import { getBytesPerBlob, getBytesPerCommitment, getKzg } from '@aztec/blob-lib';
-import type { Logger } from '@aztec/foundation/log';
+import { getBytesPerBlob, getBytesPerCommitment, getKzg } from '@aztec-labs/blob-lib';
+import type { Logger } from '@aztec-labs/foundation/log';
 
 import type { ExtendedViemWalletClient } from '../types.js';
 

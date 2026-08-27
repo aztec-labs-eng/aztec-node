@@ -1,6 +1,6 @@
 import { BackendType, Barretenberg, BarretenbergSync } from '@aztec/bb.js';
-import { type Logger, createLogger } from '@aztec/foundation/log';
 
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { parentPort, workerData } from 'node:worker_threads';
 
 // Importing `./index.js` registers the msgpackr Fr extension transitively (via
@@ -9,7 +9,7 @@ import { TXEDispatcher, type TXEDispatcherOptions, type TXEForeignCallInput, act
 
 // Seed both bb.js singletons with the WASM backend before any crypto call. `initSingleton`
 // binds the singleton to whichever backend the first call requests, so this pre-empts the
-// implicit `Barretenberg.initSingleton()` inside `poseidon2Hash` from `@aztec/foundation/crypto`.
+// implicit `Barretenberg.initSingleton()` inside `poseidon2Hash` from `@aztec-labs/foundation/crypto`.
 // TXE only needs hashing (no proving, no verification), so WASM is sufficient and
 // `skipSrsInit: true` skips the CRS load. `threads: 1` keeps the WASM backend on a single
 // thread — additional threads would each spawn a nested worker_thread, multiplying memory cost

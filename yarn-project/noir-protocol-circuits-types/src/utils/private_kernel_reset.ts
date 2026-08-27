@@ -1,9 +1,9 @@
-import { pushTestData } from '@aztec/foundation/testing';
+import { pushTestData } from '@aztec-labs/foundation/testing';
 import {
   type PrivateKernelResetCircuitPrivateInputs,
   type PrivateKernelResetDimensions,
   privateKernelResetDimensionNames,
-} from '@aztec/stdlib/kernel';
+} from '@aztec-labs/stdlib/kernel';
 
 import {
   mapPaddedSideEffectsToNoir,

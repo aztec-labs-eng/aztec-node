@@ -1,4 +1,4 @@
-import { type ConfigMappingsType, numberConfigHelper } from '@aztec/foundation/config';
+import { type ConfigMappingsType, numberConfigHelper } from '@aztec-labs/foundation/config';
 
 export const DEFAULT_BATCH_TX_REQUESTER_SMART_PARALLEL_WORKER_COUNT = 10;
 export const DEFAULT_BATCH_TX_REQUESTER_DUMB_PARALLEL_WORKER_COUNT = 10;

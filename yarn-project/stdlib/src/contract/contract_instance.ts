@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, numToUInt8, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, numToUInt8, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import {
   type ContractArtifact,

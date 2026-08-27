@@ -1,10 +1,10 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type ContractInstanceWithAddress, SerializableContractInstance } from '@aztec/stdlib/contract';
-import '@aztec/stdlib/testing/jest';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type ContractInstanceWithAddress, SerializableContractInstance } from '@aztec-labs/stdlib/contract';
+import '@aztec-labs/stdlib/testing/jest';
 
 import { ContractInstanceStore } from './contract_instance_store.js';
 

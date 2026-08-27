@@ -1,9 +1,9 @@
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import { type Wallet, WalletSchema } from '@aztec/aztec.js/wallet';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec/foundation/promise';
-import { getSchemaReturnType, schemaHasMethod } from '@aztec/foundation/schemas';
-import type { FunctionsOf } from '@aztec/foundation/types';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import { type Wallet, WalletSchema } from '@aztec-labs/aztec.js/wallet';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { getSchemaReturnType, schemaHasMethod } from '@aztec-labs/foundation/schemas';
+import type { FunctionsOf } from '@aztec-labs/foundation/types';
 
 import { type EncryptedPayload, decrypt, encrypt } from '../../crypto.js';
 import {

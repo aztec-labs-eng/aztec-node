@@ -70,7 +70,7 @@ The prover-node splits responsibility between four classes:
   a sub-tree fault or a prune-induced fork fault): a session over it could only fail, so the epoch is
   cheaply skipped until a prune/re-add installs a fresh prover in its place, at which point a rebuilt
   session reuses every already-completed sub-proof from the content-addressed broker. Reconcile runs on
-  a `SerialQueue` (from `@aztec/foundation/queue`), so two concurrent triggers can never interleave on an
+  a `SerialQueue` (from `@aztec-labs/foundation/queue`), so two concurrent triggers can never interleave on an
   `await` and race on the `EpochSession` maps.
 - **`ProofPublishingService`** — central owner of L1 proof submission. `EpochSession`s hand
   their top-tree proofs to the service as `PublishCandidate`s; the service serialises

@@ -1,5 +1,5 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { TxHash } from '@aztec/stdlib/tx';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 
 type TxPrivateLog = Fr[];
 

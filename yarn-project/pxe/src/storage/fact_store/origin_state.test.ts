@@ -1,6 +1,6 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { L2TipId, L2Tips } from '@aztec/stdlib/block';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { L2TipId, L2Tips } from '@aztec-labs/stdlib/block';
 
 import {
   OriginBlockState,

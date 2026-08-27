@@ -4,11 +4,11 @@ import {
   MAX_NOTE_HASHES_PER_TX,
   MAX_NULLIFIERS_PER_TX,
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
-} from '@aztec/constants';
-import { type FieldsOf, makeTuple } from '@aztec/foundation/array';
-import { arraySerializedSizeOfNonEmpty } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
+} from '@aztec-labs/constants';
+import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
+import { arraySerializedSizeOfNonEmpty } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
   FieldReader,
@@ -16,9 +16,8 @@ import {
   assertLength,
   serializeToBuffer,
   serializeToFields,
-} from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-
+} from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { inspect } from 'util';
 import { z } from 'zod';
 

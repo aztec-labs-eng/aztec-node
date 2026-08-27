@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
 
+import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { type Hex, createPublicClient, decodeEventLog, getAbiItem, http, toEventSelector } from 'viem';
 import { mainnet } from 'viem/chains';
 

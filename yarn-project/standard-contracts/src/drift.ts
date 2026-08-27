@@ -2,8 +2,7 @@
 // (`scripts/generate_data.ts`) and the backup jest test (`standard_contract_data.test.ts`). Lives
 // outside `contract_data.ts` so that `prettier` (a devDependency used only here) does not become a
 // transitive runtime import of the published package.
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { promises as fs } from 'fs';
 import path from 'path';
 import * as prettier from 'prettier';
@@ -88,9 +87,9 @@ function generateClassIdPreimages(names: string[], contractData: ContractData[])
 export function renderOutputFile(names: string[], contractData: ContractData[]): string {
   return `
     // GENERATED FILE - DO NOT EDIT. RUN \`yarn generate\` or \`yarn generate:data\`
-    import { Fr } from '@aztec/foundation/curves/bn254';
-    import { FunctionSelector } from '@aztec/stdlib/abi';
-    import { AztecAddress } from '@aztec/stdlib/aztec-address';
+    import { Fr } from '@aztec-labs/foundation/curves/bn254';
+    import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+    import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
     ${generateNames(names)}
 
@@ -115,7 +114,7 @@ export function renderNoirAddresses(rows: { nrConst: string; address: AztecAddre
 );`,
     )
     .join('\n\n');
-  return `// GENERATED FILE - DO NOT EDIT. RUN \`yarn workspace @aztec/standard-contracts run generate\`.
+  return `// GENERATED FILE - DO NOT EDIT. RUN \`yarn workspace @aztec-labs/standard-contracts run generate\`.
 use protocol_types::{address::AztecAddress, traits::FromField};
 
 ${globals}

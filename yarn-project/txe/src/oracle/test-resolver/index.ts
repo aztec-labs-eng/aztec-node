@@ -1,9 +1,8 @@
 /* eslint-disable camelcase */
-import { createSafeJsonRpcServer } from '@aztec/foundation/json-rpc/server';
-import type { Logger } from '@aztec/foundation/log';
-import type { ApiSchemaFor } from '@aztec/foundation/schemas';
-import { zodFor } from '@aztec/stdlib/schemas';
-
+import { createSafeJsonRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { ApiSchemaFor } from '@aztec-labs/foundation/schemas';
+import { zodFor } from '@aztec-labs/stdlib/schemas';
 import { z } from 'zod';
 
 import { ForeignCallArgsSchema, type ForeignCallResult, ForeignCallResultSchema } from '../../utils/encoding.js';

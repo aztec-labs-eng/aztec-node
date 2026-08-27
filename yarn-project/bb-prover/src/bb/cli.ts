@@ -1,9 +1,8 @@
-import type { LogFn } from '@aztec/foundation/log';
-import { ClientCircuitArtifacts } from '@aztec/noir-protocol-circuits-types/client/bundle';
-import { ServerCircuitArtifacts } from '@aztec/noir-protocol-circuits-types/server';
-import type { ProtocolArtifact } from '@aztec/noir-protocol-circuits-types/types';
-import type { NoirCompiledCircuit } from '@aztec/stdlib/noir';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { ClientCircuitArtifacts } from '@aztec-labs/noir-protocol-circuits-types/client/bundle';
+import { ServerCircuitArtifacts } from '@aztec-labs/noir-protocol-circuits-types/server';
+import type { ProtocolArtifact } from '@aztec-labs/noir-protocol-circuits-types/types';
+import type { NoirCompiledCircuit } from '@aztec-labs/stdlib/noir';
 import { Command } from 'commander';
 
 export const ProtocolCircuitArtifacts: Record<ProtocolArtifact, NoirCompiledCircuit> = {

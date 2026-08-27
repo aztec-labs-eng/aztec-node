@@ -1,10 +1,9 @@
-import { randomL1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { toArray } from '@aztec/foundation/iterable';
-import type { ProofUri, ProvingJob, ProvingJobSettledResult } from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-
+import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import type { ProofUri, ProvingJob, ProvingJobSettledResult } from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { jest } from '@jest/globals';
 import { existsSync } from 'fs';
 import { mkdir, mkdtemp, rm } from 'fs/promises';

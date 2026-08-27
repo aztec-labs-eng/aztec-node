@@ -1,5 +1,5 @@
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
-import { Gas, type GasUsed } from '@aztec/stdlib/gas';
+import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { Gas, type GasUsed } from '@aztec-labs/stdlib/gas';
 
 import { assertGasLimitsWithinNetworkLimits, getGasLimits } from './get_gas_limits.js';
 

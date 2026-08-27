@@ -1,8 +1,8 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { memoize } from '@aztec/foundation/decorators';
-import { EthAddress } from '@aztec/foundation/eth-address';
 import { GovernanceProposerAbi } from '@aztec/l1-artifacts/GovernanceProposerAbi';
 
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { memoize } from '@aztec-labs/foundation/decorators';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
   type GetContractReturnType,
   type Hex,

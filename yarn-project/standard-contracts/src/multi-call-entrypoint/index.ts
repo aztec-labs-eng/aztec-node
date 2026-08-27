@@ -1,5 +1,5 @@
-import { loadContractArtifact } from '@aztec/stdlib/abi';
-import type { NoirCompiledContract } from '@aztec/stdlib/noir';
+import { loadContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 
 import MultiCallEntrypointJson from '../../artifacts/MultiCallEntrypoint.json' with { type: 'json' };
 import { makeStandardContract } from '../make_standard_contract.js';

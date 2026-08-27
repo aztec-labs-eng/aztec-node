@@ -1,5 +1,5 @@
-import type { PublicTxResult } from '@aztec/stdlib/avm';
-import type { Tx } from '@aztec/stdlib/tx';
+import type { PublicTxResult } from '@aztec-labs/stdlib/avm';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 
 export interface PublicTxSimulatorInterface {
   simulate(tx: Tx): Promise<PublicTxResult>;

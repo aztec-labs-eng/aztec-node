@@ -1,44 +1,43 @@
-import { BBBundlePrivateKernelProver } from '@aztec/bb-prover/client/bundle';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AztecLMDBStoreV2, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { TestContractArtifact } from '@aztec/noir-test-contracts.js/Test';
-import { BundledProtocolContractsProvider } from '@aztec/protocol-contracts/providers/bundle';
-import { WASMSimulator } from '@aztec/simulator/client';
-import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
-import { getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry';
+import { BBBundlePrivateKernelProver } from '@aztec-labs/bb-prover/client/bundle';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { TestContractArtifact } from '@aztec-labs/noir-test-contracts.js/Test';
+import { BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/bundle';
+import { WASMSimulator } from '@aztec-labs/simulator/client';
+import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
+import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry';
 import {
   STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS,
   getStandardMultiCallEntrypoint,
-} from '@aztec/standard-contracts/multi-call-entrypoint';
-import { EventSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/standard-contracts/multi-call-entrypoint';
+import { EventSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
   GENESIS_BLOCK_HEADER_HASH,
   GENESIS_CHECKPOINT_HEADER_HASH,
-} from '@aztec/stdlib/block';
-import { emptyChainConfig } from '@aztec/stdlib/config';
+} from '@aztec-labs/stdlib/block';
+import { emptyChainConfig } from '@aztec-labs/stdlib/config';
 import {
   CompleteAddress,
   SerializableContractInstancePreimage,
   getContractClassFromArtifact,
-} from '@aztec/stdlib/contract';
-import type { AztecNode, AztecNodeDebug, BlockResponse } from '@aztec/stdlib/interfaces/client';
-import { computeAddressSecret, deriveKeys } from '@aztec/stdlib/keys';
-import { deriveEcdhSharedSecretPoint, protectFromForgery } from '@aztec/stdlib/logs';
+} from '@aztec-labs/stdlib/contract';
+import type { AztecNode, AztecNodeDebug, BlockResponse } from '@aztec-labs/stdlib/interfaces/client';
+import { computeAddressSecret, deriveKeys } from '@aztec-labs/stdlib/keys';
+import { deriveEcdhSharedSecretPoint, protectFromForgery } from '@aztec-labs/stdlib/logs';
 import {
   randomContractArtifact,
   randomContractInstanceWithAddress,
   randomDeployedContract,
-} from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, TxHash } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, TxHash } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 import type { MockProxy } from 'jest-mock-extended/lib/Mock.js';
 

@@ -1,34 +1,34 @@
-import { MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS, PRIVATE_CONTEXT_INPUTS_LENGTH } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { Timer } from '@aztec/foundation/timer';
-import { toACVMWitness } from '@aztec/simulator/client';
+import { MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS, PRIVATE_CONTEXT_INPUTS_LENGTH } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { toACVMWitness } from '@aztec-labs/simulator/client';
 import {
   type FunctionAbi,
   type FunctionArtifact,
   FunctionSelector,
   type NoteSelector,
   countArgumentsSize,
-} from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { siloNullifier } from '@aztec/stdlib/hash';
-import { PrivateContextInputs } from '@aztec/stdlib/kernel';
+} from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { siloNullifier } from '@aztec-labs/stdlib/hash';
+import { PrivateContextInputs } from '@aztec-labs/stdlib/kernel';
 import {
   AppTaggingSecret,
   AppTaggingSecretKind,
   ContractClassLog,
   ContractClassLogFields,
   type TaggingIndexRange,
-} from '@aztec/stdlib/logs';
-import { Note, type NoteStatus } from '@aztec/stdlib/note';
+} from '@aztec-labs/stdlib/logs';
+import { Note, type NoteStatus } from '@aztec-labs/stdlib/note';
 import {
   CallContext,
   CountedContractClassLog,
   NoteAndSlot,
   PrivateCallExecutionResult,
   type TxContext,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import type { ResolveCustomRequest } from '../../hooks/resolve_custom_request.js';
 import {

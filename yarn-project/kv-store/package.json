@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/kv-store",
+  "name": "@aztec-labs/kv-store",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -36,10 +36,10 @@
     "./package.local.json"
   ],
   "dependencies": {
-    "@aztec/foundation": "workspace:^",
-    "@aztec/native": "workspace:^",
-    "@aztec/sqlite3mc-wasm": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/native": "workspace:^",
+    "@aztec-labs/sqlite3mc-wasm": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "idb": "^8.0.0",
     "lmdb": "^3.2.0",
     "msgpackr": "^1.11.2",

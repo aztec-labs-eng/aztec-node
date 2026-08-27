@@ -1,17 +1,16 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import type { OutboxContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { FunctionsOf } from '@aztec/foundation/types';
-import type { ArchiverEmitter, BlockHash, L2Block } from '@aztec/stdlib/block';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec/telemetry-client';
-
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import type { OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { FunctionsOf } from '@aztec-labs/foundation/types';
+import type { ArchiverEmitter, BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { mock } from 'jest-mock-extended';
 import { EventEmitter } from 'node:events';
 

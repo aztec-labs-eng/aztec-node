@@ -1,4 +1,4 @@
-import { BaseFr, Fr } from '@aztec/foundation/curves/bn254';
+import { BaseFr, Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { BlockHash } from './block_hash.js';
 

@@ -1,9 +1,9 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { executeTimeout } from '@aztec/foundation/timer';
-import type { TestContract } from '@aztec/noir-test-contracts.js/Test';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { waitForTxs } from '../../fixtures/wait_helpers.js';

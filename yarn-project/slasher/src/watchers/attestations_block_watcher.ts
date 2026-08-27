@@ -1,17 +1,16 @@
-import { EpochCache } from '@aztec/epoch-cache';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { merge, pick } from '@aztec/foundation/collection';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { merge, pick } from '@aztec-labs/foundation/collection';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import {
   type DescendentOfInvalidAttestationsCheckpointEvent,
   type InvalidCheckpointDetectedEvent,
   type L2BlockSourceEventEmitter,
   L2BlockSourceEvents,
   type ValidateCheckpointNegativeResult,
-} from '@aztec/stdlib/block';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import { OffenseType, getOffenseTypeName } from '@aztec/stdlib/slashing';
-
+} from '@aztec-labs/stdlib/block';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { OffenseType, getOffenseTypeName } from '@aztec-labs/stdlib/slashing';
 import EventEmitter from 'node:events';
 
 import type { SlasherConfig } from '../config.js';

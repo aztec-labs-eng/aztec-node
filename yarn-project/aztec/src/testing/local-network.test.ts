@@ -1,6 +1,6 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { TEST_FEE_PADDING, setupLocalNetwork } from './local-network.js';
 

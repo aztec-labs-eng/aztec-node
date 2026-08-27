@@ -11,43 +11,43 @@ import {
   PRIVATE_LOG_CIPHERTEXT_LEN,
   PRIVATE_LOG_SIZE_IN_FIELDS,
   PUBLIC_DATA_TREE_HEIGHT,
-} from '@aztec/constants';
-import { BlockNumber, type SlotNumber } from '@aztec/foundation/branded-types';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { FieldReader } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import type { ACVMField } from '@aztec/simulator/client';
-import { FunctionSelector, NoteSelector } from '@aztec/stdlib/abi';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { ContractInstancePreimage, PartialAddress } from '@aztec/stdlib/contract';
-import type { GasFees } from '@aztec/stdlib/gas';
-import { KeyValidationRequest } from '@aztec/stdlib/kernel';
-import type { PublicKeys } from '@aztec/stdlib/keys';
+} from '@aztec-labs/constants';
+import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { ACVMField } from '@aztec-labs/simulator/client';
+import { FunctionSelector, NoteSelector } from '@aztec-labs/stdlib/abi';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { ContractInstancePreimage, PartialAddress } from '@aztec-labs/stdlib/contract';
+import type { GasFees } from '@aztec-labs/stdlib/gas';
+import { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
+import type { PublicKeys } from '@aztec-labs/stdlib/keys';
 import {
   type AppTaggingSecretKind,
   type FlatPublicLogs,
   PrivateLog,
   Tag,
   appTaggingSecretKindFromDeliveryMode,
-} from '@aztec/stdlib/logs';
+} from '@aztec-labs/stdlib/logs';
 import type {
   AppendOnlyTreeSnapshot,
   NullifierLeaf,
   NullifierLeafPreimage,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   type GlobalVariables,
   type PartialStateReference,
   type StateReference,
   TxHash,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import {
   type OriginBlock,

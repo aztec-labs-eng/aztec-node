@@ -6,11 +6,11 @@ import {
   optionalNumberConfigHelper,
   pickConfigMappings,
   secretValueConfigHelper,
-} from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type SequencerConfig, sharedSequencerConfigMappings } from '@aztec/stdlib/config';
-import { localSignerConfigMappings, validatorHASignerConfigMappings } from '@aztec/stdlib/ha-signing';
-import type { ValidatorClientConfig } from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type SequencerConfig, sharedSequencerConfigMappings } from '@aztec-labs/stdlib/config';
+import { localSignerConfigMappings, validatorHASignerConfigMappings } from '@aztec-labs/stdlib/ha-signing';
+import type { ValidatorClientConfig } from '@aztec-labs/stdlib/interfaces/server';
 
 export type { ValidatorClientConfig };
 

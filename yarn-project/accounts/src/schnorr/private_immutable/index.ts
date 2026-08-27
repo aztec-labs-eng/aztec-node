@@ -1,16 +1,16 @@
 /**
- * The `@aztec/accounts/schnorr` export provides an account contract implementation that uses Schnorr signatures with a Grumpkin key for authentication, and a separate Grumpkin key for encryption.
+ * The `@aztec-labs/accounts/schnorr` export provides an account contract implementation that uses Schnorr signatures with a Grumpkin key for authentication, and a separate Grumpkin key for encryption.
  * This is the suggested account contract type for most use cases within Aztec.
  *
  * @packageDocumentation
  */
-import { getAccountContractAddress } from '@aztec/aztec.js/account';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import { loadContractArtifact } from '@aztec/stdlib/abi';
-import type { NoirCompiledContract } from '@aztec/stdlib/noir';
+import { getAccountContractAddress } from '@aztec-labs/aztec.js/account';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import { loadContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 
 import SchnorrAccountContractJson from '../../../artifacts/SchnorrAccount.json' with { type: 'json' };
 import { deriveSecretKeyFromSigningKey } from '../../utils/key_derivation.js';

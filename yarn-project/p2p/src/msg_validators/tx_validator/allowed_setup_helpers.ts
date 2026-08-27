@@ -1,8 +1,8 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { FunctionSelector, countArgumentsSize, getAllFunctionAbis } from '@aztec/stdlib/abi';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { AllowedElement } from '@aztec/stdlib/interfaces/server';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FunctionSelector, countArgumentsSize, getAllFunctionAbis } from '@aztec-labs/stdlib/abi';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 
 /**
  * Builds an AllowedElement from a contract artifact, deriving both the function selector

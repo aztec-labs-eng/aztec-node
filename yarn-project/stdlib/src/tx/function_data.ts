@@ -1,7 +1,6 @@
-import { FUNCTION_DATA_LENGTH } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, FieldReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+import { FUNCTION_DATA_LENGTH } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { z } from 'zod';
 
 import { type FunctionAbi, FunctionSelector, FunctionType } from '../abi/index.js';

@@ -1,6 +1,5 @@
-import { type L1ContractAddresses, L1ContractAddressesSchema } from '@aztec/ethereum/l1-contract-addresses';
-import type { ZodFor } from '@aztec/foundation/schemas';
-
+import { type L1ContractAddresses, L1ContractAddressesSchema } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { type ProtocolContractAddresses, ProtocolContractAddressesSchema } from './protocol_contract_addresses.js';

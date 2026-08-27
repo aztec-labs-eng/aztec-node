@@ -1,6 +1,5 @@
-import { hexToBuffer } from '@aztec/foundation/string';
-import { fileURLToPath } from '@aztec/foundation/url';
-
+import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { fileURLToPath } from '@aztec-labs/foundation/url';
 import { jest } from '@jest/globals';
 import { readFile } from 'fs/promises';
 import { join } from 'path';

@@ -1,10 +1,9 @@
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { keccak256 } from '@aztec/foundation/crypto/keccak';
-import { tryRecoverAddress } from '@aztec/foundation/crypto/secp256k1-signer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { type BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { keccak256 } from '@aztec-labs/foundation/crypto/keccak';
+import { tryRecoverAddress } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { type BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { type TypedDataDefinition, hashTypedData } from 'viem';
 import { z } from 'zod';
 

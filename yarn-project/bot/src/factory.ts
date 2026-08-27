@@ -1,6 +1,6 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { deriveSecretKeyFromSigningKey } from '@aztec/accounts/utils';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { deriveSecretKeyFromSigningKey } from '@aztec-labs/accounts/utils';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import {
   BatchCall,
   ContractBase,
@@ -8,30 +8,30 @@ import {
   type DeployMethod,
   type DeployOptions,
   NO_WAIT,
-} from '@aztec/aztec.js/contracts';
-import type { L2AmountClaim } from '@aztec/aztec.js/ethereum';
-import { L1FeeJuicePortalManager } from '@aztec/aztec.js/ethereum';
-import { FeeJuicePaymentMethodWithClaim } from '@aztec/aztec.js/fee';
-import { deriveKeys } from '@aztec/aztec.js/keys';
-import { createLogger } from '@aztec/aztec.js/log';
-import { waitForL1ToL2MessageReady } from '@aztec/aztec.js/messaging';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { getFeeJuiceBalance } from '@aztec/aztec.js/utils';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import { PrivateTokenContract } from '@aztec/noir-contracts.js/PrivateToken';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import type { BlockTag } from '@aztec/stdlib/block';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import type { AztecNode, AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+} from '@aztec-labs/aztec.js/contracts';
+import type { L2AmountClaim } from '@aztec-labs/aztec.js/ethereum';
+import { L1FeeJuicePortalManager } from '@aztec-labs/aztec.js/ethereum';
+import { FeeJuicePaymentMethodWithClaim } from '@aztec-labs/aztec.js/fee';
+import { deriveKeys } from '@aztec-labs/aztec.js/keys';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { getFeeJuiceBalance } from '@aztec-labs/aztec.js/utils';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import { PrivateTokenContract } from '@aztec-labs/noir-contracts.js/PrivateToken';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import type { BlockTag } from '@aztec-labs/stdlib/block';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { type BotConfig, SupportedTokenContracts } from './config.js';
 import { seedL1ToL2Message } from './l1_to_l2_seeding.js';

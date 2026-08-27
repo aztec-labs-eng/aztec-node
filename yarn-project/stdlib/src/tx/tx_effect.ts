@@ -4,7 +4,7 @@ import {
   decodeTxBlobData,
   encodeTxBlobData,
   getNumTxBlobFields,
-} from '@aztec/blob-lib/encoding';
+} from '@aztec-labs/blob-lib/encoding';
 import {
   MAX_CONTRACT_CLASS_LOGS_PER_TX,
   MAX_L2_TO_L1_MSGS_PER_TX,
@@ -12,14 +12,13 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
-} from '@aztec/constants';
-import { type FieldsOf, makeTuple, makeTupleAsync } from '@aztec/foundation/array';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-import { BufferReader, serializeArrayOfBufferableToVector, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-
+} from '@aztec-labs/constants';
+import { type FieldsOf, makeTuple, makeTupleAsync } from '@aztec-labs/foundation/array';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeArrayOfBufferableToVector, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { inspect } from 'util';
 import { z } from 'zod';
 

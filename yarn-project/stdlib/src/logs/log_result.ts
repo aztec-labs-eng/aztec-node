@@ -1,9 +1,8 @@
-import { BlockNumber, BlockNumberSchema } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas as foundationSchemas } from '@aztec/foundation/schemas';
-import type { PickIfFlag, Prettify } from '@aztec/foundation/types';
-
+import { BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas as foundationSchemas } from '@aztec-labs/foundation/schemas';
+import type { PickIfFlag, Prettify } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { BlockHash } from '../block/block_hash.js';

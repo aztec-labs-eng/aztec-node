@@ -1,10 +1,9 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall, type ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { DefaultL1ContractsConfig } from '@aztec/ethereum/config';
-import { AuthContract } from '@aztec/noir-contracts.js/Auth';
-import { StateVarsContract } from '@aztec/noir-test-contracts.js/StateVars';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall, type ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
+import { AuthContract } from '@aztec-labs/noir-contracts.js/Auth';
+import { StateVarsContract } from '@aztec-labs/noir-test-contracts.js/StateVars';
 import { jest } from '@jest/globals';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';

@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/simulator",
+  "name": "@aztec-labs/simulator",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -63,27 +63,27 @@
     ]
   },
   "dependencies": {
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/standard-contracts": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/telemetry-client": "workspace:^",
+    "@aztec-labs/world-state": "workspace:^",
     "@aztec/bb-avm-sim": "0.1.0-dummy",
     "@aztec/cdb": "0.1.0-dummy",
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
     "@aztec/ipc-runtime": "0.1.0-dummy",
     "@aztec/noir-acvm_js": "0.1.0-dummy",
     "@aztec/noir-noirc_abi": "0.1.0-dummy",
     "@aztec/noir-types": "0.1.0-dummy",
-    "@aztec/protocol-contracts": "workspace:^",
-    "@aztec/standard-contracts": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/telemetry-client": "workspace:^",
-    "@aztec/world-state": "workspace:^",
     "lodash.clonedeep": "^4.5.0",
     "lodash.merge": "^4.6.2",
     "msgpackr": "^1.11.2",
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@aztec/noir-contracts.js": "workspace:^",
-    "@aztec/noir-test-contracts.js": "workspace:^",
+    "@aztec-labs/noir-contracts.js": "workspace:^",
+    "@aztec-labs/noir-test-contracts.js": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/lodash.clonedeep": "^4.5.7",

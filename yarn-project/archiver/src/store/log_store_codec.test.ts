@@ -1,9 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import '@aztec/stdlib/testing/jest';
-import { TxHash } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import '@aztec-labs/stdlib/testing/jest';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import {
   decodeKeyTail,

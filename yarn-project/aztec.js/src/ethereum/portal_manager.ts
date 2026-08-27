@@ -1,27 +1,27 @@
-import {
-  type L1TxConfig,
-  type L1TxUtils,
-  createL1TxUtils,
-  getL1TxUtilsConfigEnvVars,
-} from '@aztec/ethereum/l1-tx-utils';
-import type { ExtendedViemWalletClient, ViemContract } from '@aztec/ethereum/types';
-import { extractEvent } from '@aztec/ethereum/utils';
-import type { EpochNumber } from '@aztec/foundation/branded-types';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import type { SiblingPath } from '@aztec/foundation/trees';
 import { FeeAssetHandlerAbi } from '@aztec/l1-artifacts/FeeAssetHandlerAbi';
 import { FeeJuicePortalAbi } from '@aztec/l1-artifacts/FeeJuicePortalAbi';
 import { OutboxAbi } from '@aztec/l1-artifacts/OutboxAbi';
 import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
 import { TokenPortalAbi } from '@aztec/l1-artifacts/TokenPortalAbi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { computeL2ToL1MessageHash, computeSecretHash } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { getL2ToL1MessageLeafId } from '@aztec/stdlib/messaging';
 
+import {
+  type L1TxConfig,
+  type L1TxUtils,
+  createL1TxUtils,
+  getL1TxUtilsConfigEnvVars,
+} from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ExtendedViemWalletClient, ViemContract } from '@aztec-labs/ethereum/types';
+import { extractEvent } from '@aztec-labs/ethereum/utils';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { SiblingPath } from '@aztec-labs/foundation/trees';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { computeL2ToL1MessageHash, computeSecretHash } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { getL2ToL1MessageLeafId } from '@aztec-labs/stdlib/messaging';
 import { type Hex, encodeFunctionData, getContract, toFunctionSelector } from 'viem';
 
 /** L1 to L2 message info to claim it on L2. */

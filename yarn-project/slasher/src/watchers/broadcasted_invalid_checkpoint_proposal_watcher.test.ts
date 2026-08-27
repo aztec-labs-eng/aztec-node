@@ -1,19 +1,18 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { EmptyL1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { P2PClient } from '@aztec/stdlib/interfaces/server';
-import type { BlockProposal, CheckpointProposalCore } from '@aztec/stdlib/p2p';
-import { OffenseType } from '@aztec/stdlib/slashing';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { P2PClient } from '@aztec-labs/stdlib/interfaces/server';
+import type { BlockProposal, CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
+import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import {
   makeBlockHeader,
   makeBlockProposal,
   makeCheckpointHeader,
   makeCheckpointProposal,
-} from '@aztec/stdlib/testing';
-
+} from '@aztec-labs/stdlib/testing';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

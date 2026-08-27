@@ -1,9 +1,9 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { TestAztecNodeService } from '@aztec/aztec-node/test';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { OffenseType } from '@aztec/slasher';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { OffenseType } from '@aztec-labs/slasher';
 
 import {
   MultiNodeTestContext,

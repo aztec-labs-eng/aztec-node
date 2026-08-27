@@ -1,8 +1,7 @@
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { MerkleTreeId, PublicDataTreeLeaf } from '@aztec/stdlib/trees';
-import { EMPTY_GENESIS_DATA, type GenesisData } from '@aztec/stdlib/world-state';
-
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { MerkleTreeId, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
+import { EMPTY_GENESIS_DATA, type GenesisData } from '@aztec-labs/stdlib/world-state';
 import { jest } from '@jest/globals';
 
 import { NativeWorldStateService } from './native/index.js';

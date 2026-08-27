@@ -1,10 +1,10 @@
-import { type CheckpointNumber, IndexWithinCheckpoint, type SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { createLogger } from '@aztec/foundation/log';
-import { CommitteeAttestationsAndSigners } from '@aztec/stdlib/block';
-import type { InboxBucketRef } from '@aztec/stdlib/messaging';
+import { type CheckpointNumber, IndexWithinCheckpoint, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
+import type { InboxBucketRef } from '@aztec-labs/stdlib/messaging';
 import {
   BlockProposal,
   type BlockProposalOptions,
@@ -15,11 +15,11 @@ import {
   ConsensusPayload,
   type CoordinationSignatureContext,
   getCoordinationSignatureTypedData,
-} from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import type { BlockHeader, Tx } from '@aztec/stdlib/tx';
-import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec/validator-ha-signer/errors';
-import { DutyType, type SigningContext } from '@aztec/validator-ha-signer/types';
+} from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import type { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
+import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/validator-ha-signer/errors';
+import { DutyType, type SigningContext } from '@aztec-labs/validator-ha-signer/types';
 
 import type { ValidatorKeyStore } from '../key_store/interface.js';
 

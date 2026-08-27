@@ -111,8 +111,8 @@ Only deployed contract instances can upgrade or change their upgrade delay. This
 The PXE stores contract instances and classes locally. After a contract upgrades, you must register the new artifact with the wallet before interacting with it:
 
 ```typescript
-import { getContractClassFromArtifact } from '@aztec/aztec.js/contracts';
-import { publishContractClass } from '@aztec/aztec.js/deployment';
+import { getContractClassFromArtifact } from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass } from '@aztec-labs/aztec.js/deployment';
 
 // Deploy the original contract (use .wait() to get both contract and instance)
 const { contract, instance } = await UpdatableContract.deploy(wallet, ...args)

@@ -1,5 +1,5 @@
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
-import { Gas, type GasUsed } from '@aztec/stdlib/gas';
+import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { Gas, type GasUsed } from '@aztec-labs/stdlib/gas';
 
 /**
  * Returns suggested total and teardown gas limits for a simulated tx, clamped to the network's per-tx

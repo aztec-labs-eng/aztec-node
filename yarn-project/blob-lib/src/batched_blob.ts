@@ -1,5 +1,5 @@
-import { BLS12Fr, BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { FinalBlobAccumulator } from './circuit_types/index.js';
 

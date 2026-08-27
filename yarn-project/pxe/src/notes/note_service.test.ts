@@ -1,18 +1,17 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { KeyStore } from '@aztec/key-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, randomDataInBlock } from '@aztec/stdlib/block';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
-import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { deriveKeys } from '@aztec/stdlib/keys';
-import { NoteDao, NoteStatus } from '@aztec/stdlib/note';
-import { makeBlockHeader } from '@aztec/stdlib/testing';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import { TxEffect, TxHash } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { KeyStore } from '@aztec-labs/key-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, randomDataInBlock } from '@aztec-labs/stdlib/block';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { deriveKeys } from '@aztec-labs/stdlib/keys';
+import { NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
+import { makeBlockHeader } from '@aztec-labs/stdlib/testing';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 

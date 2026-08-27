@@ -1,6 +1,5 @@
-import { NULLIFIER_TREE_HEIGHT } from '@aztec/constants';
-import { MembershipWitness, SiblingPath } from '@aztec/foundation/trees';
-
+import { NULLIFIER_TREE_HEIGHT } from '@aztec-labs/constants';
+import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import { z } from 'zod';
 
 import { schemas } from '../schemas/index.js';

@@ -1,13 +1,13 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { TxHash, TxReceipt } from '@aztec/aztec.js/tx';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import type { TokenContract } from '@aztec/noir-contracts.js/Token';
-import type { BlockTag } from '@aztec/stdlib/block';
-import type { AztecNode, AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { TxHash, TxReceipt } from '@aztec-labs/aztec.js/tx';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import type { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import type { BlockTag } from '@aztec-labs/stdlib/block';
+import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { BaseBot } from './base_bot.js';
 import type { BotConfig } from './config.js';

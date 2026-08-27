@@ -49,7 +49,7 @@ export const Glossary = {
     aztec_js: () => (
       <p>
         A{" "}
-        <a href="https://www.npmjs.com/package/@aztec/aztec.js">Node package</a>{" "}
+        <a href="https://www.npmjs.com/package/@aztec-labs/aztec.js">Node package</a>{" "}
         to help make Aztec dApps.
       </p>
     ),

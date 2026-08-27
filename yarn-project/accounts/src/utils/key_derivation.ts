@@ -1,9 +1,11 @@
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 
-const SIGNING_KEY_TO_SECRET_KEY_SEPARATOR = sha256ToField([Buffer.from('@aztec/accounts/signing_key_to_secret_key')]);
+const SIGNING_KEY_TO_SECRET_KEY_SEPARATOR = sha256ToField([
+  Buffer.from('@aztec-labs/accounts/signing_key_to_secret_key'),
+]);
 
 /**
  * Derives the privacy secret key (the seed for the viewing/nullifier keyset that PXE holds) from the account's signing

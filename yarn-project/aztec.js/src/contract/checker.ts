@@ -4,7 +4,7 @@ import {
   type ContractArtifact,
   type StructType,
   getDefaultInitializer,
-} from '@aztec/stdlib/abi';
+} from '@aztec-labs/stdlib/abi';
 
 /**
  * Represents a type derived from input type T with the 'kind' property removed.

@@ -1,10 +1,11 @@
 import { BarretenbergSync, flattenChonkProofFields } from '@aztec/bb.js';
-import { CHONK_PROOF_LENGTH } from '@aztec/constants';
-import { times } from '@aztec/foundation/collection';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, BufferSink } from '@aztec/foundation/serialize';
+
+import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, BufferSink } from '@aztec-labs/foundation/serialize';
 
 /**
  * Serialization format detection for ChonkProof is value-based on the leading uint32:

@@ -1,5 +1,5 @@
-import { createLogger } from '@aztec/foundation/log';
-import { FunctionSelector } from '@aztec/stdlib/abi';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
 
 const MAX_FUNCTION_SIGNATURES = 1000;
 const MAX_FUNCTION_NAME_LEN = 256;

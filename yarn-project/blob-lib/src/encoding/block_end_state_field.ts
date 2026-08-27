@@ -3,8 +3,8 @@ import {
   NOTE_HASH_TREE_HEIGHT,
   NULLIFIER_TREE_HEIGHT,
   PUBLIC_DATA_TREE_HEIGHT,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { BlobDeserializationError } from '../errors.js';
 

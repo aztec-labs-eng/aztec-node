@@ -1,9 +1,9 @@
 // docs:start:imports
 import { BobTokenContract } from "./artifacts/BobToken.js";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 // docs:end:imports
 
 // docs:start:get_balances

@@ -1,6 +1,6 @@
-import { BLOCK_END_PREFIX } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { BLOCK_END_PREFIX } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { BlobDeserializationError } from '../errors.js';
 

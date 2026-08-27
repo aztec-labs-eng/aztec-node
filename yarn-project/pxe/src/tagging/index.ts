@@ -21,5 +21,5 @@ export {
 } from './get_all_logs_by_tags.js';
 
 // Re-export tagging-related types from stdlib
-export { AppTaggingSecret, Tag, SiloedTag } from '@aztec/stdlib/logs';
-export { type PreTag, type TaggingIndexRange } from '@aztec/stdlib/logs';
+export { AppTaggingSecret, Tag, SiloedTag } from '@aztec-labs/stdlib/logs';
+export { type PreTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';

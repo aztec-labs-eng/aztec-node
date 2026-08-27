@@ -1,5 +1,5 @@
-import type { ClientProtocolCircuitVerifier } from '@aztec/stdlib/interfaces/server';
-import type { TxValidator } from '@aztec/stdlib/tx';
+import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
+import type { TxValidator } from '@aztec-labs/stdlib/tx';
 
 import { createTxValidatorForOnDemandReceivedTxs } from '../../../msg_validators/index.js';
 import type { TxValidationCache } from '../../../msg_validators/tx_validator/tx_validation_cache.js';

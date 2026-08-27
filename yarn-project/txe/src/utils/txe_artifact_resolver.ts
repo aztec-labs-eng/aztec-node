@@ -1,17 +1,16 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import type { ContractStore } from '@aztec/pxe/client/lazy';
-import { loadContractArtifact } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { ContractStore } from '@aztec-labs/pxe/client/lazy';
+import { loadContractArtifact } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractArtifactWithHash,
   type ContractInstanceWithAddress,
   computeArtifactHash,
   getContractInstanceFromInstantiationParams,
-} from '@aztec/stdlib/contract';
-import { PublicKeys, deriveKeys } from '@aztec/stdlib/keys';
-import type { NoirCompiledContract } from '@aztec/stdlib/noir';
-
+} from '@aztec-labs/stdlib/contract';
+import { PublicKeys, deriveKeys } from '@aztec-labs/stdlib/keys';
+import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 import { createHash } from 'crypto';
 import { createReadStream } from 'fs';
 import { readFile, readdir } from 'fs/promises';

@@ -1,5 +1,5 @@
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
-import type { FileStore } from '@aztec/stdlib/file-store';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { FileStore } from '@aztec-labs/stdlib/file-store';
 import {
   type ProofUri,
   type ProvingJobId,
@@ -8,8 +8,8 @@ import {
   ProvingJobResult,
   type ProvingJobResultsMap,
   getProvingJobInputClassFor,
-} from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 import type { ProofStore } from './proof_store.js';
 

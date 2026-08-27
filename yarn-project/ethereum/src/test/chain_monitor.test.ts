@@ -1,5 +1,4 @@
-import { sleep } from '@aztec/foundation/sleep';
-
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { RollupContract } from '../contracts/rollup.js';

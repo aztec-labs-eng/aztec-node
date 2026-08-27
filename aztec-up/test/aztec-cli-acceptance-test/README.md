@@ -7,7 +7,7 @@ Tests that the installed Aztec CLI toolchain works end-to-end. Exercises the com
 3. `aztec test` - run the TXE tests from the scaffold's test crate
 4. `aztec start --local-network` - start a local sandbox (anvil + aztec node)
 5. `aztec codegen` - generate TypeScript bindings from the compiled artifact
-6. TS end-to-end test - run a `node --test` suite inside the scaffolded workspace that imports the codegen'd `CounterContract`, stands up an in-process wallet + PXE via `@aztec/wallets/embedded`, deploys Counter, calls `increment`, and reads the value back through the `get_counter` utility function
+6. TS end-to-end test - run a `node --test` suite inside the scaffolded workspace that imports the codegen'd `CounterContract`, stands up an in-process wallet + PXE via `@aztec-labs/wallets/embedded`, deploys Counter, calls `increment`, and reads the value back through the `get_counter` utility function
 
 ## Running
 

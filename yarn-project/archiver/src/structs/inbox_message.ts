@@ -1,6 +1,6 @@
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec/foundation/serialize';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 export type InboxMessage = {
   index: bigint;

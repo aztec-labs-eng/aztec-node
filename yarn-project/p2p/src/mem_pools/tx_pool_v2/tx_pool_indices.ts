@@ -1,6 +1,6 @@
-import { insertIntoSortedArray, removeFromSortedArray } from '@aztec/foundation/array';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import type { L2BlockId } from '@aztec/stdlib/block';
+import { insertIntoSortedArray, removeFromSortedArray } from '@aztec-labs/foundation/array';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { L2BlockId } from '@aztec-labs/stdlib/block';
 
 import { type PriorityComparable, type TxMetaData, type TxState, comparePriority } from './tx_metadata.js';
 

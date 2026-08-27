@@ -1,6 +1,6 @@
-import { BLS12Fr } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { BLS12Fr } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 /**
  * See `noir-projects/fnd/noir-protocol-circuits/crates/blob/src/abis/final_blob_batching_challenges.nr` for documentation.

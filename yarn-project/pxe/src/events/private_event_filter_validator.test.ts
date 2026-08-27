@@ -1,7 +1,7 @@
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHeader, TxHash } from '@aztec/stdlib/tx';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHeader, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { PrivateEventFilterValidator } from './private_event_filter_validator.js';
 

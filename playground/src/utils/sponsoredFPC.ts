@@ -1,17 +1,17 @@
-import { type ContractArtifact, loadContractArtifact } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { SPONSORED_FPC_SALT } from '@aztec/constants';
+import { type ContractArtifact, loadContractArtifact } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
 
 export async function getSponsoredFPCArtifact(version?: string): Promise<ContractArtifact> {
   if (version) {
     const artifact = (await import(`../assets/artifacts/${version}/sponsored_fpc_contract-SponsoredFPC.json`)).default;
     return loadContractArtifact(artifact);
   } else {
-    const contract = (await import('@aztec/noir-contracts.js/SponsoredFPC')).SponsoredFPCContract;
+    const contract = (await import('@aztec-labs/noir-contracts.js/SponsoredFPC')).SponsoredFPCContract;
     return contract.artifact;
   }
 }

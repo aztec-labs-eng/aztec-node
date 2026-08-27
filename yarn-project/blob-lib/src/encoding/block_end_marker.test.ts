@@ -1,6 +1,6 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import { decodeBlockEndMarker, encodeBlockEndMarker, isBlockEndMarker } from './block_end_marker.js';
 

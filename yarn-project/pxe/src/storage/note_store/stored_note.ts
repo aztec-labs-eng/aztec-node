@@ -1,5 +1,5 @@
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { NoteDao } from '@aztec/stdlib/note';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { NoteDao } from '@aztec-labs/stdlib/note';
 
 /** A note as stored by the PXE: the note DAO plus the scopes that observed it. Append-only — never mutated. */
 export class StoredNote {

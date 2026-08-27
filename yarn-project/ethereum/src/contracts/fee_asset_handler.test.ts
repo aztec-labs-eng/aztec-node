@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
 import { TestERC20Abi as FeeAssetAbi } from '@aztec/l1-artifacts/TestERC20Abi';
 
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { type GetContractReturnType, getContract } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

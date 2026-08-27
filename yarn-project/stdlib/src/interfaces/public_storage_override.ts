@@ -1,5 +1,4 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { z } from 'zod';
 
 import type { AztecAddress } from '../aztec-address/index.js';

@@ -1,8 +1,8 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
 import { EmpireBaseAbi } from '@aztec/l1-artifacts/EmpireBaseAbi';
 
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { type Hex, type TypedDataDefinition, encodeFunctionData } from 'viem';
 
 import type { L1TxRequest } from '../l1_tx_utils/index.js';

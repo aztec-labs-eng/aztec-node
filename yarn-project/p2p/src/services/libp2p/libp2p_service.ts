@@ -1,21 +1,21 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { BlockNumber, type SlotNumber } from '@aztec/foundation/branded-types';
-import { compactArray, maxBy, merge } from '@aztec/foundation/collection';
-import { type Logger, createLibp2pComponentLogger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import { Timer } from '@aztec/foundation/timer';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { EthAddress, L2BlockSource } from '@aztec/stdlib/block';
-import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec/stdlib/config';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { type BlockMinFeesProvider, GasFees, getNetworkTxGasLimits } from '@aztec/stdlib/gas';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray, maxBy, merge } from '@aztec-labs/foundation/collection';
+import { type Logger, createLibp2pComponentLogger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
+import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/config';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { type BlockMinFeesProvider, GasFees, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   P2PConnectivity,
   PeerInfo,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/interfaces/server';
 import {
   BlockProposal,
   CheckpointAttestation,
@@ -30,13 +30,13 @@ import {
   createTopicString,
   getTopicsForConfig,
   metricsTopicStrToLabels,
-} from '@aztec/stdlib/p2p';
-import { ConsensusTimetable, getDefaultCheckpointProposalSyncGrace } from '@aztec/stdlib/timetable';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import { Tx, type TxValidationResult } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
-import { InvalidBlockProposalTxsError } from '@aztec/stdlib/validators';
-import { compressComponentVersions } from '@aztec/stdlib/versioning';
+} from '@aztec-labs/stdlib/p2p';
+import { ConsensusTimetable, getDefaultCheckpointProposalSyncGrace } from '@aztec-labs/stdlib/timetable';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { Tx, type TxValidationResult } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
+import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
+import { compressComponentVersions } from '@aztec-labs/stdlib/versioning';
 import {
   Attributes,
   OtelMetricsAdapter,
@@ -44,8 +44,7 @@ import {
   type TelemetryClient,
   WithTracer,
   trackSpan,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import {
   type GossipSub,
   type GossipSubComponents,

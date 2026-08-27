@@ -1,9 +1,8 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { RollupContract, STATE_VIEW_ADDRESS } from '@aztec/ethereum/contracts';
-import { retryUntil } from '@aztec/foundation/retry';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { RollupContract, STATE_VIEW_ADDRESS } from '@aztec-labs/ethereum/contracts';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { jest } from '@jest/globals';
 import { mnemonicToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

@@ -1,13 +1,12 @@
-import type { Archiver } from '@aztec/archiver';
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { Logger } from '@aztec/aztec.js/log';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { BlockData } from '@aztec/stdlib/block';
-import type { CheckpointData, ProposedCheckpointData } from '@aztec/stdlib/checkpoint';
-
+import type { Archiver } from '@aztec-labs/archiver';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { BlockData } from '@aztec-labs/stdlib/block';
+import type { CheckpointData, ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import { jest } from '@jest/globals';
 
 import {

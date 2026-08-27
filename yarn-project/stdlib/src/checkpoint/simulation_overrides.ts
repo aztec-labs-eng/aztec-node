@@ -3,9 +3,9 @@ import {
   RollupContract,
   SimulationOverridesBuilder,
   type SimulationOverridesPlan,
-} from '@aztec/ethereum/contracts';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
+} from '@aztec-labs/ethereum/contracts';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
 
 import type { CoordinationSignatureContext } from '../p2p/signature_utils.js';
 import type { ProposedCheckpointData } from './checkpoint_data.js';

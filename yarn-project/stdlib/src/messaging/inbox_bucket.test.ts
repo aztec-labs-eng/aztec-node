@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import type { InboxBucket } from './inbox_bucket.js';
 import { InboxBucketRef } from './inbox_bucket.js';

@@ -8,8 +8,8 @@
  * This is intentionally lightweight (no key exchange yet) — key exchange happens
  * later when the user selects the wallet and calls `provider.establishSecureChannel()`.
  */
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 
 import type { DiscoverySession, WalletProvider } from '../../manager/types.js';
 import { type WalletInfo, WalletMessageType } from '../../types.js';

@@ -150,7 +150,7 @@ hardhat-aztec-example/
 Add the Aztec dependencies:
 
 ```bash
-yarn add @aztec/aztec.js@#include_version_without_prefix @aztec/accounts@#include_version_without_prefix @aztec/wallets@#include_version_without_prefix @aztec/stdlib@#include_version_without_prefix @aztec/foundation@#include_version_without_prefix @aztec/ethereum@#include_version_without_prefix @aztec/noir-contracts.js@#include_version_without_prefix @aztec/viem@2.38.2 tsx
+yarn add @aztec-labs/aztec.js@#include_version_without_prefix @aztec-labs/accounts@#include_version_without_prefix @aztec-labs/wallets@#include_version_without_prefix @aztec-labs/stdlib@#include_version_without_prefix @aztec-labs/foundation@#include_version_without_prefix @aztec-labs/ethereum@#include_version_without_prefix @aztec-labs/noir-contracts.js@#include_version_without_prefix @aztec/viem@2.38.2 tsx
 ```
 
 Start the local network in another terminal:
@@ -261,7 +261,7 @@ aztec codegen target --outdir ../artifacts
 ```
 
 :::note Token Contract
-The integration script imports `TokenContract` from `@aztec/noir-contracts.js`, which provides pre-built bindings for the standard Token contract. Only the custom `AaveBridge` contract needs codegen.
+The integration script imports `TokenContract` from `@aztec-labs/noir-contracts.js`, which provides pre-built bindings for the standard Token contract. Only the custom `AaveBridge` contract needs codegen.
 :::
 
 ## Part 2: The Ethereum Side
@@ -359,26 +359,26 @@ Create `scripts/index.ts` to run the full flow. This script deploys all contract
 ### Setup
 
 ```typescript
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { AztecAddress, EthAddress } from "@aztec/aztec.js/addresses";
-import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
-import { Fr } from "@aztec/aztec.js/fields";
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
-import { deployL1Contract } from "@aztec/ethereum/deploy-l1-contract";
-import { sha256ToField } from "@aztec/foundation/crypto/sha256";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { AztecAddress, EthAddress } from "@aztec-labs/aztec.js/addresses";
+import { SetPublicAuthwitContractInteraction } from "@aztec-labs/aztec.js/authorization";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client";
+import { deployL1Contract } from "@aztec-labs/ethereum/deploy-l1-contract";
+import { sha256ToField } from "@aztec-labs/foundation/crypto/sha256";
 import {
   computeL2ToL1MessageHash,
   computeSecretHash,
-} from "@aztec/stdlib/hash";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+} from "@aztec-labs/stdlib/hash";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 import { decodeEventLog, pad, toFunctionSelector } from "@aztec/viem";
 import { foundry } from "@aztec/viem/chains";
 import AavePortal from "../artifacts/contracts/AavePortal.sol/AavePortal.json" with { type: "json" };
 import MockERC20 from "../artifacts/contracts/MockERC20.sol/MockERC20.json" with { type: "json" };
 import MockAToken from "../artifacts/contracts/MockAToken.sol/MockAToken.json" with { type: "json" };
 import MockAavePool from "../artifacts/contracts/MockAavePool.sol/MockAavePool.json" with { type: "json" };
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import { AaveBridgeContract } from "../contracts/aztec/artifacts/AaveBridge.js";
 
 #include_code setup /docs/examples/ts/aave_bridge/index.ts raw

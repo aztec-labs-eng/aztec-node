@@ -1,6 +1,6 @@
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
   AZTEC_ADDRESS,
   BIGINT,
@@ -33,12 +33,12 @@ import {
   isStructMapping,
   isVectorMapping,
   tryFieldWidth,
-} from '@aztec/pxe/simulator';
-import { EventSelector, FunctionSelector, NoteSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import { AppTaggingSecretKind } from '@aztec/stdlib/logs';
-import { TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/pxe/simulator';
+import { EventSelector, FunctionSelector, NoteSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import { EVENT_SELECTOR } from '../txe_oracle_registry.js';
 import type { OracleTestScenario } from './resolver.js';

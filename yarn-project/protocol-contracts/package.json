@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/protocol-contracts",
+  "name": "@aztec-labs/protocol-contracts",
   "homepage": "https://github.com/AztecProtocol/aztec-packages/tree/master/yarn-project/protocol-contracts",
   "description": "Canonical Noir contracts for the Aztec Network",
   "version": "0.1.0",
@@ -73,9 +73,9 @@
     ]
   },
   "dependencies": {
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "lodash.chunk": "^4.2.0",
     "lodash.omit": "^4.5.0",
     "tslib": "^2.4.0"

@@ -1,15 +1,15 @@
-import type { BlobKzgInstance } from '@aztec/blob-lib/types';
-import { maxBigint } from '@aztec/foundation/bigint';
-import { merge, pick } from '@aztec/foundation/collection';
-import { InterruptError, TimeoutError } from '@aztec/foundation/error';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { Semaphore } from '@aztec/foundation/queue';
-import { makeBackoff, retry, retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider } from '@aztec/foundation/timer';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
 
+import type { BlobKzgInstance } from '@aztec-labs/blob-lib/types';
+import { maxBigint } from '@aztec-labs/foundation/bigint';
+import { merge, pick } from '@aztec-labs/foundation/collection';
+import { InterruptError, TimeoutError } from '@aztec-labs/foundation/error';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Semaphore } from '@aztec-labs/foundation/queue';
+import { makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import pickBy from 'lodash.pickby';
 import {
   type Abi,

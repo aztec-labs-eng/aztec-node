@@ -1,5 +1,5 @@
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Signature } from '@aztec/foundation/eth-signature';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 
 import { ConsensusPayload } from '../p2p/consensus_payload.js';
 import { getHashedSignaturePayloadTypedData } from '../p2p/signature_utils.js';

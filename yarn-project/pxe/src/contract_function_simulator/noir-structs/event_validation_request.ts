@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
-import { EventSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { TxHash } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
+import { EventSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
 /**
  * Intermediate struct used to perform batch event validation by PXE. The `utilityValidateAndStoreEnqueuedNotesAndEvents` oracle

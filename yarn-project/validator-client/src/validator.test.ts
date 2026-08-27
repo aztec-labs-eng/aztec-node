@@ -1,23 +1,23 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import type { EpochCache } from '@aztec/epoch-cache';
-import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec/ethereum/contracts';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { times } from '@aztec/foundation/collection';
-import { SecretValue, getConfigFromMappings } from '@aztec/foundation/config';
-import { Secp256k1Signer, makeEthSignDigest } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Hex } from '@aztec/foundation/string';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { type KeyStore, KeystoreManager } from '@aztec/node-keystore';
+} from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
+import { SecretValue, getConfigFromMappings } from '@aztec-labs/foundation/config';
+import { Secp256k1Signer, makeEthSignDigest } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Hex } from '@aztec-labs/foundation/string';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { type KeyStore, KeystoreManager } from '@aztec-labs/node-keystore';
 import {
   AuthRequest,
   AuthResponse,
@@ -26,20 +26,24 @@ import {
   StatusMessage,
   type TxProvider,
   createSecp256k1PeerId,
-} from '@aztec/p2p';
-import { OffenseType, WANT_TO_CLEAR_SLASH_EVENT, WANT_TO_SLASH_EVENT } from '@aztec/slasher';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type BlockData, BlockHash, L2Block, type L2BlockSink, type L2BlockSource } from '@aztec/stdlib/block';
-import { type Checkpoint, CheckpointReexecutionTracker, type ProposedCheckpointData } from '@aztec/stdlib/checkpoint';
-import type { SlasherConfig, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { type InboxBucket, InboxBucketRef, type L1ToL2MessageSource } from '@aztec/stdlib/messaging';
+} from '@aztec-labs/p2p';
+import { OffenseType, WANT_TO_CLEAR_SLASH_EVENT, WANT_TO_SLASH_EVENT } from '@aztec-labs/slasher';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type BlockData, BlockHash, L2Block, type L2BlockSink, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import {
+  type Checkpoint,
+  CheckpointReexecutionTracker,
+  type ProposedCheckpointData,
+} from '@aztec-labs/stdlib/checkpoint';
+import type { SlasherConfig, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { type InboxBucket, InboxBucketRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
   type BlockProposal,
   type CheckpointProposalCore,
   ValidatedBlockProposal,
   ValidatedCheckpointProposalCore,
-} from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
+} from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
@@ -48,11 +52,10 @@ import {
   makeCheckpointHeader,
   makeCheckpointProposal,
   mockTx,
-} from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, TX_ERROR_INVALID_PROOF, type Tx, TxEffect, TxHash } from '@aztec/stdlib/tx';
-import { AttestationTimeoutError, InvalidBlockProposalTxsError } from '@aztec/stdlib/validators';
-
+} from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, TX_ERROR_INVALID_PROOF, type Tx, TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
+import { AttestationTimeoutError, InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type PrivateKeyAccount, generatePrivateKey, privateKeyToAccount } from 'viem/accounts';

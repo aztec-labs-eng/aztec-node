@@ -1,11 +1,10 @@
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { type AztecNode, waitForTx } from '@aztec/aztec.js/node';
-import { readFieldCompressedString } from '@aztec/aztec.js/utils';
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import type { TxHash } from '@aztec/stdlib/tx';
-
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
+import { readFieldCompressedString } from '@aztec-labs/aztec.js/utils';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { getSponsoredFPCAddress } from '../fixtures/utils.js';

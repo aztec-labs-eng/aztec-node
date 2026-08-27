@@ -1,12 +1,15 @@
-import { type InitialAccountData, getInitialTestAccountsData } from '@aztec/accounts/testing';
-import type { WaitOpts } from '@aztec/aztec.js/contracts';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { LogFn } from '@aztec/foundation/log';
-import { FPCContract } from '@aztec/noir-contracts.js/FPC';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type ContractInstanceWithAddress, getContractInstanceFromInstantiationParams } from '@aztec/stdlib/contract';
+import { type InitialAccountData, getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import type { WaitOpts } from '@aztec-labs/aztec.js/contracts';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import {
+  type ContractInstanceWithAddress,
+  getContractInstanceFromInstantiationParams,
+} from '@aztec-labs/stdlib/contract';
 
 const BANANA_COIN_SALT = new Fr(0);
 const bananaCoinArgs = {

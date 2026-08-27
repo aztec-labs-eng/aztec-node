@@ -1,12 +1,11 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type LoggerBindings, createLogger } from '@aztec/foundation/log';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import {
   DatabaseVersionManager,
   type SchemaVersionMismatchPolicy,
   type VersionFileReadFailurePolicy,
-} from '@aztec/stdlib/database-version/manager';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-
+} from '@aztec-labs/stdlib/database-version/manager';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { copyFile, mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

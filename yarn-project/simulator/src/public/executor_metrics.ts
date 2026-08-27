@@ -1,5 +1,5 @@
-import type { RevertCode } from '@aztec/stdlib/avm';
-import type { GasUsed } from '@aztec/stdlib/gas';
+import type { RevertCode } from '@aztec-labs/stdlib/avm';
+import type { GasUsed } from '@aztec-labs/stdlib/gas';
 import {
   Attributes,
   type Histogram,
@@ -8,7 +8,7 @@ import {
   type Tracer,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import type { ExecutorMetricsInterface } from './executor_metrics_interface.js';
 

@@ -1,4 +1,4 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type FunctionAbi,
   FunctionCall,
@@ -6,10 +6,10 @@ import {
   FunctionType,
   decodeFromAbi,
   getFunctionReturnType,
-} from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { GasSettings } from '@aztec/stdlib/gas';
-import { ExecutionPayload } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { GasSettings } from '@aztec-labs/stdlib/gas';
+import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
 
 import { ContractFunctionInteraction } from '../contract/contract_function_interaction.js';
 import { NO_FROM } from '../contract/interaction_options.js';

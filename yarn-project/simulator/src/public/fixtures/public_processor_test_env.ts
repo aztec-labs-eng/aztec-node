@@ -1,10 +1,10 @@
-import { createLogger } from '@aztec/foundation/log';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import { GasFees } from '@aztec/stdlib/gas';
-import { GlobalVariables } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-import { NativeWorldStateService } from '@aztec/world-state';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GlobalVariables } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 
 import { AvmSimulatorPool } from '../avm_simulator_pool.js';
 import { PublicContractsDB } from '../public_db_sources.js';

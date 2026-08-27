@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import type { PodRacingContract } from '../artifacts/PodRacing';
 import { playRound, finishGame, finalizeGame } from '../contract';
 import { TRACK_NAMES, MAX_POINTS_PER_ROUND, TOTAL_ROUNDS } from '../game-constants';

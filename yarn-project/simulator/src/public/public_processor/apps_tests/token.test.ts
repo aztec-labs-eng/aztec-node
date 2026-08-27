@@ -1,9 +1,9 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import { TokenContractArtifact } from '@aztec/noir-contracts.js/Token';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { TokenContractArtifact } from '@aztec-labs/noir-contracts.js/Token';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 
 import { PublicProcessorTestEnv } from '../../fixtures/index.js';
 

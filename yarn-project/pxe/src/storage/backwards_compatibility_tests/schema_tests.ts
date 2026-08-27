@@ -1,21 +1,21 @@
 /* eslint-disable camelcase */
-import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Tuple } from '@aztec/foundation/serialize';
-import { KeyStore } from '@aztec/key-store';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { L2TipsKVStore } from '@aztec/kv-store/stores';
-import { type ContractArtifact, EventSelector, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { PublicDataWrite, RevertCode } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, Body, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec/stdlib/block';
-import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { CompleteAddress, SerializableContractInstance } from '@aztec/stdlib/contract';
-import { GasFees } from '@aztec/stdlib/gas';
-import { PublicKey, PublicKeys, deriveKeys } from '@aztec/stdlib/keys';
+import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
+import { KeyStore } from '@aztec-labs/key-store';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
+import { type ContractArtifact, EventSelector, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { PublicDataWrite, RevertCode } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, Body, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { CompleteAddress, SerializableContractInstance } from '@aztec-labs/stdlib/contract';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import { PublicKey, PublicKeys, deriveKeys } from '@aztec-labs/stdlib/keys';
 import {
   AppTaggingSecret,
   AppTaggingSecretKind,
@@ -24,10 +24,10 @@ import {
   PrivateLog,
   PublicLog,
   type TaggingIndexRange,
-} from '@aztec/stdlib/logs';
-import { Note, NoteDao } from '@aztec/stdlib/note';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/logs';
+import { Note, NoteDao } from '@aztec-labs/stdlib/note';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   GlobalVariables,
@@ -35,7 +35,7 @@ import {
   StateReference,
   TxEffect,
   TxHash,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import { AddressStore } from '../address_store/address_store.js';
 import { AnchorBlockStore } from '../anchor_block_store/index.js';

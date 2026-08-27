@@ -1,7 +1,7 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { AbortError } from '@aztec/foundation/error';
-import { createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { AbortError } from '@aztec-labs/foundation/error';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 
 import type { BlockHeader } from '../../tx/block_header.js';
 import { BlockHash } from '../block_hash.js';

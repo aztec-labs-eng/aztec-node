@@ -1,15 +1,15 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AvmSimulatorPool } from '@aztec/simulator/server';
-import type { BlockHash, L2Block } from '@aztec/stdlib/block';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AvmSimulatorPool } from '@aztec-labs/simulator/server';
+import type { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
 import type {
   MerkleTreeReadOperations,
   MerkleTreeWriteOperations,
   SnapshotDataKeys,
   WorldStateSynchronizer,
   WorldStateSynchronizerStatus,
-} from '@aztec/stdlib/interfaces/server';
-import { NativeWorldStateService } from '@aztec/world-state/native';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { NativeWorldStateService } from '@aztec-labs/world-state/native';
 
 export class TXESynchronizer implements WorldStateSynchronizer {
   // This works when set to 1 as well.

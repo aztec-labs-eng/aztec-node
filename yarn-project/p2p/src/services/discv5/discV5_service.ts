@@ -1,10 +1,9 @@
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { type ComponentsVersions, checkCompressedComponentVersion } from '@aztec/stdlib/versioning';
-import { OtelMetricsAdapter, type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { type ComponentsVersions, checkCompressedComponentVersion } from '@aztec-labs/stdlib/versioning';
+import { OtelMetricsAdapter, type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
 import { Discv5, type Discv5EventEmitter, type IDiscv5CreateOptions } from '@nethermindeth/discv5';

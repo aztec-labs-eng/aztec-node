@@ -1,7 +1,7 @@
-import { createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec/stdlib/interfaces/server';
-import type { Tx } from '@aztec/stdlib/tx';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 import {
   Attributes,
   type BatchObservableResult,
@@ -12,8 +12,7 @@ import {
   type UpDownCounter,
   createUpDownCounterWithDefault,
   getTelemetryClient,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { createHistogram } from 'node:perf_hooks';
 
 /** Records verification timing and failure metrics for an IVC (chonk) proof verifier. */

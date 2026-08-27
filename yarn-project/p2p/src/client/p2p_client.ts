@@ -1,15 +1,15 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import {
   BlockNumber,
   CheckpointNumber,
   type CheckpointProposalHash,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec/foundation/promise';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { AztecAsyncKVStore, AztecAsyncSingleton } from '@aztec/kv-store';
-import { L2TipsKVStore } from '@aztec/kv-store/stores';
+} from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncKVStore, AztecAsyncSingleton } from '@aztec-labs/kv-store';
+import { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
 import {
   type BlockData,
   type BlockHash,
@@ -22,14 +22,29 @@ import {
   type L2BlockStreamEvent,
   type L2TipsStore,
   type LocalL2Tips,
-} from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
-import { type GetTxByHashOptions, type P2PConnectivity, type PeerInfo, tryStop } from '@aztec/stdlib/interfaces/server';
-import { type BlockProposal, CheckpointAttestation, type CheckpointProposal, type TopicType } from '@aztec/stdlib/p2p';
-import type { BlockHeader, Tx, TxHash } from '@aztec/stdlib/tx';
-import { Attributes, type TelemetryClient, WithTracer, getTelemetryClient, trackSpan } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import {
+  type GetTxByHashOptions,
+  type P2PConnectivity,
+  type PeerInfo,
+  tryStop,
+} from '@aztec-labs/stdlib/interfaces/server';
+import {
+  type BlockProposal,
+  CheckpointAttestation,
+  type CheckpointProposal,
+  type TopicType,
+} from '@aztec-labs/stdlib/p2p';
+import type { BlockHeader, Tx, TxHash } from '@aztec-labs/stdlib/tx';
+import {
+  Attributes,
+  type TelemetryClient,
+  WithTracer,
+  getTelemetryClient,
+  trackSpan,
+} from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 import type { ENR } from '@nethermindeth/enr';
 

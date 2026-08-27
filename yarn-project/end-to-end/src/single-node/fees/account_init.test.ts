@@ -1,20 +1,23 @@
-import { SchnorrAccountContract } from '@aztec/accounts/schnorr';
-import { NO_FROM } from '@aztec/aztec.js/account';
-import { CompleteAddress } from '@aztec/aztec.js/addresses';
-import { FeeJuicePaymentMethodWithClaim, PrivateFeePaymentMethod, PublicFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { Fr } from '@aztec/aztec.js/fields';
-import { deriveKeys } from '@aztec/aztec.js/keys';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { AccountManager, DeployAccountMethod } from '@aztec/aztec.js/wallet';
-import { Schnorr } from '@aztec/foundation/crypto/schnorr';
-import { Fq } from '@aztec/foundation/curves/bn254';
-import type { FPCContract } from '@aztec/noir-contracts.js/FPC';
-import { SchnorrAccountContract as SchnorrAccountContractInterface } from '@aztec/noir-contracts.js/SchnorrAccount';
-import type { TokenContract as BananaCoin } from '@aztec/noir-contracts.js/Token';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Gas, GasSettings } from '@aztec/stdlib/gas';
-
+import { SchnorrAccountContract } from '@aztec-labs/accounts/schnorr';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import { CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import {
+  FeeJuicePaymentMethodWithClaim,
+  PrivateFeePaymentMethod,
+  PublicFeePaymentMethod,
+} from '@aztec-labs/aztec.js/fee';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { deriveKeys } from '@aztec-labs/aztec.js/keys';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { AccountManager, DeployAccountMethod } from '@aztec-labs/aztec.js/wallet';
+import { Schnorr } from '@aztec-labs/foundation/crypto/schnorr';
+import { Fq } from '@aztec-labs/foundation/curves/bn254';
+import type { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
+import { SchnorrAccountContract as SchnorrAccountContractInterface } from '@aztec-labs/noir-contracts.js/SchnorrAccount';
+import type { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Gas, GasSettings } from '@aztec-labs/stdlib/gas';
 import { jest } from '@jest/globals';
 
 import { PIPELINING_SETUP_OPTS, getPaddedMaxFeesPerGas } from '../../fixtures/fixtures.js';

@@ -1,21 +1,21 @@
-import { CheatCodes, EthCheatCodes } from '@aztec/aztec/testing';
-import { GovernanceProposerContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { DeployAztecL1ContractsReturnType } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { SecretValue } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
 import { EscapeHatchAbi } from '@aztec/l1-artifacts/EscapeHatchAbi';
 import { EscapeHatchBytecode } from '@aztec/l1-artifacts/EscapeHatchBytecode';
 import { EscapeHatchStorage } from '@aztec/l1-artifacts/EscapeHatchStorage';
 import { NewGovernanceProposerPayloadAbi } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadAbi';
 import { NewGovernanceProposerPayloadBytecode } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadBytecode';
-import type { SequencerClient, SequencerEvents } from '@aztec/sequencer-client';
-import type { AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
 
+import { CheatCodes, EthCheatCodes } from '@aztec-labs/aztec/testing';
+import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { SequencerClient, SequencerEvents } from '@aztec-labs/sequencer-client';
+import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
 import { privateKeyToAccount } from 'viem/accounts';
 

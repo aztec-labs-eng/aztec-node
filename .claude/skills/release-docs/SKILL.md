@@ -116,7 +116,7 @@ the tag checked out in Step 2 (needs `yarn-project` built, as in Step 6):
 
 ```bash
 cd yarn-project && node --input-type=module -e "
-import { getSponsoredFPCAddress } from '@aztec/cli/cli-utils';
+import { getSponsoredFPCAddress } from '@aztec-labs/cli/cli-utils';
 console.log((await getSponsoredFPCAddress()).toString());
 "
 ```

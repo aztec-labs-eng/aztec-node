@@ -1,11 +1,10 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { SecretValue, getActiveNetworkName } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import type { Fr } from '@aztec/foundation/schemas';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { SecretValue, getActiveNetworkName } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { Fr } from '@aztec-labs/foundation/schemas';
 import { bn254 } from '@noble/curves/bn254';
 import type { Abi, Narrow } from 'abitype';
 import { spawn } from 'child_process';

@@ -1,13 +1,12 @@
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { getDefaultConfig } from '@aztec/foundation/config';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { L2Block } from '@aztec/stdlib/block';
-import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { Tx, TxHash } from '@aztec/stdlib/tx';
-
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { getDefaultConfig } from '@aztec-labs/foundation/config';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { L2Block } from '@aztec-labs/stdlib/block';
+import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
 import { type MockProxy, mock } from 'jest-mock-extended';

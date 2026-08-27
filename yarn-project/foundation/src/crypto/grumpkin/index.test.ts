@@ -1,4 +1,4 @@
-import { createLogger } from '@aztec/foundation/log';
+import { createLogger } from '@aztec-labs/foundation/log';
 
 import { GrumpkinScalar } from '../../curves/grumpkin/index.js';
 import type { Point } from '../../curves/grumpkin/point.js';

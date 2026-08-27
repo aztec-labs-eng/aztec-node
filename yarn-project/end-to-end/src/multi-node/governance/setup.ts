@@ -1,10 +1,10 @@
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
 import { GovernanceAbi, GovernanceProposerAbi } from '@aztec/l1-artifacts';
 
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { jest } from '@jest/globals';
 import { type GetContractReturnType, encodeFunctionData, getAddress, getContract } from 'viem';
 

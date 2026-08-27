@@ -1,6 +1,5 @@
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

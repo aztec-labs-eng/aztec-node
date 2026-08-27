@@ -1,7 +1,9 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { Blob, getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec/blob-lib';
-import type { EpochCache } from '@aztec/epoch-cache';
-import type { L1ContractsConfig } from '@aztec/ethereum/config';
+import { EmpireBaseAbi, ErrorsAbi, RollupAbi, SlashingProposerAbi } from '@aztec/l1-artifacts';
+
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { Blob, getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
 import {
   FeeAssetPriceOracle,
   type GovernanceProposerContract,
@@ -13,8 +15,8 @@ import {
   type SimulationOverridesPlan,
   type SlashingProposerContract,
   buildSimulationOverridesStateOverride,
-} from '@aztec/ethereum/contracts';
-import { type L1FeeAnalysisResult, L1FeeAnalyzer, captureWindowBlockFees } from '@aztec/ethereum/l1-fee-analysis';
+} from '@aztec-labs/ethereum/contracts';
+import { type L1FeeAnalysisResult, L1FeeAnalyzer, captureWindowBlockFees } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
   type L1BlobInputs,
   type L1TxConfig,
@@ -24,39 +26,37 @@ import {
   MAX_L1_TX_LIMIT,
   type TransactionStats,
   WEI_CONST,
-} from '@aztec/ethereum/l1-tx-utils';
+} from '@aztec-labs/ethereum/l1-tx-utils';
 import {
   FormattedViemError,
   formatViemError,
   mergeAbis,
   tryDecodeRevertReason,
   tryExtractEvent,
-} from '@aztec/ethereum/utils';
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { trimmedBytesLength } from '@aztec/foundation/buffer';
-import { pick } from '@aztec/foundation/collection';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { TimeoutError } from '@aztec/foundation/error';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { InterruptibleSleep } from '@aztec/foundation/sleep';
-import { bufferToHex } from '@aztec/foundation/string';
-import { type DateProvider, Timer } from '@aztec/foundation/timer';
-import { EmpireBaseAbi, ErrorsAbi, RollupAbi, SlashingProposerAbi } from '@aztec/l1-artifacts';
-import { type ProposerSlashAction, encodeSlashConsensusVotes } from '@aztec/slasher';
-import { CommitteeAttestationsAndSigners, type ValidateCheckpointResult } from '@aztec/stdlib/block';
-import type { Checkpoint } from '@aztec/stdlib/checkpoint';
-import type { SequencerConfig } from '@aztec/stdlib/config';
+} from '@aztec-labs/ethereum/utils';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { trimmedBytesLength } from '@aztec-labs/foundation/buffer';
+import { pick } from '@aztec-labs/foundation/collection';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { TimeoutError } from '@aztec-labs/foundation/error';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { InterruptibleSleep } from '@aztec-labs/foundation/sleep';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import { type ProposerSlashAction, encodeSlashConsensusVotes } from '@aztec-labs/slasher';
+import { CommitteeAttestationsAndSigners, type ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
+import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { SequencerConfig } from '@aztec-labs/stdlib/config';
 import {
   getLastL1SlotTimestampForL2Slot,
   getNextL1SlotTimestamp,
   getTimestampForSlot,
-} from '@aztec/stdlib/epoch-helpers';
-import type { CheckpointHeader } from '@aztec/stdlib/rollup';
-import type { L1PublishCheckpointStats } from '@aztec/stdlib/stats';
-import { type TelemetryClient, type Tracer, getTelemetryClient, trackSpan } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/epoch-helpers';
+import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import type { L1PublishCheckpointStats } from '@aztec-labs/stdlib/stats';
+import { type TelemetryClient, type Tracer, getTelemetryClient, trackSpan } from '@aztec-labs/telemetry-client';
 import {
   type Abi,
   type Hex,

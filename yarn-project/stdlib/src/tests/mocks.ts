@@ -8,17 +8,16 @@ import {
   PRIVATE_TX_L2_GAS_OVERHEAD,
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
-import { type FieldsOf, makeTuple } from '@aztec/foundation/array';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { padArrayEnd, times } from '@aztec/foundation/collection';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-
+} from '@aztec-labs/constants';
+import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { type TypedDataDefinition, hashTypedData } from 'viem';
 
 import type { ContractArtifact } from '../abi/abi.js';

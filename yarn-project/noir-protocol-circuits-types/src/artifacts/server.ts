@@ -1,4 +1,4 @@
-import type { NoirCompiledCircuit, NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
+import type { NoirCompiledCircuit, NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 
 import PublicChonkVerifierJson from '../../artifacts/chonk_verifier_public.json' with { type: 'json' };
 import InboxParity64Json from '../../artifacts/inbox_parity_64.json' with { type: 'json' };

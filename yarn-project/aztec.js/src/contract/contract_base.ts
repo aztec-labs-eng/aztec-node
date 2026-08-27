@@ -4,8 +4,8 @@ import {
   type FunctionAbi,
   FunctionSelector,
   getAllFunctionAbis,
-} from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import type { Wallet } from '../wallet/wallet.js';
 import { ContractFunctionInteraction } from './contract_function_interaction.js';

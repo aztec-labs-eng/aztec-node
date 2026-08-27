@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { Fr } from '@aztec/aztec.js/fields';
-import { WalletManager } from '@aztec/wallet-sdk/manager';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { WalletManager } from '@aztec-labs/wallet-sdk/manager';
 
 describe('WalletManager', () => {
   describe('configure', () => {

@@ -4,10 +4,10 @@
  * Supports GCS, S3, R2, and local file paths.
  * Usage: node scripts/replay_failed_l1_tx.mjs gs://bucket/path/simulation/0xabc123.json [--rpc-url URL]
  */
-import { createLogger } from '@aztec/foundation/log';
 import { ErrorsAbi, RollupAbi } from '@aztec/l1-artifacts';
-import { createReadOnlyFileStore } from '@aztec/stdlib/file-store';
 
+import { createLogger } from '@aztec-labs/foundation/log';
+import { createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
 import { createPublicClient, decodeErrorResult, http } from 'viem';
 
 const logger = createLogger('script:replay_failed_l1_tx');

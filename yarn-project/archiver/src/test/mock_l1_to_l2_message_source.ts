@@ -1,7 +1,7 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { CheckpointId, L2BlockId, L2TipId, L2Tips } from '@aztec/stdlib/block';
-import type { InboxBucket, L1ToL2MessageSource } from '@aztec/stdlib/messaging';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { CheckpointId, L2BlockId, L2TipId, L2Tips } from '@aztec-labs/stdlib/block';
+import type { InboxBucket, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 
 /**
  * A mocked implementation of L1ToL2MessageSource to be used in tests.

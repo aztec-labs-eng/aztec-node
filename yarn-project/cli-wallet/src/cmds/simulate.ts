@@ -1,10 +1,9 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { AuthWitness } from '@aztec/aztec.js/authorization';
-import { Contract } from '@aztec/aztec.js/contracts';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { prepTx } from '@aztec/cli/utils';
-import type { LogFn } from '@aztec/foundation/log';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { AuthWitness } from '@aztec-labs/aztec.js/authorization';
+import { Contract } from '@aztec-labs/aztec.js/contracts';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { prepTx } from '@aztec-labs/cli/utils';
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { format } from 'util';
 
 import { printAuthorizations } from '../utils/authorizations.js';

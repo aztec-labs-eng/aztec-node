@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer, serializeToFields } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer, serializeToFields } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 /**
  * Constants that are the same for the entire epoch.

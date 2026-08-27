@@ -1,15 +1,15 @@
-import type { PrivateEventFilter } from '@aztec/aztec.js/wallet';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { Timer } from '@aztec/foundation/timer';
-import { KeyStore } from '@aztec/key-store';
-import type { AccountPrivacyKeys, AccountPrivacySecretKeys } from '@aztec/key-store';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { type ProtocolContractsProvider, protocolContractNames } from '@aztec/protocol-contracts';
-import type { CircuitSimulator } from '@aztec/simulator/client';
+import type { PrivateEventFilter } from '@aztec-labs/aztec.js/wallet';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { KeyStore } from '@aztec-labs/key-store';
+import type { AccountPrivacyKeys, AccountPrivacySecretKeys } from '@aztec-labs/key-store';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { type ProtocolContractsProvider, protocolContractNames } from '@aztec-labs/protocol-contracts';
+import type { CircuitSimulator } from '@aztec-labs/simulator/client';
 import {
   type ContractArtifact,
   EventSelector,
@@ -17,10 +17,10 @@ import {
   type FunctionSelector,
   FunctionType,
   decodeFunctionSignature,
-} from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { GENESIS_BLOCK_HEADER_HASH, type L2TipsProvider } from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { GENESIS_BLOCK_HEADER_HASH, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import {
   CompleteAddress,
   type ContractInstancePreimage,
@@ -28,16 +28,16 @@ import {
   type ContractInstanceWithAddress,
   type PartialAddress,
   computeContractAddressFromInstance,
-} from '@aztec/stdlib/contract';
-import { SimulationError } from '@aztec/stdlib/errors';
-import type { AztecNode, AztecNodeDebug, PrivateKernelProver } from '@aztec/stdlib/interfaces/client';
+} from '@aztec-labs/stdlib/contract';
+import { SimulationError } from '@aztec-labs/stdlib/errors';
+import type { AztecNode, AztecNodeDebug, PrivateKernelProver } from '@aztec-labs/stdlib/interfaces/client';
 import type {
   PrivateExecutionStep,
   PrivateKernelExecutionProofOutput,
   PrivateKernelTailCircuitPublicInputs,
-} from '@aztec/stdlib/kernel';
-import { computeAddressSecret } from '@aztec/stdlib/keys';
-import { deriveEcdhSharedSecretPoint, protectFromForgery } from '@aztec/stdlib/logs';
+} from '@aztec-labs/stdlib/kernel';
+import { computeAddressSecret } from '@aztec-labs/stdlib/keys';
+import { deriveEcdhSharedSecretPoint, protectFromForgery } from '@aztec-labs/stdlib/logs';
 import {
   BlockHeader,
   type ContractOverrides,
@@ -54,8 +54,7 @@ import {
   TxProvingResult,
   TxSimulationResult,
   UtilityExecutionResult,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { inspect } from 'util';
 
 import { BlockSynchronizer } from './block_synchronizer/index.js';

@@ -1,8 +1,7 @@
-import type { Logger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { BlockSynchronizer } from './block_synchronizer/index.js';

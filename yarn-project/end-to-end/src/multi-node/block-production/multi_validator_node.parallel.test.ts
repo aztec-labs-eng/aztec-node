@@ -1,16 +1,16 @@
-import type { Archiver } from '@aztec/archiver';
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { ContractDeployer } from '@aztec/aztec.js/deployment';
-import { Fr } from '@aztec/aztec.js/fields';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { BlockNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { retryUntil } from '@aztec/foundation/retry';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
-import { StatefulTestContractArtifact } from '@aztec/noir-test-contracts.js/StatefulTest';
-import { CheckpointAttestation, ConsensusPayload } from '@aztec/stdlib/p2p';
 
+import type { Archiver } from '@aztec-labs/archiver';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { ContractDeployer } from '@aztec-labs/aztec.js/deployment';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { BlockNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { StatefulTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
+import { CheckpointAttestation, ConsensusPayload } from '@aztec-labs/stdlib/p2p';
 import { jest } from '@jest/globals';
 import { getContract } from 'viem';
 

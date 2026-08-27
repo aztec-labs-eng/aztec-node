@@ -1,15 +1,15 @@
-import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec/ethereum/test';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { SecretValue } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { bufferToHex } from '@aztec/foundation/string';
-import { DateProvider } from '@aztec/foundation/timer';
 import { SlashingProposerAbi } from '@aztec/l1-artifacts/SlashingProposerAbi';
 
+import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 import { type Hex, type TypedDataDefinition, encodeFunctionData, hashTypedData } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';

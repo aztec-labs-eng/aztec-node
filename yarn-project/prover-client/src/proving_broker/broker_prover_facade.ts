@@ -2,14 +2,14 @@ import type {
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
-} from '@aztec/constants';
-import { asyncPool } from '@aztec/foundation/async-pool';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { chunk } from '@aztec/foundation/collection';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec/foundation/promise';
-import { truncate } from '@aztec/foundation/string';
-import type { AvmCircuitInputs } from '@aztec/stdlib/avm';
+} from '@aztec-labs/constants';
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { chunk } from '@aztec-labs/foundation/collection';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { truncate } from '@aztec-labs/foundation/string';
+import type { AvmCircuitInputs } from '@aztec-labs/stdlib/avm';
 import {
   type ProofUri,
   type ProvingJobId,
@@ -20,9 +20,9 @@ import {
   type PublicInputsAndRecursiveProof,
   type ServerCircuitProver,
   makeProvingJobId,
-} from '@aztec/stdlib/interfaces/server';
-import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec/stdlib/parity';
-import { ProvingRequestType, RecursiveProof } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec-labs/stdlib/parity';
+import { ProvingRequestType, RecursiveProof } from '@aztec-labs/stdlib/proofs';
 import type {
   BlockMergeRollupPrivateInputs,
   BlockRollupPublicInputs,
@@ -42,8 +42,7 @@ import type {
   RootRollupPublicInputs,
   TxMergeRollupPrivateInputs,
   TxRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
-
+} from '@aztec-labs/stdlib/rollup';
 import { createHash } from 'node:crypto';
 
 import { InlineProofStore, type ProofStore } from './proof_store/index.js';

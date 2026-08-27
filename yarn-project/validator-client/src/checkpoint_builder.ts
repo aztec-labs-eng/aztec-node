@@ -1,25 +1,25 @@
-import { NUM_CHECKPOINT_END_MARKER_FIELDS, getNumBlockEndBlobFields } from '@aztec/blob-lib/encoding';
-import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec/constants';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { merge, pick, sum } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { bufferToHex } from '@aztec/foundation/string';
-import { DateProvider, elapsed } from '@aztec/foundation/timer';
-import { createTxValidatorForBlockBuilding, getDefaultAllowedSetupFunctions } from '@aztec/p2p/msg_validators';
-import { LightweightCheckpointBuilder } from '@aztec/prover-client/light';
+import { NUM_CHECKPOINT_END_MARKER_FIELDS, getNumBlockEndBlobFields } from '@aztec-labs/blob-lib/encoding';
+import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { merge, pick, sum } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { DateProvider, elapsed } from '@aztec-labs/foundation/timer';
+import { createTxValidatorForBlockBuilding, getDefaultAllowedSetupFunctions } from '@aztec-labs/p2p/msg_validators';
+import { LightweightCheckpointBuilder } from '@aztec-labs/prover-client/light';
 import {
   type AvmSimulator,
   GuardedMerkleTreeOperations,
   PublicContractsDB,
   PublicProcessor,
   createPublicTxSimulatorForBlockBuilding,
-} from '@aztec/simulator/server';
-import { type BlockHash, L2Block } from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { Gas } from '@aztec/stdlib/gas';
+} from '@aztec-labs/simulator/server';
+import { type BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { Gas } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
   type BuildBlockInCheckpointResult,
@@ -31,15 +31,15 @@ import {
   type MerkleTreeWriteOperations,
   type PublicProcessorLimits,
   type WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import { type DebugLogStore, NullDebugLogStore } from '@aztec/stdlib/logs';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import { type CheckpointGlobalVariables, GlobalVariables, StateReference, Tx } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-import { ForkCheckpoint } from '@aztec/world-state';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { type DebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { type CheckpointGlobalVariables, GlobalVariables, StateReference, Tx } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { ForkCheckpoint } from '@aztec-labs/world-state';
 
 // Re-export for backward compatibility
-export type { BuildBlockInCheckpointResult } from '@aztec/stdlib/interfaces/server';
+export type { BuildBlockInCheckpointResult } from '@aztec-labs/stdlib/interfaces/server';
 
 /**
  * Builder for a single checkpoint. Handles building blocks within the checkpoint

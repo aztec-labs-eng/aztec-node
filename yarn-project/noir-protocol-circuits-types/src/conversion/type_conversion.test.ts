@@ -1,10 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { makeBlockHeader } from '@aztec/stdlib/testing';
-import { FunctionData } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { makeBlockHeader } from '@aztec-labs/stdlib/testing';
+import { FunctionData } from '@aztec-labs/stdlib/tx';
 
 import { mapFunctionDataFromNoir, mapFunctionDataToNoir } from './client.js';
 import {

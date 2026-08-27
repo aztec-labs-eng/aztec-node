@@ -1,11 +1,11 @@
-import { getConsensusConfigFromNetworkEnv, validateNetworkConsensusConfig } from '@aztec/stdlib/config';
+import { getConsensusConfigFromNetworkEnv, validateNetworkConsensusConfig } from '@aztec-labs/stdlib/config';
 import {
   DEFAULT_CHECKPOINT_PROPOSAL_INIT_TIME,
   DEFAULT_CHECKPOINT_PROPOSAL_PREPARE_TIME,
   DEFAULT_MIN_BLOCK_DURATION,
   DEFAULT_P2P_PROPAGATION_TIME,
   ProposerTimetable,
-} from '@aztec/stdlib/timetable';
+} from '@aztec-labs/stdlib/timetable';
 
 import { type ConsensusComplete, enrichEnvironmentWithChainName } from './chain_l2_config.js';
 import { devnetConfig, mainnetConfig, testnetConfig } from './generated/networks.js';

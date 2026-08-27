@@ -1,6 +1,5 @@
-import { type ZodFor, optional } from '@aztec/foundation/schemas';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { type ZodFor, optional } from '@aztec-labs/foundation/schemas';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import {

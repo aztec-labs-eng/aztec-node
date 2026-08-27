@@ -1,17 +1,16 @@
-import type { EpochCache, EpochCommitteeInfo } from '@aztec/epoch-cache';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import type { EpochCache, EpochCommitteeInfo } from '@aztec-labs/epoch-cache';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type {
   DescendentOfInvalidAttestationsCheckpointEvent,
   InvalidCheckpointDetectedEvent,
   L2BlockSourceEventEmitter,
   ValidateCheckpointNegativeResult,
-} from '@aztec/stdlib/block';
-import type { CheckpointInfo } from '@aztec/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { OffenseType } from '@aztec/stdlib/slashing';
-
+} from '@aztec-labs/stdlib/block';
+import type { CheckpointInfo } from '@aztec-labs/stdlib/checkpoint';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

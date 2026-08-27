@@ -1,8 +1,8 @@
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import type { PublisherManager } from '@aztec/ethereum/publisher-manager';
-import type { PublicProcessorFactory } from '@aztec/simulator/server';
-import type { ProposerTimetable } from '@aztec/stdlib/timetable';
-import type { FullNodeCheckpointsBuilder, ValidatorClient } from '@aztec/validator-client';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import type { PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import type { ProposerTimetable } from '@aztec-labs/stdlib/timetable';
+import type { FullNodeCheckpointsBuilder, ValidatorClient } from '@aztec-labs/validator-client';
 
 import { SequencerClient } from '../client/sequencer-client.js';
 import type { SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';

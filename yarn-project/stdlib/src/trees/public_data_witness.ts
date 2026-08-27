@@ -1,9 +1,8 @@
-import { PUBLIC_DATA_TREE_HEIGHT } from '@aztec/constants';
-import { toBigIntBE } from '@aztec/foundation/bigint-buffer';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import { MembershipWitness, SiblingPath } from '@aztec/foundation/trees';
-
+import { PUBLIC_DATA_TREE_HEIGHT } from '@aztec-labs/constants';
+import { toBigIntBE } from '@aztec-labs/foundation/bigint-buffer';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import { z } from 'zod';
 
 import { schemas } from '../schemas/schemas.js';

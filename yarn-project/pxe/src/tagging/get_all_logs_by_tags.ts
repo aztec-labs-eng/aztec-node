@@ -1,9 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { BlockHash } from '@aztec/stdlib/block';
-import { MAX_RPC_LEN } from '@aztec/stdlib/interfaces/api-limit';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { BlockHash } from '@aztec-labs/stdlib/block';
+import { MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import {
   type LogIncludeOptions,
   type LogResult,
@@ -11,8 +11,8 @@ import {
   type Tag,
   queryAllPrivateLogsByTags,
   queryAllPublicLogsByTags,
-} from '@aztec/stdlib/logs';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/logs';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 /**
  * The block a tag query is anchored to.

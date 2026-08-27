@@ -1,6 +1,6 @@
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 
 import { tick } from '../test_utils.js';
 import { BaseStagingStore } from './base_staging_store.js';

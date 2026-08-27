@@ -1,4 +1,4 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 
 import { MemoryBlobStore } from '../blobstore/memory_blob_store.js';
 import {

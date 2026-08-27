@@ -1,10 +1,9 @@
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { emptyChainConfig } from '@aztec/stdlib/config';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { emptyChainConfig } from '@aztec-labs/stdlib/config';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';

@@ -1,23 +1,23 @@
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TxSimulationResultWithAppOffset } from '@aztec/aztec.js/wallet';
-import { MAX_ENQUEUED_CALLS_PER_CALL } from '@aztec/constants';
-import type { ChainInfo } from '@aztec/entrypoints/interfaces';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Tuple } from '@aztec/foundation/serialize';
-import type { ContractNameResolver } from '@aztec/pxe/client/lazy';
-import { displayDebugLogs } from '@aztec/pxe/client/lazy';
-import { generateSimulatedProvingResult } from '@aztec/pxe/simulator';
-import { type FunctionCall, FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { GasSettings } from '@aztec/stdlib/gas';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TxSimulationResultWithAppOffset } from '@aztec-labs/aztec.js/wallet';
+import { MAX_ENQUEUED_CALLS_PER_CALL } from '@aztec-labs/constants';
+import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
+import type { ContractNameResolver } from '@aztec-labs/pxe/client/lazy';
+import { displayDebugLogs } from '@aztec-labs/pxe/client/lazy';
+import { generateSimulatedProvingResult } from '@aztec-labs/pxe/simulator';
+import { type FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
 import {
   ClaimedLengthArray,
   CountedPublicCallRequest,
   PrivateCircuitPublicInputs,
   PublicCallRequest,
-} from '@aztec/stdlib/kernel';
-import { ChonkProof } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/kernel';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
 import {
   type BlockHeader,
   type ExecutionPayload,
@@ -29,7 +29,7 @@ import {
   Tx,
   TxContext,
   TxSimulationResult,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 /**
  * Splits an execution payload into a leading prefix of public static calls

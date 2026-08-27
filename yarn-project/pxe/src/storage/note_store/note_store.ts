@@ -1,10 +1,10 @@
-import { createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { Fr } from '@aztec/foundation/schemas';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec/kv-store';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { DataInBlock } from '@aztec/stdlib/block';
-import { NoteDao, NoteStatus } from '@aztec/stdlib/note';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { Fr } from '@aztec-labs/foundation/schemas';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec-labs/kv-store';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { DataInBlock } from '@aztec-labs/stdlib/block';
+import { NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 
 import type { NotesFilter } from '../../notes_filter.js';
 import { BaseStagingStore, type ReadonlyDb } from '../base_staging_store.js';

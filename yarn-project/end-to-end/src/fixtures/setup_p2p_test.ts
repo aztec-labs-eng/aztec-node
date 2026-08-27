@@ -1,14 +1,13 @@
 /**
  * Test fixtures and utilities to set up and run a test using multiple validators
  */
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec/aztec-node';
-import { range } from '@aztec/foundation/array';
-import { SecretValue } from '@aztec/foundation/config';
-import { withLoggerBindings } from '@aztec/foundation/log/server';
-import { bufferToHex } from '@aztec/foundation/string';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { GenesisData } from '@aztec/stdlib/world-state';
-
+import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { range } from '@aztec-labs/foundation/array';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 import getPort from 'get-port';
 
 import { TEST_PEER_CHECK_INTERVAL_MS } from './fixtures.js';

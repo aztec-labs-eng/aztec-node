@@ -1,5 +1,5 @@
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec/constants';
-import { SlotNumber } from '@aztec/foundation/branded-types';
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import { type L1RollupConstants, getTimestampForSlot } from '../epoch-helpers/index.js';
 import type { InboxBucket } from './inbox_bucket.js';

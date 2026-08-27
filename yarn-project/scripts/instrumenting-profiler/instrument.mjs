@@ -249,7 +249,7 @@ function parseArgs(argv) {
 
 (async () => {
   const { patterns } = parseArgs(process.argv);
-  const runtimeModule = '@aztec/foundation/profiler';
+  const runtimeModule = '@aztec-labs/foundation/profiler';
   const files = await fg(patterns, {
     onlyFiles: true,
     unique: true,

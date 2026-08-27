@@ -1,10 +1,10 @@
-import { asyncPool } from '@aztec/foundation/async-pool';
-import { maxBigint } from '@aztec/foundation/bigint';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
 import { InboxAbi } from '@aztec/l1-artifacts/InboxAbi';
 
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { maxBigint } from '@aztec-labs/foundation/bigint';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type BlockTag, type GetContractReturnType, type Hex, getContract } from 'viem';
 
 import { getPublicClient } from '../client.js';

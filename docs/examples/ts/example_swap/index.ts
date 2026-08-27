@@ -1,21 +1,21 @@
 // docs:start:setup
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { AztecAddress, EthAddress } from "@aztec/aztec.js/addresses";
-import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
-import { Fr } from "@aztec/aztec.js/fields";
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
-import { deployL1Contract } from "@aztec/ethereum/deploy-l1-contract";
-import { sha256ToField } from "@aztec/foundation/crypto/sha256";
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import { TokenBridgeContract } from "@aztec/noir-contracts.js/TokenBridge";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { AztecAddress, EthAddress } from "@aztec-labs/aztec.js/addresses";
+import { SetPublicAuthwitContractInteraction } from "@aztec-labs/aztec.js/authorization";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client";
+import { deployL1Contract } from "@aztec-labs/ethereum/deploy-l1-contract";
+import { sha256ToField } from "@aztec-labs/foundation/crypto/sha256";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { TokenBridgeContract } from "@aztec-labs/noir-contracts.js/TokenBridge";
 import {
   computeL2ToL1MessageHash,
   computeSecretHash,
-} from "@aztec/stdlib/hash";
-import { createAztecNodeDebugClient } from "@aztec/stdlib/interfaces/client";
+} from "@aztec-labs/stdlib/hash";
+import { createAztecNodeDebugClient } from "@aztec-labs/stdlib/interfaces/client";
 import { decodeEventLog, encodeFunctionData, pad } from "@aztec/viem";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 import { foundry } from "@aztec/viem/chains";
 import ExampleERC20 from "../../../target/solidity/example_swap/ExampleERC20.sol/ExampleERC20.json" with { type: "json" };
 import ExampleTokenPortal from "../../../target/solidity/example_swap/ExampleTokenPortal.sol/ExampleTokenPortal.json" with { type: "json" };
@@ -95,7 +95,7 @@ console.log(`Uniswap Portal: ${uniswapPortalAddress}\n`);
 // docs:start:deploy_l2
 console.log("Deploying L2 contracts...\n");
 
-// Deploy L2 tokens (using the standard TokenContract from @aztec/noir-contracts.js)
+// Deploy L2 tokens (using the standard TokenContract from @aztec-labs/noir-contracts.js)
 const { contract: l2Weth } = await TokenContract.deploy(
   wallet,
   account.address,

@@ -1,17 +1,16 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { RollupCheatCodes } from '@aztec/aztec/testing';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import type { RollupContract, SlashingProposerContract } from '@aztec/ethereum/contracts';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { unique } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { retryUntil } from '@aztec/foundation/retry';
-import { pluralize } from '@aztec/foundation/string';
-import { type OffenseType, getRoundForOffense } from '@aztec/slasher';
-import type { AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import type { TxHash } from '@aztec/stdlib/tx';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import type { RollupContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { unique } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { pluralize } from '@aztec-labs/foundation/string';
+import { type OffenseType, getRoundForOffense } from '@aztec-labs/slasher';
+import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { testSpan } from '../../fixtures/timing.js';

@@ -1,9 +1,8 @@
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { DroppedTxReceipt, MinedTxReceipt, TxEffect, TxExecutionResult, TxHash, TxStatus } from '@aztec/stdlib/tx';
-
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { DroppedTxReceipt, MinedTxReceipt, TxEffect, TxExecutionResult, TxHash, TxStatus } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 
 import { TxResolverService } from './tx_resolver_service.js';

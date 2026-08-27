@@ -1,4 +1,4 @@
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '../deserialization/index.js';
 import { Checkpoint } from './checkpoint.js';

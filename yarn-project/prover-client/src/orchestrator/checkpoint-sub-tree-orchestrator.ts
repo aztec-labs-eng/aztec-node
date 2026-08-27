@@ -1,38 +1,38 @@
-import type { SpongeBlob } from '@aztec/blob-lib/types';
+import type { SpongeBlob } from '@aztec-labs/blob-lib/types';
 import {
   type ARCHIVE_HEIGHT,
   L1_TO_L2_MSG_TREE_HEIGHT,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-} from '@aztec/constants';
-import { BlockNumber, type EpochNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AbortError } from '@aztec/foundation/error';
-import type { LoggerBindings } from '@aztec/foundation/log';
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec/foundation/promise';
-import type { SerialQueue } from '@aztec/foundation/queue';
-import { type Tuple, assertLength } from '@aztec/foundation/serialize';
-import type { TreeNodeLocation } from '@aztec/foundation/trees';
-import { EthAddress } from '@aztec/stdlib/block';
+} from '@aztec-labs/constants';
+import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AbortError } from '@aztec-labs/foundation/error';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { SerialQueue } from '@aztec-labs/foundation/queue';
+import { type Tuple, assertLength } from '@aztec-labs/foundation/serialize';
+import type { TreeNodeLocation } from '@aztec-labs/foundation/trees';
+import { EthAddress } from '@aztec-labs/stdlib/block';
 import type {
   ForkMerkleTreeOperations,
   MerkleTreeWriteOperations,
   PublicInputsAndRecursiveProof,
   ReadonlyWorldStateAccess,
   ServerCircuitProver,
-} from '@aztec/stdlib/interfaces/server';
-import { appendL1ToL2MessagesToTree } from '@aztec/stdlib/messaging';
-import type { ParityPublicInputs } from '@aztec/stdlib/parity';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { appendL1ToL2MessagesToTree } from '@aztec-labs/stdlib/messaging';
+import type { ParityPublicInputs } from '@aztec-labs/stdlib/parity';
 import {
   type BaseRollupHints,
   type BlockRollupPublicInputs,
   CheckpointConstantData,
   PrivateTxBaseRollupPrivateInputs,
   type PublicChonkVerifierPublicInputs,
-} from '@aztec/stdlib/rollup';
-import type { CircuitName } from '@aztec/stdlib/stats';
-import { type AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec/stdlib/trees';
-import type { BlockHeader, ProcessedTx, Tx } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/rollup';
+import type { CircuitName } from '@aztec-labs/stdlib/stats';
+import { type AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader, ProcessedTx, Tx } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 import {
   Attributes,
   type TelemetryClient,
@@ -40,8 +40,7 @@ import {
   getTelemetryClient,
   trackSpan,
   wrapCallbackInSpan,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { inspect } from 'util';
 
 import {

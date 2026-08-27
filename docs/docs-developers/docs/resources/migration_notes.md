@@ -9,14 +9,41 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [npm] Packages moved to the `@aztec-labs` scope
+
+Every package published from this repository is now scoped `@aztec-labs` instead of `@aztec`.
+Update your dependencies and imports:
+
+```diff
+-import { Contract } from '@aztec/aztec.js';
++import { Contract } from '@aztec-labs/aztec.js';
+```
+
+```diff
+-  "@aztec/aztec.js": "<version>",
+-  "@aztec/accounts": "<version>",
++  "@aztec-labs/aztec.js": "<version>",
++  "@aztec-labs/accounts": "<version>",
+```
+
+Subpath imports are unaffected beyond the scope: `@aztec/foundation/log` becomes
+`@aztec-labs/foundation/log`.
+
+The `@aztec` scope keeps the packages published for earlier versions, so an existing project
+pinned to an older release continues to install unchanged. There is no `@aztec-labs` release of
+those older versions.
+
+Packages this repository does not publish keep their existing names. Notably `@aztec/viem`, the
+vendored viem fork consumed as `"viem": "npm:@aztec/viem@<version>"`, is unchanged.
+
 ### [CLI] Removed `bridge-erc20`
 
 `aztec bridge-erc20` performed only the L1 half of a token bridge deposit: it approved the ERC20 and called `depositToAztecPublic` (or `depositToAztecPrivate`) on a TokenPortal you supplied, then printed a claim secret for you to redeem on L2 yourself. Using it required already having deployed your own L1 TokenPortal and its L2 counterpart.
 
-Use `L1ToL2TokenPortalManager` from `@aztec/aztec.js/ethereum` instead, which is what the command wrapped:
+Use `L1ToL2TokenPortalManager` from `@aztec-labs/aztec.js/ethereum` instead, which is what the command wrapped:
 
 ```ts
-import { L1ToL2TokenPortalManager } from '@aztec/aztec.js/ethereum';
+import { L1ToL2TokenPortalManager } from '@aztec-labs/aztec.js/ethereum';
 
 const manager = new L1ToL2TokenPortalManager(portalAddress, tokenAddress, handlerAddress, l1Client, logger);
 const { claimAmount, claimSecret } = await manager.bridgeTokensPublic(recipient, amount, mint);
@@ -33,17 +60,17 @@ aztec-wallet register-contract contracts:SponsoredFPC SponsoredFPC --salt 0
 aztec-wallet send transfer --payment method=fpc-sponsored,fpc=contracts:SponsoredFPC ...
 ```
 
-If you need the address itself (for a script or a non-wallet consumer), use `getSponsoredFPCAddress` from `@aztec/cli/cli-utils`.
+If you need the address itself (for a script or a non-wallet consumer), use `getSponsoredFPCAddress` from `@aztec-labs/cli/cli-utils`.
 
 ### [CLI] Removed `inspect-contract`, `compute-selector`, `generate-secret-and-hash`, `parse-parameter-struct`, and `example-contracts`
 
 The `aztec` CLI no longer includes these contract-inspection helpers, which predate the current tooling and had no remaining use:
 
-- `aztec inspect-contract`: contract class details and function selectors are available programmatically via `getContractClassFromArtifact` and `FunctionSelector.fromSignature` in `@aztec/aztec.js`.
-- `aztec compute-selector`: use `FunctionSelector.fromSignature` from `@aztec/aztec.js`.
-- `aztec generate-secret-and-hash`: use `Fr.random()` and `computeSecretHash` from `@aztec/aztec.js`.
+- `aztec inspect-contract`: contract class details and function selectors are available programmatically via `getContractClassFromArtifact` and `FunctionSelector.fromSignature` in `@aztec-labs/aztec.js`.
+- `aztec compute-selector`: use `FunctionSelector.fromSignature` from `@aztec-labs/aztec.js`.
+- `aztec generate-secret-and-hash`: use `Fr.random()` and `computeSecretHash` from `@aztec-labs/aztec.js`.
 - `aztec parse-parameter-struct`: no replacement.
-- `aztec example-contracts`: the list of example contracts is the set of subpath exports of `@aztec/noir-contracts.js`.
+- `aztec example-contracts`: the list of example contracts is the set of subpath exports of `@aztec-labs/noir-contracts.js`.
 
 ### [Aztec.js] Contract artifacts preserve the names of `#[abi(tag)]` globals
 
@@ -57,7 +84,7 @@ pub global EXPORTED_STRING_CONSTANT: str<8> = "exported";
 ```
 
 ```typescript
-import { getGlobalsByTag } from '@aztec/aztec.js/abi';
+import { getGlobalsByTag } from '@aztec-labs/aztec.js/abi';
 
 const { EXPORTED_FIELD_CONSTANT, EXPORTED_STRING_CONSTANT } = getGlobalsByTag(MyContractArtifact, 'constants');
 ```
@@ -82,17 +109,17 @@ There is no backwards compatibility path: artifacts compiled before Noir exporte
 + decodeEachFromAbi(fn.parameters.map(param => param.type), args)
 ```
 
-### [Aztec.js] Protocol contracts removed from `@aztec/noir-contracts.js`
+### [Aztec.js] Protocol contracts removed from `@aztec-labs/noir-contracts.js`
 
-`@aztec/noir-contracts.js` no longer includes the protocol contracts: the `FeeJuice`, `ContractClassRegistry`, and `ContractInstanceRegistry` artifacts and typed wrappers have been removed from the package, so imports such as `@aztec/noir-contracts.js/FeeJuice` no longer resolve. These names are also no longer available to the `aztec` CLI's contract-name lookup (e.g. in `aztec example-contracts`).
+`@aztec-labs/noir-contracts.js` no longer includes the protocol contracts: the `FeeJuice`, `ContractClassRegistry`, and `ContractInstanceRegistry` artifacts and typed wrappers have been removed from the package, so imports such as `@aztec-labs/noir-contracts.js/FeeJuice` no longer resolve. These names are also no longer available to the `aztec` CLI's contract-name lookup (e.g. in `aztec example-contracts`).
 
-Protocol contracts are distributed via `@aztec/protocol-contracts` (artifacts and canonical deployment data), and typed wrappers for them are exported from `@aztec/aztec.js/protocol`. The `aztec.js` wrappers are bound to the contract's canonical address, so attaching takes only the wallet: there is no address parameter.
+Protocol contracts are distributed via `@aztec-labs/protocol-contracts` (artifacts and canonical deployment data), and typed wrappers for them are exported from `@aztec-labs/aztec.js/protocol`. The `aztec.js` wrappers are bound to the contract's canonical address, so attaching takes only the wallet: there is no address parameter.
 
 **Migration:**
 
 ```diff
-- import { FeeJuiceContract } from '@aztec/noir-contracts.js/FeeJuice';
-+ import { FeeJuiceContract } from '@aztec/aztec.js/protocol';
+- import { FeeJuiceContract } from '@aztec-labs/noir-contracts.js/FeeJuice';
++ import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
 
 - const feeJuice = FeeJuiceContract.at(ProtocolContractAddress.FeeJuice, wallet);
 + const feeJuice = FeeJuiceContract.withWallet(wallet);
@@ -100,7 +127,7 @@ Protocol contracts are distributed via `@aztec/protocol-contracts` (artifacts an
 
 ### [Aztec.js] Protocol contract wrappers: `at(wallet)` deprecated in favor of `withWallet(wallet)`
 
-The protocol contract wrappers exported from `@aztec/aztec.js/protocol` (`FeeJuiceContract`, `ContractClassRegistryContract`, `ContractInstanceRegistryContract`) rename their static `at(wallet)` to `withWallet(wallet)`. These wrappers are bound to the contract's canonical address, so their only parameter is the wallet to act through; `withWallet` states that directly and matches the existing `withWallet` instance method, whereas the one-argument `at` read as if it took an address. `at(wallet)` still works but is deprecated and will be removed in a future release.
+The protocol contract wrappers exported from `@aztec-labs/aztec.js/protocol` (`FeeJuiceContract`, `ContractClassRegistryContract`, `ContractInstanceRegistryContract`) rename their static `at(wallet)` to `withWallet(wallet)`. These wrappers are bound to the contract's canonical address, so their only parameter is the wallet to act through; `withWallet` states that directly and matches the existing `withWallet` instance method, whereas the one-argument `at` read as if it took an address. `at(wallet)` still works but is deprecated and will be removed in a future release.
 
 **Migration:**
 
@@ -127,11 +154,11 @@ Two remain public, at a new path:
 
 The other seven are now crate-internal (`pub(crate)`) and can no longer be imported from outside the `aztec` crate: `DOM_SEP__AUTHWIT_NULLIFIER`, `DOM_SEP__TX_NULLIFIER`, `DOM_SEP__SINGLE_USE_CLAIM_NULLIFIER`, `DOM_SEP__CONSTRAINED_MSG_NULLIFIER`, `DOM_SEP__ECDH_SUBKEY`, `DOM_SEP__ECDH_FIELD_MASK`, and `DOM_SEP__INITIALIZATION_NULLIFIER`.
 
-**Impact**: Contracts that use aztec-nr's high-level APIs (notes, authwit, state variables, message delivery, ECDH) are unaffected, since these separators are applied internally. A contract that imported one of these constants directly must either switch to the new `aztec::note::partial_note` path (for the two public ones) or, for the now-internal ones, call the corresponding aztec-nr helper instead of recomputing the hash by hand. The generated TypeScript `DomainSeparator` enum in `@aztec/constants` / `@aztec/stdlib` likewise no longer contains the seven removed members (their values were unused in TypeScript).
+**Impact**: Contracts that use aztec-nr's high-level APIs (notes, authwit, state variables, message delivery, ECDH) are unaffected, since these separators are applied internally. A contract that imported one of these constants directly must either switch to the new `aztec::note::partial_note` path (for the two public ones) or, for the now-internal ones, call the corresponding aztec-nr helper instead of recomputing the hash by hand. The generated TypeScript `DomainSeparator` enum in `@aztec-labs/constants` / `@aztec-labs/stdlib` likewise no longer contains the seven removed members (their values were unused in TypeScript).
 
-### [Aztec Node] `GasPrice` renamed to `FeesPerGas` in `@aztec/ethereum`
+### [Aztec Node] `GasPrice` renamed to `FeesPerGas` in `@aztec-labs/ethereum`
 
-The `GasPrice` interface exported from `@aztec/ethereum/l1-tx-utils` is now `FeesPerGas`, matching viem's name for the same thing, and the methods and fields carrying it are renamed to match. These values were never a price paid: they are the EIP-1559 caps a transaction is sent with (`maxFeePerGas`, `maxPriorityFeePerGas`, `maxFeePerBlobGas`), and what the transaction actually pays is decided at inclusion. The fields inside the type are unchanged.
+The `GasPrice` interface exported from `@aztec-labs/ethereum/l1-tx-utils` is now `FeesPerGas`, matching viem's name for the same thing, and the methods and fields carrying it are renamed to match. These values were never a price paid: they are the EIP-1559 caps a transaction is sent with (`maxFeePerGas`, `maxPriorityFeePerGas`, `maxFeePerBlobGas`), and what the transaction actually pays is decided at inclusion. The fields inside the type are unchanged.
 
 | Old                                         | New                                           |
 | ------------------------------------------- | --------------------------------------------- |
@@ -146,8 +173,8 @@ The `GasPrice` interface exported from `@aztec/ethereum/l1-tx-utils` is now `Fee
 **Migration:**
 
 ```diff
-- import type { GasPrice } from '@aztec/ethereum/l1-tx-utils';
-+ import type { FeesPerGas } from '@aztec/ethereum/l1-tx-utils';
+- import type { GasPrice } from '@aztec-labs/ethereum/l1-tx-utils';
++ import type { FeesPerGas } from '@aztec-labs/ethereum/l1-tx-utils';
 
 - const gasPrice = await l1TxUtils.getGasPrice(gasConfig, true, 0);
 + const feesPerGas = await l1TxUtils.getFeesPerGas(gasConfig, true, 0);

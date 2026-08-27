@@ -1,23 +1,23 @@
-import { EpochCache } from '@aztec/epoch-cache';
+import { EpochCache } from '@aztec-labs/epoch-cache';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { TimeoutError } from '@aztec/foundation/error';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { ManualDateProvider } from '@aztec/foundation/timer';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-import { type P2P, P2PClientState } from '@aztec/p2p';
-import type { SlasherClientInterface } from '@aztec/slasher';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { TimeoutError } from '@aztec-labs/foundation/error';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { ManualDateProvider } from '@aztec-labs/foundation/timer';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
+import { type P2P, P2PClientState } from '@aztec-labs/p2p';
+import type { SlasherClientInterface } from '@aztec-labs/slasher';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   CommitteeAttestation,
   L2Block,
@@ -25,34 +25,33 @@ import {
   type L2BlockSource,
   type ProposedCheckpointSink,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
   type CheckpointData,
   L1PublishedData,
   type ProposedCheckpointData,
-} from '@aztec/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { GasFees } from '@aztec/stdlib/gas';
+} from '@aztec-labs/stdlib/checkpoint';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 import {
   InsufficientValidTxsError,
   type MerkleTreeWriteOperations,
   type ResolvedSequencerConfig,
   type TreeInfo,
   type WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import type { InboxBucket, L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { BlockProposal, CheckpointProposal, type CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import type { ProposerTimetable, SubslotSelection } from '@aztec/stdlib/timetable';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { type FailedTx, GlobalVariables, type Tx } from '@aztec/stdlib/tx';
-import { AttestationTimeoutError } from '@aztec/stdlib/validators';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-import { CheckpointBuilder, type FullNodeCheckpointsBuilder, type ValidatorClient } from '@aztec/validator-client';
-import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec/validator-ha-signer/errors';
-import { DutyType } from '@aztec/validator-ha-signer/types';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxBucket, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { BlockProposal, CheckpointProposal, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import type { ProposerTimetable, SubslotSelection } from '@aztec-labs/stdlib/timetable';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { type FailedTx, GlobalVariables, type Tx } from '@aztec-labs/stdlib/tx';
+import { AttestationTimeoutError } from '@aztec-labs/stdlib/validators';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { CheckpointBuilder, type FullNodeCheckpointsBuilder, type ValidatorClient } from '@aztec-labs/validator-client';
+import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/validator-ha-signer/errors';
+import { DutyType } from '@aztec-labs/validator-ha-signer/types';
 import { expect, jest } from '@jest/globals';
 import EventEmitter from 'events';
 import { type MockProxy, mock, mockDeep, mockFn } from 'jest-mock-extended';

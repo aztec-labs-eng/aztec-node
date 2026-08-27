@@ -1,4 +1,4 @@
-import type { RollupContract, SlashingProposerContract } from '@aztec/ethereum/contracts';
+import type { RollupContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 
 import type { SlasherSettings } from '../slasher_client.js';
 

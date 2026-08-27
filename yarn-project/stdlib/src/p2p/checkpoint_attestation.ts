@@ -1,11 +1,10 @@
-import { CheckpointProposalHash, type SlotNumber } from '@aztec/foundation/branded-types';
-import { type BaseBuffer32, Buffer32 } from '@aztec/foundation/buffer';
-import { normalizeSignature } from '@aztec/foundation/crypto/secp256k1-signer';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+import { CheckpointProposalHash, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type BaseBuffer32, Buffer32 } from '@aztec-labs/foundation/buffer';
+import { normalizeSignature } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { z } from 'zod';
 
 import type { ZodFor } from '../schemas/index.js';

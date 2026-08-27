@@ -44,7 +44,7 @@ try {
 }
 ```
 
-`.send()` handles the full lifecycle: it generates a proof, submits the transaction to the node, waits for it to be included in a block, and returns the receipt. If you need to send without waiting, pass `wait: NO_WAIT` in the options to get a `TxHash` back immediately instead. `NO_WAIT` is exported from `@aztec/aztec.js/contracts`.
+`.send()` handles the full lifecycle: it generates a proof, submits the transaction to the node, waits for it to be included in a block, and returns the receipt. If you need to send without waiting, pass `wait: NO_WAIT` in the options to get a `TxHash` back immediately instead. `NO_WAIT` is exported from `@aztec-labs/aztec.js/contracts`.
 
 ## Fee payment with SponsoredFPC
 

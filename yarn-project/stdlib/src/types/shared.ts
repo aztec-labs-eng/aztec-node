@@ -1,4 +1,4 @@
-import { BufferSink, type Bufferable, type Sinkable, serializeToSink } from '@aztec/foundation/serialize';
+import { BufferSink, type Bufferable, type Sinkable, serializeToSink } from '@aztec-labs/foundation/serialize';
 
 /**
  * Implementation of a vector. Matches how we are serializing and deserializing vectors in cpp (length in the first position, followed by the items).

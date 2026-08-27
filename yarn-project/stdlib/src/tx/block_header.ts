@@ -1,13 +1,18 @@
-import { BLOCK_HEADER_LENGTH, DomainSeparator } from '@aztec/constants';
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-import { BufferReader, BufferSink, FieldReader, serializeToFields, serializeToSink } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { BLOCK_HEADER_LENGTH, DomainSeparator } from '@aztec-labs/constants';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
+import {
+  BufferReader,
+  BufferSink,
+  FieldReader,
+  serializeToFields,
+  serializeToSink,
+} from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { inspect } from 'util';
 import { z } from 'zod';
 

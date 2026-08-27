@@ -1,7 +1,7 @@
-import type { BlobKzgInstance } from '@aztec/blob-lib/types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
+import type { BlobKzgInstance } from '@aztec-labs/blob-lib/types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 
 import type { EthSigner } from '../eth-signer/eth-signer.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';

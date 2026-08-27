@@ -1,5 +1,5 @@
-import { getIdentities } from '@aztec/accounts/utils';
-import { TxHash } from '@aztec/aztec.js/tx';
+import { getIdentities } from '@aztec-labs/accounts/utils';
+import { TxHash } from '@aztec-labs/aztec.js/tx';
 import {
   ETHEREUM_HOSTS,
   PRIVATE_KEY,
@@ -9,11 +9,10 @@ import {
   parseBigint,
   parseFieldFromHexString,
   parsePublicKey,
-} from '@aztec/cli/utils';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-import { TxStatus } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/cli/utils';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { TxStatus } from '@aztec-labs/stdlib/tx';
 import { type Command, Option } from 'commander';
 import inquirer from 'inquirer';
 

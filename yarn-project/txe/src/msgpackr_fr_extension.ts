@@ -1,11 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { addExtension } from 'msgpackr';
 
-// `@aztec/native/msgpack_channel` registers a msgpackr extension that packs `Fr` instances to
-// their raw 32-byte buffer for the C++ world-state side to deserialize. Because `@aztec/native`
+// `@aztec-labs/native/msgpack_channel` registers a msgpackr extension that packs `Fr` instances to
+// their raw 32-byte buffer for the C++ world-state side to deserialize. Because `@aztec-labs/native`
 // is externalized in TXE's esbuild config (it loads a `.node` binary that can't be bundled),
-// the `Fr` class the extension is keyed on belongs to the *external* `@aztec/foundation`
+// the `Fr` class the extension is keyed on belongs to the *external* `@aztec-labs/foundation`
 // module instance — a different class identity than the `Fr` bundled into the TXE worker /
 // bin. msgpackr's extension match uses `instanceof`, so bundled `Fr` instances slip through
 // and msgpackr falls back to `Fr.toJSON()` (returns `Fr.toString()` — a `0x...` hex string).

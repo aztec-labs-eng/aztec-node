@@ -1,14 +1,14 @@
-import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, TWO_POW_64 } from '@aztec/constants';
-import { type FieldsOf, makeTuple } from '@aztec/foundation/array';
-import { poseidon2Permutation } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, TWO_POW_64 } from '@aztec-labs/constants';
+import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
+import { poseidon2Permutation } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   BufferReader,
   FieldReader,
   type Tuple,
   serializeToBuffer,
   serializeToFields,
-} from '@aztec/foundation/serialize';
+} from '@aztec-labs/foundation/serialize';
 
 /**
  * A Poseidon2 sponge used to accumulate data that will be added to blobs.

@@ -1,15 +1,15 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { computeFeePayerBalanceStorageSlot } from '@aztec/protocol-contracts/fee-juice';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { GasFees } from '@aztec/stdlib/gas';
-import type { PublicStateSource } from '@aztec/stdlib/trees';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { computeFeePayerBalanceStorageSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { GasFees } from '@aztec-labs/stdlib/gas';
+import type { PublicStateSource } from '@aztec-labs/stdlib/trees';
 import {
   TX_ERROR_INSUFFICIENT_FEE_PAYER_BALANCE,
   TX_ERROR_INSUFFICIENT_FEE_PER_GAS,
   type Tx,
   type TxValidationResult,
   type TxValidator,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import { getFeePayerClaimAmount, getTxFeeLimit } from './fee_payer_balance.js';
 

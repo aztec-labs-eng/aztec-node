@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/cli",
+  "name": "@aztec-labs/cli",
   "version": "0.32.0",
   "type": "module",
   "exports": {
@@ -76,19 +76,19 @@
     ]
   },
   "dependencies": {
-    "@aztec/accounts": "workspace:^",
-    "@aztec/archiver": "workspace:^",
-    "@aztec/aztec.js": "workspace:^",
-    "@aztec/constants": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
+    "@aztec-labs/accounts": "workspace:^",
+    "@aztec-labs/archiver": "workspace:^",
+    "@aztec-labs/aztec.js": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/node-keystore": "workspace:^",
+    "@aztec-labs/p2p": "workspace:^",
+    "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/wallets": "workspace:^",
+    "@aztec-labs/world-state": "workspace:^",
     "@aztec/l1-artifacts": "0.1.0-dummy",
-    "@aztec/node-keystore": "workspace:^",
-    "@aztec/p2p": "workspace:^",
-    "@aztec/protocol-contracts": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/wallets": "workspace:^",
-    "@aztec/world-state": "workspace:^",
     "@ethersproject/wallet": "^5.8.0",
     "@iarna/toml": "^2.2.5",
     "@libp2p/peer-id-factory": "^3.0.4",
@@ -118,15 +118,15 @@
     "typescript": "^5.3.3"
   },
   "peerDependencies": {
-    "@aztec/accounts": "workspace:^",
-    "@aztec/bb-prover": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy",
-    "@aztec/noir-contracts.js": "workspace:^",
-    "@aztec/noir-protocol-circuits-types": "workspace:^",
-    "@aztec/noir-test-contracts.js": "workspace:^",
-    "@aztec/protocol-contracts": "workspace:^",
-    "@aztec/stdlib": "workspace:^"
+    "@aztec-labs/accounts": "workspace:^",
+    "@aztec-labs/bb-prover": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/noir-contracts.js": "workspace:^",
+    "@aztec-labs/noir-protocol-circuits-types": "workspace:^",
+    "@aztec-labs/noir-test-contracts.js": "workspace:^",
+    "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec/l1-artifacts": "0.1.0-dummy"
   },
   "files": [
     "dest",

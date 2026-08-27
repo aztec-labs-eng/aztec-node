@@ -1,15 +1,14 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { CheatCodes } from '@aztec/aztec/testing';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { DeployAztecL1ContractsReturnType } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import type { TestDateProvider } from '@aztec/foundation/timer';
-import { LendingContract } from '@aztec/noir-contracts.js/Lending';
-import { PriceFeedContract } from '@aztec/noir-contracts.js/PriceFeed';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { LendingContract } from '@aztec-labs/noir-contracts.js/Lending';
+import { PriceFeedContract } from '@aztec-labs/noir-contracts.js/PriceFeed';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { afterAll, jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/setup.js';

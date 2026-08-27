@@ -168,7 +168,7 @@ The logging API is the same in public functions:
 In test mode (when not using real proofs), you can access public function debug logs on the `TxReceipt`:
 
 ```typescript
-import { applyStringFormatting } from '@aztec/foundation/log';
+import { applyStringFormatting } from '@aztec-labs/foundation/log';
 
 const { receipt } = await contract.methods.myPublicFunction(args).send({
   from: address,

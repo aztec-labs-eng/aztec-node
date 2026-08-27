@@ -6,7 +6,7 @@ argument-hint: <network-or-rpc-url> <command...>
 
 # Aztec Wallet
 
-Run `@aztec/cli-wallet` commands against a live Aztec network. Handles network resolution, cli-wallet installation, account setup, and alias management automatically.
+Run `@aztec-labs/cli-wallet` commands against a live Aztec network. Handles network resolution, cli-wallet installation, account setup, and alias management automatically.
 
 ## Known Networks
 

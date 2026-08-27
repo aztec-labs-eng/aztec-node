@@ -1,4 +1,4 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import type { MerkleTreeWriteOperations } from '../interfaces/merkle_tree_operations.js';
 import { MerkleTreeId } from '../trees/merkle_tree_id.js';

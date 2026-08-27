@@ -1,13 +1,13 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { type DeployOptions, getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { ContractDeployer } from '@aztec/aztec.js/deployment';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { TxExecutionResult } from '@aztec/aztec.js/tx';
-import { TokenContractArtifact } from '@aztec/noir-contracts.js/Token';
-import { StatefulTestContract } from '@aztec/noir-test-contracts.js/StatefulTest';
-import { TestContractArtifact } from '@aztec/noir-test-contracts.js/Test';
-import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec/stdlib/tx';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { type DeployOptions, getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { ContractDeployer } from '@aztec-labs/aztec.js/deployment';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
+import { TokenContractArtifact } from '@aztec-labs/noir-contracts.js/Token';
+import { StatefulTestContract } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
+import { TestContractArtifact } from '@aztec-labs/noir-test-contracts.js/Test';
+import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec-labs/stdlib/tx';
 
 import type { TestWallet } from '../../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../../automine_test_context.js';

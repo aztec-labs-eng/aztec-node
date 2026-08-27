@@ -1,7 +1,7 @@
-import { AbortError } from '@aztec/foundation/error';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import { sleep } from '@aztec/foundation/sleep';
+import { AbortError } from '@aztec-labs/foundation/error';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { sleep } from '@aztec-labs/foundation/sleep';
 
 /**
  * Minimal surface a deferred-proving state must expose. Both `CheckpointProvingState` /

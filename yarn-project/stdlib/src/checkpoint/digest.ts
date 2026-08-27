@@ -1,5 +1,5 @@
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { ConsensusPayload } from '../p2p/consensus_payload.js';
 import { type CoordinationSignatureContext, getHashedSignaturePayloadTypedData } from '../p2p/signature_utils.js';

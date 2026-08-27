@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/validator-ha-signer",
+  "name": "@aztec-labs/validator-ha-signer",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -75,10 +75,10 @@
     ]
   },
   "dependencies": {
-    "@aztec/foundation": "workspace:^",
-    "@aztec/kv-store": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/telemetry-client": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/kv-store": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/telemetry-client": "workspace:^",
     "node-pg-migrate": "^8.0.4",
     "pg": "^8.11.3",
     "tslib": "^2.4.0",

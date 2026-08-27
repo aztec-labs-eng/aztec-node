@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/pxe",
+  "name": "@aztec-labs/pxe",
   "version": "0.1.0",
   "type": "module",
   "typedocOptions": {
@@ -71,18 +71,18 @@
     ]
   },
   "dependencies": {
-    "@aztec/bb-prover": "workspace:^",
+    "@aztec-labs/bb-prover": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/key-store": "workspace:^",
+    "@aztec-labs/kv-store": "workspace:^",
+    "@aztec-labs/noir-protocol-circuits-types": "workspace:^",
+    "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/simulator": "workspace:^",
+    "@aztec-labs/standard-contracts": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "@aztec/bb.js": "0.1.0-dummy",
-    "@aztec/constants": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/key-store": "workspace:^",
-    "@aztec/kv-store": "workspace:^",
-    "@aztec/noir-protocol-circuits-types": "workspace:^",
-    "@aztec/protocol-contracts": "workspace:^",
-    "@aztec/simulator": "workspace:^",
-    "@aztec/standard-contracts": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
     "koa": "^2.16.1",
     "koa-router": "^13.1.1",
     "lodash.omit": "^4.5.0",
@@ -91,8 +91,8 @@
     "viem": "npm:@aztec/viem@2.38.2"
   },
   "devDependencies": {
-    "@aztec/noir-test-contracts.js": "workspace:^",
-    "@aztec/world-state": "workspace:^",
+    "@aztec-labs/noir-test-contracts.js": "workspace:^",
+    "@aztec-labs/world-state": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/lodash.omit": "^4.5.7",

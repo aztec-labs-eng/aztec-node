@@ -1,5 +1,5 @@
-import type { AztecAsyncKVStore, AztecAsyncSingleton } from '@aztec/kv-store';
-import { BlockHeader } from '@aztec/stdlib/tx';
+import type { AztecAsyncKVStore, AztecAsyncSingleton } from '@aztec-labs/kv-store';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 /**
  * Holds the block header that PXE's private execution is anchored to. Updated by the BlockSynchronizer as the chain

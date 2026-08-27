@@ -1,17 +1,16 @@
-import { BatchedBlob } from '@aztec/blob-lib/types';
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import { randomL1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { SecretValue } from '@aztec/foundation/config';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { PublisherConfig, TxSenderConfig } from '@aztec/sequencer-client';
-import { Proof } from '@aztec/stdlib/proofs';
-import { CheckpointHeader, RootRollupPublicInputs } from '@aztec/stdlib/rollup';
-
+import { BatchedBlob } from '@aztec-labs/blob-lib/types';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
+import { Proof } from '@aztec-labs/stdlib/proofs';
+import { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

@@ -1,7 +1,6 @@
-import type { ISemaphore } from '@aztec/foundation/queue';
-import type { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import type { Tx, TxHash, TxValidator } from '@aztec/stdlib/tx';
-
+import type { ISemaphore } from '@aztec-labs/foundation/queue';
+import type { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import type { Tx, TxHash, TxValidator } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { ConnectionSampler } from '../connection-sampler/connection_sampler.js';

@@ -1,10 +1,10 @@
-import { Blob } from '@aztec/blob-lib';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
 import { TestERC20Abi, TestERC20Bytecode } from '@aztec/l1-artifacts';
 
+import { Blob } from '@aztec-labs/blob-lib';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type PrivateKeyAccount, createWalletClient, fallback, getContract, http, publicActions } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

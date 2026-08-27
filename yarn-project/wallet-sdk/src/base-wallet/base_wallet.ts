@@ -1,6 +1,6 @@
-import type { Account, NoFrom } from '@aztec/aztec.js/account';
-import { NO_FROM } from '@aztec/aztec.js/account';
-import type { CallIntent, IntentInnerHash } from '@aztec/aztec.js/authorization';
+import type { Account, NoFrom } from '@aztec-labs/aztec.js/account';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import type { CallIntent, IntentInnerHash } from '@aztec-labs/aztec.js/authorization';
 import {
   DefaultWaitOpts,
   type InteractionWaitOptions,
@@ -8,9 +8,9 @@ import {
   type SendReturn,
   type WaitOpts,
   extractOffchainOutput,
-} from '@aztec/aztec.js/contracts';
-import type { FeePaymentMethod } from '@aztec/aztec.js/fee';
-import { waitForTx } from '@aztec/aztec.js/node';
+} from '@aztec-labs/aztec.js/contracts';
+import type { FeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
 import {
   type Aliased,
   type AppCapabilities,
@@ -26,32 +26,32 @@ import {
   TxSimulationResultWithAppOffset,
   type Wallet,
   type WalletCapabilities,
-} from '@aztec/aztec.js/wallet';
-import { AccountFeePaymentMethodOptions, type DefaultAccountEntrypointOptions } from '@aztec/entrypoints/account';
-import { DefaultEntrypoint } from '@aztec/entrypoints/default';
-import type { ChainInfo } from '@aztec/entrypoints/interfaces';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import type { FieldsOf } from '@aztec/foundation/types';
-import { displayDebugLogs } from '@aztec/pxe/client/lazy';
-import type { PXE, PackedPrivateEvent } from '@aztec/pxe/server';
+} from '@aztec-labs/aztec.js/wallet';
+import { AccountFeePaymentMethodOptions, type DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
+import { DefaultEntrypoint } from '@aztec-labs/entrypoints/default';
+import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { displayDebugLogs } from '@aztec-labs/pxe/client/lazy';
+import type { PXE, PackedPrivateEvent } from '@aztec-labs/pxe/server';
 import {
   type ContractArtifact,
   type EventMetadataDefinition,
   type FunctionCall,
   decodeFromAbi,
-} from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type ContractInstancePreimage, type NodeInfo, computePartialAddress } from '@aztec/stdlib/contract';
-import { SimulationError } from '@aztec/stdlib/errors';
-import { Gas, GasFees, GasSettings, ManaUsageEstimate } from '@aztec/stdlib/gas';
+} from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type ContractInstancePreimage, type NodeInfo, computePartialAddress } from '@aztec-labs/stdlib/contract';
+import { SimulationError } from '@aztec-labs/stdlib/errors';
+import { Gas, GasFees, GasSettings, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
 import {
   computeSiloedPrivateInitializationNullifier,
   computeSiloedPublicInitializationNullifier,
-} from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { type MasterSecretKeys, deriveKeys, deriveKeysFromMasterSecretKeys } from '@aztec/stdlib/keys';
+} from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { type MasterSecretKeys, deriveKeys, deriveKeysFromMasterSecretKeys } from '@aztec-labs/stdlib/keys';
 import {
   BlockHeader,
   ExecutionPayload,
@@ -59,8 +59,7 @@ import {
   type TxProfileResult,
   type UtilityExecutionResult,
   mergeExecutionPayloads,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { inspect } from 'util';
 
 import { assertGasLimitsWithinNetworkLimits } from './get_gas_limits.js';

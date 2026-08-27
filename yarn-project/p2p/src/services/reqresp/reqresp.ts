@@ -1,10 +1,9 @@
 // @attribution: lodestar impl for inspiration
-import { AbortError, TimeoutError } from '@aztec/foundation/error';
-import { createLogger } from '@aztec/foundation/log';
-import { executeTimeout } from '@aztec/foundation/timer';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { Attributes, type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec/telemetry-client';
-
+import { AbortError, TimeoutError } from '@aztec-labs/foundation/error';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { Attributes, type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec-labs/telemetry-client';
 import type { IncomingStreamData, PeerId, Stream } from '@libp2p/interface';
 import type { Libp2p } from 'libp2p';
 import { pipeline } from 'node:stream/promises';

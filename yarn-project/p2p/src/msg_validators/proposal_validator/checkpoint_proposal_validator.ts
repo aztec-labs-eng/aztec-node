@@ -1,11 +1,11 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import type {
   CheckpointProposal,
   CoordinationSignatureContext,
   P2PValidator,
   ValidationResult,
-} from '@aztec/stdlib/p2p';
-import type { ConsensusTimetable } from '@aztec/stdlib/timetable';
+} from '@aztec-labs/stdlib/p2p';
+import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
 import { ProposalValidator } from '../proposal_validator/proposal_validator.js';
 

@@ -69,7 +69,7 @@ L2 to L1 messages are only available after the epoch proof is submitted to L1. S
 Compute the witness for the L2 to L1 message in TypeScript:
 
 ```ts
-import { computeL2ToL1MessageHash } from "@aztec/stdlib/hash";
+import { computeL2ToL1MessageHash } from "@aztec-labs/stdlib/hash";
 
 const l2ToL1Message = computeL2ToL1MessageHash({
   l2Sender: l2BridgeAddress,

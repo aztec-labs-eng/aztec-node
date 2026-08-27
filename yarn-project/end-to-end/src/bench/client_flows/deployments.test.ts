@@ -1,11 +1,10 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ContractInstanceWithAddress, SimulateInteractionOptions } from '@aztec/aztec.js/contracts';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { PrivateVotingContract } from '@aztec/noir-contracts.js/PrivateVoting';
-import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC';
-import { getContractClassFromArtifact } from '@aztec/stdlib/contract';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractInstanceWithAddress, SimulateInteractionOptions } from '@aztec-labs/aztec.js/contracts';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { PrivateVotingContract } from '@aztec-labs/noir-contracts.js/PrivateVoting';
+import { SponsoredFPCContract } from '@aztec-labs/noir-contracts.js/SponsoredFPC';
+import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
 import { jest } from '@jest/globals';
 
 import { captureProfile, expectedExecutionSteps } from './benchmark.js';

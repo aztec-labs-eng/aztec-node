@@ -1,6 +1,6 @@
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { SimulationOverridesBuilder } from './chain_state_override.js';
 

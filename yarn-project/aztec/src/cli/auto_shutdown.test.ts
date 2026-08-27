@@ -1,5 +1,4 @@
-import { VersionChecker } from '@aztec/stdlib/update-checker';
-
+import { VersionChecker } from '@aztec-labs/stdlib/update-checker';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { ExitCode, softShutdown } from './util.js';

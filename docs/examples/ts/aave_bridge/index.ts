@@ -1,23 +1,23 @@
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { AztecAddress, EthAddress } from "@aztec/aztec.js/addresses";
-import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
-import { Fr } from "@aztec/aztec.js/fields";
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
-import { deployL1Contract } from "@aztec/ethereum/deploy-l1-contract";
-import { sha256ToField } from "@aztec/foundation/crypto/sha256";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { AztecAddress, EthAddress } from "@aztec-labs/aztec.js/addresses";
+import { SetPublicAuthwitContractInteraction } from "@aztec-labs/aztec.js/authorization";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client";
+import { deployL1Contract } from "@aztec-labs/ethereum/deploy-l1-contract";
+import { sha256ToField } from "@aztec-labs/foundation/crypto/sha256";
 import {
   computeL2ToL1MessageHash,
   computeSecretHash,
-} from "@aztec/stdlib/hash";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+} from "@aztec-labs/stdlib/hash";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 import { decodeEventLog, pad, toFunctionSelector } from "@aztec/viem";
 import { foundry } from "@aztec/viem/chains";
 import AavePortal from "../../../target/solidity/aave_bridge/AavePortal.sol/AavePortal.json" with { type: "json" };
 import MockERC20 from "../../../target/solidity/aave_bridge/MockERC20.sol/MockERC20.json" with { type: "json" };
 import MockAToken from "../../../target/solidity/aave_bridge/MockAToken.sol/MockAToken.json" with { type: "json" };
 import MockAavePool from "../../../target/solidity/aave_bridge/MockAavePool.sol/MockAavePool.json" with { type: "json" };
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import { AaveBridgeContract } from "./artifacts/AaveBridge.js";
 
 // docs:start:setup

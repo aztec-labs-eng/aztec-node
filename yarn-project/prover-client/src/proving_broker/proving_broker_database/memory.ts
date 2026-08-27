@@ -1,11 +1,11 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import {
   type ProofUri,
   type ProvingJob,
   type ProvingJobId,
   type ProvingJobSettledResult,
   getEpochFromProvingJobId,
-} from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/interfaces/server';
 
 import type { ProvingBrokerDatabase } from '../proving_broker_database.js';
 

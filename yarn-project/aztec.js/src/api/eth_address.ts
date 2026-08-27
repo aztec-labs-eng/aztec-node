@@ -1,1 +1,1 @@
-export { EthAddress } from '@aztec/foundation/eth-address';
+export { EthAddress } from '@aztec-labs/foundation/eth-address';

@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/builder",
+  "name": "@aztec-labs/builder",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -67,8 +67,8 @@
     ]
   },
   "dependencies": {
-    "@aztec/foundation": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "commander": "^12.1.0"
   },
   "devDependencies": {

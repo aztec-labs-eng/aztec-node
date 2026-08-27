@@ -11,18 +11,18 @@ import {
   percentageConfigHelper,
   pickConfigMappings,
   secretStringConfigHelper,
-} from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FunctionSelector } from '@aztec/stdlib/abi/function-selector';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi/function-selector';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type AllowedElement,
   type ChainConfig,
   type SequencerConfig,
   chainConfigMappings,
   sharedSequencerConfigMappings,
-} from '@aztec/stdlib/config';
-import { type DataStoreConfig, dataConfigMappings } from '@aztec/stdlib/kv-store';
+} from '@aztec-labs/stdlib/config';
+import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
 
 import {
   type BatchTxRequesterConfig,

@@ -1,4 +1,4 @@
-import type { EpochNumber } from '@aztec/foundation/branded-types';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { ProvingRequestType } from '../proofs/proving_request_type.js';
 import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobStatus } from './proving-job.js';

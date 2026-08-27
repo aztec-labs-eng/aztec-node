@@ -1,4 +1,5 @@
 import { BackendType, BarretenbergSync } from '@aztec/bb.js';
+
 import {
   MAX_APPS_PER_KERNEL,
   MAX_KEY_VALIDATION_REQUESTS_PER_TX,
@@ -6,19 +7,18 @@ import {
   MAX_TX_LIFETIME,
   MEGA_APP_VK_LENGTH_IN_FIELDS,
   VK_TREE_HEIGHT,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { PrivateKernelProver } from '@aztec/stdlib/interfaces/client';
-import { PrivateCircuitPublicInputs, PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import { makeTxRequest } from '@aztec/stdlib/testing';
-import { PrivateCallExecutionResult, PrivateExecutionResult, type TxRequest } from '@aztec/stdlib/tx';
-import { VerificationKeyData } from '@aztec/stdlib/vks';
-
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { PrivateKernelProver } from '@aztec-labs/stdlib/interfaces/client';
+import { PrivateCircuitPublicInputs, PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { makeTxRequest } from '@aztec-labs/stdlib/testing';
+import { PrivateCallExecutionResult, PrivateExecutionResult, type TxRequest } from '@aztec-labs/stdlib/tx';
+import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { mock } from 'jest-mock-extended';
 import times from 'lodash.times';
 

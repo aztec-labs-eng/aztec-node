@@ -1,10 +1,10 @@
-import { DomainSeparator, PRIVATE_TO_ROLLUP_KERNEL_CIRCUIT_PUBLIC_INPUTS_LENGTH } from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, BufferSink, serializeToFields, serializeToSink } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { DomainSeparator, PRIVATE_TO_ROLLUP_KERNEL_CIRCUIT_PUBLIC_INPUTS_LENGTH } from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, BufferSink, serializeToFields, serializeToSink } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { Gas } from '../gas/gas.js';

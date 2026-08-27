@@ -230,7 +230,7 @@ function install_aztec_packages {
   set -euo pipefail
 
   # Install npm packages to the version directory using --prefix
-  npm install @aztec/aztec@$VERSION @aztec/cli-wallet@$VERSION --prefix "$version_path"
+  npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix "$version_path"
 }
 
 # Expose every native tool in internal-bin under an aztec-<tool> symlink in bin.
@@ -263,8 +263,8 @@ function install_npm_bin_symlinks {
   for bin_link in "$npm_bin_dir"/*; do
     [ -L "$bin_link" ] || continue
     target=$(readlink "$bin_link")
-    # npm writes relative symlinks like ../@aztec/aztec/... for scoped packages.
-    [[ "$target" == ../@aztec/* ]] || continue
+    # npm writes relative symlinks like ../@aztec-labs/aztec/... for scoped packages.
+    [[ "$target" == ../@aztec-labs/* ]] || continue
     bin_name=$(basename "$bin_link")
 
     # `aztec` is a wrapper, written by install_aztec_wrapper.
@@ -279,7 +279,7 @@ function install_npm_bin_symlinks {
     fi
 
     if [ -e "$version_bin_path/$link_name" ] && [ ! -L "$version_bin_path/$link_name" ]; then
-      echo_yellow "refusing to overwrite non-symlink $link_name; @aztec package bin collides with a hand-installed toolchain binary" >&2
+      echo_yellow "refusing to overwrite non-symlink $link_name; @aztec-labs package bin collides with a hand-installed toolchain binary" >&2
       exit 1
     fi
     ln -sfn "../node_modules/.bin/$bin_name" "$version_bin_path/$link_name"
@@ -288,7 +288,7 @@ function install_npm_bin_symlinks {
 
 # Wrapper for `aztec`: prepends internal-bin to PATH so the aztec workflow
 # resolves bundled native tools by basename. yarn-project/aztec/scripts/aztec.sh
-# (the npm bin entry of @aztec/aztec) calls bare `nargo` (line 36, in `aztec
+# (the npm bin entry of @aztec-labs/aztec) calls bare `nargo` (line 36, in `aztec
 # test`) and bare `anvil` (line 55-56, in `aztec start --local-network`); the
 # TS commands it spawns also fall back to bare `forge` / `nargo` /
 # `noir-profiler` when their respective env vars are unset. The wrapper is

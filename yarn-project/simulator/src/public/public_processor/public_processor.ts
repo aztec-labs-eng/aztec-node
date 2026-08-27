@@ -1,12 +1,15 @@
-import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX, NULLIFIER_SUBTREE_HEIGHT } from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider, Timer, elapsed, execWithSignal } from '@aztec/foundation/timer';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { ContractClassPublishedEvent } from '@aztec/protocol-contracts/class-registry';
-import { computeFeePayerBalanceLeafSlot, computeFeePayerBalanceStorageSlot } from '@aztec/protocol-contracts/fee-juice';
+import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX, NULLIFIER_SUBTREE_HEIGHT } from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider, Timer, elapsed, execWithSignal } from '@aztec-labs/foundation/timer';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { ContractClassPublishedEvent } from '@aztec-labs/protocol-contracts/class-registry';
+import {
+  computeFeePayerBalanceLeafSlot,
+  computeFeePayerBalanceStorageSlot,
+} from '@aztec-labs/protocol-contracts/fee-juice';
 import {
   AvmCircuitInputs,
   AvmCircuitPublicInputs,
@@ -14,20 +17,20 @@ import {
   type AvmProvingRequest,
   PublicDataWrite,
   PublicSimulatorConfig,
-} from '@aztec/stdlib/avm';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { computeTransactionFee } from '@aztec/stdlib/fees';
-import { Gas } from '@aztec/stdlib/gas';
+} from '@aztec-labs/stdlib/avm';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { computeTransactionFee } from '@aztec-labs/stdlib/fees';
+import { Gas } from '@aztec-labs/stdlib/gas';
 import type {
   MerkleTreeWriteOperations,
   PublicProcessorLimits,
   PublicProcessorValidator,
   SequencerConfig,
-} from '@aztec/stdlib/interfaces/server';
-import { type DebugLog, type DebugLogStore, NullDebugLogStore } from '@aztec/stdlib/logs';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { type DebugLog, type DebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   type FailedTx,
   GlobalVariables,
@@ -37,7 +40,7 @@ import {
   Tx,
   makeProcessedTxFromPrivateOnlyTx,
   makeProcessedTxFromTxWithPublicCalls,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 import {
   Attributes,
   type TelemetryClient,
@@ -45,9 +48,8 @@ import {
   type Tracer,
   getTelemetryClient,
   trackSpan,
-} from '@aztec/telemetry-client';
-import { ForkCheckpoint } from '@aztec/world-state/native';
-
+} from '@aztec-labs/telemetry-client';
+import { ForkCheckpoint } from '@aztec-labs/world-state/native';
 import { AssertionError } from 'assert';
 
 import type { AvmSimulator } from '../avm_simulator.js';

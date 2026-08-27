@@ -1,7 +1,7 @@
-import { PUBLIC_DATA_TREE_HEIGHT } from '@aztec/constants';
-import { toBufferBE } from '@aztec/foundation/bigint-buffer';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { SiblingPath } from '@aztec/foundation/trees';
+import { PUBLIC_DATA_TREE_HEIGHT } from '@aztec-labs/constants';
+import { toBufferBE } from '@aztec-labs/foundation/bigint-buffer';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { SiblingPath } from '@aztec-labs/foundation/trees';
 
 import { makePublicDataTreeLeafPreimage } from '../tests/factories.js';
 import { PublicDataWitness } from './public_data_witness.js';

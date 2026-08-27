@@ -5,17 +5,17 @@ Aztec.js is a library that provides APIs for managing accounts and interacting w
 ## Installing
 
 ```
-npm install @aztec/aztec.js
+npm install @aztec-labs/aztec.js
 ```
 
 ## Usage
 
-Use the `@aztec/accounts` package in order to create and manage accounts, and acquire a `Wallet` object needed to send transactions and interact with the network.
+Use the `@aztec-labs/accounts` package in order to create and manage accounts, and acquire a `Wallet` object needed to send transactions and interact with the network.
 
 ### Deploy a contract
 
 ```typescript
-import { Contract } from '@aztec/aztec.js';
+import { Contract } from '@aztec-labs/aztec.js';
 
 const contract = await Contract.deploy(wallet, MyContractArtifact, [...constructorArgs])
   .send()
@@ -26,7 +26,7 @@ console.log(`Contract deployed at ${contract.address}`);
 ### Send a transaction
 
 ```typescript
-import { Contract } from '@aztec/aztec.js';
+import { Contract } from '@aztec-labs/aztec.js';
 
 const contract = await Contract.at(contractAddress, MyContractArtifact, wallet);
 const tx = await contract.methods.transfer(amount, recipientAddress).send().wait();
@@ -36,7 +36,7 @@ console.log(`Transferred ${amount} to ${recipientAddress} on block ${tx.blockNum
 ### Simulate a function
 
 ```typescript
-import { Contract } from '@aztec/aztec.js';
+import { Contract } from '@aztec-labs/aztec.js';
 
 const contract = await Contract.at(contractAddress, MyContractArtifact, wallet);
 const balance = await contract.methods.get_balance(wallet.getAddress()).simulate();

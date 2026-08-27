@@ -225,8 +225,8 @@ The TypeScript API reference is auto-generated from the `yarn-project/` packages
 
 **Documented packages:**
 
-- **Client SDKs:** `@aztec/aztec.js`, `@aztec/accounts`, `@aztec/pxe`, `@aztec/wallet-sdk`, `@aztec/wallets`, `@aztec/entrypoints`
-- **Core Libraries:** `@aztec/stdlib`, `@aztec/foundation`, `@aztec/constants`
+- **Client SDKs:** `@aztec-labs/aztec.js`, `@aztec-labs/accounts`, `@aztec-labs/pxe`, `@aztec-labs/wallet-sdk`, `@aztec-labs/wallets`, `@aztec-labs/entrypoints`
+- **Core Libraries:** `@aztec-labs/stdlib`, `@aztec-labs/foundation`, `@aztec-labs/constants`
 
 **Prerequisites:** You need `yarn-project` to be built first (the bootstrap process handles this).
 

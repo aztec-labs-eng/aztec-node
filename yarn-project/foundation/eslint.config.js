@@ -111,7 +111,7 @@ export default [
             '@aztec/l1-artifacts',
             '@aztec/bb.js',
             // Conditional exports (browser/default) not resolved by eslint-import-resolver-typescript
-            '@aztec/wallets',
+            '@aztec-labs/wallets',
           ],
         },
       ],

@@ -1,2 +1,2 @@
-export { Body, L2Block } from '@aztec/stdlib/block';
-export { getTimestampRangeForEpoch } from '@aztec/stdlib/epoch-helpers';
+export { Body, L2Block } from '@aztec-labs/stdlib/block';
+export { getTimestampRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';

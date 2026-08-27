@@ -1,9 +1,8 @@
-import { sha256 } from '@aztec/foundation/crypto/sha256';
-import { Fr, reduceFn } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { numToUInt8 } from '@aztec/foundation/serialize';
-import { MerkleTree, MerkleTreeCalculator } from '@aztec/foundation/trees';
-
+import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr, reduceFn } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { numToUInt8 } from '@aztec-labs/foundation/serialize';
+import { MerkleTree, MerkleTreeCalculator } from '@aztec-labs/foundation/trees';
 import deterministicStringify from 'json-stringify-deterministic';
 
 import {

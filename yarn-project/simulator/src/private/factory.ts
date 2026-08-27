@@ -1,5 +1,4 @@
-import { type Logger, type LoggerBindings, resolveLogger } from '@aztec/foundation/log';
-
+import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
 import { promises as fs } from 'fs';
 
 import { NativeACVMSimulator } from './acvm_native.js';

@@ -1,4 +1,4 @@
-import type { FunctionArtifactWithContractName } from '@aztec/stdlib/abi';
+import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 
 import type { ACIRCallback, ACIRExecutionResult } from '../acvm/acvm.js';
 import type { ACVMWitness } from '../acvm/acvm_types.js';

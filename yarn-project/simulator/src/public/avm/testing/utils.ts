@@ -1,24 +1,23 @@
-import { CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type ContractArtifact,
   type FunctionAbi,
   type FunctionArtifact,
   FunctionSelector,
   getAllFunctionAbis,
-} from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractClassPublic,
   type ContractInstanceWithAddress,
   computeInitializationHash,
-} from '@aztec/stdlib/contract';
-import { siloNullifier } from '@aztec/stdlib/hash';
-import { deriveKeys } from '@aztec/stdlib/keys';
-import { makeContractClassPublic, makeContractInstanceFromClassId } from '@aztec/stdlib/testing';
-import type { UInt64 } from '@aztec/stdlib/types';
-
+} from '@aztec-labs/stdlib/contract';
+import { siloNullifier } from '@aztec-labs/stdlib/hash';
+import { deriveKeys } from '@aztec-labs/stdlib/keys';
+import { makeContractClassPublic, makeContractInstanceFromClassId } from '@aztec-labs/stdlib/testing';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 import { strict as assert } from 'assert';
 import merge from 'lodash.merge';
 

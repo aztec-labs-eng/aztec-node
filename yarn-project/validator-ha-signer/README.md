@@ -32,7 +32,7 @@ aztec migrate-ha-db up --database-url postgresql://user:pass@host:port/db
 
 ```typescript
 // 2. Create signer (migrations already applied)
-import { createHASigner } from '@aztec/validator-ha-signer/factory';
+import { createHASigner } from '@aztec-labs/validator-ha-signer/factory';
 
 const { signer, db } = await createHASigner({
   databaseUrl: process.env.DATABASE_URL,
@@ -65,8 +65,8 @@ If you need custom pool configuration (e.g., max connections, idle timeout) or w
 > See [Database Migrations](#database-migrations) below.
 
 ```typescript
-import { PostgresSlashingProtectionDatabase } from '@aztec/validator-ha-signer/db';
-import { ValidatorHASigner } from '@aztec/validator-ha-signer/validator-ha-signer';
+import { PostgresSlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/db';
+import { ValidatorHASigner } from '@aztec-labs/validator-ha-signer/validator-ha-signer';
 
 import { Pool } from 'pg';
 

@@ -1,5 +1,5 @@
-import { CheckpointProposalHash, SlotNumber } from '@aztec/foundation/branded-types';
-import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec/foundation/json-rpc/test';
+import { CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 
 import { CheckpointAttestation } from '../p2p/checkpoint_attestation.js';
 import { Tx } from '../tx/tx.js';

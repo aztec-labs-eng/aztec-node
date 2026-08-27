@@ -1,5 +1,9 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type InboxBucket, MIN_BLOCKS_FOR_INBOX_CATCHUP, isInboxConsumptionSufficient } from '@aztec/stdlib/messaging';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import {
+  type InboxBucket,
+  MIN_BLOCKS_FOR_INBOX_CATCHUP,
+  isInboxConsumptionSufficient,
+} from '@aztec-labs/stdlib/messaging';
 
 import { type InboxBucketSource, selectInboxBucketForBlock } from './inbox_bucket_selector.js';
 

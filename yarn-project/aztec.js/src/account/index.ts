@@ -3,7 +3,7 @@
  *
  * @packageDocumentation
  */
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 export { type AccountContract, getAccountContractAddress } from './account_contract.js';
 export { type Account, BaseAccount, type AuthorizationProvider } from './account.js';

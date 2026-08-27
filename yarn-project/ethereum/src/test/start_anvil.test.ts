@@ -1,7 +1,6 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { TestDateProvider } from '@aztec/foundation/timer';
-
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { existsSync } from 'fs';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 

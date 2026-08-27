@@ -1,30 +1,34 @@
-import type { ACVMConfig, BBConfig } from '@aztec/bb-prover/config';
+import type { ACVMConfig, BBConfig } from '@aztec-labs/bb-prover/config';
 import {
   type ConfigMappingsType,
   booleanConfigHelper,
   getConfigFromMappings,
   numberConfigHelper,
   pickConfigMappings,
-} from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type KeyStoreConfig, keyStoreConfigMappings } from '@aztec/node-keystore/config';
-import { ethPrivateKeySchema } from '@aztec/node-keystore/schemas';
-import type { KeyStore } from '@aztec/node-keystore/types';
-import { type SharedNodeConfig, sharedNodeConfigMappings } from '@aztec/node-lib/config';
+} from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type KeyStoreConfig, keyStoreConfigMappings } from '@aztec-labs/node-keystore/config';
+import { ethPrivateKeySchema } from '@aztec-labs/node-keystore/schemas';
+import type { KeyStore } from '@aztec-labs/node-keystore/types';
+import { type SharedNodeConfig, sharedNodeConfigMappings } from '@aztec-labs/node-lib/config';
 import {
   type ProverAgentConfig,
   type ProverBrokerConfig,
   proverAgentConfigMappings,
   proverBrokerConfigMappings,
-} from '@aztec/prover-client/broker/config';
-import { type ProverClientUserConfig, bbConfigMappings, proverClientConfigMappings } from '@aztec/prover-client/config';
+} from '@aztec-labs/prover-client/broker/config';
+import {
+  type ProverClientUserConfig,
+  bbConfigMappings,
+  proverClientConfigMappings,
+} from '@aztec-labs/prover-client/config';
 import {
   type ProverPublisherConfig,
   type ProverTxSenderConfig,
   proverPublisherConfigMappings,
   proverTxSenderConfigMappings,
-} from '@aztec/sequencer-client/config';
-import { type DataStoreConfig, dataConfigMappings } from '@aztec/stdlib/kv-store';
+} from '@aztec-labs/sequencer-client/config';
+import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
 
 export type ProverNodeConfig = ProverClientUserConfig &
   ProverPublisherConfig &

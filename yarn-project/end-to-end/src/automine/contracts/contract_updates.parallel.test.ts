@@ -1,23 +1,26 @@
-import { getSchnorrInitializerlessAccountContractAddress } from '@aztec/accounts/schnorr';
-import { fastForwardContractUpdate, getContractClassFromArtifact } from '@aztec/aztec.js/contracts';
-import { publishContractClass } from '@aztec/aztec.js/deployment';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { CheatCodes } from '@aztec/aztec/testing';
-import { MINIMUM_UPDATE_DELAY, UPDATED_CLASS_IDS_SLOT } from '@aztec/constants';
-import { UpdatableContract } from '@aztec/noir-test-contracts.js/Updatable';
-import { UpdatedContract, UpdatedContractArtifact } from '@aztec/noir-test-contracts.js/Updated';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type ContractInstanceWithAddress, getContractInstanceFromInstantiationParams } from '@aztec/stdlib/contract';
+import { getSchnorrInitializerlessAccountContractAddress } from '@aztec-labs/accounts/schnorr';
+import { fastForwardContractUpdate, getContractClassFromArtifact } from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass } from '@aztec-labs/aztec.js/deployment';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { CheatCodes } from '@aztec-labs/aztec/testing';
+import { MINIMUM_UPDATE_DELAY, UPDATED_CLASS_IDS_SLOT } from '@aztec-labs/constants';
+import { UpdatableContract } from '@aztec-labs/noir-test-contracts.js/Updatable';
+import { UpdatedContract, UpdatedContractArtifact } from '@aztec-labs/noir-test-contracts.js/Updated';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import {
+  type ContractInstanceWithAddress,
+  getContractInstanceFromInstantiationParams,
+} from '@aztec-labs/stdlib/contract';
 import {
   DelayedPublicMutableValuesWithHash,
   ScheduledDelayChange,
   ScheduledValueChange,
-} from '@aztec/stdlib/delayed-public-mutable';
-import { computePublicDataTreeLeafSlot, deriveStorageSlotInMap } from '@aztec/stdlib/hash';
-import type { AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-import { PublicDataTreeLeaf } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/delayed-public-mutable';
+import { computePublicDataTreeLeafSlot, deriveStorageSlotInMap } from '@aztec-labs/stdlib/hash';
+import type { AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
+import { PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../automine_test_context.js';

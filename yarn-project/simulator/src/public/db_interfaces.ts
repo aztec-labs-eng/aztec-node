@@ -1,8 +1,8 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractClassPublic, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import type { UInt64 } from '@aztec/stdlib/types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractClassPublic, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 /**
  * Database interface for providing access to public state.

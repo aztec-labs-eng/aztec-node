@@ -1,4 +1,4 @@
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /**
  * Asserts that `scope` is one of `allowedScopes`, throwing otherwise.

@@ -1,6 +1,6 @@
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 
 import { deriveSessionKeys, exportPublicKey, generateKeyPair, importPublicKey } from '../../crypto.js';
 import {

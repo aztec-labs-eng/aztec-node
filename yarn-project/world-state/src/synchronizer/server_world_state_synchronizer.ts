@@ -1,9 +1,9 @@
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { elapsed } from '@aztec/foundation/timer';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { elapsed } from '@aztec-labs/foundation/timer';
 import {
   type BlockHash,
   EventDrivenL2BlockStream,
@@ -13,18 +13,18 @@ import {
   type L2BlockStreamEventHandler,
   type L2BlockStreamLocalDataProvider,
   type LocalChainTips,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   WorldStateRunningState,
   type WorldStateSyncStatus,
   type WorldStateSynchronizer,
   type WorldStateSynchronizerStatus,
-} from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import type { SnapshotDataKeys } from '@aztec/stdlib/snapshots';
-import type { L2BlockHandledStats } from '@aztec/stdlib/stats';
-import { MerkleTreeId, type MerkleTreeReadOperations, type MerkleTreeWriteOperations } from '@aztec/stdlib/trees';
-import { getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { SnapshotDataKeys } from '@aztec-labs/stdlib/snapshots';
+import type { L2BlockHandledStats } from '@aztec-labs/stdlib/stats';
+import { MerkleTreeId, type MerkleTreeReadOperations, type MerkleTreeWriteOperations } from '@aztec-labs/stdlib/trees';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { WorldStateInstrumentation } from '../instrumentation/instrumentation.js';
 import type { WorldStateStatusFull } from '../native/message.js';

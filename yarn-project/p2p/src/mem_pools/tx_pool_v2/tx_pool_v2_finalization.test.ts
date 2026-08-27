@@ -1,23 +1,22 @@
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { Timer } from '@aztec/foundation/timer';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { RevertCode } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Body, L2Block, type L2BlockSource } from '@aztec/stdlib/block';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { mockTx } from '@aztec/stdlib/testing';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { RevertCode } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Body, L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { mockTx } from '@aztec-labs/stdlib/testing';
 import {
   AppendOnlyTreeSnapshot,
   MerkleTreeId,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, type Tx, TxEffect, type TxValidator } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, type Tx, TxEffect, type TxValidator } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

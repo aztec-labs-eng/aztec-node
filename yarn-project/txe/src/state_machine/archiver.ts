@@ -1,9 +1,9 @@
-import { ArchiverDataSourceBase, ArchiverDataStoreUpdater, createArchiverDataStores } from '@aztec/archiver';
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import { CheckpointNumber, type EpochNumber, type SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
+import { ArchiverDataSourceBase, ArchiverDataStoreUpdater, createArchiverDataStores } from '@aztec-labs/archiver';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import { CheckpointNumber, type EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import {
   type CheckpointId,
   GENESIS_BLOCK_HEADER_HASH,
@@ -11,10 +11,10 @@ import {
   type L2TipId,
   type L2Tips,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
-import type { PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { BlockHeader } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/block';
+import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 /**
  * TXE Archiver implementation.

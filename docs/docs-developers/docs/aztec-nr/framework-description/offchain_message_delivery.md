@@ -47,7 +47,7 @@ const messageForBob = offchainMessages.find((msg) => msg.recipient.equals(bob));
 If you manage proving manually, you can extract the messages from a proven transaction's offchain effects with `extractOffchainOutput`:
 
 ```typescript
-import { extractOffchainOutput } from "@aztec/aztec.js/contracts";
+import { extractOffchainOutput } from "@aztec-labs/aztec.js/contracts";
 
 const { offchainMessages } = extractOffchainOutput(
   provenTx.offchainEffects,

@@ -1,23 +1,23 @@
+import type { ForeignCallInput, ForeignCallOutput } from '@aztec/noir-acvm_js';
+
 import {
   BatchedBlobAccumulator,
   BlobAccumulator,
   FinalBlobBatchingChallenges,
   computeBlobFieldsHash,
   getBlobsPerL1Block,
-} from '@aztec/blob-lib';
+} from '@aztec-labs/blob-lib';
 import {
   BLOB_ACCUMULATOR_LENGTH,
   BLS12_FQ_LIMBS,
   BLS12_FR_LIMBS,
   BLS12_POINT_LENGTH,
   FIELDS_PER_BLOB,
-} from '@aztec/constants';
-import { chunk } from '@aztec/foundation/collection';
-import { BLS12Fq, BLS12Fr, BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { LogLevels, applyStringFormatting, createLogger } from '@aztec/foundation/log';
-import type { ForeignCallInput, ForeignCallOutput } from '@aztec/noir-acvm_js';
-
+} from '@aztec-labs/constants';
+import { chunk } from '@aztec-labs/foundation/collection';
+import { BLS12Fq, BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { LogLevels, applyStringFormatting, createLogger } from '@aztec-labs/foundation/log';
 import { strict as assert } from 'assert';
 
 export async function foreignCallHandler(name: string, args: ForeignCallInput[]): Promise<ForeignCallOutput[]> {

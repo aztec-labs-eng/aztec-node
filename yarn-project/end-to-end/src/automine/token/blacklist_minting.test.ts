@@ -1,6 +1,6 @@
-import { computeSecretHash } from '@aztec/aztec.js/crypto';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { TxHash } from '@aztec/aztec.js/tx';
+import { computeSecretHash } from '@aztec-labs/aztec.js/crypto';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { TxHash } from '@aztec-labs/aztec.js/tx';
 
 import { U128_OVERFLOW_ERROR } from '../../fixtures/index.js';
 import { BlacklistTokenContractTest } from './blacklist_token_contract_test.js';

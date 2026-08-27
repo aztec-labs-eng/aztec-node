@@ -1,19 +1,18 @@
-import { NO_FROM } from '@aztec/aztec.js/account';
-import type { Aliased } from '@aztec/aztec.js/wallet';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { PXE } from '@aztec/pxe/server';
-import { FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Gas, GasFees } from '@aztec/stdlib/gas';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import type { Aliased } from '@aztec-labs/aztec.js/wallet';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { PXE } from '@aztec-labs/pxe/server';
+import { FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import {
   ExecutionPayload,
   PrivateCallExecutionResult,
   PrivateExecutionResult,
   TxSimulationResult,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import type { AccountContractsProvider } from './account-contract-providers/types.js';

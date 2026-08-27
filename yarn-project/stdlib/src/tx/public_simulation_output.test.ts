@@ -1,4 +1,4 @@
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { PublicSimulationOutput } from './public_simulation_output.js';
 

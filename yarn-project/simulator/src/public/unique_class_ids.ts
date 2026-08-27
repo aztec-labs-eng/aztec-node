@@ -1,5 +1,4 @@
-import { MAX_PUBLIC_CALLS_TO_UNIQUE_CONTRACT_CLASS_IDS } from '@aztec/constants';
-
+import { MAX_PUBLIC_CALLS_TO_UNIQUE_CONTRACT_CLASS_IDS } from '@aztec-labs/constants';
 import { strict as assert } from 'assert';
 
 /**

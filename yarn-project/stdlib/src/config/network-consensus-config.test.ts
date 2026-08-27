@@ -1,4 +1,4 @@
-import { l1ContractsConfigMappings } from '@aztec/ethereum/config';
+import { l1ContractsConfigMappings } from '@aztec-labs/ethereum/config';
 
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '../deserialization/index.js';
 import { MIN_BLOCKS_FOR_INBOX_CATCHUP } from '../messaging/inbox_consumption.js';

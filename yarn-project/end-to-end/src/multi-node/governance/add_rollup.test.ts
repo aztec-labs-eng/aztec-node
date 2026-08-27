@@ -1,20 +1,3 @@
-import { type InitialAccountData, generateSchnorrAccounts } from '@aztec/accounts/testing';
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { waitForProven } from '@aztec/aztec.js/contracts';
-import { generateClaimSecret } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/aztec.js/fields';
-import { waitForL1ToL2MessageReady } from '@aztec/aztec.js/messaging';
-import { RollupCheatCodes } from '@aztec/aztec/testing';
-import { FeeAssetHandlerContract, RegistryContract } from '@aztec/ethereum/contracts';
-import { deployRollupForUpgrade } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { L1TxUtils, createL1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
 import {
   GovernanceAbi,
   OutboxAbi,
@@ -22,14 +5,31 @@ import {
   RegisterNewRollupVersionPayloadBytecode,
   RegistryAbi,
 } from '@aztec/l1-artifacts';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { getPXEConfig } from '@aztec/pxe/server';
-import { computeL2ToL1MessageHash } from '@aztec/stdlib/hash';
-import { getL2ToL1MessageLeafId } from '@aztec/stdlib/messaging';
-import { getGenesisValues } from '@aztec/world-state/testing';
 
+import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { waitForProven } from '@aztec-labs/aztec.js/contracts';
+import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import { FeeAssetHandlerContract, RegistryContract } from '@aztec-labs/ethereum/contracts';
+import { deployRollupForUpgrade } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { getPXEConfig } from '@aztec-labs/pxe/server';
+import { computeL2ToL1MessageHash } from '@aztec-labs/stdlib/hash';
+import { getL2ToL1MessageLeafId } from '@aztec-labs/stdlib/messaging';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 import { type Hex, decodeEventLog, encodeFunctionData, getAddress, getContract } from 'viem';
 import { foundry } from 'viem/chains';
 

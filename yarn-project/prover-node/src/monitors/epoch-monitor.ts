@@ -1,10 +1,10 @@
-import { BlockNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import { sleep } from '@aztec/foundation/sleep';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { type L1RollupConstants, getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import { type TelemetryClient, type Traceable, type Tracer, getTelemetryClient } from '@aztec/telemetry-client';
+import { BlockNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { type L1RollupConstants, getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { type TelemetryClient, type Traceable, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 export interface EpochMonitorHandler {
   handleEpochReadyToProve(epochNumber: EpochNumber): Promise<boolean>;

@@ -1,9 +1,8 @@
-import type { ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-import { withHexPrefix } from '@aztec/foundation/string';
-
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
+import { withHexPrefix } from '@aztec-labs/foundation/string';
 import type { Hex } from 'viem';
 import { z } from 'zod';
 

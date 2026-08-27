@@ -1,6 +1,6 @@
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import type { LogFn } from '@aztec/foundation/log';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { LogFn } from '@aztec-labs/foundation/log';
 
 import { inspectBlock } from '../../utils/inspect.js';
 

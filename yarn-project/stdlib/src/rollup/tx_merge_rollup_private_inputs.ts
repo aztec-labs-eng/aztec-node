@@ -1,6 +1,6 @@
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { ProofData, type RollupHonkProofData } from '../proofs/proof_data.js';
 import { TxRollupPublicInputs } from './tx_rollup_public_inputs.js';

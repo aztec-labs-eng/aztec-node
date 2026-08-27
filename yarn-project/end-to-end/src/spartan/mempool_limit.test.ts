@@ -1,14 +1,13 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { Fr } from '@aztec/aztec.js/fields';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { Tx, TxStatus } from '@aztec/aztec.js/tx';
-import { asyncPool } from '@aztec/foundation/async-pool';
-import { times, timesAsync } from '@aztec/foundation/collection';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { Tx, TxStatus } from '@aztec-labs/aztec.js/tx';
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { jest } from '@jest/globals';
 
 import { getSponsoredFPCAddress } from '../fixtures/utils.js';

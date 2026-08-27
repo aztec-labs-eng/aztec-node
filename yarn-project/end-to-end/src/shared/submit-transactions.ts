@@ -1,10 +1,10 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { TxHash, type TxReceipt, TxStatus } from '@aztec/aztec.js/tx';
-import { times } from '@aztec/foundation/collection';
-import { TestContract, TestContractArtifact } from '@aztec/noir-test-contracts.js/Test';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { TxHash, type TxReceipt, TxStatus } from '@aztec-labs/aztec.js/tx';
+import { times } from '@aztec-labs/foundation/collection';
+import { TestContract, TestContractArtifact } from '@aztec-labs/noir-test-contracts.js/Test';
 
 import type { TestWallet } from '../test-wallet/test_wallet.js';
 

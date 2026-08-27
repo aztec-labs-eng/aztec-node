@@ -1,9 +1,9 @@
-import { type EthCheatCodes, RollupCheatCodes } from '@aztec/ethereum/test';
-import type { EpochNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
-import { settleEpochOutbox } from '@aztec/prover-client/test';
-import { EpochMonitor } from '@aztec/prover-node';
-import type { EthAddress, L2BlockSource } from '@aztec/stdlib/block';
+import { type EthCheatCodes, RollupCheatCodes } from '@aztec-labs/ethereum/test';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { settleEpochOutbox } from '@aztec-labs/prover-client/test';
+import { EpochMonitor } from '@aztec-labs/prover-node';
+import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
 
 export class EpochTestSettler {
   private rollupCheatCodes: RollupCheatCodes;

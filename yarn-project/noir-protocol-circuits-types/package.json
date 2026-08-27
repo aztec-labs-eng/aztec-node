@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/noir-protocol-circuits-types",
+  "name": "@aztec-labs/noir-protocol-circuits-types",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -63,14 +63,14 @@
     ]
   },
   "dependencies": {
-    "@aztec/blob-lib": "workspace:^",
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
+    "@aztec-labs/blob-lib": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "@aztec/noir-acvm_js": "0.1.0-dummy",
     "@aztec/noir-noir_codegen": "0.1.0-dummy",
     "@aztec/noir-noirc_abi": "0.1.0-dummy",
     "@aztec/noir-types": "0.1.0-dummy",
-    "@aztec/stdlib": "workspace:^",
     "change-case": "^5.4.4",
     "tslib": "^2.4.0"
   },

@@ -1,8 +1,8 @@
-import { FIELDS_PER_BLOB } from '@aztec/constants';
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toInlineStrArray } from '@aztec/foundation/testing';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toInlineStrArray } from '@aztec-labs/foundation/testing';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import { Blob } from './blob.js';
 import { commitmentToFields } from './hash.js';

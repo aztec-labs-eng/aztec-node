@@ -1,7 +1,7 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { Point } from '@aztec/foundation/curves/grumpkin';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { AppTaggingSecretKind } from '@aztec/stdlib/logs';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- only referenced by a {@link} doc tag
 import type { ResolveCustomRequest } from './resolve_custom_request.js';

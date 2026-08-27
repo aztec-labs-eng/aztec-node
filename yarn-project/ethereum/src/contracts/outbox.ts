@@ -1,8 +1,8 @@
-import type { EpochNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
 import { OutboxAbi } from '@aztec/l1-artifacts/OutboxAbi';
 
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type GetContractReturnType, type Hex, encodeAbiParameters, getContract, hexToBigInt, keccak256 } from 'viem';
 
 import { getPublicClient } from '../client.js';

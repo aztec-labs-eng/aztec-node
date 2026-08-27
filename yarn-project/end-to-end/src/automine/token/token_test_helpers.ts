@@ -1,9 +1,9 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import type { GenericProxyContract } from '@aztec/noir-test-contracts.js/GenericProxy';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import type { GenericProxyContract } from '@aztec-labs/noir-test-contracts.js/GenericProxy';
 
 import { sendThroughAuthwitProxy } from '../../fixtures/authwit_proxy.js';
 import { DUPLICATE_NULLIFIER_ERROR } from '../../fixtures/fixtures.js';

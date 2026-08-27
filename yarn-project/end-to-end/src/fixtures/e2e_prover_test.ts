@@ -1,20 +1,20 @@
-import { type InitialAccountData, generateSchnorrAccounts } from '@aztec/accounts/testing';
-import { AztecNodeService, createAztecNodeService } from '@aztec/aztec-node';
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { createLogger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { CheatCodes } from '@aztec/aztec/testing';
-import type { ClientProtocolCircuitVerifier } from '@aztec/bb-prover';
 import { BackendType, Barretenberg } from '@aztec/bb.js';
-import type { DeployAztecL1ContractsReturnType } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { SecretValue } from '@aztec/foundation/config';
 import { FeeAssetHandlerAbi } from '@aztec/l1-artifacts';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import type { AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import { getGenesisValues } from '@aztec/world-state/testing';
 
+import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import { AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import type { ClientProtocolCircuitVerifier } from '@aztec-labs/bb-prover';
+import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 import { type Hex, getContract } from 'viem';
 import { privateKeyToAddress } from 'viem/accounts';
 

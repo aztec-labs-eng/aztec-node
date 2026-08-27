@@ -1,6 +1,6 @@
-import { times } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { times } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { MAX_RPC_CONTRACT_OVERRIDES_LEN, MAX_RPC_PUBLIC_STORAGE_OVERRIDES_LEN } from '../interfaces/api_limit.js';

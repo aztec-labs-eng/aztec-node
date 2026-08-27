@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { PrivateCircuitPublicInputs } from '../kernel/private_circuit_public_inputs.js';
 import {

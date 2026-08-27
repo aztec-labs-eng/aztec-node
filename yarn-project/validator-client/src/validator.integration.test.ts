@@ -1,45 +1,44 @@
-import { createArchiverStore, registerProtocolContracts } from '@aztec/archiver';
-import { makeInboxMessages } from '@aztec/archiver/test';
-import { type NoopL1Archiver, createNoopL1Archiver } from '@aztec/archiver/test/noop-l1';
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec/epoch-cache';
-import { TestEpochCache } from '@aztec/epoch-cache/test';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { timesAsync } from '@aztec/foundation/collection';
-import { SecretValue } from '@aztec/foundation/config';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { Hex } from '@aztec/foundation/string';
-import { ManualDateProvider } from '@aztec/foundation/timer';
-import { type KeyStore, KeystoreManager } from '@aztec/node-keystore';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import type { P2P, PeerId } from '@aztec/p2p';
-import { TestTxProvider } from '@aztec/p2p/test-helpers';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { AvmSimulatorPool } from '@aztec/simulator/server';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { CommitteeAttestation, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec/stdlib/block';
-import { CheckpointReexecutionTracker, L1PublishedData, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { type L1RollupConstants, getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
-import { Gas, GasFees } from '@aztec/stdlib/gas';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-import { InboxBucketRef } from '@aztec/stdlib/messaging';
+import { createArchiverStore, registerProtocolContracts } from '@aztec-labs/archiver';
+import { makeInboxMessages } from '@aztec-labs/archiver/test';
+import { type NoopL1Archiver, createNoopL1Archiver } from '@aztec-labs/archiver/test/noop-l1';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { TestEpochCache } from '@aztec-labs/epoch-cache/test';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { Hex } from '@aztec-labs/foundation/string';
+import { ManualDateProvider } from '@aztec-labs/foundation/timer';
+import { type KeyStore, KeystoreManager } from '@aztec-labs/node-keystore';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import type { P2P, PeerId } from '@aztec-labs/p2p';
+import { TestTxProvider } from '@aztec-labs/p2p/test-helpers';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { AvmSimulatorPool } from '@aztec-labs/simulator/server';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { CommitteeAttestation, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import { CheckpointReexecutionTracker, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { type L1RollupConstants, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import { InboxBucketRef } from '@aztec-labs/stdlib/messaging';
 import {
   type BlockProposal,
   CheckpointProposal,
   ValidatedBlockProposal,
   ValidatedCheckpointProposalCore,
-} from '@aztec/stdlib/p2p';
-import { mockTx } from '@aztec/stdlib/testing';
-import { BlockHeader, type CheckpointGlobalVariables, Tx } from '@aztec/stdlib/tx';
-import type { GenesisData } from '@aztec/stdlib/world-state';
-import { ServerWorldStateSynchronizer } from '@aztec/world-state';
-import { NativeWorldStateService } from '@aztec/world-state/native';
-import { getGenesisValues } from '@aztec/world-state/testing';
-
+} from '@aztec-labs/stdlib/p2p';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import { BlockHeader, type CheckpointGlobalVariables, Tx } from '@aztec-labs/stdlib/tx';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
+import { ServerWorldStateSynchronizer } from '@aztec-labs/world-state';
+import { NativeWorldStateService } from '@aztec-labs/world-state/native';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { hashTypedData } from 'viem';
@@ -147,7 +146,7 @@ describe('ValidatorClient Integration', () => {
     const synchronizer = new ServerWorldStateSynchronizer(worldStateDb, archiver, wsConfig);
     await synchronizer.start();
 
-    const { AvmSimulatorPool } = await import('@aztec/simulator/server');
+    const { AvmSimulatorPool } = await import('@aztec-labs/simulator/server');
     const avmSimulator = await AvmSimulatorPool.spawn({ wsdbIpcPath: worldStateDb.getIpcPath() });
 
     // Create real checkpoints builder

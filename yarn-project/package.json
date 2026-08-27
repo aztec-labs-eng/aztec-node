@@ -65,7 +65,7 @@
     "wallets",
     "world-state"
   ],
-  "prettier": "@aztec/foundation/prettier",
+  "prettier": "@aztec-labs/foundation/prettier",
   "devDependencies": {
     "@monorepo-utils/workspaces-to-typescript-project-references": "^2.9.0",
     "@swc-node/register": "^1.10.10",

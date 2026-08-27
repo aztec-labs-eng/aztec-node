@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/native",
+  "name": "@aztec-labs/native",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -15,8 +15,8 @@
     "../package.common.json"
   ],
   "dependencies": {
+    "@aztec-labs/foundation": "workspace:^",
     "@aztec/bb.js": "0.1.0-dummy",
-    "@aztec/foundation": "workspace:^",
     "msgpackr": "^1.11.2"
   },
   "devDependencies": {

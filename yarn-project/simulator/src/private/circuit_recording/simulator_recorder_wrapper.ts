@@ -1,6 +1,7 @@
 import type { ForeignCallHandler } from '@aztec/noir-acvm_js';
-import type { FunctionArtifactWithContractName } from '@aztec/stdlib/abi';
-import type { NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
+
+import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 
 import type { ACIRCallback, ACIRCallbackStats, ACIRExecutionResult } from '../acvm/acvm.js';
 import type { ACVMWitness } from '../acvm/acvm_types.js';

@@ -1,4 +1,4 @@
-import { MAX_PRIVATE_LOGS_PER_TX } from '@aztec/constants';
+import { MAX_PRIVATE_LOGS_PER_TX } from '@aztec-labs/constants';
 
 // This window bounds how far a sender's next tag index for a directional app tagging secret can run ahead of that
 // secret's highest finalized index before `PXE::proveTx` throws.

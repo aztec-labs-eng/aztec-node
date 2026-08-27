@@ -1,7 +1,7 @@
-import { createConsoleLogger } from '@aztec/foundation/log';
 import { codegen } from '@aztec/noir-noir_codegen';
 import type { CompiledCircuit } from '@aztec/noir-types';
 
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
 import { pascalCase } from 'change-case';
 import { promises as fs } from 'fs';
 

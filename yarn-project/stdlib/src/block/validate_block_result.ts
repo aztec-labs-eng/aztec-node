@@ -1,10 +1,9 @@
-import type { ViemCommitteeAttestations } from '@aztec/ethereum/contracts';
-import { EpochNumber, EpochNumberSchema } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { z } from 'zod';
 
 import {

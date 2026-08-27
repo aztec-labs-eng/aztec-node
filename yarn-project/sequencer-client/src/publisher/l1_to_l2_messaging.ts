@@ -1,12 +1,12 @@
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { tryJsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
 import { InboxAbi } from '@aztec/l1-artifacts';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
 
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { tryJsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { decodeEventLog, getContract } from 'viem';
 
 /**

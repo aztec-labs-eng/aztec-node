@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import { AztecContext } from '../aztecContext';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import {
   ContractFunctionInteraction,
   DeployMethod,
@@ -8,12 +8,12 @@ import {
   type SendInteractionOptions,
   type DeployOptions,
   NO_WAIT,
-} from '@aztec/aztec.js/contracts';
-import { PendingTxReceipt, TxHash, type TxReceipt } from '@aztec/aztec.js/tx';
-import { TimeoutError } from '@aztec/foundation/error';
+} from '@aztec-labs/aztec.js/contracts';
+import { PendingTxReceipt, TxHash, type TxReceipt } from '@aztec-labs/aztec.js/tx';
+import { TimeoutError } from '@aztec-labs/foundation/error';
 import { useNotifications } from '@toolpad/core/useNotifications';
 import { TX_TIMEOUT } from '../constants';
-import { waitForTx } from '@aztec/aztec.js/node';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
 
 export function useTransaction() {
   const { playgroundDB, currentTx, setCurrentTx, node } = useContext(AztecContext);

@@ -1,6 +1,6 @@
-import type { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { LoggerBindings } from '@aztec/foundation/log';
+import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
 
 import type { BlockHash } from '../block/block_hash.js';
 import type { L2Block } from '../block/l2_block.js';

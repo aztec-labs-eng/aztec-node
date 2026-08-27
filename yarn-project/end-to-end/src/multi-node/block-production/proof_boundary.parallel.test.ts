@@ -1,12 +1,11 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { Delayer } from '@aztec/ethereum/l1-tx-utils';
-import { asyncMap } from '@aztec/foundation/async-map';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { SequencerClient, SequencerEvents } from '@aztec/sequencer-client';
-import { getEpochAtSlot, getEpochNumberAtTimestamp, getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import { asyncMap } from '@aztec-labs/foundation/async-map';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { SequencerClient, SequencerEvents } from '@aztec-labs/sequencer-client';
+import { getEpochAtSlot, getEpochNumberAtTimestamp, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

@@ -2,18 +2,18 @@ import {
   createAztecNodeClient,
   waitForNode,
   waitForTx,
-} from "@aztec/aztec.js/node";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { TokenContract, type Transfer } from "@aztec/noir-contracts.js/Token";
-import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC";
-import { Fr } from "@aztec/aztec.js/fields";
-import { NO_WAIT, BatchCall, Contract } from "@aztec/aztec.js/contracts";
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee/testing";
-import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
-import { PublicKeys } from "@aztec/stdlib/keys";
-import { getPublicEvents } from "@aztec/aztec.js/events";
-import { Gas, GasSettings } from "@aztec/stdlib/gas";
+} from "@aztec-labs/aztec.js/node";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { TokenContract, type Transfer } from "@aztec-labs/noir-contracts.js/Token";
+import { SponsoredFPCContract } from "@aztec-labs/noir-contracts.js/SponsoredFPC";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { NO_WAIT, BatchCall, Contract } from "@aztec-labs/aztec.js/contracts";
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee/testing";
+import { getContractInstanceFromInstantiationParams } from "@aztec-labs/stdlib/contract";
+import { PublicKeys } from "@aztec-labs/stdlib/keys";
+import { getPublicEvents } from "@aztec-labs/aztec.js/events";
+import { Gas, GasSettings } from "@aztec-labs/stdlib/gas";
 
 // Setup: connect to network
 const node = createAztecNodeClient(
@@ -481,12 +481,12 @@ console.log("Auto-estimated L2 gas:", autoEstimate.l2Gas);
 // docs:end:auto_gas_estimation
 
 // docs:start:import_get_public_events
-import { getPublicEvents as _importCheck } from "@aztec/aztec.js/events";
+import { getPublicEvents as _importCheck } from "@aztec-labs/aztec.js/events";
 // docs:end:import_get_public_events
 
 // docs:start:import_private_event_types
-import type { PrivateEventFilter } from "@aztec/aztec.js/wallet";
-import { BlockNumber } from "@aztec/aztec.js/fields";
+import type { PrivateEventFilter } from "@aztec-labs/aztec.js/wallet";
+import { BlockNumber } from "@aztec-labs/aztec.js/fields";
 // docs:end:import_private_event_types
 
 // docs:start:simulate_private_access

@@ -1,4 +1,4 @@
-import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec/foundation/config';
+import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec-labs/foundation/config';
 
 export const DEFAULT_INDIVIDUAL_REQUEST_TIMEOUT_MS = 10_000;
 export const DEFAULT_OVERALL_REQUEST_TIMEOUT_MS = 10_000; // Not currently used

@@ -1,12 +1,12 @@
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { BufferReader, numToUInt8, numToUInt32BE, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { BufferReader, numToUInt8, numToUInt32BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import type {
   ValidatorStatusHistory,
   ValidatorStatusInSlot,
   ValidatorsEpochPerformance,
-} from '@aztec/stdlib/validators';
+} from '@aztec-labs/stdlib/validators';
 
 export class SentinelStore {
   public static readonly SCHEMA_VERSION = 4;

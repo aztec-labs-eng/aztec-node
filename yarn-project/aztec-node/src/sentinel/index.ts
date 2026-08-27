@@ -5,4 +5,4 @@ export type {
   ValidatorStats,
   ValidatorStatusHistory,
   ValidatorStatusInSlot,
-} from '@aztec/stdlib/validators';
+} from '@aztec-labs/stdlib/validators';

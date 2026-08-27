@@ -1,6 +1,6 @@
-import type { NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
-import type { CircuitName } from '@aztec/stdlib/stats';
-import type { VerificationKeyData } from '@aztec/stdlib/vks';
+import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
+import type { CircuitName } from '@aztec-labs/stdlib/stats';
+import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 import type {
   PrivateResetArtifact,

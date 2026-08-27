@@ -1,7 +1,7 @@
-import { DomainSeparator } from '@aztec/constants';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { numToUInt32BE } from '@aztec/foundation/serialize';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { numToUInt32BE } from '@aztec-labs/foundation/serialize';
 
 /**
  * Extends the Inbox rolling-hash chain by a single message leaf, returning the new rolling hash.

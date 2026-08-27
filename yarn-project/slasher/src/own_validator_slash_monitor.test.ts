@@ -1,12 +1,11 @@
-import type { SlashVoteTarget, SlashingProposerContract } from '@aztec/ethereum/contracts';
-import { times } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import { Metrics } from '@aztec/telemetry-client';
-import { BenchmarkTelemetryClient } from '@aztec/telemetry-client/bench';
-
+import type { SlashVoteTarget, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { times } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { Metrics } from '@aztec-labs/telemetry-client';
+import { BenchmarkTelemetryClient } from '@aztec-labs/telemetry-client/bench';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

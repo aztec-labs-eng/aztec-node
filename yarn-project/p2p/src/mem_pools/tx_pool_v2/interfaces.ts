@@ -1,9 +1,9 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-import type { L2Block, L2BlockId, L2BlockSource } from '@aztec/stdlib/block';
-import type { BlockMinFeesProvider } from '@aztec/stdlib/gas';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { BlockHeader, Tx, TxHash, TxValidator } from '@aztec/stdlib/tx';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
+import type { L2Block, L2BlockId, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { BlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { BlockHeader, Tx, TxHash, TxValidator } from '@aztec-labs/stdlib/tx';
 
 import type { TxPoolRejectionError } from './eviction/interfaces.js';
 import type { TxMetaData, TxState } from './tx_metadata.js';

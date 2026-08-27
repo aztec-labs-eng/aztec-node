@@ -1,8 +1,8 @@
-import { ProtocolContractAddress } from '@aztec/aztec.js/protocol';
-import { getSponsoredFPCAddress } from '@aztec/cli/cli-utils';
-import type { LogFn } from '@aztec/foundation/log';
-import { StandardContractAddress } from '@aztec/standard-contracts/data';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { ProtocolContractAddress } from '@aztec-labs/aztec.js/protocol';
+import { getSponsoredFPCAddress } from '@aztec-labs/cli/cli-utils';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { StandardContractAddress } from '@aztec-labs/standard-contracts/data';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import type { WalletDB } from '../storage/wallet_db.js';
 

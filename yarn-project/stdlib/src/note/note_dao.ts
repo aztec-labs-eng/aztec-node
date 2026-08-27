@@ -1,9 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Note } from '@aztec/stdlib/note';
-import { TxHash } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Note } from '@aztec-labs/stdlib/note';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
 /**
  * A Note Data Access Object, representing a note that was committed to the note hash tree, holding all of the

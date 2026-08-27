@@ -16,10 +16,10 @@ Measure cheapest-first: native `bb` for the trend, gate counts to explain it, an
 
 ## Mental model
 
-Capture goes through the **public aztec.js API only**: `profile()` (on `ContractFunctionInteraction`/`DeployMethod`) returns `executionSteps`, which `serializePrivateExecutionSteps` (from `@aztec/stdlib/kernel`) writes to `ivc-inputs.msgpack`. The one catch: **`profile()` simulates and proves but does not send**, so in a stateful flow you **capture, then send** each step on its correct pre-state:
+Capture goes through the **public aztec.js API only**: `profile()` (on `ContractFunctionInteraction`/`DeployMethod`) returns `executionSteps`, which `serializePrivateExecutionSteps` (from `@aztec-labs/stdlib/kernel`) writes to `ivc-inputs.msgpack`. The one catch: **`profile()` simulates and proves but does not send**, so in a stateful flow you **capture, then send** each step on its correct pre-state:
 
 ```ts
-import { serializePrivateExecutionSteps } from '@aztec/stdlib/kernel';
+import { serializePrivateExecutionSteps } from '@aztec-labs/stdlib/kernel';
 
 const i = contract.methods.step(...args);
 const r = await i.profile({ profileMode: 'full', skipProofGeneration: false, from });
@@ -34,7 +34,7 @@ The in-repo bench harness works exactly this way — `captureProfile` in `client
 In the app repo:
 
 1. **Find the end-to-end flow** that already drives the private txs against a local network. It's usually a single test *file* — one `describe` with per-step `test()` blocks and shared `beforeAll` setup — that calls `.send({ from })` on each interaction in order, with all wallet/authwit/setup plumbing done. Instrument it rather than rebuild the flow.
-2. **Pin the app's Aztec version** from the relevant `package.json` (`@aztec/aztec.js` etc.). Record it exactly — it is not interchangeable with aztec-packages repo HEAD. *(Regression overlay: pin **two** versions, the "before" and "after", often on separate branches — e.g. a stable branch vs a version-bump branch.)*
+2. **Pin the app's Aztec version** from the relevant `package.json` (`@aztec-labs/aztec.js` etc.). Record it exactly — it is not interchangeable with aztec-packages repo HEAD. *(Regression overlay: pin **two** versions, the "before" and "after", often on separate branches — e.g. a stable branch vs a version-bump branch.)*
 
 > **Typical shape.** A multi-step app lifecycle (`step_1 → step_2 → … → step_n`, each a private tx) driven by one `*.e2e.test.ts` (under whatever runner the app uses — `bun:test`, `vitest`, `jest`, …) against `aztec start --local-network`. (For a regression, the same flow is captured once per pinned version.)
 
@@ -54,7 +54,7 @@ From there, proving and benchmarking (Steps 4–5) are identical — the msgpack
 On a throwaway branch in the app repo, gate capture behind an env var so the test is unchanged when not capturing:
 
 ```ts
-import { serializePrivateExecutionSteps } from '@aztec/stdlib/kernel';
+import { serializePrivateExecutionSteps } from '@aztec-labs/stdlib/kernel';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -82,7 +82,7 @@ Replace each lifecycle `await someInteraction.send(opts)` with `await captureThe
 Result: a directory tree matching the pinned-flow layout — `<flow>_<step>/ivc-inputs.msgpack` per step. (A 4-step lifecycle captured in ~80s with proofs on, and the instrumented test still passed.)
 
 **Checkpoints (verify, don't assume — these differ across versions):**
-- Confirm `serializePrivateExecutionSteps` is exported from `@aztec/stdlib/kernel` in the app's installed version. If it isn't, inline the encoding with `msgpackr` — it's just `new Encoder({ useRecords: false }).pack(steps.map(s => ({ bytecode: s.bytecode, witness: serializeWitness(s.witness), vk: s.vk, functionName: s.functionName, kind: s.kind })))`. The decoding side is `private_execution_steps.hpp` in the barretenberg (foundation) repo.
+- Confirm `serializePrivateExecutionSteps` is exported from `@aztec-labs/stdlib/kernel` in the app's installed version. If it isn't, inline the encoding with `msgpackr` — it's just `new Encoder({ useRecords: false }).pack(steps.map(s => ({ bytecode: s.bytecode, witness: serializeWitness(s.witness), vk: s.vk, functionName: s.functionName, kind: s.kind })))`. The decoding side is `private_execution_steps.hpp` in the barretenberg (foundation) repo.
 - Confirm the `profile()` signature: `profileMode` accepts `'gates' | 'execution-steps' | 'full'`; `'full'` is required to get `executionSteps`. The `from` field is required.
 
 ## Step 3 — Run the capture against a version-matched node (no docker needed)
@@ -113,10 +113,10 @@ The version manager is `aztec-up`, and its interface is a subcommand, **not** a 
 
 A freshly published version (e.g. an `-rc.N`) can be **blocked by a release-age pin** even though it exists on the registry, because the install resolves it through a date cutoff. Two independent mechanisms show up, and a capture hits *both* (the toolchain install goes through npm; the app deps go through bun):
 
-- **npm** (`aztec-up`'s installs): `~/.npmrc` `min-release-age=<days>`. Symptom: `npm error code ETARGET … No matching version found for @aztec/aztec@<version> with a date before <date>`.
-- **bun** (`bun install`): `bunfig.toml` `[install] minimumReleaseAge = <seconds>`. Symptom: `error: @aztec/aztec.js@<version> failed to resolve`.
+- **npm** (`aztec-up`'s installs): `~/.npmrc` `min-release-age=<days>`. Symptom: `npm error code ETARGET … No matching version found for @aztec-labs/aztec@<version> with a date before <date>`.
+- **bun** (`bun install`): `bunfig.toml` `[install] minimumReleaseAge = <seconds>`. Symptom: `error: @aztec-labs/aztec.js@<version> failed to resolve`.
 
-Ask the user if they are willing to override the **age**, not the date — passing `--before`/`npm_config_before` while an age pin is set errors with `--min-release-age cannot be provided when using --before` - with the smallest value that still admits the target, i.e. `≤ (now − publish_time)`; check the publish time with `npm view @aztec/aztec.js@<version> time` or the registry JSON:
+Ask the user if they are willing to override the **age**, not the date — passing `--before`/`npm_config_before` while an age pin is set errors with `--min-release-age cannot be provided when using --before` - with the smallest value that still admits the target, i.e. `≤ (now − publish_time)`; check the publish time with `npm view @aztec-labs/aztec.js@<version> time` or the registry JSON:
 
 ```bash
 # toolchain install (npm under the hood): age in DAYS

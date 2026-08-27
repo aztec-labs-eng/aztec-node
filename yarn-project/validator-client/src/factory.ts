@@ -1,15 +1,15 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import type { EpochCache } from '@aztec/epoch-cache';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { KeystoreManager } from '@aztec/node-keystore';
-import type { P2PClient } from '@aztec/p2p';
-import type { L2BlockSink, L2BlockSource } from '@aztec/stdlib/block';
-import type { CheckpointReexecutionTracker } from '@aztec/stdlib/checkpoint';
-import type { ValidatorClientFullConfig, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import type { TelemetryClient } from '@aztec/telemetry-client';
-import type { SlashingProtectionDatabase } from '@aztec/validator-ha-signer/types';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { KeystoreManager } from '@aztec-labs/node-keystore';
+import type { P2PClient } from '@aztec-labs/p2p';
+import type { L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import type { ValidatorClientFullConfig, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
+import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import { ValidatorMetrics } from './metrics.js';

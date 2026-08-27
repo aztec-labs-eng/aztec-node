@@ -1,10 +1,9 @@
-import { prettyPrintJSON } from '@aztec/cli/utils';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { GSEContract } from '@aztec/ethereum/contracts';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn } from '@aztec/foundation/log';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { prettyPrintJSON } from '@aztec-labs/cli/utils';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { GSEContract } from '@aztec-labs/ethereum/contracts';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { readFile, writeFile } from 'fs/promises';
 import { basename, dirname, join } from 'path';

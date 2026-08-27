@@ -7,18 +7,17 @@ import {
   MAX_PRIVATE_LOGS_PER_TX,
   NOTE_HASH_TREE_HEIGHT,
   VK_TREE_HEIGHT,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type DimensionName,
   type PrivateKernelResetDimensions,
   privateKernelResetDimensionNames,
-} from '@aztec/stdlib/kernel';
-import { NullifierMembershipWitness } from '@aztec/stdlib/trees';
-
+} from '@aztec-labs/stdlib/kernel';
+import { NullifierMembershipWitness } from '@aztec-labs/stdlib/trees';
 import { mock } from 'jest-mock-extended';
 import times from 'lodash.times';
 

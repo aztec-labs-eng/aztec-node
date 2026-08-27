@@ -1,9 +1,9 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { parseBooleanEnv } from '@aztec/foundation/config';
 import { FeeJuicePortalAbi, TestERC20Abi } from '@aztec/l1-artifacts';
 
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { parseBooleanEnv } from '@aztec-labs/foundation/config';
 import { jest } from '@jest/globals';
 import { type GetContractReturnType, getContract } from 'viem';
 

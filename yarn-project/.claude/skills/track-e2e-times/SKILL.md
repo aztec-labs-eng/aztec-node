@@ -40,14 +40,14 @@ Run any e2e test (or the whole suite) with `TEST_TIMING_FILE` pointed at a scrat
 
 ```bash
 TEST_TIMING_FILE=/tmp/e2e-timings.jsonl \
-  yarn workspace @aztec/end-to-end test:e2e e2e_block_building.test.ts
+  yarn workspace @aztec-labs/end-to-end test:e2e e2e_block_building.test.ts
 ```
 
 For the per-occurrence span lines as well:
 
 ```bash
 TEST_TIMING_FILE=/tmp/e2e-timings.jsonl TEST_TIMING_SPANS=1 \
-  yarn workspace @aztec/end-to-end test:e2e e2e_block_building.test.ts
+  yarn workspace @aztec-labs/end-to-end test:e2e e2e_block_building.test.ts
 ```
 
 If a run spreads across several jest workers and each worker writes its own file, collect them all

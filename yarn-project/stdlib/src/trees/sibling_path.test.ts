@@ -1,7 +1,7 @@
-// `SiblingPath` lives in `foundation`, which cannot import `@aztec/constants` because `constants` depends on it,
+// `SiblingPath` lives in `foundation`, which cannot import `@aztec-labs/constants` because `constants` depends on it,
 // so the check that its length cap covers every protocol tree lives here instead.
-import * as constants from '@aztec/constants';
-import { MAX_SIBLING_PATH_LENGTH } from '@aztec/foundation/trees';
+import * as constants from '@aztec-labs/constants';
+import { MAX_SIBLING_PATH_LENGTH } from '@aztec-labs/foundation/trees';
 
 describe('MAX_SIBLING_PATH_LENGTH', () => {
   const treeHeights = Object.entries(constants).filter(

@@ -4,11 +4,10 @@ import {
   PRIVATE_TX_L2_GAS_OVERHEAD,
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import { mockTx } from '@aztec/stdlib/testing';
-import { TX_ERROR_GAS_LIMIT_TOO_HIGH, TX_ERROR_INSUFFICIENT_GAS_LIMIT, type Tx } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/constants';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import { TX_ERROR_GAS_LIMIT_TOO_HIGH, TX_ERROR_INSUFFICIENT_GAS_LIMIT, type Tx } from '@aztec-labs/stdlib/tx';
 import assert from 'assert';
 
 import { MaxGasLimitsValidator, MinGasLimitsValidator } from './gas_limits_validator.js';

@@ -1,9 +1,9 @@
-import type { Logger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { TxHash, TxReceipt } from '@aztec/stdlib/tx';
-import { SortedTxStatuses, TxStatus } from '@aztec/stdlib/tx';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { TxHash, TxReceipt } from '@aztec-labs/stdlib/tx';
+import { SortedTxStatuses, TxStatus } from '@aztec-labs/stdlib/tx';
 
 import { DefaultWaitOpts, type WaitOpts } from '../contract/wait_opts.js';
 
@@ -103,4 +103,8 @@ export async function waitForTx(node: AztecNode, txHash: TxHash, opts?: WaitOpts
   return receipt;
 }
 
-export { createAztecNodeClient, type AztecNode, type AztecNodeClientOptions } from '@aztec/stdlib/interfaces/client';
+export {
+  createAztecNodeClient,
+  type AztecNode,
+  type AztecNodeClientOptions,
+} from '@aztec-labs/stdlib/interfaces/client';

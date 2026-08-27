@@ -2,9 +2,9 @@ import {
   type MAX_NOTE_HASHES_PER_TX,
   MAX_NOTE_HASH_READ_REQUESTS_PER_TX,
   type NOTE_HASH_TREE_HEIGHT,
-} from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { MembershipWitness } from '@aztec/foundation/trees';
+} from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { MembershipWitness } from '@aztec-labs/foundation/trees';
 
 import type { ClaimedLengthArray } from '../claimed_length_array.js';
 import type { ScopedNoteHash } from '../note_hash.js';

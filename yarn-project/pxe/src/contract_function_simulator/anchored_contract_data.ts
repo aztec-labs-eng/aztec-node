@@ -1,8 +1,8 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { FunctionArtifactWithContractName, FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstancePreimageWithAddress } from '@aztec/stdlib/contract';
-import type { BlockHeader, ContractOverrides } from '@aztec/stdlib/tx';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { FunctionArtifactWithContractName, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstancePreimageWithAddress } from '@aztec-labs/stdlib/contract';
+import type { BlockHeader, ContractOverrides } from '@aztec-labs/stdlib/tx';
 
 import type { ContractClassService } from '../contract/contract_class_service.js';
 import type { ContractStore } from '../storage/contract_store/contract_store.js';

@@ -1,8 +1,8 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
 import { RegistryAbi } from '@aztec/l1-artifacts/RegistryAbi';
 import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
 
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { type GetContractReturnType, type Hex, getAbiItem, getContract } from 'viem';
 
 import type { L1ContractAddresses } from '../l1_contract_addresses.js';

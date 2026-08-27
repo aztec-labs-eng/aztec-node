@@ -1,12 +1,12 @@
 /**
- * The `@aztec/accounts/ecdsa` export provides an ECDSA account contract implementation, that uses an ECDSA private key for authentication, and a Grumpkin key for encryption.
+ * The `@aztec-labs/accounts/ecdsa` export provides an ECDSA account contract implementation, that uses an ECDSA private key for authentication, and a Grumpkin key for encryption.
  * Consider using this account type when working with integrations with Ethereum wallets.
  *
  * @packageDocumentation
  */
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import { loadContractArtifact } from '@aztec/stdlib/abi';
-import type { NoirCompiledContract } from '@aztec/stdlib/noir';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import { loadContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 
 import EcdsaKAccountContractJson from '../../../artifacts/EcdsaKAccount.json' with { type: 'json' };
 import { EcdsaKBaseAccountContract } from './account_contract.js';

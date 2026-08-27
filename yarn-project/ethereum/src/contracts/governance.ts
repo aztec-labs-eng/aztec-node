@@ -1,8 +1,8 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
 import { GovernanceAbi } from '@aztec/l1-artifacts/GovernanceAbi';
 
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import {
   type EncodeFunctionDataParameters,
   type GetContractReturnType,

@@ -1,9 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { KeyStore } from '@aztec/key-store';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openEphemeralStore } from '@aztec/kv-store/lmdb-v2';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { KeyStore } from '@aztec-labs/key-store';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openEphemeralStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   AddressStore,
   AnchorBlockStore,
@@ -22,8 +22,8 @@ import {
   TaggingSecretSourcesStore,
   composeHooks,
   runOperation,
-} from '@aztec/pxe/server';
-import type { ChangeSetId, OperationContributor } from '@aztec/pxe/server';
+} from '@aztec-labs/pxe/server';
+import type { ChangeSetId, OperationContributor } from '@aztec-labs/pxe/server';
 import {
   ExecutionNoteCache,
   ExecutionTaggingIndexCache,
@@ -36,7 +36,7 @@ import {
   TransientArrayService,
   UtilityExecutionOracle,
   buildACIRCallback,
-} from '@aztec/pxe/simulator';
+} from '@aztec-labs/pxe/simulator';
 import {
   ExecutionError,
   WASMSimulator,
@@ -44,17 +44,16 @@ import {
   extractCallStack,
   resolveAssertionMessageFromError,
   toACVMWitness,
-} from '@aztec/simulator/client';
-import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec/standard-contracts/auth-registry/constants';
-import { EventSelector, FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { GasSettings } from '@aztec/stdlib/gas';
-import { computeProtocolNullifier } from '@aztec/stdlib/hash';
-import { PrivateContextInputs } from '@aztec/stdlib/kernel';
-import { makeGlobalVariables } from '@aztec/stdlib/testing';
-import { CallContext, GlobalVariables, OFFCHAIN_MESSAGE_IDENTIFIER, TxContext } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/simulator/client';
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry/constants';
+import { EventSelector, FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { GasSettings } from '@aztec-labs/stdlib/gas';
+import { computeProtocolNullifier } from '@aztec-labs/stdlib/hash';
+import { PrivateContextInputs } from '@aztec-labs/stdlib/kernel';
+import { makeGlobalVariables } from '@aztec-labs/stdlib/testing';
+import { CallContext, GlobalVariables, OFFCHAIN_MESSAGE_IDENTIFIER, TxContext } from '@aztec-labs/stdlib/tx';
 import { z } from 'zod';
 
 import { DEFAULT_ADDRESS } from './constants.js';

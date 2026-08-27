@@ -3,19 +3,18 @@ import {
   DeployMethod,
   type DeployOptions,
   type ProfileInteractionOptions,
-} from '@aztec/aztec.js/contracts';
-import type { Logger } from '@aztec/aztec.js/log';
-import { MAX_APPS_PER_KERNEL } from '@aztec/constants';
-import { createLogger } from '@aztec/foundation/log';
-import { type PrivateExecutionStep, serializePrivateExecutionSteps } from '@aztec/stdlib/kernel';
+} from '@aztec-labs/aztec.js/contracts';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { type PrivateExecutionStep, serializePrivateExecutionSteps } from '@aztec-labs/stdlib/kernel';
 import type {
   ProvingStats,
   ProvingTimings,
   RoundTripStats,
   SimulationStats,
   SimulationTimings,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import assert from 'node:assert';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

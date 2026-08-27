@@ -1,4 +1,4 @@
-import { BLOB_ACCUMULATOR_LENGTH } from '@aztec/constants';
+import { BLOB_ACCUMULATOR_LENGTH } from '@aztec-labs/constants';
 
 import { BlobAccumulator } from './blob_accumulator.js';
 

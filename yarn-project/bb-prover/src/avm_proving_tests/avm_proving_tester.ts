@@ -1,6 +1,7 @@
 import type { AvmStat } from '@aztec/bb.js';
-import { createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
+
+import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import {
   type MeasuredSimulatorFactory,
   PublicTxSimulationTester,
@@ -8,16 +9,15 @@ import {
   type TestEnqueuedCall,
   type TestExecutorMetrics,
   type TestPrivateInsertions,
-} from '@aztec/simulator/public/fixtures';
-import { AvmSimulatorPool, MeasuredPublicTxSimulator } from '@aztec/simulator/server';
-import type { PublicTxResult } from '@aztec/simulator/server';
-import { AvmCircuitInputs, AvmCircuitPublicInputs, PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Gas } from '@aztec/stdlib/gas';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import type { GlobalVariables } from '@aztec/stdlib/tx';
-import { NativeWorldStateService } from '@aztec/world-state';
-
+} from '@aztec-labs/simulator/public/fixtures';
+import { AvmSimulatorPool, MeasuredPublicTxSimulator } from '@aztec-labs/simulator/server';
+import type { PublicTxResult } from '@aztec-labs/simulator/server';
+import { AvmCircuitInputs, AvmCircuitPublicInputs, PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Gas } from '@aztec-labs/stdlib/gas';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import type { GlobalVariables } from '@aztec-labs/stdlib/tx';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 import path from 'path';
 
 import { BBJsFactory } from '../bb/bb_js_backend.js';

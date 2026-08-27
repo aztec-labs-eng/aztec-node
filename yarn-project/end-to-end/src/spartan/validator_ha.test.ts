@@ -1,12 +1,11 @@
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { RollupCheatCodes } from '@aztec/aztec/testing';
-import { INITIAL_CHECKPOINT_NUMBER } from '@aztec/constants';
-import { EthCheatCodesWithState } from '@aztec/ethereum/test';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import { INITIAL_CHECKPOINT_NUMBER } from '@aztec-labs/constants';
+import { EthCheatCodesWithState } from '@aztec-labs/ethereum/test';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { expect, jest } from '@jest/globals';
 
 import {

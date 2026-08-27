@@ -1,5 +1,5 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
 
 import type { EphemeralArrayService } from '../ephemeral_array_service.js';
 import type { TypeMapping } from '../oracle/oracle_registry.js';

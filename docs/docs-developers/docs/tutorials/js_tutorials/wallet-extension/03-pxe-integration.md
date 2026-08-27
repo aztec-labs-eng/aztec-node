@@ -118,7 +118,7 @@ Errors are serialized and sent back to the background, which can:
 
 ## PXE State Persistence
 
-The PXE uses IndexedDB for persistence (via `@aztec/kv-store`). This means:
+The PXE uses IndexedDB for persistence (via `@aztec-labs/kv-store`). This means:
 - Synced notes persist across extension restarts
 - Registered contracts are remembered
 - Account registrations survive restarts

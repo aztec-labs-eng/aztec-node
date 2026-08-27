@@ -1,6 +1,7 @@
 import { CircuitKind } from '@aztec/bb.js';
-import { vkAsFields } from '@aztec/foundation/crypto/keys';
-import { Fr } from '@aztec/foundation/curves/bn254';
+
+import { vkAsFields } from '@aztec-labs/foundation/crypto/keys';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { type ContractArtifact, type FunctionArtifact, FunctionSelector, FunctionType } from '../abi/index.js';
 import { hashVK } from '../hash/hash.js';

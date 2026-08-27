@@ -1,31 +1,31 @@
-import { createArchiver } from '@aztec/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec/bb-prover';
-import { TestCircuitVerifier } from '@aztec/bb-prover/test';
-import { createBlobClientWithFileStores } from '@aztec/blob-client/client';
-import { Blob, getKzg } from '@aztec/blob-lib';
-import { EpochCache } from '@aztec/epoch-cache';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { getPublicClient, makeL1HttpTransport } from '@aztec/ethereum/client';
-import { RegistryContract, RollupContract } from '@aztec/ethereum/contracts';
-import { pickL1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { compactArray } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import { type KeyStore, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec/node-keystore';
-import { trySnapshotSync } from '@aztec/node-lib/actions';
-import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec/node-lib/factories';
-import { type P2PClientDeps, createP2PClient } from '@aztec/p2p';
-import { type ProverNode, type ProverNodeDeps, createProverNode } from '@aztec/prover-node';
-import { createKeyStoreForProver } from '@aztec/prover-node/config';
+import { createArchiver } from '@aztec-labs/archiver';
+import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
+import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
+import { createBlobClientWithFileStores } from '@aztec-labs/blob-client/client';
+import { Blob, getKzg } from '@aztec-labs/blob-lib';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { getPublicClient, makeL1HttpTransport } from '@aztec-labs/ethereum/client';
+import { RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { compactArray } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { type KeyStore, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
+import { trySnapshotSync } from '@aztec-labs/node-lib/actions';
+import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec-labs/node-lib/factories';
+import { type P2PClientDeps, createP2PClient } from '@aztec-labs/p2p';
+import { type ProverNode, type ProverNodeDeps, createProverNode } from '@aztec-labs/prover-node';
+import { createKeyStoreForProver } from '@aztec-labs/prover-node/config';
 import {
   FeeProviderImpl,
   GlobalVariableBuilder,
   SequencerClient,
   type SequencerPublisher,
-} from '@aztec/sequencer-client';
-import { type AutomineSequencer, createAutomineSequencer } from '@aztec/sequencer-client/automine';
-import { AvmSimulatorPool } from '@aztec/simulator/server';
+} from '@aztec-labs/sequencer-client';
+import { type AutomineSequencer, createAutomineSequencer } from '@aztec-labs/sequencer-client/automine';
+import { AvmSimulatorPool } from '@aztec-labs/simulator/server';
 import {
   AttestationsBlockWatcher,
   AttestedInvalidProposalWatcher,
@@ -35,13 +35,13 @@ import {
   type SlasherClientInterface,
   type Watcher,
   createSlasher,
-} from '@aztec/slasher';
-import { CheckpointReexecutionTracker } from '@aztec/stdlib/checkpoint';
-import { type ClientProtocolCircuitVerifier, tryStop } from '@aztec/stdlib/interfaces/server';
-import { type DebugLogStore, InMemoryDebugLogStore, NullDebugLogStore } from '@aztec/stdlib/logs';
-import { getPackageVersion } from '@aztec/stdlib/update-checker';
-import type { GenesisData } from '@aztec/stdlib/world-state';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/slasher';
+import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import { type ClientProtocolCircuitVerifier, tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import { type DebugLogStore, InMemoryDebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
+import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import {
   FullNodeCheckpointsBuilder as CheckpointsBuilder,
   FullNodeCheckpointsBuilder,
@@ -50,10 +50,9 @@ import {
   ValidatorClient,
   createProposalHandler,
   createValidatorClient,
-} from '@aztec/validator-client';
-import type { SlashingProtectionDatabase } from '@aztec/validator-ha-signer/types';
-import { createWorldState, createWorldStateSynchronizer } from '@aztec/world-state';
-
+} from '@aztec-labs/validator-client';
+import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
+import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/world-state';
 import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';

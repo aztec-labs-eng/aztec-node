@@ -1,4 +1,4 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import {
   BatchCall,
   ContractFunctionInteraction,
@@ -9,14 +9,13 @@ import {
   type SendInteractionOptions,
   type WaitOpts,
   toSendOptions,
-} from '@aztec/aztec.js/contracts';
-import { type AztecNode, waitForTx } from '@aztec/aztec.js/node';
-import { timesAsync } from '@aztec/foundation/collection';
-import type { Logger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { SimulationError } from '@aztec/stdlib/errors';
-import { type OffchainEffect, type ProvingStats, Tx, TxHash, type TxReceipt } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/aztec.js/contracts';
+import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { SimulationError } from '@aztec-labs/stdlib/errors';
+import { type OffchainEffect, type ProvingStats, Tx, TxHash, type TxReceipt } from '@aztec-labs/stdlib/tx';
 import { inspect } from 'util';
 
 import { testSpan, withTestSpanOwner } from '../fixtures/timing.js';

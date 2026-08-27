@@ -44,7 +44,7 @@ services:
     volumes:
       - ../:/root/aztec-node
     working_dir: /root/aztec-node/playground
-    command: 'yarn workspace @aztec/playground test --project=$BROWSER'
+    command: 'yarn workspace @aztec-labs/playground test --project=$BROWSER'
     environment:
       HARDWARE_CONCURRENCY: 4
       DEBUG: 'aztec:*'

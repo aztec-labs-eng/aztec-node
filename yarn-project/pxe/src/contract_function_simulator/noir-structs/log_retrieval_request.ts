@@ -1,7 +1,7 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Tag } from '@aztec/stdlib/logs';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Tag } from '@aztec-labs/stdlib/logs';
 
 import type { Option } from './option.js';
 

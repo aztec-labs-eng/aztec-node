@@ -1,8 +1,8 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ExecutionNoteCache } from '@aztec/pxe/simulator';
-import { computeNoteHashNonce, computeUniqueNoteHash, siloNoteHash } from '@aztec/stdlib/hash';
-import { TxEffect, TxHash } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ExecutionNoteCache } from '@aztec-labs/pxe/simulator';
+import { computeNoteHashNonce, computeUniqueNoteHash, siloNoteHash } from '@aztec-labs/stdlib/hash';
+import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 export async function makeTxEffect(noteCache: ExecutionNoteCache, txBlockNumber: BlockNumber): Promise<TxEffect> {
   const txEffect = TxEffect.empty();

@@ -1,11 +1,10 @@
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { EmptyL1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { EpochProvingJobState } from '@aztec/stdlib/interfaces/server';
-
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { EpochProvingJobState } from '@aztec-labs/stdlib/interfaces/server';
 import { mock } from 'jest-mock-extended';
 
 import type { CheckpointStore } from './checkpoint-store.js';

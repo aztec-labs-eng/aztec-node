@@ -1,7 +1,7 @@
-import { median } from '@aztec/foundation/collection';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
+import { median } from '@aztec-labs/foundation/collection';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
   Attributes,
   Metrics,
@@ -9,8 +9,7 @@ import {
   type UpDownCounter,
   createUpDownCounterWithDefault,
   getTelemetryClient,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 
 import type { P2PConfig } from '../../config.js';

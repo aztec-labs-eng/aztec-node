@@ -5,7 +5,7 @@
  */
 
 /** Max transactions per block for deserialization validation (~300x default of 32) */
-export { MAX_TXS_PER_BLOCK } from '@aztec/stdlib/deserialization';
+export { MAX_TXS_PER_BLOCK } from '@aztec-labs/stdlib/deserialization';
 
 /** Max version string length (e.g., "1.0.0-alpha.123") */
 export const MAX_VERSION_STRING_LENGTH = 64;

@@ -1,16 +1,16 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { type Logger, createLogger } from '@aztec/aztec.js/log';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { RollupContract, SlashingProposerContract } from '@aztec/ethereum/contracts';
-import { L1TxUtils, createL1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryUntil } from '@aztec/foundation/retry';
-import { bufferToHex } from '@aztec/foundation/string';
 import { GSEAbi } from '@aztec/l1-artifacts/GSEAbi';
 import { SlasherAbi } from '@aztec/l1-artifacts/SlasherAbi';
 
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { RollupContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import assert from 'assert';
 import { encodeFunctionData, getContract } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';

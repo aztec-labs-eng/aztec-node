@@ -19,11 +19,11 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import SecurityIcon from '@mui/icons-material/Security';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useContext, useEffect, useState, useRef } from 'react';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { WebLogger } from '../../../utils/web_logger';
-import { getInitialTestAccountsData } from '@aztec/accounts/testing/lazy';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { type DeployOptions, DeployMethod } from '@aztec/aztec.js/contracts';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing/lazy';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { type DeployOptions, DeployMethod } from '@aztec-labs/aztec.js/contracts';
 import { AztecContext } from '../../../aztecContext';
 import { CreateAccountDialog } from '../../../wallet/components/CreateAccountDialog';
 import { useTransaction } from '../../../hooks/useTransaction';
@@ -32,10 +32,10 @@ import {
   type PendingConnection,
   type DiscoverySession,
   WalletManager,
-} from '@aztec/wallet-sdk/manager';
-import { hashToEmoji } from '@aztec/wallet-sdk/crypto';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ContractInitializationStatus, type Wallet } from '@aztec/aztec.js/wallet';
+} from '@aztec-labs/wallet-sdk/manager';
+import { hashToEmoji } from '@aztec-labs/wallet-sdk/crypto';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ContractInitializationStatus, type Wallet } from '@aztec-labs/aztec.js/wallet';
 
 type ExtendedWalletProvider = Omit<WalletProvider, 'type'> & {
   type: WalletProvider['type'] | 'embedded';

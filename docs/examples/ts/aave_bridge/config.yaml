@@ -2,11 +2,11 @@ contracts:
   - aave_bridge-AaveBridge
 
 dependencies:
-  - "@aztec/aztec.js"
-  - "@aztec/accounts"
-  - "@aztec/wallets"
-  - "@aztec/stdlib"
-  - "@aztec/foundation"
-  - "@aztec/ethereum"
-  - "@aztec/noir-contracts.js"
+  - "@aztec-labs/aztec.js"
+  - "@aztec-labs/accounts"
+  - "@aztec-labs/wallets"
+  - "@aztec-labs/stdlib"
+  - "@aztec-labs/foundation"
+  - "@aztec-labs/ethereum"
+  - "@aztec-labs/noir-contracts.js"
   - "npm:@aztec/viem@2.38.2"

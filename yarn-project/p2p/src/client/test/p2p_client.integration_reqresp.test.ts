@@ -1,11 +1,10 @@
-import type { EpochAndSlot, EpochCache } from '@aztec/epoch-cache';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { emptyChainConfig } from '@aztec/stdlib/config';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { Tx, TxArray, TxHash, TxHashArray } from '@aztec/stdlib/tx';
-
+import type { EpochAndSlot, EpochCache } from '@aztec-labs/epoch-cache';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { emptyChainConfig } from '@aztec-labs/stdlib/config';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { Tx, TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

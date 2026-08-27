@@ -29,25 +29,25 @@
  *    checks they missed: double-spend, block header, gas limits, and timestamps.
  *    This runs on every tx potentially entering the pending pool.
  */
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { LoggerBindings } from '@aztec/foundation/log';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { ProtocolContractAddress, protocolContractsHash } from '@aztec/protocol-contracts';
-import type { BlockHash } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import type { GasFees } from '@aztec/stdlib/gas';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { ProtocolContractAddress, protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { BlockHash } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import type { GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   AllowedElement,
   ClientProtocolCircuitVerifier,
   MerkleTreeReadOperations,
   PublicProcessorValidator,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { DatabasePublicStateSource, MerkleTreeId, type PublicStateSource } from '@aztec/stdlib/trees';
-import type { GlobalVariables, Tx, TxValidationResult, TxValidator } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { DatabasePublicStateSource, MerkleTreeId, type PublicStateSource } from '@aztec-labs/stdlib/trees';
+import type { GlobalVariables, Tx, TxValidationResult, TxValidator } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { TxMetaData } from '../../mem_pools/tx_pool_v2/tx_metadata.js';
 import { AggregateTxValidator } from './aggregate_tx_validator.js';

@@ -1,7 +1,7 @@
-import { UPDATES_VALUE_SIZE } from '@aztec/constants';
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, FieldReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { UPDATES_VALUE_SIZE } from '@aztec-labs/constants';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { ScheduledDelayChange } from './scheduled_delay_change.js';
 import { ScheduledValueChange } from './scheduled_value_change.js';

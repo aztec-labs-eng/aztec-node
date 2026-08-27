@@ -43,7 +43,7 @@ Both modes produce the same `Wallet` interface, so the rest of your app doesn't 
 
 ## Embedded wallet (local development)
 
-For local development, the app uses a custom `EmbeddedWallet` class that extends the official `EmbeddedWallet` from `@aztec/wallets/embedded`. The official wallet already provides account creation and persistence, transaction sending with gas estimation, automatic authwitness generation, and stub-account simulation. The tutorial subclass adds one thing: **SponsoredFPC fee payment** so users don't need to hold fee tokens.
+For local development, the app uses a custom `EmbeddedWallet` class that extends the official `EmbeddedWallet` from `@aztec-labs/wallets/embedded`. The official wallet already provides account creation and persistence, transaction sending with gas estimation, automatic authwitness generation, and stub-account simulation. The tutorial subclass adds one thing: **SponsoredFPC fee payment** so users don't need to hold fee tokens.
 
 Open `src/embedded-wallet.ts`:
 

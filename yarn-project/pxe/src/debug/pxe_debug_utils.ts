@@ -1,8 +1,8 @@
-import type { FunctionCall } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { NoteDao } from '@aztec/stdlib/note';
-import type { BlockHeader, ContractOverrides } from '@aztec/stdlib/tx';
+import type { FunctionCall } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { NoteDao } from '@aztec-labs/stdlib/note';
+import type { BlockHeader, ContractOverrides } from '@aztec-labs/stdlib/tx';
 
 import type { ContractSyncService } from '../contract/contract_sync_service.js';
 import type { ContractFunctionSimulator } from '../contract_function_simulator/contract_function_simulator.js';

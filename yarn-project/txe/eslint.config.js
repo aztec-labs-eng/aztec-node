@@ -1,5 +1,4 @@
-import config from '@aztec/foundation/eslint';
-
+import config from '@aztec-labs/foundation/eslint';
 import { globalIgnores } from 'eslint/config';
 
 // .cjs stubs are not part of the TS build (they're string-replaced by esbuild) and not

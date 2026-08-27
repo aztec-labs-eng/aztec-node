@@ -1,9 +1,8 @@
-import { Blob } from '@aztec/blob-lib';
-import { type L1TxState, TxUtilsState } from '@aztec/ethereum/l1-tx-utils';
-import { omit } from '@aztec/foundation/collection';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-
+import { Blob } from '@aztec-labs/blob-lib';
+import { type L1TxState, TxUtilsState } from '@aztec-labs/ethereum/l1-tx-utils';
+import { omit } from '@aztec-labs/foundation/collection';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { Hex } from 'viem';
 
 import { L1TxStore } from './l1_tx_store.js';

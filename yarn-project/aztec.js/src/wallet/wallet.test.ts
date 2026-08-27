@@ -1,14 +1,14 @@
-import type { ChainInfo } from '@aztec/entrypoints/interfaces';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec/foundation/json-rpc/test';
-import type { ContractArtifact, EventMetadataDefinition } from '@aztec/stdlib/abi';
-import { EventSelector, FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { ContractInstancePreimageWithAddress } from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
+import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import type { ContractArtifact, EventMetadataDefinition } from '@aztec-labs/stdlib/abi';
+import { EventSelector, FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { ContractInstancePreimageWithAddress } from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import {
   DroppedTxReceipt,
   ExecutionPayload,
@@ -17,8 +17,8 @@ import {
   TxProfileResult,
   TxSimulationResult,
   UtilityExecutionResult,
-} from '@aztec/stdlib/tx';
-import { DEV_VERSION } from '@aztec/stdlib/update-checker';
+} from '@aztec-labs/stdlib/tx';
+import { DEV_VERSION } from '@aztec-labs/stdlib/update-checker';
 
 import {
   type InteractionWaitOptions,

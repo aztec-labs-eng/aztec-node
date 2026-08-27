@@ -1,11 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 
 import type { ContractStore } from '../storage/contract_store/contract_store.js';

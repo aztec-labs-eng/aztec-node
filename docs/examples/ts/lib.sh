@@ -6,7 +6,7 @@
 #
 # Reads a config.yaml via yq and classifies each dependency entry into one of
 # three global arrays:
-#   AZTEC_DEPS          — @aztec/* packages resolved to pkg@link:<repo_root>/yarn-project/<name>
+#   AZTEC_DEPS          — @aztec-labs/* packages resolved to pkg@link:<repo_root>/yarn-project/<name>
 #   EXPLICIT_LINK_DEPS  — link: packages resolved to pkg@link:<repo_root>/<path>
 #   NPM_DEPS            — npm: packages (bare names, e.g. viem)
 #
@@ -43,11 +43,11 @@ parse_dependencies() {
             local link_path="${link_spec#*:}"
             EXPLICIT_LINK_DEPS+=("${link_pkg_name}@link:${repo_root}/${link_path}")
         elif [[ "$pkg" =~ ^@ ]]; then
-            # @aztec/* package - auto-link from yarn-project/
-            local pkg_name="${pkg#@aztec/}"
+            # @aztec-labs/* package - auto-link from yarn-project/
+            local pkg_name="${pkg#@aztec-labs/}"
             AZTEC_DEPS+=("${pkg}@link:${repo_root}/yarn-project/${pkg_name}")
         else
-            echo "Warning: Unknown dependency format '$pkg' (use '@aztec/pkg', 'link:pkg:path', or 'npm:pkg')" >&2
+            echo "Warning: Unknown dependency format '$pkg' (use '@aztec-labs/pkg', 'link:pkg:path', or 'npm:pkg')" >&2
         fi
     done < <(yq eval '.dependencies[]' "$config_file")
 }

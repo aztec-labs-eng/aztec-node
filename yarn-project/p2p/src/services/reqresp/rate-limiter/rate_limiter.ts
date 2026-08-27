@@ -3,8 +3,7 @@
  * Rationale is that if it was good enough for them, then it should be good enough for us.
  * https://github.com/ChainSafe/lodestar
  */
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import type { PeerId } from '@libp2p/interface';
 
 import type { PeerScoring } from '../../peer-manager/peer_scoring.js';

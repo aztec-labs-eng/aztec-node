@@ -1,20 +1,19 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { TestAztecNodeService } from '@aztec/aztec-node/test';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import type { RollupCheatCodes } from '@aztec/aztec/testing';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { BlockNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { SequencerEvents } from '@aztec/sequencer-client';
-import { OffenseType } from '@aztec/slasher';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { makeBlockHeader, makeBlockProposal } from '@aztec/stdlib/testing';
-import { TxHash } from '@aztec/stdlib/tx';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { BlockNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { SequencerEvents } from '@aztec-labs/sequencer-client';
+import { OffenseType } from '@aztec-labs/slasher';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { makeBlockHeader, makeBlockProposal } from '@aztec-labs/stdlib/testing';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { getPrivateKeyFromIndex } from '../../fixtures/utils.js';

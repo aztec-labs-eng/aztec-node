@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import { ChonkProof } from '@aztec/stdlib/proofs';
-import { mockTx } from '@aztec/stdlib/testing';
-import { HashedValues, TX_ERROR_SIZE_ABOVE_LIMIT, Tx, TxHash } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import { HashedValues, TX_ERROR_SIZE_ABOVE_LIMIT, Tx, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { SizeTxValidator } from './size_validator.js';
 

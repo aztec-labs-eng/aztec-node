@@ -3,11 +3,11 @@ import {
   MAX_NOTE_HASHES_PER_TX,
   MAX_NULLIFIERS_PER_TX,
   PRIVATE_TO_AVM_ACCUMULATED_DATA_LENGTH,
-} from '@aztec/constants';
-import { type FieldsOf, makeTuple } from '@aztec/foundation/array';
-import { arraySerializedSizeOfNonEmpty } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
+} from '@aztec-labs/constants';
+import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
+import { arraySerializedSizeOfNonEmpty } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
   BufferSink,
@@ -16,8 +16,7 @@ import {
   assertLength,
   serializeToFields,
   serializeToSink,
-} from '@aztec/foundation/serialize';
-
+} from '@aztec-labs/foundation/serialize';
 import { inspect } from 'util';
 import { z } from 'zod';
 

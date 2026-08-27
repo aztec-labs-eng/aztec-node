@@ -1,8 +1,7 @@
-import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX, STATE_REFERENCE_LENGTH } from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX, STATE_REFERENCE_LENGTH } from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { inspect } from 'util';
 import { z } from 'zod';
 

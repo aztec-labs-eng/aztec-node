@@ -1,6 +1,5 @@
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { mock } from 'jest-mock-extended';
 
 import type { L2BlockSource } from '../block/l2_block_source.js';

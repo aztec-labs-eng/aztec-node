@@ -1,6 +1,5 @@
-import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { z } from 'zod';
 
 import { schemas, zodFor } from '../schemas/index.js';

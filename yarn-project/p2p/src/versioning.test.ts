@@ -1,7 +1,6 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import { checkCompressedComponentVersion, compressComponentVersions } from '@aztec/stdlib/versioning';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import { checkCompressedComponentVersion, compressComponentVersions } from '@aztec-labs/stdlib/versioning';
 import type { SignableENR } from '@nethermindeth/enr';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

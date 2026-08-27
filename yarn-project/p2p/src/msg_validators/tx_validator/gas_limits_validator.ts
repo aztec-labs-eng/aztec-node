@@ -4,15 +4,15 @@ import {
   PRIVATE_TX_L2_GAS_OVERHEAD,
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { Gas } from '@aztec/stdlib/gas';
+} from '@aztec-labs/constants';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Gas } from '@aztec-labs/stdlib/gas';
 import {
   TX_ERROR_GAS_LIMIT_TOO_HIGH,
   TX_ERROR_INSUFFICIENT_GAS_LIMIT,
   type TxValidationResult,
   type TxValidator,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 /**
  * Structural interface for types that carry gas limit data, used by {@link MinGasLimitsValidator} and

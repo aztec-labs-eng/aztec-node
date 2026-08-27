@@ -1,21 +1,21 @@
-import type { AztecNodeConfig, AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { RollupContract, type SlashingProposerContract } from '@aztec/ethereum/contracts';
-import type { Operator } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import type { ViemClient } from '@aztec/ethereum/types';
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { SecretValue } from '@aztec/foundation/config';
-import { retryUntil } from '@aztec/foundation/retry';
-import { bufferToHex } from '@aztec/foundation/string';
 import { SlasherAbi } from '@aztec/l1-artifacts';
-import type { L2Tips } from '@aztec/stdlib/block';
-import type { AztecNode, BlockResponse } from '@aztec/stdlib/interfaces/client';
-import type { Offense } from '@aztec/stdlib/slashing';
-import { createSharedSlashingProtectionDb } from '@aztec/validator-ha-signer/factory';
-import type { SlashingProtectionDatabase } from '@aztec/validator-ha-signer/types';
 
+import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import type { ViemClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import type { L2Tips } from '@aztec-labs/stdlib/block';
+import type { AztecNode, BlockResponse } from '@aztec-labs/stdlib/interfaces/client';
+import type { Offense } from '@aztec-labs/stdlib/slashing';
+import { createSharedSlashingProtectionDb } from '@aztec-labs/validator-ha-signer/factory';
+import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
 import { type GetContractReturnType, getAddress, getContract } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 

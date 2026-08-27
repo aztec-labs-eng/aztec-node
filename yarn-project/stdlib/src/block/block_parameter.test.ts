@@ -1,5 +1,5 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { BlockHash } from './block_hash.js';
 import { type BlockParameter, BlockParameterSchema } from './block_parameter.js';

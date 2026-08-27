@@ -1,11 +1,11 @@
-import { Fr } from '@aztec/aztec.js/fields';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { GSEContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { LogFn } from '@aztec/foundation/log';
 import { RollupAbi, TestERC20Abi } from '@aztec/l1-artifacts';
 
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { createPublicClient, createWalletClient, fallback, getContract, http } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 

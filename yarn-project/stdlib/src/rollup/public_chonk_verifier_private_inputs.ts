@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { PrivateToPublicKernelCircuitPublicInputs } from '../kernel/private_to_public_kernel_circuit_public_inputs.js';
 import { type ChonkProofData, ProofData } from '../proofs/proof_data.js';

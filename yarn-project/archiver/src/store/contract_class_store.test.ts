@@ -1,14 +1,14 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { ProtocolContractClassId } from '@aztec/protocol-contracts';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { ProtocolContractClassId } from '@aztec-labs/protocol-contracts';
 import {
   type ContractClassPublic,
   type ContractClassPublicWithCommitment,
   computePublicBytecodeCommitment,
-} from '@aztec/stdlib/contract';
-import { makeContractClassPublic } from '@aztec/stdlib/testing';
-import '@aztec/stdlib/testing/jest';
+} from '@aztec-labs/stdlib/contract';
+import { makeContractClassPublic } from '@aztec-labs/stdlib/testing';
+import '@aztec-labs/stdlib/testing/jest';
 
 import { ContractClassStore } from './contract_class_store.js';
 

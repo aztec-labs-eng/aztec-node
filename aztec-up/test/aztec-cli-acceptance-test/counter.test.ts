@@ -14,8 +14,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { CounterContract } from './artifacts/Counter.ts';
 

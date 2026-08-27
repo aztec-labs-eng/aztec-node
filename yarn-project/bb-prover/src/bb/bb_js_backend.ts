@@ -1,8 +1,9 @@
 import { type AvmStat, type BackendOptions, BackendType, Barretenberg } from '@aztec/bb.js';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-import { FifoMemoryQueue } from '@aztec/foundation/queue';
-import { Timer } from '@aztec/foundation/timer';
-import { ProvingError } from '@aztec/stdlib/errors';
+
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { FifoMemoryQueue } from '@aztec-labs/foundation/queue';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { ProvingError } from '@aztec-labs/stdlib/errors';
 
 import type { UltraHonkFlavor } from '../honk.js';
 

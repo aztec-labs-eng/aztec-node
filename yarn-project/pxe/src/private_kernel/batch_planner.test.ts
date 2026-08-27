@@ -2,11 +2,10 @@ import {
   MAX_APPS_PER_KERNEL,
   MAX_KEY_VALIDATION_REQUESTS_PER_CALL,
   MAX_KEY_VALIDATION_REQUESTS_PER_TX,
-} from '@aztec/constants';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { PrivateCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import { PrivateCallExecutionResult } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/constants';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { PrivateCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
 import times from 'lodash.times';
 
 import { BatchPlanner } from './batch_planner.js';

@@ -1,4 +1,4 @@
-// Browser stub for @aztec/foundation/log
+// Browser stub for @aztec-labs/foundation/log
 // Only used during vitest browser tests to avoid loading Barretenberg WASM.
 // Create a logger that returns itself for chaining
 function createLogger(name, bindings) {

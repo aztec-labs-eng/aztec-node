@@ -1,11 +1,13 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
+import { RollupAbi } from '@aztec/l1-artifacts';
+
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import {
   BlobDeserializationError,
   type CheckpointBlobData,
   SpongeBlob,
   decodeCheckpointBlobDataFromBlobs,
   encodeBlockBlobData,
-} from '@aztec/blob-lib';
+} from '@aztec-labs/blob-lib';
 import type {
   CheckpointProposedLog,
   EpochProofPublicInputArgs,
@@ -14,21 +16,19 @@ import type {
   RollupContract,
   ViemCommitteeAttestations,
   ViemHeader,
-} from '@aztec/ethereum/contracts';
-import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { asyncPool } from '@aztec/foundation/async-pool';
-import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { RollupAbi } from '@aztec/l1-artifacts';
-import { Body, CommitteeAttestation, L2Block } from '@aztec/stdlib/block';
-import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { Proof } from '@aztec/stdlib/proofs';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { Body, CommitteeAttestation, L2Block } from '@aztec-labs/stdlib/block';
+import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { Proof } from '@aztec-labs/stdlib/proofs';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
 import { type Hex, decodeFunctionData, getAbiItem, hexToBytes } from 'viem';
 
 import { NoBlobBodiesFoundError } from '../errors.js';

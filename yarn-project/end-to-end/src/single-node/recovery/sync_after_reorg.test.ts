@@ -1,9 +1,9 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { getTimestampRangeForEpoch } from '@aztec/aztec.js/block';
-import type { Logger } from '@aztec/aztec.js/log';
-import { CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { executeTimeout } from '@aztec/foundation/timer';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { SingleNodeTestContext, jest, setupWithProver } from './setup.js';

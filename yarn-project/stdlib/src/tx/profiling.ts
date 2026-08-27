@@ -1,7 +1,7 @@
 import { CircuitKind } from '@aztec/bb.js';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type ZodFor, optional, schemas } from '@aztec/foundation/schemas';
 
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ZodFor, optional, schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

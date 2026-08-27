@@ -1,6 +1,6 @@
-import type { FunctionCall, FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { ContractStore } from '../storage/contract_store/contract_store.js';
 import type { ContractClassService } from './contract_class_service.js';

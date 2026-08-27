@@ -1,9 +1,9 @@
-import { EcdsaKAccountContract, EcdsaRAccountContract } from '@aztec/accounts/ecdsa';
-import { StubEcdsaAccountContractArtifact, createStubEcdsaAccount } from '@aztec/accounts/ecdsa/stub';
-import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec/accounts/schnorr';
-import { StubSchnorrAccountContractArtifact, createStubSchnorrAccount } from '@aztec/accounts/schnorr/stub';
-import { type Account, type AccountContract, NO_FROM } from '@aztec/aztec.js/account';
-import type { CompleteAddress } from '@aztec/aztec.js/addresses';
+import { EcdsaKAccountContract, EcdsaRAccountContract } from '@aztec-labs/accounts/ecdsa';
+import { StubEcdsaAccountContractArtifact, createStubEcdsaAccount } from '@aztec-labs/accounts/ecdsa/stub';
+import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec-labs/accounts/schnorr';
+import { StubSchnorrAccountContractArtifact, createStubSchnorrAccount } from '@aztec-labs/accounts/schnorr/stub';
+import { type Account, type AccountContract, NO_FROM } from '@aztec-labs/aztec.js/account';
+import type { CompleteAddress } from '@aztec-labs/aztec.js/addresses';
 import {
   type CallIntent,
   type ContractFunctionInteractionCallIntent,
@@ -12,22 +12,22 @@ import {
   computeInnerAuthWitHashFromAction,
   isContractFunctionInteractionCallIntent,
   lookupValidity,
-} from '@aztec/aztec.js/authorization';
-import { ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { AccountManager, type SendOptions } from '@aztec/aztec.js/wallet';
-import { TxSimulationResultWithAppOffset } from '@aztec/aztec.js/wallet';
-import type { DefaultAccountEntrypointOptions } from '@aztec/entrypoints/account';
-import { DefaultEntrypoint } from '@aztec/entrypoints/default';
-import { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { NotesFilter } from '@aztec/pxe/client/lazy';
-import { type PXEConfig, getPXEConfig } from '@aztec/pxe/config';
-import { PXE, type PXECreationOptions, type TaggingSecretSource, createPXE } from '@aztec/pxe/server';
-import { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { getContractClassFromArtifact } from '@aztec/stdlib/contract';
-import type { NoteDao } from '@aztec/stdlib/note';
+} from '@aztec-labs/aztec.js/authorization';
+import { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { AccountManager, type SendOptions } from '@aztec-labs/aztec.js/wallet';
+import { TxSimulationResultWithAppOffset } from '@aztec-labs/aztec.js/wallet';
+import type { DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
+import { DefaultEntrypoint } from '@aztec-labs/entrypoints/default';
+import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { NotesFilter } from '@aztec-labs/pxe/client/lazy';
+import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/config';
+import { PXE, type PXECreationOptions, type TaggingSecretSource, createPXE } from '@aztec-labs/pxe/server';
+import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
+import type { NoteDao } from '@aztec-labs/stdlib/note';
 import {
   type BlockHeader,
   type ContractOverrides,
@@ -35,10 +35,10 @@ import {
   type TxExecutionRequest,
   type TxHash,
   type TxReceipt,
-} from '@aztec/stdlib/tx';
-import { ExecutionPayload, mergeExecutionPayloads } from '@aztec/stdlib/tx';
-import { BaseWallet, type SimulateViaEntrypointOptions } from '@aztec/wallet-sdk/base-wallet';
-import type { AccountType } from '@aztec/wallets/embedded';
+} from '@aztec-labs/stdlib/tx';
+import { ExecutionPayload, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
+import { BaseWallet, type SimulateViaEntrypointOptions } from '@aztec-labs/wallet-sdk/base-wallet';
+import type { AccountType } from '@aztec-labs/wallets/embedded';
 
 import { DEFAULT_MIN_FEE_PADDING } from '../fixtures/fixtures.js';
 import { AztecNodeProxy, ProvenTx } from './utils.js';

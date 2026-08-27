@@ -1,4 +1,4 @@
-import type { Tx, TxValidationResult, TxValidator } from '@aztec/stdlib/tx';
+import type { Tx, TxValidationResult, TxValidator } from '@aztec-labs/stdlib/tx';
 
 import type { ITxValidationCache } from './tx_validation_cache.js';
 

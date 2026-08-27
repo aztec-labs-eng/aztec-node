@@ -6,14 +6,14 @@ import {
   MAX_NULLIFIER_READ_REQUESTS_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
   NULLIFIER_TREE_HEIGHT,
-} from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { assertLength } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import { privateKernelResetDimensionsConfig } from '@aztec/noir-protocol-circuits-types/client';
+} from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { assertLength } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { privateKernelResetDimensionsConfig } from '@aztec-labs/noir-protocol-circuits-types/client';
 import {
   ClaimedLengthArray,
   KeyValidationHint,
@@ -38,9 +38,9 @@ import {
   getNullifierReadRequestResetActions,
   kernelStateIsForPublic,
   privateKernelResetDimensionNames,
-} from '@aztec/stdlib/kernel';
-import { type PrivateCallExecutionResult, collectNested } from '@aztec/stdlib/tx';
-import { VkData } from '@aztec/stdlib/vks';
+} from '@aztec-labs/stdlib/kernel';
+import { type PrivateCallExecutionResult, collectNested } from '@aztec-labs/stdlib/tx';
+import { VkData } from '@aztec-labs/stdlib/vks';
 
 import type { PrivateKernelOracle } from '../private_kernel_oracle.js';
 

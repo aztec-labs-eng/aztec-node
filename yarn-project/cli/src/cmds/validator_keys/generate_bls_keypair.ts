@@ -1,6 +1,5 @@
-import { deriveBlsPrivateKey } from '@aztec/foundation/crypto/bls';
-import type { LogFn } from '@aztec/foundation/log';
-
+import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { writeFile } from 'fs/promises';
 
 import { computeBlsPublicKeyCompressed, withValidatorIndex } from './shared.js';

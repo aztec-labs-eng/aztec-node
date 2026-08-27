@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/stdlib",
+  "name": "@aztec-labs/stdlib",
   "version": "0.1.0",
   "type": "module",
   "inherits": [
@@ -92,11 +92,11 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.892.0",
+    "@aztec-labs/blob-lib": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
     "@aztec/bb.js": "0.1.0-dummy",
-    "@aztec/blob-lib": "workspace:^",
-    "@aztec/constants": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
     "@aztec/noir-noirc_abi": "0.1.0-dummy",
     "@google-cloud/storage": "^7.15.0",
     "axios": "^1.15.1",

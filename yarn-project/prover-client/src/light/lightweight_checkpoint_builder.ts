@@ -1,25 +1,30 @@
-import { SpongeBlob, computeBlobsHashFromBlobs, encodeCheckpointEndMarker, getBlobsPerL1Block } from '@aztec/blob-lib';
-import { type CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { elapsed } from '@aztec/foundation/timer';
-import { L2Block } from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
+import {
+  SpongeBlob,
+  computeBlobsHashFromBlobs,
+  encodeCheckpointEndMarker,
+  getBlobsPerL1Block,
+} from '@aztec-labs/blob-lib';
+import { type CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { elapsed } from '@aztec-labs/foundation/timer';
+import { L2Block } from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
 import {
   accumulateCheckpointOutHashes,
   accumulateInboxRollingHash,
   appendL1ToL2MessagesToTree,
   computeCheckpointOutHash,
-} from '@aztec/stdlib/messaging';
-import { CheckpointHeader, computeBlockHeadersHash } from '@aztec/stdlib/rollup';
-import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/messaging';
+import { CheckpointHeader, computeBlockHeadersHash } from '@aztec-labs/stdlib/rollup';
+import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   type CheckpointGlobalVariables,
   type GlobalVariables,
   type ProcessedTx,
   StateReference,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import {
   buildHeaderAndBodyFromTxs,

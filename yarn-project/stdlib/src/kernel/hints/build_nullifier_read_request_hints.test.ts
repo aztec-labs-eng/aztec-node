@@ -1,8 +1,8 @@
-import { MAX_NULLIFIERS_PER_TX, MAX_NULLIFIER_READ_REQUESTS_PER_TX } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Tuple } from '@aztec/foundation/serialize';
+import { MAX_NULLIFIERS_PER_TX, MAX_NULLIFIER_READ_REQUESTS_PER_TX } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
 
 import { AztecAddress } from '../../aztec-address/index.js';
 import { siloNullifier } from '../../hash/hash.js';

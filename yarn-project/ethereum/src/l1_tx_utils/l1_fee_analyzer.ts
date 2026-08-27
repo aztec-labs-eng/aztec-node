@@ -1,8 +1,7 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type Block, type FormattedTransaction, type Hex, formatGwei } from 'viem';
 
 import type { ViemClient } from '../types.js';

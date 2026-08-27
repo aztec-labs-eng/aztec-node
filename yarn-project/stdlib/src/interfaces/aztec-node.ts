@@ -1,5 +1,5 @@
-import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec/constants';
-import { type L1ContractAddresses, L1ContractAddressesSchema } from '@aztec/ethereum/l1-contract-addresses';
+import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { type L1ContractAddresses, L1ContractAddressesSchema } from '@aztec-labs/ethereum/l1-contract-addresses';
 import {
   type BlockNumber,
   BlockNumberPositiveSchema,
@@ -12,17 +12,16 @@ import {
   EpochNumberSchema,
   type SlotNumber,
   SlotNumberSchema,
-} from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
+} from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
   type JsonRpcFetch,
   type JsonRpcFetchConfig,
   createSafeJsonRpcClient,
   makeFetch,
-} from '@aztec/foundation/json-rpc/client';
-import { MembershipWitness, SiblingPath } from '@aztec/foundation/trees';
-
+} from '@aztec-labs/foundation/json-rpc/client';
+import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import { z } from 'zod';
 
 import type { AztecAddress } from '../aztec-address/index.js';

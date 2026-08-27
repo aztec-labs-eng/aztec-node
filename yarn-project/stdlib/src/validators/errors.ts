@@ -1,6 +1,6 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { TxHash } from '@aztec/stdlib/tx';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 
 export class ValidatorError extends Error {
   constructor(message: string) {

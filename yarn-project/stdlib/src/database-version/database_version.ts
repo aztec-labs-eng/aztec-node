@@ -1,6 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { z } from 'zod';
 
 /**

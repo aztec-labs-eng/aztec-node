@@ -1,5 +1,9 @@
-import type { CHONK_PROOF_LENGTH, RECURSIVE_PROOF_LENGTH, RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec/constants';
-import { BufferReader, type Bufferable, serializeToBuffer } from '@aztec/foundation/serialize';
+import type {
+  CHONK_PROOF_LENGTH,
+  RECURSIVE_PROOF_LENGTH,
+  RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
+} from '@aztec-labs/constants';
+import { BufferReader, type Bufferable, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { RecursiveProof } from '../proofs/recursive_proof.js';
 import { VkData } from '../vks/index.js';

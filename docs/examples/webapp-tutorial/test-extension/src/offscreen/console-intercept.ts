@@ -1,6 +1,6 @@
 /**
  * Console.info interception — MUST be imported before any module that creates
- * pino loggers (e.g. @aztec/pxe).
+ * pino loggers (e.g. @aztec-labs/pxe).
  *
  * Pino's browser transport captures `console.info` at logger-creation time.
  * If our override runs after pino grabs the reference, pino bypasses it.

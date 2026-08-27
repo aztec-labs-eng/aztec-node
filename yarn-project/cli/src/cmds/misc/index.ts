@@ -1,5 +1,4 @@
-import type { LogFn } from '@aztec/foundation/log';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
 import type { Command } from 'commander';
 
 import { l1ChainIdOption, prettyPrintJSON } from '../../utils/commands.js';
@@ -48,7 +47,7 @@ export function injectCommands(program: Command, log: LogFn) {
     .description('Decodes and ENR record')
     .argument('<enr>', 'The encoded ENR string')
     .action(async (enr: string) => {
-      const { printENR } = await import('@aztec/p2p/enr');
+      const { printENR } = await import('@aztec-labs/p2p/enr');
       await printENR(enr, log);
     });
 

@@ -1,20 +1,20 @@
-import { type AztecNodeConfig, AztecNodeService } from '@aztec/aztec-node';
-import { TestCircuitVerifier } from '@aztec/bb-prover/test';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
+import { type AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
 import {
   type AnchorBlockStore,
   ContractClassService,
   type ContractStore,
   ContractSyncService,
   type NoteStore,
-} from '@aztec/pxe/server';
-import { TxResolverService } from '@aztec/pxe/simulator';
-import { L2Block, type L2TipsProvider } from '@aztec/stdlib/block';
-import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
+} from '@aztec-labs/pxe/server';
+import { TxResolverService } from '@aztec-labs/pxe/simulator';
+import { L2Block, type L2TipsProvider } from '@aztec-labs/stdlib/block';
+import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 
 import { TXEArchiver } from './archiver.js';
 import { DummyP2P } from './dummy_p2p_client.js';

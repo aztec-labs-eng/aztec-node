@@ -2,7 +2,7 @@
 import {
   ContentScriptConnectionHandler,
   type ContentScriptTransport,
-} from '@aztec/wallet-sdk/extension/handlers';
+} from '@aztec-labs/wallet-sdk/extension/handlers';
 
 const transport: ContentScriptTransport = {
   sendToBackground: (message) => {

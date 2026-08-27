@@ -1,14 +1,14 @@
-import { BBNativeRollupProver, type BBProverConfig } from '@aztec/bb-prover';
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK, PAIRING_POINTS_SIZE } from '@aztec/constants';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { parseBooleanEnv } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { getTestData, isGenerateTestDataEnabled } from '@aztec/foundation/testing';
-import { writeTestData } from '@aztec/foundation/testing/files';
-import { getTelemetryClient } from '@aztec/telemetry-client';
+import { BBNativeRollupProver, type BBProverConfig } from '@aztec-labs/bb-prover';
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK, PAIRING_POINTS_SIZE } from '@aztec-labs/constants';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { parseBooleanEnv } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { getTestData, isGenerateTestDataEnabled } from '@aztec-labs/foundation/testing';
+import { writeTestData } from '@aztec-labs/foundation/testing/files';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from '../orchestrator/checkpoint-sub-tree-orchestrator.js';

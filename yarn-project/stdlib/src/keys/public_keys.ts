@@ -7,14 +7,13 @@ import {
   DEFAULT_OVPK_M_HASH,
   DEFAULT_TPK_M_HASH,
   DomainSeparator,
-} from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, FieldReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, withoutHexPrefix } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+} from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, withoutHexPrefix } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { PublicKey, hashPublicKey } from './public_key.js';

@@ -1,9 +1,8 @@
-import { SecretValue } from '@aztec/foundation/config';
-import { createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { generateKeyPair, marshalPrivateKey } from '@libp2p/crypto/keys';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
 import { promises as fs } from 'fs';

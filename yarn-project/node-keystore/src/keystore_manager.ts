@@ -3,13 +3,12 @@
  *
  * Manages keystore configuration and delegates signing operations to appropriate signers.
  */
-import type { EthSigner } from '@aztec/ethereum/eth-signer';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import type { EthSigner } from '@aztec-labs/ethereum/eth-signer';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Wallet } from '@ethersproject/wallet';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { extname, join } from 'path';

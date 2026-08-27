@@ -11,11 +11,11 @@ import {
   MAX_NULLIFIER_READ_REQUESTS_PER_TX,
   MAX_PRIVATE_LOGS_PER_CALL,
   MAX_PRIVATE_LOGS_PER_TX,
-} from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Serializable } from '@aztec/foundation/serialize';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Serializable } from '@aztec-labs/foundation/serialize';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   ClaimedLengthArray,
   KeyValidationRequest,
@@ -30,11 +30,11 @@ import {
   ScopedNoteHash,
   ScopedNullifier,
   ScopedReadRequest,
-} from '@aztec/stdlib/kernel';
-import { PrivateLogData, ScopedPrivateLogData } from '@aztec/stdlib/kernel';
-import { PrivateLog } from '@aztec/stdlib/logs';
-import { PrivateCallExecutionResult } from '@aztec/stdlib/tx';
-import { VerificationKeyData } from '@aztec/stdlib/vks';
+} from '@aztec-labs/stdlib/kernel';
+import { PrivateLogData, ScopedPrivateLogData } from '@aztec-labs/stdlib/kernel';
+import { PrivateLog } from '@aztec-labs/stdlib/logs';
+import { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
+import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 const DEFAULT_CONTRACT_ADDRESS = AztecAddress.fromBigIntUnsafe(987654n);
 

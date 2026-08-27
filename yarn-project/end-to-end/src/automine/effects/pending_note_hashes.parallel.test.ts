@@ -1,14 +1,14 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import {
   MAX_NOTE_HASHES_PER_CALL,
   MAX_NOTE_HASHES_PER_TX,
   MAX_NOTE_HASH_READ_REQUESTS_PER_CALL,
   MAX_NOTE_HASH_READ_REQUESTS_PER_TX,
-} from '@aztec/constants';
-import { PendingNoteHashesContract } from '@aztec/noir-test-contracts.js/PendingNoteHashes';
+} from '@aztec-labs/constants';
+import { PendingNoteHashesContract } from '@aztec-labs/noir-test-contracts.js/PendingNoteHashes';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../automine_test_context.js';

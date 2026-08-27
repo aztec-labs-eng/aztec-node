@@ -1,9 +1,8 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { FileStore } from '@aztec/stdlib/file-store';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { FileStore } from '@aztec-labs/stdlib/file-store';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { getLatestSnapshotMetadata } from './download.js';

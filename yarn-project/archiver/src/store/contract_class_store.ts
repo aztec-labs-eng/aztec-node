@@ -1,13 +1,13 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toArray } from '@aztec/foundation/iterable';
-import { BufferReader, numToUInt8, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { isProtocolContractClass } from '@aztec/protocol-contracts';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { BufferReader, numToUInt8, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { isProtocolContractClass } from '@aztec-labs/protocol-contracts';
 import type {
   ContractClassPublic,
   ContractClassPublicWithBlockNumber,
   ContractClassPublicWithCommitment,
-} from '@aztec/stdlib/contract';
+} from '@aztec-labs/stdlib/contract';
 
 /**
  * LMDB-based contract class storage for the archiver.

@@ -1,6 +1,6 @@
-import type { NULLIFIER_TREE_HEIGHT } from '@aztec/constants';
-import type { MembershipWitness } from '@aztec/foundation/trees';
-import type { NullifierLeafPreimage, NullifierMembershipWitness } from '@aztec/stdlib/trees';
+import type { NULLIFIER_TREE_HEIGHT } from '@aztec-labs/constants';
+import type { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { NullifierLeafPreimage, NullifierMembershipWitness } from '@aztec-labs/stdlib/trees';
 
 /**
  * A nullifier leaf preimage and the witness proving its membership in the nullifier tree.

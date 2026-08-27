@@ -1,14 +1,13 @@
-import type { Archiver } from '@aztec/archiver';
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Delayer } from '@aztec/ethereum/l1-tx-utils';
-import type { ChainMonitor } from '@aztec/ethereum/test';
-import type { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import type { TxHash } from '@aztec/stdlib/tx';
-
+import type { Archiver } from '@aztec-labs/archiver';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ChainMonitor } from '@aztec-labs/ethereum/test';
+import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

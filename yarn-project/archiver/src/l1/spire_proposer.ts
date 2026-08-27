@@ -1,6 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
 import { type Hex, type Transaction, decodeFunctionData, getAddress, trim } from 'viem';
 
 // Spire Proposer Multicall constants

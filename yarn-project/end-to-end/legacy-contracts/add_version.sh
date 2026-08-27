@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds <version>.tar.gz in this directory from the @aztec packages published on npm, enabling the
+# Builds <version>.tar.gz in this directory from the @aztec-labs packages published on npm, enabling the
 # backwards-compat sweep for that version once committed.
 # Usage: ./add_version.sh <version>   e.g. ./add_version.sh 6.0.1
 set -euo pipefail
@@ -25,10 +25,10 @@ trap 'rm -rf "$workdir"' EXIT
 cd "$workdir"
 
 for p in noir-contracts.js noir-test-contracts.js accounts; do
-  # Force the public registry: some environments (e.g. CI) point the @aztec scope elsewhere.
-  npm pack "@aztec/$p@$version" --@aztec:registry=https://registry.npmjs.org/ --quiet
+  # Force the public registry: some environments (e.g. CI) point the @aztec-labs scope elsewhere.
+  npm pack "@aztec-labs/$p@$version" --@aztec-labs:registry=https://registry.npmjs.org/ --quiet
   mkdir -p "$version/$p"
-  tar -xzf "aztec-$p-$version.tgz"
+  tar -xzf "aztec-labs-$p-$version.tgz"
   cp -r package/artifacts "$version/$p/artifacts"
   rm -rf package
 done

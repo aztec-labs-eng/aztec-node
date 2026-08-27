@@ -1,9 +1,8 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { RegistryContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import type { LogFn } from '@aztec/foundation/log';
-
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { RegistryContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { createPublicClient, fallback, http } from 'viem';
 
 export async function getL1Addresses(

@@ -1,12 +1,12 @@
-import { retrieveL2ProofVerifiedEvents } from '@aztec/archiver';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { compactArray, mapValues, unique } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type LogFn, type Logger, createLogger } from '@aztec/foundation/log';
 import { RollupAbi } from '@aztec/l1-artifacts';
-import { createAztecNodeClient } from '@aztec/stdlib/interfaces/client';
 
+import { retrieveL2ProofVerifiedEvents } from '@aztec-labs/archiver';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { compactArray, mapValues, unique } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type LogFn, type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { createAztecNodeClient } from '@aztec-labs/stdlib/interfaces/client';
 import chunk from 'lodash.chunk';
 import groupBy from 'lodash.groupby';
 import { createPublicClient, fallback, getAbiItem, getAddress, http } from 'viem';

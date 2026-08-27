@@ -1,7 +1,7 @@
 /**
  * IframeConnectionHandler — wallet-side of the cross-origin iframe protocol.
  *
- * This mirrors {@link BackgroundConnectionHandler} from `@aztec/wallet-sdk/extension/handlers`
+ * This mirrors {@link BackgroundConnectionHandler} from `@aztec-labs/wallet-sdk/extension/handlers`
  * but uses `window.postMessage` instead of browser.runtime messaging.
  *
  * Message flow (wallet receives):
@@ -13,11 +13,11 @@
  * The wallet announces itself by posting WALLET_READY as soon as the handler starts,
  * so the dApp knows it can send a discovery request.
  */
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { WalletSchema } from '@aztec/aztec.js/wallet';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { getSchemaParameters, parseWithOptionals, schemaHasMethod } from '@aztec/foundation/schemas';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { WalletSchema } from '@aztec-labs/aztec.js/wallet';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { getSchemaParameters, parseWithOptionals, schemaHasMethod } from '@aztec-labs/foundation/schemas';
 
 import {
   type EncryptedPayload,

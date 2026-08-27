@@ -1,4 +1,4 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { BlockHeader } from '../../tx/block_header.js';
 import type { L2Block } from '../l2_block.js';

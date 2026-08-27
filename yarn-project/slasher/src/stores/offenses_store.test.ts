@@ -1,6 +1,6 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type AztecLMDBStoreV2, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { type Offense, type OffenseIdentifier, OffenseType } from '@aztec/stdlib/slashing';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { type Offense, type OffenseIdentifier, OffenseType } from '@aztec-labs/stdlib/slashing';
 
 import { SlasherOffensesStore } from './offenses_store.js';
 

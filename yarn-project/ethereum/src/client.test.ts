@@ -1,5 +1,4 @@
-import { startHttpRpcServer } from '@aztec/foundation/json-rpc/server';
-
+import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
 import { type Server, createServer } from 'node:http';
 import { createPublicClient } from 'viem';
 import { foundry } from 'viem/chains';

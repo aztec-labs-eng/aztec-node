@@ -1,8 +1,8 @@
-import type { WaitOpts } from '@aztec/aztec.js/contracts';
-import { publishContractClass, publishInstance } from '@aztec/aztec.js/deployment';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import type { WaitOpts } from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass, publishInstance } from '@aztec-labs/aztec.js/deployment';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 export async function publishStandardAuthRegistry(
   wallet: Wallet,

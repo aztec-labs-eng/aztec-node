@@ -1,5 +1,5 @@
-import { type FunctionCall, FunctionType, decodeFromAbi } from '@aztec/stdlib/abi';
-import { ExecutionPayload, HashedValues, UtilityExecutionResult, mergeExecutionPayloads } from '@aztec/stdlib/tx';
+import { type FunctionCall, FunctionType, decodeFromAbi } from '@aztec-labs/stdlib/abi';
+import { ExecutionPayload, HashedValues, UtilityExecutionResult, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
 
 import type { TxSimulationResultWithAppOffset } from '../wallet/tx_simulation_result_with_app_offset.js';
 import type { BatchedMethod, Wallet } from '../wallet/wallet.js';

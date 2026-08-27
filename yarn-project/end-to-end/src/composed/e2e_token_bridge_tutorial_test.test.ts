@@ -1,16 +1,4 @@
 // This test should only use packages that are published to npm
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { waitForProven } from '@aztec/aztec.js/contracts';
-import { publishContractClass, publishInstance } from '@aztec/aztec.js/deployment';
-import { L1TokenManager, L1TokenPortalManager } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/aztec.js/fields';
-import { createLogger } from '@aztec/aztec.js/log';
-import { createAztecNodeClient, waitForNode } from '@aztec/aztec.js/node';
-import { CheatCodes } from '@aztec/aztec/testing';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import { retryUntil } from '@aztec/foundation/retry';
-import { DateProvider } from '@aztec/foundation/timer';
 import {
   FeeAssetHandlerAbi,
   FeeAssetHandlerBytecode,
@@ -19,11 +7,23 @@ import {
   TokenPortalAbi,
   TokenPortalBytecode,
 } from '@aztec/l1-artifacts';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { TokenBridgeContract } from '@aztec/noir-contracts.js/TokenBridge';
-import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
-import { registerInitialLocalNetworkAccountsInWallet } from '@aztec/wallets/testing';
 
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { waitForProven } from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass, publishInstance } from '@aztec-labs/aztec.js/deployment';
+import { L1TokenManager, L1TokenPortalManager } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { createAztecNodeClient, waitForNode } from '@aztec-labs/aztec.js/node';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { TokenBridgeContract } from '@aztec-labs/noir-contracts.js/TokenBridge';
+import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
+import { registerInitialLocalNetworkAccountsInWallet } from '@aztec-labs/wallets/testing';
 import { getContract } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 

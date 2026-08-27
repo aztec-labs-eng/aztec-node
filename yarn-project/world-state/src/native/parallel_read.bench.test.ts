@@ -1,5 +1,5 @@
-import { createLogger } from '@aztec/foundation/log';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 import { NativeWorldStateService } from './native_world_state.js';
 

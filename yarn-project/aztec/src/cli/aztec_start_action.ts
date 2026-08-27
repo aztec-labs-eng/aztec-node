@@ -1,20 +1,20 @@
-import { registerAztecNodeRpcHandlers } from '@aztec/aztec-node';
-import { getActiveNetworkName } from '@aztec/foundation/config';
+import { registerAztecNodeRpcHandlers } from '@aztec-labs/aztec-node';
+import { getActiveNetworkName } from '@aztec-labs/foundation/config';
 import {
   type NamespacedApiHandlers,
   createNamespacedSafeJsonRpcServer,
   getApiKeyAuthMiddleware,
   startHttpRpcServer,
-} from '@aztec/foundation/json-rpc/server';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-import { type ChainConfig, getRpcCorsAllowedOrigins } from '@aztec/stdlib/config';
-import { getPackageVersion } from '@aztec/stdlib/update-checker';
-import { getVersioningMiddleware } from '@aztec/stdlib/versioning';
+} from '@aztec-labs/foundation/json-rpc/server';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { type ChainConfig, getRpcCorsAllowedOrigins } from '@aztec-labs/stdlib/config';
+import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
+import { getVersioningMiddleware } from '@aztec-labs/stdlib/versioning';
 import {
   getOtelJsonRpcDiagnosticsMiddleware,
   getOtelJsonRpcPropagationMiddleware,
   getOtelJsonRpcServerMetricsMiddleware,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import { createLocalNetwork } from '../local-network/index.js';
 import { github, splash } from '../splash.js';

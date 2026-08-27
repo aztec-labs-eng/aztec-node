@@ -1,9 +1,9 @@
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 /**
  * A block's L1-to-L2 message bundle: the real message leaves it inserts into the L1-to-L2 message tree and the count

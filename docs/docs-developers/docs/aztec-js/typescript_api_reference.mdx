@@ -85,12 +85,12 @@ Packages for building Aztec applications:
 
 | Package                      | Description                                                                                                           |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **@aztec/aztec.js**          | Main SDK for building Aztec applications. Provides contract deployment, transaction creation, and account management. |
-| **@aztec/accounts**          | Sample account contract implementations including ECDSA and Schnorr accounts.                                         |
-| **@aztec/pxe**               | Private eXecution Environment client library for orchestrating private transaction execution and proving.             |
-| **@aztec/wallet-sdk**        | Wallet SDK for browser and extension integrations.                                                                    |
-| **@aztec/wallets**           | Embedded wallet for browser and Node.js environments.                                                                 |
-| **@aztec/entrypoints**       | Transaction entrypoint implementations for account abstraction.                                                       |
+| **@aztec-labs/aztec.js**          | Main SDK for building Aztec applications. Provides contract deployment, transaction creation, and account management. |
+| **@aztec-labs/accounts**          | Sample account contract implementations including ECDSA and Schnorr accounts.                                         |
+| **@aztec-labs/pxe**               | Private eXecution Environment client library for orchestrating private transaction execution and proving.             |
+| **@aztec-labs/wallet-sdk**        | Wallet SDK for browser and extension integrations.                                                                    |
+| **@aztec-labs/wallets**           | Embedded wallet for browser and Node.js environments.                                                                 |
+| **@aztec-labs/entrypoints**       | Transaction entrypoint implementations for account abstraction.                                                       |
 
 ### Core Libraries
 
@@ -98,12 +98,12 @@ Foundational types and utilities used across the Aztec stack:
 
 | Package              | Description                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------- |
-| **@aztec/stdlib**    | Protocol-level types including transactions, blocks, proofs, and kernel circuit types. |
-| **@aztec/foundation** | Low-level utilities including crypto primitives, serialization, and async helpers.    |
-| **@aztec/constants** | Protocol constants shared between TypeScript and Noir circuits.                        |
+| **@aztec-labs/stdlib**    | Protocol-level types including transactions, blocks, proofs, and kernel circuit types. |
+| **@aztec-labs/foundation** | Low-level utilities including crypto primitives, serialization, and async helpers.    |
+| **@aztec-labs/constants** | Protocol constants shared between TypeScript and Noir circuits.                        |
 
 :::note
-Common types like `Fr`, `AztecAddress`, and `EthAddress` are re-exported through `@aztec/aztec.js` subpaths (e.g., `@aztec/aztec.js/fields`, `@aztec/aztec.js/addresses`). Most developers won't need to import from `@aztec/stdlib` directly.
+Common types like `Fr`, `AztecAddress`, and `EthAddress` are re-exported through `@aztec-labs/aztec.js` subpaths (e.g., `@aztec-labs/aztec.js/fields`, `@aztec-labs/aztec.js/addresses`). Most developers won't need to import from `@aztec-labs/stdlib` directly.
 :::
 
 ## LLM-Optimized Documentation

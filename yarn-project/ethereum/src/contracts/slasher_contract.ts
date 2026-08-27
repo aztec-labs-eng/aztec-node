@@ -1,7 +1,7 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
 import { SlasherAbi } from '@aztec/l1-artifacts/SlasherAbi';
 
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { type GetContractReturnType, getContract } from 'viem';
 
 import type { ViemClient } from '../types.js';

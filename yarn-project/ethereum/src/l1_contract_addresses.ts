@@ -1,7 +1,6 @@
-import type { ConfigMapping, ConfigMappingsType } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { schemas } from '@aztec/foundation/schemas';
-
+import type { ConfigMapping, ConfigMappingsType } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 /**

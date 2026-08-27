@@ -1,7 +1,7 @@
 import { findBbBinary } from '@aztec/bb.js';
-import { asyncPool } from '@aztec/foundation/async-pool';
-import type { LogFn } from '@aztec/foundation/log';
 
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { execFile as execFileCb } from 'child_process';
 import { rm } from 'fs/promises';
 import { promisify } from 'util';

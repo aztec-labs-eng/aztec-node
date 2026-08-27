@@ -116,7 +116,7 @@ To render multiple metrics as a **single stacked area chart** (e.g., component b
 **TypeScript** (most common):
 ```typescript
 // my_bench.test.ts
-import { Timer } from '@aztec/foundation/timer';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { writeFile, mkdir } from 'fs/promises';
 
 describe('MyComponent benchmarks', () => {

@@ -1,12 +1,12 @@
-import { generateClaimSecret } from '@aztec/aztec.js/ethereum';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { compactArray } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
 import { InboxAbi } from '@aztec/l1-artifacts';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
 
+import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { compactArray } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { decodeEventLog, getContract } from 'viem';
 
 import type { BotStore, PendingL1ToL2Message } from './store/index.js';

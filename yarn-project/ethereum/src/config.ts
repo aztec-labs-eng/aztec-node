@@ -1,3 +1,5 @@
+import l1ContractsDefaultEnv from '@aztec/l1-artifacts/network-defaults.json' with { type: 'json' };
+
 import {
   type ConfigMappingsType,
   bigintConfigHelper,
@@ -7,9 +9,8 @@ import {
   numberConfigHelper,
   omitConfigMappings,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import l1ContractsDefaultEnv from '@aztec/l1-artifacts/network-defaults.json' with { type: 'json' };
+} from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './l1_tx_utils/config.js';
 

@@ -1,10 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
 import { GovernanceProposerAbi } from '@aztec/l1-artifacts/GovernanceProposerAbi';
 import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
 import { TestERC20Bytecode } from '@aztec/l1-artifacts/TestERC20Bytecode';
 
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { type GetContractReturnType, type PrivateKeyAccount, encodeFunctionData, getContract } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

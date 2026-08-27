@@ -1,6 +1,6 @@
-import { createLogger } from '@aztec/foundation/log';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { Capsule, ExecutionPayload, TxReceipt } from '@aztec/stdlib/tx';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { Capsule, ExecutionPayload, TxReceipt } from '@aztec-labs/stdlib/tx';
 
 import type { Wallet } from '../wallet/wallet.js';
 import {

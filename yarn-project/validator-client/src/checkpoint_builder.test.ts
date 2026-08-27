@@ -1,4 +1,4 @@
-import { NUM_CHECKPOINT_END_MARKER_FIELDS, getNumBlockEndBlobFields } from '@aztec/blob-lib/encoding';
+import { NUM_CHECKPOINT_END_MARKER_FIELDS, getNumBlockEndBlobFields } from '@aztec-labs/blob-lib/encoding';
 import {
   BLOBS_PER_CHECKPOINT,
   CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
@@ -6,17 +6,17 @@ import {
   FIELDS_PER_BLOB,
   MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import type { LightweightCheckpointBuilder } from '@aztec/prover-client/light';
-import type { AvmSimulator, PublicContractsDB, PublicProcessor } from '@aztec/simulator/server';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, L2Block } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { Gas, GasFees } from '@aztec/stdlib/gas';
+} from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import type { LightweightCheckpointBuilder } from '@aztec-labs/prover-client/light';
+import type { AvmSimulator, PublicContractsDB, PublicProcessor } from '@aztec-labs/simulator/server';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
   type FullNodeBlockBuilderConfig,
@@ -25,16 +25,15 @@ import {
   type PublicProcessorLimits,
   type PublicProcessorValidator,
   type WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/interfaces/server';
 import {
   type CheckpointGlobalVariables,
   type GlobalVariables,
   type ProcessedTx,
   type Tx,
   TxHash,
-} from '@aztec/stdlib/tx';
-import type { TelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/tx';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

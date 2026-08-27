@@ -1,16 +1,15 @@
-import { getPublicClient } from '@aztec/ethereum/client';
-import { DefaultL1ContractsConfig } from '@aztec/ethereum/config';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { deployAztecL1Contracts } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec/ethereum/test';
-import type { Anvil } from '@aztec/ethereum/test';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { SecretValue } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { TestDateProvider } from '@aztec/foundation/timer';
-
+import { getPublicClient } from '@aztec-labs/ethereum/client';
+import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import type { Anvil } from '@aztec-labs/ethereum/test';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import type { Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

@@ -12,16 +12,16 @@
  * slashing-protection database, and timezone/clock divergence between the node and its database can only
  * be reproduced against a genuine, separate Postgres process (not an in-process one).
  */
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
 import { GovernanceProposerAbi } from '@aztec/l1-artifacts/GovernanceProposerAbi';
-import type { ValidatorClient } from '@aztec/validator-client';
-import { PostgresSlashingProtectionDatabase } from '@aztec/validator-ha-signer/db';
-import { type DutyRow, DutyStatus, DutyType } from '@aztec/validator-ha-signer/types';
 
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { ValidatorClient } from '@aztec-labs/validator-client';
+import { PostgresSlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/db';
+import { type DutyRow, DutyStatus, DutyType } from '@aztec-labs/validator-ha-signer/types';
 import { jest } from '@jest/globals';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

@@ -1,26 +1,26 @@
-import { GENESIS_ARCHIVE_ROOT, INITIAL_CHECKPOINT_NUMBER } from '@aztec/constants';
+import { GENESIS_ARCHIVE_ROOT, INITIAL_CHECKPOINT_NUMBER } from '@aztec-labs/constants';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { sleep } from '@aztec/foundation/sleep';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
+} from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   BlockHash,
   CommitteeAttestation,
   EthAddress,
   L2Block,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
-import { Checkpoint, PublishedCheckpoint, randomCheckpointInfo } from '@aztec/stdlib/checkpoint';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import '@aztec/stdlib/testing/jest';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { type IndexedTxEffect, TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/block';
+import { Checkpoint, PublishedCheckpoint, randomCheckpointInfo } from '@aztec-labs/stdlib/checkpoint';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import '@aztec-labs/stdlib/testing/jest';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { type IndexedTxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import {
   BlockAlreadyCheckpointedError,

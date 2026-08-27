@@ -1,7 +1,7 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { PrivateExecutionOracle } from '@aztec/pxe/simulator';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { PrivateExecutionOracle } from '@aztec-labs/pxe/simulator';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /**
  * TXE-specific subclass of PrivateExecutionOracle that forbids operations not supported in

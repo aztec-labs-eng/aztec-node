@@ -8,24 +8,23 @@ import {
   NOTE_HASH_TREE_HEIGHT,
   NULLIFIER_TREE_HEIGHT,
   PUBLIC_DATA_TREE_HEIGHT,
-} from '@aztec/constants';
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { SiblingPath } from '@aztec/foundation/trees';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { L2Block } from '@aztec/stdlib/block';
-import { DatabaseVersionManager } from '@aztec/stdlib/database-version/manager';
-import { DatabaseVersion } from '@aztec/stdlib/database-version/version';
-import type { MerkleTreeLeafType, MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import { makeGlobalVariables } from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot, MerkleTreeId, PublicDataTreeLeaf } from '@aztec/stdlib/trees';
-import { BlockHeader } from '@aztec/stdlib/tx';
-import type { GenesisData } from '@aztec/stdlib/world-state';
-
+} from '@aztec-labs/constants';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { SiblingPath } from '@aztec-labs/foundation/trees';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { L2Block } from '@aztec-labs/stdlib/block';
+import { DatabaseVersionManager } from '@aztec-labs/stdlib/database-version/manager';
+import { DatabaseVersion } from '@aztec-labs/stdlib/database-version/version';
+import type { MerkleTreeLeafType, MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { makeGlobalVariables } from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot, MerkleTreeId, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 import { jest } from '@jest/globals';
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';

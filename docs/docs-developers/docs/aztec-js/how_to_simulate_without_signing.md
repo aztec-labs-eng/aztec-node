@@ -26,7 +26,7 @@ All three are the same root cause: passing `from: AztecAddress.ZERO`.
 
 ## The wrong fix
 
-Do not pass `from: AztecAddress.ZERO`. That value was the old way to express "no account context," and it is no longer a supported input for `.simulate()`. The replacement is `NO_FROM` (from `@aztec/aztec.js/account`), which tells the wallet to execute the payload through the default entrypoint with no account contract mediation. `NO_FROM` is still only appropriate for calls that genuinely have no sender; use a real account address for everything else.
+Do not pass `from: AztecAddress.ZERO`. That value was the old way to express "no account context," and it is no longer a supported input for `.simulate()`. The replacement is `NO_FROM` (from `@aztec-labs/aztec.js/account`), which tells the wallet to execute the payload through the default entrypoint with no account contract mediation. `NO_FROM` is still only appropriate for calls that genuinely have no sender; use a real account address for everything else.
 
 ## The right fix
 
@@ -48,7 +48,7 @@ For a normal `.simulate()` you do not need to pass overrides yourself. The defau
 If you genuinely need to construct your own `SimulationOverrides` (for example, to combine a contract-instance swap with a `fastForwardContractUpdate` for upgrade testing), you can pass them through `.simulate()`:
 
 ```typescript
-import { SimulationOverrides } from "@aztec/aztec.js/wallet";
+import { SimulationOverrides } from "@aztec-labs/aztec.js/wallet";
 
 const { result } = await contract.methods
   .transfer_in_private(sender, recipient, amount, nonce)
@@ -64,7 +64,7 @@ The override map itself has to be built by code that knows the contract class id
 
 ### Implementing the override in a custom wallet
 
-`EmbeddedWallet` (`yarn-project/wallets/src/embedded/embedded_wallet.ts`, in `@aztec/wallets`) is the canonical implementation of the override pattern and the reference any custom wallet should follow. The three pieces it wires up are:
+`EmbeddedWallet` (`yarn-project/wallets/src/embedded/embedded_wallet.ts`, in `@aztec-labs/wallets`) is the canonical implementation of the override pattern and the reference any custom wallet should follow. The three pieces it wires up are:
 
 1. **Register the stub contract class with the PXE at wallet startup.** Inside `initStubClasses`, `EmbeddedWallet` calls `pxe.registerContractClass` for each supported account type's stub artifact and caches the resulting class id by account type.
 2. **Build an override map for every account in scope.** Inside `buildAccountOverrides`, it fetches the live contract instance for each scoped address and returns a `ContractOverrides` map that copies the instance with `currentContractClassId` rewritten to the stub class id. The map covers every account in scope, not only `from`.
@@ -100,7 +100,7 @@ The app does not need to know which calls require authwits ahead of time. The si
 
 ## Things to watch out for
 
-- **`AztecAddress.ZERO` is not "no sender".** Use `NO_FROM` (from `@aztec/aztec.js/account`) for calls that genuinely have no account context, and a real account address otherwise.
+- **`AztecAddress.ZERO` is not "no sender".** Use `NO_FROM` (from `@aztec-labs/aztec.js/account`) for calls that genuinely have no account context, and a real account address otherwise.
 - **A private FPC needs to be included in fee options for accurate gas.** Kernelless simulation matches full simulation on gas, but only if the simulation sees the same fee path as the real transaction. If the user will pay through a fee payment contract (FPC) that emits private notes, pass that FPC in the simulation's fee options so its side effects are accounted for. Kernelless plus a private FPC is the supported path; you do not need a full simulation to get accurate gas.
 - **`profile()` is not kernelless.** If you call `.profile()` to count circuit gates, the kernels run regardless. Use `.simulate()` if you only need return values, offchain effects, or gas estimates.
 - **Utility functions reject overrides.** `FunctionType.UTILITY` calls go through `wallet.executeUtility`, and `ContractFunctionInteraction.simulate` throws `overrides are not supported for utility function simulation` if you pass non-empty `overrides.publicStorage` or `overrides.contracts`. Utility functions do not need an override anyway, since they do not run through an account contract.

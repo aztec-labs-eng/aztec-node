@@ -1,30 +1,30 @@
-import type { AztecNodeConfig } from '@aztec/aztec-node';
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { waitForProven } from '@aztec/aztec.js/contracts';
-import { createLogger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { TxReceipt } from '@aztec/aztec.js/tx';
-import { CheatCodes, EpochTestSettler } from '@aztec/aztec/testing';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { InboxContract, OutboxContract, RollupContract } from '@aztec/ethereum/contracts';
+import { TestERC20Abi, TestERC20Bytecode, TokenPortalAbi, TokenPortalBytecode } from '@aztec/l1-artifacts';
+
+import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { waitForProven } from '@aztec-labs/aztec.js/contracts';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { TxReceipt } from '@aztec-labs/aztec.js/tx';
+import { CheatCodes, EpochTestSettler } from '@aztec-labs/aztec/testing';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { InboxContract, OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type {
   DeployAztecL1ContractsArgs,
   DeployAztecL1ContractsReturnType,
-} from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import { pickL1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { TestERC20Abi, TestERC20Bytecode, TokenPortalAbi, TokenPortalBytecode } from '@aztec/l1-artifacts';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { TokenBridgeContract } from '@aztec/noir-contracts.js/TokenBridge';
-import type { PXEConfig } from '@aztec/pxe/server';
-import type { BlockTag } from '@aztec/stdlib/block';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import type { AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-
+} from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { TokenBridgeContract } from '@aztec-labs/noir-contracts.js/TokenBridge';
+import type { PXEConfig } from '@aztec-labs/pxe/server';
+import type { BlockTag } from '@aztec-labs/stdlib/block';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 import { mnemonicToAccount } from 'viem/accounts';
 
 import { MNEMONIC } from '../../fixtures/fixtures.js';

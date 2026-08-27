@@ -1,6 +1,6 @@
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { mockTx } from '@aztec/stdlib/testing';
-import type { Tx } from '@aztec/stdlib/tx';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 
 import { TxArchive } from './tx_archive.js';
 

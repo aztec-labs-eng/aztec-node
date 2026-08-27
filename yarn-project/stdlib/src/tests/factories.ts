@@ -3,7 +3,7 @@ import {
   makeFinalBlobAccumulator,
   makeFinalBlobBatchingChallenges,
   makeSpongeBlob,
-} from '@aztec/blob-lib/testing';
+} from '@aztec-labs/blob-lib/testing';
 import {
   ARCHIVE_HEIGHT,
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
@@ -41,17 +41,17 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
   RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   VK_TREE_HEIGHT,
-} from '@aztec/constants';
-import { type FieldsOf, makeTuple } from '@aztec/foundation/array';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { compact } from '@aztec/foundation/collection';
-import { Grumpkin } from '@aztec/foundation/crypto/grumpkin';
-import { sha256 } from '@aztec/foundation/crypto/sha256';
-import { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar, Point } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Bufferable, Serializable, Tuple } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
+} from '@aztec-labs/constants';
+import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compact } from '@aztec-labs/foundation/collection';
+import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
+import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
+import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Bufferable, Serializable, Tuple } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
 
 import { FunctionSelector } from '../abi/function_selector.js';
 import {

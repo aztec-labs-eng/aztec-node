@@ -1,9 +1,8 @@
-import { createLogger } from '@aztec/foundation/log';
-import { AMMContractArtifact } from '@aztec/noir-contracts.js/AMM';
-import { TokenContractArtifact } from '@aztec/noir-contracts.js/Token';
-import { TestExecutorMetrics, ammTest, defaultGlobals } from '@aztec/simulator/public/fixtures';
-import { NativeWorldStateService } from '@aztec/world-state';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { AMMContractArtifact } from '@aztec-labs/noir-contracts.js/AMM';
+import { TokenContractArtifact } from '@aztec-labs/noir-contracts.js/Token';
+import { TestExecutorMetrics, ammTest, defaultGlobals } from '@aztec-labs/simulator/public/fixtures';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 

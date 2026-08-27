@@ -1,5 +1,5 @@
-import type { FieldsOf } from '@aztec/foundation/types';
-import type { Gas, GasFees } from '@aztec/stdlib/gas';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import type { Gas, GasFees } from '@aztec-labs/stdlib/gas';
 
 /** Wire form of {@link Gas}: the domain type's fields as decoded off the wire, before conversion. */
 export type GasData = FieldsOf<Gas>;

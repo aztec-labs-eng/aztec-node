@@ -1,13 +1,13 @@
-import { OutboxContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { DateProvider } from '@aztec/foundation/timer';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
 
+import { OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
 import {
   type GetContractReturnType,
   type Hex,

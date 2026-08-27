@@ -1,13 +1,12 @@
-import { prettyPrintJSON } from '@aztec/cli/utils';
-import { asyncPool } from '@aztec/foundation/async-pool';
-import { deriveBlsPrivateKey } from '@aztec/foundation/crypto/bls';
-import { createBn254Keystore } from '@aztec/foundation/crypto/bls/bn254_keystore';
-import { computeBn254G1PublicKeyCompressed } from '@aztec/foundation/crypto/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn } from '@aztec/foundation/log';
-import type { EthAccount, EthPrivateKey, ValidatorKeyStore } from '@aztec/node-keystore/types';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { prettyPrintJSON } from '@aztec-labs/cli/utils';
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
+import { createBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
+import { computeBn254G1PublicKeyCompressed } from '@aztec-labs/foundation/crypto/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { EthAccount, EthPrivateKey, ValidatorKeyStore } from '@aztec-labs/node-keystore/types';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Wallet } from '@ethersproject/wallet';
 import { constants as fsConstants, mkdirSync } from 'fs';
 import { access, writeFile } from 'fs/promises';

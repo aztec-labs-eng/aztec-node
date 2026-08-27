@@ -1,8 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createConsoleLogger } from '@aztec/foundation/log';
-import { fileURLToPath } from '@aztec/foundation/url';
-import { hashVK } from '@aztec/stdlib/hash';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
+import { fileURLToPath } from '@aztec-labs/foundation/url';
+import { hashVK } from '@aztec-labs/stdlib/hash';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 

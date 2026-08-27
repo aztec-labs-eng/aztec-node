@@ -185,7 +185,7 @@ function get_projects {
   if [ "${1:-}" == 'topological' ]; then
     yarn workspaces foreach --topological-dev -A \
       --exclude @aztec/aztec3-packages \
-      --exclude @aztec/scripts \
+      --exclude @aztec-labs/scripts \
       exec 'echo $(pwd)' | cat | grep -v "Done"
   else
     dirname */src | xargs realpath
@@ -466,7 +466,7 @@ function release_packages {
   echo "Computing packages to publish..."
   local packages=$(get_projects topological)
 
-  # Scoped release (see ci3/release_prep_package_json): only the @aztec deps local to this
+  # Scoped release (see ci3/release_prep_package_json): only the @aztec-labs deps local to this
   # workspace are co-published at $1; foundation deps keep the version the root resolutions
   # field pins them to.
   local resolutions

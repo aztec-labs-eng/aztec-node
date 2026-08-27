@@ -1,16 +1,15 @@
-import { encodeCheckpointBlobDataFromBlocks } from '@aztec/blob-lib/encoding';
+import { encodeCheckpointBlobDataFromBlocks } from '@aztec-labs/blob-lib/encoding';
 import {
   BlockNumber,
   CheckpointNumber,
   CheckpointNumberSchema,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { pick, sum } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeSignedBigInt, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+} from '@aztec-labs/foundation/branded-types';
+import { pick, sum } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeSignedBigInt, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { L2Block } from '../block/l2_block.js';

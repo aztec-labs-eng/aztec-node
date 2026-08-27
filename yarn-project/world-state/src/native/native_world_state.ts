@@ -1,22 +1,21 @@
-import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { fromEntries, padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import type { L2Block } from '@aztec/stdlib/block';
-import { DatabaseVersionManager } from '@aztec/stdlib/database-version/manager';
+import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { fromEntries, padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import { DatabaseVersionManager } from '@aztec-labs/stdlib/database-version/manager';
 import type {
   IndexedTreeId,
   MerkleTreeReadOperations,
   MerkleTreeWriteOperations,
-} from '@aztec/stdlib/interfaces/server';
-import type { SnapshotDataKeys } from '@aztec/stdlib/snapshots';
-import { MerkleTreeId, NullifierLeaf, type NullifierLeafPreimage, PublicDataTreeLeaf } from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec/stdlib/tx';
-import { EMPTY_GENESIS_DATA, type GenesisData, WorldStateRevision } from '@aztec/stdlib/world-state';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { SnapshotDataKeys } from '@aztec-labs/stdlib/snapshots';
+import { MerkleTreeId, NullifierLeaf, type NullifierLeafPreimage, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
+import { EMPTY_GENESIS_DATA, type GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import assert from 'assert/strict';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';

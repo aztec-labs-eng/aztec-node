@@ -1,10 +1,10 @@
-import type { AuthWitnessProvider } from '@aztec/entrypoints/interfaces';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
-import { getContractInstanceFromInstantiationParams } from '@aztec/stdlib/contract';
-import { deriveKeys } from '@aztec/stdlib/keys';
+import type { AuthWitnessProvider } from '@aztec-labs/entrypoints/interfaces';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/stdlib/contract';
+import { deriveKeys } from '@aztec-labs/stdlib/keys';
 
 import type { Account } from './account.js';
 

@@ -1,6 +1,6 @@
-import { FunctionType } from '@aztec/stdlib/abi';
-import type { GasSettings } from '@aztec/stdlib/gas';
-import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec/stdlib/tx';
+import { FunctionType } from '@aztec-labs/stdlib/abi';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
+import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec-labs/stdlib/tx';
 
 import type { ChainInfo, EntrypointInterface } from './interfaces.js';
 

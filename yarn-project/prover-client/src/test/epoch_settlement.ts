@@ -1,9 +1,9 @@
-import type { RollupCheatCodes } from '@aztec/ethereum/test';
-import type { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { computeEpochOutHash } from '@aztec/stdlib/messaging';
+import type { RollupCheatCodes } from '@aztec-labs/ethereum/test';
+import type { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
 
 /** Arguments for {@link settleEpochOutbox}. */
 export type SettleEpochOutboxArgs = {

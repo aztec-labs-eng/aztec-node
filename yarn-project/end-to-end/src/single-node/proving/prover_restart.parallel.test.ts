@@ -1,12 +1,12 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryUntil } from '@aztec/foundation/retry';
-import { type ProvingBroker, createAndStartProvingBroker } from '@aztec/prover-client/broker';
-import type { TestProverNode } from '@aztec/prover-node/test';
-import { EthAddress } from '@aztec/stdlib/block';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { type ProvingBroker, createAndStartProvingBroker } from '@aztec-labs/prover-client/broker';
+import type { TestProverNode } from '@aztec-labs/prover-node/test';
+import { EthAddress } from '@aztec-labs/stdlib/block';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import type {
   AztecNode,
   GetProvingJobResponse,
@@ -16,10 +16,9 @@ import type {
   ProvingJobFilter,
   ProvingJobId,
   ProvingJobStatus,
-} from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { expect, jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

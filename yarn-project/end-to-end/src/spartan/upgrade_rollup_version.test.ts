@@ -1,14 +1,14 @@
-import { type AztecNode, type NodeInfo, createAztecNodeClient } from '@aztec/aztec.js/node';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { GovernanceProposerContract, RegistryContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { createL1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
 import { GSEAbi, GovernanceAbi, TestERC20Abi } from '@aztec/l1-artifacts';
 
+import { type AztecNode, type NodeInfo, createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { GovernanceProposerContract, RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { jest } from '@jest/globals';
 import fs from 'fs';
 import omit from 'lodash.omit';

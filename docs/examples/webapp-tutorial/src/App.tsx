@@ -1,7 +1,7 @@
 // docs:start:app-imports
 import React, { useState } from 'react';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import type { NetworkType } from './config';
 import type { PodRacingContract } from './artifacts/PodRacing';
 import { NetworkPicker } from './components/NetworkPicker';

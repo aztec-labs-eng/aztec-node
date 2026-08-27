@@ -1,11 +1,10 @@
 /* eslint-disable camelcase */
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { extractOffchainOutput } from '@aztec/aztec.js/contracts';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { retryUntil } from '@aztec/foundation/retry';
-import { OffchainPaymentContract } from '@aztec/noir-test-contracts.js/OffchainPayment';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { extractOffchainOutput } from '@aztec-labs/aztec.js/contracts';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { OffchainPaymentContract } from '@aztec-labs/noir-test-contracts.js/OffchainPayment';
 import { jest } from '@jest/globals';
 
 import { getLogger } from '../../fixtures/utils.js';

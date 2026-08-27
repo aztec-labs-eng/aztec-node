@@ -1,16 +1,15 @@
-import type { Archiver } from '@aztec/archiver';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { createBlobClient } from '@aztec/blob-client/client';
-import { Blob } from '@aztec/blob-lib';
-import type { Delayer } from '@aztec/ethereum/l1-tx-utils';
-import type { ChainMonitor, ChainMonitorEventMap } from '@aztec/ethereum/test';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { AbortError } from '@aztec/foundation/error';
-import { retryUntil } from '@aztec/foundation/retry';
-import { hexToBuffer } from '@aztec/foundation/string';
-import { executeTimeout } from '@aztec/foundation/timer';
-
+import type { Archiver } from '@aztec-labs/archiver';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { createBlobClient } from '@aztec-labs/blob-client/client';
+import { Blob } from '@aztec-labs/blob-lib';
+import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ChainMonitor, ChainMonitorEventMap } from '@aztec-labs/ethereum/test';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { AbortError } from '@aztec-labs/foundation/error';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
 import 'jest-extended';
 import { keccak256, parseTransaction } from 'viem';
 

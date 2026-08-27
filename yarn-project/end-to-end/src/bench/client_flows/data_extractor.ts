@@ -1,10 +1,9 @@
-import { BBBundlePrivateKernelProver } from '@aztec/bb-prover/client/bundle';
-import { createLogger, logger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import { WASMSimulator } from '@aztec/simulator/client';
-import type { PrivateExecutionStep } from '@aztec/stdlib/kernel';
-import type { ProvingStats, ProvingTimings, SimulationStats } from '@aztec/stdlib/tx';
-
+import { BBBundlePrivateKernelProver } from '@aztec-labs/bb-prover/client/bundle';
+import { createLogger, logger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { WASMSimulator } from '@aztec-labs/simulator/client';
+import type { PrivateExecutionStep } from '@aztec-labs/stdlib/kernel';
+import type { ProvingStats, ProvingTimings, SimulationStats } from '@aztec-labs/stdlib/tx';
 import { Decoder } from 'msgpackr';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

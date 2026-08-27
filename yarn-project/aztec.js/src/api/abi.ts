@@ -26,8 +26,8 @@ export {
   getAllFunctionAbis,
   contractArtifactToBuffer,
   contractArtifactFromBuffer,
-} from '@aztec/stdlib/abi';
-export { type NoirCompiledContract } from '@aztec/stdlib/noir';
+} from '@aztec-labs/stdlib/abi';
+export { type NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 
 // Type converters for flexible parameter types in contract calls
 export {

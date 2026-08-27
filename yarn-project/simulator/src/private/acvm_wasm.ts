@@ -1,9 +1,10 @@
-import { type Logger, type LoggerBindings, resolveLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
 import initACVM, { type ExecutionError, type ForeignCallHandler, executeCircuit } from '@aztec/noir-acvm_js';
 import initAbi from '@aztec/noir-noirc_abi';
-import type { FunctionArtifactWithContractName } from '@aztec/stdlib/abi';
-import type { NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
+
+import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 
 import { type ACIRCallback, type ACIRExecutionResult, acvm } from './acvm/acvm.js';
 import type { ACVMWitness } from './acvm/acvm_types.js';

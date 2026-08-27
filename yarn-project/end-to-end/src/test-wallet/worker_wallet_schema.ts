@@ -1,9 +1,8 @@
-import { ExecutionPayloadSchema, SendOptionsSchema, WalletSchema } from '@aztec/aztec.js/wallet';
-import type { ApiSchema } from '@aztec/foundation/schemas';
-import { schemas } from '@aztec/foundation/schemas';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Tx } from '@aztec/stdlib/tx';
-
+import { ExecutionPayloadSchema, SendOptionsSchema, WalletSchema } from '@aztec-labs/aztec.js/wallet';
+import type { ApiSchema } from '@aztec-labs/foundation/schemas';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Tx } from '@aztec-labs/stdlib/tx';
 import { z } from 'zod';
 
 /** Schema for the WorkerWallet API — extends WalletSchema with proveTx and registerAccount. */

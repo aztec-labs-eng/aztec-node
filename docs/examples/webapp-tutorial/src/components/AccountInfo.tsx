@@ -1,6 +1,6 @@
 // docs:start:account-info
 import React from 'react';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 
 interface AccountInfoProps {
   address: AztecAddress;

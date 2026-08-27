@@ -1,4 +1,4 @@
-import type { Blob } from '@aztec/blob-lib';
+import type { Blob } from '@aztec-labs/blob-lib';
 
 import type { BlobStore } from '../blobstore/index.js';
 import type { BlobClientInterface, GetBlobSidecarOptions } from './interface.js';

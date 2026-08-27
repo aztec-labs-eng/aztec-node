@@ -1,6 +1,6 @@
-import type { ChainInfo } from '@aztec/entrypoints/interfaces';
-import { BlockNumber, BlockNumberPositiveSchema } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
+import { BlockNumber, BlockNumberPositiveSchema } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type AbiDecoded,
   AbiTypeSchema,
@@ -8,18 +8,18 @@ import {
   ContractArtifactSchema,
   type EventMetadataDefinition,
   FunctionCall,
-} from '@aztec/stdlib/abi';
-import { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/stdlib/abi';
+import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractInstancePreimage,
   ContractInstancePreimageSchema,
   type ContractInstancePreimageWithAddress,
   ContractInstancePreimageWithAddressSchema,
-} from '@aztec/stdlib/contract';
-import { Gas, ManaUsageEstimate } from '@aztec/stdlib/gas';
-import type { MasterSecretKeys } from '@aztec/stdlib/keys';
-import { refineTxHashAndRange } from '@aztec/stdlib/logs';
+} from '@aztec-labs/stdlib/contract';
+import { Gas, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
+import type { MasterSecretKeys } from '@aztec-labs/stdlib/keys';
+import { refineTxHashAndRange } from '@aztec-labs/stdlib/logs';
 import {
   AbiDecodedSchema,
   type ApiSchemaFor,
@@ -28,8 +28,8 @@ import {
   optional,
   schemas,
   zodFor,
-} from '@aztec/stdlib/schemas';
-import type { ExecutionPayload, InTx } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/schemas';
+import type { ExecutionPayload, InTx } from '@aztec-labs/stdlib/tx';
 import {
   Capsule,
   HashedValues,
@@ -39,8 +39,7 @@ import {
   TxReceiptSchema,
   UtilityExecutionResult,
   inTxSchema,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { z } from 'zod';
 
 import { EventCursor } from '../api/event_cursor.js';

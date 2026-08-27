@@ -1,11 +1,11 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Logger } from '@aztec/aztec.js/log';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { chunkBy } from '@aztec/foundation/collection';
-import type { SpamContract } from '@aztec/noir-test-contracts.js/Spam';
-import { getSlotAtTimestamp, getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { chunkBy } from '@aztec-labs/foundation/collection';
+import type { SpamContract } from '@aztec-labs/noir-test-contracts.js/Spam';
+import { getSlotAtTimestamp, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { proveAndSendTxs } from '../../test-wallet/utils.js';

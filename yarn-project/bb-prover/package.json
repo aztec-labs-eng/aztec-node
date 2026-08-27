@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/bb-prover",
+  "name": "@aztec-labs/bb-prover",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -70,15 +70,15 @@
     ]
   },
   "dependencies": {
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/noir-protocol-circuits-types": "workspace:^",
+    "@aztec-labs/simulator": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/telemetry-client": "workspace:^",
     "@aztec/bb.js": "0.1.0-dummy",
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
     "@aztec/noir-noirc_abi": "0.1.0-dummy",
-    "@aztec/noir-protocol-circuits-types": "workspace:^",
     "@aztec/noir-types": "0.1.0-dummy",
-    "@aztec/simulator": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/telemetry-client": "workspace:^",
     "commander": "^12.1.0",
     "msgpackr": "^1.11.2",
     "pako": "^2.1.0",
@@ -86,10 +86,10 @@
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@aztec/noir-contracts.js": "workspace:^",
-    "@aztec/noir-test-contracts.js": "workspace:^",
-    "@aztec/protocol-contracts": "workspace:^",
-    "@aztec/world-state": "workspace:^",
+    "@aztec-labs/noir-contracts.js": "workspace:^",
+    "@aztec-labs/noir-test-contracts.js": "workspace:^",
+    "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/world-state": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

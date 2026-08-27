@@ -1,4 +1,4 @@
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { VkData } from '../vks/index.js';
 import { PrivateToPublicKernelCircuitPublicInputs } from './private_to_public_kernel_circuit_public_inputs.js';

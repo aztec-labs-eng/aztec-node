@@ -1,12 +1,12 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import { EpochNumber, type SlotNumber } from '@aztec/foundation/branded-types';
-import { timesParallel } from '@aztec/foundation/collection';
-import type { Logger } from '@aztec/foundation/log';
-import { formatSeconds } from '@aztec/foundation/string';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { type L1RollupConstants, getStartTimestampForEpoch } from '@aztec/stdlib/epoch-helpers';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { formatSeconds } from '@aztec-labs/foundation/string';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { type L1RollupConstants, getStartTimestampForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
 
 /** Collaborators {@link logMissingCommittee} needs to diagnose and report why no committee exists. */
 export interface MissingCommitteeContext {

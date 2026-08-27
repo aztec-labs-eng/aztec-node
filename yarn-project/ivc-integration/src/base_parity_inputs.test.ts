@@ -2,20 +2,20 @@
  * Generates parity circuit inputs (bytecode + witness) for UltraHonk benchmarks.
  * Only runs when BASE_PARITY_BENCH_DIR env var is set by the UltraHonk benchmark input generator.
  *
- * Run with: BASE_PARITY_BENCH_DIR=./bench-out yarn workspace @aztec/ivc-integration test src/base_parity_inputs.test.ts
+ * Run with: BASE_PARITY_BENCH_DIR=./bench-out yarn workspace @aztec-labs/ivc-integration test src/base_parity_inputs.test.ts
  *
  * The parity base/root circuits were replaced by the single variable-size InboxParity circuit; this benchmark now
  * targets the 256-message rung (`InboxParity256`), matching the old base-parity circuit's size. The
  * output files keep their legacy `parity_base.json` / `witness.gz` names because `ci_benchmark_ultrahonk_circuits.sh`
  * locates inputs as `${circuit_name}.json` with `circuit_name=parity_base`.
  */
-import { INBOX_PARITY_SIZE_MEDIUM } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
 import { Noir } from '@aztec/noir-noir_js';
-import { ServerCircuitArtifacts } from '@aztec/noir-protocol-circuits-types/server';
-import { InboxParityPrivateInputs } from '@aztec/stdlib/parity';
 
+import { INBOX_PARITY_SIZE_MEDIUM } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { ServerCircuitArtifacts } from '@aztec-labs/noir-protocol-circuits-types/server';
+import { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
 import { jest } from '@jest/globals';
 import * as fs from 'fs/promises';
 import * as path from 'path';

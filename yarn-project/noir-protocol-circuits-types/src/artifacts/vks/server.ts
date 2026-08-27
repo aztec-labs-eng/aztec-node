@@ -27,8 +27,8 @@ import {
   PUBLIC_TX_BASE_ROLLUP_VK_INDEX,
   ROOT_ROLLUP_VK_INDEX,
   TX_MERGE_ROLLUP_VK_INDEX,
-} from '@aztec/constants';
-import { VerificationKeyData } from '@aztec/stdlib/vks';
+} from '@aztec-labs/constants';
+import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 import PublicChonkVerifier from '../../../artifacts/chonk_verifier_public.json' with { type: 'json' };
 import InboxParity64 from '../../../artifacts/inbox_parity_64.json' with { type: 'json' };

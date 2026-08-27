@@ -1,18 +1,18 @@
 import { CircuitKind } from '@aztec/bb.js';
+import { type ForeignCallInput, type ForeignCallOutput, Noir } from '@aztec/noir-noir_js';
+
 import {
   AVM_CIRCUIT_PUBLIC_INPUTS_LENGTH,
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
   MEGA_APP_VK_LENGTH_IN_FIELDS,
   MEGA_KERNEL_VK_LENGTH_IN_FIELDS,
-} from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { applyStringFormatting, createLogger } from '@aztec/foundation/log';
-import { type ForeignCallInput, type ForeignCallOutput, Noir } from '@aztec/noir-noir_js';
-import type { AvmCircuitPublicInputs } from '@aztec/stdlib/avm';
-import type { RecursiveProof } from '@aztec/stdlib/proofs';
-import { VerificationKeyAsFields } from '@aztec/stdlib/vks';
-
+} from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { applyStringFormatting, createLogger } from '@aztec-labs/foundation/log';
+import type { AvmCircuitPublicInputs } from '@aztec-labs/stdlib/avm';
+import type { RecursiveProof } from '@aztec-labs/stdlib/proofs';
+import { VerificationKeyAsFields } from '@aztec-labs/stdlib/vks';
 import { strict as assert } from 'assert';
 import { ungzip } from 'pako';
 

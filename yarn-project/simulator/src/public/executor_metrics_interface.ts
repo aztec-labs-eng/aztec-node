@@ -1,5 +1,5 @@
-import type { RevertCode } from '@aztec/stdlib/avm';
-import type { GasUsed } from '@aztec/stdlib/gas';
+import type { RevertCode } from '@aztec-labs/stdlib/avm';
+import type { GasUsed } from '@aztec-labs/stdlib/gas';
 
 export interface ExecutorMetricsInterface {
   startRecordingTxSimulation(txLabel: string): void;

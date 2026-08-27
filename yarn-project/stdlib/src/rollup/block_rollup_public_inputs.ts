@@ -1,8 +1,8 @@
-import { SpongeBlob } from '@aztec/blob-lib/types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+import { SpongeBlob } from '@aztec-labs/blob-lib/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { L1ToL2MessageSponge } from '../messaging/l1_to_l2_message_sponge.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';

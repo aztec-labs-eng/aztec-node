@@ -1,6 +1,5 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import { ENR } from '@nethermindeth/enr';
 
 /** Map name under which discovered peer ENRs are persisted so discovery can be re-seeded after a restart. */
