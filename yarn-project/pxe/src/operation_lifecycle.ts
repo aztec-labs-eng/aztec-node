@@ -55,9 +55,9 @@ export async function runOperation<T>(args: RunOperationArgs, fn: () => Promise<
     try {
       stagedWriteCoordinator.abort(changeSetId);
     } catch (abortErr) {
-      // Nothing here can undo a failed discard, so it is logged, but the error that ended the operation is the one
+      // Nothing here can undo a failed abort, so it is logged, but the error that ended the operation is the one
       // reported.
-      log.error(`Failed to discard operation ${changeSetId}`, abortErr, { changeSetId });
+      log.error(`Failed to abort operation ${changeSetId}`, abortErr, { changeSetId });
     }
     notifyOperationEnd(args, 'discarded');
     throw err;

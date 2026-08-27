@@ -136,7 +136,7 @@ describe('runOperation', () => {
     expect(notified).toEqual(['committed', 'discarded']);
   });
 
-  it('reports the operation error and still notifies contributors when a store cannot discard', async () => {
+  it('reports the operation error and still notifies contributors when the abort fails', async () => {
     coordinator = new StagedWriteCoordinator({
       kvStore: store,
       stagedStores: [

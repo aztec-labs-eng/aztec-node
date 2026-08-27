@@ -88,7 +88,7 @@ export class StagedWriteCoordinator {
    * Opens a change set and returns its ID for staged writes.
    *
    * All or nothing: if a store fails to open the change set, the stores that already opened it discard it again and
-   * nothing is left active, so the caller can retry.
+   * nothing is left active, so a later change set can still be opened on this PXE instance.
    *
    * @returns Change set ID to pass to store operations
    * @throws If a change set is already open, or if a store rejects the new one.
@@ -172,11 +172,11 @@ export class StagedWriteCoordinator {
         begunStores.push(store);
       }
     } catch (err) {
-      // Only the stores that accepted need undoing: the loop stopped at the rejection, so the rest never opened it.
       try {
         this.#discardChangeSetOnStores(begunStores, changeSetId);
       } catch (discardError) {
-        // The rejection is the cause and a failed undo is only its fallout, so it is logged rather than thrown.
+        // The original error is that a store failed to begin the changeset, and we're throwing that
+        // unconditionally, so we just log this additional failure.
         this.#log.error(`Failed to roll back change set ${changeSetId} after a store rejected it`, discardError, {
           changeSetId,
         });
