@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       docker_image:
-        description: Complete docker image to use (e.g., aztecprotocol/aztec:some-tag)
+        description: Complete docker image to use (e.g., azteclabs/aztec:some-tag)
         required: true
         type: string
       ref:
@@ -143,7 +143,7 @@ jobs:
           elif [[ -n "$NIGHTLY_SEMVER" ]]; then
             major_version=$(./ci3/semver major "$NIGHTLY_SEMVER")
             namespace="v${major_version}-scenario"
-            docker_image="aztecprotocol/aztec:${NIGHTLY_SEMVER}"
+            docker_image="azteclabs/aztec:${NIGHTLY_SEMVER}"
           else
             echo "No namespace input and no nightly tag context." >&2
             exit 1

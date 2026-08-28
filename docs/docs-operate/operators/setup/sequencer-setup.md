@@ -381,7 +381,7 @@ Create a `docker-compose.yml` file in your `aztec-sequencer` directory:
 ```yaml
 services:
   aztec-sequencer:
-    image: "aztecprotocol/aztec:#release_version"
+    image: "azteclabs/aztec:#release_version"
     container_name: "aztec-sequencer"
     ports:
       - ${AZTEC_PORT}:${AZTEC_PORT}
