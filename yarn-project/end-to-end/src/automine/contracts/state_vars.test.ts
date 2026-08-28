@@ -1,7 +1,6 @@
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { BatchCall, type ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
-import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import { AuthContract } from '@aztec-labs/noir-contracts.js/Auth';
 import { StateVarsContract } from '@aztec-labs/noir-test-contracts.js/StateVars';
 import { jest } from '@jest/globals';
@@ -13,12 +12,11 @@ import { AutomineTestContext } from '../automine_test_context.js';
 const TIMEOUT = 300_000;
 
 // Exercises PublicImmutable, PrivateMutable, PrivateImmutable, and DelayedPublicMutable state variable types
-// via the StateVars and Auth contracts. Single node with AutomineSequencer. The DelayedPublicMutable sub-suite
-// reads DefaultL1ContractsConfig.aztecSlotDuration as a static constant (72) for delay arithmetic and asserts
-// it has not changed; the runtime slot set by AUTOMINE_E2E_OPTS (12s) is irrelevant to that assertion.
+// via the StateVars and Auth contracts. Single node with AutomineSequencer.
 describe('automine/contracts/state_vars', () => {
   jest.setTimeout(TIMEOUT);
 
+  let t: AutomineTestContext;
   let aztecNode: AztecNode;
   let wallet: TestWallet;
   let defaultAccountAddress: AztecAddress;
@@ -30,12 +28,13 @@ describe('automine/contracts/state_vars', () => {
   const RANDOMNESS = 2n;
 
   beforeAll(async () => {
+    t = await AutomineTestContext.setup({ numberOfAccounts: 1 });
     ({
       teardown,
       aztecNode,
       wallet,
       accounts: [defaultAccountAddress],
-    } = (await AutomineTestContext.setup({ numberOfAccounts: 1 })).context);
+    } = t.context);
     ({ contract } = await StateVarsContract.deploy(wallet).send({ from: defaultAccountAddress }));
   });
 
@@ -306,63 +305,32 @@ describe('automine/contracts/state_vars', () => {
   describe('DelayedPublicMutable', () => {
     let authContract: AuthContract;
 
-    const aztecSlotDuration = DefaultL1ContractsConfig.aztecSlotDuration;
-
     beforeAll(async () => {
       // We use the auth contract here because has a nice, clear, simple implementation of Delayed Public Mutable
       ({ contract: authContract } = await AuthContract.deploy(wallet, defaultAccountAddress).send({
         from: defaultAccountAddress,
       }));
-
-      if (aztecSlotDuration !== 72) {
-        throw new Error(
-          'Aztec slot duration changed and this will break this test. Update CHANGE_AUTHORIZED_DELAY constant in the Auth contract to be 5 slots again.',
-        );
-      }
     });
 
-    // Drives the chain forward by sending a no-op tx per iteration (rather than warping wall-clock time)
-    // until the latest block's timestamp reaches `target`. Under the forced 12s slot duration a fixed
-    // block-count delay cannot count for the schedule, so we poll the real block timestamp instead.
-    const advanceChainToTimestamp = async (target: bigint) => {
-      while ((await aztecNode.getBlockData('latest'))!.header.globalVariables.timestamp < target) {
-        await authContract.methods.get_authorized().send({ from: defaultAccountAddress });
-      }
-    };
-
-    // Changes the authorized delay from 5 slots (360s) to 2 slots, advances the chain past the
-    // scheduled timestamp_of_change by sending no-op txs, then proves the private read and asserts
-    // the expirationTimestamp equals anchorTimestamp + newDelay - 1.
+    // Lowers the authorized delay to the smallest value aztec-nr accepts, warps the chain past the scheduled
+    // timestamp_of_change, then proves the private read and asserts the expirationTimestamp equals
+    // anchorTimestamp + newDelay - 1.
     it('sets the expiration timestamp property', async () => {
-      // Mirrors CHANGE_AUTHORIZED_DELAY in noir-contracts/contracts/app/auth_contract/src/main.nr.
-      const oldDelay = 360n;
-      const newDelay = BigInt(aztecSlotDuration * 2);
-      // We change the DelayedPublicMutable authorized delay here to 2 slots, this means that a change to the "authorized"
-      // value can only be applied 2 slots after it is initiated, and thus read requests on a historical state without
-      // an initiated change is valid for at least 2 slots.
-      const setDelayResult = await authContract.methods
-        .set_authorized_delay(newDelay)
-        .send({ from: defaultAccountAddress });
-      const setDelayBlockNumber = setDelayResult.receipt.blockNumber;
-      if (setDelayBlockNumber === undefined) {
-        throw new Error('set_authorized_delay tx did not return a block number');
-      }
-      const setDelayBlock = await aztecNode.getBlockData(setDelayBlockNumber);
-      // When *decreasing* the delay, ScheduledDelayChange::schedule_change sets the scheduled
-      // timestamp_of_change to `current_timestamp + (oldDelay - newDelay)` — not `current_timestamp + oldDelay`.
-      // See noir-protocol-circuits/crates/types/src/delayed_public_mutable/scheduled_delay_change.nr.
-      const timestampOfChange = setDelayBlock!.header.globalVariables.timestamp + (oldDelay - newDelay);
+      const oldDelay = (await authContract.methods.get_authorized_delay().simulate({ from: defaultAccountAddress }))
+        .result;
+      // The PXE rounds a tx's expiration down to a whole number of hours (then half hours) past the anchor block, so
+      // newDelay - 1 is a whole hour to keep the exact value observable. This is also just above the smallest delay
+      // aztec-nr accepts (DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY).
+      const newDelay = 60n * 60n + 1n;
+      expect(oldDelay).toBeGreaterThan(newDelay);
 
-      // Advance the chain until the scheduled timestamp_of_change has been reached, so any future
-      // anchor block falls in the "post" branch of get_effective_minimum_delay_at and the effective
-      // delay equals newDelay - 1 (not the larger time_until_delay_change + newDelay - 1). We send
-      // no-op txs to push fresh blocks rather than relying on wall-clock time: the e2e fixture
-      // forces aztecSlotDuration=12s under pipelining (see fixtures/setup.ts), so a fixed
-      // `delay(N blocks)` cannot count for the schedule — block timestamp polling is the
-      // slot-duration-agnostic way to know we have crossed the schedule.
-      await advanceChainToTimestamp(timestampOfChange);
+      await authContract.methods.set_authorized_delay(newDelay).send({ from: defaultAccountAddress });
 
-      // We now call our AuthContract to see if the change in expiration timestamp has reflected our delay change.
+      // When decreasing the delay, the timestamp of change is scheduled `oldDelay - newDelay` seconds in from the
+      // current timestamp. A warp this long crosses epochs with no proofs submitted, so the pending chain must be
+      // marked proven first or the rollup prunes it.
+      await t.markProvenAndWarp(oldDelay - newDelay);
+
       // expirationTimestamp is `anchor.timestamp + effective_minimum_delay`, where the anchor is the
       // historical header the PXE pinned at the start of proveTx. Compare directly against that anchor
       // so the assertion isn't flaky against chain drift between the "latest" snapshot and proveTx's own sync.

@@ -307,7 +307,7 @@ function install_hooks {
 #!/usr/bin/env bash
 set -euo pipefail
 ./yarn-project/precommit.sh
-./noir-projects/labs/precommit.sh
+./noir-projects/precommit.sh
 ./docs/examples/ts/precommit.sh
 EOF
   chmod +x $hooks_dir/pre-commit
@@ -464,7 +464,7 @@ function build_and_test {
 
 function bench_cmds {
   if [ "$#" -eq 0 ]; then
-    set -- yarn-project/end-to-end yarn-project noir-projects/labs/noir-contracts
+    set -- yarn-project/end-to-end yarn-project noir-projects/noir-contracts
   fi
   parallel -k --line-buffer './{}/bootstrap.sh bench_cmds' ::: $@
 }
@@ -830,10 +830,10 @@ case "$cmd" in
     docker_image="${3:-}"
     test_set="${4:-}"
     build
-    # If no docker image provided, build and push to aztecdev
+    # If no docker image provided, build and push to aztec-dev
     if [ -z "$docker_image" ]; then
       release-image/bootstrap.sh push_pr
-      docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+      docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
     fi
     # Set up environment and deploy using spartan
     export NAMESPACE="$namespace"
@@ -861,7 +861,7 @@ case "$cmd" in
     export CI=1
     [ "${SKIP_BUILD:-0}" -eq 0 ] && build
     # Set the docker image to the locally built image and load it into KIND
-    export AZTEC_DOCKER_IMAGE="aztecprotocol/aztec:$(git rev-parse HEAD)"
+    export AZTEC_DOCKER_IMAGE="azteclabs/aztec:$(git rev-parse HEAD)"
     spartan/bootstrap.sh kind
     kind load docker-image "$AZTEC_DOCKER_IMAGE"
     # Just one test for now
@@ -877,10 +877,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -904,10 +904,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -930,10 +930,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -959,10 +959,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -989,10 +989,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"

@@ -3,7 +3,7 @@ title: Contract Artifacts
 description: Understand the structure and contents of Aztec smart contract artifacts.
 tags: [contracts]
 sidebar_position: 13
-references: ["noir-projects/labs/noir-contracts/contracts/test/test_contract/src/main.nr", "yarn-project/stdlib/src/abi/contract_artifact.ts"]
+references: ["noir-projects/noir-contracts/contracts/test/test_contract/src/main.nr", "yarn-project/stdlib/src/abi/contract_artifact.ts"]
 ---
 
 Compiling an Aztec contract produces a contract artifact file (`.json`) containing everything needed to interact with that contract: its name, functions, their interfaces, and compiled bytecode. Since private function bytecode is never published to the network, you need this artifact file to call private functions.

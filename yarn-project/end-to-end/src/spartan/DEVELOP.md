@@ -34,11 +34,11 @@ That will run a port forward to your port `8443` . If you’re running in a remo
 
 Open the forwarded page, and copy/paste the token that was generated when you forwarded the dashboard.
 
-# Build an aztecprotocol:aztec image
+# Build an azteclabs/aztec image
 
 ```bash
 ./bootstrap.sh
-export AZTEC_DOCKER_IMAGE="aztecprotocol/aztec:$(docker images "aztecprotocol/aztec" --format json | \
+export AZTEC_DOCKER_IMAGE="azteclabs/aztec:$(docker images "azteclabs/aztec" --format json | \
   jq -r 'select(.Tag != "latest") | .Tag' | \
   head -1)"
 kind load docker-image $AZTEC_DOCKER_IMAGE
@@ -49,7 +49,7 @@ If you just changed typescript, you can (after the initial bootstrap)
 ```bash
 ./yarn-project/bootstrap.sh
 ./release-image/bootstrap.sh
-export AZTEC_DOCKER_IMAGE="aztecprotocol/aztec:$(docker images "aztecprotocol/aztec" --format json | \
+export AZTEC_DOCKER_IMAGE="azteclabs/aztec:$(docker images "azteclabs/aztec" --format json | \
   jq -r 'select(.Tag != "latest") | .Tag' | \
   head -1)"
 kind load docker-image $AZTEC_DOCKER_IMAGE

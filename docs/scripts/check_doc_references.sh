@@ -13,7 +13,7 @@ set -euo pipefail
 #
 # Reference Format:
 #   - Individual files: "yarn-project/stdlib/src/interfaces/aztec-node.ts"
-#   - Directories (all files within): "noir-projects/labs/aztec-nr/aztec/src/context/*"
+#   - Directories (all files within): "noir-projects/aztec-nr/aztec/src/context/*"
 
 # Compute SCRIPT_DIR before cd so relative BASH_SOURCE resolves correctly
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

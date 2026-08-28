@@ -65,7 +65,7 @@ export function synthesizeDefaultFixtures(
 
 /**
  * The scalar test-value implementations, mirroring the Noir synthesizer's `scalars` table in
- * `noir-projects/labs/aztec-nr/.../macros/oracle_testing.nr` exactly.
+ * `noir-projects/aztec-nr/.../macros/oracle_testing.nr` exactly.
  */
 const SCALAR_IMPLS: ScalarImpl[] = [
   scalar(FIELD, seed => new Fr(seed)),

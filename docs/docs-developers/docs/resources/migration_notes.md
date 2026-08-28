@@ -36,6 +36,19 @@ those older versions.
 Packages this repository does not publish keep their existing names. Notably `@aztec/viem`, the
 vendored viem fork consumed as `"viem": "npm:@aztec/viem@<version>"`, is unchanged.
 
+### [Aztec.nr] `DelayedPublicMutable` rejects delays below one hour
+
+`DelayedPublicMutable` now enforces a minimum delay of one hour (`aztec::state_vars::DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY`, 3600 seconds). Declaring a state variable with a shorter initial delay fails to compile, and `schedule_delay_change` reverts when passed a shorter delay:
+
+```noir
+// Fails to compile: the delay is below DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY.
+paused: DelayedPublicMutable<bool, 300, Context>,
+```
+
+Shorter delays make the time window users have to read chain state, produce a proof and get it included too short, effectively limiting access to the system, which is an unintended side-effect of controlling the delay.
+
+Raise any initial delay below one hour - a delay of at least a couple of hours remains the recommendation.
+
 ### [CLI] Removed `bridge-erc20`
 
 `aztec bridge-erc20` performed only the L1 half of a token bridge deposit: it approved the ERC20 and called `depositToAztecPublic` (or `depositToAztecPrivate`) on a TokenPortal you supplied, then printed a claim secret for you to redeem on L2 yourself. Using it required already having deployed your own L1 TokenPortal and its L2 counterpart.

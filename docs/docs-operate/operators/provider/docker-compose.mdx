@@ -20,7 +20,7 @@ Create `docker-compose.yml` in your `aztec-sequencer/` directory:
 
 <ConfigCode language="yaml" title="docker-compose.yml">{`services:
   aztec-sequencer:
-    image: "aztecprotocol/aztec:{{IMAGE_TAG}}"
+    image: "azteclabs/aztec:{{IMAGE_TAG}}"
     container_name: "aztec-sequencer"
     ports:
       - "\${AZTEC_PORT}:\${AZTEC_PORT}"
@@ -81,7 +81,7 @@ You'll need:
 
 <ConfigCode language="yaml" title="docker-compose.yml (deploy on both servers)">{`services:
   aztec-sequencer:
-    image: "aztecprotocol/aztec:{{IMAGE_TAG}}"
+    image: "azteclabs/aztec:{{IMAGE_TAG}}"
     container_name: "aztec-sequencer"
     ports:
       - "\${AZTEC_PORT}:\${AZTEC_PORT}"

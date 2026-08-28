@@ -1767,6 +1767,7 @@ __metadata:
     "@aztec-labs/stdlib": "workspace:^"
     "@aztec-labs/world-state": "workspace:^"
     "@aztec/bb.js": "npm:0.1.0-dummy"
+    "@aztec/noir-acvm_js": "npm:0.1.0-dummy"
     "@jest/globals": "npm:^30.0.0"
     "@types/jest": "npm:^30.0.0"
     "@types/lodash.omit": "npm:^4.5.7"

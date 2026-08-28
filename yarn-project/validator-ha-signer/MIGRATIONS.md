@@ -64,7 +64,7 @@ spec:
     spec:
       initContainers:
         - name: db-migrate
-          image: aztecprotocol/aztec:<image_tag>
+          image: azteclabs/aztec:<image_tag>
           command: ['node', '--no-warnings', '/usr/src/yarn-project/aztec/dest/bin/index.js', 'migrate-ha-db', 'up']
           env:
             - name: DATABASE_URL
@@ -74,7 +74,7 @@ spec:
                   key: connection-string
       containers:
         - name: validator
-          image: aztecprotocol/aztec:<image_tag>
+          image: azteclabs/aztec:<image_tag>
           # ... validator config
 ```
 
@@ -90,7 +90,7 @@ spec:
     spec:
       containers:
         - name: migrate
-          image: aztecprotocol/aztec:<image_tag>
+          image: azteclabs/aztec:<image_tag>
           command: ['node', '--no-warnings', '/usr/src/yarn-project/aztec/dest/bin/index.js', 'migrate-ha-db', 'up']
           env:
             - name: DATABASE_URL
@@ -109,7 +109,7 @@ spec:
   run: |
     docker run --rm \
       -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-      aztecprotocol/aztec:<image_tag> \
+      azteclabs/aztec:<image_tag> \
       migrate-ha-db up
 ```
 

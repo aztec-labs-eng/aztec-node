@@ -145,7 +145,7 @@ spec:
     spec:
       containers:
         - name: migrate
-          image: aztecprotocol/aztec:<image_tag>
+          image: azteclabs/aztec:<image_tag>
           command: ['node', '--no-warnings', '/usr/src/yarn-project/aztec/dest/bin/index.js', 'migrate-ha-db', 'up']
           env:
             - name: DATABASE_URL

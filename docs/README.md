@@ -190,7 +190,7 @@ This command runs the preprocess command, generates static content into the `bui
 
 ### Aztec.nr API Documentation
 
-The Aztec.nr API reference is auto-generated from the `noir-projects/labs/aztec-nr/` source code using `nargo doc`. This generates HTML documentation that is served from `static/aztec-nr-api/`.
+The Aztec.nr API reference is auto-generated from the `noir-projects/aztec-nr/` source code using `nargo doc`. This generates HTML documentation that is served from `static/aztec-nr-api/`.
 
 **Prerequisites:** You need `nargo` installed. Install via [noirup](https://noir-lang.org/docs/getting_started/quick_start#installation):
 
@@ -412,7 +412,7 @@ This macro is release-type-aware and automatically resolves to the appropriate v
 | testnet      | `TESTNET_TAG`                              | `2.1.11`                 |
 | mainnet      | `MAINNET_TAG`                              | `2.1.11`                 |
 
-Usage: `aztecprotocol/aztec:#release_version`
+Usage: `azteclabs/aztec:#release_version`
 
 ### `#release_network`
 
@@ -533,7 +533,7 @@ Documentation pages can declare which source files they document via a `referenc
    ```yaml
    ---
    title: Function Context
-   references: ["noir-projects/labs/aztec-nr/aztec/src/context/*"]
+   references: ["noir-projects/aztec-nr/aztec/src/context/*"]
    ---
    ```
 
