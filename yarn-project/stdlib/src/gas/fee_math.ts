@@ -36,6 +36,7 @@ export type ManaMinFeeParams = {
   provingCostPerManaEth: bigint;
   excessMana: bigint;
   ethPerFeeAsset: bigint;
+  protocolFeeMarginBps: bigint;
 };
 
 /**
@@ -60,11 +61,21 @@ export function computeExcessMana(prevExcessMana: bigint, prevManaUsed: bigint, 
   return sum > manaTarget ? sum - manaTarget : 0n;
 }
 
-/** Computes the congestion multiplier from excess mana (1e9 = no congestion). */
-export function computeCongestionMultiplier(excessMana: bigint, manaTarget: bigint): bigint {
+/**
+ * Computes the congestion multiplier from excess mana.
+ * The protocol fee margin scales only the fakeExponential factor: (10_000 + bps) * 1e5, which is
+ * (1 + mu) * 1e9 and exactly 1e9 at mu = 0. The uncongested baseline is therefore (1 + mu) * 1e9.
+ * The MINIMUM_CONGESTION_MULTIPLIER divisor in computeManaMinFee MUST NOT be scaled -- scaling
+ * both sites cancels the margin.
+ */
+export function computeCongestionMultiplier(
+  excessMana: bigint,
+  manaTarget: bigint,
+  protocolFeeMarginBps: bigint,
+): bigint {
   const denominator = (manaTarget * MAGIC_CONGESTION_VALUE_MULTIPLIER) / MAGIC_CONGESTION_VALUE_DIVISOR;
   const cappedNumerator = excessMana < denominator * 100n ? excessMana : denominator * 100n;
-  return fakeExponential(MINIMUM_CONGESTION_MULTIPLIER, cappedNumerator, denominator);
+  return fakeExponential((10_000n + protocolFeeMarginBps) * 100_000n, cappedNumerator, denominator);
 }
 
 /** Ceiling division for positive bigints. */
@@ -81,11 +92,20 @@ function toFeeAsset(ethValue: bigint, ethPerFeeAsset: bigint): bigint {
 }
 
 /**
- * Computes the full mana min fee (sequencer + prover + congestion) in fee asset terms.
+ * Computes the full mana min fee (sequencer + prover + protocol fee) in fee asset terms.
  * Mirrors FeeLib.getManaMinFeeComponentsAt + summedMinFee.
  */
 export function computeManaMinFee(params: ManaMinFeeParams): bigint {
-  const { l1BaseFee, l1BlobFee, manaTarget, epochDuration, provingCostPerManaEth, excessMana, ethPerFeeAsset } = params;
+  const {
+    l1BaseFee,
+    l1BlobFee,
+    manaTarget,
+    epochDuration,
+    provingCostPerManaEth,
+    excessMana,
+    ethPerFeeAsset,
+    protocolFeeMarginBps,
+  } = params;
 
   if (manaTarget === 0n) {
     return 0n;
@@ -102,17 +122,18 @@ export function computeManaMinFee(params: ManaMinFeeParams): bigint {
   // Total base cost in ETH (congestion is computed on this)
   const totalEth = sequencerCostEth + proverCostEth;
 
-  // Congestion multiplier and cost (in ETH)
-  const congestionMul = computeCongestionMultiplier(excessMana, manaTarget);
-  const congestionCostEth = (totalEth * congestionMul) / MINIMUM_CONGESTION_MULTIPLIER - totalEth;
+  // Congestion multiplier (scaled by the protocol fee margin) and protocol fee (in ETH).
+  // The divisor here stays MINIMUM_CONGESTION_MULTIPLIER; only the multiplier's factor scales.
+  const congestionMul = computeCongestionMultiplier(excessMana, manaTarget, protocolFeeMarginBps);
+  const protocolFeeEth = (totalEth * congestionMul) / MINIMUM_CONGESTION_MULTIPLIER - totalEth;
 
   // Convert all components to fee asset
   const clampedEthPerFeeAsset = ethPerFeeAsset < MIN_ETH_PER_FEE_ASSET ? MIN_ETH_PER_FEE_ASSET : ethPerFeeAsset;
   const sequencerCost = toFeeAsset(sequencerCostEth, clampedEthPerFeeAsset);
   const proverCost = toFeeAsset(proverCostEth, clampedEthPerFeeAsset);
-  const congestionCost = toFeeAsset(congestionCostEth, clampedEthPerFeeAsset);
+  const protocolFee = toFeeAsset(protocolFeeEth, clampedEthPerFeeAsset);
 
-  const total = sequencerCost + proverCost + congestionCost;
+  const total = sequencerCost + proverCost + protocolFee;
 
   // Cap at uint128 max (matching FeeLib.summedMinFee)
   const UINT128_MAX = (1n << 128n) - 1n;
