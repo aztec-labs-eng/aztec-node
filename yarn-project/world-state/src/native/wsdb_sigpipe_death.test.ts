@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
 import { type IpcClientAsync, UdsIpcClient } from '@aztec/ipc-runtime';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
 import { AsyncApi } from '@aztec/wsdb';
 
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
 
 import { NativeWorldStateService } from './native_world_state.js';

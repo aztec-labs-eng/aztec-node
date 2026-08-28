@@ -9,7 +9,7 @@ contracts:
   - recursive_verification_contract-ValueNotEqual
 
 # Dependencies:
-#   - @aztec/* packages are auto-linked from yarn-project/
+#   - @aztec-labs/* packages are auto-linked from yarn-project/
 #   - Use npm:package-name or npm:package-name@range for external npm packages
 dependencies:
   - "@aztec-labs/aztec.js"
