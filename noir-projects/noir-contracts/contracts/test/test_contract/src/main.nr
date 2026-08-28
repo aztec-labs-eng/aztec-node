@@ -72,7 +72,7 @@ pub contract Test {
         value4: Field,
     }
 
-    global DELAYED_PUBLIC_MUTABLE_INITIAL_DELAY: u64 = 2;
+    global DELAYED_PUBLIC_MUTABLE_INITIAL_DELAY: u64 = 60 * 60;
 
     #[abi(constants)]
     pub global EXPORTED_FIELD_CONSTANT: Field = 1234;
