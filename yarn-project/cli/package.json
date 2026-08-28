@@ -88,7 +88,7 @@
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/wallets": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy",
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@ethersproject/wallet": "^5.8.0",
     "@iarna/toml": "^2.2.5",
     "@libp2p/peer-id-factory": "^3.0.4",
@@ -126,7 +126,7 @@
     "@aztec-labs/noir-test-contracts.js": "workspace:^",
     "@aztec-labs/protocol-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy"
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy"
   },
   "files": [
     "dest",

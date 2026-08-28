@@ -1,5 +1,5 @@
-import { SlasherAbi } from '@aztec/l1-artifacts/SlasherAbi';
-import { SlashingProposerAbi } from '@aztec/l1-artifacts/SlashingProposerAbi';
+import { SlasherAbi } from '@aztec-foundation/l1-artifacts/SlasherAbi';
+import { SlashingProposerAbi } from '@aztec-foundation/l1-artifacts/SlashingProposerAbi';
 
 import type { L1TxRequest } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { ViemClient } from '@aztec-labs/ethereum/types';

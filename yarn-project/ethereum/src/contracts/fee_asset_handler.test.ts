@@ -1,4 +1,4 @@
-import { TestERC20Abi as FeeAssetAbi } from '@aztec/l1-artifacts/TestERC20Abi';
+import { TestERC20Abi as FeeAssetAbi } from '@aztec-foundation/l1-artifacts/TestERC20Abi';
 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';

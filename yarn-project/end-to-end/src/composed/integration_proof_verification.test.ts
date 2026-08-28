@@ -1,4 +1,4 @@
-import { HonkVerifierAbi, HonkVerifierBytecode, IVerifierAbi } from '@aztec/l1-artifacts';
+import { HonkVerifierAbi, HonkVerifierBytecode, IVerifierAbi } from '@aztec-foundation/l1-artifacts';
 
 import { BBCircuitVerifier } from '@aztec-labs/bb-prover';
 import { PAIRING_POINTS_SIZE } from '@aztec-labs/constants';

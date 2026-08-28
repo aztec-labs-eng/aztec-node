@@ -1,4 +1,4 @@
-import { BarretenbergSync } from '@aztec/bb.js';
+import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
 /**
  * Secp256k1 elliptic curve operations.

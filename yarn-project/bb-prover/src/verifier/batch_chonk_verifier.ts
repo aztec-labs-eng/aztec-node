@@ -1,4 +1,4 @@
-import { BackendType, Barretenberg } from '@aztec/bb.js';
+import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';

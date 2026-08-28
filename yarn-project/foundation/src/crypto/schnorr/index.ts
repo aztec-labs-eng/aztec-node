@@ -1,4 +1,4 @@
-import { BarretenbergSync } from '@aztec/bb.js';
+import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';

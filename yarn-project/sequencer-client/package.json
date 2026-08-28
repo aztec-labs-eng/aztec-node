@@ -43,7 +43,7 @@
     "@aztec-labs/telemetry-client": "workspace:^",
     "@aztec-labs/validator-client": "workspace:^",
     "@aztec-labs/validator-ha-signer": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy",
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "lodash.chunk": "^4.2.0",
     "tslib": "^2.4.0",
     "viem": "npm:@aztec/viem@2.38.2",

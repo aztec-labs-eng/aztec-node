@@ -154,7 +154,7 @@ cd yarn-project/slasher && yarn generate
 cd yarn-project/cli && yarn generate
 ```
 
-**L1 contract config source of truth:** L1 contract defaults live in `l1-contracts/scripts/network-defaults.json` (owned by l1-contracts), published via `@aztec/l1-artifacts`. `@aztec-labs/ethereum`'s config imports that JSON directly, and the Solidity deploy scripts read it via foundry `vm.readFile`. The JSON values are only used for testing flows.
+**L1 contract config source of truth:** L1 contract defaults live in `l1-contracts/scripts/network-defaults.json` (owned by l1-contracts), published via `@aztec-foundation/l1-artifacts`. `@aztec-labs/ethereum`'s config imports that JSON directly, and the Solidity deploy scripts read it via foundry `vm.readFile`. The JSON values are only used for testing flows.
 
 ### Deployment Environment Files
 

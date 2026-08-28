@@ -6,7 +6,7 @@ import {
   TestERC20Bytecode,
   TokenPortalAbi,
   TokenPortalBytecode,
-} from '@aztec/l1-artifacts';
+} from '@aztec-foundation/l1-artifacts';
 
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { waitForProven } from '@aztec-labs/aztec.js/contracts';

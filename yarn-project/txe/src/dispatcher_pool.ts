@@ -1,4 +1,4 @@
-import { BackendType, Barretenberg, BarretenbergSync } from '@aztec/bb.js';
+import { BackendType, Barretenberg, BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { getSchnorrAccountContractArtifact } from '@aztec-labs/accounts/schnorr/lazy';
 import type { Logger } from '@aztec-labs/foundation/log';

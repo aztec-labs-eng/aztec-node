@@ -7,7 +7,7 @@
  *
  * All tests exercise the full BatchChonkVerifier TS class (not raw bb.js).
  */
-import { AztecClientBackend, BackendType, Barretenberg } from '@aztec/bb.js';
+import { AztecClientBackend, BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
 import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
 import { createLogger } from '@aztec-labs/foundation/log';

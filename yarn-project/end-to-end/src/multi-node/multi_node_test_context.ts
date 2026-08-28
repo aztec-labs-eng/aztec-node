@@ -1,4 +1,4 @@
-import { SlasherAbi } from '@aztec/l1-artifacts';
+import { SlasherAbi } from '@aztec-foundation/l1-artifacts';
 
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';

@@ -1,5 +1,5 @@
-import type { WitnessMap } from '@aztec/noir-acvm_js';
-import { type InputValue, abiDecode, abiEncode } from '@aztec/noir-noirc_abi';
+import type { WitnessMap } from '@aztec-foundation/noir-acvm_js';
+import { type InputValue, abiDecode, abiEncode } from '@aztec-foundation/noir-noirc_abi';
 
 import { INBOX_PARITY_SIZE_LARGE, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_SMALL } from '@aztec-labs/constants';
 import { pushTestData } from '@aztec-labs/foundation/testing';

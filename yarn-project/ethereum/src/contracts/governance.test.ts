@@ -1,4 +1,4 @@
-import { GovernanceAbi } from '@aztec/l1-artifacts/GovernanceAbi';
+import { GovernanceAbi } from '@aztec-foundation/l1-artifacts/GovernanceAbi';
 
 import { createExtendedL1Client, getPublicClient } from '@aztec-labs/ethereum/client';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';

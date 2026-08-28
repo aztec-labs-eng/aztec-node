@@ -1,5 +1,5 @@
-import { codegen } from '@aztec/noir-noir_codegen';
-import type { CompiledCircuit } from '@aztec/noir-types';
+import { codegen } from '@aztec-foundation/noir-noir_codegen';
+import type { CompiledCircuit } from '@aztec-foundation/noir-types';
 
 import { createConsoleLogger } from '@aztec-labs/foundation/log';
 import { pascalCase } from 'change-case';
@@ -47,7 +47,9 @@ const main = async () => {
   // (see `TEMPLATE_DIMENSIONS` below for the differs-from-template invariant).
   const dimensionsByGroup = JSON.parse(
     await fs.readFile(
-      new URL(import.meta.resolve('@aztec/protocol-circuits-artifacts/private_kernel_reset_dimensions.json')),
+      new URL(
+        import.meta.resolve('@aztec-foundation/protocol-circuits-artifacts/private_kernel_reset_dimensions.json'),
+      ),
       'utf8',
     ),
   ) as Record<string, number[][]>;

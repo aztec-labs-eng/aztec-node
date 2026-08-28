@@ -12,7 +12,7 @@
  * slashing-protection database, and timezone/clock divergence between the node and its database can only
  * be reproduced against a genuine, separate Postgres process (not an in-process one).
  */
-import { GovernanceProposerAbi } from '@aztec/l1-artifacts/GovernanceProposerAbi';
+import { GovernanceProposerAbi } from '@aztec-foundation/l1-artifacts/GovernanceProposerAbi';
 
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';

@@ -1,4 +1,4 @@
-import { EmpireBaseAbi } from '@aztec/l1-artifacts/EmpireBaseAbi';
+import { EmpireBaseAbi } from '@aztec-foundation/l1-artifacts/EmpireBaseAbi';
 
 import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';

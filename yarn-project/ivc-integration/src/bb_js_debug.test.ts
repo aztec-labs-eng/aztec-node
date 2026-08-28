@@ -4,7 +4,7 @@
  * 1. Runs `bb prove` via CLI using the same inputs → compares proof output
  * 2. Runs `bb verify` via CLI using the proof files → checks verification passes
  */
-import { Noir } from '@aztec/noir-noir_js';
+import { Noir } from '@aztec-foundation/noir-noir_js';
 
 import { BBJsInstance, type BBJsProofResult } from '@aztec-labs/bb-prover';
 import { DebugBBJsInstance } from '@aztec-labs/bb-prover/debug';

@@ -1,5 +1,5 @@
-import { GovernanceAbi } from '@aztec/l1-artifacts/GovernanceAbi';
-import { TestERC20Abi as StakingAssetAbi } from '@aztec/l1-artifacts/TestERC20Abi';
+import { GovernanceAbi } from '@aztec-foundation/l1-artifacts/GovernanceAbi';
+import { TestERC20Abi as StakingAssetAbi } from '@aztec-foundation/l1-artifacts/TestERC20Abi';
 
 import type { Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';

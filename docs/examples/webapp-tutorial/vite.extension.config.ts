@@ -103,10 +103,10 @@ export default defineConfig({
   optimizeDeps: {
     include: ['pino', 'pino/browser'],
     exclude: [
-      '@aztec/noir-noirc_abi',
-      '@aztec/noir-acvm_js',
-      '@aztec/bb.js',
-      '@aztec/noir-noir_js',
+      '@aztec-foundation/noir-noirc_abi',
+      '@aztec-foundation/noir-acvm_js',
+      '@aztec-foundation/bb.js',
+      '@aztec-foundation/noir-noir_js',
     ],
   },
   resolve: {

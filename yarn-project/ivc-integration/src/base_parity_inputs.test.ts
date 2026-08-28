@@ -9,7 +9,7 @@
  * output files keep their legacy `parity_base.json` / `witness.gz` names because `ci_benchmark_ultrahonk_circuits.sh`
  * locates inputs as `${circuit_name}.json` with `circuit_name=parity_base`.
  */
-import { Noir } from '@aztec/noir-noir_js';
+import { Noir } from '@aztec-foundation/noir-noir_js';
 
 import { INBOX_PARITY_SIZE_MEDIUM } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';

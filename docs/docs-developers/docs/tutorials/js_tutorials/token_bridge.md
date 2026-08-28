@@ -39,14 +39,14 @@ cd hardhat-aztec-example
 yarn add @aztec-labs/aztec.js@#include_version_without_prefix @aztec-labs/accounts@#include_version_without_prefix @aztec-labs/stdlib@#include_version_without_prefix @aztec-labs/wallets@#include_version_without_prefix @aztec/viem@2.38.2 tsx
 ```
 
-:::note Use `@aztec/l1-artifacts` for the L1 interfaces
-The starter repo may still pin `@aztec/l1-contracts` as a git dependency; that repository is no longer updated. In `package.json`, replace it with the `@aztec/l1-artifacts` npm package at the version used in this tutorial, then run `yarn install` again:
+:::note Use `@aztec-foundation/l1-artifacts` for the L1 interfaces
+The starter repo may still pin `@aztec/l1-contracts` as a git dependency; that repository is no longer updated. In `package.json`, replace it with the `@aztec-foundation/l1-artifacts` npm package at the version used in this tutorial, then run `yarn install` again:
 
 ```json
-"@aztec/l1-artifacts": "#include_version_without_prefix"
+"@aztec-foundation/l1-artifacts": "#include_version_without_prefix"
 ```
 
-The package ships the L1 contract sources under `@aztec/l1-artifacts/l1-contracts/src`. If the project resolves `@aztec/*` Solidity imports through remappings or aliases, point them at `node_modules/@aztec/l1-artifacts/l1-contracts/src`. The interfaces the portal imports later in this tutorial must match the contracts deployed by your running network.
+The package ships the L1 contract sources under `@aztec-foundation/l1-artifacts/l1-contracts/src`. If the project resolves `@aztec/*` Solidity imports through remappings or aliases, point them at `node_modules/@aztec-foundation/l1-artifacts/l1-contracts/src`. The interfaces the portal imports later in this tutorial must match the contracts deployed by your running network.
 :::
 
 Now start the local network in another terminal:

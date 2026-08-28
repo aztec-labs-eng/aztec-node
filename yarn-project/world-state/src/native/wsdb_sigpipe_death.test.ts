@@ -1,5 +1,5 @@
-import { type IpcClientAsync, UdsIpcClient } from '@aztec/ipc-runtime';
-import { AsyncApi } from '@aztec/wsdb';
+import { type IpcClientAsync, UdsIpcClient } from '@aztec-foundation/ipc-runtime';
+import { AsyncApi } from '@aztec-foundation/wsdb';
 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';

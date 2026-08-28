@@ -45,7 +45,7 @@ function versionsIn(text, regex, expected, offset = 0) {
   });
 }
 
-// Where each @aztec npm resolution lives inside a foundation checkout, as
+// Where each @aztec-foundation npm resolution lives inside a foundation checkout, as
 // "<yarn protocol><foundation-relative path>"; use-local relativizes the path from the
 // consuming manifest's directory. null marks packages with no consumable package dir in
 // the foundation tree, which stay pinned to the published release even in use-local mode.
@@ -53,36 +53,36 @@ function versionsIn(text, regex, expected, offset = 0) {
 // (noir-projects/fnd/bootstrap.sh stage_packages); the foundation build stages them
 // before driving this repo, so local circuit changes reach use-local consumers.
 const LOCAL_PACKAGES = {
-  "@aztec/bb-avm-sim": "portal:barretenberg/ts/bb-avm-sim",
-  "@aztec/bb-avm-sim-darwin-arm64":
+  "@aztec-foundation/bb-avm-sim": "portal:barretenberg/ts/bb-avm-sim",
+  "@aztec-foundation/bb-avm-sim-darwin-arm64":
     "portal:barretenberg/ts/bb-avm-sim/packages/bb-avm-sim-darwin-arm64",
-  "@aztec/bb-avm-sim-darwin-x64":
+  "@aztec-foundation/bb-avm-sim-darwin-x64":
     "portal:barretenberg/ts/bb-avm-sim/packages/bb-avm-sim-darwin-x64",
-  "@aztec/bb-avm-sim-linux-arm64":
+  "@aztec-foundation/bb-avm-sim-linux-arm64":
     "portal:barretenberg/ts/bb-avm-sim/packages/bb-avm-sim-linux-arm64",
-  "@aztec/bb-avm-sim-linux-x64":
+  "@aztec-foundation/bb-avm-sim-linux-x64":
     "portal:barretenberg/ts/bb-avm-sim/packages/bb-avm-sim-linux-x64",
-  "@aztec/bb.js": "portal:barretenberg/ts/bb.js",
-  "@aztec/cdb": "portal:barretenberg/ts/cdb",
-  "@aztec/constants-codegen": "portal:protocol/constants-codegen",
-  "@aztec/ipc-runtime": "portal:ipc-runtime/ts",
-  "@aztec/l1-artifacts": "portal:l1-contracts/l1-artifacts",
-  "@aztec/mock-protocol-circuits-artifacts":
+  "@aztec-foundation/bb.js": "portal:barretenberg/ts/bb.js",
+  "@aztec-foundation/cdb": "portal:barretenberg/ts/cdb",
+  "@aztec-foundation/constants-codegen": "portal:protocol/constants-codegen",
+  "@aztec-foundation/ipc-runtime": "portal:ipc-runtime/ts",
+  "@aztec-foundation/l1-artifacts": "portal:l1-contracts/l1-artifacts",
+  "@aztec-foundation/mock-protocol-circuits-artifacts":
     "portal:noir-projects/fnd/mock-protocol-circuits-artifacts/dist",
-  "@aztec/protocol-circuits-artifacts":
+  "@aztec-foundation/protocol-circuits-artifacts":
     "portal:noir-projects/fnd/protocol-circuits-artifacts/dist",
-  "@aztec/protocol-contracts-artifacts":
+  "@aztec-foundation/protocol-contracts-artifacts":
     "portal:noir-projects/fnd/protocol-contracts-artifacts/dist",
-  "@aztec/wsdb": "portal:wsdb/ts",
-  "@aztec/wsdb-darwin-arm64": "portal:wsdb/ts/packages/wsdb-darwin-arm64",
-  "@aztec/wsdb-darwin-x64": "portal:wsdb/ts/packages/wsdb-darwin-x64",
-  "@aztec/wsdb-linux-arm64": "portal:wsdb/ts/packages/wsdb-linux-arm64",
-  "@aztec/wsdb-linux-x64": "portal:wsdb/ts/packages/wsdb-linux-x64",
-  "@aztec/noir-acvm_js": "portal:noir/packages/acvm_js",
-  "@aztec/noir-types": "portal:noir/packages/types",
-  "@aztec/noir-noirc_abi": "portal:noir/packages/noirc_abi",
-  "@aztec/noir-noir_codegen": "portal:noir/packages/noir_codegen",
-  "@aztec/noir-noir_js": "file:noir/packages/noir_js",
+  "@aztec-foundation/wsdb": "portal:wsdb/ts",
+  "@aztec-foundation/wsdb-darwin-arm64": "portal:wsdb/ts/packages/wsdb-darwin-arm64",
+  "@aztec-foundation/wsdb-darwin-x64": "portal:wsdb/ts/packages/wsdb-darwin-x64",
+  "@aztec-foundation/wsdb-linux-arm64": "portal:wsdb/ts/packages/wsdb-linux-arm64",
+  "@aztec-foundation/wsdb-linux-x64": "portal:wsdb/ts/packages/wsdb-linux-x64",
+  "@aztec-foundation/noir-acvm_js": "portal:noir/packages/acvm_js",
+  "@aztec-foundation/noir-types": "portal:noir/packages/types",
+  "@aztec-foundation/noir-noirc_abi": "portal:noir/packages/noirc_abi",
+  "@aztec-foundation/noir-noir_codegen": "portal:noir/packages/noir_codegen",
+  "@aztec-foundation/noir-noir_js": "file:noir/packages/noir_js",
 };
 
 // Turns a LOCAL_PACKAGES value into the manifest entry ("portal:../relative/path") plus the
@@ -163,7 +163,7 @@ const SITES = [
     },
   },
   {
-    // Only bb.js and the noir packages track BB_VERSION: other @aztec-scoped pins (e.g. the viem
+    // Only bb.js and the noir packages track BB_VERSION: other @aztec-foundation-scoped pins (e.g. the viem
     // fork) version independently and must not be checked. A missing or empty version would
     // float to the registry's latest, so it is reported (found: null) rather than skipped.
     name: "published @aztec npm pin",
@@ -192,7 +192,8 @@ const SITES = [
       }
       return pins;
     },
-    // These have no local form: the examples runner links bare @aztec names from
+    // These have no local form (and keep the @aztec scope until the @aztec-foundation releases exist):
+    // the examples runner links bare @aztec names from
     // yarn-project/, where bb.js and the noir packages do not exist, and its link: entries
     // install no transitive dependencies. Examples consume the published release even in
     // use-local mode.
@@ -208,21 +209,21 @@ const SITES = [
   {
     // docs pins the l1-artifacts package, whose l1-contracts sources feed the docs L1 snippets
     // and the solidity examples' imports.
-    name: "@aztec/l1-artifacts pin",
+    name: "@aztec-foundation/l1-artifacts pin",
     files: () => ["docs/package.json"],
     required: ["docs/package.json"],
     pins: (content, { bb }) =>
-      versionsIn(content, /"@aztec\/l1-artifacts":\s*"([^"]+)"/dg, bb),
+      versionsIn(content, /"@aztec-foundation\/l1-artifacts":\s*"([^"]+)"/dg, bb),
     useLocal(content, ctx) {
       const { value, target } = localize(
-        LOCAL_PACKAGES["@aztec/l1-artifacts"],
+        LOCAL_PACKAGES["@aztec-foundation/l1-artifacts"],
         ctx,
       );
       return {
         // A replacer function, not a replacement string: the localized value embeds a
         // filesystem path, which must not be interpreted for $-patterns.
         content: content.replace(
-          /("@aztec\/l1-artifacts":\s*")[^"]+(")/,
+          /("@aztec-foundation\/l1-artifacts":\s*")[^"]+(")/,
           (_, pre, post) => pre + value + post,
         ),
         targets: [target],
@@ -231,10 +232,10 @@ const SITES = [
   },
   {
     // yarn-project pins its first-party npm dependencies in one place, the resolutions block;
-    // the workspace manifests carry a dummy version. Every @aztec-scoped entry there is a
+    // the workspace manifests carry a dummy version. Every @aztec-foundation-scoped entry there is a
     // release of this repo and so tracks BB_VERSION, unlike the third-party entries it sits
     // beside.
-    name: "@aztec resolutions entry",
+    name: "@aztec-foundation resolutions entry",
     files: () => ["yarn-project/package.json"],
     required: ["yarn-project/package.json"],
     pins(content, { bb }) {
@@ -243,7 +244,7 @@ const SITES = [
         throw new Error("yarn-project/package.json has no resolutions block");
       return versionsIn(
         block[0],
-        /"@aztec\/[^"]+":\s*"([^"]+)"/dg,
+        /"@aztec-foundation\/[^"]+":\s*"([^"]+)"/dg,
         bb,
         block.index,
       );
@@ -254,7 +255,7 @@ const SITES = [
     verify(content) {
       const block = /"resolutions"\s*:\s*\{[^}]*\}/.exec(content);
       if (!block) return ["yarn-project/package.json has no resolutions block"];
-      const keys = [...block[0].matchAll(/"(@aztec\/[^"]+)":/g)].map(
+      const keys = [...block[0].matchAll(/"(@aztec-foundation\/[^"]+)":/g)].map(
         (m) => m[1],
       );
       const errors = [];
@@ -279,7 +280,7 @@ const SITES = [
       const targets = [];
       let retargeted = 0;
       const updated = block[0].replace(
-        /"(@aztec\/[^"]+)":(\s*)"([^"]+)"/g,
+        /"(@aztec-foundation\/[^"]+)":(\s*)"([^"]+)"/g,
         (entry, name, ws, current) => {
           const local = LOCAL_PACKAGES[name];
           if (local === undefined) {

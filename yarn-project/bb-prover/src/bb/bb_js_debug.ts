@@ -1,4 +1,4 @@
-import type { AvmStat } from '@aztec/bb.js';
+import type { AvmStat } from '@aztec-foundation/bb.js';
 
 import type { Logger } from '@aztec-labs/foundation/log';
 import { promises as fs } from 'fs';

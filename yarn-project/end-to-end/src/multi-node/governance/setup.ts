@@ -1,4 +1,4 @@
-import { GovernanceAbi, GovernanceProposerAbi } from '@aztec/l1-artifacts';
+import { GovernanceAbi, GovernanceProposerAbi } from '@aztec-foundation/l1-artifacts';
 
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';

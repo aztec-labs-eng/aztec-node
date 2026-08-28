@@ -17,7 +17,7 @@ describe('shipped private kernel reset catalog', () => {
     finalTailToPublic: ShippedEntry[];
   };
   const configPath = createRequire(import.meta.url).resolve(
-    '@aztec/protocol-circuits-artifacts/private_kernel_reset_config.json',
+    '@aztec-foundation/protocol-circuits-artifacts/private_kernel_reset_config.json',
   );
   const shipped = JSON.parse(readFileSync(configPath, 'utf8')) as ShippedConfig;
   const allEntries: ShippedEntry[] = [...shipped.inner, ...shipped.finalTail, ...shipped.finalTailToPublic];

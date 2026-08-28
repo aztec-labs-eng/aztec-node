@@ -52,7 +52,7 @@ import {
   ValidatorOperationsExtLibBytecode,
   ValidatorSelectionLibAbi,
   ValidatorSelectionLibBytecode,
-} from '@aztec/l1-artifacts';
+} from '@aztec-foundation/l1-artifacts';
 
 import type { Hex } from 'viem';
 

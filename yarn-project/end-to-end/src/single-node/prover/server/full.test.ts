@@ -1,4 +1,4 @@
-import { FeeJuicePortalAbi, TestERC20Abi } from '@aztec/l1-artifacts';
+import { FeeJuicePortalAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';

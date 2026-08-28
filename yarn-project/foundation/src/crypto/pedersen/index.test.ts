@@ -1,4 +1,4 @@
-import { BarretenbergSync } from '@aztec/bb.js';
+import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { toBufferBE } from '../../bigint-buffer/index.js';
 import { setupCustomSnapshotSerializers } from '../../testing/index.js';

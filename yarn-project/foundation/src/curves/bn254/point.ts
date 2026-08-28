@@ -4,7 +4,7 @@ import {
   BarretenbergSync,
   type Bn254G1Point as BbApiBn254G1Point,
   type Bn254G2Point as BbApiBn254G2Point,
-} from '@aztec/bb.js';
+} from '@aztec-foundation/bb.js';
 
 import { Fq, Fr } from './field.js';
 

@@ -1,4 +1,4 @@
-import { CircuitKind } from '@aztec/bb.js';
+import { CircuitKind } from '@aztec-foundation/bb.js';
 
 import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
 import { uniqueBy } from '@aztec-labs/foundation/collection';

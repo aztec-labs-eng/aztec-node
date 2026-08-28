@@ -1,4 +1,4 @@
-import { GSEAbi, GovernanceAbi, TestERC20Abi } from '@aztec/l1-artifacts';
+import { GSEAbi, GovernanceAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import { type AztecNode, type NodeInfo, createAztecNodeClient } from '@aztec-labs/aztec.js/node';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';

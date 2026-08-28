@@ -86,7 +86,7 @@ function compile-solidity {
   local OUTPUT_DIR="$REPO_ROOT/docs/target/solidity"
 
   # The examples compile against the l1-contracts sources shipped in the
-  # @aztec/l1-artifacts package (see foundry.toml), so docs' node_modules
+  # @aztec-foundation/l1-artifacts package (see foundry.toml), so docs' node_modules
   # must be populated. Unconditional so that a pin bump refreshes an
   # existing node_modules instead of compiling against stale sources.
   (cd "$REPO_ROOT/docs" && npm_install_deps)
@@ -195,8 +195,8 @@ function validate-webapp-tutorial {
         }
       }
 
-      // yarn-project pins the @aztec packages built outside it (e.g. @aztec/bb.js,
-      // @aztec/ipc-runtime, @aztec/wsdb, @aztec/noir-*) to published npm versions via
+      // yarn-project pins the @aztec packages built outside it (e.g. @aztec-foundation/bb.js,
+      // @aztec-foundation/ipc-runtime, @aztec-foundation/wsdb, @aztec/noir-*) to published npm versions via
       // its root resolutions. Workspace manifests declare those with placeholder
       // versions that only the resolutions rewrite, so mirror the pins here: consume
       // them from npm at the pinned version, never link them. Path-based entries

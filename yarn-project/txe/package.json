@@ -83,7 +83,7 @@
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
-    "@aztec/bb.js": "0.1.0-dummy",
+    "@aztec-foundation/bb.js": "0.1.0-dummy",
     "msgpackr": "^1.11.2",
     "zod": "^4"
   },

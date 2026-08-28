@@ -1,4 +1,4 @@
-import { NewGovernanceProposerPayloadAbi, NewGovernanceProposerPayloadBytecode } from '@aztec/l1-artifacts';
+import { NewGovernanceProposerPayloadAbi, NewGovernanceProposerPayloadBytecode } from '@aztec-foundation/l1-artifacts';
 
 import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
 import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';

@@ -1,5 +1,5 @@
-import { codegen } from '@aztec/noir-noir_codegen';
-import { type CompiledCircuit } from '@aztec/noir-types';
+import { codegen } from '@aztec-foundation/noir-noir_codegen';
+import { type CompiledCircuit } from '@aztec-foundation/noir-types';
 
 import { createConsoleLogger } from '@aztec-labs/foundation/log';
 import { pascalCase } from 'change-case';

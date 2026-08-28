@@ -250,7 +250,7 @@ function install_native_symlinks {
 
 # Npm bins are NOT mirrored into internal-bin. The contract for any TS tool
 # that needs to spawn a sibling binary is to resolve an absolute bundled
-# path itself (e.g. via @aztec/bb.js findBbBinary(), or a BB-style env
+# path itself (e.g. via @aztec-foundation/bb.js findBbBinary(), or a BB-style env
 # var) -- never by basename + PATH lookup. If you find yourself wanting to
 # add an npm bin to internal-bin so a child process can find it on PATH,
 # fix the caller instead of broadening this list.

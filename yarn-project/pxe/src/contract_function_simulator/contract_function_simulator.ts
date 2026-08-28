@@ -1,4 +1,4 @@
-import { CircuitKind } from '@aztec/bb.js';
+import { CircuitKind } from '@aztec-foundation/bb.js';
 
 import {
   AVM_EMITNOTEHASH_BASE_L2_GAS,

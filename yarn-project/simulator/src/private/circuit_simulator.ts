@@ -1,5 +1,5 @@
-import type { ExecutionError, ForeignCallHandler } from '@aztec/noir-acvm_js';
-import { abiDecodeError } from '@aztec/noir-noirc_abi';
+import type { ExecutionError, ForeignCallHandler } from '@aztec-foundation/noir-acvm_js';
+import { abiDecodeError } from '@aztec-foundation/noir-noirc_abi';
 
 import { parseDebugSymbols } from '@aztec-labs/stdlib/abi';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';

@@ -1,4 +1,4 @@
-import type { ForeignCallHandler } from '@aztec/noir-acvm_js';
+import type { ForeignCallHandler } from '@aztec-foundation/noir-acvm_js';
 
 import type {
   ACIRCallback,

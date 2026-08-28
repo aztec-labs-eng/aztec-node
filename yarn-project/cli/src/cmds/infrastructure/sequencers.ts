@@ -1,4 +1,4 @@
-import { RollupAbi, TestERC20Abi } from '@aztec/l1-artifacts';
+import { RollupAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';

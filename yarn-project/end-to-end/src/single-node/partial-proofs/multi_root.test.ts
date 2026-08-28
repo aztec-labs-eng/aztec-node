@@ -1,4 +1,4 @@
-import { OutboxAbi } from '@aztec/l1-artifacts';
+import { OutboxAbi } from '@aztec-foundation/l1-artifacts';
 
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';

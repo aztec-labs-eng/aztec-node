@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import { L1RpcError, getPublicClient } from '@aztec-labs/ethereum/client';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';

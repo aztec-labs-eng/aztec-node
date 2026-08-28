@@ -1,4 +1,4 @@
-import { InboxAbi } from '@aztec/l1-artifacts';
+import { InboxAbi } from '@aztec-foundation/l1-artifacts';
 
 import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';

@@ -1,8 +1,8 @@
-import { FeeAssetHandlerAbi } from '@aztec/l1-artifacts/FeeAssetHandlerAbi';
-import { FeeJuicePortalAbi } from '@aztec/l1-artifacts/FeeJuicePortalAbi';
-import { OutboxAbi } from '@aztec/l1-artifacts/OutboxAbi';
-import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
-import { TokenPortalAbi } from '@aztec/l1-artifacts/TokenPortalAbi';
+import { FeeAssetHandlerAbi } from '@aztec-foundation/l1-artifacts/FeeAssetHandlerAbi';
+import { FeeJuicePortalAbi } from '@aztec-foundation/l1-artifacts/FeeJuicePortalAbi';
+import { OutboxAbi } from '@aztec-foundation/l1-artifacts/OutboxAbi';
+import { TestERC20Abi } from '@aztec-foundation/l1-artifacts/TestERC20Abi';
+import { TokenPortalAbi } from '@aztec-foundation/l1-artifacts/TokenPortalAbi';
 
 import {
   type L1TxConfig,

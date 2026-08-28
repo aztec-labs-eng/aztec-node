@@ -1,4 +1,4 @@
-import { SlasherAbi } from '@aztec/l1-artifacts/SlasherAbi';
+import { SlasherAbi } from '@aztec-foundation/l1-artifacts/SlasherAbi';
 
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';

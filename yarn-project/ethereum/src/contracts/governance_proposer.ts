@@ -1,4 +1,4 @@
-import { GovernanceProposerAbi } from '@aztec/l1-artifacts/GovernanceProposerAbi';
+import { GovernanceProposerAbi } from '@aztec-foundation/l1-artifacts/GovernanceProposerAbi';
 
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { memoize } from '@aztec-labs/foundation/decorators';

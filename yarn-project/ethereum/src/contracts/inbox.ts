@@ -1,4 +1,4 @@
-import { InboxAbi } from '@aztec/l1-artifacts/InboxAbi';
+import { InboxAbi } from '@aztec-foundation/l1-artifacts/InboxAbi';
 
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
 import { maxBigint } from '@aztec-labs/foundation/bigint';

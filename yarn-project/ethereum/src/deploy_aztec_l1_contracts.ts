@@ -130,13 +130,13 @@ export interface ValidatorJson {
 }
 
 /**
- * Gets the path to the l1-contracts foundry artifacts directory bundled inside @aztec/l1-artifacts.
+ * Gets the path to the l1-contracts foundry artifacts directory bundled inside @aztec-foundation/l1-artifacts.
  * Resolved through the package (its "." export -> dest/index.js) so it works whether the package is
  * linked via portal (monorepo) or installed under node_modules (published npm) — resolution follows
  * the symlink in the portal case. The bundled foundry subtree sits alongside dest/, at <pkg>/l1-contracts.
  */
 export function getL1ContractsPath(): string {
-  return resolve(dirname(require.resolve('@aztec/l1-artifacts')), '..', 'l1-contracts');
+  return resolve(dirname(require.resolve('@aztec-foundation/l1-artifacts')), '..', 'l1-contracts');
 }
 
 // Cached deployment directory

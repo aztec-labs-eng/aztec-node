@@ -1,8 +1,8 @@
-import { EscapeHatchAbi } from '@aztec/l1-artifacts/EscapeHatchAbi';
-import { EscapeHatchBytecode } from '@aztec/l1-artifacts/EscapeHatchBytecode';
-import { EscapeHatchStorage } from '@aztec/l1-artifacts/EscapeHatchStorage';
-import { NewGovernanceProposerPayloadAbi } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadAbi';
-import { NewGovernanceProposerPayloadBytecode } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadBytecode';
+import { EscapeHatchAbi } from '@aztec-foundation/l1-artifacts/EscapeHatchAbi';
+import { EscapeHatchBytecode } from '@aztec-foundation/l1-artifacts/EscapeHatchBytecode';
+import { EscapeHatchStorage } from '@aztec-foundation/l1-artifacts/EscapeHatchStorage';
+import { NewGovernanceProposerPayloadAbi } from '@aztec-foundation/l1-artifacts/NewGovernanceProposerPayloadAbi';
+import { NewGovernanceProposerPayloadBytecode } from '@aztec-foundation/l1-artifacts/NewGovernanceProposerPayloadBytecode';
 
 import { CheatCodes, EthCheatCodes } from '@aztec-labs/aztec/testing';
 import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';

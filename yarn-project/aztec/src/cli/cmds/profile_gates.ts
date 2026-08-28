@@ -1,4 +1,4 @@
-import { findBbBinary } from '@aztec/bb.js';
+import { findBbBinary } from '@aztec-foundation/bb.js';
 
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
 import type { LogFn } from '@aztec-labs/foundation/log';

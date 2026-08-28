@@ -1,5 +1,5 @@
-import { CircuitKind } from '@aztec/bb.js';
-import { type ForeignCallInput, type ForeignCallOutput, Noir } from '@aztec/noir-noir_js';
+import { CircuitKind } from '@aztec-foundation/bb.js';
+import { type ForeignCallInput, type ForeignCallOutput, Noir } from '@aztec-foundation/noir-noir_js';
 
 import {
   AVM_CIRCUIT_PUBLIC_INPUTS_LENGTH,

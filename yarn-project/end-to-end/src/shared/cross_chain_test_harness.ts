@@ -1,4 +1,4 @@
-import { TestERC20Abi, TokenPortalAbi, TokenPortalBytecode } from '@aztec/l1-artifacts';
+import { TestERC20Abi, TokenPortalAbi, TokenPortalBytecode } from '@aztec-foundation/l1-artifacts';
 
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';

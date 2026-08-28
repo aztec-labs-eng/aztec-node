@@ -1,6 +1,6 @@
-import type { WitnessMap } from '@aztec/noir-acvm_js';
-import { abiDecode, abiEncode } from '@aztec/noir-noirc_abi';
-import type { Abi, InputMap } from '@aztec/noir-types';
+import type { WitnessMap } from '@aztec-foundation/noir-acvm_js';
+import { abiDecode, abiEncode } from '@aztec-foundation/noir-noirc_abi';
+import type { Abi, InputMap } from '@aztec-foundation/noir-types';
 
 import { MEGA_KERNEL_VK_LENGTH_IN_FIELDS } from '@aztec-labs/constants';
 import { pushTestData } from '@aztec-labs/foundation/testing';

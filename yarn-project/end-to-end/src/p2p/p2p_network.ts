@@ -1,4 +1,4 @@
-import { RollupAbi, SlasherAbi, TestERC20Abi } from '@aztec/l1-artifacts';
+import { RollupAbi, SlasherAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';

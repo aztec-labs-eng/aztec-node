@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import { OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';

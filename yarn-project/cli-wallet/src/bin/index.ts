@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { BackendType, Barretenberg } from '@aztec/bb.js';
+import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
 import { computeSecretHash } from '@aztec-labs/aztec.js/crypto';
 import { Fr } from '@aztec-labs/aztec.js/fields';

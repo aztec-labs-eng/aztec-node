@@ -1,4 +1,4 @@
-import l1ContractsDefaultEnv from '@aztec/l1-artifacts/network-defaults.json' with { type: 'json' };
+import l1ContractsDefaultEnv from '@aztec-foundation/l1-artifacts/network-defaults.json' with { type: 'json' };
 
 import {
   type ConfigMappingsType,
@@ -94,7 +94,7 @@ export type L1ContractsConfig = {
 
 /**
  * Config mappings for L1ContractsConfig.
- * Default values come from l1-contracts/scripts/network-defaults.json (published via @aztec/l1-artifacts).
+ * Default values come from l1-contracts/scripts/network-defaults.json (published via @aztec-foundation/l1-artifacts).
  * Real deployments use forge scripts which require explicit env vars (vm.envUint).
  */
 export const l1ContractsConfigMappings: ConfigMappingsType<L1ContractsConfig> = {
@@ -271,7 +271,7 @@ export const l1ContractsConfigMappings: ConfigMappingsType<L1ContractsConfig> = 
 
 /**
  * Default L1 contracts configuration derived from l1ContractsConfigMappings.
- * Source of truth: l1-contracts/scripts/network-defaults.json (published via @aztec/l1-artifacts).
+ * Source of truth: l1-contracts/scripts/network-defaults.json (published via @aztec-foundation/l1-artifacts).
  */
 export const DefaultL1ContractsConfig = getDefaultConfig(l1ContractsConfigMappings);
 

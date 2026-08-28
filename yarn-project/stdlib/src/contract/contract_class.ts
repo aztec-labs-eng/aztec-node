@@ -1,4 +1,4 @@
-import { CircuitKind } from '@aztec/bb.js';
+import { CircuitKind } from '@aztec-foundation/bb.js';
 
 import { vkAsFields } from '@aztec-labs/foundation/crypto/keys';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';

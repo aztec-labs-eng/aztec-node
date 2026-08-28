@@ -1,5 +1,5 @@
-import { type ExecutionError, type ForeignCallHandler, executeCircuit } from '@aztec/noir-acvm_js';
-import type { WitnessMap } from '@aztec/noir-types';
+import { type ExecutionError, type ForeignCallHandler, executeCircuit } from '@aztec-foundation/noir-acvm_js';
+import type { WitnessMap } from '@aztec-foundation/noir-types';
 
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';

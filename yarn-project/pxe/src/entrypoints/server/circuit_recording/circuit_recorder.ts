@@ -1,4 +1,4 @@
-import type { ForeignCallHandler, ForeignCallInput, ForeignCallOutput } from '@aztec/noir-acvm_js';
+import type { ForeignCallHandler, ForeignCallInput, ForeignCallOutput } from '@aztec-foundation/noir-acvm_js';
 
 import { sha512 } from '@aztec-labs/foundation/crypto/sha512';
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';

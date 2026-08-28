@@ -1,4 +1,4 @@
-import { InboxAbi, RollupAbi } from '@aztec/l1-artifacts';
+import { InboxAbi, RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import type { ArchiverDataSource } from '@aztec-labs/archiver';
 import { MockL1ToL2MessageSource } from '@aztec-labs/archiver/test';

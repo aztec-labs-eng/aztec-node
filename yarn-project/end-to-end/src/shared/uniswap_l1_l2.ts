@@ -1,4 +1,4 @@
-import { InboxAbi, UniswapPortalAbi, UniswapPortalBytecode } from '@aztec/l1-artifacts';
+import { InboxAbi, UniswapPortalAbi, UniswapPortalBytecode } from '@aztec-foundation/l1-artifacts';
 
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { computeAuthWitMessageHash } from '@aztec-labs/aztec.js/authorization';

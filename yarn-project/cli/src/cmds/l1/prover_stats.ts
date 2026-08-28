@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { retrieveL2ProofVerifiedEvents } from '@aztec-labs/archiver';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';

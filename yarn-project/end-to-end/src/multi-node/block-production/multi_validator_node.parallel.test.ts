@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import type { Archiver } from '@aztec-labs/archiver';
 import type { AztecNodeService } from '@aztec-labs/aztec-node';

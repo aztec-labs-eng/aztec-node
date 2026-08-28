@@ -1,4 +1,4 @@
-import { AztecClientBackend, BackendType, Barretenberg } from '@aztec/bb.js';
+import { AztecClientBackend, BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
 import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';

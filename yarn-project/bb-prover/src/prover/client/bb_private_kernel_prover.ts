@@ -1,6 +1,6 @@
-import { AztecClientBackend, type BackendOptions, Barretenberg } from '@aztec/bb.js';
-import { serializeWitness } from '@aztec/noir-noirc_abi';
-import type { Abi, WitnessMap } from '@aztec/noir-types';
+import { AztecClientBackend, type BackendOptions, Barretenberg } from '@aztec-foundation/bb.js';
+import { serializeWitness } from '@aztec-foundation/noir-noirc_abi';
+import type { Abi, WitnessMap } from '@aztec-foundation/noir-types';
 
 import { type LogLevel, type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';

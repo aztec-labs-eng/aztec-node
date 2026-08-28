@@ -1,4 +1,4 @@
-import type { AvmStat } from '@aztec/bb.js';
+import type { AvmStat } from '@aztec-foundation/bb.js';
 
 import { createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';

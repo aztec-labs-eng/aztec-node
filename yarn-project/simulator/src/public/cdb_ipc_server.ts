@@ -2,7 +2,7 @@
  * UDS server for AVM CDB requests.
  *
  * Transport (socket, framing, per-connection response ordering) is handled by the shared
- * `UdsIpcServer` from `@aztec/ipc-runtime`; message dispatch comes from the generated CDB
+ * `UdsIpcServer` from `@aztec-foundation/ipc-runtime`; message dispatch comes from the generated CDB
  * server. This class only implements the generated handler interface and routes requests to
  * PublicContractsDB instances by fork ID.
  */
@@ -25,8 +25,8 @@ import {
   type CdbRevertCheckpoint,
   type CdbRevertCheckpointResponse,
   handleRequest,
-} from '@aztec/cdb';
-import { UdsIpcServer } from '@aztec/ipc-runtime';
+} from '@aztec-foundation/cdb';
+import { UdsIpcServer } from '@aztec-foundation/ipc-runtime';
 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
