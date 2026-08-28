@@ -1,13 +1,13 @@
-import { L1FeeJuicePortalManager } from '@aztec/aztec.js/ethereum';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { ProtocolContractAddress } from '@aztec/aztec.js/protocol';
-import { prettyPrintJSON } from '@aztec/cli/utils';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { getNonNullifiedL1ToL2MessageWitness } from '@aztec/stdlib/messaging';
+import { L1FeeJuicePortalManager } from '@aztec-labs/aztec.js/ethereum';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { ProtocolContractAddress } from '@aztec-labs/aztec.js/protocol';
+import { prettyPrintJSON } from '@aztec-labs/cli/utils';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { getNonNullifiedL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
 
 export async function bridgeL1FeeJuice(
   amount: bigint,

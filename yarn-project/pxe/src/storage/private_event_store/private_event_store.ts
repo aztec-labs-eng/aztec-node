@@ -1,12 +1,12 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { Semaphore } from '@aztec/foundation/queue';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec/kv-store';
-import type { EventSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { InTx, TxHash } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { Semaphore } from '@aztec-labs/foundation/queue';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec-labs/kv-store';
+import type { EventSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { InTx, TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { PackedPrivateEvent } from '../../pxe.js';
 import type { Rollbackable } from '../rollbackable.js';

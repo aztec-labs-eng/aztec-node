@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/aztec.js/fields';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { getGenesisValues } from '@aztec/world-state/testing';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 
 /**
  * This test suit makes sure that the code in the monorepo is still compatible with the latest version of mainnet

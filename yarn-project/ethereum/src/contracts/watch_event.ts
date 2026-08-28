@@ -1,6 +1,5 @@
-import type { Logger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/promise';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/promise';
 import type { Abi, ContractEventName, GetContractEventsReturnType, Hex } from 'viem';
 
 import type { ViemClient } from '../types.js';

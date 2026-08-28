@@ -4,7 +4,7 @@ This guide explains how to integrate your wallet with the Aztec Wallet SDK, enab
 
 ## Available Types
 
-All types and utilities needed for wallet integration are exported from `@aztec/wallet-sdk/types`:
+All types and utilities needed for wallet integration are exported from `@aztec-labs/wallet-sdk/types`:
 
 ```typescript
 import type {
@@ -15,13 +15,13 @@ import type {
   WalletInfo,
   WalletMessage,
   WalletResponse,
-} from '@aztec/wallet-sdk/types';
+} from '@aztec-labs/wallet-sdk/types';
 ```
 
-Cryptographic utilities for secure channel establishment are exported from `@aztec/wallet-sdk/crypto`:
+Cryptographic utilities for secure channel establishment are exported from `@aztec-labs/wallet-sdk/crypto`:
 
 ```typescript
-import type { EncryptedPayload, ExportedPublicKey } from '@aztec/wallet-sdk/crypto';
+import type { EncryptedPayload, ExportedPublicKey } from '@aztec-labs/wallet-sdk/crypto';
 import {
   decrypt,
   deriveSessionKeys,
@@ -30,7 +30,7 @@ import {
   generateKeyPair,
   hashToEmoji,
   importPublicKey,
-} from '@aztec/wallet-sdk/crypto';
+} from '@aztec-labs/wallet-sdk/crypto';
 ```
 
 **For extension wallets**, pre-built connection handlers are available:
@@ -39,7 +39,7 @@ import {
 import {
   BackgroundConnectionHandler,
   ContentScriptConnectionHandler,
-} from '@aztec/wallet-sdk/extension/handlers';
+} from '@aztec-labs/wallet-sdk/extension/handlers';
 ```
 
 ## Overview
@@ -100,8 +100,8 @@ import {
   type BackgroundConnectionConfig,
   type BackgroundConnectionCallbacks,
   type BackgroundTransport,
-} from '@aztec/wallet-sdk/extension/handlers';
-import { hashToEmoji } from '@aztec/wallet-sdk/crypto';
+} from '@aztec-labs/wallet-sdk/extension/handlers';
+import { hashToEmoji } from '@aztec-labs/wallet-sdk/crypto';
 
 // Configuration for your wallet
 const config: BackgroundConnectionConfig = {
@@ -182,7 +182,7 @@ browser.tabs.onRemoved.addListener((tabId) => {
 import {
   ContentScriptConnectionHandler,
   type ContentScriptTransport,
-} from '@aztec/wallet-sdk/extension/handlers';
+} from '@aztec-labs/wallet-sdk/extension/handlers';
 
 const transport: ContentScriptTransport = {
   sendToBackground: (message) => browser.runtime.sendMessage(message),
@@ -202,9 +202,9 @@ The `WalletManager` supports two patterns for consuming discovered wallets.
 ### Async Iterator Pattern
 
 ```typescript
-import { Fr } from '@aztec/foundation/fields';
-import { WalletManager } from '@aztec/wallet-sdk/manager';
-import { hashToEmoji } from '@aztec/wallet-sdk/crypto';
+import { Fr } from '@aztec-labs/foundation/fields';
+import { WalletManager } from '@aztec-labs/wallet-sdk/manager';
+import { hashToEmoji } from '@aztec-labs/wallet-sdk/crypto';
 
 const discovery = WalletManager.configure({
   extensions: { enabled: true },
@@ -243,9 +243,9 @@ discovery.cancel();
 ### Callback Pattern
 
 ```typescript
-import { Fr } from '@aztec/foundation/fields';
-import { WalletManager, type WalletProvider } from '@aztec/wallet-sdk/manager';
-import { hashToEmoji } from '@aztec/wallet-sdk/crypto';
+import { Fr } from '@aztec-labs/foundation/fields';
+import { WalletManager, type WalletProvider } from '@aztec-labs/wallet-sdk/manager';
+import { hashToEmoji } from '@aztec-labs/wallet-sdk/crypto';
 
 const discoveredProviders: WalletProvider[] = [];
 
@@ -325,7 +325,7 @@ function useWalletDiscovery(chainInfo: ChainInfo, appId: string) {
 When an embedded wallet connects to a cross-origin node that uses session cookies, opt in to browser credentials through the node client options:
 
 ```typescript
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 const wallet = await EmbeddedWallet.create('https://rpc.example.com', {
   nodeClientOptions: {
@@ -338,8 +338,8 @@ const wallet = await EmbeddedWallet.create('https://rpc.example.com', {
 Node.js does not manage cookies automatically. Applications that need affinity there can inject any asynchronous cookie jar, including a `tough-cookie` jar installed by the application:
 
 ```typescript
-import { Agent, makeUndiciFetch } from '@aztec/foundation/json-rpc/undici';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { Agent, makeUndiciFetch } from '@aztec-labs/foundation/json-rpc/undici';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { CookieJar } from 'tough-cookie';
 
 const wallet = await EmbeddedWallet.create('https://rpc.example.com', {
@@ -354,10 +354,10 @@ Cookie storage is optional.
 
 ## Storage backends
 
-Your wallet and the PXE it embeds persist state through a pluggable key-value store (`@aztec/kv-store`). In the browser there are two backends:
+Your wallet and the PXE it embeds persist state through a pluggable key-value store (`@aztec-labs/kv-store`). In the browser there are two backends:
 
-- **IndexedDB** (`@aztec/kv-store/deprecated/indexeddb`): the default in browser environments up to Aztec Alpha v4, now moved to a deprecated subpath. We plan to remove this backend, so new browser code should use the SQLite backend below.
-- **SQLite-OPFS** (`@aztec/kv-store/sqlite-opfs`): the default KV store backend from Aztec Alpha v5 on. It's backed by the durable Origin Private File System web standard, and it offers a number of advantages over IndexedDB: a sane transaction model (IDB transactions auto-close the moment the event loop yields, which constrains the store layer), support for encryption at rest, and better performance in the access patterns we exercise the most from both wallet and PXE.
+- **IndexedDB** (`@aztec-labs/kv-store/deprecated/indexeddb`): the default in browser environments up to Aztec Alpha v4, now moved to a deprecated subpath. We plan to remove this backend, so new browser code should use the SQLite backend below.
+- **SQLite-OPFS** (`@aztec-labs/kv-store/sqlite-opfs`): the default KV store backend from Aztec Alpha v5 on. It's backed by the durable Origin Private File System web standard, and it offers a number of advantages over IndexedDB: a sane transaction model (IDB transactions auto-close the moment the event loop yields, which constrains the store layer), support for encryption at rest, and better performance in the access patterns we exercise the most from both wallet and PXE.
 
 The backend is chosen by *which store you construct and hand to the wallet* there is no runtime flag or environment variable.
 
@@ -365,12 +365,12 @@ The backend is chosen by *which store you construct and hand to the wallet* ther
 
 ### Quick start: embedded wallet with an encrypted SQLite store
 
-If you build on `@aztec/wallets`' `EmbeddedWallet`, open its two stores (PXE state + the wallet DB) with `openEncryptedEmbeddedStores`, then pass them in:
+If you build on `@aztec-labs/wallets`' `EmbeddedWallet`, open its two stores (PXE state + the wallet DB) with `openEncryptedEmbeddedStores`, then pass them in:
 
 ```typescript
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
-import { openEncryptedEmbeddedStores } from '@aztec/wallets/embedded/store-encryption';
-import { createLogger } from '@aztec/foundation/log';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
+import { openEncryptedEmbeddedStores } from '@aztec-labs/wallets/embedded/store-encryption';
+import { createLogger } from '@aztec-labs/foundation/log';
 
 const log = createLogger('wallet:storage');
 
@@ -397,7 +397,7 @@ const wallet = await EmbeddedWallet.create(nodeUrl, {
 If the supplied key cannot decrypt an existing store, `openEncryptedEmbeddedStores` throws `EmbeddedWalletEncryptionError` with `storeName: 'pxe' | 'wallet'`, which you can then surface as a "wrong password" error in your UI:
 
 ```typescript
-import { EmbeddedWalletEncryptionError } from '@aztec/wallets/embedded/store-encryption';
+import { EmbeddedWalletEncryptionError } from '@aztec-labs/wallets/embedded/store-encryption';
 
 try {
   await openEncryptedEmbeddedStores(/* ... */);
@@ -432,9 +432,9 @@ If you do not need at-rest encryption (you rely on full-disk encryption, or the 
 The `createStore` convenience helper always uses the default OPFS pool directory and does not currently let you change it, so it only works for a single store per tab. The embedded wallet runs two stores (PXE + walletDB), so open them directly from `AztecSQLiteOPFSStore` with a distinct `poolDirectory` each:
 
 ```typescript
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
-import { AztecSQLiteOPFSStore } from '@aztec/kv-store/sqlite-opfs';
-import { createLogger } from '@aztec/foundation/log';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
+import { AztecSQLiteOPFSStore } from '@aztec-labs/kv-store/sqlite-opfs';
+import { createLogger } from '@aztec-labs/foundation/log';
 
 const log = createLogger('wallet:storage');
 
@@ -450,10 +450,10 @@ const wallet = await EmbeddedWallet.create(nodeUrl, {
 
 ### Building your own wallet (lower-level API)
 
-If you are not using `EmbeddedWallet`, construct stores directly from `@aztec/kv-store/sqlite-opfs` and pass them wherever a store is accepted (e.g. `PXECreationOptions.store`):
+If you are not using `EmbeddedWallet`, construct stores directly from `@aztec-labs/kv-store/sqlite-opfs` and pass them wherever a store is accepted (e.g. `PXECreationOptions.store`):
 
 ```typescript
-import { openEncryptedStore, createStore, SqliteEncryptionError } from '@aztec/kv-store/sqlite-opfs';
+import { openEncryptedStore, createStore, SqliteEncryptionError } from '@aztec-labs/kv-store/sqlite-opfs';
 
 // Encrypted, persistent:
 const store = await openEncryptedStore(new Uint8Array(myDerivedKey), 'my-store', '/my-pool');

@@ -1,4 +1,4 @@
-import type { TelemetryClient } from '@aztec/telemetry-client';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 
 import type { ProverBrokerConfig } from './config.js';
 import { ProvingBroker } from './proving_broker.js';

@@ -1,5 +1,3 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-
 import {
   GetObjectCommand,
   type GetObjectCommandOutput,
@@ -7,6 +5,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { createReadStream, createWriteStream } from 'fs';
 import { mkdir, mkdtemp, stat, unlink } from 'fs/promises';
 import { tmpdir } from 'os';

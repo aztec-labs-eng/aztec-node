@@ -1,9 +1,8 @@
-import type { BlobJson } from '@aztec/blob-lib/types';
-import { createLogger } from '@aztec/foundation/log';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-import { schemas, zodFor } from '@aztec/foundation/schemas';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+import type { BlobJson } from '@aztec-labs/blob-lib/types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { z } from 'zod';
 
 import { BlobArchiveClientInstrumentation } from './instrumentation.js';

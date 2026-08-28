@@ -1,7 +1,9 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec/blob-lib';
-import type { EpochCache } from '@aztec/epoch-cache';
-import type { L1ContractsConfig } from '@aztec/ethereum/config';
+import { EmpireBaseAbi, RollupAbi } from '@aztec/l1-artifacts';
+
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
 import {
   type GovernanceProposerContract,
   Multicall3,
@@ -9,7 +11,7 @@ import {
   type RollupContract,
   type SlashingProposerContract,
   type ViemCommitteeAttestations,
-} from '@aztec/ethereum/contracts';
+} from '@aztec-labs/ethereum/contracts';
 import {
   type L1TxState,
   L1TxTimeoutError,
@@ -17,26 +19,24 @@ import {
   type L1TxUtilsConfig,
   MAX_L1_TX_LIMIT,
   defaultL1TxUtilsConfig,
-} from '@aztec/ethereum/l1-tx-utils';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { TimeoutError } from '@aztec/foundation/error';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonParseWithSchema } from '@aztec/foundation/json-rpc';
-import { sleep } from '@aztec/foundation/sleep';
-import { bufferToHex } from '@aztec/foundation/string';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { EmpireBaseAbi, RollupAbi } from '@aztec/l1-artifacts';
+} from '@aztec-labs/ethereum/l1-tx-utils';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { TimeoutError } from '@aztec-labs/foundation/error';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonParseWithSchema } from '@aztec-labs/foundation/json-rpc';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import {
   CommitteeAttestationsAndSigners,
   L2Block,
   Signature,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { EmptyL1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-
+} from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';

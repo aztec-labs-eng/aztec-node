@@ -1,5 +1,4 @@
-import { createSafeJsonRpcClient, defaultFetch } from '@aztec/foundation/json-rpc/client';
-
+import { createSafeJsonRpcClient, defaultFetch } from '@aztec-labs/foundation/json-rpc/client';
 import { z } from 'zod';
 
 import { type ApiSchemaFor, schemas } from '../schemas/index.js';

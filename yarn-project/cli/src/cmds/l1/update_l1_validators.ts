@@ -1,15 +1,15 @@
-import { createEthereumChain, isAnvilTestChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client, getPublicClient } from '@aztec/ethereum/client';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { GSEContract, RollupContract } from '@aztec/ethereum/contracts';
-import { createL1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { EthCheatCodes } from '@aztec/ethereum/test';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
 import { RollupAbi, StakingAssetHandlerAbi, TestERC20Abi } from '@aztec/l1-artifacts';
-import { ZkPassportProofParams } from '@aztec/stdlib/zkpassport';
 
+import { createEthereumChain, isAnvilTestChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client, getPublicClient } from '@aztec-labs/ethereum/client';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { EthCheatCodes } from '@aztec-labs/ethereum/test';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
 import { encodeFunctionData, formatEther, getContract, maxUint256 } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 

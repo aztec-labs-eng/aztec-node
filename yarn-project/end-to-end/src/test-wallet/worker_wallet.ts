@@ -1,5 +1,5 @@
-import type { CallIntent, IntentInnerHash } from '@aztec/aztec.js/authorization';
-import type { InteractionWaitOptions, SendReturn } from '@aztec/aztec.js/contracts';
+import type { CallIntent, IntentInnerHash } from '@aztec-labs/aztec.js/authorization';
+import type { InteractionWaitOptions, SendReturn } from '@aztec-labs/aztec.js/contracts';
 import type {
   Aliased,
   AppCapabilities,
@@ -16,23 +16,22 @@ import type {
   TxSimulationResultWithAppOffset,
   Wallet,
   WalletCapabilities,
-} from '@aztec/aztec.js/wallet';
-import type { ChainInfo } from '@aztec/entrypoints/interfaces';
-import type { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { type ApiSchema, getSchemaReturnType } from '@aztec/foundation/schemas';
-import { sleep } from '@aztec/foundation/sleep';
-import { NodeConnector, TransportClient } from '@aztec/foundation/transport';
-import type { PXEConfig } from '@aztec/pxe/config';
-import type { ContractArtifact, EventMetadataDefinition, FunctionCall } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstancePreimage } from '@aztec/stdlib/contract';
-import type { ExecutionPayload, TxProfileResult, UtilityExecutionResult } from '@aztec/stdlib/tx';
-import { Tx } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/aztec.js/wallet';
+import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
+import type { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { type ApiSchema, getSchemaReturnType } from '@aztec-labs/foundation/schemas';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { NodeConnector, TransportClient } from '@aztec-labs/foundation/transport';
+import type { PXEConfig } from '@aztec-labs/pxe/config';
+import type { ContractArtifact, EventMetadataDefinition, FunctionCall } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstancePreimage } from '@aztec-labs/stdlib/contract';
+import type { ExecutionPayload, TxProfileResult, UtilityExecutionResult } from '@aztec-labs/stdlib/tx';
+import { Tx } from '@aztec-labs/stdlib/tx';
 import { Worker } from 'worker_threads';
 
 import { WorkerWalletSchema } from './worker_wallet_schema.js';

@@ -1,14 +1,13 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { EventSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import { computePrivateEventCommitment, siloNullifier } from '@aztec/stdlib/hash';
-import { makeBlockHeader } from '@aztec/stdlib/testing';
-import { TxEffect } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { EventSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import { computePrivateEventCommitment, siloNullifier } from '@aztec-labs/stdlib/hash';
+import { makeBlockHeader } from '@aztec-labs/stdlib/testing';
+import { TxEffect } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 
 import type { EventValidationRequest } from '../contract_function_simulator/noir-structs/event_validation_request.js';

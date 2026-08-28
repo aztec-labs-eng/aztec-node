@@ -1,20 +1,20 @@
-import { BlockNumber, type EpochNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { EpochProverFactory } from '@aztec/prover-client';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
+import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
   getEpochAtSlot,
   getProofSubmissionDeadlineTimestamp,
   getSlotRangeForEpoch,
-} from '@aztec/stdlib/epoch-helpers';
-import type { EpochProvingJobState } from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/epoch-helpers';
+import type { EpochProvingJobState } from '@aztec-labs/stdlib/interfaces/server';
 
 import type { CheckpointStore } from './checkpoint-store.js';
 import { CheckpointProver } from './job/checkpoint-prover.js';

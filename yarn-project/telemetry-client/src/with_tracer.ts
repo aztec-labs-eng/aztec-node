@@ -10,7 +10,7 @@ import type { TelemetryClient, Tracer } from './telemetry.js';
  * Example:
  *
  * ```
- * import {Attributes, type TelemetryClient, WithTracer, trackSpan } from '@aztec/telemetry-client';
+ * import {Attributes, type TelemetryClient, WithTracer, trackSpan } from '@aztec-labs/telemetry-client';
  *
  * class MyClass extends WithTracer {
  *   // Constructor is required to be passed the TelemetryClient implementation.

@@ -1,26 +1,26 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { type AztecNode, waitForTx } from '@aztec/aztec.js/node';
-import { EpochTestSettler } from '@aztec/aztec/testing';
-import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec/constants';
-import { OutboxContract, type ViemL2ToL1Msg } from '@aztec/ethereum/contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
 import { OutboxAbi } from '@aztec/l1-artifacts';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { computeL2ToL1MessageHash } from '@aztec/stdlib/hash';
+
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
+import { EpochTestSettler } from '@aztec-labs/aztec/testing';
+import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import { OutboxContract, type ViemL2ToL1Msg } from '@aztec-labs/ethereum/contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { computeL2ToL1MessageHash } from '@aztec-labs/stdlib/hash';
 import {
   type L2ToL1MembershipWitness,
   computeEpochOutHash,
   computeL2ToL1MembershipWitness,
   getL2ToL1MessageLeafId,
-} from '@aztec/stdlib/messaging';
-import { type TxReceipt, TxStatus } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/messaging';
+import { type TxReceipt, TxStatus } from '@aztec-labs/stdlib/tx';
 import { type Hex, decodeEventLog } from 'viem';
 
 import { waitForL2ToL1Witness } from '../../fixtures/wait_helpers.js';

@@ -1,5 +1,4 @@
-import { StorageProofTestContract } from '@aztec/noir-test-contracts.js/StorageProofTest';
-
+import { StorageProofTestContract } from '@aztec-labs/noir-test-contracts.js/StorageProofTest';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

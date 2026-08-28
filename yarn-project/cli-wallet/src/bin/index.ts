@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-import { computeSecretHash } from '@aztec/aztec.js/crypto';
-import { Fr } from '@aztec/aztec.js/fields';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
 import { BackendType, Barretenberg } from '@aztec/bb.js';
-import { LOCALHOST } from '@aztec/cli/cli-utils';
-import { type LogFn, createConsoleLogger, createLogger } from '@aztec/foundation/log';
-import { openStoreAt } from '@aztec/kv-store/lmdb-v2';
-import type { PXEConfig } from '@aztec/pxe/config';
-import { getPackageVersion } from '@aztec/stdlib/update-checker';
 
+import { computeSecretHash } from '@aztec-labs/aztec.js/crypto';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { LOCALHOST } from '@aztec-labs/cli/cli-utils';
+import { type LogFn, createConsoleLogger, createLogger } from '@aztec-labs/foundation/log';
+import { openStoreAt } from '@aztec-labs/kv-store/lmdb-v2';
+import type { PXEConfig } from '@aztec-labs/pxe/config';
+import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import { Argument, Command, Option } from 'commander';
 import { homedir } from 'os';
 import { join } from 'path';

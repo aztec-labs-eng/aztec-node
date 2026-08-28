@@ -1,14 +1,14 @@
-import { EpochCache } from '@aztec/epoch-cache';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemClient } from '@aztec/ethereum/types';
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import { AztecLMDBStoreV2 } from '@aztec/kv-store/lmdb-v2';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-import type { Offense, ProposerSlashAction } from '@aztec/stdlib/slashing';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemClient } from '@aztec-labs/ethereum/types';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { AztecLMDBStoreV2 } from '@aztec-labs/kv-store/lmdb-v2';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import type { Offense, ProposerSlashAction } from '@aztec-labs/stdlib/slashing';
 
 import { createSlasherImplementation } from './factory/create_implementation.js';
 import type { SlasherClientInterface } from './slasher_client_interface.js';

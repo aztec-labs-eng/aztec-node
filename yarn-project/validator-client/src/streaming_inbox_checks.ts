@@ -1,5 +1,5 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { InboxBucket, InboxBucketRef, L1ToL2MessageSource } from '@aztec/stdlib/messaging';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { InboxBucket, InboxBucketRef, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 
 /**
  * Reason a streaming-Inbox block proposal fails the per-block acceptance checks. Follows the

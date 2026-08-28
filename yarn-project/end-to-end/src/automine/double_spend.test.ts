@@ -1,10 +1,10 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TxExecutionResult } from '@aztec/aztec.js/tx';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 
 import { AutomineTestContext } from './automine_test_context.js';
 

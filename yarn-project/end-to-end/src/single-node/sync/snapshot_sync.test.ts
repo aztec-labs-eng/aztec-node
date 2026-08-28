@@ -1,16 +1,15 @@
-import { type AztecNodeConfig, createAztecNodeService } from '@aztec/aztec-node';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { MerkleTreeId } from '@aztec/aztec.js/trees';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { tryRmDir } from '@aztec/foundation/fs';
-import { logger } from '@aztec/foundation/log';
-import { withLoggerBindings } from '@aztec/foundation/log/server';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import { type AztecNodeConfig, createAztecNodeService } from '@aztec-labs/aztec-node';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { tryRmDir } from '@aztec-labs/foundation/fs';
+import { logger } from '@aztec-labs/foundation/log';
+import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

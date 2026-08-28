@@ -1,12 +1,12 @@
-import { L1RpcError, getPublicClient } from '@aztec/ethereum/client';
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
 
+import { L1RpcError, getPublicClient } from '@aztec-labs/ethereum/client';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 import { type Abi, RpcRequestError, encodeErrorResult } from 'viem';
 import { foundry } from 'viem/chains';

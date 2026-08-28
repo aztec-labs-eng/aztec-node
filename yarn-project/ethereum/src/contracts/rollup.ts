@@ -1,16 +1,16 @@
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { memoize } from '@aztec/foundation/decorators';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { ViemSignature } from '@aztec/foundation/eth-signature';
-import { createLogger } from '@aztec/foundation/log';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-import { getErrorCause } from '@aztec/foundation/types';
 import { EscapeHatchAbi } from '@aztec/l1-artifacts/EscapeHatchAbi';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
 import { RollupStorage } from '@aztec/l1-artifacts/RollupStorage';
 
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { memoize } from '@aztec-labs/foundation/decorators';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import chunk from 'lodash.chunk';
 import {
   type Account,

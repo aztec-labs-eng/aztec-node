@@ -1,6 +1,6 @@
-import { DomainSeparator } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ZodFor } from '@aztec/foundation/schemas';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
 
 import type { AztecAddress } from '../aztec-address/index.js';
 import { computeLogTag, computeSiloedPrivateLogFirstField } from '../hash/hash.js';

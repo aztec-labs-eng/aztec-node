@@ -8,7 +8,7 @@ It can also be used to update aztec project dependencies.
 To install the package, run:
 
 ```bash
-yarn add @aztec/builder
+yarn add @aztec-labs/builder
 ```
 
 ## Usage

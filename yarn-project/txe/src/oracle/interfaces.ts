@@ -1,13 +1,13 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { ChangeSetId, TaggingSecretStrategy } from '@aztec/pxe/server';
-import type { Option } from '@aztec/pxe/simulator';
-import type { EventSelector, FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { CompleteAddress } from '@aztec/stdlib/contract';
-import type { GasSettings } from '@aztec/stdlib/gas';
-import type { UInt64 } from '@aztec/stdlib/types';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { ChangeSetId, TaggingSecretStrategy } from '@aztec-labs/pxe/server';
+import type { Option } from '@aztec-labs/pxe/simulator';
+import type { EventSelector, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { TxEffectsData } from './noir-structs/tx_effects_data.js';
 

@@ -1,15 +1,15 @@
-import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { LruSet } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
 import { RollupAbi } from '@aztec/l1-artifacts';
-import { CommitteeAttestation } from '@aztec/stdlib/block';
-import { computeCheckpointPayloadDigest } from '@aztec/stdlib/checkpoint';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
 
+import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { LruSet } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
+import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   type AbiParameter,
   type Hex,

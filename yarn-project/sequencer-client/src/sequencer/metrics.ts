@@ -1,7 +1,7 @@
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import type { L1FeeAnalysisResult } from '@aztec/ethereum/l1-fee-analysis';
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1FeeAnalysisResult } from '@aztec-labs/ethereum/l1-fee-analysis';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
   Attributes,
   type Gauge,
@@ -12,8 +12,7 @@ import {
   type Tracer,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { type Hex, formatUnits } from 'viem';
 
 import type { SequencerState } from './utils.js';

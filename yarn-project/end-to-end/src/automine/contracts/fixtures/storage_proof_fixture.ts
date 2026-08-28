@@ -1,9 +1,8 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Capsule } from '@aztec/stdlib/tx';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Capsule } from '@aztec-labs/stdlib/tx';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';

@@ -1,15 +1,15 @@
-import { FUNCTION_TREE_HEIGHT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { assertLength } from '@aztec/foundation/serialize';
-import { MembershipWitness, type MerkleTree } from '@aztec/foundation/trees';
-import { type ContractArtifact, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
+import { FUNCTION_TREE_HEIGHT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { assertLength } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness, type MerkleTree } from '@aztec-labs/foundation/trees';
+import { type ContractArtifact, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
 import {
   type PrivateFunction,
   computePrivateFunctionLeaf,
   computePrivateFunctionsTree,
   getContractClassPrivateFunctionFromArtifact,
-} from '@aztec/stdlib/contract';
+} from '@aztec-labs/stdlib/contract';
 
 /**
  * Represents a Merkle tree of functions for a particular Contract Class.

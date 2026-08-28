@@ -1,6 +1,6 @@
 // docs:start:script-setup
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
 // @ts-ignore — generated artifact, may not exist until compiled
 import { PodRacingContract } from "../src/artifacts/PodRacing.js";
 

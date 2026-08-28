@@ -7,15 +7,14 @@ import {
   type L1ContractAddresses,
   L1ContractsNames,
   randomL1ContractAddresses,
-} from '@aztec/ethereum/l1-contract-addresses';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-// import { createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import { emptyChainConfig } from '@aztec/stdlib/config';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-
+} from '@aztec-labs/ethereum/l1-contract-addresses';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+// import { createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { emptyChainConfig } from '@aztec-labs/stdlib/config';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

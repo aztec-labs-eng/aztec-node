@@ -2,11 +2,10 @@
 /**
  * This script takes a failed proof from the FailedProofStore and re-executes it locally
  */
-import { BBNativeRollupProver } from '@aztec/bb-prover';
-import { createLogger } from '@aztec/foundation/log';
-import { GoogleCloudStorageProofStore } from '@aztec/prover-client/broker';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-
+import { BBNativeRollupProver } from '@aztec-labs/bb-prover';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { GoogleCloudStorageProofStore } from '@aztec-labs/prover-client/broker';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 

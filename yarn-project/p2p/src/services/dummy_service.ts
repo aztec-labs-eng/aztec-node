@@ -1,8 +1,7 @@
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { P2PConnectivity, PeerInfo } from '@aztec/stdlib/interfaces/server';
-import type { Gossipable, PeerErrorSeverity, TopicType } from '@aztec/stdlib/p2p';
-import { Tx, TxHash } from '@aztec/stdlib/tx';
-
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { P2PConnectivity, PeerInfo } from '@aztec-labs/stdlib/interfaces/server';
+import type { Gossipable, PeerErrorSeverity, TopicType } from '@aztec-labs/stdlib/p2p';
+import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 import type { ENR } from '@nethermindeth/enr';
 import EventEmitter from 'events';

@@ -1,5 +1,5 @@
-import { AuthWitness } from '@aztec/aztec.js/authorization';
-import { type SendInteractionOptions, ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
+import { AuthWitness } from '@aztec-labs/aztec.js/authorization';
+import { type SendInteractionOptions, ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';

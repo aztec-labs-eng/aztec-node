@@ -1,10 +1,9 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { EthPrivateKey } from '@aztec/node-keystore';
-import type { SharedNodeConfig } from '@aztec/node-lib/config';
-import type { SequencerClientConfig, SequencerTxSenderConfig } from '@aztec/sequencer-client/config';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ValidatorClientConfig } from '@aztec/validator-client/config';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { EthPrivateKey } from '@aztec-labs/node-keystore';
+import type { SharedNodeConfig } from '@aztec-labs/node-lib/config';
+import type { SequencerClientConfig, SequencerTxSenderConfig } from '@aztec-labs/sequencer-client/config';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ValidatorClientConfig } from '@aztec-labs/validator-client/config';
 import type { Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
 

@@ -1,4 +1,4 @@
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 export const WITGEN_DELAY_MS: Record<ProvingRequestType, number> = {
   [ProvingRequestType.PUBLIC_CHONK_VERIFIER]: 60,

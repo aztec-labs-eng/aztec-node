@@ -1,10 +1,9 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { openTmpStore } from '@aztec/kv-store/lmdb';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import { type Offense, OffenseType } from '@aztec/stdlib/slashing';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import { type Offense, OffenseType } from '@aztec-labs/stdlib/slashing';
 import { jest } from '@jest/globals';
 import { EventEmitter } from 'events';
 

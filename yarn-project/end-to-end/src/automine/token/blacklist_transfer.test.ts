@@ -1,7 +1,7 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { computeAuthWitMessageHash } from '@aztec/aztec.js/authorization';
-import type { ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { computeAuthWitMessageHash } from '@aztec-labs/aztec.js/authorization';
+import type { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
 
 import { simulateThroughAuthwitProxy } from '../../fixtures/authwit_proxy.js';
 import { U128_UNDERFLOW_ERROR } from '../../fixtures/index.js';

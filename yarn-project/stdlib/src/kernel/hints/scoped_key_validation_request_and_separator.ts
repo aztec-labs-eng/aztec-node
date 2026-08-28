@@ -1,6 +1,6 @@
-import { SCOPED_KEY_VALIDATION_REQUEST_AND_GENERATOR_LENGTH } from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, FieldReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { SCOPED_KEY_VALIDATION_REQUEST_AND_GENERATOR_LENGTH } from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { AztecAddress } from '../../aztec-address/index.js';
 import { KeyValidationRequestAndSeparator } from './key_validation_request_and_separator.js';

@@ -1,7 +1,8 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
 import type { RawAssertionPayload } from '@aztec/noir-acvm_js';
 import { abiDecodeError } from '@aztec/noir-noirc_abi';
+
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import type {
   BrilligFunctionId,
   DebugFileMap,
@@ -9,13 +10,13 @@ import type {
   FunctionAbi,
   LocationNodeDebugInfo,
   OpcodeLocation,
-} from '@aztec/stdlib/abi';
+} from '@aztec-labs/stdlib/abi';
 import {
   type FailingFunction,
   type NoirCallStack,
   SimulationError,
   type SourceCodeLocation,
-} from '@aztec/stdlib/errors';
+} from '@aztec-labs/stdlib/errors';
 
 /**
  * An error that occurred during the execution of a function.

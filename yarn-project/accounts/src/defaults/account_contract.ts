@@ -1,8 +1,13 @@
-import { type Account, type AccountContract, type AuthWitnessProvider, BaseAccount } from '@aztec/aztec.js/account';
-import { DefaultAccountEntrypoint } from '@aztec/entrypoints/account';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
+import {
+  type Account,
+  type AccountContract,
+  type AuthWitnessProvider,
+  BaseAccount,
+} from '@aztec-labs/aztec.js/account';
+import { DefaultAccountEntrypoint } from '@aztec-labs/entrypoints/account';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 
 /**
  * Base class for implementing an account contract. Requires that the account uses the

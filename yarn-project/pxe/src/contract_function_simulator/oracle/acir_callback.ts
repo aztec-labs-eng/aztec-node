@@ -1,4 +1,4 @@
-import type { ACIRCallback, ACVMField } from '@aztec/simulator/client';
+import type { ACIRCallback, ACVMField } from '@aztec-labs/simulator/client';
 
 import { ORACLE_VERSION_MAJOR, ORACLE_VERSION_MINOR } from '../../oracle_version.js';
 import type { IMiscOracle, IPrivateExecutionOracle, IUtilityExecutionOracle } from './interfaces.js';

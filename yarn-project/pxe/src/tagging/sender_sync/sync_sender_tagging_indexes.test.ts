@@ -1,13 +1,12 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { RevertCode } from '@aztec/stdlib/avm';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { AppTaggingSecretKind, type LogResult, PrivateLog } from '@aztec/stdlib/logs';
-import { randomAppTaggingSecret, randomPrivateLogResult } from '@aztec/stdlib/testing';
-import { type MinedTxStatus, TxEffect, TxExecutionResult, TxHash, TxStatus } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { RevertCode } from '@aztec-labs/stdlib/avm';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { AppTaggingSecretKind, type LogResult, PrivateLog } from '@aztec-labs/stdlib/logs';
+import { randomAppTaggingSecret, randomPrivateLogResult } from '@aztec-labs/stdlib/testing';
+import { type MinedTxStatus, TxEffect, TxExecutionResult, TxHash, TxStatus } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';

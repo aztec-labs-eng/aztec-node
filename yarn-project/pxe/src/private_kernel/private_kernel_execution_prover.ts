@@ -1,16 +1,17 @@
 import { CircuitKind } from '@aztec/bb.js';
-import { MAX_APPS_PER_KERNEL } from '@aztec/constants';
-import { uniqueBy } from '@aztec/foundation/collection';
-import { vkAsFields } from '@aztec/foundation/crypto/keys';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { pushTestData } from '@aztec/foundation/testing';
-import { Timer } from '@aztec/foundation/timer';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { ProtocolContractsList } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { PrivateKernelProver } from '@aztec/stdlib/interfaces/client';
+
+import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
+import { uniqueBy } from '@aztec-labs/foundation/collection';
+import { vkAsFields } from '@aztec-labs/foundation/crypto/keys';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { pushTestData } from '@aztec-labs/foundation/testing';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { ProtocolContractsList } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { PrivateKernelProver } from '@aztec-labs/stdlib/interfaces/client';
 import {
   HidingKernelToPublicPrivateInputs,
   HidingKernelToRollupPrivateInputs,
@@ -35,8 +36,8 @@ import {
   type PrivateKernelTailCircuitPublicInputs,
   PrivateVerificationKeyHints,
   type UpdatedClassIdHints,
-} from '@aztec/stdlib/kernel';
-import { ChonkProof, ChonkProofWithPublicInputs } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/kernel';
+import { ChonkProof, ChonkProofWithPublicInputs } from '@aztec-labs/stdlib/proofs';
 import {
   type PrivateCallExecutionResult,
   type PrivateExecutionResult,
@@ -44,8 +45,8 @@ import {
   collectNested,
   collectNoteHashNullifierCounterMap,
   getFinalMinRevertibleSideEffectCounter,
-} from '@aztec/stdlib/tx';
-import { VerificationKeyAsFields, VerificationKeyData, VkData } from '@aztec/stdlib/vks';
+} from '@aztec-labs/stdlib/tx';
+import { VerificationKeyAsFields, VerificationKeyData, VkData } from '@aztec-labs/stdlib/vks';
 
 import { BatchPlanner } from './batch_planner.js';
 import { computeTxExpirationTimestamp } from './hints/compute_tx_expiration_timestamp.js';

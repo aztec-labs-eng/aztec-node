@@ -1,5 +1,5 @@
-import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { PublicKey } from '@aztec/stdlib/keys';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { PublicKey } from '@aztec-labs/stdlib/keys';
 
 /**
  * The four master privacy secret keys the key store holds for an account: the nullifier-hiding, incoming-viewing,

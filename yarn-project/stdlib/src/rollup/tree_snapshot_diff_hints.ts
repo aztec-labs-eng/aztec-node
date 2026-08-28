@@ -4,12 +4,12 @@ import {
   NULLIFIER_SUBTREE_ROOT_SIBLING_PATH_LENGTH,
   NULLIFIER_TREE_HEIGHT,
   PUBLIC_DATA_TREE_HEIGHT,
-} from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, type Tuple, serializeToBuffer } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import type { FieldsOf } from '@aztec/foundation/types';
+} from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, type Tuple, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { NullifierLeafPreimage } from '../trees/index.js';
 

@@ -2,7 +2,7 @@ import { useContext, useState } from 'react';
 import { AddSendersDialog } from './AddSenderDialog';
 import ContactsIcon from '@mui/icons-material/Contacts';
 import { AztecContext } from '../../aztecContext';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { navbarButtonStyle } from '../../styles/common';
 import { Typography } from '@mui/material';
 

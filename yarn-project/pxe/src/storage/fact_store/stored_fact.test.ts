@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { FactCollectionKey } from './fact_store_keys.js';
 import { StoredFact, factKeyStrOf } from './stored_fact.js';

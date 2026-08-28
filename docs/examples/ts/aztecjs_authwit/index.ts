@@ -1,9 +1,9 @@
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import { Fr } from "@aztec/aztec.js/fields";
-import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { SetPublicAuthwitContractInteraction } from "@aztec-labs/aztec.js/authorization";
 
 // Setup: connect to network and deploy a token contract
 const node = createAztecNodeClient(
@@ -96,7 +96,7 @@ await publicAction.send({ from: bobAddress });
 // docs:end:public_authwit
 
 // docs:start:arbitrary_authwit
-import { computeInnerAuthWitHash } from "@aztec/aztec.js/authorization";
+import { computeInnerAuthWitHash } from "@aztec-labs/aztec.js/authorization";
 
 // Create hash of arbitrary data
 const innerHash = await computeInnerAuthWitHash([

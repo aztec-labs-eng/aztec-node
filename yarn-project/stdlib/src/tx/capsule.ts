@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { hexSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { hexSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { Vector } from '../types/shared.js';

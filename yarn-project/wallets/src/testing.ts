@@ -1,8 +1,8 @@
-import type { InitialAccountData } from '@aztec/accounts/testing';
-import { getInitialTestAccountsData } from '@aztec/accounts/testing/lazy';
-import type { AccountManager } from '@aztec/aztec.js/wallet';
-import type { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import type { InitialAccountData } from '@aztec-labs/accounts/testing';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing/lazy';
+import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
+import type { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 interface WalletWithSchnorrAccounts {
   createSchnorrInitializerlessAccount(secret: Fr, salt: Fr, signingKey: Fq, alias?: string): Promise<AccountManager>;

@@ -1,6 +1,5 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { createWriteStream } from 'fs';
 import { mkdir } from 'fs/promises';

@@ -1,4 +1,4 @@
-import { type AppTaggingSecret, type PrivateLogsQuery, SiloedTag, type TagQuery } from '@aztec/stdlib/logs';
+import { type AppTaggingSecret, type PrivateLogsQuery, SiloedTag, type TagQuery } from '@aztec-labs/stdlib/logs';
 
 /** Computes the siloed tag */
 export function computeSiloedTagForIndex(secret: AppTaggingSecret, index: number): Promise<SiloedTag> {

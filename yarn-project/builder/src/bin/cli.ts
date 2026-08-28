@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { createConsoleLogger } from '@aztec/foundation/log';
-
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
 import { Command } from 'commander';
 
 import { injectCommands as injectBuilderCommands } from '../index.js';

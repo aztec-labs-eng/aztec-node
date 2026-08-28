@@ -1,6 +1,6 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { TxMetaData } from '../tx_metadata.js';
 import {

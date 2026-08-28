@@ -1,15 +1,15 @@
-import type { WaitOpts } from '@aztec/aztec.js/contracts';
-import type { Fr } from '@aztec/aztec.js/fields';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/aztec.js/protocol';
-import type { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { Sequencer, SequencerEvents, SequencerState } from '@aztec/sequencer-client';
-import type { L2BlockTag } from '@aztec/stdlib/block';
-import type { AztecNode, CheckpointTag } from '@aztec/stdlib/interfaces/client';
-import type { L2ToL1MembershipWitness } from '@aztec/stdlib/messaging';
-import type { TxHash, TxReceipt, TxStatus } from '@aztec/stdlib/tx';
+import type { WaitOpts } from '@aztec-labs/aztec.js/contracts';
+import type { Fr } from '@aztec-labs/aztec.js/fields';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/aztec.js/protocol';
+import type { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { Sequencer, SequencerEvents, SequencerState } from '@aztec-labs/sequencer-client';
+import type { L2BlockTag } from '@aztec-labs/stdlib/block';
+import type { AztecNode, CheckpointTag } from '@aztec-labs/stdlib/interfaces/client';
+import type { L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
+import type { TxHash, TxReceipt, TxStatus } from '@aztec-labs/stdlib/tx';
 
 import { testSpan } from './timing.js';
 

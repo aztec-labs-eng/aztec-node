@@ -1,6 +1,5 @@
-import { times } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { times } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jest } from '@jest/globals';
 import { type Hex, encodeFunctionData } from 'viem';
 

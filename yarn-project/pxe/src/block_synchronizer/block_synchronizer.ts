@@ -1,10 +1,15 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { L2TipsKVStore } from '@aztec/kv-store/stores';
-import { BlockHash, L2BlockStream, type L2BlockStreamEvent, type L2BlockStreamEventHandler } from '@aztec/stdlib/block';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
+import {
+  BlockHash,
+  L2BlockStream,
+  type L2BlockStreamEvent,
+  type L2BlockStreamEventHandler,
+} from '@aztec-labs/stdlib/block';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { BlockSynchronizerConfig } from '../config/index.js';
 import type { ContractSyncService } from '../contract/contract_sync_service.js';

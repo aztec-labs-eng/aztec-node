@@ -1,4 +1,4 @@
-import { PrivateLog } from '@aztec/stdlib/logs';
+import { PrivateLog } from '@aztec-labs/stdlib/logs';
 
 import { getSampleContractInstancePublishedEventPayload } from '../tests/fixtures.js';
 import { ContractInstancePublishedEvent } from './contract_instance_published_event.js';

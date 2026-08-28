@@ -1,11 +1,11 @@
-import { getKeys, merge, pick, times } from '@aztec/foundation/collection';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-import { DateProvider } from '@aztec/foundation/timer';
-import { getErrorCause } from '@aztec/foundation/types';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
 
+import { getKeys, merge, pick, times } from '@aztec-labs/foundation/collection';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import pickBy from 'lodash.pickby';
 import {
   type Abi,

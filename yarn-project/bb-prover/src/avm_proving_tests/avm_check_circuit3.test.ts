@@ -1,12 +1,16 @@
-import { MAX_NULLIFIERS_PER_TX, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT, MAX_PROCESSABLE_L2_GAS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AvmTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmTest';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { Gas } from '@aztec/stdlib/gas';
-import { L2ToL1Message, ScopedL2ToL1Message } from '@aztec/stdlib/messaging';
-import { NativeWorldStateService } from '@aztec/world-state';
+import {
+  MAX_NULLIFIERS_PER_TX,
+  MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT,
+  MAX_PROCESSABLE_L2_GAS,
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { Gas } from '@aztec-labs/stdlib/gas';
+import { L2ToL1Message, ScopedL2ToL1Message } from '@aztec-labs/stdlib/messaging';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 
 import { AvmProvingTester } from './avm_proving_tester.js';
 

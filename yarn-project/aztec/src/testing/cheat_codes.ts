@@ -1,6 +1,6 @@
-import { EthCheatCodes, RollupCheatCodes } from '@aztec/ethereum/test';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { AztecNode, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
+import { EthCheatCodes, RollupCheatCodes } from '@aztec-labs/ethereum/test';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 
 /**
  * Wrapper for Aztec Debug API.

@@ -12,8 +12,8 @@ The Version Manager helps manage database migrations and version compatibility a
 ## Usage
 
 ```typescript
-import { version } from '@aztec/foundation';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { version } from '@aztec-labs/foundation';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 // Define your current database version
 const DB_VERSION = 3;

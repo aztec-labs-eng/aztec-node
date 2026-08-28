@@ -1,10 +1,10 @@
-import { runInDirectory } from '@aztec/foundation/fs';
-import { type Logger, type LoggerBindings, resolveLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
 import type { ForeignCallHandler, WitnessMap } from '@aztec/noir-acvm_js';
-import type { FunctionArtifactWithContractName } from '@aztec/stdlib/abi';
-import type { NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
 
+import { runInDirectory } from '@aztec-labs/foundation/fs';
+import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 import * as proc from 'child_process';
 import { promises as fs } from 'fs';
 

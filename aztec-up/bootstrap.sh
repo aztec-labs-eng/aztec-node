@@ -46,9 +46,15 @@ publish:
   allow_offline: true
 
 packages:
-  # The fake-published workspace packages resolve from storage; the rest of @aztec (the
-  # foundation pins from yarn-project's resolutions) falls through to npmjs and caches
-  # into storage for the offline test image.
+  # The fake-published workspace packages are @aztec-labs and resolve from storage; @aztec (the
+  # foundation pins from yarn-project's resolutions, and the viem fork) falls through to npmjs
+  # and caches into storage for the offline test image.
+  "@aztec-labs/*":
+    access: \$all
+    publish: \$all
+    unpublish: \$all
+    proxy: npmjs
+
   "@aztec/*":
     access: \$all
     publish: \$all
@@ -120,7 +126,7 @@ EOF
 
     # Deploy all npm packages to local registry.
     version=0.0.1
-    # Scoped fake-publish: workspace-local @aztec deps are co-published at $version, while
+    # Scoped fake-publish: workspace-local @aztec-labs deps are co-published at $version, while
     # foundation deps (bb.js, wsdb, noir packages, ...) keep the versions pinned in
     # yarn-project's root resolutions and resolve through the npmjs uplink.
     export NPM_RELEASE_RESOLUTIONS="$(jq -c '.resolutions // {}' $root/yarn-project/package.json)"
@@ -140,7 +146,7 @@ EOF
     else
       echo "Priming verdaccio cache with all dependencies..."
       t=$SECONDS
-      retry "npm i -g --no-audit --no-fund --prefix /tmp/npm-prime @aztec/aztec@$version @aztec/cli-wallet@$version"
+      retry "npm i -g --no-audit --no-fund --prefix /tmp/npm-prime @aztec-labs/aztec@$version @aztec-labs/cli-wallet@$version"
       rm -rf /tmp/npm-prime
       echo "Prime took $((SECONDS - t))s."
     fi

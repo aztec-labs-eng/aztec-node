@@ -108,14 +108,14 @@ These examples require additional infrastructure or custom contracts with verifi
 3. Add `config.yaml` specifying dependencies:
 
 ```yaml
-# For examples using pre-built contracts from @aztec/noir-contracts.js
+# For examples using pre-built contracts from @aztec-labs/noir-contracts.js
 contracts: []
 
 dependencies:
-  - "@aztec/aztec.js"
-  - "@aztec/accounts"
-  - "@aztec/wallets"
-  - "@aztec/noir-contracts.js"
+  - "@aztec-labs/aztec.js"
+  - "@aztec-labs/accounts"
+  - "@aztec-labs/wallets"
+  - "@aztec-labs/noir-contracts.js"
 ```
 
 4. Create empty `yarn.lock` file

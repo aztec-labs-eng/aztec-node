@@ -1,16 +1,16 @@
 // docs:start:setup
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { AztecAddress, EthAddress } from "@aztec/aztec.js/addresses";
-import { Fr } from "@aztec/aztec.js/fields";
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
-import { deployL1Contract } from "@aztec/ethereum/deploy-l1-contract";
-import { sha256ToField } from "@aztec/foundation/crypto/sha256";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { AztecAddress, EthAddress } from "@aztec-labs/aztec.js/addresses";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client";
+import { deployL1Contract } from "@aztec-labs/ethereum/deploy-l1-contract";
+import { sha256ToField } from "@aztec-labs/foundation/crypto/sha256";
 import {
   computeL2ToL1MessageHash,
   computeSecretHash,
-} from "@aztec/stdlib/hash";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+} from "@aztec-labs/stdlib/hash";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 import { decodeEventLog, pad } from "@aztec/viem";
 import { foundry } from "@aztec/viem/chains";
 import NFTPortal from "../../../target/solidity/nft_bridge/NFTPortal.sol/NFTPortal.json" with { type: "json" };

@@ -96,7 +96,7 @@ export default {
 ### Profile transactions
 
 ```javascript
-import { serializePrivateExecutionSteps } from "@aztec/stdlib";
+import { serializePrivateExecutionSteps } from "@aztec-labs/stdlib";
 
 // Profile the transaction
 const profileTx = await contract.methods

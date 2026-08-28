@@ -1,4 +1,4 @@
-import type { ChainInfo } from '@aztec/aztec.js/account';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
 
 import {
   type EncryptedPayload,

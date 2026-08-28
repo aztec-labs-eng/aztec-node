@@ -1,7 +1,7 @@
-import { KeyStore } from '@aztec/key-store';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { L2TipsKVStore } from '@aztec/kv-store/stores';
-import type { BlockHash } from '@aztec/stdlib/block';
+import { KeyStore } from '@aztec-labs/key-store';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
+import type { BlockHash } from '@aztec-labs/stdlib/block';
 
 import { AddressStore } from './address_store/address_store.js';
 import { AnchorBlockStore } from './anchor_block_store/anchor_block_store.js';

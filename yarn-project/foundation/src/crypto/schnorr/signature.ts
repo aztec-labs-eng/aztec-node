@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { mapTuple } from '@aztec/foundation/serialize';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { mapTuple } from '@aztec-labs/foundation/serialize';
 
 import type { Signature } from '../signature/index.js';
 

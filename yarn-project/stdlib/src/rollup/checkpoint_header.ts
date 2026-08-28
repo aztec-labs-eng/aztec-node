@@ -1,13 +1,12 @@
-import type { ViemHeader } from '@aztec/ethereum/contracts';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { ZodFor } from '@aztec/foundation/schemas';
-import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import type { ViemHeader } from '@aztec-labs/ethereum/contracts';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { inspect } from 'util';
 import { z } from 'zod';
 

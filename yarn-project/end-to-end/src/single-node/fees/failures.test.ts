@@ -1,19 +1,18 @@
-import { FunctionSelector } from '@aztec/aztec.js/abi';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { SetPublicAuthwitContractInteraction } from '@aztec/aztec.js/authorization';
-import { waitForProven } from '@aztec/aztec.js/contracts';
-import { PrivateFeePaymentMethod, PublicFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TxExecutionResult } from '@aztec/aztec.js/tx';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { FPCContract } from '@aztec/noir-contracts.js/FPC';
-import type { TokenContract as BananaCoin } from '@aztec/noir-contracts.js/Token';
-import { FunctionCall, FunctionType } from '@aztec/stdlib/abi';
-import { Gas, GasSettings } from '@aztec/stdlib/gas';
-import { ExecutionPayload } from '@aztec/stdlib/tx';
-
+import { FunctionSelector } from '@aztec-labs/aztec.js/abi';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { SetPublicAuthwitContractInteraction } from '@aztec-labs/aztec.js/authorization';
+import { waitForProven } from '@aztec-labs/aztec.js/contracts';
+import { PrivateFeePaymentMethod, PublicFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
+import type { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
+import { FunctionCall, FunctionType } from '@aztec-labs/stdlib/abi';
+import { Gas, GasSettings } from '@aztec-labs/stdlib/gas';
+import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { PIPELINING_SETUP_OPTS, U128_UNDERFLOW_ERROR } from '../../fixtures/fixtures.js';

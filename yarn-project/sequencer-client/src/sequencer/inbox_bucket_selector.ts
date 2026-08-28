@@ -1,5 +1,5 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type InboxBucket, type L1ToL2MessageSource, isInboxConsumptionSufficient } from '@aztec/stdlib/messaging';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type InboxBucket, type L1ToL2MessageSource, isInboxConsumptionSufficient } from '@aztec-labs/stdlib/messaging';
 
 /** The subset of the archiver's Inbox-bucket queries the selector needs. */
 export type InboxBucketSource = Pick<

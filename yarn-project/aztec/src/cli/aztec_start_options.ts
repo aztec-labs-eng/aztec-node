@@ -1,27 +1,27 @@
-import { type ArchiverConfig, archiverConfigMappings } from '@aztec/archiver/config';
-import { blobClientConfigMapping } from '@aztec/blob-client/client/config';
-import { botConfigMappings } from '@aztec/bot/config';
-import { l1ContractsConfigMappings } from '@aztec/ethereum/config';
-import { l1ContractAddressesMapping } from '@aztec/ethereum/l1-contract-addresses';
-import { l1ReaderConfigMappings } from '@aztec/ethereum/l1-reader';
-import { getKeys } from '@aztec/foundation/collection';
+import { type ArchiverConfig, archiverConfigMappings } from '@aztec-labs/archiver/config';
+import { blobClientConfigMapping } from '@aztec-labs/blob-client/client/config';
+import { botConfigMappings } from '@aztec-labs/bot/config';
+import { l1ContractsConfigMappings } from '@aztec-labs/ethereum/config';
+import { l1ContractAddressesMapping } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { l1ReaderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
+import { getKeys } from '@aztec-labs/foundation/collection';
 import {
   type ConfigMapping,
   type EnvVar,
   booleanConfigHelper,
   isBooleanConfigValue,
   omitConfigMappings,
-} from '@aztec/foundation/config';
-import { sharedNodeConfigMappings } from '@aztec/node-lib/config';
-import { bootnodeConfigMappings, p2pConfigMappings } from '@aztec/p2p/config';
-import { proverAgentConfigMappings, proverBrokerConfigMappings } from '@aztec/prover-client/broker/config';
-import { proverNodeConfigMappings } from '@aztec/prover-node/config';
-import { allPxeConfigMappings } from '@aztec/pxe/config';
-import { sequencerClientConfigMappings } from '@aztec/sequencer-client/config';
-import { chainConfigMappings, nodeRpcConfigMappings } from '@aztec/stdlib/config';
-import { dataConfigMappings } from '@aztec/stdlib/kv-store';
-import { telemetryClientConfigMappings } from '@aztec/telemetry-client/config';
-import { worldStateConfigMappings } from '@aztec/world-state/config';
+} from '@aztec-labs/foundation/config';
+import { sharedNodeConfigMappings } from '@aztec-labs/node-lib/config';
+import { bootnodeConfigMappings, p2pConfigMappings } from '@aztec-labs/p2p/config';
+import { proverAgentConfigMappings, proverBrokerConfigMappings } from '@aztec-labs/prover-client/broker/config';
+import { proverNodeConfigMappings } from '@aztec-labs/prover-node/config';
+import { allPxeConfigMappings } from '@aztec-labs/pxe/config';
+import { sequencerClientConfigMappings } from '@aztec-labs/sequencer-client/config';
+import { chainConfigMappings, nodeRpcConfigMappings } from '@aztec-labs/stdlib/config';
+import { dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
+import { telemetryClientConfigMappings } from '@aztec-labs/telemetry-client/config';
+import { worldStateConfigMappings } from '@aztec-labs/world-state/config';
 
 import { DefaultMnemonic } from '../mnemonic.js';
 

@@ -1,8 +1,8 @@
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { RollupCheatCodes } from '@aztec/ethereum/test';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import type { LogFn } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { RollupCheatCodes } from '@aztec-labs/ethereum/test';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 
 export async function assumeProvenThrough(
   checkpointOrLatest: CheckpointNumber | undefined,

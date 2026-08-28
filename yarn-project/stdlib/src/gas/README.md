@@ -213,7 +213,7 @@ itself, before actual teardown consumption is known.
 
 ⚠️ Name clash: `FeeLib.sol` (and its port `fee_math.ts`) defines `BLOBS_PER_CHECKPOINT = 3`,
 used only to price the sequencer's blob costs. The protocol constant of the same name in
-`@aztec/constants` is **6** — the actual blob capacity of a checkpoint, used throughout the
+`@aztec-labs/constants` is **6** — the actual blob capacity of a checkpoint, used throughout the
 limits section below. The FeeLib value is a holdover from the pre-checkpoint
 `BLOBS_PER_BLOCK`, so the fee model prices half of a full checkpoint's blobs.
 

@@ -2,8 +2,8 @@ import type {
   ContractFunctionInteraction,
   SendInteractionOptions,
   SimulateInteractionOptions,
-} from '@aztec/aztec.js/contracts';
-import type { GenericProxyContract } from '@aztec/noir-test-contracts.js/GenericProxy';
+} from '@aztec-labs/aztec.js/contracts';
+import type { GenericProxyContract } from '@aztec-labs/noir-test-contracts.js/GenericProxy';
 
 /**
  * Builds a proxy forwarding call from an action, selecting the right forward_private_N method.

@@ -1,9 +1,8 @@
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Logger } from '@aztec/foundation/log';
-import type { BlockResponse } from '@aztec/stdlib/interfaces/client';
-import type { TopicType } from '@aztec/stdlib/p2p';
-import { Tx, type TxReceipt } from '@aztec/stdlib/tx';
-
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { BlockResponse } from '@aztec-labs/stdlib/interfaces/client';
+import type { TopicType } from '@aztec-labs/stdlib/p2p';
+import { Tx, type TxReceipt } from '@aztec-labs/stdlib/tx';
 import { createHistogram } from 'perf_hooks';
 
 /** Metrics class for proving-related benchmarks. */

@@ -10,7 +10,7 @@ import { FUN_FACTS, TX_TIMEOUT } from '../../constants';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import { queryTxReceipt, type UserTx } from '../../utils/txs';
 import { formatFrAsString } from '../../utils/conversion';
-import { TxHash, TxStatus } from '@aztec/aztec.js/tx';
+import { TxHash, TxStatus } from '@aztec-labs/aztec.js/tx';
 import { TransactionModal } from '../common/TransactionModal';
 import { useLocalStorage } from '@uidotdev/usehooks';
 import { CopyToClipboardButton } from '../common/CopyToClipboardButton';

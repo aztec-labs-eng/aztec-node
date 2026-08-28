@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import type { ChangeSetId, StagedStore } from '../staged_write_coordinator.js';
 

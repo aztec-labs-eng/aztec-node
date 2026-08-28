@@ -1,7 +1,7 @@
-import { first } from '@aztec/foundation/iterable';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { Tx, TxHash } from '@aztec/stdlib/tx';
+import { first } from '@aztec-labs/foundation/iterable';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
 
 /**
  * Manages archived transactions with FIFO eviction.

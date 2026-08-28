@@ -1,12 +1,12 @@
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   getEpochAtSlot,
   getSlotAtTimestamp,
   getTimestampForSlot,
   getTimestampRangeForEpoch,
-} from '@aztec/stdlib/epoch-helpers';
+} from '@aztec-labs/stdlib/epoch-helpers';
 
 import {
   type EpochAndSlot,

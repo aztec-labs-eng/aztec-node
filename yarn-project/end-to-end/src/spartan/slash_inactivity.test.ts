@@ -1,15 +1,18 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryUntil } from '@aztec/foundation/retry';
-import { timeoutPromise } from '@aztec/foundation/timer';
-import { type SlasherConfig, type SlasherSettings, getSlasherSettings } from '@aztec/slasher';
-import { type L1RollupConstants, getSlotRangeForEpoch, getStartTimestampForEpoch } from '@aztec/stdlib/epoch-helpers';
-
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { timeoutPromise } from '@aztec-labs/foundation/timer';
+import { type SlasherConfig, type SlasherSettings, getSlasherSettings } from '@aztec-labs/slasher';
+import {
+  type L1RollupConstants,
+  getSlotRangeForEpoch,
+  getStartTimestampForEpoch,
+} from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 import assert from 'assert';
 

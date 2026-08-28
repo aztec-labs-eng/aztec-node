@@ -4,19 +4,18 @@ import {
   MAX_ENQUEUED_CALLS_PER_TX,
   MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
-import { type BaseBuffer32, Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ZodFor } from '@aztec/foundation/schemas';
+} from '@aztec-labs/constants';
+import { type BaseBuffer32, Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
   BufferSink,
   serializeArrayOfBufferableToVector,
   serializeArrayToSink,
   serializeToSink,
-} from '@aztec/foundation/serialize';
-import { type FieldsOf, unfreeze } from '@aztec/foundation/types';
-
+} from '@aztec-labs/foundation/serialize';
+import { type FieldsOf, unfreeze } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import type { GasSettings } from '../gas/gas_settings.js';

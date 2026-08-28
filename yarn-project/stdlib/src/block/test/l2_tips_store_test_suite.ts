@@ -1,6 +1,6 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type CheckpointId,
   GENESIS_CHECKPOINT_HEADER_HASH,
@@ -8,10 +8,9 @@ import {
   type L2BlockId,
   type L2BlockTag,
   type L2TipId,
-} from '@aztec/stdlib/block';
-import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/block';
+import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { expect } from 'vitest';
 
 import { GENESIS_BLOCK_HEADER_HASH } from '../block_hash.js';

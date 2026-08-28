@@ -1,5 +1,4 @@
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import { jest } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
 import { type MockProxy, mock } from 'jest-mock-extended';

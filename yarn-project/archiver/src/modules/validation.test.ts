@@ -1,21 +1,20 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { times } from '@aztec/foundation/collection';
-import { Secp256k1Signer, flipSignature } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { type Logger, createLogger } from '@aztec/foundation/log';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
+import { Secp256k1Signer, flipSignature } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import {
   CommitteeAttestation,
   CommitteeAttestationsAndSigners,
   EthAddress,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
-import { Checkpoint, type PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '@aztec/stdlib/testing';
-
+} from '@aztec-labs/stdlib/block';
+import { Checkpoint, type PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '@aztec-labs/stdlib/testing';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import assert from 'node:assert';
 

@@ -1,11 +1,11 @@
-import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec/constants';
-import { BlockNumber, type EpochNumber } from '@aztec/foundation/branded-types';
-import { chunkBy } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { MembershipWitness, type SiblingPath } from '@aztec/foundation/trees';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { chunkBy } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { MembershipWitness, type SiblingPath } from '@aztec-labs/foundation/trees';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockHash,
   type BlockParameter,
@@ -13,19 +13,19 @@ import {
   type L2BlockSource,
   type NormalizedBlockParameter,
   inspectBlockParameter,
-} from '@aztec/stdlib/block';
-import { computePublicDataTreeLeafSlot } from '@aztec/stdlib/hash';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec/stdlib/messaging';
+} from '@aztec-labs/stdlib/block';
+import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
 import {
   MerkleTreeId,
   type NullifierLeafPreimage,
   NullifierMembershipWitness,
   type PublicDataTreeLeafPreimage,
   PublicDataWitness,
-} from '@aztec/stdlib/trees';
-import type { TxHash } from '@aztec/stdlib/tx';
-import { WorldStateSynchronizerError } from '@aztec/world-state';
+} from '@aztec-labs/stdlib/trees';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
+import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 
 import { normalizeBlockParameter } from './block_parameter.js';
 

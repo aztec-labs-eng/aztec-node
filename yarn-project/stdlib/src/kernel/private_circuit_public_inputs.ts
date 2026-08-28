@@ -9,17 +9,17 @@ import {
   MAX_NULLIFIER_READ_REQUESTS_PER_CALL,
   MAX_PRIVATE_CALL_STACK_LENGTH_PER_CALL,
   MAX_PRIVATE_LOGS_PER_CALL,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
   FieldReader,
   bigintToUInt64BE,
   serializeToBuffer,
   serializeToFields,
-} from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
+} from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { KeyValidationRequestAndSeparator } from '../kernel/hints/key_validation_request_and_separator.js';
 import { CountedLogHash } from '../kernel/log_hash.js';

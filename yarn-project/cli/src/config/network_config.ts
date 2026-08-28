@@ -1,5 +1,4 @@
-import { type NetworkConfig, NetworkConfigMapSchema, type NetworkNames } from '@aztec/foundation/config';
-
+import { type NetworkConfig, NetworkConfigMapSchema, type NetworkNames } from '@aztec-labs/foundation/config';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 

@@ -1,13 +1,13 @@
-import { chunk } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, type DataInBlock, type InBlock } from '@aztec/stdlib/block';
-import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec/stdlib/hash';
-import { type AztecNode, MAX_RPC_LEN } from '@aztec/stdlib/interfaces/client';
-import { Note, NoteDao, NoteStatus } from '@aztec/stdlib/note';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import { chunk } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, type DataInBlock, type InBlock } from '@aztec-labs/stdlib/block';
+import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec-labs/stdlib/hash';
+import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
+import { Note, NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { NoteValidationRequest } from '../contract_function_simulator/noir-structs/note_validation_request.js';
 import type { NoteStore } from '../storage/note_store/note_store.js';

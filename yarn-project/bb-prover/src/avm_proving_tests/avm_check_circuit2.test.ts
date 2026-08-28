@@ -1,9 +1,9 @@
-import { MAX_NULLIFIERS_PER_TX } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AvmTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmTest';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { NativeWorldStateService } from '@aztec/world-state';
+import { MAX_NULLIFIERS_PER_TX } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 
 import { AvmProvingTester } from './avm_proving_tester.js';
 

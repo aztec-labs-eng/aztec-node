@@ -1,17 +1,17 @@
 /**
  * IframeWallet — Wallet proxy that communicates with a web wallet loaded in an iframe.
  *
- * This mirrors {@link ExtensionWallet} from `@aztec/wallet-sdk/extension/provider` but uses
+ * This mirrors {@link ExtensionWallet} from `@aztec-labs/wallet-sdk/extension/provider` but uses
  * `window.postMessage` / `window.addEventListener('message')` instead of MessagePort.
  *
  * The wire protocol (encrypted {@link WalletMessage} / {@link WalletResponse}) is identical.
  */
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import { type Wallet, WalletSchema } from '@aztec/aztec.js/wallet';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec/foundation/promise';
-import { getSchemaReturnType, schemaHasMethod } from '@aztec/foundation/schemas';
-import type { FunctionsOf } from '@aztec/foundation/types';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import { type Wallet, WalletSchema } from '@aztec-labs/aztec.js/wallet';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { getSchemaReturnType, schemaHasMethod } from '@aztec-labs/foundation/schemas';
+import type { FunctionsOf } from '@aztec-labs/foundation/types';
 
 import { type EncryptedPayload, decrypt, encrypt } from '../../crypto.js';
 import {

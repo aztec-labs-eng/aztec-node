@@ -1,6 +1,5 @@
-import { BlockNumber, BlockNumberSchema } from '@aztec/foundation/branded-types';
-import type { PromiseWithResolvers } from '@aztec/foundation/promise';
-
+import { BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
+import type { PromiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { z } from 'zod';
 
 import type { BlockHash } from '../block/block_hash.js';

@@ -1,6 +1,5 @@
-import { filter, map, sort, take } from '@aztec/foundation/iterable';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-
+import { filter, map, sort, take } from '@aztec-labs/foundation/iterable';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import { type Batch, type Datastore, Key, type KeyQuery, type Pair, type Query } from 'interface-datastore';
 import type { AwaitIterable } from 'interface-store';
 

@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { elapsed } from '@aztec/foundation/timer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { elapsed } from '@aztec-labs/foundation/timer';
 
 import { FunctionSelector } from '../abi/function_selector.js';
 import { getBenchmarkContractArtifact, getTestContractArtifact, getTokenContractArtifact } from '../tests/fixtures.js';

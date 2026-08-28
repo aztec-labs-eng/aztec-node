@@ -1,12 +1,12 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { SendInteractionOptions } from '@aztec/aztec.js/contracts';
-import { createLogger } from '@aztec/aztec.js/log';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { TxStatus } from '@aztec/aztec.js/tx';
-import type { TxHash, TxReceipt } from '@aztec/aztec.js/tx';
-import { Gas } from '@aztec/stdlib/gas';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { SendInteractionOptions } from '@aztec-labs/aztec.js/contracts';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { TxStatus } from '@aztec-labs/aztec.js/tx';
+import type { TxHash, TxReceipt } from '@aztec-labs/aztec.js/tx';
+import { Gas } from '@aztec-labs/stdlib/gas';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import type { BotConfig } from './config.js';
 

@@ -2,18 +2,18 @@ import {
   RollupContract,
   type SimulationOverridesPlan,
   buildSimulationOverridesStateOverride,
-} from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type L1RollupConstants, getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
-import { GasFees } from '@aztec/stdlib/gas';
+} from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type L1RollupConstants, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   CheckpointGlobalVariables,
   GlobalVariableBuilder as GlobalVariableBuilderInterface,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 /** Configuration for the GlobalVariableBuilder (excludes L1 client config). */
 export type GlobalVariableBuilderConfig = {

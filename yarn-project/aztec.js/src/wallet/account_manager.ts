@@ -1,12 +1,12 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   CompleteAddress,
   type ContractInstanceWithAddress,
   getContractInstanceFromInstantiationParams,
-} from '@aztec/stdlib/contract';
-import type { PublicKeys } from '@aztec/stdlib/keys';
-import { deriveKeys } from '@aztec/stdlib/keys';
+} from '@aztec-labs/stdlib/contract';
+import type { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { deriveKeys } from '@aztec-labs/stdlib/keys';
 
 import type { AccountContract } from '../account/account_contract.js';
 import type { Account, Salt } from '../account/index.js';

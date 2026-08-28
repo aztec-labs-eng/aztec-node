@@ -1,8 +1,8 @@
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { keccak256 } from '@aztec/foundation/crypto/keccak';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { keccak256 } from '@aztec-labs/foundation/crypto/keccak';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { StatusMessage } from './status.js';
 

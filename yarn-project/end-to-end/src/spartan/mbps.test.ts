@@ -1,15 +1,14 @@
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { TxHash } from '@aztec/aztec.js/tx';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { TxHash } from '@aztec-labs/aztec.js/tx';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { expect, jest } from '@jest/globals';
 import { createPublicClient, fallback, http } from 'viem';
 

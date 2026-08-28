@@ -1,4 +1,4 @@
-import type { VerificationKeyData } from '@aztec/stdlib/vks';
+import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 import HidingKernelToPublicJson from '../../../artifacts/hiding_kernel_to_public.json' with { type: 'json' };
 import HidingKernelToRollupJson from '../../../artifacts/hiding_kernel_to_rollup.json' with { type: 'json' };

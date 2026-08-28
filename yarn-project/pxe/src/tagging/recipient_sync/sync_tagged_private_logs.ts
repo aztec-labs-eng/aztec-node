@@ -1,10 +1,10 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { isDefined } from '@aztec/foundation/types';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { AppTaggingSecret, LogResult } from '@aztec/stdlib/logs';
-import { AppTaggingSecretKind, SiloedTag } from '@aztec/stdlib/logs';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { isDefined } from '@aztec-labs/foundation/types';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { AppTaggingSecret, LogResult } from '@aztec-labs/stdlib/logs';
+import { AppTaggingSecretKind, SiloedTag } from '@aztec-labs/stdlib/logs';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';

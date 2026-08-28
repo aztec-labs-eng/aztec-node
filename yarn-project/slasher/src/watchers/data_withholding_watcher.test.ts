@@ -1,14 +1,13 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { CheckpointReexecutionTracker, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { ITxProvider, P2PApi } from '@aztec/stdlib/interfaces/server';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { OffenseType } from '@aztec/stdlib/slashing';
-import { TxHash } from '@aztec/stdlib/tx';
-
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { CheckpointReexecutionTracker, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { ITxProvider, P2PApi } from '@aztec-labs/stdlib/interfaces/server';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { OffenseType } from '@aztec-labs/stdlib/slashing';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { WANT_TO_SLASH_EVENT, type WantToSlashArgs } from '../watcher.js';

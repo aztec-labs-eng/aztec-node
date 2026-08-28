@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --no-warnings
-import { startHttpRpcServer } from '@aztec/foundation/json-rpc/server';
-import { createLogger } from '@aztec/foundation/log';
+import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import { createLogger } from '@aztec-labs/foundation/log';
 
 import { createOracleTestRpcServer } from '../oracle/test-resolver/index.js';
 

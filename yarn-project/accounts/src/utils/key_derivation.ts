@@ -1,8 +1,11 @@
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 
+// Frozen string, not a package reference: it is hashed into every secret key derived below, so
+// changing it changes the address of every account derived from a signing key. It keeps the old
+// @aztec scope for that reason and must not be updated to track the package name.
 const SIGNING_KEY_TO_SECRET_KEY_SEPARATOR = sha256ToField([Buffer.from('@aztec/accounts/signing_key_to_secret_key')]);
 
 /**

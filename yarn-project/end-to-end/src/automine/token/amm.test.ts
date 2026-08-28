@@ -1,9 +1,8 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import type { TestTokenContract } from '@aztec/noir-test-contracts.js/TestToken';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import type { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 import { jest } from '@jest/globals';
 
 import { deployTestToken } from '../../fixtures/token_utils.js';

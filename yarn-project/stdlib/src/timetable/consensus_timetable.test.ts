@@ -1,4 +1,4 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { L1RollupConstants } from '../epoch-helpers/index.js';
 import { ConsensusTimetable } from './consensus_timetable.js';

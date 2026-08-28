@@ -1,14 +1,14 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { AbortError } from '@aztec/foundation/error';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { AbortError } from '@aztec-labs/foundation/error';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import type {
   ProvingJobId,
   ProvingJobInputs,
   ProvingJobResultsMap,
   ServerCircuitProver,
-} from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 export enum ProvingJobControllerStatus {
   IDLE = 'idle',

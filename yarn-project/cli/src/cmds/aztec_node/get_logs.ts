@@ -1,16 +1,16 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import type { TxHash } from '@aztec/aztec.js/tx';
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { LogFn } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import type { TxHash } from '@aztec-labs/aztec.js/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import {
   LogCursor,
   type PublicLogsQuery,
   type Tag,
   logResultToHumanReadable,
   queryAllPublicLogsByTags,
-} from '@aztec/stdlib/logs';
+} from '@aztec-labs/stdlib/logs';
 
 /** Options for the `get-logs` CLI command. */
 export type GetLogsOptions = {

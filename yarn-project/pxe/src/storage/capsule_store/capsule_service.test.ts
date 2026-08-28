@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { CapsuleService } from './capsule_service.js';
 import { CapsuleStore } from './capsule_store.js';

@@ -1,6 +1,6 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { mockTx, mockTxForRollup } from '@aztec/stdlib/testing';
-import { TX_ERROR_INVALID_EXPIRATION_TIMESTAMP, type Tx } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { mockTx, mockTxForRollup } from '@aztec-labs/stdlib/testing';
+import { TX_ERROR_INVALID_EXPIRATION_TIMESTAMP, type Tx } from '@aztec-labs/stdlib/tx';
 
 import { TimestampTxValidator } from './timestamp_validator.js';
 

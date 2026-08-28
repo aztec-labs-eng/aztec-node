@@ -1,21 +1,25 @@
-import type { Archiver } from '@aztec/archiver';
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import type { EpochCache } from '@aztec/epoch-cache';
-import { GovernanceProposerContract, type RollupContract } from '@aztec/ethereum/contracts';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { PublisherManager } from '@aztec/ethereum/publisher-manager';
-import { EthCheatCodes } from '@aztec/ethereum/test';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import type { Logger } from '@aztec/foundation/log';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { KeystoreManager } from '@aztec/node-keystore';
-import type { P2PClient as ConcreteP2PClient, P2P } from '@aztec/p2p';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import type { TelemetryClient } from '@aztec/telemetry-client';
-import { type FullNodeCheckpointsBuilder, NodeKeystoreAdapter, type ValidatorClient } from '@aztec/validator-client';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { GovernanceProposerContract, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { EthCheatCodes } from '@aztec-labs/ethereum/test';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { KeystoreManager } from '@aztec-labs/node-keystore';
+import type { P2PClient as ConcreteP2PClient, P2P } from '@aztec-labs/p2p';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
+import {
+  type FullNodeCheckpointsBuilder,
+  NodeKeystoreAdapter,
+  type ValidatorClient,
+} from '@aztec-labs/validator-client';
 
 import { type SequencerClientConfig, getPublisherConfigFromSequencerConfig } from '../../config.js';
 import type { GlobalVariableBuilder } from '../../global_variable_builder/global_builder.js';

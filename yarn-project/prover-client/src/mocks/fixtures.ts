@@ -1,18 +1,17 @@
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import type { FieldsOf } from '@aztec/foundation/types';
-import { fileURLToPath } from '@aztec/foundation/url';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { type CircuitSimulator, NativeACVMSimulator, WASMSimulatorWithBlobs } from '@aztec/simulator/server';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { GasFees } from '@aztec/stdlib/gas';
-import { CheckpointConstantData } from '@aztec/stdlib/rollup';
-import { GlobalVariables } from '@aztec/stdlib/tx';
-
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { fileURLToPath } from '@aztec-labs/foundation/url';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { type CircuitSimulator, NativeACVMSimulator, WASMSimulatorWithBlobs } from '@aztec-labs/simulator/server';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import { CheckpointConstantData } from '@aztec-labs/stdlib/rollup';
+import { GlobalVariables } from '@aztec-labs/stdlib/tx';
 import { promises as fs } from 'fs';
 import path from 'path';
 

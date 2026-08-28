@@ -1,7 +1,7 @@
 // docs:start:connect_to_network
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
 
 const nodeUrl = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 const node = createAztecNodeClient(nodeUrl);
@@ -38,14 +38,14 @@ console.log(`Bob's address: ${bobAddress.toString()}`);
 // docs:end:load_accounts
 
 // docs:start:check_fee_juice
-import { getFeeJuiceBalance } from "@aztec/aztec.js/utils";
+import { getFeeJuiceBalance } from "@aztec-labs/aztec.js/utils";
 
 const aliceBalance = await getFeeJuiceBalance(aliceAddress, node);
 console.log(`Alice's fee juice balance: ${aliceBalance}`);
 // docs:end:check_fee_juice
 
 // docs:start:create_account
-import { Fr, GrumpkinScalar } from "@aztec/aztec.js/fields";
+import { Fr, GrumpkinScalar } from "@aztec-labs/aztec.js/fields";
 
 const secret = Fr.random();
 const salt = Fr.random();
@@ -56,10 +56,10 @@ console.log("New account address:", newAccount.address.toString());
 
 // docs:start:deploy_account_sponsored_fpc
 // Additional imports needed for account deployment examples
-import { NO_FROM } from "@aztec/aztec.js/account";
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee/testing";
-import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC";
-import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
+import { NO_FROM } from "@aztec-labs/aztec.js/account";
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee/testing";
+import { SponsoredFPCContract } from "@aztec-labs/noir-contracts.js/SponsoredFPC";
+import { getContractInstanceFromInstantiationParams } from "@aztec-labs/stdlib/contract";
 
 // Set up the Sponsored FPC payment method (see fees guide for details)
 const sponsoredFPCInstance = await getContractInstanceFromInstantiationParams(
@@ -97,9 +97,9 @@ const feeJuiceAccount = await wallet.createSchnorrAccount(
 // docs:end:create_fee_juice_account
 
 // docs:start:bridge_fee_juice_setup
-import { createExtendedL1Client } from "@aztec/ethereum/client";
-import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
-import { createLogger } from "@aztec/aztec.js/log";
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client";
+import { L1FeeJuicePortalManager } from "@aztec-labs/aztec.js/ethereum";
+import { createLogger } from "@aztec-labs/aztec.js/log";
 
 // Create an L1 client (accepts a mnemonic or 0x-prefixed private key)
 const l1RpcUrl = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
@@ -126,7 +126,7 @@ console.log("Claim amount:", claim.claimAmount);
 // docs:end:bridge_fee_juice_execute
 
 // docs:start:deploy_contract
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 
 const { contract: token } = await TokenContract.deploy(
   wallet,
@@ -164,7 +164,7 @@ await token.methods
   .send({ from: aliceAddress });
 
 // docs:start:bridge_fee_juice_claim
-import { FeeJuicePaymentMethodWithClaim } from "@aztec/aztec.js/fee";
+import { FeeJuicePaymentMethodWithClaim } from "@aztec-labs/aztec.js/fee";
 
 // claim is from the bridgeTokensPublic step above
 // Create a payment method that claims the bridged Fee Juice and uses it to pay

@@ -10,17 +10,16 @@
 // package's transitive imports.
 //
 // Paths below are relative to `yarn-project/standard-contracts` (the cwd when scripts run).
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FunctionSelector, loadContractArtifact } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FunctionSelector, loadContractArtifact } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   computeContractAddressFromInstance,
   computeInitializationHash,
   getContractClassFromArtifact,
-} from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import type { NoirCompiledContract } from '@aztec/stdlib/noir';
-
+} from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 import { promises as fs } from 'fs';
 import path from 'path';
 

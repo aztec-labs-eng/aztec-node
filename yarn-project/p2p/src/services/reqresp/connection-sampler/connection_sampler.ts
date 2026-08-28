@@ -1,6 +1,5 @@
-import { AbortError } from '@aztec/foundation/error';
-import { createLogger } from '@aztec/foundation/log';
-
+import { AbortError } from '@aztec-labs/foundation/error';
+import { createLogger } from '@aztec-labs/foundation/log';
 import type { Libp2p, PeerId, Stream } from '@libp2p/interface';
 
 const MAX_SAMPLE_ATTEMPTS = 4;

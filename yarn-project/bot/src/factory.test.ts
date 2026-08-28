@@ -1,7 +1,6 @@
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import type { AztecNode, AztecNodeAdmin, AztecNodeAdminConfig } from '@aztec/stdlib/interfaces/client';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
-
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { AztecNode, AztecNodeAdmin, AztecNodeAdminConfig } from '@aztec-labs/stdlib/interfaces/client';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { mock } from 'jest-mock-extended';
 
 import { type BotConfig, getBotDefaultConfig } from './config.js';

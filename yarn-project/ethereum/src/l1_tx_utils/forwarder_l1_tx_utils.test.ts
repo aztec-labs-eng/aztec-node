@@ -1,9 +1,9 @@
-import { Blob } from '@aztec/blob-lib';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { TestDateProvider } from '@aztec/foundation/timer';
 import { TestERC20Abi, TestERC20Bytecode } from '@aztec/l1-artifacts';
 
+import { Blob } from '@aztec-labs/blob-lib';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type Hex, encodeFunctionData, parseEventLogs } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

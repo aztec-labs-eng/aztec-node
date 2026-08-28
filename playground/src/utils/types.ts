@@ -1,4 +1,4 @@
-import type { AbiType } from '@aztec/aztec.js/abi';
+import type { AbiType } from '@aztec-labs/aztec.js/abi';
 
 export const PREDEFINED_CONTRACTS = {
   SIMPLE_VOTING: 'Easy Private Voting',

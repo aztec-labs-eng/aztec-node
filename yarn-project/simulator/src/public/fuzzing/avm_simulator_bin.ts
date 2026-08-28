@@ -1,14 +1,13 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   AvmCircuitPublicInputs,
   type AvmTxHint,
   PublicTxEffect,
   deserializeFromMessagePack,
   serializeWithMessagePack,
-} from '@aztec/stdlib/avm';
-import { GlobalVariables, TreeSnapshots } from '@aztec/stdlib/tx';
-import { NativeWorldStateService } from '@aztec/world-state';
-
+} from '@aztec-labs/stdlib/avm';
+import { GlobalVariables, TreeSnapshots } from '@aztec-labs/stdlib/tx';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 import { createInterface } from 'readline';
 
 import { AvmFuzzerSimulator, FuzzerSimulationRequest } from './avm_fuzzer_simulator.js';

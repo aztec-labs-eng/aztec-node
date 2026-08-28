@@ -1,16 +1,16 @@
-import type { L1TxRequest } from '@aztec/ethereum/l1-tx-utils';
-import type { ViemClient } from '@aztec/ethereum/types';
-import { mergeAbis, tryExtractEvent } from '@aztec/ethereum/utils';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { memoize } from '@aztec/foundation/decorators';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { createLogger } from '@aztec/foundation/log';
-import { hexToBuffer } from '@aztec/foundation/string';
 import { SlasherAbi } from '@aztec/l1-artifacts/SlasherAbi';
 import { SlashingProposerAbi } from '@aztec/l1-artifacts/SlashingProposerAbi';
 
+import type { L1TxRequest } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ViemClient } from '@aztec-labs/ethereum/types';
+import { mergeAbis, tryExtractEvent } from '@aztec-labs/ethereum/utils';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { memoize } from '@aztec-labs/foundation/decorators';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { hexToBuffer } from '@aztec-labs/foundation/string';
 import {
   type GetContractReturnType,
   type Hex,

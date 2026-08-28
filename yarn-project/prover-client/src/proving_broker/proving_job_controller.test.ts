@@ -1,13 +1,12 @@
-import { RECURSIVE_PROOF_LENGTH } from '@aztec/constants';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { AbortError } from '@aztec/foundation/error';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import { type ProvingJobId, makePublicInputsAndRecursiveProof } from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType, makeRecursiveProof } from '@aztec/stdlib/proofs';
-import { makeInboxParityPrivateInputs, makeParityPublicInputs } from '@aztec/stdlib/testing';
-import { VerificationKeyData } from '@aztec/stdlib/vks';
-
+import { RECURSIVE_PROOF_LENGTH } from '@aztec-labs/constants';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { AbortError } from '@aztec-labs/foundation/error';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { type ProvingJobId, makePublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType, makeRecursiveProof } from '@aztec-labs/stdlib/proofs';
+import { makeInboxParityPrivateInputs, makeParityPublicInputs } from '@aztec-labs/stdlib/testing';
+import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { jest } from '@jest/globals';
 
 import { MockProver } from '../test/mock_prover.js';

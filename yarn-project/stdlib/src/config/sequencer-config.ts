@@ -3,7 +3,7 @@ import {
   floatConfigHelper,
   numberConfigHelper,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
+} from '@aztec-labs/foundation/config';
 
 import type { SequencerConfig } from '../interfaces/configs.js';
 import {

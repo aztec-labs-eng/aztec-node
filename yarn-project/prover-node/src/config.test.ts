@@ -1,6 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { EthPrivateKey } from '@aztec/node-keystore';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { EthPrivateKey } from '@aztec-labs/node-keystore';
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
 
 import { type ProverNodeConfig, createKeyStoreForProver } from './config.js';

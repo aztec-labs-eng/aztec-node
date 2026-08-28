@@ -1,12 +1,11 @@
-import { ARCHIVE_HEIGHT } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { EmptyL1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-
+import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { mock } from 'jest-mock-extended';
 
 import { CheckpointStore } from './checkpoint-store.js';

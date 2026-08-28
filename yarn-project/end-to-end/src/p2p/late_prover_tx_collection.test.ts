@@ -1,10 +1,9 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-import type { Tx } from '@aztec/stdlib/tx';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { shouldCollectMetrics } from '../fixtures/fixtures.js';

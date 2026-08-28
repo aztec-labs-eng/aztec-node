@@ -1,7 +1,7 @@
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { GENESIS_BLOCK_HEADER_HASH } from '@aztec/stdlib/block';
-import { testL2TipsStore } from '@aztec/stdlib/block/test';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { GENESIS_BLOCK_HEADER_HASH } from '@aztec-labs/stdlib/block';
+import { testL2TipsStore } from '@aztec-labs/stdlib/block/test';
 
 import { L2TipsKVStore } from './l2_tips_store.js';
 

@@ -1,35 +1,34 @@
 #!/usr/bin/env -S node --no-warnings
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { createAztecNodeService } from '@aztec/aztec-node';
-import { type AztecNodeConfig, getConfigEnvVars } from '@aztec/aztec-node/config';
-import { Fr } from '@aztec/aztec.js/fields';
-import { createLogger } from '@aztec/aztec.js/log';
-import { type BlobClientInterface, createBlobClient } from '@aztec/blob-client/client';
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import { waitForPublicClient } from '@aztec/ethereum/client';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { NULL_KEY } from '@aztec/ethereum/constants';
-import { deployAztecL1Contracts } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { SecretValue } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn } from '@aztec/foundation/log';
-import { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ProvingJobBroker } from '@aztec/stdlib/interfaces/server';
-import { TxStatus } from '@aztec/stdlib/tx';
-import type { GenesisData } from '@aztec/stdlib/world-state';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { createAztecNodeService } from '@aztec-labs/aztec-node';
+import { type AztecNodeConfig, getConfigEnvVars } from '@aztec-labs/aztec-node/config';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { type BlobClientInterface, createBlobClient } from '@aztec-labs/blob-client/client';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import { waitForPublicClient } from '@aztec-labs/ethereum/client';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { NULL_KEY } from '@aztec-labs/ethereum/constants';
+import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ProvingJobBroker } from '@aztec-labs/stdlib/interfaces/server';
+import { TxStatus } from '@aztec-labs/stdlib/tx';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 import {
   type TelemetryClient,
   getConfigEnvVars as getTelemetryClientConfig,
   initTelemetryClient,
-} from '@aztec/telemetry-client';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
-import { createFundedInitializerlessAccounts } from '@aztec/wallets/testing';
-import { getGenesisValues } from '@aztec/world-state/testing';
-
+} from '@aztec-labs/telemetry-client';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
+import { createFundedInitializerlessAccounts } from '@aztec-labs/wallets/testing';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 import type { Hex } from 'viem';
 import { mnemonicToAccount, privateKeyToAddress } from 'viem/accounts';
 import { foundry } from 'viem/chains';

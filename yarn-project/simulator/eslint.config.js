@@ -1,4 +1,4 @@
-import config from '@aztec/foundation/eslint';
+import config from '@aztec-labs/foundation/eslint';
 
 export default [
   ...config,

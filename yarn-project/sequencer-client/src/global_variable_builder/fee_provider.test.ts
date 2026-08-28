@@ -1,8 +1,7 @@
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import { GasFees, ManaUsageEstimate } from '@aztec/stdlib/gas';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { GasFees, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
 import { jest } from '@jest/globals';
 
 import { FeeProviderImpl } from './fee_provider.js';

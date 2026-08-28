@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { BlockData } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { BlockData } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { isL1ToL2MessageReady } from './cross_chain.js';

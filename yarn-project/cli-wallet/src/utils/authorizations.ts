@@ -1,10 +1,9 @@
-import type { ContractArtifact } from '@aztec/aztec.js/abi';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { CallAuthorizationRequest } from '@aztec/aztec.js/authorization';
-import type { LogFn } from '@aztec/foundation/log';
-import { decodeEachFromAbi, getFunctionArtifact } from '@aztec/stdlib/abi';
-import type { OffchainEffect } from '@aztec/stdlib/tx';
-
+import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { CallAuthorizationRequest } from '@aztec-labs/aztec.js/authorization';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { decodeEachFromAbi, getFunctionArtifact } from '@aztec-labs/stdlib/abi';
+import type { OffchainEffect } from '@aztec-labs/stdlib/tx';
 import { format } from 'util';
 
 export async function printAuthorizations(

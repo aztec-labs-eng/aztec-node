@@ -1,9 +1,8 @@
 /**
  * Zod schemas for keystore validation using Aztec's validation functions
  */
-import { optional, schemas } from '@aztec/foundation/schemas';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { optional, schemas } from '@aztec-labs/foundation/schemas';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { z } from 'zod';
 
 import type { BLSPrivateKey, EthPrivateKey } from './types.js';

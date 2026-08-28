@@ -1,6 +1,5 @@
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { TxArray, TxHash } from '@aztec/stdlib/tx';
-
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { TxArray, TxHash } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { AttestationPoolApi } from '../../../../mem_pools/attestation_pool/attestation_pool.js';

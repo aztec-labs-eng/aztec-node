@@ -1,6 +1,5 @@
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { jest } from '@jest/globals';
 
 import { type ChangeSetId, type StagedStore, StagedWriteCoordinator } from './staged_write_coordinator.js';

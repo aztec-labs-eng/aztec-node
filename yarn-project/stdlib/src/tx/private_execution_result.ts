@@ -1,9 +1,8 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { timesParallel } from '@aztec/foundation/collection';
-import { randomBytes, randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { randomBytes, randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { NoteSelector } from '../abi/note_selector.js';

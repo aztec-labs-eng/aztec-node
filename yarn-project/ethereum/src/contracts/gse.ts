@@ -1,6 +1,6 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
 import { GSEAbi } from '@aztec/l1-artifacts/GSEAbi';
 
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bn254 } from '@noble/curves/bn254';
 import { type GetContractReturnType, type Hex, getContract } from 'viem';

@@ -1,8 +1,9 @@
-import { MEGA_KERNEL_VK_LENGTH_IN_FIELDS } from '@aztec/constants';
-import { pushTestData } from '@aztec/foundation/testing';
 import type { WitnessMap } from '@aztec/noir-acvm_js';
 import { abiDecode, abiEncode } from '@aztec/noir-noirc_abi';
 import type { Abi, InputMap } from '@aztec/noir-types';
+
+import { MEGA_KERNEL_VK_LENGTH_IN_FIELDS } from '@aztec-labs/constants';
+import { pushTestData } from '@aztec-labs/foundation/testing';
 import type {
   HidingKernelToPublicPrivateInputs,
   HidingKernelToRollupPrivateInputs,
@@ -20,7 +21,7 @@ import type {
   PrivateKernelResetCircuitPrivateInputsVariants,
   PrivateKernelResetTailCircuitPrivateInputs,
   PrivateKernelTailCircuitPublicInputs,
-} from '@aztec/stdlib/kernel';
+} from '@aztec-labs/stdlib/kernel';
 
 import {
   mapPaddedSideEffectAmountsToNoir,

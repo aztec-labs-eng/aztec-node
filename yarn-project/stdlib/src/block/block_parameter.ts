@@ -1,8 +1,7 @@
-import { type BlockNumber, BlockNumberSchema } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { schemas } from '@aztec/foundation/schemas';
-
+import { type BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { BlockHash } from './block_hash.js';

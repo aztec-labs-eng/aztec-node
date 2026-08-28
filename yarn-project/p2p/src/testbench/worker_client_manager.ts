@@ -1,8 +1,7 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import type { ChainConfig } from '@aztec/stdlib/config';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import { type ChildProcess, fork } from 'child_process';
 import { existsSync } from 'fs';
 import path from 'path';

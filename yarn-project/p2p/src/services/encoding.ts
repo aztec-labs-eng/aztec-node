@@ -1,7 +1,6 @@
 // Taken from lodestar: https://github.com/ChainSafe/lodestar
-import { createLogger } from '@aztec/foundation/log';
-import { MAX_TX_SIZE_KB, TopicType, getTopicFromString } from '@aztec/stdlib/p2p';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { MAX_TX_SIZE_KB, TopicType, getTopicFromString } from '@aztec-labs/stdlib/p2p';
 import type { DataTransform } from '@chainsafe/libp2p-gossipsub/types';
 import type { Message } from '@libp2p/interface';
 import { webcrypto } from 'node:crypto';

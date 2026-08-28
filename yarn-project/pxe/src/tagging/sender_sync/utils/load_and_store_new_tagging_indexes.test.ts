@@ -1,17 +1,16 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type AppTaggingSecret,
   AppTaggingSecretKind,
   type PrivateLogsQuery,
   type SiloedTag,
   randomLogResult,
-} from '@aztec/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec/stdlib/testing';
-import { TxHash } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/logs';
+import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { SenderTaggingStore } from '../../../storage/tagging_store/sender_tagging_store.js';

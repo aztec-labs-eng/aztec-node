@@ -1,14 +1,13 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall } from '@aztec/aztec.js/contracts';
-import { getPublicEvents } from '@aztec/aztec.js/events';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { CustomMessageContract, type MultiLogEvent } from '@aztec/noir-test-contracts.js/CustomMessage';
-import { EventOnlyContract, type TestEvent } from '@aztec/noir-test-contracts.js/EventOnly';
-import { type LargeEvent, LargePublicEventContract } from '@aztec/noir-test-contracts.js/LargePublicEvent';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import { getPublicEvents } from '@aztec-labs/aztec.js/events';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { CustomMessageContract, type MultiLogEvent } from '@aztec-labs/noir-test-contracts.js/CustomMessage';
+import { EventOnlyContract, type TestEvent } from '@aztec-labs/noir-test-contracts.js/EventOnly';
+import { type LargeEvent, LargePublicEventContract } from '@aztec-labs/noir-test-contracts.js/LargePublicEvent';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

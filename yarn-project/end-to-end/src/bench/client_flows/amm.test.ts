@@ -1,13 +1,12 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ContractInstanceWithAddress, SimulateInteractionOptions } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import { FPCContract } from '@aztec/noir-contracts.js/FPC';
-import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC';
-import { TestTokenContract } from '@aztec/noir-test-contracts.js/TestToken';
-import type { RoundTripStats } from '@aztec/stdlib/tx';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractInstanceWithAddress, SimulateInteractionOptions } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
+import { SponsoredFPCContract } from '@aztec-labs/noir-contracts.js/SponsoredFPC';
+import { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
+import type { RoundTripStats } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { mintNotes } from '../../fixtures/token_utils.js';

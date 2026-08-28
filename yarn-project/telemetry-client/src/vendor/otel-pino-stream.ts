@@ -160,7 +160,7 @@ export class OTelPinoStream extends Writable {
     // Cannot use `instrumentation.logger` until have delegating LoggerProvider:
     // https://github.com/open-telemetry/opentelemetry-js/issues/4399
     // [aztec] Use the name of this package
-    this._otelLogger = logs.getLogger('@aztec/telemetry-client/otel-pino-stream', '0.1.0');
+    this._otelLogger = logs.getLogger('@aztec-labs/telemetry-client/otel-pino-stream', '0.1.0');
   }
 
   override _write(s: string, _encoding: string, callback: Function) {

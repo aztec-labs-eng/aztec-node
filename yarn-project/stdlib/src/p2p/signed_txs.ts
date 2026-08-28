@@ -1,7 +1,6 @@
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import type { TypedDataDefinition } from 'viem';
 
 import { MAX_TXS_PER_BLOCK } from '../deserialization/index.js';

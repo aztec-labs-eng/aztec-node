@@ -1,4 +1,4 @@
-import { type ConfigMappingsType, booleanConfigHelper } from '@aztec/foundation/config';
+import { type ConfigMappingsType, booleanConfigHelper } from '@aztec-labs/foundation/config';
 
 export type SharedNodeConfig = {
   /** Whether to populate the genesis state with initial fee juice for the test accounts */

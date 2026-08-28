@@ -1,1 +1,1 @@
-export { Comparator, Note } from '@aztec/stdlib/note';
+export { Comparator, Note } from '@aztec-labs/stdlib/note';

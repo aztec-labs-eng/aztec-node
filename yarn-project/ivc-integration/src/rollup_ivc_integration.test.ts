@@ -1,15 +1,15 @@
 import { AztecClientBackend, Barretenberg } from '@aztec/bb.js';
-import { CHONK_PROOF_LENGTH, CHONK_VK_LENGTH_IN_FIELDS, ULTRA_VK_LENGTH_IN_FIELDS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { mapAvmCircuitPublicInputsToNoir } from '@aztec/noir-protocol-circuits-types/server';
-import { AvmTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmTest';
-import { PublicTxSimulationTester, bulkTest } from '@aztec/simulator/public/fixtures';
-import { AvmCircuitInputs, AvmCircuitPublicInputs, PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import { RecursiveProof } from '@aztec/stdlib/proofs';
-import { VerificationKeyAsFields } from '@aztec/stdlib/vks';
-import { NativeWorldStateService } from '@aztec/world-state/native';
 
+import { CHONK_PROOF_LENGTH, CHONK_VK_LENGTH_IN_FIELDS, ULTRA_VK_LENGTH_IN_FIELDS } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { mapAvmCircuitPublicInputsToNoir } from '@aztec-labs/noir-protocol-circuits-types/server';
+import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
+import { PublicTxSimulationTester, bulkTest } from '@aztec-labs/simulator/public/fixtures';
+import { AvmCircuitInputs, AvmCircuitPublicInputs, PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import { RecursiveProof } from '@aztec-labs/stdlib/proofs';
+import { VerificationKeyAsFields } from '@aztec-labs/stdlib/vks';
+import { NativeWorldStateService } from '@aztec-labs/world-state/native';
 import { jest } from '@jest/globals';
 import path from 'path';
 import { fileURLToPath } from 'url';

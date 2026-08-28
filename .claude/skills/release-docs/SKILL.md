@@ -116,7 +116,7 @@ the tag checked out in Step 2 (needs `yarn-project` built, as in Step 6):
 
 ```bash
 cd yarn-project && node --input-type=module -e "
-import { getSponsoredFPCAddress } from '@aztec/cli/cli-utils';
+import { getSponsoredFPCAddress } from '@aztec-labs/cli/cli-utils';
 console.log((await getSponsoredFPCAddress()).toString());
 "
 ```
@@ -751,8 +751,8 @@ Aztec.js examples, which are source-only; see task 4). Tasks:
    release tag's example code, not the cut snapshot. Type-check all via `bootstrap.sh`,
    execute the runner-supported set via `aztecjs_runner/run.sh`, and list skipped examples
    with reasons. To test against the published release (not the workspace copies auto-linked
-   in `lib.sh`), temporarily rewrite each example's `@aztec/*` config dep to
-   `npm:@aztec/*@<new_version>`, keeping special pins like `@aztec/viem`.
+   in `lib.sh`), temporarily rewrite each example's `@aztec-labs/*` config dep to
+   `npm:@aztec-labs/*@<new_version>`, keeping special pins like `@aztec/viem`.
 
 Report pass/fail per guide/tutorial/example with the exact doc line for each failure. Fix
 guide/tutorial drift in both the snapshot **and** the source docs; for the Aztec.js

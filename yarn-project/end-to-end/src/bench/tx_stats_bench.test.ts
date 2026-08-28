@@ -1,11 +1,10 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { parseBooleanEnv } from '@aztec/foundation/config';
-import { sleep } from '@aztec/foundation/sleep';
-import { Timer } from '@aztec/foundation/timer';
-import type { IVCProofVerificationResult } from '@aztec/stdlib/interfaces/server';
-import type { Tx } from '@aztec/stdlib/tx';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { parseBooleanEnv } from '@aztec-labs/foundation/config';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 import '@jest/globals';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';

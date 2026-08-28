@@ -1,6 +1,5 @@
-import { createLogger } from '@aztec/aztec.js/log';
-import { schemas } from '@aztec/foundation/schemas';
-
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 const logger = createLogger('e2e:k8s-utils');

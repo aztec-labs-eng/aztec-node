@@ -1,6 +1,6 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import { sleep } from '@aztec/foundation/sleep';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import { sleep } from '@aztec-labs/foundation/sleep';
 
 import {
   NO_REORG_SUBMISSION_EPOCHS,

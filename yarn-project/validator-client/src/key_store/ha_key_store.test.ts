@@ -1,13 +1,12 @@
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import type { EthRemoteSignerConfig } from '@aztec/node-keystore';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec/validator-ha-signer/errors';
-import { DutyType, type SigningContext, isHAProtectedContext } from '@aztec/validator-ha-signer/types';
-import type { ValidatorHASigner } from '@aztec/validator-ha-signer/validator-ha-signer';
-
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import type { EthRemoteSignerConfig } from '@aztec-labs/node-keystore';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/validator-ha-signer/errors';
+import { DutyType, type SigningContext, isHAProtectedContext } from '@aztec-labs/validator-ha-signer/types';
+import type { ValidatorHASigner } from '@aztec-labs/validator-ha-signer/validator-ha-signer';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { TypedDataDefinition } from 'viem';
 

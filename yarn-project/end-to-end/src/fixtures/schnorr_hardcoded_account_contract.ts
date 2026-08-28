@@ -1,12 +1,12 @@
-import { DefaultAccountContract } from '@aztec/accounts/defaults';
-import type { ContractArtifact } from '@aztec/aztec.js/abi';
-import type { AuthWitnessProvider } from '@aztec/aztec.js/account';
-import type { CompleteAddress } from '@aztec/aztec.js/addresses';
-import { AuthWitness } from '@aztec/aztec.js/authorization';
-import type { Fr } from '@aztec/aztec.js/fields';
-import { Schnorr } from '@aztec/foundation/crypto/schnorr';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { SchnorrHardcodedAccountContractArtifact } from '@aztec/noir-contracts.js/SchnorrHardcodedAccount';
+import { DefaultAccountContract } from '@aztec-labs/accounts/defaults';
+import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
+import type { AuthWitnessProvider } from '@aztec-labs/aztec.js/account';
+import type { CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { AuthWitness } from '@aztec-labs/aztec.js/authorization';
+import type { Fr } from '@aztec-labs/aztec.js/fields';
+import { Schnorr } from '@aztec-labs/foundation/crypto/schnorr';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { SchnorrHardcodedAccountContractArtifact } from '@aztec-labs/noir-contracts.js/SchnorrHardcodedAccount';
 
 /**
  * The private key that matches the hardcoded public key in the SchnorrHardcodedAccountContract.

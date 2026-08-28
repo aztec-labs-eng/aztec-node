@@ -1,7 +1,8 @@
 import { AvmService } from '@aztec/bb-avm-sim';
-import { AbortError } from '@aztec/foundation/error';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
+
+import { AbortError } from '@aztec-labs/foundation/error';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 
 import type { AvmContractsDBContext, AvmSimulator } from './avm_simulator.js';
 import { CdbIpcServer } from './cdb_ipc_server.js';

@@ -1,5 +1,4 @@
-import type { Logger } from '@aztec/foundation/log';
-
+import type { Logger } from '@aztec-labs/foundation/log';
 import { type Context, SpanStatusCode, TraceFlags } from '@opentelemetry/api';
 import { type ExportResult, hrTimeToMilliseconds } from '@opentelemetry/core';
 import type { SpanExporter } from '@opentelemetry/sdk-trace-base';

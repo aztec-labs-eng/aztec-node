@@ -1,5 +1,4 @@
-import { runMigrations } from '@aztec/validator-ha-signer/migrations';
-
+import { runMigrations } from '@aztec-labs/validator-ha-signer/migrations';
 import type { Command } from 'commander';
 
 export function injectMigrateCommand(program: Command, log: (msg: string) => void): Command {

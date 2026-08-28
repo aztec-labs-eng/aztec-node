@@ -1,6 +1,5 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 
 import type { L1RollupConstants } from '../epoch-helpers/index.js';

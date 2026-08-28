@@ -30,7 +30,7 @@ Prefer native tools over bash equivalents—they don't require permissions and p
 ```bash
 # GOOD
 yarn build
-yarn workspace @aztec/sequencer-client test src/file.test.ts
+yarn workspace @aztec-labs/sequencer-client test src/file.test.ts
 git diff HEAD
 
 # BAD — never do this
@@ -102,7 +102,7 @@ Then use **Read** or **Grep** to examine `/tmp/test-output.log`. Never use `| ta
 - Tests log "Running test TEST NAME" to track progress
 
 ```bash
-yarn workspace @aztec/end-to-end test:e2e e2e_something.test.ts
+yarn workspace @aztec-labs/end-to-end test:e2e e2e_something.test.ts
 ```
 
 ### Sequential Testing (Port Conflicts)
@@ -197,7 +197,7 @@ When working with `AztecAsyncKVStore`, wrap related reads and writes in `store.t
 <general_style>
 Prefer `const` over `let`. Prefer `async`/`await` over `.then()`/`.catch()` callbacks. Named exports only (no default exports). Explicit return types on public API methods; inferred types acceptable on private/internal methods. Only export types needed by external consumers. Avoid `const self = this`; use arrow functions.
 
-When you need a promise whose `resolve`/`reject` are called from outside the executor (deferred gates, signals, manual settlement), use `promiseWithResolvers` from `@aztec/foundation/promise` instead of `new Promise(resolve => { outerVar = resolve })` with an escaped `let`. The helper returns `{ promise, resolve, reject }` directly, avoiding the mutable placeholder.
+When you need a promise whose `resolve`/`reject` are called from outside the executor (deferred gates, signals, manual settlement), use `promiseWithResolvers` from `@aztec-labs/foundation/promise` instead of `new Promise(resolve => { outerVar = resolve })` with an escaped `let`. The helper returns `{ promise, resolve, reject }` directly, avoiding the mutable placeholder.
 
 Prefer high-level collection functions (`find`, `filter`, `map`, helpers from `foundation/src/collection/`) over imperative loops, but prefer imperative loops over `forEach` and complex `reduce`. Prefer `sum(items.map(item => item.value))` over `reduce(...)` for addition.
 
@@ -229,7 +229,7 @@ Available levels in order: `trace`, `debug`, `verbose`, `info`, `warn`, `error`.
 </logging>
 
 <import_organization>
-Order imports: external `@aztec/*` packages → foundation utilities (`@aztec/foundation/*`) → protocol-specific packages → Node.js built-ins (`node:events`, `node:fs`) → third-party packages (`viem`, `zod`) → relative imports (with `.js` extension). Use `import type` for type-only imports.
+Order imports: external `@aztec/*` packages → foundation utilities (`@aztec-labs/foundation/*`) → protocol-specific packages → Node.js built-ins (`node:events`, `node:fs`) → third-party packages (`viem`, `zod`) → relative imports (with `.js` extension). Use `import type` for type-only imports.
 </import_organization>
 
 <event_handling>

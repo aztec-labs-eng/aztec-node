@@ -97,7 +97,7 @@ Either:
 - Propose a code fix based on findings
 - Suggest running the test locally to verify:
   ```bash
-  yarn workspace @aztec/end-to-end test:e2e <file>.test.ts -t '<test name>'
+  yarn workspace @aztec-labs/end-to-end test:e2e <file>.test.ts -t '<test name>'
   ```
 
 ## Hypothesis Formation
@@ -147,16 +147,16 @@ To run tests locally for verification:
 
 ```bash
 # Run specific test
-yarn workspace @aztec/end-to-end test:e2e <file>.test.ts -t '<test name>'
+yarn workspace @aztec-labs/end-to-end test:e2e <file>.test.ts -t '<test name>'
 
 # With verbose logging
-LOG_LEVEL=verbose yarn workspace @aztec/end-to-end test:e2e <file>.test.ts -t '<test name>'
+LOG_LEVEL=verbose yarn workspace @aztec-labs/end-to-end test:e2e <file>.test.ts -t '<test name>'
 
 # With debug logging (very detailed)
-LOG_LEVEL=debug yarn workspace @aztec/end-to-end test:e2e <file>.test.ts -t '<test name>'
+LOG_LEVEL=debug yarn workspace @aztec-labs/end-to-end test:e2e <file>.test.ts -t '<test name>'
 
 # With specific module logging
-LOG_LEVEL='info; debug:sequencer,p2p' yarn workspace @aztec/end-to-end test:e2e <file>.test.ts -t '<test name>'
+LOG_LEVEL='info; debug:sequencer,p2p' yarn workspace @aztec-labs/end-to-end test:e2e <file>.test.ts -t '<test name>'
 ```
 
 ## Log Structure

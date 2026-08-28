@@ -1,6 +1,6 @@
 // docs:start:setup
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
 
 const nodeUrl = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 const wallet = await EmbeddedWallet.create(nodeUrl, { ephemeral: true });
@@ -19,7 +19,7 @@ await wallet.createSchnorrInitializerlessAccount(
 // docs:end:setup
 
 // docs:start:deploy
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 
 const { contract: token } = await TokenContract.deploy(
   wallet,

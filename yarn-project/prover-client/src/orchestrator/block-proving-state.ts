@@ -1,15 +1,20 @@
-import { type BlockBlobData, type BlockEndBlobData, type SpongeBlob, encodeBlockEndBlobData } from '@aztec/blob-lib';
+import {
+  type BlockBlobData,
+  type BlockEndBlobData,
+  type SpongeBlob,
+  encodeBlockEndBlobData,
+} from '@aztec-labs/blob-lib';
 import type {
   ARCHIVE_HEIGHT,
   L1_TO_L2_MSG_TREE_HEIGHT,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-} from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Tuple } from '@aztec/foundation/serialize';
-import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec/foundation/trees';
-import type { PublicInputsAndRecursiveProof } from '@aztec/stdlib/interfaces/server';
-import { L1ToL2MessageBundle, type L1ToL2MessageSponge, makeL1ToL2MessageBundle } from '@aztec/stdlib/messaging';
+} from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
+import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec-labs/foundation/trees';
+import type { PublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import { L1ToL2MessageBundle, type L1ToL2MessageSponge, makeL1ToL2MessageBundle } from '@aztec-labs/stdlib/messaging';
 import {
   BlockRollupPublicInputs,
   BlockRootNoTxsRollupPrivateInputs,
@@ -18,11 +23,11 @@ import {
   CheckpointConstantData,
   TxMergeRollupPrivateInputs,
   type TxRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
-import type { CircuitName } from '@aztec/stdlib/stats';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, StateReference } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/rollup';
+import type { CircuitName } from '@aztec-labs/stdlib/stats';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, StateReference } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import { buildHeaderFromCircuitOutputs, toProofData } from './block-building-helpers.js';
 import type { CheckpointProvingState } from './checkpoint-proving-state.js';

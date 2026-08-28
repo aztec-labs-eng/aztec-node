@@ -1,7 +1,7 @@
 /**
  * Custom errors for the validator HA signer
  */
-import type { SlotNumber } from '@aztec/foundation/branded-types';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { DutyType } from './db/types.js';
 

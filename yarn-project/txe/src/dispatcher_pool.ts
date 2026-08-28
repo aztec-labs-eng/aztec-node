@@ -1,13 +1,13 @@
-import { getSchnorrAccountContractArtifact } from '@aztec/accounts/schnorr/lazy';
 import { BackendType, Barretenberg, BarretenbergSync } from '@aztec/bb.js';
-import type { Logger } from '@aztec/foundation/log';
-import { openEphemeralStore } from '@aztec/kv-store/lmdb-v2';
-import { LazyProtocolContractsProvider } from '@aztec/protocol-contracts/providers/lazy';
-import { ContractStore } from '@aztec/pxe/client/lazy';
-import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry/lazy';
-import { getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry/lazy';
-import { getContractClassFromArtifact } from '@aztec/stdlib/contract';
 
+import { getSchnorrAccountContractArtifact } from '@aztec-labs/accounts/schnorr/lazy';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { openEphemeralStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { LazyProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/lazy';
+import { ContractStore } from '@aztec-labs/pxe/client/lazy';
+import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry/lazy';
+import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry/lazy';
+import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
 import { existsSync } from 'node:fs';
 import { cpus } from 'node:os';
 import { fileURLToPath } from 'node:url';

@@ -1,8 +1,7 @@
-import { PARTIAL_STATE_REFERENCE_LENGTH } from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { PARTIAL_STATE_REFERENCE_LENGTH } from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';

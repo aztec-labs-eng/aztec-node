@@ -1,5 +1,5 @@
-import { mockTx } from '@aztec/stdlib/testing';
-import type { AnyTx, TxHash, TxValidationResult, TxValidator } from '@aztec/stdlib/tx';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import type { AnyTx, TxHash, TxValidationResult, TxValidator } from '@aztec-labs/stdlib/tx';
 
 import { AggregateTxValidator } from './aggregate_tx_validator.js';
 

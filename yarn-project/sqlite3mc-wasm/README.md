@@ -1,4 +1,4 @@
-# @aztec/sqlite3mc-wasm
+# @aztec-labs/sqlite3mc-wasm
 
 SQLite3 Multiple Ciphers v2.3.5 (based on SQLite 3.53.2) packaged as a WASM
 module.
@@ -8,7 +8,7 @@ Upstream: https://github.com/utelle/SQLite3MultipleCiphers
 Cipher schemes enabled: ChaCha20 (PRAGMA cipher = chacha20), SQLCipher v4,
 AES-256, and others. See sqlite3mc upstream docs.
 
-Usage: import sqlite3InitModule from @aztec/sqlite3mc-wasm. API is identical
+Usage: import sqlite3InitModule from @aztec-labs/sqlite3mc-wasm. API is identical
 to @sqlite.org/sqlite-wasm; sqlite3mc is a strict superset.
 
 License: sqlite3mc is MIT-licensed.
@@ -92,7 +92,7 @@ than the zip.
    it in the upstream release notes or compute it: `curl -sL <url> | sha256sum`).
 2. Run `scripts/vendor.sh` (no args). It fetches the new release, verifies the SHA, replaces `vendor/jswasm/`, and
    regenerates `SHA256SUMS`.
-3. Re-run kv-store tests to confirm compatibility: `yarn workspace @aztec/kv-store test:browser`
+3. Re-run kv-store tests to confirm compatibility: `yarn workspace @aztec-labs/kv-store test:browser`
 4. Commit `scripts/vendor.pin` and `vendor/jswasm/SHA256SUMS` together.
 
 To verify a candidate release before editing the pin file:

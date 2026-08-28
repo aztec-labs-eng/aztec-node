@@ -1,10 +1,10 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, GENESIS_BLOCK_HEADER_HASH } from '@aztec/stdlib/block';
-import { Checkpoint, type PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { MAX_LOGS_PER_TAG } from '@aztec/stdlib/interfaces/api-limit';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, GENESIS_BLOCK_HEADER_HASH } from '@aztec-labs/stdlib/block';
+import { Checkpoint, type PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { MAX_LOGS_PER_TAG } from '@aztec-labs/stdlib/interfaces/api-limit';
 import {
   LogCursor,
   PublicLog,
@@ -12,10 +12,9 @@ import {
   Tag,
   queryAllPrivateLogsByTags,
   queryAllPublicLogsByTags,
-} from '@aztec/stdlib/logs';
-import '@aztec/stdlib/testing/jest';
-import type { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-
+} from '@aztec-labs/stdlib/logs';
+import '@aztec-labs/stdlib/testing/jest';
+import type { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
 
 import {

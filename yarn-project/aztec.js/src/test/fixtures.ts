@@ -1,7 +1,7 @@
-import { MEGA_APP_VK_LENGTH_IN_FIELDS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type ContractArtifact, FunctionType } from '@aztec/stdlib/abi';
-import { DEV_VERSION } from '@aztec/stdlib/update-checker';
+import { MEGA_APP_VK_LENGTH_IN_FIELDS } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ContractArtifact, FunctionType } from '@aztec-labs/stdlib/abi';
+import { DEV_VERSION } from '@aztec-labs/stdlib/update-checker';
 
 /**
  * A minimal but representative `ContractArtifact` shared by unit tests in this package. Covers
@@ -10,8 +10,8 @@ import { DEV_VERSION } from '@aztec/stdlib/update-checker';
  * function (`qux`), and two functions exercising Noir `Option<Field>` parameters (`optionEcho`,
  * `mixedParams`).
  *
- * We deliberately do not depend on `@aztec/noir-test-contracts.js` here: that package depends on
- * `@aztec/aztec.js`, so importing from it would create a workspace cycle.
+ * We deliberately do not depend on `@aztec-labs/noir-test-contracts.js` here: that package depends on
+ * `@aztec-labs/aztec.js`, so importing from it would create a workspace cycle.
  */
 export const testContractArtifact: ContractArtifact = {
   name: 'TestContract',

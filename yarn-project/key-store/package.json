@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/key-store",
+  "name": "@aztec-labs/key-store",
   "version": "0.1.0",
   "type": "module",
   "exports": "./dest/index.js",
@@ -57,10 +57,10 @@
     ]
   },
   "dependencies": {
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/kv-store": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/kv-store": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "tslib": "^2.4.0"
   },
   "devDependencies": {

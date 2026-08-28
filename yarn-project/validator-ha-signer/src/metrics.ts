@@ -5,7 +5,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 export type HACleanupType = 'stuck' | 'old' | 'outdated_rollup';
 

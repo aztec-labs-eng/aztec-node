@@ -1,9 +1,8 @@
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import { normalizeSignature } from '@aztec/foundation/crypto/secp256k1-signer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import type { SigningContext } from '@aztec/validator-ha-signer/types';
-
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { normalizeSignature } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import type { SigningContext } from '@aztec-labs/validator-ha-signer/types';
 import type { TypedDataDefinition } from 'viem';
 
 import type { ValidatorKeyStore } from './interface.js';

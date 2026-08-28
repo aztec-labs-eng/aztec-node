@@ -1,5 +1,5 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 // Re-export L2 block number constants with proper BlockNumber type
 // Note: The generated constants are plain numbers, but we provide typed versions here
@@ -56,9 +56,9 @@ export const GENESIS_BLOCK_HEADER_HASH = new Fr(GENESIS_BLOCK_HEADER_HASH_BIGINT
  * The RAW DA capacity of a checkpoint's blobs: `BLOBS_PER_CHECKPOINT * FIELDS_PER_BLOB * DA_GAS_PER_FIELD`.
  * This value is NOT attainable by transactions. The blob encoding reserves overhead fields that no tx pays
  * DA gas for: a checkpoint-end marker field plus per-block block-end fields (7 for the first block in a
- * checkpoint, 6 for each subsequent block — see `@aztec/blob-lib` encoding). The true tx-usable DA budget
+ * checkpoint, 6 for each subsequent block — see `@aztec-labs/blob-lib` encoding). The true tx-usable DA budget
  * is lower and block-count-dependent; consumers budgeting tx data should subtract the encoding overhead (as
- * `CheckpointBuilder` and the network tx gas limits in `@aztec/stdlib/gas` do) rather than use this value
+ * `CheckpointBuilder` and the network tx gas limits in `@aztec-labs/stdlib/gas` do) rather than use this value
  * directly.
  */
 // eslint-disable-next-line import-x/export

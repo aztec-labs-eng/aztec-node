@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/aztec.js",
+  "name": "@aztec-labs/aztec.js",
   "homepage": "https://github.com/AztecProtocol/aztec-packages/tree/master/yarn-project/aztec.js",
   "version": "0.1.0",
   "type": "module",
@@ -94,21 +94,21 @@
     ]
   },
   "dependencies": {
-    "@aztec/constants": "workspace:^",
-    "@aztec/entrypoints": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/entrypoints": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/standard-contracts": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "@aztec/l1-artifacts": "0.1.0-dummy",
-    "@aztec/protocol-contracts": "workspace:^",
-    "@aztec/standard-contracts": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
     "axios": "^1.15.1",
     "tslib": "^2.4.0",
     "viem": "npm:@aztec/viem@2.38.2",
     "zod": "^4"
   },
   "devDependencies": {
-    "@aztec/builder": "workspace:^",
+    "@aztec-labs/builder": "workspace:^",
     "@aztec/protocol-contracts-artifacts": "0.1.0-dummy",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",

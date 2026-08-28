@@ -1,14 +1,14 @@
-import { BBCircuitVerifier } from '@aztec/bb-prover';
-import { PAIRING_POINTS_SIZE } from '@aztec/constants';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import type { Anvil } from '@aztec/ethereum/test';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import type { Logger } from '@aztec/foundation/log';
 import { HonkVerifierAbi, HonkVerifierBytecode, IVerifierAbi } from '@aztec/l1-artifacts';
-import { Proof } from '@aztec/stdlib/proofs';
-import { RootRollupPublicInputs } from '@aztec/stdlib/rollup';
 
+import { BBCircuitVerifier } from '@aztec-labs/bb-prover';
+import { PAIRING_POINTS_SIZE } from '@aztec-labs/constants';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import type { Anvil } from '@aztec-labs/ethereum/test';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { Proof } from '@aztec-labs/stdlib/proofs';
+import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -22,7 +22,7 @@ import { getLogger, startAnvil } from '../fixtures/utils.js';
 
 /**
  * Regenerate this test's fixture with
- * AZTEC_GENERATE_TEST_DATA=1 yarn workspace @aztec/prover-client test bb_prover_full_rollup
+ * AZTEC_GENERATE_TEST_DATA=1 yarn workspace @aztec-labs/prover-client test bb_prover_full_rollup
  */
 // Standalone Honk proof verifier integration test. Starts its own anvil, deploys a HonkVerifier contract,
 // loads a serialised RootRollupPublicInputs fixture, and verifies the proof on-chain via BBCircuitVerifier.
@@ -80,7 +80,7 @@ describe('proof_verification', () => {
   });
 
   beforeAll(async () => {
-    // AZTEC_GENERATE_TEST_DATA=1 yarn workspace @aztec/prover-client test bb_prover_full_rollup
+    // AZTEC_GENERATE_TEST_DATA=1 yarn workspace @aztec-labs/prover-client test bb_prover_full_rollup
     const epochProof = JSON.parse(
       await readFile(join(fileURLToPath(import.meta.url), '../../fixtures/dumps/epoch_proof_result.json'), 'utf-8'),
     );

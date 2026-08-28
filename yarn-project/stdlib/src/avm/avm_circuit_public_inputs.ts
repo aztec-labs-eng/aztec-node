@@ -1,10 +1,15 @@
-import { MAX_ENQUEUED_CALLS_PER_TX } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, FieldReader, type Tuple, assertLength, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-
+import { MAX_ENQUEUED_CALLS_PER_TX } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import {
+  BufferReader,
+  FieldReader,
+  type Tuple,
+  assertLength,
+  serializeToBuffer,
+} from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { inspect } from 'util';
 import { z } from 'zod';
 

@@ -1,5 +1,4 @@
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { describe, expect, it, jest } from '@jest/globals';
 
 import { RequestsTracker } from './requests_tracker.js';

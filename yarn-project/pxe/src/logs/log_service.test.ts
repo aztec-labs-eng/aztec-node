@@ -1,15 +1,15 @@
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { KeyStore } from '@aztec/key-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { L2TipsProvider } from '@aztec/stdlib/block';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { deriveKeys } from '@aztec/stdlib/keys';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { KeyStore } from '@aztec-labs/key-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { deriveKeys } from '@aztec-labs/stdlib/keys';
 import {
   AppTaggingSecret,
   AppTaggingSecretKind,
@@ -17,9 +17,8 @@ import {
   SiloedTag,
   Tag,
   computeSharedTaggingSecret,
-} from '@aztec/stdlib/logs';
-import { makeBlockHeader, makeL2Tips, randomPrivateLogResult } from '@aztec/stdlib/testing';
-
+} from '@aztec-labs/stdlib/logs';
+import { makeBlockHeader, makeL2Tips, randomPrivateLogResult } from '@aztec-labs/stdlib/testing';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import {

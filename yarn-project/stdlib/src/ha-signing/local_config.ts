@@ -3,10 +3,9 @@ import {
   booleanConfigHelper,
   getConfigFromMappings,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
-import { zodFor } from '@aztec/foundation/schemas';
-import { type DataStoreConfig, dataConfigMappings } from '@aztec/stdlib/kv-store';
-
+} from '@aztec-labs/foundation/config';
+import { zodFor } from '@aztec-labs/foundation/schemas';
+import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
 import { z } from 'zod';
 
 import { type BaseSignerConfig, BaseSignerConfigSchema, baseSignerConfigMappings } from './config.js';

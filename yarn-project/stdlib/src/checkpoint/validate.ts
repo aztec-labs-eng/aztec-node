@@ -1,6 +1,6 @@
-import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec/constants';
-import type { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { sum } from '@aztec/foundation/collection';
+import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec-labs/constants';
+import type { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { sum } from '@aztec-labs/foundation/collection';
 
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '../deserialization/index.js';
 import type { Checkpoint } from './checkpoint.js';

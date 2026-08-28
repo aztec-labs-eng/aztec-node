@@ -1,7 +1,7 @@
-import { DomainSeparator } from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { computeUnbalancedMerkleTreeRootAsync } from '@aztec/foundation/trees';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { computeUnbalancedMerkleTreeRootAsync } from '@aztec-labs/foundation/trees';
 
 import type { BlockHeader } from '../tx/block_header.js';
 

@@ -1,7 +1,7 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { ScopeTestContract } from '@aztec/noir-test-contracts.js/ScopeTest';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { ScopeTestContract } from '@aztec-labs/noir-test-contracts.js/ScopeTest';
 
 import { AutomineTestContext } from '../automine_test_context.js';
 

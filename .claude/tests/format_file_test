@@ -142,7 +142,7 @@ else
   cat > "$TMP/fake-yarn-project/foundation/src/mod.ts" <<'EOF'
 import { z } from 'zod';
 import { foo } from './local.js';
-import { Fr } from '@aztec/foundation/fields';
+import { Fr } from '@aztec-labs/foundation/fields';
 
 const  x   = 1;
 EOF
@@ -153,7 +153,7 @@ EOF
   else
     pass "TS basic formatting (whitespace normalized)"
   fi
-  aztec_line=$(printf '%s\n' "$out" | grep -n '@aztec/foundation' | cut -d: -f1 || true)
+  aztec_line=$(printf '%s\n' "$out" | grep -n '@aztec-labs/foundation' | cut -d: -f1 || true)
   zod_line=$(printf '%s\n' "$out" | grep -n "from 'zod'" | cut -d: -f1 || true)
   local_line=$(printf '%s\n' "$out" | grep -n "from './local" | cut -d: -f1 || true)
   if [[ -n "$aztec_line" && -n "$zod_line" && -n "$local_line" \

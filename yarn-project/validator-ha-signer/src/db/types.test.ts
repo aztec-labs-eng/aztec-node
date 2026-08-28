@@ -1,6 +1,5 @@
-import { IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { describe, expect, it } from '@jest/globals';
 
 import {

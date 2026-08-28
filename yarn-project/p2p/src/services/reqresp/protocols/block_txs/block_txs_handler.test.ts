@@ -1,11 +1,10 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { L2Block, type L2BlockSource } from '@aztec/stdlib/block';
-import type { BlockProposal } from '@aztec/stdlib/p2p';
-import { makeBlockHeader, makeBlockProposal } from '@aztec/stdlib/testing';
-import { Tx, TxHash, TxHashArray } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
+import { makeBlockHeader, makeBlockProposal } from '@aztec-labs/stdlib/testing';
+import { Tx, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

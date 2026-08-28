@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/blob-lib",
+  "name": "@aztec-labs/blob-lib",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -27,8 +27,8 @@
     "../package.common.json"
   ],
   "dependencies": {
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
     "@crate-crypto/node-eth-kzg": "^0.10.0",
     "tslib": "^2.4.0"
   },

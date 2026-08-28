@@ -1,7 +1,6 @@
-import type { TxBlobData } from '@aztec/blob-lib/encoding';
-import { timesParallel } from '@aztec/foundation/collection';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+import type { TxBlobData } from '@aztec-labs/blob-lib/encoding';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { inspect } from 'util';
 import { z } from 'zod';
 

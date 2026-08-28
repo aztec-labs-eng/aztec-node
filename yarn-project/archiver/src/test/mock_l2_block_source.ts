@@ -1,18 +1,18 @@
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import { DefaultL1ContractsConfig } from '@aztec/ethereum/config';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   type BlockHash,
@@ -29,21 +29,21 @@ import {
   type L2Tips,
   type ProposedCheckpointQuery,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
   type CheckpointData,
   L1PublishedData,
   type ProposedCheckpointData,
   PublishedCheckpoint,
-} from '@aztec/stdlib/checkpoint';
-import type { ContractClassPublic, ContractDataSource, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { EmptyL1RollupConstants, type L1RollupConstants, getSlotRangeForEpoch } from '@aztec/stdlib/epoch-helpers';
-import { computeCheckpointOutHash } from '@aztec/stdlib/messaging';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { BlockHeader, TxHash } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/checkpoint';
+import type { ContractClassPublic, ContractDataSource, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { EmptyL1RollupConstants, type L1RollupConstants, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
+import { computeCheckpointOutHash } from '@aztec-labs/stdlib/messaging';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, TxHash } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 /**
  * A mocked implementation of L2BlockSource to be used in tests.

@@ -1,8 +1,8 @@
-import type { BBPrivateKernelProverOptions } from '@aztec/bb-prover/client';
-import type { Logger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { CircuitSimulator } from '@aztec/simulator/client';
-import type { AztecNodeDebug, PrivateKernelProver } from '@aztec/stdlib/interfaces/client';
+import type { BBPrivateKernelProverOptions } from '@aztec-labs/bb-prover/client';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { CircuitSimulator } from '@aztec-labs/simulator/client';
+import type { AztecNodeDebug, PrivateKernelProver } from '@aztec-labs/stdlib/interfaces/client';
 
 import type { ExecutionHooks } from '../hooks/index.js';
 import type { PreloadedContractsProvider } from '../pxe.js';

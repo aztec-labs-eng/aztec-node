@@ -1,5 +1,4 @@
-import { createConsoleLogger } from '@aztec/foundation/log';
-
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
 import { promises as fs } from 'fs';
 
 import type { ClientProtocolArtifact } from '../artifacts/types.js';
@@ -46,9 +45,9 @@ const artifactsWithoutSimulatedVersions = [
 
 function generateImports() {
   return `
-  import type { NoirCompiledCircuit, NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
+  import type { NoirCompiledCircuit, NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
   import type { ClientProtocolArtifact } from './artifacts/types.js';
-  import { VerificationKeyData } from '@aztec/stdlib/vks';
+  import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
   import { abiToVKData } from './utils/vk_json.js';
 `;
 }

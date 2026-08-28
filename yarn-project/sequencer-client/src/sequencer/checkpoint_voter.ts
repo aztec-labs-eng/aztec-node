@@ -1,12 +1,11 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import type { SlasherClientInterface } from '@aztec/slasher';
-import type { ResolvedSequencerConfig } from '@aztec/stdlib/interfaces/server';
-import type { ValidatorClient } from '@aztec/validator-client';
-import { DutyAlreadySignedError } from '@aztec/validator-ha-signer/errors';
-import { DutyType, type SigningContext } from '@aztec/validator-ha-signer/types';
-
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { SlasherClientInterface } from '@aztec-labs/slasher';
+import type { ResolvedSequencerConfig } from '@aztec-labs/stdlib/interfaces/server';
+import type { ValidatorClient } from '@aztec-labs/validator-client';
+import { DutyAlreadySignedError } from '@aztec-labs/validator-ha-signer/errors';
+import { DutyType, type SigningContext } from '@aztec-labs/validator-ha-signer/types';
 import type { TypedDataDefinition } from 'viem';
 
 import type { SequencerPublisher } from '../publisher/sequencer-publisher.js';

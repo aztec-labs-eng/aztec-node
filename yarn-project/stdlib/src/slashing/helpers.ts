@@ -1,4 +1,4 @@
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import { type L1RollupConstants, getEpochAtSlot, getSlotRangeForEpoch } from '../epoch-helpers/index.js';
 import type { SlasherConfig } from '../interfaces/slasher.js';

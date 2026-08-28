@@ -3,30 +3,29 @@
  *
  * Used when running testbench commands.
  */
-import { MockL2BlockSource } from '@aztec/archiver/test';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { SecretValue } from '@aztec/foundation/config';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider, Timer } from '@aztec/foundation/timer';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-import { type BlockProposal, P2PMessage } from '@aztec/stdlib/p2p';
-import { ChonkProof } from '@aztec/stdlib/proofs';
-import { makeAztecAddress, makeBlockHeader, makeBlockProposal, mockTx } from '@aztec/stdlib/testing';
-import { Tx, TxHash, type TxValidationResult, type TxValidator } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+import { MockL2BlockSource } from '@aztec-labs/archiver/test';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import { type BlockProposal, P2PMessage } from '@aztec-labs/stdlib/p2p';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
+import { makeAztecAddress, makeBlockHeader, makeBlockProposal, mockTx } from '@aztec-labs/stdlib/testing';
+import { Tx, TxHash, type TxValidationResult, type TxValidator } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type { Message, PeerId } from '@libp2p/interface';
 import { TopicValidatorResult } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';

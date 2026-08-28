@@ -16,7 +16,7 @@ fi
 
 # Point .npmrc config to one that relies on 'NPM_TOKEN' in the environment. A private release
 # (INTERNAL_NPM_REGISTRY set) has already exported NPM_CONFIG_GLOBALCONFIG — an .npmrc that scopes
-# @aztec/@noir-lang to our internal GCP Artifact Registry npm repo (see bootstrap.sh::private_release)
+# @aztec-labs/@aztec to our internal GCP Artifact Registry npm repo (see bootstrap.sh::private_release)
 # — so we leave it in place; a normal release uses the npmjs config.
 if [ -z "${INTERNAL_NPM_REGISTRY:-}" ]; then
   export NPM_CONFIG_GLOBALCONFIG="$root/ci3/npm/.npmrc"

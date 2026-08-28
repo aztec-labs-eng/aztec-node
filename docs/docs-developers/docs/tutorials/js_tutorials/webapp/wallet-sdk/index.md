@@ -7,7 +7,7 @@ references: ["yarn-project/wallet-sdk/src/*"]
 
 # Wallet SDK
 
-The `@aztec/wallet-sdk` package defines how dApps and wallet extensions communicate on Aztec. It handles wallet discovery, establishes encrypted channels via ECDH key exchange, and provides a capability-based permission system — analogous to EIP-1193 and MetaMask's provider on Ethereum, but with built-in encryption and visual verification.
+The `@aztec-labs/wallet-sdk` package defines how dApps and wallet extensions communicate on Aztec. It handles wallet discovery, establishes encrypted channels via ECDH key exchange, and provides a capability-based permission system — analogous to EIP-1193 and MetaMask's provider on Ethereum, but with built-in encryption and visual verification.
 
 This section covers **both sides** of the integration:
 
@@ -54,11 +54,11 @@ The SDK is split into focused entry points:
 
 | Import path | What it provides |
 |-------------|------------------|
-| `@aztec/wallet-sdk/manager` | `WalletManager`, `WalletProvider`, `PendingConnection`, `DiscoverySession` — dApp-side discovery and connection |
-| `@aztec/wallet-sdk/crypto` | `hashToEmoji` — convert verification hash to emoji string |
-| `@aztec/wallet-sdk/extension/handlers` | `BackgroundConnectionHandler`, `ContentScriptConnectionHandler` — wallet extension handlers |
-| `@aztec/wallet-sdk/extension/provider` | `ExtensionWallet`, `ExtensionProvider` — low-level provider classes |
-| `@aztec/wallet-sdk/base-wallet` | `BaseWallet` — abstract wallet class that extensions subclass |
+| `@aztec-labs/wallet-sdk/manager` | `WalletManager`, `WalletProvider`, `PendingConnection`, `DiscoverySession` — dApp-side discovery and connection |
+| `@aztec-labs/wallet-sdk/crypto` | `hashToEmoji` — convert verification hash to emoji string |
+| `@aztec-labs/wallet-sdk/extension/handlers` | `BackgroundConnectionHandler`, `ContentScriptConnectionHandler` — wallet extension handlers |
+| `@aztec-labs/wallet-sdk/extension/provider` | `ExtensionWallet`, `ExtensionProvider` — low-level provider classes |
+| `@aztec-labs/wallet-sdk/base-wallet` | `BaseWallet` — abstract wallet class that extensions subclass |
 
 ## Security Model
 

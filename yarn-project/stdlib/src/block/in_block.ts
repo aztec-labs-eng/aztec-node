@@ -1,5 +1,4 @@
-import { BlockNumber, BlockNumberSchema } from '@aztec/foundation/branded-types';
-
+import { BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { type ZodTypeAny, z } from 'zod';
 
 import { BlockHash } from './block_hash.js';

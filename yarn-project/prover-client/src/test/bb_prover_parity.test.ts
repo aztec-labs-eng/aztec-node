@@ -1,10 +1,10 @@
-import { BBNativeRollupProver, type BBProverConfig } from '@aztec/bb-prover';
-import { parseBooleanEnv } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import type { ServerProtocolArtifact } from '@aztec/noir-protocol-circuits-types/server';
-import { ServerCircuitVks } from '@aztec/noir-protocol-circuits-types/server/vks';
-import { INBOX_PARITY_SIZES, InboxParityPrivateInputs, type InboxParitySize } from '@aztec/stdlib/parity';
+import { BBNativeRollupProver, type BBProverConfig } from '@aztec-labs/bb-prover';
+import { parseBooleanEnv } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { ServerProtocolArtifact } from '@aztec-labs/noir-protocol-circuits-types/server';
+import { ServerCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import { INBOX_PARITY_SIZES, InboxParityPrivateInputs, type InboxParitySize } from '@aztec-labs/stdlib/parity';
 
 import { TestContext } from '../mocks/test_context.js';
 

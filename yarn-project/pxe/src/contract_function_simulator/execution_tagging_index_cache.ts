@@ -1,4 +1,4 @@
-import { AppTaggingSecret, type TaggingIndexRange } from '@aztec/stdlib/logs';
+import { AppTaggingSecret, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
 
 /** A map that stores the tagging index range for a given app tagging secret. */
 export class ExecutionTaggingIndexCache {

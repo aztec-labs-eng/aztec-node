@@ -1,8 +1,9 @@
 import type { ExecutionError, ForeignCallHandler } from '@aztec/noir-acvm_js';
 import { abiDecodeError } from '@aztec/noir-noirc_abi';
-import { parseDebugSymbols } from '@aztec/stdlib/abi';
-import type { FunctionArtifactWithContractName } from '@aztec/stdlib/abi';
-import type { NoirCompiledCircuit, NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
+
+import { parseDebugSymbols } from '@aztec-labs/stdlib/abi';
+import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledCircuit, NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 
 import { type ACIRCallback, type ACIRExecutionResult, extractCallStack } from './acvm/acvm.js';
 import type { ACVMWitness } from './acvm/acvm_types.js';

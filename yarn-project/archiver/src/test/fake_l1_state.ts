@@ -1,23 +1,28 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { type Blob, getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec/blob-lib';
-import type { CheckpointProposedLog, InboxContract, MessageSentLog, RollupContract } from '@aztec/ethereum/contracts';
-import { MULTI_CALL_3_ADDRESS } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { type BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
 import { RollupAbi } from '@aztec/l1-artifacts';
-import { CommitteeAttestation, CommitteeAttestationsAndSigners, L2Block } from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { getSlotAtTimestamp } from '@aztec/stdlib/epoch-helpers';
-import { updateInboxRollingHash } from '@aztec/stdlib/messaging';
-import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec/stdlib/p2p';
-import { mockCheckpointAndMessages } from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
 
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { type Blob, getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';
+import type {
+  CheckpointProposedLog,
+  InboxContract,
+  MessageSentLog,
+  RollupContract,
+} from '@aztec-labs/ethereum/contracts';
+import { MULTI_CALL_3_ADDRESS } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { type BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { CommitteeAttestation, CommitteeAttestationsAndSigners, L2Block } from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
+import { updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
+import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-labs/stdlib/p2p';
+import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import {
   type AbiParameter,

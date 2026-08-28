@@ -1,8 +1,8 @@
-import { getPublicClient } from '@aztec/ethereum/client';
-import { RegistryContract } from '@aztec/ethereum/contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { getL1ContractsConfig } from '@aztec/ethereum/queries';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { getPublicClient } from '@aztec-labs/ethereum/client';
+import { RegistryContract } from '@aztec-labs/ethereum/contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { getL1ContractsConfig } from '@aztec-labs/ethereum/queries';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 export async function getL1Config(
   registryAddress: EthAddress,

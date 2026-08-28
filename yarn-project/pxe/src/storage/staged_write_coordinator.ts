@@ -1,6 +1,6 @@
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 
 /**
  * Identifies a change set: the writes staged between a {@link StagedWriteCoordinator.begin} and its matching commit or

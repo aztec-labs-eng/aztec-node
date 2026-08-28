@@ -1,10 +1,10 @@
-import { createExtendedL1Client, getPublicClient } from '@aztec/ethereum/client';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { TestDateProvider } from '@aztec/foundation/timer';
 import { GovernanceAbi } from '@aztec/l1-artifacts/GovernanceAbi';
 
+import { createExtendedL1Client, getPublicClient } from '@aztec-labs/ethereum/client';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 import { type Hex, encodeFunctionData, parseEventLogs } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';

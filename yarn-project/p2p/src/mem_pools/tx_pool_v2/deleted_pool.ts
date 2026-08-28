@@ -1,6 +1,6 @@
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncSet } from '@aztec/kv-store';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncSet } from '@aztec-labs/kv-store';
 
 /**
  * State stored for each transaction from a pruned block.

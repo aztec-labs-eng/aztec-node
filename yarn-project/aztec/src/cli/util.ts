@@ -1,11 +1,10 @@
-import type { AztecNodeConfig } from '@aztec/aztec-node';
-import type { AccountManager } from '@aztec/aztec.js/wallet';
-import type { ConfigMappingsType } from '@aztec/foundation/config';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { LogFn } from '@aztec/foundation/log';
-import type { ProverConfig } from '@aztec/stdlib/interfaces/server';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
-
+import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
+import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
+import type { ConfigMappingsType } from '@aztec-labs/foundation/config';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { ProverConfig } from '@aztec-labs/stdlib/interfaces/server';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 

@@ -7,4 +7,4 @@ export * from './bb/bb_js_backend.js';
 export * from './honk.js';
 export * from './verification_key/verification_key_data.js';
 
-export { type ClientProtocolCircuitVerifier } from '@aztec/stdlib/interfaces/server';
+export { type ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';

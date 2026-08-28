@@ -1,9 +1,9 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import type { Operator } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn } from '@aztec/foundation/log';
-import { getGenesisValues } from '@aztec/world-state/testing';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 
 import { deployNewRollupContracts } from '../../utils/aztec.js';
 import { getSponsoredFPCAddress } from '../../utils/setup_contracts.js';

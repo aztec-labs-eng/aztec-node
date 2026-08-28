@@ -1,11 +1,11 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import {
   TX_ERROR_DUPLICATE_NULLIFIER_IN_TX,
   TX_ERROR_EXISTING_NULLIFIER,
   type TxValidationResult,
   type TxValidator,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 export interface NullifierSource {
   nullifiersExist: (nullifiers: Buffer[]) => Promise<boolean[]>;

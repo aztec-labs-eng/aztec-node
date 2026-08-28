@@ -1,6 +1,5 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { describe, expect, it, jest } from '@jest/globals';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';

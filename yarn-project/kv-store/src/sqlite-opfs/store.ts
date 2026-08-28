@@ -1,5 +1,5 @@
-import type { Logger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
 
 import type { AztecAsyncArray } from '../interfaces/array.js';
 import type { Key, StoreSize, Value } from '../interfaces/common.js';

@@ -1,6 +1,5 @@
-import type { LogFn } from '@aztec/foundation/log';
-import { DEV_VERSION, getPackageVersion } from '@aztec/stdlib/update-checker';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { DEV_VERSION, getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import TOML from '@iarna/toml';
 import { readFile } from 'fs/promises';
 import { join } from 'path';

@@ -1,21 +1,21 @@
-import { BatchedBlob, getEthBlobEvaluationInputs } from '@aztec/blob-lib';
-import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec/constants';
-import type { RollupContract, ViemCommitteeAttestation } from '@aztec/ethereum/contracts';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { areArraysEqual } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
 import { RollupAbi } from '@aztec/l1-artifacts';
-import type { PublisherConfig, TxSenderConfig } from '@aztec/sequencer-client';
-import { CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec/stdlib/block';
-import type { Proof } from '@aztec/stdlib/proofs';
-import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec/stdlib/rollup';
-import type { L1PublishProofStats } from '@aztec/stdlib/stats';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
 
+import { BatchedBlob, getEthBlobEvaluationInputs } from '@aztec-labs/blob-lib';
+import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import type { RollupContract, ViemCommitteeAttestation } from '@aztec-labs/ethereum/contracts';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { areArraysEqual } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
+import { CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
+import type { Proof } from '@aztec-labs/stdlib/proofs';
+import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
+import type { L1PublishProofStats } from '@aztec-labs/stdlib/stats';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { inspect } from 'util';
 import { type Hex, type TransactionReceipt, encodeFunctionData, formatEther, formatGwei } from 'viem';
 

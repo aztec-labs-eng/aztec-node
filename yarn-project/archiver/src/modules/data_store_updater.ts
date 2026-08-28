@@ -1,25 +1,25 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { filterAsync } from '@aztec/foundation/collection';
-import { createLogger } from '@aztec/foundation/log';
-import { ContractClassPublishedEvent } from '@aztec/protocol-contracts/class-registry';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { filterAsync } from '@aztec-labs/foundation/collection';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { ContractClassPublishedEvent } from '@aztec-labs/protocol-contracts/class-registry';
 import {
   ContractInstancePublishedEvent,
   ContractInstanceUpdatedEvent,
-} from '@aztec/protocol-contracts/instance-registry';
-import type { CommitteeAttestation, L2Block, ValidateCheckpointResult } from '@aztec/stdlib/block';
+} from '@aztec-labs/protocol-contracts/instance-registry';
+import type { CommitteeAttestation, L2Block, ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
 import {
   type L1PublishedData,
   type ProposedCheckpointInput,
   type PublishedCheckpoint,
   validateCheckpoint,
-} from '@aztec/stdlib/checkpoint';
+} from '@aztec-labs/stdlib/checkpoint';
 import {
   type ContractClassPublicWithCommitment,
   computeContractAddressFromInstance,
   computeContractClassId,
-} from '@aztec/stdlib/contract';
-import type { ContractClassLog, PrivateLog, PublicLog } from '@aztec/stdlib/logs';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/contract';
+import type { ContractClassLog, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { ArchiverDataStores } from '../store/data_stores.js';
 import type { L2TipsCache } from '../store/l2_tips_cache.js';

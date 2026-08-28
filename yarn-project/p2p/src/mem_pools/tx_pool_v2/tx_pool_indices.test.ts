@@ -1,4 +1,4 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { stubTxMetaData, txHashFromBigInt } from './tx_metadata.js';
 import { TxPoolIndices } from './tx_pool_indices.js';

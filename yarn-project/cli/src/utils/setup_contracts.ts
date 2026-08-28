@@ -1,12 +1,12 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { SPONSORED_FPC_SALT } from '@aztec/constants';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
 
 async function getSponsoredFPCContract() {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore - Importing noir-contracts.js even in devDeps results in a circular dependency error. Need to ignore because this line doesn't cause an error in a dev environment
-  const { SponsoredFPCContract } = await import('@aztec/noir-contracts.js/SponsoredFPC');
+  const { SponsoredFPCContract } = await import('@aztec-labs/noir-contracts.js/SponsoredFPC');
   return SponsoredFPCContract;
 }
 

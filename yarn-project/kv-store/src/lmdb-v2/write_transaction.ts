@@ -6,7 +6,7 @@ import {
   merge,
   removeAnyOf,
   removeFromSortedArray,
-} from '@aztec/foundation/array';
+} from '@aztec-labs/foundation/array';
 
 import { type Batch, Database, LMDBMessageType } from './message.js';
 import { ReadTransaction } from './read_transaction.js';

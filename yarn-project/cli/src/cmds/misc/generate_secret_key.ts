@@ -1,4 +1,4 @@
-import { Fr } from '@aztec/aztec.js/fields';
+import { Fr } from '@aztec-labs/aztec.js/fields';
 
 export function generateSecretKey() {
   return { secretKey: Fr.random() };

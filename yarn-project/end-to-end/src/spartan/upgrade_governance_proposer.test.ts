@@ -1,15 +1,15 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { type AztecNode, type NodeInfo, createAztecNodeClient } from '@aztec/aztec.js/node';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { GovernanceProposerContract, RollupContract } from '@aztec/ethereum/contracts';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import { createL1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
 import { NewGovernanceProposerPayloadAbi } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadAbi';
 import { NewGovernanceProposerPayloadBytecode } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadBytecode';
 
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { type AztecNode, type NodeInfo, createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { privateKeyToAccount } from 'viem/accounts';
 import { parseEther, stringify } from 'viem/utils';
 

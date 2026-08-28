@@ -1,4 +1,4 @@
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { MAX_RPC_LEN } from '../interfaces/api_limit.js';

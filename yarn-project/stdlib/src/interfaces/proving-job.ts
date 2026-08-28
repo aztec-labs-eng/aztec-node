@@ -3,10 +3,9 @@ import {
   NESTED_RECURSIVE_PROOF_LENGTH,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
-} from '@aztec/constants';
-import { EpochNumber, EpochNumberSchema } from '@aztec/foundation/branded-types';
-import type { ZodFor } from '@aztec/foundation/schemas';
-
+} from '@aztec-labs/constants';
+import { EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { AvmCircuitInputs } from '../avm/avm.js';

@@ -1,11 +1,11 @@
-import { levels, registerLoggingStream } from '@aztec/foundation/log';
+import { levels, registerLoggingStream } from '@aztec-labs/foundation/log';
 import {
   type TelemetryClient,
   type TelemetryClientConfig,
   getConfigEnvVars as getTelemetryConfig,
   initTelemetryClient,
-} from '@aztec/telemetry-client';
-import { OTelPinoStream } from '@aztec/telemetry-client/otel-pino-stream';
+} from '@aztec-labs/telemetry-client';
+import { OTelPinoStream } from '@aztec-labs/telemetry-client/otel-pino-stream';
 
 export async function getEndToEndTestTelemetryClient(metricsPort?: number): Promise<TelemetryClient> {
   if (metricsPort) {

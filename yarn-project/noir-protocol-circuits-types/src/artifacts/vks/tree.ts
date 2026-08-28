@@ -1,8 +1,8 @@
-import { VK_TREE_HEIGHT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { assertLength } from '@aztec/foundation/serialize';
-import type { MerkleTree } from '@aztec/foundation/trees';
-import { VerificationKeyAsFields, VerificationKeyData } from '@aztec/stdlib/vks';
+import { VK_TREE_HEIGHT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { assertLength } from '@aztec-labs/foundation/serialize';
+import type { MerkleTree } from '@aztec-labs/foundation/trees';
+import { VerificationKeyAsFields, VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 import { vkTree } from '../../vk_tree.js';
 

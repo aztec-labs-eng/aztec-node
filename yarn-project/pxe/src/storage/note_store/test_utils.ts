@@ -1,4 +1,4 @@
-import type { NoteDao } from '@aztec/stdlib/note';
+import type { NoteDao } from '@aztec-labs/stdlib/note';
 
 import type { NotesFilter } from '../../notes_filter.js';
 import type { NoteStore } from './note_store.js';

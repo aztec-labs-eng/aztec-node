@@ -1,12 +1,12 @@
-import type { ConfigMappingsType } from '@aztec/foundation/config';
+import type { ConfigMappingsType } from '@aztec-labs/foundation/config';
 import {
   bigintConfigHelper,
   booleanConfigHelper,
   floatConfigHelper,
   numberConfigHelper,
-} from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
 
 import { slasherDefaultEnv } from './generated/slasher-defaults.js';
 

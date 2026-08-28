@@ -1,8 +1,7 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { P2PBootstrapApi } from '@aztec/stdlib/interfaces/server';
-import { OtelMetricsAdapter, type TelemetryClient } from '@aztec/telemetry-client';
-
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { P2PBootstrapApi } from '@aztec-labs/stdlib/interfaces/server';
+import { OtelMetricsAdapter, type TelemetryClient } from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
 import { Discv5, type Discv5EventEmitter } from '@nethermindeth/discv5';

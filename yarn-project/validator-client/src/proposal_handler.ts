@@ -1,61 +1,61 @@
-import type { Archiver } from '@aztec/archiver';
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { type Blob, encodeCheckpointBlobDataFromBlocks, getBlobsPerL1Block } from '@aztec/blob-lib';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { type Blob, encodeCheckpointBlobDataFromBlocks, getBlobsPerL1Block } from '@aztec-labs/blob-lib';
 import {
   INITIAL_L2_BLOCK_NUM,
   MAX_BLOCKS_PER_CHECKPOINT,
   MAX_L1_TO_L2_MSGS_PER_BLOCK,
   MAX_L1_TO_L2_MSGS_PER_CHECKPOINT,
-} from '@aztec/constants';
-import type { EpochCache } from '@aztec/epoch-cache';
-import { validateFeeAssetPriceModifier } from '@aztec/ethereum/contracts';
+} from '@aztec-labs/constants';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { validateFeeAssetPriceModifier } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
   type CheckpointProposalHash,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { pick } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { TimeoutError } from '@aztec/foundation/error';
-import { FifoSet } from '@aztec/foundation/fifo-set';
-import type { LogData } from '@aztec/foundation/log';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { DateProvider, Timer } from '@aztec/foundation/timer';
-import { isErrorClass } from '@aztec/foundation/types';
-import type { P2P, PeerId } from '@aztec/p2p';
-import type { BlockData, L2Block, L2BlockSink, L2BlockSource } from '@aztec/stdlib/block';
-import type { CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec/stdlib/checkpoint';
+} from '@aztec-labs/foundation/branded-types';
+import { pick } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { TimeoutError } from '@aztec-labs/foundation/error';
+import { FifoSet } from '@aztec-labs/foundation/fifo-set';
+import type { LogData } from '@aztec-labs/foundation/log';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import { isErrorClass } from '@aztec-labs/foundation/types';
+import type { P2P, PeerId } from '@aztec-labs/p2p';
+import type { BlockData, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
 import {
   getPreviousCheckpointInboxRollingHash,
   getPreviousCheckpointOutHashes,
   validateCheckpoint,
-} from '@aztec/stdlib/checkpoint';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import { Gas } from '@aztec/stdlib/gas';
+} from '@aztec-labs/stdlib/checkpoint';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { Gas } from '@aztec-labs/stdlib/gas';
 import type {
   ITxProvider,
   MerkleTreeWriteOperations,
   ValidatorClientFullConfig,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/interfaces/server';
 import {
   type L1ToL2MessageSource,
   accumulateCheckpointOutHashes,
   getInboxCutoffTimestamp,
   isInboxConsumptionSufficient,
-} from '@aztec/stdlib/messaging';
+} from '@aztec-labs/stdlib/messaging';
 import type {
   BlockProposal,
   CheckpointAttestation,
   CheckpointProposalCore,
   ValidatedBlockProposal,
   ValidatedCheckpointProposalCore,
-} from '@aztec/stdlib/p2p';
-import type { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { CheckpointGlobalVariables, FailedTx, Tx, TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/p2p';
+import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { CheckpointGlobalVariables, FailedTx, Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import {
   InvalidBlockProposalTxsError,
   ReExFailedTxsError,
@@ -63,8 +63,8 @@ import {
   ReExStateMismatchError,
   ReExTimeoutError,
   TransactionsNotAvailableError,
-} from '@aztec/stdlib/validators';
-import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/validators';
+import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import type { ValidatorMetrics } from './metrics.js';

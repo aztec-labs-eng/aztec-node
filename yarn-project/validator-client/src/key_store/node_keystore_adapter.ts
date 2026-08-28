@@ -1,13 +1,12 @@
-import type { EthSigner } from '@aztec/ethereum/eth-signer';
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { KeystoreManager, loadKeystoreFile } from '@aztec/node-keystore';
-import type { EthRemoteSignerConfig } from '@aztec/node-keystore';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { InvalidValidatorPrivateKeyError } from '@aztec/stdlib/validators';
-import type { SigningContext } from '@aztec/validator-ha-signer/types';
-
+import type { EthSigner } from '@aztec-labs/ethereum/eth-signer';
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { KeystoreManager, loadKeystoreFile } from '@aztec-labs/node-keystore';
+import type { EthRemoteSignerConfig } from '@aztec-labs/node-keystore';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { InvalidValidatorPrivateKeyError } from '@aztec-labs/stdlib/validators';
+import type { SigningContext } from '@aztec-labs/validator-ha-signer/types';
 import type { TypedDataDefinition } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 

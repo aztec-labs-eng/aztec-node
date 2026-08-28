@@ -1,6 +1,6 @@
 import { findBbBinary } from '@aztec/bb.js';
-import type { LogFn } from '@aztec/foundation/log';
 
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { readFile, rename, rm, writeFile } from 'fs/promises';
 import { basename, dirname, join } from 'path';
 

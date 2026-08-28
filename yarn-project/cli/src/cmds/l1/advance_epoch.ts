@@ -1,7 +1,7 @@
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { RollupCheatCodes } from '@aztec/ethereum/test';
-import type { LogFn } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { RollupCheatCodes } from '@aztec-labs/ethereum/test';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 
 export async function advanceEpoch(l1RpcUrls: string[], nodeUrl: string, log: LogFn) {
   const aztecNode = createAztecNodeClient(nodeUrl);

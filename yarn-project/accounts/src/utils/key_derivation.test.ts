@@ -1,4 +1,4 @@
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 
 import { deriveSecretKeyFromSigningKey } from './key_derivation.js';
 

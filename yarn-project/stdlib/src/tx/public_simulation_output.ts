@@ -1,6 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import times from 'lodash.times';
 import { z } from 'zod';
 

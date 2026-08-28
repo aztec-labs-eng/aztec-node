@@ -1,6 +1,5 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { Registry } from 'prom-client';
 
 import type { MetricDefinition } from './metrics.js';

@@ -1,4 +1,5 @@
 import { CircuitKind } from '@aztec/bb.js';
+
 import {
   AVM_EMITNOTEHASH_BASE_L2_GAS,
   AVM_EMITNULLIFIER_BASE_L2_GAS,
@@ -23,15 +24,15 @@ import {
   PUBLIC_DATA_WRITE_LENGTH,
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
-import { arrayNonEmptyLength, padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { Timer } from '@aztec/foundation/timer';
-import type { KeyStore } from '@aztec/key-store';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
+} from '@aztec-labs/constants';
+import { arrayNonEmptyLength, padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { KeyStore } from '@aztec-labs/key-store';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import {
   type CircuitSimulator,
   ExecutionError,
@@ -40,13 +41,13 @@ import {
   resolveAssertionMessageFromError,
   toACVMWitness,
   witnessMapToFields,
-} from '@aztec/simulator/client';
-import type { FunctionCall } from '@aztec/stdlib/abi';
-import { FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { BlockParameter, L2TipsProvider } from '@aztec/stdlib/block';
-import { Gas } from '@aztec/stdlib/gas';
+} from '@aztec-labs/simulator/client';
+import type { FunctionCall } from '@aztec-labs/stdlib/abi';
+import { FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { BlockParameter, L2TipsProvider } from '@aztec-labs/stdlib/block';
+import { Gas } from '@aztec-labs/stdlib/gas';
 import {
   computeNoteHashNonce,
   computeProtocolNullifier,
@@ -54,8 +55,8 @@ import {
   computeUniqueNoteHash,
   siloNoteHash,
   siloNullifier,
-} from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
   ClaimedLengthArray,
   PartialPrivateTailPublicInputsForPublic,
@@ -75,11 +76,11 @@ import {
   buildTransientDataHints,
   getNoteHashReadRequestResetActions,
   getNullifierReadRequestResetActions,
-} from '@aztec/stdlib/kernel';
-import { PrivateLog } from '@aztec/stdlib/logs';
-import { ScopedL2ToL1Message } from '@aztec/stdlib/messaging';
-import { ChonkProof } from '@aztec/stdlib/proofs';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/kernel';
+import { PrivateLog } from '@aztec-labs/stdlib/logs';
+import { ScopedL2ToL1Message } from '@aztec-labs/stdlib/messaging';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   CallContext,
@@ -92,7 +93,7 @@ import {
   collectNested,
   collectNoteHashNullifierCounterMap,
   getFinalMinRevertibleSideEffectCounter,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import type { ContractClassService } from '../contract/contract_class_service.js';
 import type { ContractSyncService } from '../contract/contract_sync_service.js';

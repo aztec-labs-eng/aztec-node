@@ -1,24 +1,23 @@
-import type { ContractArtifact } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import {
   type ContractClassWithId,
   type ContractInstanceWithAddress,
   getContractClassFromArtifact,
   getContractInstanceFromInstantiationParams,
-} from '@aztec/aztec.js/contracts';
-import { publishContractClass, publishInstance } from '@aztec/aztec.js/deployment';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TxExecutionResult, type TxReceipt } from '@aztec/aztec.js/tx';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { writeTestData } from '@aztec/foundation/testing/files';
-import { StatefulTestContract } from '@aztec/noir-test-contracts.js/StatefulTest';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import type { ContractClassIdPreimage } from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
-
+} from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass, publishInstance } from '@aztec-labs/aztec.js/deployment';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TxExecutionResult, type TxReceipt } from '@aztec-labs/aztec.js/tx';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { writeTestData } from '@aztec-labs/foundation/testing/files';
+import { StatefulTestContract } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import type { ContractClassIdPreimage } from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import { jest } from '@jest/globals';
 
 import { DUPLICATE_NULLIFIER_ERROR } from '../../../fixtures/fixtures.js';

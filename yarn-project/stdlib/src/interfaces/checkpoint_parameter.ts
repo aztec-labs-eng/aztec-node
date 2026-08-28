@@ -1,5 +1,4 @@
-import { CheckpointNumberSchema, SlotNumberSchema } from '@aztec/foundation/branded-types';
-
+import { CheckpointNumberSchema, SlotNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { z } from 'zod';
 
 import { CheckpointTagSchema } from './chain_tips.js';

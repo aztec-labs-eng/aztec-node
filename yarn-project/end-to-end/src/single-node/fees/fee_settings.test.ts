@@ -1,14 +1,13 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { CheatCodes } from '@aztec/aztec/testing';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { retryUntil } from '@aztec/foundation/retry';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import type { GasFees, GasSettings } from '@aztec/stdlib/gas';
-import { TX_ERROR_INSUFFICIENT_FEE_PER_GAS } from '@aztec/stdlib/tx';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import type { GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import { TX_ERROR_INSUFFICIENT_FEE_PER_GAS } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { inspect } from 'util';
 

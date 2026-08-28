@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/standard-contracts",
+  "name": "@aztec-labs/standard-contracts",
   "homepage": "https://github.com/AztecProtocol/aztec-packages/tree/master/yarn-project/standard-contracts",
   "description": "Standard non-protocol contracts for the Aztec Network",
   "version": "0.1.0",
@@ -75,8 +75,8 @@
     ]
   },
   "dependencies": {
-    "@aztec/foundation": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "tslib": "^2.4.0"
   },
   "devDependencies": {

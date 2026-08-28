@@ -1,12 +1,12 @@
 // docs:start:run_recursion
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
-import type { FieldLike } from "@aztec/aztec.js/abi";
+import { SponsoredFeePaymentMethod } from "@aztec-labs/aztec.js/fee";
+import type { FieldLike } from "@aztec-labs/aztec.js/abi";
 import { getSponsoredFPCInstance } from "./scripts/sponsored_fpc.js";
-import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC";
+import { SponsoredFPCContract } from "@aztec-labs/noir-contracts.js/SponsoredFPC";
 import { ValueNotEqualContract } from "./artifacts/ValueNotEqual.js";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { NO_FROM } from "@aztec/aztec.js/account";
-import { Fr, GrumpkinScalar } from "@aztec/aztec.js/fields";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { NO_FROM } from "@aztec-labs/aztec.js/account";
+import { Fr, GrumpkinScalar } from "@aztec-labs/aztec.js/fields";
 import assert from "node:assert";
 import fs from "node:fs";
 

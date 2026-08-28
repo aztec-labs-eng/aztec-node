@@ -1,13 +1,13 @@
-import { type Account, NO_FROM } from '@aztec/aztec.js/account';
-import { CallAuthorizationRequest } from '@aztec/aztec.js/authorization';
+import { type Account, NO_FROM } from '@aztec-labs/aztec.js/account';
+import { CallAuthorizationRequest } from '@aztec-labs/aztec.js/authorization';
 import {
   ContractFunctionInteraction,
   type InteractionWaitOptions,
   NO_WAIT,
   type SendReturn,
   type WaitOpts,
-} from '@aztec/aztec.js/contracts';
-import type { AztecNodeClientOptions } from '@aztec/aztec.js/node';
+} from '@aztec-labs/aztec.js/contracts';
+import type { AztecNodeClientOptions } from '@aztec-labs/aztec.js/node';
 import type {
   Aliased,
   ExecuteUtilityOptions,
@@ -16,22 +16,22 @@ import type {
   ProfileOptions,
   SendOptions,
   SimulateOptions,
-} from '@aztec/aztec.js/wallet';
-import { AccountManager, TxSimulationResultWithAppOffset } from '@aztec/aztec.js/wallet';
-import type { DefaultAccountEntrypointOptions } from '@aztec/entrypoints/account';
-import { DefaultEntrypoint } from '@aztec/entrypoints/default';
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { Schnorr } from '@aztec/foundation/crypto/schnorr';
-import { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { PXEConfig, PXECreationOptions } from '@aztec/pxe/client/lazy';
-import type { PXE } from '@aztec/pxe/server';
-import type { EventMetadataDefinition, FunctionCall } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { getContractClassFromArtifact } from '@aztec/stdlib/contract';
-import { GasSettings } from '@aztec/stdlib/gas';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+} from '@aztec-labs/aztec.js/wallet';
+import { AccountManager, TxSimulationResultWithAppOffset } from '@aztec-labs/aztec.js/wallet';
+import type { DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
+import { DefaultEntrypoint } from '@aztec-labs/entrypoints/default';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { Schnorr } from '@aztec-labs/foundation/crypto/schnorr';
+import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { PXEConfig, PXECreationOptions } from '@aztec-labs/pxe/client/lazy';
+import type { PXE } from '@aztec-labs/pxe/server';
+import type { EventMetadataDefinition, FunctionCall } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
+import { GasSettings } from '@aztec-labs/stdlib/gas';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import {
   type ContractOverrides,
   ExecutionPayload,
@@ -42,8 +42,8 @@ import {
   type UtilityExecutionResult,
   collectOffchainEffects,
   mergeExecutionPayloads,
-} from '@aztec/stdlib/tx';
-import { BaseWallet, type SimulateViaEntrypointOptions, getGasLimits } from '@aztec/wallet-sdk/base-wallet';
+} from '@aztec-labs/stdlib/tx';
+import { BaseWallet, type SimulateViaEntrypointOptions, getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
 
 import type { AccountContractsProvider } from './account-contract-providers/types.js';
 import { type AccountType, WalletDB } from './wallet_db.js';

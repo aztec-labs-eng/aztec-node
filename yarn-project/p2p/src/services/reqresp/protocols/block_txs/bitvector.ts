@@ -1,4 +1,4 @@
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { MAX_TXS_PER_BLOCK } from '../../constants.js';
 

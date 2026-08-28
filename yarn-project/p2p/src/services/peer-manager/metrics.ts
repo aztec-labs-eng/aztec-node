@@ -8,8 +8,7 @@ import {
   type UpDownCounter,
   createUpDownCounterWithDefault,
   getTelemetryClient,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 
 import { GoodByeReason, prettyGoodbyeReason } from '../reqresp/protocols/index.js';

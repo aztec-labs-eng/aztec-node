@@ -1,8 +1,7 @@
-import { createLogger } from '@aztec/foundation/log';
-import { AvmTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmTest';
-import { TestExecutorMetrics, defaultGlobals, megaBulkTest } from '@aztec/simulator/public/fixtures';
-import { NativeWorldStateService } from '@aztec/world-state';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
+import { TestExecutorMetrics, defaultGlobals, megaBulkTest } from '@aztec-labs/simulator/public/fixtures';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 

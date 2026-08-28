@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { PublicKey, deriveKeys, derivePublicKeyFromSecretKey, hashPublicKey } from '@aztec/stdlib/keys';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { PublicKey, deriveKeys, derivePublicKeyFromSecretKey, hashPublicKey } from '@aztec-labs/stdlib/keys';
 
 import type { AccountPrivacySecretKeys } from './account_privacy_keys.js';
 import { KeyStore } from './key_store.js';

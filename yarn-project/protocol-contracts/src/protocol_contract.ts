@@ -1,7 +1,11 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractClassIdPreimage, ContractClassWithId, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type {
+  ContractClassIdPreimage,
+  ContractClassWithId,
+  ContractInstanceWithAddress,
+} from '@aztec-labs/stdlib/contract';
 
 import { ProtocolContractAddress, ProtocolContractClassId } from './protocol_contract_data.js';
 

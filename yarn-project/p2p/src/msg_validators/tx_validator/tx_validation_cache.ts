@@ -1,7 +1,6 @@
-import { LruMap } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { Tx, TxValidationResult } from '@aztec/stdlib/tx';
-
+import { LruMap } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { Tx, TxValidationResult } from '@aztec-labs/stdlib/tx';
 import { createHash } from 'node:crypto';
 
 /**

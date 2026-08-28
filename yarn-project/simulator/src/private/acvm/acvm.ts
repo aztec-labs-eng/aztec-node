@@ -1,12 +1,13 @@
-import { type Logger, type LoggerBindings, resolveLogger } from '@aztec/foundation/log';
 import {
   type ExecutionError,
   type ForeignCallInput,
   type ForeignCallOutput,
   executeCircuitWithReturnWitness,
 } from '@aztec/noir-acvm_js';
-import type { FunctionDebugMetadata } from '@aztec/stdlib/abi';
-import type { NoirCallStack } from '@aztec/stdlib/errors';
+
+import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
+import type { FunctionDebugMetadata } from '@aztec-labs/stdlib/abi';
+import type { NoirCallStack } from '@aztec-labs/stdlib/errors';
 
 import { resolveOpcodeLocations, traverseCauseChain } from '../../common/errors.js';
 import type { ACVMWitness } from './acvm_types.js';

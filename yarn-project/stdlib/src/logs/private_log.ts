@@ -1,8 +1,8 @@
-import { PRIVATE_LOG_LENGTH, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec/constants';
-import { type FieldsOf, makeTuple } from '@aztec/foundation/array';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
+import { PRIVATE_LOG_LENGTH, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
   BufferSink,
@@ -10,8 +10,7 @@ import {
   type Tuple,
   serializeToFields,
   serializeToSink,
-} from '@aztec/foundation/serialize';
-
+} from '@aztec-labs/foundation/serialize';
 import { inspect } from 'util';
 import { z } from 'zod';
 

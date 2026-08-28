@@ -1,6 +1,6 @@
-import { makeTuple } from '@aztec/foundation/array';
-import { BufferReader, type Bufferable, type Tuple, serializeToBuffer } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { BufferReader, type Bufferable, type Tuple, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
 
 export enum ReadRequestActionEnum {
   SKIP = 0,

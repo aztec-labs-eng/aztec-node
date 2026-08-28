@@ -1,10 +1,9 @@
-import type { Logger } from '@aztec/foundation/log';
-import { elapsed } from '@aztec/foundation/timer';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-import type { L2Block } from '@aztec/stdlib/block';
-import type { BlockHeader, Tx } from '@aztec/stdlib/tx';
-import type { TelemetryClient } from '@aztec/telemetry-client';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { elapsed } from '@aztec-labs/foundation/timer';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import type { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import EventEmitter from 'node:events';
 
 import type { TxPoolV2, TxPoolV2Events } from '../../mem_pools/index.js';

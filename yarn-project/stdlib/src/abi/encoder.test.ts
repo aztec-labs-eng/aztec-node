@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { schemas } from '../schemas/index.js';

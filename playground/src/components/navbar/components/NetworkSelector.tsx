@@ -7,7 +7,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { AddNetworksDialog } from './AddNetworkDialog';
 import CircularProgress from '@mui/material/CircularProgress';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import { AztecSQLiteOPFSStore, storePoolDirectory } from '@aztec/kv-store/sqlite-opfs';
+import { AztecSQLiteOPFSStore, storePoolDirectory } from '@aztec-labs/kv-store/sqlite-opfs';
 import { AztecContext } from '../../../aztecContext';
 import { navbarButtonStyle, navbarSelect } from '../../../styles/common';
 import { NETWORKS } from '../../../utils/networks';
@@ -18,7 +18,7 @@ import { trackButtonClick } from '../../../utils/matomo';
 import CloseIcon from '@mui/icons-material/Close';
 import { PlaygroundDB } from '../../../utils/storage';
 import { WebLogger } from '../../../utils/web_logger';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
 
 export function NetworkSelector() {
   const {

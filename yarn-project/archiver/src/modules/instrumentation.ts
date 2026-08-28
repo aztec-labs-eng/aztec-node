@@ -1,9 +1,9 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import type { L2Block } from '@aztec/stdlib/block';
-import type { CheckpointData } from '@aztec/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import type { CheckpointData } from '@aztec-labs/stdlib/checkpoint';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   Attributes,
   type Gauge,
@@ -15,7 +15,7 @@ import {
   type Tracer,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 export class ArchiverInstrumentation {
   public readonly tracer: Tracer;

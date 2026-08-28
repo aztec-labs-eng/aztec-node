@@ -1,7 +1,6 @@
-import { type SlotNumber, SlotNumberSchema } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Prettify } from '@aztec/foundation/types';
-
+import { type SlotNumber, SlotNumberSchema } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Prettify } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import type { AztecAddress } from '../aztec-address/index.js';

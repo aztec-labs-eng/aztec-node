@@ -1,8 +1,9 @@
-import { INBOX_PARITY_SIZE_LARGE, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_SMALL } from '@aztec/constants';
-import { pushTestData } from '@aztec/foundation/testing';
 import type { WitnessMap } from '@aztec/noir-acvm_js';
 import { type InputValue, abiDecode, abiEncode } from '@aztec/noir-noirc_abi';
-import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec/stdlib/parity';
+
+import { INBOX_PARITY_SIZE_LARGE, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_SMALL } from '@aztec-labs/constants';
+import { pushTestData } from '@aztec-labs/foundation/testing';
+import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec-labs/stdlib/parity';
 import type {
   BlockMergeRollupPrivateInputs,
   BlockRollupPublicInputs,
@@ -22,7 +23,7 @@ import type {
   RootRollupPublicInputs,
   TxMergeRollupPrivateInputs,
   TxRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
+} from '@aztec-labs/stdlib/rollup';
 
 import { ServerCircuitArtifacts, SimulatedServerCircuitArtifacts } from '../artifacts/server.js';
 import { type ServerProtocolArtifact, mapProtocolArtifactNameToCircuitName } from '../artifacts/types.js';

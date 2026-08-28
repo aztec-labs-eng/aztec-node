@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { deriveStorageSlotInMap } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { deriveStorageSlotInMap } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 /**
  * Returns the owner's fee juice balance.

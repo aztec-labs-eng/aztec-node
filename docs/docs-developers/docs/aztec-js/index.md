@@ -13,35 +13,35 @@ Aztec.js is a library that provides APIs for managing accounts and interacting w
 ## Installing
 
 ```bash
-npm install @aztec/aztec.js@#include_version_without_prefix
+npm install @aztec-labs/aztec.js@#include_version_without_prefix
 ```
 
 ## Common Dependencies
 
-Most applications will need additional packages alongside `@aztec/aztec.js`, e.g.:
+Most applications will need additional packages alongside `@aztec-labs/aztec.js`, e.g.:
 
 ```bash
-npm install @aztec/aztec.js@#include_version_without_prefix \
-  @aztec/accounts@#include_version_without_prefix \
-  @aztec/wallets@#include_version_without_prefix \
-  @aztec/noir-contracts.js@#include_version_without_prefix
+npm install @aztec-labs/aztec.js@#include_version_without_prefix \
+  @aztec-labs/accounts@#include_version_without_prefix \
+  @aztec-labs/wallets@#include_version_without_prefix \
+  @aztec-labs/noir-contracts.js@#include_version_without_prefix
 ```
 
 | Package                    | Description                                                   |
 | -------------------------- | ------------------------------------------------------------- |
-| `@aztec/aztec.js`          | Core SDK for contracts, transactions, and network interaction |
-| `@aztec/accounts`          | Account contract implementations (Schnorr, ECDSA)             |
-| `@aztec/wallets`           | Simplified wallets for local development and scripting        |
-| `@aztec/noir-contracts.js` | Pre-compiled contract interfaces (Token, NFT, etc.)           |
+| `@aztec-labs/aztec.js`          | Core SDK for contracts, transactions, and network interaction |
+| `@aztec-labs/accounts`          | Account contract implementations (Schnorr, ECDSA)             |
+| `@aztec-labs/wallets`           | Simplified wallets for local development and scripting        |
+| `@aztec-labs/noir-contracts.js` | Pre-compiled contract interfaces (Token, NFT, etc.)           |
 
 ## Package Structure
 
-`@aztec/aztec.js` uses subpath exports. You must import from specific subpaths rather than the package root:
+`@aztec-labs/aztec.js` uses subpath exports. You must import from specific subpaths rather than the package root:
 
 ```typescript
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { Fr } from "@aztec/aztec.js/fields";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 ```
 
 ## AI-Friendly Reference

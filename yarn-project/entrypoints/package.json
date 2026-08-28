@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/entrypoints",
+  "name": "@aztec-labs/entrypoints",
   "homepage": "https://github.com/AztecProtocol/aztec-packages/tree/master/yarn-project/entrypoints",
   "description": "Implementation of sample contract entrypoints for the Aztec Network",
   "version": "0.1.0",
@@ -67,10 +67,10 @@
     ]
   },
   "dependencies": {
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/standard-contracts": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/standard-contracts": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "tslib": "^2.4.0",
     "zod": "^4"
   },

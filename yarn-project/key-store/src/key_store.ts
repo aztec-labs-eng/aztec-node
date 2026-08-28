@@ -1,13 +1,13 @@
-import { DomainSeparator } from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar, Point } from '@aztec/foundation/curves/grumpkin';
-import { toArray } from '@aztec/foundation/iterable';
-import { type Bufferable, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { CompleteAddress, type PartialAddress } from '@aztec/stdlib/contract';
-import { KeyValidationRequest } from '@aztec/stdlib/kernel';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { type Bufferable, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { CompleteAddress, type PartialAddress } from '@aztec-labs/stdlib/contract';
+import { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import {
   KEY_PREFIXES,
   type KeyPrefix,
@@ -16,7 +16,7 @@ import {
   computeAppSecretKey,
   derivePublicKeyFromSecretKey,
   hashPublicKey,
-} from '@aztec/stdlib/keys';
+} from '@aztec-labs/stdlib/keys';
 
 import type { AccountPrivacyKeys, AccountPrivacySecretKeys } from './account_privacy_keys.js';
 

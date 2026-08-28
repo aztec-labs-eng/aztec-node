@@ -1,11 +1,11 @@
-import { NUM_BLOCK_END_BLOB_FIELDS, NUM_CHECKPOINT_END_MARKER_FIELDS } from '@aztec/blob-lib/encoding';
+import { NUM_BLOCK_END_BLOB_FIELDS, NUM_CHECKPOINT_END_MARKER_FIELDS } from '@aztec-labs/blob-lib/encoding';
 import {
   BLOBS_PER_CHECKPOINT,
   DA_GAS_PER_FIELD,
   FIELDS_PER_BLOB,
   MAX_PROCESSABLE_L2_GAS,
   MAX_TX_DA_GAS,
-} from '@aztec/constants';
+} from '@aztec-labs/constants';
 
 import { type ProposerTimetableConfig, buildProposerTimetable } from '../timetable/build_proposer_timetable.js';
 import type { SlotTimingConstants } from '../timetable/consensus_timetable.js';

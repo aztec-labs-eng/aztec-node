@@ -1,9 +1,8 @@
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { MAX_TX_SIZE_KB } from '@aztec/stdlib/p2p';
-import { TxArray, type TxHash, TxHashArray } from '@aztec/stdlib/tx';
-
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
+import { TxArray, type TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { createHash } from 'node:crypto';
 
 import { BitVector } from './bitvector.js';

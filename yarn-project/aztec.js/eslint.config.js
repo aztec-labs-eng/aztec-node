@@ -1,3 +1,3 @@
-import config from '@aztec/foundation/eslint.docs';
+import config from '@aztec-labs/foundation/eslint.docs';
 
 export default config;

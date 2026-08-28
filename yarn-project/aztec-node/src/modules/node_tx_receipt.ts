@@ -1,8 +1,8 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { P2P } from '@aztec/p2p';
-import type { L2BlockSource, L2Tips } from '@aztec/stdlib/block';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import type { DebugLogStore } from '@aztec/stdlib/logs';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { P2P } from '@aztec-labs/p2p';
+import type { L2BlockSource, L2Tips } from '@aztec-labs/stdlib/block';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import type { DebugLogStore } from '@aztec-labs/stdlib/logs';
 import {
   DroppedTxReceipt,
   type GetTxReceiptOptions,
@@ -14,7 +14,7 @@ import {
   type TxHash,
   type TxReceipt,
   TxStatus,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 /** Dependencies required to build a {@link NodeTxReceiptBuilder}. */
 export interface NodeTxReceiptBuilderDeps {

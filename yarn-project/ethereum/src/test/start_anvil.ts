@@ -1,7 +1,6 @@
-import { createLogger } from '@aztec/foundation/log';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-import type { TestDateProvider } from '@aztec/foundation/timer';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import type { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';

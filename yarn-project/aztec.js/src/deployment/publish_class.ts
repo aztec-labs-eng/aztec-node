@@ -1,12 +1,12 @@
 import {
   CONTRACT_CLASS_REGISTRY_BYTECODE_CAPSULE_SLOT,
   MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { type ContractArtifact, bufferAsFields } from '@aztec/stdlib/abi';
-import { getContractClassFromArtifact } from '@aztec/stdlib/contract';
-import { Capsule } from '@aztec/stdlib/tx';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { type ContractArtifact, bufferAsFields } from '@aztec-labs/stdlib/abi';
+import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
+import { Capsule } from '@aztec-labs/stdlib/tx';
 
 import type { ContractFunctionInteraction } from '../contract/contract_function_interaction.js';
 import { ContractClassRegistryContract } from '../contract/protocol_contracts/contract-class-registry.js';

@@ -1,5 +1,5 @@
-import { createLogger } from '@aztec/foundation/log';
-import type { BlockMinFeesProvider } from '@aztec/stdlib/gas';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { BlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
 
 import type { EvictionContext, EvictionResult, EvictionRule, PoolOperations } from './interfaces.js';
 import { EvictionEvent } from './interfaces.js';

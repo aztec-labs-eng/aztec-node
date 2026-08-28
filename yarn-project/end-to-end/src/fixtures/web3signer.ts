@@ -1,8 +1,7 @@
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { RemoteSigner } from '@aztec/node-keystore';
-
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { RemoteSigner } from '@aztec-labs/node-keystore';
 import { mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

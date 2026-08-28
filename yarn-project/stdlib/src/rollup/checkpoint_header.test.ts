@@ -1,8 +1,8 @@
-import { CHECKPOINT_HEADER_SIZE_IN_BYTES, MAX_FIELD_VALUE } from '@aztec/constants';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { CHECKPOINT_HEADER_SIZE_IN_BYTES, MAX_FIELD_VALUE } from '@aztec-labs/constants';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { GasFees } from '../gas/gas_fees.js';

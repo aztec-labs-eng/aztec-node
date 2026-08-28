@@ -8,23 +8,22 @@ import {
   CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS,
   FEE_JUICE_ADDRESS,
   MAX_PROTOCOL_CONTRACTS,
-} from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createConsoleLogger } from '@aztec/foundation/log';
-import { fileURLToPath } from '@aztec/foundation/url';
-import { FunctionSelector, loadContractArtifact } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
+import { fileURLToPath } from '@aztec-labs/foundation/url';
+import { FunctionSelector, loadContractArtifact } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   computeContractAddressFromInstance,
   computeInitializationHash,
   getContractClassFromArtifact,
-} from '@aztec/stdlib/contract';
-import { computeSiloedPrivateLogFirstField } from '@aztec/stdlib/hash';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import { type NoirCompiledContract } from '@aztec/stdlib/noir';
-import { ProtocolContracts } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/contract';
+import { computeSiloedPrivateLogFirstField } from '@aztec-labs/stdlib/hash';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { type NoirCompiledContract } from '@aztec-labs/stdlib/noir';
+import { ProtocolContracts } from '@aztec-labs/stdlib/tx';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -109,7 +108,7 @@ async function computeContractData(artifact: NoirCompiledContract, deployer: Azt
 
 async function generateDeclarationFile(destName: string) {
   const content = `
-    import type { NoirCompiledContract } from '@aztec/stdlib/noir';
+    import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
     const circuit: NoirCompiledContract;
     export = circuit;
   `;
@@ -225,10 +224,10 @@ async function generateLogTags() {
 async function generateOutputFile(names: string[], contractData: ContractData[]) {
   const content = `
     // GENERATED FILE - DO NOT EDIT. RUN \`yarn generate\` or \`yarn generate:data\`
-    import { Fr } from '@aztec/foundation/curves/bn254';
-    import { FunctionSelector } from '@aztec/stdlib/abi';
-    import { AztecAddress } from '@aztec/stdlib/aztec-address';
-    import { ProtocolContracts } from '@aztec/stdlib/tx';
+    import { Fr } from '@aztec-labs/foundation/curves/bn254';
+    import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+    import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+    import { ProtocolContracts } from '@aztec-labs/stdlib/tx';
 
     ${generateNames(names)}
 

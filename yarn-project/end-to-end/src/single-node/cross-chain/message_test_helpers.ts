@@ -1,12 +1,12 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { isL1ToL2MessageReady } from '@aztec/aztec.js/messaging';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { ExecutionPayload } from '@aztec/stdlib/tx';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { isL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
 
 import { sendL1ToL2Message } from '../../fixtures/l1_to_l2_messaging.js';
 import type { CrossChainMessagingTest } from './cross_chain_messaging_test.js';

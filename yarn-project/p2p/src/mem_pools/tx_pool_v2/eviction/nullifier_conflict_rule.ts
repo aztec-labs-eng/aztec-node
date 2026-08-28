@@ -1,4 +1,4 @@
-import { createLogger } from '@aztec/foundation/log';
+import { createLogger } from '@aztec-labs/foundation/log';
 
 import { type TxMetaData, checkNullifierConflict } from '../tx_metadata.js';
 import type { PreAddContext, PreAddPoolAccess, PreAddResult, PreAddRule } from './interfaces.js';

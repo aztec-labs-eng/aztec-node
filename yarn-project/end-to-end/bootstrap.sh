@@ -224,7 +224,7 @@ function build_bench {
   rm -rf "$ultrahonk_bench_dir" && mkdir -p "$ultrahonk_bench_dir"
   if ! cache_download "bb-ultrahonk-bench-inputs-$hash.tar.gz"; then
     export BASE_PARITY_BENCH_DIR="$(pwd)/$ultrahonk_bench_dir"
-    yarn workspace @aztec/ivc-integration test src/base_parity_inputs.test.ts
+    yarn workspace @aztec-labs/ivc-integration test src/base_parity_inputs.test.ts
     cache_upload "bb-ultrahonk-bench-inputs-$hash.tar.gz" "$ultrahonk_bench_dir"
   fi
 }

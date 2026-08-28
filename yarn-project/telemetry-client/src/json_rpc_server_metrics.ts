@@ -1,5 +1,4 @@
-import { Timer } from '@aztec/foundation/timer';
-
+import { Timer } from '@aztec-labs/foundation/timer';
 import type Koa from 'koa';
 
 import * as Attributes from './attributes.js';

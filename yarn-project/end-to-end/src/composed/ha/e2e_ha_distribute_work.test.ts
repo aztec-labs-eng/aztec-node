@@ -6,10 +6,9 @@
  * own file (and therefore its own cluster via the shared `HaFullTestContext`) removes that contract while
  * preserving every assertion. Requires the docker-compose HA suite (run_test.sh ha).
  */
-import { type AttestationInfo, getAttestationInfoFromPublishedCheckpoint } from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { OffenseType } from '@aztec/stdlib/slashing';
-
+import { type AttestationInfo, getAttestationInfoFromPublishedCheckpoint } from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import { jest } from '@jest/globals';
 
 import { getValidatorDuties, verifyNoDuplicateAttestations } from '../../fixtures/ha_setup.js';

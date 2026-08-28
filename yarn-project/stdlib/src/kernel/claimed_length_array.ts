@@ -1,4 +1,4 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   BufferReader,
   FieldReader,
@@ -6,8 +6,7 @@ import {
   type Tuple,
   serializeToBuffer,
   serializeToFields,
-} from '@aztec/foundation/serialize';
-
+} from '@aztec-labs/foundation/serialize';
 import { inspect } from 'util';
 
 export class ClaimedLengthArray<T extends Serializable, N extends number> {

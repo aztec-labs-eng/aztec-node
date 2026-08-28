@@ -1,5 +1,5 @@
-import type { Timer } from '@aztec/foundation/timer';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+import type { Timer } from '@aztec-labs/foundation/timer';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import {
   Attributes,
   type Histogram,
@@ -9,7 +9,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 export type MonitorCallback = (proofType: ProvingRequestType) => number;
 

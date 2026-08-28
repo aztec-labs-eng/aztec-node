@@ -1,10 +1,10 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { AuthWitness } from '@aztec/aztec.js/authorization';
-import { Contract, NO_WAIT, type SendInteractionOptions } from '@aztec/aztec.js/contracts';
-import { type AztecNode, waitForTx } from '@aztec/aztec.js/node';
-import { prepTx } from '@aztec/cli/utils';
-import type { LogFn } from '@aztec/foundation/log';
-import { TxStatus } from '@aztec/stdlib/tx';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { AuthWitness } from '@aztec-labs/aztec.js/authorization';
+import { Contract, NO_WAIT, type SendInteractionOptions } from '@aztec-labs/aztec.js/contracts';
+import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
+import { prepTx } from '@aztec-labs/cli/utils';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { TxStatus } from '@aztec-labs/stdlib/tx';
 
 import { DEFAULT_TX_TIMEOUT_S } from '../utils/cli_wallet_and_node_wrapper.js';
 import { CLIFeeArgs } from '../utils/options/fees.js';

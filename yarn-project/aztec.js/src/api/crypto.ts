@@ -1,1 +1,1 @@
-export { computeSecretHash } from '@aztec/stdlib/hash';
+export { computeSecretHash } from '@aztec-labs/stdlib/hash';

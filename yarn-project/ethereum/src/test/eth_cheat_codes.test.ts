@@ -1,12 +1,12 @@
-import { Blob } from '@aztec/blob-lib';
-import { times, timesAsync } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
-import { getErrorCause } from '@aztec/foundation/types';
 import { TestERC20Abi, TestERC20Bytecode } from '@aztec/l1-artifacts';
 
+import { Blob } from '@aztec-labs/blob-lib';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import { type Hex, RpcRequestError, encodeFunctionData, getContract, parseEther } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

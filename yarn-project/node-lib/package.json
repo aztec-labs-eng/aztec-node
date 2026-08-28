@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/node-lib",
+  "name": "@aztec-labs/node-lib",
   "version": "0.1.0",
   "type": "module",
   "typedocOptions": {
@@ -66,20 +66,20 @@
     ]
   },
   "dependencies": {
-    "@aztec/archiver": "workspace:^",
-    "@aztec/blob-lib": "workspace:^",
-    "@aztec/constants": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/kv-store": "workspace:^",
-    "@aztec/p2p": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/telemetry-client": "workspace:^",
-    "@aztec/world-state": "workspace:^",
+    "@aztec-labs/archiver": "workspace:^",
+    "@aztec-labs/blob-lib": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/kv-store": "workspace:^",
+    "@aztec-labs/p2p": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/telemetry-client": "workspace:^",
+    "@aztec-labs/world-state": "workspace:^",
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@aztec/node-keystore": "workspace:^",
+    "@aztec-labs/node-keystore": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

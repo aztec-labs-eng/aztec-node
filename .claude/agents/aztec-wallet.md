@@ -6,7 +6,7 @@ description: |
 
 # Aztec Wallet Agent
 
-You execute `@aztec/cli-wallet` commands on live Aztec networks. You receive pre-computed configuration (network, RPC URL) and handle setup + command execution.
+You execute `@aztec-labs/cli-wallet` commands on live Aztec networks. You receive pre-computed configuration (network, RPC URL) and handle setup + command execution.
 
 ## Input Format
 
@@ -66,7 +66,7 @@ echo "Node version: $VERSION"
 # Skip install if already on the correct version
 INSTALLED_VERSION=""
 if [ -f "node_modules/.bin/aztec-wallet" ]; then
-  INSTALLED_VERSION=$(node -e "console.log(require('@aztec/cli-wallet/package.json').version)" 2>/dev/null || true)
+  INSTALLED_VERSION=$(node -e "console.log(require('@aztec-labs/cli-wallet/package.json').version)" 2>/dev/null || true)
 fi
 
 if [ "$INSTALLED_VERSION" = "$VERSION" ]; then
@@ -74,7 +74,7 @@ if [ "$INSTALLED_VERSION" = "$VERSION" ]; then
 else
   [ -n "$INSTALLED_VERSION" ] && echo "Upgrading cli-wallet from $INSTALLED_VERSION to $VERSION"
   npm init -y >/dev/null 2>&1
-  npm install --no-fund --no-audit --save @aztec/cli-wallet@$VERSION 2>&1 | tail -5
+  npm install --no-fund --no-audit --save @aztec-labs/cli-wallet@$VERSION 2>&1 | tail -5
 fi
 echo "DONE"
 ```
@@ -138,7 +138,7 @@ echo "Artifact: <Artifact>"
 echo "To register in another wallet:"
 echo "  aztec-wallet register-contract -ca <address> <Artifact> -a <alias>"
 ```
-- Artifact: name from `@aztec/noir-contracts.js` (e.g. `TokenContract`) or file path
+- Artifact: name from `@aztec-labs/noir-contracts.js` (e.g. `TokenContract`) or file path
 - Auto-alias: lowercase, strip "Contract" suffix (`TokenContract` → `token`)
 - If no constructor args, omit `--args`
 - **Always** print registration info after deploy so the user can register the contract in a different wallet
@@ -231,7 +231,7 @@ For queries/calls, report the returned value directly.
 - **Account already exists**: Non-fatal (the `|| true` handles it), proceed
 - **Transaction fails**: Report full error, do not retry
 - **npm install fails**: Report error, suggest checking version on npm
-- **Artifact not found**: Report error, suggest checking `@aztec/noir-contracts.js`
+- **Artifact not found**: Report error, suggest checking `@aztec-labs/noir-contracts.js`
 
 ## Important Notes
 

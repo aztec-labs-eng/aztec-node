@@ -1,4 +1,4 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { BlockHash } from '../block_hash.js';
 import type { CheckpointId, L2BlockTag } from '../l2_block_source.js';

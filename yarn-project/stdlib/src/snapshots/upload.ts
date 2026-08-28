@@ -1,7 +1,7 @@
-import { fromEntries, getEntries, pick } from '@aztec/foundation/collection';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { isoDate } from '@aztec/foundation/string';
-import type { FileStore } from '@aztec/stdlib/file-store';
+import { fromEntries, getEntries, pick } from '@aztec-labs/foundation/collection';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { isoDate } from '@aztec-labs/foundation/string';
+import type { FileStore } from '@aztec-labs/stdlib/file-store';
 
 import { getBasePath, getSnapshotIndex, getSnapshotIndexPath } from './download.js';
 import type { SnapshotDataKeys, SnapshotMetadata, SnapshotsIndex, UploadSnapshotMetadata } from './types.js';

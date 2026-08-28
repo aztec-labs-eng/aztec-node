@@ -1,9 +1,9 @@
-import { timesParallel } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { CompleteAddress } from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
 
 import { AddressStore } from './address_store.js';
 

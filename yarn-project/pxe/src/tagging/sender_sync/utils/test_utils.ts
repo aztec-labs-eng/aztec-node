@@ -1,7 +1,7 @@
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { MinedTxStatus, TxEffect, TxHash } from '@aztec/stdlib/tx';
-import { MinedTxReceipt, TxExecutionResult } from '@aztec/stdlib/tx';
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { MinedTxStatus, TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
+import { MinedTxReceipt, TxExecutionResult } from '@aztec-labs/stdlib/tx';
 
 import type { PendingTx } from '../../../storage/tagging_store/sender_tagging_store.js';
 import type { TxInLogs } from './load_and_store_new_tagging_indexes.js';

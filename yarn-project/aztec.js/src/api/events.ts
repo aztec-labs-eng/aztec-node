@@ -1,9 +1,9 @@
-import { DomainSeparator } from '@aztec/constants';
-import { type EventMetadataDefinition, decodeFromAbi } from '@aztec/stdlib/abi';
-import { computeLogTag } from '@aztec/stdlib/hash';
-import { MAX_LOGS_PER_TAG } from '@aztec/stdlib/interfaces/api-limit';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { LogCursor, type PublicLogsQuery, Tag } from '@aztec/stdlib/logs';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { type EventMetadataDefinition, decodeFromAbi } from '@aztec-labs/stdlib/abi';
+import { computeLogTag } from '@aztec-labs/stdlib/hash';
+import { MAX_LOGS_PER_TAG } from '@aztec-labs/stdlib/interfaces/api-limit';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { LogCursor, type PublicLogsQuery, Tag } from '@aztec-labs/stdlib/logs';
 
 import type { PublicEvent, PublicEventFilter } from '../wallet/wallet.js';
 import { EventCursor } from './event_cursor.js';

@@ -1,7 +1,6 @@
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { type AztecLMDBStoreV2, openStoreAt } from '@aztec/kv-store/lmdb-v2';
-
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { type AztecLMDBStoreV2, openStoreAt } from '@aztec-labs/kv-store/lmdb-v2';
 import { mkdir } from 'fs/promises';
 import { join } from 'path';
 

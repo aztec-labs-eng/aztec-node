@@ -1,4 +1,4 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import type { L2Tips } from '../block/l2_block_source.js';
 import type { InboxBucket } from './inbox_bucket.js';

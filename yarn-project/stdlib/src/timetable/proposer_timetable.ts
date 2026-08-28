@@ -1,5 +1,5 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
 
 import { type ResolvedTimingBudgets, getDefaultCheckpointProposalSyncGrace, resolveTimingBudgets } from './budgets.js';
 import { ConsensusTimetable, type SlotTimingConstants } from './consensus_timetable.js';

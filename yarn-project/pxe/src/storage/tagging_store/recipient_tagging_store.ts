@@ -1,5 +1,5 @@
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import type { AppTaggingSecret } from '@aztec/stdlib/logs';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import type { AppTaggingSecret } from '@aztec-labs/stdlib/logs';
 
 import { BaseStagingStore, type ReadonlyDb } from '../base_staging_store.js';
 import type { ChangeSetId } from '../staged_write_coordinator.js';

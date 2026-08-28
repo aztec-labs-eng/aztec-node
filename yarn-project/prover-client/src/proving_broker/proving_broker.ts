@@ -1,8 +1,8 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec/foundation/promise';
-import { PriorityMemoryQueue } from '@aztec/foundation/queue';
-import { Timer } from '@aztec/foundation/timer';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { type PromiseWithResolvers, RunningPromise, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { PriorityMemoryQueue } from '@aztec-labs/foundation/queue';
+import { Timer } from '@aztec-labs/foundation/timer';
 import {
   type GetProvingJobResponse,
   type ProofUri,
@@ -15,10 +15,9 @@ import {
   type ProvingJobSettledResult,
   type ProvingJobStatus,
   tryStop,
-} from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-import { type TelemetryClient, type Traceable, type Tracer, getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
+import { type TelemetryClient, type Traceable, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import assert from 'assert';
 
 import { type ProverBrokerConfig, defaultProverBrokerConfig } from './config.js';

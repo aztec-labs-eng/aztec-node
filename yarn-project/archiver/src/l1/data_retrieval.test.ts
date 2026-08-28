@@ -1,9 +1,9 @@
-import { type BlockBlobData, type CheckpointBlobData, makeBlockEndBlobData } from '@aztec/blob-lib/encoding';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Body, CommitteeAttestation } from '@aztec/stdlib/block';
-import { L1PublishedData } from '@aztec/stdlib/checkpoint';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
+import { type BlockBlobData, type CheckpointBlobData, makeBlockEndBlobData } from '@aztec-labs/blob-lib/encoding';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Body, CommitteeAttestation } from '@aztec-labs/stdlib/block';
+import { L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 
 import { type RetrievedCheckpoint, retrievedToPublishedCheckpoint } from './data_retrieval.js';
 

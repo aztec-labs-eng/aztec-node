@@ -1,10 +1,10 @@
-import type { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { SecretValue } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { schemas, zodFor } from '@aztec/foundation/schemas';
-import type { SequencerConfig, SlasherConfig } from '@aztec/stdlib/interfaces/server';
+import type { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { SecretValue } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
+import type { SequencerConfig, SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
 import type {
   BlockProposal,
   BlockProposalOptions,
@@ -13,10 +13,9 @@ import type {
   CheckpointProposalOptions,
   ValidatedBlockProposal,
   ValidatedCheckpointProposalCore,
-} from '@aztec/stdlib/p2p';
-import type { CheckpointHeader } from '@aztec/stdlib/rollup';
-import type { BlockHeader, Tx } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/p2p';
+import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import type { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 import { z } from 'zod';
 

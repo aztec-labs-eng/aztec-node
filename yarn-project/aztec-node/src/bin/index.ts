@@ -3,14 +3,14 @@ import {
   type NamespacedApiHandlers,
   createNamespacedSafeJsonRpcServer,
   startHttpRpcServer,
-} from '@aztec/foundation/json-rpc/server';
-import { createLogger } from '@aztec/foundation/log';
-import { getRpcCorsAllowedOrigins } from '@aztec/stdlib/config';
+} from '@aztec-labs/foundation/json-rpc/server';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { getRpcCorsAllowedOrigins } from '@aztec-labs/stdlib/config';
 import {
   getOtelJsonRpcDiagnosticsMiddleware,
   getOtelJsonRpcPropagationMiddleware,
   getOtelJsonRpcServerMetricsMiddleware,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import {
   type AztecNodeConfig,

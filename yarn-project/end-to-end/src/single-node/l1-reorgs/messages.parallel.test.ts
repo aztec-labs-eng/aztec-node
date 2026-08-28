@@ -1,16 +1,15 @@
-import type { Archiver } from '@aztec/archiver';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { isL1ToL2MessageReady, waitForL1ToL2MessageReady } from '@aztec/aztec.js/messaging';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Delayer } from '@aztec/ethereum/l1-tx-utils';
-import type { ChainMonitor } from '@aztec/ethereum/test';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import type { Archiver } from '@aztec-labs/archiver';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { isL1ToL2MessageReady, waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ChainMonitor } from '@aztec-labs/ethereum/test';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import 'jest-extended';
 
 import { sendL1ToL2Message } from '../../fixtures/l1_to_l2_messaging.js';

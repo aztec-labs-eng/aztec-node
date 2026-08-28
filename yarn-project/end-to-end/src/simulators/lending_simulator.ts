@@ -1,13 +1,13 @@
 // Convenience struct to hold an account's address and secret that can easily be passed around.
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { CheatCodes } from '@aztec/aztec/testing';
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import type { TestDateProvider } from '@aztec/foundation/timer';
-import type { LendingContract } from '@aztec/noir-contracts.js/Lending';
-import type { AztecNode, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import type { TestDateProvider } from '@aztec-labs/foundation/timer';
+import type { LendingContract } from '@aztec-labs/noir-contracts.js/Lending';
+import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 
 import type { TokenSimulator } from './token_simulator.js';
 

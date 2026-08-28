@@ -12,8 +12,8 @@ import { CopyToClipboardButton } from '../../common/CopyToClipboardButton';
 import { formatFrAsString } from '../../../utils/conversion';
 import { PREDEFINED_CONTRACTS } from '../../../utils/types';
 import { AztecContext } from '../../../aztecContext';
-import { loadContractArtifact } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import { loadContractArtifact } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { parse } from 'buffer-json';
 import { navbarButtonStyle, navbarSelect, navbarSelectLabel } from '../../../styles/common';
 import { filterDeployedAliasedContracts } from '../../../utils/contracts';
@@ -91,12 +91,12 @@ export function ContractSelector() {
         switch (contractValue) {
           case PREDEFINED_CONTRACTS.SIMPLE_VOTING:
             ({ PrivateVotingContractArtifact: contractArtifactJSON } = await import(
-              '@aztec/noir-contracts.js/PrivateVoting'
+              '@aztec-labs/noir-contracts.js/PrivateVoting'
             ));
             break;
           case PREDEFINED_CONTRACTS.SIMPLE_TOKEN:
             ({ SimpleTokenContractArtifact: contractArtifactJSON } = await import(
-              '@aztec/noir-contracts.js/SimpleToken'
+              '@aztec-labs/noir-contracts.js/SimpleToken'
             ));
             break;
         }

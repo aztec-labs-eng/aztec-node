@@ -1,14 +1,13 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { merge, pick } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { merge, pick } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import {
   type CheckpointEquivocationDetectedEvent,
   type L2BlockSourceEventEmitter,
   L2BlockSourceEvents,
-} from '@aztec/stdlib/block';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import { OffenseType, getOffenseTypeName } from '@aztec/stdlib/slashing';
-
+} from '@aztec-labs/stdlib/block';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import { OffenseType, getOffenseTypeName } from '@aztec-labs/stdlib/slashing';
 import EventEmitter from 'node:events';
 
 import { WANT_TO_SLASH_EVENT, type WantToSlashArgs, type Watcher, type WatcherEmitter } from '../watcher.js';

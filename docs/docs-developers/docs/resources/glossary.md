@@ -32,7 +32,7 @@ Full reference [here](../cli/aztec_wallet_cli_reference).
 
 ### Aztec.js
 
-A [Node package](https://www.npmjs.com/package/@aztec/aztec.js) to help make Aztec dApps.
+A [Node package](https://www.npmjs.com/package/@aztec-labs/aztec.js) to help make Aztec dApps.
 
 Read more and review the source code [here](https://github.com/AztecProtocol/aztec-packages/blob/#include_aztec_version/yarn-project/aztec.js).
 

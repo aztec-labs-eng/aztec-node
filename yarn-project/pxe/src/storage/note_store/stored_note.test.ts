@@ -1,4 +1,4 @@
-import { NoteDao } from '@aztec/stdlib/note';
+import { NoteDao } from '@aztec-labs/stdlib/note';
 
 import { StoredNote } from './stored_note.js';
 

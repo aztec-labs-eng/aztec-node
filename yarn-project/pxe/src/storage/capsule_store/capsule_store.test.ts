@@ -1,8 +1,8 @@
-import { range } from '@aztec/foundation/array';
-import { times } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecLMDBStoreV2, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { range } from '@aztec-labs/foundation/array';
+import { times } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import type { ChangeSetId } from '../staged_write_coordinator.js';
 import { CapsuleStore } from './capsule_store.js';

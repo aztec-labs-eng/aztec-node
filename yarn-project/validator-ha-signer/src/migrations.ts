@@ -1,8 +1,7 @@
 /**
  * Programmatic migration runner
  */
-import { createLogger } from '@aztec/foundation/log';
-
+import { createLogger } from '@aztec-labs/foundation/log';
 import { readdirSync } from 'fs';
 import { runner } from 'node-pg-migrate';
 import { dirname, join } from 'path';

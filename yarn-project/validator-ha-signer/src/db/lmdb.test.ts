@@ -1,8 +1,7 @@
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { type AztecLMDBStoreV2, createStore, openStoreAt, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { type AztecLMDBStoreV2, createStore, openStoreAt, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';

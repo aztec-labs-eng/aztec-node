@@ -234,7 +234,7 @@ class TypeScriptParser {
 
     return {
       metadata: {
-        package: '@aztec/aztec.js',
+        package: '@aztec-labs/aztec.js',
         generated_at: new Date().toISOString(),
         source_path: this.sourcePath,
       },

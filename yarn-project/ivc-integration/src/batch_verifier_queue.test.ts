@@ -7,10 +7,10 @@
  *
  * All tests exercise the full BatchChonkVerifier TS class (not raw bb.js).
  */
-import { BatchChonkVerifier } from '@aztec/bb-prover';
 import { AztecClientBackend, BackendType, Barretenberg } from '@aztec/bb.js';
-import { createLogger } from '@aztec/foundation/log';
 
+import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 
 import { corruptProofFields, runBatchVerifier } from './batch_verifier_test_helpers.js';

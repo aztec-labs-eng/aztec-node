@@ -1,6 +1,6 @@
 import { css } from '@mui/styled-engine';
 import { useDropzone } from 'react-dropzone';
-import { loadContractArtifact } from '@aztec/aztec.js/abi';
+import { loadContractArtifact } from '@aztec-labs/aztec.js/abi';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import UploadFileIcon from '@mui/icons-material/UploadFile';

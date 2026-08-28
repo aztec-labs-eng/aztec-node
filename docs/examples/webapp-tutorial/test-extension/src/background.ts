@@ -15,7 +15,7 @@ import {
   type BackgroundTransport,
   type BackgroundConnectionCallbacks,
   type ActiveSession,
-} from "@aztec/wallet-sdk/extension/handlers";
+} from "@aztec-labs/wallet-sdk/extension/handlers";
 
 import {
   WALLET_CONFIG,

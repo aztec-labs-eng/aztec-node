@@ -7,13 +7,13 @@ contracts:
   - nft_bridge-NFTBridge
 
 # Dependencies:
-#   - @aztec/* packages are auto-linked from yarn-project/
+#   - @aztec-labs/* packages are auto-linked from yarn-project/
 #   - Use npm:package-name for external npm packages
 dependencies:
-  - "@aztec/aztec.js"
-  - "@aztec/accounts"
-  - "@aztec/wallets"
-  - "@aztec/stdlib"
-  - "@aztec/foundation"
-  - "@aztec/ethereum"
+  - "@aztec-labs/aztec.js"
+  - "@aztec-labs/accounts"
+  - "@aztec-labs/wallets"
+  - "@aztec-labs/stdlib"
+  - "@aztec-labs/foundation"
+  - "@aztec-labs/ethereum"
   - "npm:@aztec/viem@2.38.2"

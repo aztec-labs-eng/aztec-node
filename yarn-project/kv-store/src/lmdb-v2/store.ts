@@ -1,7 +1,6 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { Semaphore, SerialQueue } from '@aztec/foundation/queue';
-import { MsgpackChannel, NativeLMDBStore } from '@aztec/native';
-
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Semaphore, SerialQueue } from '@aztec-labs/foundation/queue';
+import { MsgpackChannel, NativeLMDBStore } from '@aztec-labs/native';
 import { AsyncLocalStorage } from 'async_hooks';
 import { mkdir, rm } from 'fs/promises';
 

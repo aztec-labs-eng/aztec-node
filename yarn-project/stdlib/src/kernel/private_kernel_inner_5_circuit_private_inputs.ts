@@ -1,4 +1,4 @@
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { PrivateCallData } from './private_call_data.js';
 import { PrivateKernelData } from './private_kernel_data.js';

@@ -1,8 +1,8 @@
-import { FeeJuiceArtifact } from '@aztec/protocol-contracts/fee-juice';
-import { getCallRequestsWithCalldataByPhase } from '@aztec/simulator/server';
-import { FunctionSelector, getAllFunctionAbis } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type Tx, TxExecutionPhase } from '@aztec/stdlib/tx';
+import { FeeJuiceArtifact } from '@aztec-labs/protocol-contracts/fee-juice';
+import { getCallRequestsWithCalldataByPhase } from '@aztec-labs/simulator/server';
+import { FunctionSelector, getAllFunctionAbis } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type Tx, TxExecutionPhase } from '@aztec-labs/stdlib/tx';
 
 export type FeePayerBalanceDelta = {
   feeLimit: bigint;

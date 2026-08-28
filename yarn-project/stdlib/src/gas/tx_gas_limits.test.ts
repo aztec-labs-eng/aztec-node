@@ -1,4 +1,4 @@
-import { NUM_CHECKPOINT_END_MARKER_FIELDS, getNumBlockEndBlobFields } from '@aztec/blob-lib/encoding';
+import { NUM_CHECKPOINT_END_MARKER_FIELDS, getNumBlockEndBlobFields } from '@aztec-labs/blob-lib/encoding';
 import {
   BLOBS_PER_CHECKPOINT,
   CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
@@ -7,7 +7,7 @@ import {
   MAX_PROCESSABLE_L2_GAS,
   MAX_TX_DA_GAS,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
+} from '@aztec-labs/constants';
 
 import { buildProposerTimetable } from '../timetable/build_proposer_timetable.js';
 import {

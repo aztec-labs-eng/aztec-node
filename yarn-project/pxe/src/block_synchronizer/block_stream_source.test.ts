@@ -1,8 +1,7 @@
-import { BlockNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BlockHash, L2Block } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-
+import { BlockNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { blockStreamSourceFromAztecNode } from './block_stream_source.js';

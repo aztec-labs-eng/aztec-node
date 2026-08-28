@@ -1,10 +1,10 @@
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import type { PublisherManager } from '@aztec/ethereum/publisher-manager';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { LoggerBindings } from '@aztec/foundation/log';
-import type { ProverPublisherConfig, ProverTxSenderConfig } from '@aztec/sequencer-client';
-import type { TelemetryClient } from '@aztec/telemetry-client';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
+import type { ProverPublisherConfig, ProverTxSenderConfig } from '@aztec-labs/sequencer-client';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { ProverNodePublisher } from './prover-node-publisher.js';
 

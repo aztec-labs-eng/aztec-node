@@ -1,28 +1,28 @@
-import { TestCircuitVerifier } from '@aztec/bb-prover';
-import { EpochCache } from '@aztec/epoch-cache';
-import type { RollupContract } from '@aztec/ethereum/contracts';
+import { TestCircuitVerifier } from '@aztec-labs/bb-prover';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { BadRequestError } from '@aztec/foundation/json-rpc';
-import type { Hex } from '@aztec/foundation/string';
-import { DateProvider } from '@aztec/foundation/timer';
-import { unfreeze } from '@aztec/foundation/types';
-import { type KeyStore, KeystoreManager, RemoteSigner, type ValidatorKeyStore } from '@aztec/node-keystore';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import type { P2P } from '@aztec/p2p';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import type { GlobalVariableBuilder, Sequencer, SequencerClient } from '@aztec/sequencer-client';
-import type { SlasherClientInterface } from '@aztec/slasher';
-import { RevertCode } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
+import type { Hex } from '@aztec-labs/foundation/string';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { unfreeze } from '@aztec-labs/foundation/types';
+import { type KeyStore, KeystoreManager, RemoteSigner, type ValidatorKeyStore } from '@aztec-labs/node-keystore';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import type { P2P } from '@aztec-labs/p2p';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import type { GlobalVariableBuilder, Sequencer, SequencerClient } from '@aztec-labs/sequencer-client';
+import type { SlasherClientInterface } from '@aztec-labs/slasher';
+import { RevertCode } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
@@ -31,22 +31,26 @@ import {
   L2Block,
   type L2BlockSource,
   type L2Tips,
-} from '@aztec/stdlib/block';
-import type { CheckpointData, ProposedCheckpointData } from '@aztec/stdlib/checkpoint';
-import type { ContractDataSource, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { L2LogsSource, MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { mockTx, randomContractInstanceWithAddress } from '@aztec/stdlib/testing';
+} from '@aztec-labs/stdlib/block';
+import type { CheckpointData, ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
+import type { ContractDataSource, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type {
+  L2LogsSource,
+  MerkleTreeReadOperations,
+  WorldStateSynchronizer,
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { mockTx, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
 import {
   AppendOnlyTreeSnapshot,
   MerkleTreeId,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
-import type { FeeProvider, IndexedTxEffect } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/trees';
+import type { FeeProvider, IndexedTxEffect } from '@aztec-labs/stdlib/tx';
 import {
   BlockHeader,
   DroppedTxReceipt,
@@ -64,11 +68,10 @@ import {
   TxExecutionResult,
   TxHash,
   TxStatus,
-} from '@aztec/stdlib/tx';
-import { getPackageVersion } from '@aztec/stdlib/update-checker';
-import type { ValidatorClient } from '@aztec/validator-client';
-import { WorldStateSynchronizerError } from '@aztec/world-state';
-
+} from '@aztec-labs/stdlib/tx';
+import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
+import type { ValidatorClient } from '@aztec-labs/validator-client';
+import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { type MockProxy, mock } from 'jest-mock-extended';

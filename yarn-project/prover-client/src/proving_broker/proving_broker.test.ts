@@ -1,9 +1,8 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { sleep } from '@aztec/foundation/sleep';
-import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobStatus } from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobStatus } from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { jest } from '@jest/globals';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';

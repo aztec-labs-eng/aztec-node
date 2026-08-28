@@ -1,11 +1,11 @@
-import { EcdsaKAccountContract, EcdsaRAccountContract } from '@aztec/accounts/ecdsa';
-import { StubEcdsaAccountContractArtifact, createStubEcdsaAccount } from '@aztec/accounts/ecdsa/stub';
-import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec/accounts/schnorr';
-import { StubSchnorrAccountContractArtifact, createStubSchnorrAccount } from '@aztec/accounts/schnorr/stub';
-import type { Account, AccountContract } from '@aztec/aztec.js/account';
-import type { Fq } from '@aztec/foundation/curves/bn254';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
+import { EcdsaKAccountContract, EcdsaRAccountContract } from '@aztec-labs/accounts/ecdsa';
+import { StubEcdsaAccountContractArtifact, createStubEcdsaAccount } from '@aztec-labs/accounts/ecdsa/stub';
+import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec-labs/accounts/schnorr';
+import { StubSchnorrAccountContractArtifact, createStubSchnorrAccount } from '@aztec-labs/accounts/schnorr/stub';
+import type { Account, AccountContract } from '@aztec-labs/aztec.js/account';
+import type { Fq } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 
 import type { AccountType } from '../wallet_db.js';
 import type { AccountContractsProvider } from './types.js';

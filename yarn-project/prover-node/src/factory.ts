@@ -1,34 +1,33 @@
-import type { Archiver } from '@aztec/archiver';
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { Blob } from '@aztec/blob-lib';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { makeL1HttpTransport } from '@aztec/ethereum/client';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { PublisherManager } from '@aztec/ethereum/publisher-manager';
-import { pick } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import { KeystoreManager } from '@aztec/node-keystore';
-import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec/node-lib/factories';
-import { type ProverClientConfig, type ProverClientUserConfig, createProverClient } from '@aztec/prover-client';
-import { createAndStartProvingBroker } from '@aztec/prover-client/broker';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { Blob } from '@aztec-labs/blob-lib';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { pick } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { KeystoreManager } from '@aztec-labs/node-keystore';
+import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec-labs/node-lib/factories';
+import { type ProverClientConfig, type ProverClientUserConfig, createProverClient } from '@aztec-labs/prover-client';
+import { createAndStartProvingBroker } from '@aztec-labs/prover-client/broker';
 import {
   type ProverPublisherConfig,
   type ProverTxSenderConfig,
   getPublisherConfigFromProverConfig,
-} from '@aztec/sequencer-client';
-import type { AvmSimulator } from '@aztec/simulator/server';
+} from '@aztec-labs/sequencer-client';
+import type { AvmSimulator } from '@aztec-labs/simulator/server';
 import type {
   ITxProvider,
   ProverConfig,
   ProvingJobBroker,
   Service,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import { L1Metrics, type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import { L1Metrics, type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { createPublicClient } from 'viem';
 
 import type { SpecificProverNodeConfig } from './config.js';

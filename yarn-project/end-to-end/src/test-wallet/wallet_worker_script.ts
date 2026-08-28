@@ -1,14 +1,14 @@
-import { DefaultWaitOpts } from '@aztec/aztec.js/contracts';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import type { SendOptions } from '@aztec/aztec.js/wallet';
 import { BackendType, BarretenbergSync } from '@aztec/bb.js';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
-import type { ApiSchema, Fq, Fr } from '@aztec/foundation/schemas';
-import { getSchemaParameters, parseWithOptionals, schemaHasMethod } from '@aztec/foundation/schemas';
-import { NodeListener, TransportServer } from '@aztec/foundation/transport';
-import { ExecutionPayload, Tx } from '@aztec/stdlib/tx';
 
+import { DefaultWaitOpts } from '@aztec-labs/aztec.js/contracts';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import type { SendOptions } from '@aztec-labs/aztec.js/wallet';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { ApiSchema, Fq, Fr } from '@aztec-labs/foundation/schemas';
+import { getSchemaParameters, parseWithOptionals, schemaHasMethod } from '@aztec-labs/foundation/schemas';
+import { NodeListener, TransportServer } from '@aztec-labs/foundation/transport';
+import { ExecutionPayload, Tx } from '@aztec-labs/stdlib/tx';
 import { workerData } from 'worker_threads';
 
 import { TestWallet } from './test_wallet.js';

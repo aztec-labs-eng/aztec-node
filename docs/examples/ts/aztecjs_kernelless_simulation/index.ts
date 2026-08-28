@@ -1,11 +1,11 @@
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import { CrowdfundingContract } from "@aztec/noir-contracts.js/Crowdfunding";
-import { Fr } from "@aztec/aztec.js/fields";
-import { deriveKeys } from "@aztec/aztec.js/keys";
-import { CallAuthorizationRequest } from "@aztec/aztec.js/authorization";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { CrowdfundingContract } from "@aztec-labs/noir-contracts.js/Crowdfunding";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { deriveKeys } from "@aztec-labs/aztec.js/keys";
+import { CallAuthorizationRequest } from "@aztec-labs/aztec.js/authorization";
 
 // Setup: connect to network, create alice and bob, deploy a token, mint to alice.
 // EmbeddedWallet runs every .simulate() call in kernelless mode with a stub-account

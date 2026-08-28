@@ -3,7 +3,7 @@
 // of resolving the full TXE → simulator → world-state → bb-prover dependency tree from scratch.
 // This is the dominant cost of cold-starting TXE.
 //
-// Native modules (LMDB, @aztec/native, msgpackr, snappy, etc.) and packages that load their own
+// Native modules (LMDB, @aztec-labs/native, msgpackr, snappy, etc.) and packages that load their own
 // .wasm assets at runtime (@aztec/noir-acvm_js, @aztec/noir-noirc_abi, @aztec/bb.js) stay
 // external — esbuild cannot bundle .node binaries, and bundling the WASM-loader JS would break
 // relative paths to the .wasm files.
@@ -17,26 +17,26 @@ import { redirectsPlugin } from './esbuild/plugins/redirects.mjs';
 import { enforceSizeLimits } from './esbuild/plugins/size_guard.mjs';
 import { stripArtifactDebugPlugin } from './esbuild/plugins/strip_artifact_debug.mjs';
 
-// `@aztec/*` packages that AztecNodeService imports transitively but the TXE worker never
+// `@aztec-labs/*` packages that AztecNodeService imports transitively but the TXE worker never
 // actually constructs or executes — sequencer/validator/prover/etc. are passed in as `undefined`,
 // so the imported symbols are only used inside AztecNodeService methods TXE never calls. The
 // Proxy-based `empty_stub.cjs` throws on access, surfacing any false assumption loudly.
 //
-// NOTE: `@aztec/archiver` is intentionally NOT stubbed — TXEArchiver extends ArchiverDataSourceBase
+// NOTE: `@aztec-labs/archiver` is intentionally NOT stubbed — TXEArchiver extends ArchiverDataSourceBase
 //       and uses createArchiverDataStores at runtime.
-// NOTE: `@aztec/blob-lib` is NOT stubbed — stdlib's tx_effect calls getNumTxBlobFields at runtime
+// NOTE: `@aztec-labs/blob-lib` is NOT stubbed — stdlib's tx_effect calls getNumTxBlobFields at runtime
 //       when serializing transactions.
 const fullyStubbedAztecPackages = [
-  '@aztec/p2p',
-  '@aztec/sequencer-client',
-  '@aztec/validator-client',
-  '@aztec/prover-client',
-  '@aztec/prover-node',
-  '@aztec/slasher',
-  '@aztec/epoch-cache',
-  '@aztec/blob-client',
-  '@aztec/node-keystore',
-  '@aztec/node-lib',
+  '@aztec-labs/p2p',
+  '@aztec-labs/sequencer-client',
+  '@aztec-labs/validator-client',
+  '@aztec-labs/prover-client',
+  '@aztec-labs/prover-node',
+  '@aztec-labs/slasher',
+  '@aztec-labs/epoch-cache',
+  '@aztec-labs/blob-client',
+  '@aztec-labs/node-keystore',
+  '@aztec-labs/node-lib',
 ];
 
 // Each row redirects a specifier match to a stub file under `esbuild/stubs/`. The local stub
@@ -56,12 +56,12 @@ const redirects = [
   // never executes (telemetry HTTP wrappers, archiver factory + L1 retrieval, world-state
   // synchronizer, bb prover/verifier stack) or eagerly precompute large lookup tables at import
   // (noble curve field-tower tables).
-  { filter: /^@aztec\/telemetry-client$/, stub: 'telemetry_stub.ts' },
-  { filter: /^@aztec\/protocol-contracts\/providers\/bundle$/, stub: 'protocol_contracts_bundle_stub.ts' },
-  { filter: /^@aztec\/archiver$/, stub: 'archiver_stub.ts' },
-  { filter: /^@aztec\/bb-prover$/, stub: 'bb_prover_stub.ts' },
-  { filter: /^@aztec\/bb-prover\/test$/, stub: 'bb_prover_test_stub.ts' },
-  { filter: /^@aztec\/world-state$/, stub: 'world_state_stub.ts' },
+  { filter: /^@aztec-labs\/telemetry-client$/, stub: 'telemetry_stub.ts' },
+  { filter: /^@aztec-labs\/protocol-contracts\/providers\/bundle$/, stub: 'protocol_contracts_bundle_stub.ts' },
+  { filter: /^@aztec-labs\/archiver$/, stub: 'archiver_stub.ts' },
+  { filter: /^@aztec-labs\/bb-prover$/, stub: 'bb_prover_stub.ts' },
+  { filter: /^@aztec-labs\/bb-prover\/test$/, stub: 'bb_prover_test_stub.ts' },
+  { filter: /^@aztec-labs\/world-state$/, stub: 'world_state_stub.ts' },
   { filter: /^@noble\/curves\/secp256k1$/, stub: 'noble_secp256k1_stub.ts' },
   { filter: /^@noble\/curves\/bls12-381$/, stub: 'noble_bls12_stub.ts' },
 
@@ -112,8 +112,8 @@ const entryPoints = {
   'bin/index': 'src/bin/index.ts',
   // src/worker.ts → dest/worker.bundle.js (the file the pool spawns).
   'worker.bundle': 'src/worker.ts',
-  // src/rpc_server.ts → dest/server.bundle.js (the entry the parent `@aztec/aztec`
-  // CLI imports via `@aztec/txe/server`).
+  // src/rpc_server.ts → dest/server.bundle.js (the entry the parent `@aztec-labs/aztec`
+  // CLI imports via `@aztec-labs/txe/server`).
   'server.bundle': 'src/rpc_server.ts',
 };
 
@@ -143,7 +143,7 @@ const result = await build({
     'msgpackr-extract',
     'snappy',
     'node-eth-kzg',
-    '@aztec/native',
+    '@aztec-labs/native',
     // WASM-loading packages.
     '@aztec/noir-acvm_js',
     '@aztec/noir-noirc_abi',
@@ -154,10 +154,10 @@ const result = await build({
     // as large JSON files and get re-exported from a barrel without proper `sideEffects: false`,
     // so esbuild can't tree-shake them. Externalizing the whole package keeps them off the
     // worker's startup parse path.
-    '@aztec/noir-protocol-circuits-types',
-    '@aztec/noir-protocol-circuits-types/client',
-    '@aztec/noir-protocol-circuits-types/server',
-    '@aztec/noir-protocol-circuits-types/vks',
+    '@aztec-labs/noir-protocol-circuits-types',
+    '@aztec-labs/noir-protocol-circuits-types/client',
+    '@aztec-labs/noir-protocol-circuits-types/server',
+    '@aztec-labs/noir-protocol-circuits-types/vks',
     // pino spawns its own worker_threads for transports and detects its runtime format
     // dynamically; bundling it triggers ERR_AMBIGUOUS_MODULE_SYNTAX. thread-stream and
     // sonic-boom are pino's siblings and have the same issue.
@@ -172,7 +172,7 @@ const result = await build({
     // TXE never talks to L1, so the whole ethereum/viem stack is dead weight in the worker.
     // Keeping it external avoids bundling forwarder_proxy (whose CLI guard executes when
     // bundled), viem, abitype, and the rest of the L1 client surface.
-    '@aztec/ethereum',
+    '@aztec-labs/ethereum',
     '@aztec/l1-artifacts',
     // Same reasoning: stdlib/p2p/signature_utils, archiver/l1, and aztec-node/config all
     // statically import `viem` for L1 RPC + signing primitives. None of those code paths execute
@@ -182,8 +182,8 @@ const result = await build({
     'ox',
     // TXE never snapshots/uploads world state, so the file-store backend (which drags in the
     // AWS S3 SDK, Google Cloud Storage SDK, mime-db, pako, etc.) is dead weight.
-    '@aztec/stdlib/file-store',
-    '@aztec/stdlib/snapshots',
+    '@aztec-labs/stdlib/file-store',
+    '@aztec-labs/stdlib/snapshots',
   ],
   plugins: [
     externalNativePlugin,

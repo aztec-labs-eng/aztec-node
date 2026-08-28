@@ -147,7 +147,7 @@ Open `scripts/deploy-and-interact.ts`. It follows the same pattern as the [aztec
 
 #include_code script-setup /docs/examples/webapp-tutorial/scripts/deploy-and-interact.ts typescript
 
-This uses `EmbeddedWallet` from `@aztec/wallets/embedded` — a ready-made embedded wallet that handles PXE creation and account management. `getInitialTestAccountsData` provides pre-deployed test accounts available on the local network. The `{ ephemeral: true }` option means PXE state is not persisted between runs.
+This uses `EmbeddedWallet` from `@aztec-labs/wallets/embedded` — a ready-made embedded wallet that handles PXE creation and account management. `getInitialTestAccountsData` provides pre-deployed test accounts available on the local network. The `{ ephemeral: true }` option means PXE state is not persisted between runs.
 
 ### Deploy the contract
 

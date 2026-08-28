@@ -1,19 +1,3 @@
-import {
-  ARCHIVE_HEIGHT,
-  DomainSeparator,
-  L1_TO_L2_MSG_TREE_HEIGHT,
-  MAX_NULLIFIERS_PER_TX,
-  MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
-  NOTE_HASH_TREE_HEIGHT,
-  NULLIFIER_TREE_HEIGHT,
-  PUBLIC_DATA_TREE_HEIGHT,
-} from '@aztec/constants';
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import type { IndexedTreeId, TreeInfo } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { GenesisData, WorldStateRevision } from '@aztec/stdlib/world-state';
 import { AsyncApi, WsdbService } from '@aztec/wsdb';
 import type {
   WorldStateDBStats as WsdbDBStats,
@@ -26,6 +10,22 @@ import type {
   TreeMeta as WsdbTreeMeta,
 } from '@aztec/wsdb';
 
+import {
+  ARCHIVE_HEIGHT,
+  DomainSeparator,
+  L1_TO_L2_MSG_TREE_HEIGHT,
+  MAX_NULLIFIERS_PER_TX,
+  MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
+  NOTE_HASH_TREE_HEIGHT,
+  NULLIFIER_TREE_HEIGHT,
+  PUBLIC_DATA_TREE_HEIGHT,
+} from '@aztec-labs/constants';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import type { IndexedTreeId, TreeInfo } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 import { cpus } from 'node:os';
 
 import type { WorldStateInstrumentation } from '../instrumentation/instrumentation.js';

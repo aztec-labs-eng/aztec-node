@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { PublicKeys } from '@aztec/stdlib/keys';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
 
 import type { StandardContract } from './standard_contract.js';
 import {

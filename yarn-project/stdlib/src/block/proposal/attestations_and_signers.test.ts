@@ -1,9 +1,8 @@
-import type { ViemCommitteeAttestations } from '@aztec/ethereum/contracts';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { bufferToHex } from '@aztec/foundation/string';
-
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { type AbiParameter, encodeAbiParameters, keccak256 } from 'viem';
 
 import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '../../tests/mocks.js';

@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { LogLevels, applyStringFormatting, createLogger } from '@aztec/foundation/log';
 import type { ForeignCallInput, ForeignCallOutput } from '@aztec/noir-acvm_js';
 
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { LogLevels, applyStringFormatting, createLogger } from '@aztec-labs/foundation/log';
 import { strict as assert } from 'assert';
 
 export function foreignCallHandler(name: string, args: ForeignCallInput[]): Promise<ForeignCallOutput[]> {

@@ -1,17 +1,17 @@
-import type { AztecNodeConfig, AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { addL1Validator } from '@aztec/cli/l1/validators';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
 import { MockZKPassportVerifierAbi } from '@aztec/l1-artifacts/MockZKPassportVerifierAbi';
 import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-import { TopicType } from '@aztec/stdlib/p2p';
-import { ZkPassportProofParams } from '@aztec/stdlib/zkpassport';
 
+import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { addL1Validator } from '@aztec-labs/cli/l1/validators';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import { TopicType } from '@aztec-labs/stdlib/p2p';
+import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
 import { jest } from '@jest/globals';
 import { getContract } from 'viem';
 

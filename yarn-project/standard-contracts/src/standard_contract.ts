@@ -1,6 +1,10 @@
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractClassIdPreimage, ContractClassWithId, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type {
+  ContractClassIdPreimage,
+  ContractClassWithId,
+  ContractInstanceWithAddress,
+} from '@aztec-labs/stdlib/contract';
 
 /** A non-protocol contract deployed at a canonical artifact-derived address. */
 export interface StandardContract {

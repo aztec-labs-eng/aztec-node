@@ -1,5 +1,5 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { L2Tips } from '@aztec/stdlib/block';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { L2Tips } from '@aztec-labs/stdlib/block';
 
 import type { FactCollectionKey, OriginBlock } from './fact_store_keys.js';
 import type { Fact } from './stored_fact.js';

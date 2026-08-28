@@ -1,5 +1,5 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import type { FunctionSelector } from '../../abi/index.js';
 import type { AztecAddress } from '../../aztec-address/index.js';

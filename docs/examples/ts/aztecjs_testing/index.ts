@@ -1,9 +1,9 @@
 // docs:start:complete_test_example
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { AztecAddress } from "@aztec-labs/aztec.js/addresses";
 
 // This file demonstrates a complete Jest test structure.
 // In a real test file, wrap this in describe() and it() blocks.
@@ -115,7 +115,7 @@ await runTests();
 // docs:end:complete_test_example
 
 // docs:start:load_test_accounts
-import { registerInitialLocalNetworkAccountsInWallet } from "@aztec/wallets/testing";
+import { registerInitialLocalNetworkAccountsInWallet } from "@aztec-labs/wallets/testing";
 
 // wallet is the EmbeddedWallet from the setup section above
 const [alice, bob] = await registerInitialLocalNetworkAccountsInWallet(wallet);

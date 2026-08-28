@@ -1,6 +1,6 @@
 /* eslint-disable camelcase */
-import { MAX_NOTE_HASHES_PER_TX, PRIVATE_LOG_CIPHERTEXT_LEN, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec/constants';
-import { computeFeeJuiceMessageNullifier } from '@aztec/stdlib/messaging';
+import { MAX_NOTE_HASHES_PER_TX, PRIVATE_LOG_CIPHERTEXT_LEN, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
 import type { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';

@@ -1,16 +1,16 @@
-import { MAX_PRIVATE_LOGS_PER_TX } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { RevertCode } from '@aztec/stdlib/avm';
+import { MAX_PRIVATE_LOGS_PER_TX } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { RevertCode } from '@aztec-labs/stdlib/avm';
 import {
   AppTaggingSecret,
   AppTaggingSecretKind,
   PrivateLog,
   SiloedTag,
   type TaggingIndexRange,
-} from '@aztec/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec/stdlib/testing';
-import { TxEffect, TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/logs';
+import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, unfinalizedTaggingIndexesWindowEnd } from '../../tagging/constants.js';
 import type { ChangeSetId } from '../staged_write_coordinator.js';

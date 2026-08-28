@@ -1,7 +1,7 @@
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec/foundation/promise';
-import type { DateProvider } from '@aztec/foundation/timer';
-import { TxHash } from '@aztec/stdlib/tx';
-import type { Tx } from '@aztec/stdlib/tx';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import { TxHash } from '@aztec-labs/stdlib/tx';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 
 /**
  * Tracks which transactions are still missing and need to be fetched.

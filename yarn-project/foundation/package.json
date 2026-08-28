@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/foundation",
+  "name": "@aztec-labs/foundation",
   "version": "0.1.0",
   "type": "module",
   "main": "./dest/index.js",

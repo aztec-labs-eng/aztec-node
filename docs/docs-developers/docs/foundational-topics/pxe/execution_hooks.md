@@ -13,7 +13,7 @@ Execution hooks are callbacks that the PXE invokes during client-side simulation
 Pass a `hooks` object when creating the PXE:
 
 ```typescript
-import { createPXE } from "@aztec/pxe/server";
+import { createPXE } from "@aztec-labs/pxe/server";
 
 const pxe = await createPXE(node, config, {
   hooks: {

@@ -1,6 +1,6 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import type { ChainMonitor } from '@aztec/ethereum/test';
-import { CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { ChainMonitor } from '@aztec-labs/ethereum/test';
+import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 
 import { PROVING_SLOT_TIMING, SingleNodeTestContext, jest, setupWithProver } from './setup.js';
 

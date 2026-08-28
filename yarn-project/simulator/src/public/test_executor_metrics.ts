@@ -1,8 +1,7 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import type { RevertCode } from '@aztec/stdlib/avm';
-import type { GasUsed } from '@aztec/stdlib/gas';
-
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { RevertCode } from '@aztec-labs/stdlib/avm';
+import type { GasUsed } from '@aztec-labs/stdlib/gas';
 import { strict as assert } from 'assert';
 
 import type { ExecutorMetricsInterface } from './executor_metrics_interface.js';

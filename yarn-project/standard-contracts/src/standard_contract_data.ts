@@ -1,7 +1,7 @@
 // GENERATED FILE - DO NOT EDIT. RUN `yarn generate` or `yarn generate:data`
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 export const standardContractNames = [
   'AuthRegistry',

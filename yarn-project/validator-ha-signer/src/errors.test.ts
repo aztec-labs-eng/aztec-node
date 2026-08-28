@@ -1,5 +1,4 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { describe, expect, it } from '@jest/globals';
 
 import { DutyAlreadySignedError, SigningLockLostError, SlashingProtectionError } from './errors.js';

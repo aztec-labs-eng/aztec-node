@@ -1,9 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { CompleteAddress } from '@aztec/stdlib/contract';
-import type { TxExecutionRequest, TxReceipt, UtilityExecutionResult } from '@aztec/stdlib/tx';
-import { OFFCHAIN_MESSAGE_IDENTIFIER } from '@aztec/stdlib/tx';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import type { TxExecutionRequest, TxReceipt, UtilityExecutionResult } from '@aztec-labs/stdlib/tx';
+import { OFFCHAIN_MESSAGE_IDENTIFIER } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { Account } from '../account/account.js';

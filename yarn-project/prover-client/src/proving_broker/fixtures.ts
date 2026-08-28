@@ -1,7 +1,7 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { type ProofUri, type ProvingJobId, makeProvingJobId } from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { type ProofUri, type ProvingJobId, makeProvingJobId } from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 export function makeRandomProvingJobId(epochNumber?: EpochNumber): ProvingJobId {
   return makeProvingJobId(

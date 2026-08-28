@@ -1,4 +1,4 @@
-import type { Logger } from '@aztec/foundation/log';
+import type { Logger } from '@aztec-labs/foundation/log';
 
 import type { PrometheusClient } from '../../quality_of_service/prometheus_client.js';
 

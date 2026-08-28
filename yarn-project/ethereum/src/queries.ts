@@ -1,5 +1,4 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { BaseError, type Block } from 'viem';
 
 import { DefaultL1ContractsConfig, type L1ContractsConfig } from './config.js';

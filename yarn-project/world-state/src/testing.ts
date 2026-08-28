@@ -1,9 +1,9 @@
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { MerkleTreeId, PublicDataTreeLeaf } from '@aztec/stdlib/trees';
-import type { GenesisData } from '@aztec/stdlib/world-state';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { MerkleTreeId, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 
 import { NativeWorldStateService } from './native/index.js';
 

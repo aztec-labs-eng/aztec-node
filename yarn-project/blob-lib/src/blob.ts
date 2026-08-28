@@ -1,7 +1,7 @@
-import { FIELDS_PER_BLOB } from '@aztec/constants';
-import { BLS12Fr } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
+import { BLS12Fr } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { computeBlobCommitment, computeChallengeZ, computeEthVersionedBlobHash } from './hash.js';
 import type { BlobJson } from './interface.js';

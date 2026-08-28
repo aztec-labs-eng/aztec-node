@@ -12,5 +12,5 @@ export {
   type PublicTxSimulatorInterface,
   TelemetryPublicTxSimulator,
 } from './public_tx_simulator/index.js';
-export type { PublicTxResult, PublicSimulatorConfig as PublicTxSimulatorConfig } from '@aztec/stdlib/avm';
+export type { PublicTxResult, PublicSimulatorConfig as PublicTxSimulatorConfig } from '@aztec-labs/stdlib/avm';
 export { getCallRequestsWithCalldataByPhase } from './utils.js';

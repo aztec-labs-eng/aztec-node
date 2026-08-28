@@ -1,5 +1,4 @@
-import { compactArray } from '@aztec/foundation/collection';
-
+import { compactArray } from '@aztec-labs/foundation/collection';
 import type { ContractFunctionExecutionError } from 'viem';
 
 export function tryGetCustomErrorNameContractFunction(err: ContractFunctionExecutionError) {

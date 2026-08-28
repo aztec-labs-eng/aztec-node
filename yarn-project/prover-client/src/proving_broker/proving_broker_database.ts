@@ -1,5 +1,5 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobSettledResult } from '@aztec/stdlib/interfaces/server';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { ProofUri, ProvingJob, ProvingJobId, ProvingJobSettledResult } from '@aztec-labs/stdlib/interfaces/server';
 
 /**
  * A database for storing proof requests and their results

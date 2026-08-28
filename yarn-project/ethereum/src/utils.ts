@@ -1,7 +1,7 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
 import { ErrorsAbi } from '@aztec/l1-artifacts/ErrorsAbi';
 
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
 import {
   type Abi,
   type AbiItem,

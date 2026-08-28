@@ -1,8 +1,8 @@
-import type { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { type L1RollupConstants, getEpochAtSlot, getSlotRangeForEpoch } from '@aztec/stdlib/epoch-helpers';
+import type { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { type L1RollupConstants, getEpochAtSlot, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
 
 import {
   CheckpointProver,

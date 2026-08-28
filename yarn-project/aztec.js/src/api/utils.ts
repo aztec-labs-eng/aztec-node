@@ -3,10 +3,10 @@
  *
  * NOTE: This module contains low-usage utilities and may be deprecated in the future.
  * Prefer using more specific modules:
- * - Node connection utilities → `@aztec/aztec.js/node`
- * - Type converters → `@aztec/aztec.js/abi`
- * - Key generation → `@aztec/aztec.js/keys`
- * - Messaging utilities → `@aztec/aztec.js/messaging`
+ * - Node connection utilities → `@aztec-labs/aztec.js/node`
+ * - Type converters → `@aztec-labs/aztec.js/abi`
+ * - Key generation → `@aztec-labs/aztec.js/keys`
+ * - Messaging utilities → `@aztec-labs/aztec.js/messaging`
  */
 
 // Low-usage utilities - consider these internal/experimental

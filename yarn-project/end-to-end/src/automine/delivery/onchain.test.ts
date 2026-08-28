@@ -1,8 +1,8 @@
-import type { InitialAccountData } from '@aztec/accounts/testing';
-import type { CompleteAddress } from '@aztec/aztec.js/addresses';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import type { ResolveCustomRequest } from '@aztec/pxe/config';
-import { deriveKeys } from '@aztec/stdlib/keys';
+import type { InitialAccountData } from '@aztec-labs/accounts/testing';
+import type { CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import type { ResolveCustomRequest } from '@aztec-labs/pxe/config';
+import { deriveKeys } from '@aztec-labs/stdlib/keys';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import {

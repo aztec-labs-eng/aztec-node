@@ -3,7 +3,7 @@
  * These constants define maximum allowed sizes during deserialization
  * to prevent DoS attacks via maliciously crafted messages.
  */
-import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_BLOCKS_PER_CHECKPOINT } from '@aztec/constants';
+import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
 
 /** Max transactions per block for deserialization validation */
 export const MAX_TXS_PER_BLOCK = 2 ** 16;

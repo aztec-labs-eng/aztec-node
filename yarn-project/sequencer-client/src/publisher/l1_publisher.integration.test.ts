@@ -1,13 +1,15 @@
-import type { ArchiverDataSource } from '@aztec/archiver';
-import { MockL1ToL2MessageSource } from '@aztec/archiver/test';
-import { createBlobClient } from '@aztec/blob-client/client';
+import { InboxAbi, RollupAbi } from '@aztec/l1-artifacts';
+
+import type { ArchiverDataSource } from '@aztec-labs/archiver';
+import { MockL1ToL2MessageSource } from '@aztec-labs/archiver/test';
+import { createBlobClient } from '@aztec-labs/blob-client/client';
 import {
   BatchedBlob,
   BatchedBlobAccumulator,
   Blob,
   getBlobsPerL1Block,
   getPrefixedEthBlobCommitments,
-} from '@aztec/blob-lib';
+} from '@aztec-labs/blob-lib';
 import {
   GENESIS_ARCHIVE_ROOT,
   MAX_L1_TO_L2_MSGS_PER_BLOCK,
@@ -15,43 +17,45 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_PROCESSABLE_L2_GAS,
   MAX_TX_DA_GAS,
-} from '@aztec/constants';
-import { EpochCache } from '@aztec/epoch-cache';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { type L1ContractsConfig, getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { GovernanceProposerContract, RollupContract, SimulationOverridesBuilder } from '@aztec/ethereum/contracts';
-import { type DeployAztecL1ContractsArgs, deployAztecL1Contracts } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { TxUtilsState, createL1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { EthCheatCodesWithState, RollupCheatCodes, startAnvil } from '@aztec/ethereum/test';
-import type { Anvil } from '@aztec/ethereum/test';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { range } from '@aztec/foundation/array';
+} from '@aztec-labs/constants';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { type L1ContractsConfig, getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { GovernanceProposerContract, RollupContract, SimulationOverridesBuilder } from '@aztec-labs/ethereum/contracts';
+import {
+  type DeployAztecL1ContractsArgs,
+  deployAztecL1Contracts,
+} from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { TxUtilsState, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { EthCheatCodesWithState, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import type { Anvil } from '@aztec-labs/ethereum/test';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { range } from '@aztec-labs/foundation/array';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { times, timesParallel } from '@aztec/foundation/collection';
-import { SecretValue } from '@aztec/foundation/config';
-import { Secp256k1Signer, flipSignature } from '@aztec/foundation/crypto/secp256k1-signer';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { hexToBuffer } from '@aztec/foundation/string';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { InboxAbi, RollupAbi } from '@aztec/l1-artifacts';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { ProtocolContractsList, protocolContractsHash } from '@aztec/protocol-contracts';
-import { LightweightCheckpointBuilder } from '@aztec/prover-client/light';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times, timesParallel } from '@aztec-labs/foundation/collection';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Secp256k1Signer, flipSignature } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { ProtocolContractsList, protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { LightweightCheckpointBuilder } from '@aztec-labs/prover-client/light';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   type BlockQuery,
@@ -63,28 +67,32 @@ import {
   L2Block,
   type L2Tips,
   Signature,
-} from '@aztec/stdlib/block';
-import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
+} from '@aztec-labs/stdlib/block';
+import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
   getNextL1SlotTimestamp,
   getSlotStartBuildTimestamp,
-} from '@aztec/stdlib/epoch-helpers';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/epoch-helpers';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import {
   CheckpointProposal,
   ConsensusPayload,
   CheckpointAttestation as P2PCheckpointAttestation,
   getHashedSignaturePayloadTypedData,
   orderAttestations,
-} from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { fr, mockProcessedTx } from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { type BlockHeader, type CheckpointGlobalVariables, GlobalVariables, type ProcessedTx } from '@aztec/stdlib/tx';
-import { NativeWorldStateService, ServerWorldStateSynchronizer, type WorldStateConfig } from '@aztec/world-state';
-
+} from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { fr, mockProcessedTx } from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import {
+  type BlockHeader,
+  type CheckpointGlobalVariables,
+  GlobalVariables,
+  type ProcessedTx,
+} from '@aztec-labs/stdlib/tx';
+import { NativeWorldStateService, ServerWorldStateSynchronizer, type WorldStateConfig } from '@aztec-labs/world-state';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type Address, encodeFunctionData, getAbiItem, getAddress, getContract, multicall3Abi } from 'viem';
@@ -110,7 +118,7 @@ const logger = createLogger('integration_l1_publisher');
 
 // Compose the publisher's config from sequencer-client's own env getter plus the L1 contracts
 // config (for lagInEpochsForValidatorSet, which is not part of SequencerClientConfig). This avoids
-// depending on @aztec/aztec-node, which would create a sequencer-client <-> aztec-node cycle.
+// depending on @aztec-labs/aztec-node, which would create a sequencer-client <-> aztec-node cycle.
 const config: SequencerClientConfig & L1ContractsConfig = { ...getL1ContractsConfigEnvVars(), ...getConfigEnvVars() };
 
 // Several consecutive checkpoints, each consuming the L1->L2 messages sent while it was being built, so real

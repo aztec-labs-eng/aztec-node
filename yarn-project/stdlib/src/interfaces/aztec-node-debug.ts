@@ -1,6 +1,5 @@
-import { type CheckpointNumber, CheckpointNumberSchema } from '@aztec/foundation/branded-types';
-import { createSafeJsonRpcClient, defaultFetch } from '@aztec/foundation/json-rpc/client';
-
+import { type CheckpointNumber, CheckpointNumberSchema } from '@aztec-labs/foundation/branded-types';
+import { createSafeJsonRpcClient, defaultFetch } from '@aztec-labs/foundation/json-rpc/client';
 import { z } from 'zod';
 
 import { type ApiSchemaFor, optional } from '../schemas/schemas.js';

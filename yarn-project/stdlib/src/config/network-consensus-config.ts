@@ -1,5 +1,5 @@
-import { type L1ContractsConfig, l1ContractsConfigMappings, validateSlotDurations } from '@aztec/ethereum/config';
-import { type EnvVar, pickConfigMappings } from '@aztec/foundation/config';
+import { type L1ContractsConfig, l1ContractsConfigMappings, validateSlotDurations } from '@aztec-labs/ethereum/config';
+import { type EnvVar, pickConfigMappings } from '@aztec-labs/foundation/config';
 
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '../deserialization/index.js';
 import type { SequencerConfig } from '../interfaces/configs.js';

@@ -1,7 +1,7 @@
-import { DomainSeparator, FUNCTION_TREE_HEIGHT } from '@aztec/constants';
-import { poseidon2Hash, poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type MerkleTree, MerkleTreeCalculator } from '@aztec/foundation/trees';
+import { DomainSeparator, FUNCTION_TREE_HEIGHT } from '@aztec-labs/constants';
+import { poseidon2Hash, poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type MerkleTree, MerkleTreeCalculator } from '@aztec-labs/foundation/trees';
 
 import { computeMerkleHash } from '../hash/hash.js';
 import type { PrivateFunction } from './interfaces/contract_class.js';

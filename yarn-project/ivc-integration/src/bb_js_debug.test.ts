@@ -4,15 +4,15 @@
  * 1. Runs `bb prove` via CLI using the same inputs → compares proof output
  * 2. Runs `bb verify` via CLI using the proof files → checks verification passes
  */
-import { BBJsInstance, type BBJsProofResult } from '@aztec/bb-prover';
-import { DebugBBJsInstance } from '@aztec/bb-prover/debug';
-import { INBOX_PARITY_SIZE_MEDIUM } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
 import { Noir } from '@aztec/noir-noir_js';
-import { ServerCircuitArtifacts } from '@aztec/noir-protocol-circuits-types/server';
-import { InboxParityPrivateInputs } from '@aztec/stdlib/parity';
 
+import { BBJsInstance, type BBJsProofResult } from '@aztec-labs/bb-prover';
+import { DebugBBJsInstance } from '@aztec-labs/bb-prover/debug';
+import { INBOX_PARITY_SIZE_MEDIUM } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { ServerCircuitArtifacts } from '@aztec-labs/noir-protocol-circuits-types/server';
+import { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
 import { jest } from '@jest/globals';
 import * as proc from 'child_process';
 import * as fs from 'fs/promises';

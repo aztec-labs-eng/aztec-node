@@ -1,27 +1,27 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { AuthWitness } from '@aztec/aztec.js/authorization';
+import { TestERC20Abi, TokenPortalAbi, TokenPortalBytecode } from '@aztec/l1-artifacts';
+
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { AuthWitness } from '@aztec-labs/aztec.js/authorization';
 import {
   type L1TokenManager,
   L1TokenPortalManager,
   type L2AmountClaim,
   type L2AmountClaimWithRecipient,
-} from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { SiblingPath } from '@aztec/aztec.js/trees';
-import type { TxReceipt } from '@aztec/aztec.js/tx';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { OutboxContract } from '@aztec/ethereum/contracts';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { TestERC20Abi, TokenPortalAbi, TokenPortalBytecode } from '@aztec/l1-artifacts';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { TokenBridgeContract } from '@aztec/noir-contracts.js/TokenBridge';
-
+} from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { SiblingPath } from '@aztec-labs/aztec.js/trees';
+import type { TxReceipt } from '@aztec-labs/aztec.js/tx';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { OutboxContract } from '@aztec-labs/ethereum/contracts';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { TokenBridgeContract } from '@aztec-labs/noir-contracts.js/TokenBridge';
 import { type Hex, getContract } from 'viem';
 
 import { testSpan } from '../fixtures/timing.js';

@@ -1,8 +1,8 @@
-import { BLOBS_PER_CHECKPOINT, DomainSeparator, MAX_CHECKPOINTS_PER_EPOCH } from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { BLS12Fr, BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { BLOBS_PER_CHECKPOINT, DomainSeparator, MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { BatchedBlob } from './batched_blob.js';
 import { Blob } from './blob.js';

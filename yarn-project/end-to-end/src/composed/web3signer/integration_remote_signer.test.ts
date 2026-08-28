@@ -1,7 +1,6 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { LocalSigner, RemoteSigner } from '@aztec/node-keystore';
-
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { LocalSigner, RemoteSigner } from '@aztec-labs/node-keystore';
 import { jest } from '@jest/globals';
 import type { TransactionSerializable, TypedDataDefinition } from 'viem';
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';

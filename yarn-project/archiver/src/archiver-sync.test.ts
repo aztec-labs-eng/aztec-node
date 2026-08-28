@@ -1,35 +1,38 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { makeRandomBlob } from '@aztec/blob-lib/testing';
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import type { EpochCache, EpochCommitteeInfo } from '@aztec/epoch-cache';
-import { DefaultL1ContractsConfig } from '@aztec/ethereum/config';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import type { EpochCache, EpochCommitteeInfo } from '@aztec-labs/epoch-cache';
+import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import {
   BlockTagTooOldError,
   type InboxContract,
   type OutboxContract,
   type RollupContract,
-} from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { sum, times } from '@aztec/foundation/collection';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { toArray } from '@aztec/foundation/iterable';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { retryFastUntil } from '@aztec/foundation/retry';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { GENESIS_BLOCK_HEADER_HASH, L2BlockSourceEvents, type L2BlockSourceUpdatedEvent } from '@aztec/stdlib/block';
-import type { ProposedCheckpointInput } from '@aztec/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { mockCheckpointAndMessages } from '@aztec/stdlib/testing';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import { BlockHeader } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { sum, times } from '@aztec-labs/foundation/collection';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { retryFastUntil } from '@aztec-labs/foundation/retry';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import {
+  GENESIS_BLOCK_HEADER_HASH,
+  L2BlockSourceEvents,
+  type L2BlockSourceUpdatedEvent,
+} from '@aztec-labs/stdlib/block';
+import type { ProposedCheckpointInput } from '@aztec-labs/stdlib/checkpoint';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import assert from 'assert';
 import { EventEmitter } from 'events';

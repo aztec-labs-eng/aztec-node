@@ -1,5 +1,5 @@
-import { EMPTY_EPOCH_OUT_HASH, MAX_CHECKPOINTS_PER_EPOCH } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { EMPTY_EPOCH_OUT_HASH, MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { computeEpochOutHash } from './out_hash.js';
 

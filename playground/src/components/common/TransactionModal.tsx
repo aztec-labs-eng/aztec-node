@@ -9,7 +9,7 @@ import TwitterIcon from '@mui/icons-material/Twitter';
 import { DISCORD_URL, PLAYGROUND_URL } from '../../constants';
 import Button from '@mui/material/Button';
 import { Dialog, DialogContent, DialogTitle } from '@mui/material';
-import { TxStatus } from '@aztec/aztec.js/tx';
+import { TxStatus } from '@aztec-labs/aztec.js/tx';
 import { dialogBody, loader } from '../../styles/common';
 import type { UserTx } from '../../utils/txs';
 import ReactConfetti from 'react-confetti';

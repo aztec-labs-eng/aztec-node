@@ -1,5 +1,5 @@
-import { Semaphore } from '@aztec/foundation/queue';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
+import { Semaphore } from '@aztec-labs/foundation/queue';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 
 import type { Rollbackable } from './rollbackable.js';
 import type { ChangeSetId, StagedStore } from './staged_write_coordinator.js';

@@ -1,8 +1,8 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { createLogger } from '@aztec/foundation/log';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 const logger = createLogger('example:token');
 

@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { mockTx, mockTxForRollup } from '@aztec/stdlib/testing';
-import { TX_ERROR_DUPLICATE_NULLIFIER_IN_TX, TX_ERROR_EXISTING_NULLIFIER, type Tx } from '@aztec/stdlib/tx';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { mockTx, mockTxForRollup } from '@aztec-labs/stdlib/testing';
+import { TX_ERROR_DUPLICATE_NULLIFIER_IN_TX, TX_ERROR_EXISTING_NULLIFIER, type Tx } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { DoubleSpendTxValidator, type NullifierSource } from './double_spend_validator.js';

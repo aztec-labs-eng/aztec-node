@@ -1,11 +1,10 @@
-import { toBigIntBE, toHex } from '@aztec/foundation/bigint-buffer';
-import { keccak256 } from '@aztec/foundation/crypto/keccak';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
-import { pluralize } from '@aztec/foundation/string';
-import type { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
-
+import { toBigIntBE, toHex } from '@aztec-labs/foundation/bigint-buffer';
+import { keccak256 } from '@aztec-labs/foundation/crypto/keccak';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { pluralize } from '@aztec-labs/foundation/string';
+import type { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type Chain, type Hex, type Transaction, createPublicClient, fallback, hexToNumber, http } from 'viem';
 import { foundry } from 'viem/chains';
 

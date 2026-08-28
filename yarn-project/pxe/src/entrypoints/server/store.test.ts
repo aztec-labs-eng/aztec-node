@@ -1,5 +1,4 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { mkdtemp, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

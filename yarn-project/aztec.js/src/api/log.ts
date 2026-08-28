@@ -1,2 +1,2 @@
-export { createLogger, type Logger } from '@aztec/foundation/log';
-export { LogCursor, type LogResult } from '@aztec/stdlib/logs';
+export { createLogger, type Logger } from '@aztec-labs/foundation/log';
+export { LogCursor, type LogResult } from '@aztec-labs/stdlib/logs';

@@ -1,5 +1,6 @@
 import { AztecClientBackend, Barretenberg } from '@aztec/bb.js';
-import { createLogger } from '@aztec/foundation/log';
+
+import { createLogger } from '@aztec-labs/foundation/log';
 
 import {
   MockAppCreatorCircuit,

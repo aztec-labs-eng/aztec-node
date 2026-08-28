@@ -1,13 +1,12 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { createLogger } from '@aztec/aztec.js/log';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { Tx } from '@aztec/aztec.js/tx';
-import { PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec/epoch-cache';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { Tx } from '@aztec-labs/aztec.js/tx';
+import { PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { expect, jest } from '@jest/globals';
 
 import { getBootNodeUdpPort, shouldCollectMetrics } from '../../fixtures/fixtures.js';

@@ -124,7 +124,7 @@ Maximum notes per call: `MAX_NOTE_HASH_READ_REQUESTS_PER_CALL` (currently 16)
 You can pass comparator values from TypeScript to your contract functions:
 
 ```typescript
-import { Comparator } from '@aztec/aztec.js/note';
+import { Comparator } from '@aztec-labs/aztec.js/note';
 
 // Pass comparator to a contract function that accepts it as a parameter
 await contract.methods.read_notes(Comparator.GTE, 5).simulate({ from: senderAddress });

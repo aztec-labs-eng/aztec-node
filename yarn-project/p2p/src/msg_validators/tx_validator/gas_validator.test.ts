@@ -1,15 +1,18 @@
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Writeable } from '@aztec/foundation/types';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { computeFeePayerBalanceStorageSlot } from '@aztec/protocol-contracts/fee-juice';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import { mockTx } from '@aztec/stdlib/testing';
-import type { PublicStateSource } from '@aztec/stdlib/trees';
-import { TX_ERROR_INSUFFICIENT_FEE_PAYER_BALANCE, TX_ERROR_INSUFFICIENT_FEE_PER_GAS, type Tx } from '@aztec/stdlib/tx';
-
+import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Writeable } from '@aztec-labs/foundation/types';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { computeFeePayerBalanceStorageSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import type { PublicStateSource } from '@aztec-labs/stdlib/trees';
+import {
+  TX_ERROR_INSUFFICIENT_FEE_PAYER_BALANCE,
+  TX_ERROR_INSUFFICIENT_FEE_PER_GAS,
+  type Tx,
+} from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock, mockFn } from 'jest-mock-extended';
 
 import { GasTxValidator, MaxFeePerGasValidator } from './gas_validator.js';

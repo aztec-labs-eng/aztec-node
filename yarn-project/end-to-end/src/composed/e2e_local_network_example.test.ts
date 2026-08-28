@@ -2,18 +2,17 @@ import {
   registerDeployedBananaCoinInWalletAndGetAddress,
   registerDeployedBananaFPCInWalletAndGetAddress,
   registerDeployedSponsoredFPCInWalletAndGetAddress,
-} from '@aztec/aztec';
-import { PrivateFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee/testing';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import { createLogger } from '@aztec/aztec.js/log';
-import { createAztecNodeClient, waitForNode } from '@aztec/aztec.js/node';
-import { getFeeJuiceBalance } from '@aztec/aztec.js/utils';
-import { timesParallel } from '@aztec/foundation/collection';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { Gas, GasSettings } from '@aztec/stdlib/gas';
-import { registerInitialLocalNetworkAccountsInWallet } from '@aztec/wallets/testing';
-
+} from '@aztec-labs/aztec';
+import { PrivateFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee/testing';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { createAztecNodeClient, waitForNode } from '@aztec-labs/aztec.js/node';
+import { getFeeJuiceBalance } from '@aztec-labs/aztec.js/utils';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { Gas, GasSettings } from '@aztec-labs/stdlib/gas';
+import { registerInitialLocalNetworkAccountsInWallet } from '@aztec-labs/wallets/testing';
 import { format } from 'util';
 
 import { getPaddedMaxFeesPerGas } from '../fixtures/fixtures.js';

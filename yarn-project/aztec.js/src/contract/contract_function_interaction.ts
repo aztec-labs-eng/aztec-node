@@ -10,11 +10,11 @@ import {
   encodeArguments,
   getFunctionReturnType,
   isOptionStruct,
-} from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Capsule, HashedValues, TxProfileResult } from '@aztec/stdlib/tx';
-import { ExecutionPayload, mergeExecutionPayloads } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Capsule, HashedValues, TxProfileResult } from '@aztec-labs/stdlib/tx';
+import { ExecutionPayload, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
 
 import type { Wallet } from '../wallet/wallet.js';
 import { BaseContractInteraction } from './base_contract_interaction.js';

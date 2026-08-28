@@ -3,16 +3,16 @@ import {
   L1_TO_L2_MSG_TREE_HEIGHT,
   type NOTE_HASH_TREE_HEIGHT,
   PRIVATE_LOG_CIPHERTEXT_LEN,
-} from '@aztec/constants';
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { uniqueBy } from '@aztec/foundation/collection';
-import { Aes128 } from '@aztec/foundation/crypto/aes128';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { LogLevels, type Logger, createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import type { KeyStore } from '@aztec/key-store';
+} from '@aztec-labs/constants';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { uniqueBy } from '@aztec-labs/foundation/collection';
+import { Aes128 } from '@aztec-labs/foundation/crypto/aes128';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { LogLevels, type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { KeyStore } from '@aztec-labs/key-store';
 import {
   type CircuitSimulator,
   ExecutionError,
@@ -20,21 +20,21 @@ import {
   resolveAssertionMessageFromError,
   toACVMWitness,
   witnessMapToFields,
-} from '@aztec/simulator/client';
-import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec/standard-contracts/handshake-registry/constants';
-import { type FunctionCall, FunctionSelector } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, type L2TipsProvider } from '@aztec/stdlib/block';
-import type { CompleteAddress, ContractInstancePreimageWithAddress, PartialAddress } from '@aztec/stdlib/contract';
-import { siloNullifier } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import type { KeyValidationRequest } from '@aztec/stdlib/kernel';
-import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec/stdlib/keys';
-import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec/stdlib/logs';
-import { type UnsiloedMessageNullifier, getL1ToL2MessageWitness } from '@aztec/stdlib/messaging';
-import type { NoteStatus } from '@aztec/stdlib/note';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/simulator/client';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
+import { type FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, type L2TipsProvider } from '@aztec-labs/stdlib/block';
+import type { CompleteAddress, ContractInstancePreimageWithAddress, PartialAddress } from '@aztec-labs/stdlib/contract';
+import { siloNullifier } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
+import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
+import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
+import { type UnsiloedMessageNullifier, getL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
+import type { NoteStatus } from '@aztec-labs/stdlib/note';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   type BlockHeader,
   CallContext,
@@ -43,7 +43,7 @@ import {
   type TxEffect,
   type TxHash,
   type TxReceipt,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import type { ContractSyncService } from '../../contract/contract_sync_service.js';
 import { createContractLogger, logContractMessage, stripAztecnrLogPrefix } from '../../contract_logging.js';

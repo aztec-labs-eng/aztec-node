@@ -1,8 +1,8 @@
-import { getPublicClient, getRpcUrlsFromClient } from '@aztec/ethereum/client';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
+import { getPublicClient, getRpcUrlsFromClient } from '@aztec-labs/ethereum/client';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 
 /** Subset of L1 contract addresses whose historical logs the Aztec node relies on. */
 export type HistoricalLogsContractAddresses = Pick<

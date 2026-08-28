@@ -1,6 +1,5 @@
-import { BlockNumberSchema } from '@aztec/foundation/branded-types';
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-
+import { BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { z } from 'zod';
 
 import type { AztecAddress } from '../aztec-address/index.js';

@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/slasher",
+  "name": "@aztec-labs/slasher",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -56,12 +56,12 @@
     ]
   },
   "dependencies": {
-    "@aztec/epoch-cache": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/kv-store": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/telemetry-client": "workspace:^",
+    "@aztec-labs/epoch-cache": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/kv-store": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/telemetry-client": "workspace:^",
     "source-map-support": "^0.5.21",
     "tslib": "^2.4.0",
     "viem": "npm:@aztec/viem@2.38.2",

@@ -1,7 +1,12 @@
-import { BlockNumber, CheckpointNumber, type IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { DutyType } from '@aztec/stdlib/ha-signing';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  type IndexWithinCheckpoint,
+  SlotNumber,
+} from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { DutyType } from '@aztec-labs/stdlib/ha-signing';
 
 /**
  * Row type from PostgreSQL query

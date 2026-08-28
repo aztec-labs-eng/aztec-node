@@ -1,6 +1,5 @@
-import type { LogFn } from '@aztec/foundation/log';
-import { parseNoirPackageConfig } from '@aztec/foundation/noir';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { parseNoirPackageConfig } from '@aztec-labs/foundation/noir';
 import TOML from '@iarna/toml';
 import { readFile } from 'fs/promises';
 import { join, relative, resolve } from 'path';

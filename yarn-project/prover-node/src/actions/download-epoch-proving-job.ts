@@ -1,10 +1,9 @@
-import { jsonParseWithSchema } from '@aztec/foundation/json-rpc';
-import type { Logger } from '@aztec/foundation/log';
-import { urlJoin } from '@aztec/foundation/string';
-import { snapshotSync } from '@aztec/node-lib/actions';
-import { createReadOnlyFileStore } from '@aztec/stdlib/file-store';
-import { UploadSnapshotMetadataSchema, makeSnapshotPaths } from '@aztec/stdlib/snapshots';
-
+import { jsonParseWithSchema } from '@aztec-labs/foundation/json-rpc';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { urlJoin } from '@aztec-labs/foundation/string';
+import { snapshotSync } from '@aztec-labs/node-lib/actions';
+import { createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
+import { UploadSnapshotMetadataSchema, makeSnapshotPaths } from '@aztec-labs/stdlib/snapshots';
 import { readFileSync } from 'fs';
 
 import { deserializeEpochProvingJobData } from '../job/epoch-proving-job-data.js';

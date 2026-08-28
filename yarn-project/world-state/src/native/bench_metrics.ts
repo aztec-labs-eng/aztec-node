@@ -1,4 +1,4 @@
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 type BlockSyncMetrics = {
   numTxs: number;

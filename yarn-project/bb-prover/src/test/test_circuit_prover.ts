@@ -1,12 +1,14 @@
+import type { WitnessMap } from '@aztec/noir-types';
+
 import {
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
   NESTED_RECURSIVE_PROOF_LENGTH,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
-} from '@aztec/constants';
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { Timer } from '@aztec/foundation/timer';
+} from '@aztec-labs/constants';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { Timer } from '@aztec-labs/foundation/timer';
 import {
   type ServerProtocolArtifact,
   convertBlockMergeRollupOutputsFromWitnessMap,
@@ -38,25 +40,28 @@ import {
   foreignCallHandler,
   getSimulatedServerCircuitArtifact,
   inboxParityArtifactForSize,
-} from '@aztec/noir-protocol-circuits-types/server';
-import { ProtocolCircuitVks } from '@aztec/noir-protocol-circuits-types/server/vks';
-import { mapProtocolArtifactNameToCircuitName } from '@aztec/noir-protocol-circuits-types/types';
-import type { WitnessMap } from '@aztec/noir-types';
-import { type CircuitSimulator, WASMSimulatorWithBlobs, emitCircuitSimulationStats } from '@aztec/simulator/server';
-import type { AvmCircuitInputs } from '@aztec/stdlib/avm';
+} from '@aztec-labs/noir-protocol-circuits-types/server';
+import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import { mapProtocolArtifactNameToCircuitName } from '@aztec-labs/noir-protocol-circuits-types/types';
+import {
+  type CircuitSimulator,
+  WASMSimulatorWithBlobs,
+  emitCircuitSimulationStats,
+} from '@aztec-labs/simulator/server';
+import type { AvmCircuitInputs } from '@aztec-labs/stdlib/avm';
 import {
   type PublicInputsAndRecursiveProof,
   type ServerCircuitProver,
   makePublicInputsAndRecursiveProof,
-} from '@aztec/stdlib/interfaces/server';
-import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec/stdlib/parity';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec-labs/stdlib/parity';
 import {
   type Proof,
   ProvingRequestType,
   RecursiveProof,
   makeEmptyRecursiveProof,
   makeRecursiveProof,
-} from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/proofs';
 import {
   type BlockMergeRollupPrivateInputs,
   type BlockRollupPublicInputs,
@@ -76,8 +81,8 @@ import {
   type RootRollupPublicInputs,
   type TxMergeRollupPrivateInputs,
   type TxRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
-import { type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/rollup';
+import { type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec-labs/telemetry-client';
 
 import { ProverInstrumentation } from '../instrumentation.js';
 import { PROOF_DELAY_MS, WITGEN_DELAY_MS } from './delay_values.js';

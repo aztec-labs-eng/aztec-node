@@ -8,7 +8,7 @@
  *
  * @example
  * ```ts
- * import { createAztecNodeClient, waitForNode, waitForTx } from '@aztec/aztec.js/node';
+ * import { createAztecNodeClient, waitForNode, waitForTx } from '@aztec-labs/aztec.js/node';
  *
  * const node = createAztecNodeClient('http://localhost:8080');
  * await waitForNode(node);
@@ -27,4 +27,4 @@ export {
   type AztecNode,
   type AztecNodeClientOptions,
 } from '../utils/node.js';
-export { type NodeInfo } from '@aztec/stdlib/contract';
+export { type NodeInfo } from '@aztec-labs/stdlib/contract';

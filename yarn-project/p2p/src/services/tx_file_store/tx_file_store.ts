@@ -1,11 +1,11 @@
-import { FifoSet } from '@aztec/foundation/fifo-set';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/promise';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-import { Timer } from '@aztec/foundation/timer';
-import { type FileStore, createFileStore } from '@aztec/stdlib/file-store';
-import type { Tx } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+import { FifoSet } from '@aztec-labs/foundation/fifo-set';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/promise';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { type FileStore, createFileStore } from '@aztec-labs/stdlib/file-store';
+import type { Tx } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import type { TxPoolV2 } from '../../mem_pools/index.js';
 import type { TxFileStoreConfig } from './config.js';

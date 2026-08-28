@@ -1,8 +1,8 @@
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import { L1TxUtils, createL1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { sleep } from '@aztec/foundation/sleep';
 import { NewGovernanceProposerPayloadAbi, NewGovernanceProposerPayloadBytecode } from '@aztec/l1-artifacts';
 
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { getAddress } from 'viem';
 
 import {

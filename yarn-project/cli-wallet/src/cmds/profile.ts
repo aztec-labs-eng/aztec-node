@@ -1,11 +1,10 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { AuthWitness } from '@aztec/aztec.js/authorization';
-import { Contract } from '@aztec/aztec.js/contracts';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { prepTx } from '@aztec/cli/utils';
-import type { LogFn } from '@aztec/foundation/log';
-import { serializePrivateExecutionSteps } from '@aztec/stdlib/kernel';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { AuthWitness } from '@aztec-labs/aztec.js/authorization';
+import { Contract } from '@aztec-labs/aztec.js/contracts';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { prepTx } from '@aztec-labs/cli/utils';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { serializePrivateExecutionSteps } from '@aztec-labs/stdlib/kernel';
 import { promises as fs } from 'fs';
 import path from 'path';
 

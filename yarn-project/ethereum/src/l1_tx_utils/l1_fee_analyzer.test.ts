@@ -1,8 +1,7 @@
-import { Blob } from '@aztec/blob-lib';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
-
+import { Blob } from '@aztec-labs/blob-lib';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type Hex, parseGwei } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

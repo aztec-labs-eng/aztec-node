@@ -1,8 +1,17 @@
-import { GAS_SETTINGS_LENGTH, MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT, MAX_PROCESSABLE_L2_GAS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, BufferSink, FieldReader, serializeToFields, serializeToSink } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import {
+  GAS_SETTINGS_LENGTH,
+  MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT,
+  MAX_PROCESSABLE_L2_GAS,
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import {
+  BufferReader,
+  BufferSink,
+  FieldReader,
+  serializeToFields,
+  serializeToSink,
+} from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { Gas, GasDimensions } from './gas.js';

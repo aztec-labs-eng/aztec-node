@@ -1,8 +1,7 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import { parseBooleanEnv } from '@aztec/foundation/config';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { tryRmDir } from '@aztec/foundation/fs';
-
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { parseBooleanEnv } from '@aztec-labs/foundation/config';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { tryRmDir } from '@aztec-labs/foundation/fs';
 import { promises as fs } from 'fs';
 
 export { deployAndInitializeTokenAndBridgeContracts } from '../shared/cross_chain_test_harness.js';

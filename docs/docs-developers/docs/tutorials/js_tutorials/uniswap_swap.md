@@ -78,8 +78,8 @@ examples/
 - `keccak256` -- for computing Solidity-compatible function selectors
 
 **TypeScript**:
-- `@aztec/aztec.js`, `@aztec/accounts`, `@aztec/wallets`, `@aztec/stdlib`
-- `@aztec/ethereum`, `@aztec/noir-contracts.js`, `@aztec/foundation`
+- `@aztec-labs/aztec.js`, `@aztec-labs/accounts`, `@aztec-labs/wallets`, `@aztec-labs/stdlib`
+- `@aztec-labs/ethereum`, `@aztec-labs/noir-contracts.js`, `@aztec-labs/foundation`
 
 :::note
 The TypeScript script imports compiled Solidity artifacts and a generated Noir artifact (`ExampleUniswapContract`). You will compile both before running the script.
@@ -260,13 +260,13 @@ From the `examples/ts/example_swap` directory, initialize a project and install 
 cd ../../ts/example_swap
 npm init -y
 npm install \
-  @aztec/aztec.js@#include_aztec_version \
-  @aztec/accounts@#include_aztec_version \
-  @aztec/wallets@#include_aztec_version \
-  @aztec/stdlib@#include_aztec_version \
-  @aztec/ethereum@#include_aztec_version \
-  @aztec/noir-contracts.js@#include_aztec_version \
-  @aztec/foundation@#include_aztec_version \
+  @aztec-labs/aztec.js@#include_aztec_version \
+  @aztec-labs/accounts@#include_aztec_version \
+  @aztec-labs/wallets@#include_aztec_version \
+  @aztec-labs/stdlib@#include_aztec_version \
+  @aztec-labs/ethereum@#include_aztec_version \
+  @aztec-labs/noir-contracts.js@#include_aztec_version \
+  @aztec-labs/foundation@#include_aztec_version \
   npm:@aztec/viem@2.38.2 \
   tsx
 ```
@@ -285,7 +285,7 @@ Deploy two ERC20 tokens, two token portals, and the uniswap portal:
 
 ### Deploy L2 Contracts
 
-Deploy L2 tokens (using `TokenContract` from `@aztec/noir-contracts.js`), bridges, and the uniswap contract:
+Deploy L2 tokens (using `TokenContract` from `@aztec-labs/noir-contracts.js`), bridges, and the uniswap contract:
 
 #include_code deploy_l2 /docs/examples/ts/example_swap/index.ts typescript
 

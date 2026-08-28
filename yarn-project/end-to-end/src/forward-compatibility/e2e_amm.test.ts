@@ -19,16 +19,15 @@
  *
  * Terminal 3 — run this test (from yarn-project/):
  *   REMOTE_WALLET_URL=http://localhost:8081 \
- *     yarn workspace @aztec/end-to-end test:e2e src/forward-compatibility/e2e_amm.test.ts
+ *     yarn workspace @aztec-labs/end-to-end test:e2e src/forward-compatibility/e2e_amm.test.ts
  */
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { createLogger } from '@aztec/aztec.js/log';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import type { TestTokenContract } from '@aztec/noir-test-contracts.js/TestToken';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import type { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 import { jest } from '@jest/globals';
 
 import { deployTestToken, mintTokensToPrivate } from '../fixtures/token_utils.js';

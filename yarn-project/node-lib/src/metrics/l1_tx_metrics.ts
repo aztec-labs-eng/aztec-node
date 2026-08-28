@@ -1,6 +1,6 @@
-import type { IL1TxMetrics, L1TxState } from '@aztec/ethereum/l1-tx-utils';
-import { TxUtilsState } from '@aztec/ethereum/l1-tx-utils';
-import { createLogger } from '@aztec/foundation/log';
+import type { IL1TxMetrics, L1TxState } from '@aztec-labs/ethereum/l1-tx-utils';
+import { TxUtilsState } from '@aztec-labs/ethereum/l1-tx-utils';
+import { createLogger } from '@aztec-labs/foundation/log';
 import {
   Attributes,
   type Histogram,
@@ -8,7 +8,7 @@ import {
   Metrics,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 export type L1TxScope = 'sequencer' | 'prover' | 'other';
 

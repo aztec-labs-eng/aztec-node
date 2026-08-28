@@ -1,6 +1,5 @@
-import type { DiagnosticsMiddleware } from '@aztec/foundation/json-rpc/server';
-import { Timer } from '@aztec/foundation/timer';
-
+import type { DiagnosticsMiddleware } from '@aztec-labs/foundation/json-rpc/server';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { ROOT_CONTEXT, type Span, SpanKind, SpanStatusCode, propagation } from '@opentelemetry/api';
 import type Koa from 'koa';
 

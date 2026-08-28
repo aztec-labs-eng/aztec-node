@@ -1,8 +1,8 @@
 /* eslint-disable camelcase */
-import type { Logger } from '@aztec/foundation/log';
-import { createLogger } from '@aztec/foundation/log';
-import { withoutHexPrefix } from '@aztec/foundation/string';
-import { BOUNDED_VEC, BoundedVec, Option, type OracleRegistryEntry, U8, makeEntry } from '@aztec/pxe/simulator';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { withoutHexPrefix } from '@aztec-labs/foundation/string';
+import { BOUNDED_VEC, BoundedVec, Option, type OracleRegistryEntry, U8, makeEntry } from '@aztec-labs/pxe/simulator';
 
 import type { ForeignCallArgs, ForeignCallResult } from '../../utils/encoding.js';
 import { toInputSlots } from '../txe_oracle_registry.js';

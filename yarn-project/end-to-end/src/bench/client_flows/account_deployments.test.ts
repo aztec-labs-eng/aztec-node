@@ -1,12 +1,11 @@
-import { EcdsaRAccountContractArtifact } from '@aztec/accounts/ecdsa';
-import { SchnorrAccountContractArtifact } from '@aztec/accounts/schnorr';
-import { NO_FROM } from '@aztec/aztec.js/account';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { publishContractClass } from '@aztec/aztec.js/deployment';
-import type { DeployAccountOptions, Wallet } from '@aztec/aztec.js/wallet';
-import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-
+import { EcdsaRAccountContractArtifact } from '@aztec-labs/accounts/ecdsa';
+import { SchnorrAccountContractArtifact } from '@aztec-labs/accounts/schnorr';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { publishContractClass } from '@aztec-labs/aztec.js/deployment';
+import type { DeployAccountOptions, Wallet } from '@aztec-labs/aztec.js/wallet';
+import { SponsoredFPCContract } from '@aztec-labs/noir-contracts.js/SponsoredFPC';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { jest } from '@jest/globals';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';

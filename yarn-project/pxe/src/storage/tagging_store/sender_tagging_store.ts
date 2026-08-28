@@ -1,7 +1,7 @@
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { AppTaggingSecret, SiloedTag, type TaggingIndexRange } from '@aztec/stdlib/logs';
-import { TxEffect, TxHash } from '@aztec/stdlib/tx';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { AppTaggingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+import { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { UNFINALIZED_TAGGING_INDEXES_WINDOW_LEN, unfinalizedTaggingIndexesWindowEnd } from '../../tagging/constants.js';
 import type { ChangeSetId, StagedStore } from '../staged_write_coordinator.js';

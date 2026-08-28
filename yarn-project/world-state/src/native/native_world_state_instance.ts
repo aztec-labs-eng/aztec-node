@@ -1,8 +1,8 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { IndexedTreeId, TreeInfo } from '@aztec/stdlib/interfaces/server';
-import type { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { WorldStateRevision } from '@aztec/stdlib/world-state';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { IndexedTreeId, TreeInfo } from '@aztec-labs/stdlib/interfaces/server';
+import type { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 
 import type {
   BlockStateReference,

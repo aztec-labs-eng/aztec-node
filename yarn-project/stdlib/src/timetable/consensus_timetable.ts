@@ -1,4 +1,4 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 
 import { type L1RollupConstants, getTimestampForSlot } from '../epoch-helpers/index.js';
 import { getDefaultCheckpointProposalSyncGrace } from './budgets.js';

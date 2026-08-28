@@ -1,5 +1,4 @@
-import { schemas, zodFor } from '@aztec/foundation/schemas';
-
+import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import type {

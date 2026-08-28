@@ -1,7 +1,6 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { GasFees } from '@aztec/stdlib/gas';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { type TxMetaData, stubTxMetaData } from '../tx_metadata.js';

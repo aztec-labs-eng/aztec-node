@@ -1,6 +1,6 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-import { OffenseType } from '@aztec/stdlib/slashing';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
+import { OffenseType } from '@aztec-labs/stdlib/slashing';
 
 import type { SlasherConfig } from './config.js';
 

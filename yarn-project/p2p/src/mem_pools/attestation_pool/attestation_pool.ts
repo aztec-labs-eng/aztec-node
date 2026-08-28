@@ -1,14 +1,14 @@
-import type { BlockProposalHash, CheckpointProposalHash, SlotNumber } from '@aztec/foundation/branded-types';
-import { toArray } from '@aztec/foundation/iterable';
-import { createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec/kv-store';
+import type { BlockProposalHash, CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec-labs/kv-store';
 import {
   BlockProposal,
   CheckpointAttestation,
   CheckpointProposal,
   type CheckpointProposalCore,
-} from '@aztec/stdlib/p2p';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/p2p';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { PoolInstrumentation, PoolName, type PoolStatsCallback } from '../instrumentation.js';
 
@@ -642,7 +642,7 @@ export class AttestationPool {
 
 /** Creates an AttestationPool backed by a temporary store for testing. */
 export async function createTestAttestationPool(telemetry?: TelemetryClient): Promise<AttestationPool> {
-  const { openTmpStore } = await import('@aztec/kv-store/lmdb-v2');
+  const { openTmpStore } = await import('@aztec-labs/kv-store/lmdb-v2');
   const store = await openTmpStore('test-attestation-pool');
   return new AttestationPool(store, telemetry);
 }

@@ -1,6 +1,6 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Capsule } from '@aztec/stdlib/tx';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Capsule } from '@aztec-labs/stdlib/tx';
 
 import { assertAllowedScope } from '../allowed_scopes.js';
 import type { ChangeSetId } from '../staged_write_coordinator.js';

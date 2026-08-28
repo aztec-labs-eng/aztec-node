@@ -1,20 +1,20 @@
-import { L1RpcError } from '@aztec/ethereum/client';
-import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { times } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { ViemSignature } from '@aztec/foundation/eth-signature';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { withHexPrefix } from '@aztec/foundation/string';
 import { RollupAbi } from '@aztec/l1-artifacts';
-import { Signature } from '@aztec/stdlib/block';
-import { GasFees } from '@aztec/stdlib/gas';
-import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
 
+import { L1RpcError } from '@aztec-labs/ethereum/client';
+import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { withHexPrefix } from '@aztec-labs/foundation/string';
+import { Signature } from '@aztec-labs/stdlib/block';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import {

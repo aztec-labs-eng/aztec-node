@@ -3,8 +3,8 @@ import type {
   MAX_NOTE_HASH_READ_REQUESTS_PER_TX,
   MAX_NULLIFIERS_PER_TX,
   MAX_NULLIFIER_READ_REQUESTS_PER_TX,
-} from '@aztec/constants';
-import { bigintToUInt64BE, serializeToBuffer } from '@aztec/foundation/serialize';
+} from '@aztec-labs/constants';
+import { bigintToUInt64BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import type { UInt64 } from '../types/shared.js';
 import type { PrivateKernelResetHints } from './hints/private_kernel_reset_hints.js';

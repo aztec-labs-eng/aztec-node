@@ -1,10 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { LogFn } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { TxHash } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { AccountType } from '../utils/constants.js';
 import { extractECDSAPublicKeyFromBase64String } from '../utils/ecdsa.js';

@@ -1,4 +1,4 @@
-import type { Buffer32 } from '@aztec/foundation/buffer';
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
 
 /** Base L1 event log with common fields. */
 export type L1EventLog<T> = {

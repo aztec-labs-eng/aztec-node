@@ -1,5 +1,5 @@
-import { MAX_TX_LIFETIME } from '@aztec/constants';
-import type { LogResult } from '@aztec/stdlib/logs';
+import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
+import type { LogResult } from '@aztec-labs/stdlib/logs';
 
 /**
  * Finds the highest aged and the highest finalized tagging indexes.

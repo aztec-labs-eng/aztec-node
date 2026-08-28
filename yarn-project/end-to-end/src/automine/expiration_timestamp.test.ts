@@ -1,9 +1,9 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { CheatCodes } from '@aztec/aztec/testing';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import type { AztecNode, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-import { TX_ERROR_INVALID_EXPIRATION_TIMESTAMP } from '@aztec/stdlib/tx';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { CheatCodes } from '@aztec-labs/aztec/testing';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
+import { TX_ERROR_INVALID_EXPIRATION_TIMESTAMP } from '@aztec-labs/stdlib/tx';
 
 import type { TestWallet } from '../test-wallet/test_wallet.js';
 import { proveInteraction } from '../test-wallet/utils.js';

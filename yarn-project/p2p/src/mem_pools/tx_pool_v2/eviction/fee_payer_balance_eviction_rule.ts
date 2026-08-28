@@ -1,9 +1,9 @@
-import { createLogger } from '@aztec/foundation/log';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { computeFeePayerBalanceStorageSlot } from '@aztec/protocol-contracts/fee-juice';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { DatabasePublicStateSource, type MerkleTreeReadOperations } from '@aztec/stdlib/trees';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { computeFeePayerBalanceStorageSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { DatabasePublicStateSource, type MerkleTreeReadOperations } from '@aztec-labs/stdlib/trees';
 
 import { type TxMetaData, comparePriority } from '../tx_metadata.js';
 import type { EvictionContext, EvictionResult, EvictionRule, PoolOperations } from './interfaces.js';

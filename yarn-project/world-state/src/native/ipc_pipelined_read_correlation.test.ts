@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
 
 import { NativeWorldStateService } from './native_world_state.js';

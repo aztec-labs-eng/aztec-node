@@ -1,11 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { hexToBuffer } from '@aztec/foundation/string';
-import { type ContractArtifact, ContractArtifactSchema } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import { type ContractInstanceWithAddress, ContractInstanceWithAddressSchema } from '@aztec/stdlib/contract';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { type ContractArtifact, ContractArtifactSchema } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import { type ContractInstanceWithAddress, ContractInstanceWithAddressSchema } from '@aztec-labs/stdlib/contract';
 import { z } from 'zod';
 
 export type ForeignCallSingle = string;

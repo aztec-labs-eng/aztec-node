@@ -10,10 +10,9 @@ import {
   PRIVATE_KERNEL_RESET_TAIL_VK_INDEX,
   PRIVATE_KERNEL_RESET_VK_INDEX,
   VK_TREE_HEIGHT,
-} from '@aztec/constants';
-import { createConsoleLogger } from '@aztec/foundation/log';
-import type { PrivateKernelResetDimensionsConfig } from '@aztec/stdlib/kernel';
-
+} from '@aztec-labs/constants';
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
+import type { PrivateKernelResetDimensionsConfig } from '@aztec-labs/stdlib/kernel';
 import { promises as fs } from 'fs';
 
 const log = createConsoleLogger('autogenerate');
@@ -311,7 +310,7 @@ const main = async () => {
     /* eslint-disable camelcase */
     // GENERATED FILE - DO NOT EDIT. RUN \`yarn generate\` or \`yarn generate:reset-data\`
 
-    import type { NoirCompiledCircuit } from '@aztec/stdlib/noir';
+    import type { NoirCompiledCircuit } from '@aztec-labs/stdlib/noir';
 
     import type {
       ${families.map(f => f.typeName).join(',\n      ')},
@@ -324,7 +323,7 @@ const main = async () => {
     /* eslint-disable camelcase */
     // GENERATED FILE - DO NOT EDIT. RUN \`yarn generate\` or \`yarn generate:reset-data\`
 
-    import { PrivateKernelResetDimensions, type PrivateKernelResetDimensionsConfig } from '@aztec/stdlib/kernel';
+    import { PrivateKernelResetDimensions, type PrivateKernelResetDimensionsConfig } from '@aztec-labs/stdlib/kernel';
 
     ${typeSections.join('\n\n')}
 
@@ -337,7 +336,7 @@ const main = async () => {
     /* eslint-disable camelcase */
     // GENERATED FILE - DO NOT EDIT. RUN \`yarn generate\` or \`yarn generate:reset-data\`
 
-    import type { VerificationKeyData } from '@aztec/stdlib/vks';
+    import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
     import { abiToVKData } from './utils/vk_json.js';
 
     import type {

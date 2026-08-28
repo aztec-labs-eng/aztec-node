@@ -1,10 +1,10 @@
-import { CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceUpdateWithAddress } from '@aztec/stdlib/contract';
-import type { PublicLog } from '@aztec/stdlib/logs';
-import type { UInt64 } from '@aztec/stdlib/types';
+import { CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceUpdateWithAddress } from '@aztec-labs/stdlib/contract';
+import type { PublicLog } from '@aztec-labs/stdlib/logs';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import { ProtocolContractAddress } from '../protocol_contract_data.js';
 

@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 //
-import { injectCommands as injectBuilderCommands } from '@aztec/builder';
-import { injectCommands as injectAztecNodeCommands } from '@aztec/cli/aztec_node';
-import { enrichEnvironmentWithChainName } from '@aztec/cli/config/chain';
-import { enrichEnvironmentWithNetworkConfig } from '@aztec/cli/config/network';
-import { injectCommands as injectInfrastructureCommands } from '@aztec/cli/infrastructure';
-import { injectCommands as injectL1Commands } from '@aztec/cli/l1';
-import { injectCommands as injectMiscCommands } from '@aztec/cli/misc';
-import { injectCommands as injectValidatorKeysCommands } from '@aztec/cli/validator_keys';
-import { getActiveNetworkName } from '@aztec/foundation/config';
-import { createConsoleLogger, createLogger } from '@aztec/foundation/log';
-import { getPackageVersion } from '@aztec/stdlib/update-checker';
-
+import { injectCommands as injectBuilderCommands } from '@aztec-labs/builder';
+import { injectCommands as injectAztecNodeCommands } from '@aztec-labs/cli/aztec_node';
+import { enrichEnvironmentWithChainName } from '@aztec-labs/cli/config/chain';
+import { enrichEnvironmentWithNetworkConfig } from '@aztec-labs/cli/config/network';
+import { injectCommands as injectInfrastructureCommands } from '@aztec-labs/cli/infrastructure';
+import { injectCommands as injectL1Commands } from '@aztec-labs/cli/l1';
+import { injectCommands as injectMiscCommands } from '@aztec-labs/cli/misc';
+import { injectCommands as injectValidatorKeysCommands } from '@aztec-labs/cli/validator_keys';
+import { getActiveNetworkName } from '@aztec-labs/foundation/config';
+import { createConsoleLogger, createLogger } from '@aztec-labs/foundation/log';
+import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import { Command } from 'commander';
 
 import { injectCompileCommand } from '../cli/cmds/compile.js';

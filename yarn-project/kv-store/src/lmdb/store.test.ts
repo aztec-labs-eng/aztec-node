@@ -1,4 +1,4 @@
-import { toArray } from '@aztec/foundation/iterable';
+import { toArray } from '@aztec-labs/foundation/iterable';
 
 import { openTmpStore } from './index.js';
 import type { AztecLmdbStore } from './store.js';

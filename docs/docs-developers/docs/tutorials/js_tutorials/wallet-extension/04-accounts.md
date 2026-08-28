@@ -28,8 +28,8 @@ An Aztec account has:
 The wallet generates a random signing key as the account's root and derives the privacy secret from it:
 
 ```typescript
-import { GrumpkinScalar } from '@aztec/aztec.js/fields';
-import { deriveSecretKeyFromSigningKey } from '@aztec/accounts/utils';
+import { GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import { deriveSecretKeyFromSigningKey } from '@aztec-labs/accounts/utils';
 
 // The signing key is the account's root; the privacy secret is derived from it
 const signingKey = GrumpkinScalar.random();
@@ -54,7 +54,7 @@ export function deriveMasterNullifierHidingSecretKey(secretKey: Fr): GrumpkinSca
 The wallet uses `SchnorrAccountContract` for authentication:
 
 ```typescript
-import { SchnorrAccountContract } from '@aztec/accounts/schnorr/lazy';
+import { SchnorrAccountContract } from '@aztec-labs/accounts/schnorr/lazy';
 
 const accountContract = new SchnorrAccountContract(signingKey);
 ```

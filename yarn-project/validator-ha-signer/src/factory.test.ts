@@ -1,8 +1,7 @@
-import { SecretValue } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { defaultValidatorHASignerConfig } from '@aztec/stdlib/ha-signing';
-import type { LocalSignerConfig } from '@aztec/stdlib/ha-signing';
-
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { defaultValidatorHASignerConfig } from '@aztec-labs/stdlib/ha-signing';
+import type { LocalSignerConfig } from '@aztec-labs/stdlib/ha-signing';
 import { PGlite } from '@electric-sql/pglite';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import type { Pool as PgPool } from 'pg';

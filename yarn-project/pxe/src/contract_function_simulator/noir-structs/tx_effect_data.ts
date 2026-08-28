@@ -1,6 +1,6 @@
-import type { FieldsOf } from '@aztec/foundation/types';
-import type { FlatPublicLogs } from '@aztec/stdlib/logs';
-import type { TxEffect } from '@aztec/stdlib/tx';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import type { FlatPublicLogs } from '@aztec-labs/stdlib/logs';
+import type { TxEffect } from '@aztec-labs/stdlib/tx';
 
 import type { ContractClassLogData } from './contract_class_log_data.js';
 

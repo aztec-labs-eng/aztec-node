@@ -1,31 +1,32 @@
-import { NO_FROM } from '@aztec/aztec.js/account';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { FeeJuicePaymentMethodWithClaim } from '@aztec/aztec.js/fee';
-import { type FeePaymentMethod, PrivateFeePaymentMethod, SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { type Logger, createLogger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { FeeJuiceContract } from '@aztec/aztec.js/protocol';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { CheatCodes, getTokenAllowedSetupFunctions } from '@aztec/aztec/testing';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { DeployAztecL1ContractsArgs } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
 import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
 import { TestERC20Bytecode } from '@aztec/l1-artifacts/TestERC20Bytecode';
-import { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import { FPCContract } from '@aztec/noir-contracts.js/FPC';
-import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC';
-import { TestTokenContract as BananaCoin, TestTokenContract } from '@aztec/noir-test-contracts.js/TestToken';
-import { type PXEConfig, getPXEConfig } from '@aztec/pxe/server';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { Gas, GasSettings } from '@aztec/stdlib/gas';
-import { AppTaggingSecretKind } from '@aztec/stdlib/logs';
+
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { FeeJuicePaymentMethodWithClaim } from '@aztec-labs/aztec.js/fee';
+import { type FeePaymentMethod, PrivateFeePaymentMethod, SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { CheatCodes, getTokenAllowedSetupFunctions } from '@aztec-labs/aztec/testing';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { DeployAztecL1ContractsArgs } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
+import { SponsoredFPCContract } from '@aztec-labs/noir-contracts.js/SponsoredFPC';
+import { TestTokenContract as BananaCoin, TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
+import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/server';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { Gas, GasSettings } from '@aztec-labs/stdlib/gas';
+import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
 import {
   AUTOMINE_E2E_OPTS,

@@ -1,4 +1,4 @@
-import { randomBytes } from '@aztec/foundation/crypto/random';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 
 import type { AztecAsyncMap } from '../interfaces/map.js';
 import { openTmpStore } from './factory.js';

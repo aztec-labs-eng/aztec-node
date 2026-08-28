@@ -52,7 +52,7 @@ A failed propose mines no checkpoint on L1 (it reverts inside the multicall or i
 
 ## Epoch proving
 
-There is no real prover in the automine setup, so epochs are settled synthetically: the epoch out hash is written into the L1 Outbox via cheat codes and the rollup's proven tip is advanced — the local-network equivalent of an epoch proof landing on L1. The grouping/out-hash logic lives in the shared `settleEpochOutbox` helper in `@aztec/prover-client/test`, used by both proving drivers below.
+There is no real prover in the automine setup, so epochs are settled synthetically: the epoch out hash is written into the L1 Outbox via cheat codes and the rollup's proven tip is advanced — the local-network equivalent of an epoch proof landing on L1. The grouping/out-hash logic lives in the shared `settleEpochOutbox` helper in `@aztec-labs/prover-client/test`, used by both proving drivers below.
 
 Who drives proving depends on the `automineEnableProveEpoch` config flag:
 

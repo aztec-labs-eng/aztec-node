@@ -1,10 +1,10 @@
-import type { FUNCTION_TREE_HEIGHT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toArray } from '@aztec/foundation/iterable';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { BufferReader, numToUInt8, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { MembershipWitness } from '@aztec/foundation/trees';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
+import type { FUNCTION_TREE_HEIGHT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { BufferReader, numToUInt8, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import {
   type ContractArtifact,
   type FunctionArtifactWithContractName,
@@ -19,15 +19,15 @@ import {
   findFunctionArtifactBySelector,
   getFunctionDebugMetadata,
   getFunctionReturnType,
-} from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractClassIdPreimage,
   type ContractClassWithId,
   type ContractInstancePreimageWithAddress,
   SerializableContractInstancePreimage,
   getContractClassFromArtifact,
-} from '@aztec/stdlib/contract';
+} from '@aztec-labs/stdlib/contract';
 
 import { PrivateFunctionsTree } from './private_functions_tree.js';
 

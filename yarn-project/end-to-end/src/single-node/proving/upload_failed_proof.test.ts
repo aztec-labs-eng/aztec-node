@@ -1,12 +1,11 @@
-import type { AztecNodeConfig } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { Logger } from '@aztec/aztec.js/log';
-import { tryRmDir } from '@aztec/foundation/fs';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import { downloadEpochProvingJob, rerunCheckpointProvingJob, rerunEpochProvingJob } from '@aztec/prover-node';
-import type { TestProverNode } from '@aztec/prover-node/test';
-
+import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { tryRmDir } from '@aztec-labs/foundation/fs';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { downloadEpochProvingJob, rerunCheckpointProvingJob, rerunEpochProvingJob } from '@aztec-labs/prover-node';
+import type { TestProverNode } from '@aztec-labs/prover-node/test';
 import { jest } from '@jest/globals';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';

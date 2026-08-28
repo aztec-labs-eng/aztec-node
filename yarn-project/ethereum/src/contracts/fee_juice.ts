@@ -1,6 +1,6 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
 import { TestERC20Abi as FeeJuiceAbi } from '@aztec/l1-artifacts/TestERC20Abi';
 
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type GetContractReturnType, type Hex, getContract } from 'viem';
 
 import { type ExtendedViemWalletClient, type ViemClient, isExtendedClient } from '../types.js';

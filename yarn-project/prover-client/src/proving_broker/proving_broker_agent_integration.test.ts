@@ -1,13 +1,12 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { sha256 } from '@aztec/foundation/crypto/sha256';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import { ProvingJob, makeProvingJobId } from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-import { makeInboxParityPrivateInputs, makeParityPublicInputs } from '@aztec/stdlib/testing';
-
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { ProvingJob, makeProvingJobId } from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
+import { makeInboxParityPrivateInputs, makeParityPublicInputs } from '@aztec-labs/stdlib/testing';
 import { jest } from '@jest/globals';
 
 import { MockProver } from '../test/mock_prover.js';

@@ -270,7 +270,7 @@ function codegen(artifactPath: string) {
 }
 
 function runTsEndToEndTest() {
-  // Point the workspace at the installed node_modules so @aztec/* imports (and transitive deps
+  // Point the workspace at the installed node_modules so @aztec-labs/* imports (and transitive deps
   // of the codegen'd Counter.ts) resolve to the same bundle a real user would have.
   const modulesLink = join(WORKSPACE_DIR, "node_modules");
   if (!existsSync(modulesLink)) {

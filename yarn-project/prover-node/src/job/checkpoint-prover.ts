@@ -1,27 +1,27 @@
-import type { ARCHIVE_HEIGHT } from '@aztec/constants';
-import { BlockNumber, type EpochNumber, type SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec/foundation/promise';
-import type { Tuple } from '@aztec/foundation/serialize';
-import { type DateProvider, Timer } from '@aztec/foundation/timer';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { EpochProverFactory } from '@aztec/prover-client';
+import type { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { BlockNumber, type EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
+import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type {
   CheckpointSubTreeOrchestrator,
   CheckpointSubTreeProofs,
   ChonkCache,
-} from '@aztec/prover-client/orchestrator';
-import type { PublicProcessor, PublicProcessorFactory } from '@aztec/simulator/server';
-import { PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import type { CommitteeAttestation, L2Block } from '@aztec/stdlib/block';
-import type { Checkpoint } from '@aztec/stdlib/checkpoint';
-import type { ForkMerkleTreeOperations, ITxProvider } from '@aztec/stdlib/interfaces/server';
-import { CheckpointConstantData } from '@aztec/stdlib/rollup';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { BlockHeader, ProcessedTx, Tx, TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/prover-client/orchestrator';
+import type { PublicProcessor, PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import { PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import type { CommitteeAttestation, L2Block } from '@aztec-labs/stdlib/block';
+import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { ForkMerkleTreeOperations, ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
+import { CheckpointConstantData } from '@aztec-labs/stdlib/rollup';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader, ProcessedTx, Tx, TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { ProverNodeJobMetrics } from '../metrics.js';
 

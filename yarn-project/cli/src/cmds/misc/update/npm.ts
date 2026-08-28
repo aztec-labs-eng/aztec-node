@@ -1,5 +1,4 @@
-import type { LogFn } from '@aztec/foundation/log';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { spawnSync } from 'child_process';
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
@@ -9,7 +8,7 @@ import { type SemVer, parse } from 'semver';
 import type { DependencyChanges } from './common.js';
 import { atomicUpdateFile } from './utils.js';
 
-const deprecatedNpmPackages = new Set<string>(['@aztec/cli', '@aztec/aztec-local-network']);
+const deprecatedNpmPackages = new Set<string>(['@aztec-labs/cli', '@aztec/aztec-local-network']);
 const npmDeprecationMessage = `
 The following packages have been deprecated and will no longer be updated on the npm registry:
 ${Array.from(deprecatedNpmPackages)
@@ -58,7 +57,7 @@ export async function getNewestVersion(packageName: string, distTag = 'latest'):
 }
 
 /**
- * Updates a project's \@aztec/* dependencies to the specific version
+ * Updates a project's \@aztec-labs/* dependencies to the specific version
  * @param projectPath - Path to Nodejs project
  * @param aztecVersion - The version to update to
  * @returns True if the project was updated
@@ -74,7 +73,7 @@ export async function updateAztecDeps(
     dependencies: [],
   };
 
-  log(`Updating @aztec packages to ${aztecVersion} in ${relative(process.cwd(), changes.file)}`);
+  log(`Updating @aztec-labs packages to ${aztecVersion} in ${relative(process.cwd(), changes.file)}`);
   const version = aztecVersion.version;
 
   let detectedDeprecatedPackages = false;
@@ -86,12 +85,7 @@ export async function updateAztecDeps(
     }
 
     for (const name of Object.keys(dependencies)) {
-      if (!name.startsWith('@aztec/')) {
-        continue;
-      }
-
-      // different release schedule
-      if (name === '@aztec/aztec-ui') {
+      if (!name.startsWith('@aztec-labs/')) {
         continue;
       }
 

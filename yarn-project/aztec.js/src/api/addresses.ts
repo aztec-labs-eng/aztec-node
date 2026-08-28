@@ -1,3 +1,3 @@
-export { AztecAddress } from '@aztec/stdlib/aztec-address';
-export { CompleteAddress } from '@aztec/stdlib/contract';
-export { EthAddress } from '@aztec/foundation/eth-address';
+export { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+export { CompleteAddress } from '@aztec-labs/stdlib/contract';
+export { EthAddress } from '@aztec-labs/foundation/eth-address';

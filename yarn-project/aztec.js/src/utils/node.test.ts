@@ -1,7 +1,7 @@
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { TimeoutError } from '@aztec/foundation/error';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { TimeoutError } from '@aztec-labs/foundation/error';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import {
   DroppedTxReceipt,
   MinedTxReceipt,
@@ -11,8 +11,7 @@ import {
   TxHash,
   type TxReceipt,
   TxStatus,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { waitForNode, waitForTx } from './node.js';

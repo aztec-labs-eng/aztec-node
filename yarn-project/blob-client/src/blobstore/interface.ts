@@ -1,4 +1,4 @@
-import type { Blob } from '@aztec/blob-lib';
+import type { Blob } from '@aztec-labs/blob-lib';
 
 export interface BlobStore {
   /**

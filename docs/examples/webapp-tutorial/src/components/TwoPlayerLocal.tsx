@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Wallet } from '@aztec/aztec.js/wallet';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import type { PodRacingContract } from '../artifacts/PodRacing';
 import { EmbeddedWallet } from '../embedded-wallet';
 import { getNodeUrl } from '../config';

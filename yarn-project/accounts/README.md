@@ -1,11 +1,11 @@
 # Accounts
 
-Accounts is a client library that provides implementations for some common account flavors. Use it to acquire a `Wallet` object that corresponds to an account, and use that together with `@aztec/aztec.js` to interact with the network.
+Accounts is a client library that provides implementations for some common account flavors. Use it to acquire a `Wallet` object that corresponds to an account, and use that together with `@aztec-labs/aztec.js` to interact with the network.
 
 ## Installing
 
 ```
-npm install @aztec/accounts
+npm install @aztec-labs/accounts
 ```
 
 ## Account types
@@ -18,9 +18,9 @@ npm install @aztec/accounts
 ### Deploy a new account
 
 ```typescript
-import { getSchnorrAccount } from '@aztec/accounts/schnorr';
-import { GrumpkinScalar } from '@aztec/foundation/curves/bn254';
-import { Fr } from '@aztec/stdlib';
+import { getSchnorrAccount } from '@aztec-labs/accounts/schnorr';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/stdlib';
 
 const encryptionSecretKey = Fr.random();
 const signingPrivateKey = GrumpkinScalar.random();
@@ -33,7 +33,7 @@ console.log(`New account deployed at ${wallet.getAddress()}`);
 ### Create a wallet object from an already deployed account
 
 ```typescript
-import { getSchnorrWallet } from '@aztec/accounts/schnorr';
+import { getSchnorrWallet } from '@aztec-labs/accounts/schnorr';
 
 const wallet = getSchnorrWallet(pxe, address, signingPrivateKey);
 console.log(`Wallet for ${wallet.getAddress()} ready`);

@@ -1,9 +1,9 @@
-import { NULL_MSG_SENDER_CONTRACT_ADDRESS } from '@aztec/constants';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { PublicContractsDB, getCallRequestsWithCalldataByPhase } from '@aztec/simulator/server';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import type { AllowedElement } from '@aztec/stdlib/interfaces/server';
+import { NULL_MSG_SENDER_CONTRACT_ADDRESS } from '@aztec-labs/constants';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { PublicContractsDB, getCallRequestsWithCalldataByPhase } from '@aztec-labs/simulator/server';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type PublicCallRequestWithCalldata,
   TX_ERROR_DURING_VALIDATION,
@@ -16,8 +16,8 @@ import {
   TxExecutionPhase,
   type TxValidationResult,
   type TxValidator,
-} from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 export class PhasesTxValidator implements TxValidator<Tx> {
   #log: Logger;

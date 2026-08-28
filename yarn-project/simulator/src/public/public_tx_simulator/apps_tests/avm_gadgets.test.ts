@@ -1,9 +1,9 @@
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AvmGadgetsTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmGadgetsTest';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { NativeWorldStateService } from '@aztec/world-state';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AvmGadgetsTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmGadgetsTest';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 
 import { PublicTxSimulationTester, defaultGlobals } from '../../fixtures/public_tx_simulation_tester.js';
 

@@ -1,7 +1,6 @@
-import { type BlockNumber, BlockNumberSchema } from '@aztec/foundation/branded-types';
-import { LogCursor } from '@aztec/stdlib/logs';
-import { schemas } from '@aztec/stdlib/schemas';
-
+import { type BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
+import { LogCursor } from '@aztec-labs/stdlib/logs';
+import { schemas } from '@aztec-labs/stdlib/schemas';
 import { z } from 'zod';
 
 /**

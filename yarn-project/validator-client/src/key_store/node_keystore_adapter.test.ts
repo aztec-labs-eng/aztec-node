@@ -1,9 +1,8 @@
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { DutyType, type SigningContext } from '@aztec/validator-ha-signer/types';
-
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { DutyType, type SigningContext } from '@aztec-labs/validator-ha-signer/types';
 import { beforeEach, describe, expect, it } from '@jest/globals';
 import type { TypedDataDefinition } from 'viem';
 

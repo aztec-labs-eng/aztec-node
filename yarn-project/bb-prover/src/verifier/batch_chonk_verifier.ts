@@ -1,13 +1,13 @@
 import { BackendType, Barretenberg } from '@aztec/bb.js';
-import { FifoFrameReader } from '@aztec/foundation/fifo';
-import { createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import { Timer } from '@aztec/foundation/timer';
-import { ProtocolCircuitVks } from '@aztec/noir-protocol-circuits-types/server/vks';
-import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec/stdlib/interfaces/server';
-import type { Tx } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
 
+import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
+import type { Tx } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { Unpackr } from 'msgpackr';
 import { execFile } from 'node:child_process';
 import { rmSync } from 'node:fs';

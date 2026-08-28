@@ -1,6 +1,5 @@
-import { Blob, getBytesPerBlob } from '@aztec/blob-lib';
-import { createLogger } from '@aztec/foundation/log';
-
+import { Blob, getBytesPerBlob } from '@aztec-labs/blob-lib';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { foundry } from 'viem/chains';
 
 import { createExtendedL1Client } from '../client.js';

@@ -1,7 +1,6 @@
-import type { LogFn } from '@aztec/foundation/log';
-import type { PrivateExecutionStep } from '@aztec/stdlib/kernel';
-import type { ProvingStats, ProvingTimings, SimulationStats, SimulationTimings } from '@aztec/stdlib/tx';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { PrivateExecutionStep } from '@aztec-labs/stdlib/kernel';
+import type { ProvingStats, ProvingTimings, SimulationStats, SimulationTimings } from '@aztec-labs/stdlib/tx';
 import { format } from 'util';
 
 const FN_NAME_PADDING = 60;

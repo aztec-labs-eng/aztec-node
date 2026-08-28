@@ -1,7 +1,7 @@
 // docs:start:config
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { getPXEConfig } from '@aztec/pxe/config';
-import { createPXE } from '@aztec/pxe/client/lazy';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { getPXEConfig } from '@aztec-labs/pxe/config';
+import { createPXE } from '@aztec-labs/pxe/client/lazy';
 
 
 export type NetworkType = 'local' | 'remote';

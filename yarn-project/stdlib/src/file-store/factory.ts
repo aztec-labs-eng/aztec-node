@@ -1,4 +1,4 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 
 import { GoogleCloudFileStore } from './gcs.js';
 import { HttpFileStore, type HttpFileStoreOptions } from './http.js';

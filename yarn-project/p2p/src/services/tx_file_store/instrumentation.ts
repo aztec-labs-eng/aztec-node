@@ -1,4 +1,10 @@
-import { type Gauge, type Histogram, Metrics, type TelemetryClient, type UpDownCounter } from '@aztec/telemetry-client';
+import {
+  type Gauge,
+  type Histogram,
+  Metrics,
+  type TelemetryClient,
+  type UpDownCounter,
+} from '@aztec-labs/telemetry-client';
 
 /** Instrumentation for the TxFileStore service. */
 export class TxFileStoreInstrumentation {

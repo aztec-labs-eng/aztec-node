@@ -8,7 +8,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 /** Callback that returns the current estimated metadata memory in bytes. */
 export type MetadataMemoryCallback = () => number;

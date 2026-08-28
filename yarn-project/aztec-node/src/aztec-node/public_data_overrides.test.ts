@@ -1,10 +1,9 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { computePublicDataTreeLeafSlot } from '@aztec/stdlib/hash';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { applyPublicDataOverrides } from './public_data_overrides.js';

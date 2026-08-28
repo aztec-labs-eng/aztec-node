@@ -1,12 +1,12 @@
-import type { Archiver } from '@aztec/archiver';
-import type { AztecNodeConfig } from '@aztec/aztec-node';
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { asyncMap } from '@aztec/foundation/async-map';
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { executeTimeout } from '@aztec/foundation/timer';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { asyncMap } from '@aztec-labs/foundation/async-map';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import { proveTxs, startMempoolFeeder } from '../../test-wallet/utils.js';

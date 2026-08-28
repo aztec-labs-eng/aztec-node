@@ -1,6 +1,5 @@
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { z } from 'zod';
 

@@ -1,5 +1,5 @@
-import { computeAuthWitMessageHash, computeInnerAuthWitHashFromAction } from '@aztec/aztec.js/authorization';
-import { Fr } from '@aztec/aztec.js/fields';
+import { computeAuthWitMessageHash, computeInnerAuthWitHashFromAction } from '@aztec-labs/aztec.js/authorization';
+import { Fr } from '@aztec-labs/aztec.js/fields';
 
 import { sendThroughAuthwitProxy, simulateThroughAuthwitProxy } from '../../fixtures/authwit_proxy.js';
 import { DUPLICATE_NULLIFIER_ERROR, U128_UNDERFLOW_ERROR } from '../../fixtures/fixtures.js';

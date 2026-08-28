@@ -1,7 +1,7 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { Fr } from '@aztec/aztec.js/fields';
-import { prettyPrintJSON } from '@aztec/cli/cli-utils';
-import type { LogFn } from '@aztec/foundation/log';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { prettyPrintJSON } from '@aztec-labs/cli/cli-utils';
+import type { LogFn } from '@aztec-labs/foundation/log';
 
 import type { WalletDB } from '../storage/wallet_db.js';
 import type { CLIWallet } from '../utils/wallet.js';

@@ -5,7 +5,7 @@ import {
   type Meter,
   Metrics,
   type TelemetryClient,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 type CheckpointProposalJobInstruments = {
   checkpointAttestationDelay: Histogram;

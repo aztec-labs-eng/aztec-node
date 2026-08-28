@@ -1,16 +1,15 @@
-import { MockL2BlockSource } from '@aztec/archiver/test';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryFastUntil } from '@aztec/foundation/retry';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { L2Block } from '@aztec/stdlib/block';
-import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { mockTx } from '@aztec/stdlib/testing';
-import { TxHash } from '@aztec/stdlib/tx';
-
+import { MockL2BlockSource } from '@aztec-labs/archiver/test';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryFastUntil } from '@aztec-labs/foundation/retry';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { L2Block } from '@aztec-labs/stdlib/block';
+import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { expect, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

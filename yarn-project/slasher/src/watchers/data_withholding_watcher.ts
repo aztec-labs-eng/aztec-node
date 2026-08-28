@@ -1,17 +1,16 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import { CheckpointProposalHash, SlotNumber } from '@aztec/foundation/branded-types';
-import { compactArray, merge, pick } from '@aztec/foundation/collection';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/promise';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { getAttestationInfoFromPublishedCheckpoint } from '@aztec/stdlib/block';
-import type { CheckpointReexecutionTracker, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import type { ITxProvider, P2PApi, SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { OffenseType, getOffenseTypeName } from '@aztec/stdlib/slashing';
-import type { TxHash } from '@aztec/stdlib/tx';
-
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray, merge, pick } from '@aztec-labs/foundation/collection';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/promise';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { getAttestationInfoFromPublishedCheckpoint } from '@aztec-labs/stdlib/block';
+import type { CheckpointReexecutionTracker, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { ITxProvider, P2PApi, SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { OffenseType, getOffenseTypeName } from '@aztec-labs/stdlib/slashing';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 import EventEmitter from 'node:events';
 
 import { WANT_TO_SLASH_EVENT, type WantToSlashArgs, type Watcher, type WatcherEmitter } from '../watcher.js';

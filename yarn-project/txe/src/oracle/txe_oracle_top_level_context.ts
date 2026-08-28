@@ -1,11 +1,11 @@
-import { CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Schnorr } from '@aztec/foundation/crypto/schnorr';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { LogLevels, type Logger, applyStringFormatting, createLogger } from '@aztec/foundation/log';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import type { KeyStore } from '@aztec/key-store';
+import { CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Schnorr } from '@aztec-labs/foundation/crypto/schnorr';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { LogLevels, type Logger, applyStringFormatting, createLogger } from '@aztec-labs/foundation/log';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import type { KeyStore } from '@aztec-labs/key-store';
 import {
   AddressStore,
   AnchoredContractData,
@@ -25,7 +25,7 @@ import {
   type TaggingSecretStrategy,
   composeHooks,
   enrichPublicSimulationError,
-} from '@aztec/pxe/server';
+} from '@aztec-labs/pxe/server';
 import {
   CONTRACT_INSTANCE,
   ExecutionNoteCache,
@@ -39,7 +39,7 @@ import {
   buildACIRCallback,
   executePrivateFunction,
   generateSimulatedProvingResult,
-} from '@aztec/pxe/simulator';
+} from '@aztec-labs/pxe/simulator';
 import {
   ExecutionError,
   WASMSimulator,
@@ -48,32 +48,38 @@ import {
   resolveAssertionMessageFromError,
   toACVMWitness,
   witnessMapToFields,
-} from '@aztec/simulator/client';
+} from '@aztec-labs/simulator/client';
 import {
   GuardedMerkleTreeOperations,
   PublicContractsDB,
   PublicProcessor,
   PublicTxSimulator,
-} from '@aztec/simulator/server';
-import { type ContractArtifact, EventSelector, FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type ContractInstanceWithAddress, computePartialAddress } from '@aztec/stdlib/contract';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import { computeCalldataHash, computeProtocolNullifier, siloNullifier } from '@aztec/stdlib/hash';
+} from '@aztec-labs/simulator/server';
+import {
+  type ContractArtifact,
+  EventSelector,
+  FunctionCall,
+  FunctionSelector,
+  FunctionType,
+} from '@aztec-labs/stdlib/abi';
+import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type ContractInstanceWithAddress, computePartialAddress } from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import { computeCalldataHash, computeProtocolNullifier, siloNullifier } from '@aztec-labs/stdlib/hash';
 import {
   PartialPrivateTailPublicInputsForPublic,
   PrivateKernelTailCircuitPublicInputs,
   PrivateToPublicAccumulatedData,
   PublicCallRequest,
-} from '@aztec/stdlib/kernel';
-import { deriveKeys, hashPublicKey } from '@aztec/stdlib/keys';
-import { AppTaggingSecretKind } from '@aztec/stdlib/logs';
-import { L1Actor, L1ToL2Message, L2Actor } from '@aztec/stdlib/messaging';
-import { ChonkProof } from '@aztec/stdlib/proofs';
-import { makeGlobalVariables } from '@aztec/stdlib/testing';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/kernel';
+import { deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
+import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { L1Actor, L1ToL2Message, L2Actor } from '@aztec-labs/stdlib/messaging';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
+import { makeGlobalVariables } from '@aztec-labs/stdlib/testing';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   CallContext,
   HashedValues,
@@ -85,9 +91,9 @@ import {
   TxEffect,
   TxHash,
   collectNested,
-} from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
-import { ForkCheckpoint } from '@aztec/world-state/native';
+} from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
+import { ForkCheckpoint } from '@aztec-labs/world-state/native';
 
 import { DEFAULT_ADDRESS, MAX_PRIVATE_EVENTS_PER_TXE_QUERY, MAX_PRIVATE_EVENT_LEN } from '../constants.js';
 import type { TXEStateMachine } from '../state_machine/index.js';

@@ -1,21 +1,20 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { times } from '@aztec/foundation/collection';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { retryFastUntil } from '@aztec/foundation/retry';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { times } from '@aztec-labs/foundation/collection';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import type {
   WorldStateSyncStatus,
   WorldStateSynchronizer,
   WorldStateSynchronizerStatus,
-} from '@aztec/stdlib/interfaces/server';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { Attributes, getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { Attributes, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';
