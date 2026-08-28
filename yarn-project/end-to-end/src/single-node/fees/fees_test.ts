@@ -381,13 +381,14 @@ export class FeesTest extends SingleNodeTestContext {
       return feeHeader.manaUsed * feeHeader.proverCost;
     };
 
-    // RewardLib computes sequencerFee = checkpointFee - burn - proverFee where burn = manaUsed * congestionCost.
-    // The fixture's typical case keeps congestionCost at zero, but reading it explicitly avoids latent bugs
-    // when test load changes excess mana.
+    // RewardLib computes sequencerFee = checkpointFee - protocolFee - proverFee where
+    // protocolFee = manaUsed * feeHeader.protocolFee. The fixture's typical case keeps the
+    // protocol fee at zero, but reading it explicitly avoids latent bugs when test load changes
+    // excess mana.
     this.getCommittedBurn = async (blockNumber: BlockNumber) => {
       const block = await this.aztecNode.getBlock(blockNumber);
       const feeHeader = await this.rollupContract.getFeeHeader(BigInt(block!.checkpointNumber));
-      return feeHeader.manaUsed * feeHeader.congestionCost;
+      return feeHeader.manaUsed * feeHeader.protocolFee;
     };
   }
 

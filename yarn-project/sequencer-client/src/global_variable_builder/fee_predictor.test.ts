@@ -264,7 +264,7 @@ describe('FeePredictor', () => {
           excessMana: newExcessMana,
           manaUsed: assumedManaUsed,
           ethPerFeeAsset: decayEthPerFeeAsset(currentFeeHeader.ethPerFeeAsset, i + 1),
-          congestionCost: 0n,
+          protocolFee: 0n,
           proverCost: 0n,
         };
 
@@ -341,7 +341,7 @@ describe('FeePredictor', () => {
         excessMana: newExcessMana,
         manaUsed: 0n,
         ethPerFeeAsset: decayedEthPerFeeAsset,
-        congestionCost: 0n,
+        protocolFee: 0n,
         proverCost: 0n,
       };
 
@@ -357,6 +357,33 @@ describe('FeePredictor', () => {
       prevManaUsed = 0n;
       ethPerFeeAsset = decayedEthPerFeeAsset;
       nextCheckpointOffset++;
+    }
+  }, 60_000);
+
+  it('slot 0 matches L1 getManaMinFeeAt with a nonzero protocol fee margin', async () => {
+    // Pin the comparison timestamp so before/after fees differ only by the margin.
+    const startSlot = await getPredictionStartSlot();
+    const timestamp = getTimestamp(startSlot + 1n);
+    const feeBefore = await rollup.getManaMinFeeAt(timestamp, true);
+
+    // The first-ever margin update bypasses the 30-day cooldown; from 0 the x3/2 step cap on the
+    // fee multiplier permits up to 5000 bps.
+    await rollupCheatCodes.setProtocolFeeMargin(5000);
+    expect(await rollup.getProtocolFeeMargin()).toBe(5000);
+
+    // The margin must move the pinned fee. If L1 scaled both the fakeExponential factor and the
+    // mulDiv divisor, mu would cancel silently and this catches it.
+    const l1Fee = await rollup.getManaMinFeeAt(timestamp, true);
+    expect(l1Fee).toBeGreaterThan(feeBefore);
+
+    // The predictor must agree with L1 exactly at mu != 0. This is the only check that catches
+    // the same factor+divisor double-scaling on the TS side of the mirror.
+    for (const manaUsage of Object.values(ManaUsageEstimate)) {
+      const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
+      const predicted = await predictor.getPredictedMinFees(manaUsage);
+      const predictionStartSlot = await getPredictionStartSlot();
+      const l1FeeAtStart = await rollup.getManaMinFeeAt(getTimestamp(predictionStartSlot), true);
+      expect(predicted[0].feePerL2Gas).toBe(l1FeeAtStart);
     }
   }, 60_000);
 });

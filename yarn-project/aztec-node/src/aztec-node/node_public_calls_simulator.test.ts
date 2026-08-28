@@ -445,7 +445,7 @@ describe('NodePublicCallsSimulator', () => {
 });
 
 function makeFeeHeader(): FeeHeader {
-  return { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: 0n, congestionCost: 0n, proverCost: 0n };
+  return { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: 0n, protocolFee: 0n, proverCost: 0n };
 }
 
 function makeProposedCheckpointData(args: {

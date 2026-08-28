@@ -73,7 +73,7 @@ describe('prover-node-publisher', () => {
           excessMana: 0n, // unused
           manaUsed: 0n, // unused
           ethPerFeeAsset: 0n, // unused
-          congestionCost: 0n, // unused
+          protocolFee: 0n, // unused
           proverCost: 0n, // unused
         },
       }),
@@ -244,7 +244,7 @@ describe('prover-node-publisher', () => {
         blobCommitmentsHash: Buffer32.ZERO,
         outHash: '0x',
         slotNumber: SlotNumber(0),
-        feeHeader: { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: 0n, congestionCost: 0n, proverCost: 0n },
+        feeHeader: { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: 0n, protocolFee: 0n, proverCost: 0n },
       }),
     );
 
@@ -311,7 +311,7 @@ describe('prover-node-publisher', () => {
           excessMana: 0n, // unused
           manaUsed: 0n, // unused
           ethPerFeeAsset: 0n, // unused
-          congestionCost: 0n, // unused
+          protocolFee: 0n, // unused
           proverCost: 0n, // unused
         },
       }),
