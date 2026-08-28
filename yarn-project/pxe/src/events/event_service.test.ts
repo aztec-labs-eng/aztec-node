@@ -36,6 +36,8 @@ describe('validateAndStoreEvents', () => {
   beforeEach(async () => {
     const store = await openTmpStore('test');
     privateEventStore = new PrivateEventStore(store);
+    // Leave a change set open for the tests to operate under: every store operation requires one.
+    privateEventStore.beginChangeSet('test');
 
     contractAddress = await AztecAddress.random();
     recipient = await AztecAddress.random();
@@ -91,6 +93,7 @@ describe('validateAndStoreEvents', () => {
     await eventService.validateAndStoreEvents([request], recipient, map);
 
     await privateEventStore.commitChangeSet('test');
+    privateEventStore.beginChangeSet('test');
   }
 
   it('should throw when tx does not exist or has no effects', async () => {
@@ -113,12 +116,7 @@ describe('validateAndStoreEvents', () => {
 
     await runStoreEvent({ eventContent: otherContent, eventCommitment: otherCommitment });
 
-    const result = await privateEventStore.getPrivateEvents(eventSelector, {
-      contractAddress,
-      fromBlock: blockNumber,
-      toBlock: blockNumber + 1,
-      scopes: [recipient],
-    });
+    const result = await readEvents();
 
     expect(result.length).toEqual(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/commitment is not present in its tx/));
@@ -128,12 +126,7 @@ describe('validateAndStoreEvents', () => {
     // Commitment is legitimately present in the tx, but the provided content does not hash to it.
     await runStoreEvent({ eventContent: [Fr.random(), Fr.random()] });
 
-    const result = await privateEventStore.getPrivateEvents(eventSelector, {
-      contractAddress,
-      fromBlock: blockNumber,
-      toBlock: blockNumber + 1,
-      scopes: [recipient],
-    });
+    const result = await readEvents();
 
     expect(result.length).toEqual(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/content does not hash to the provided commitment/));
@@ -143,12 +136,7 @@ describe('validateAndStoreEvents', () => {
     await runStoreEvent();
 
     // I should be able to retrieve the private event I just saved using getPrivateEvents
-    const result = await privateEventStore.getPrivateEvents(eventSelector, {
-      contractAddress,
-      fromBlock: blockNumber,
-      toBlock: blockNumber + 1,
-      scopes: [recipient],
-    });
+    const result = await readEvents();
 
     expect(result.length).toEqual(1);
     expect(result[0].packedEvent).toEqual(eventContent);
@@ -156,5 +144,14 @@ describe('validateAndStoreEvents', () => {
 
   function defaultValidationTxDataMap() {
     return new Map([[txEffect.txHash.toString(), validationTxData]]);
+  }
+
+  /** Reads the fixture's events through the change set the tests operate under. */
+  function readEvents() {
+    return privateEventStore.getPrivateEvents(
+      eventSelector,
+      { contractAddress, fromBlock: blockNumber, toBlock: blockNumber + 1, scopes: [recipient] },
+      'test',
+    );
   }
 });
