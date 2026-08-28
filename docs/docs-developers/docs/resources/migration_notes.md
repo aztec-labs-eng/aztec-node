@@ -18,7 +18,7 @@ Aztec is in active development. Each version may introduce breaking changes that
 paused: DelayedPublicMutable<bool, 300, Context>,
 ```
 
-Shorter delays make the time window users have to read chain state, produce a proof and get it inclued too short, effectively limiting access to the system, which is an unintended side-effect of controlling the delay.
+Shorter delays make the time window users have to read chain state, produce a proof and get it included too short, effectively limiting access to the system, which is an unintended side-effect of controlling the delay.
 
 Raise any initial delay below one hour - a delay of at least a couple of hours remains the recommendation.
 
