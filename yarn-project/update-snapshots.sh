@@ -19,5 +19,5 @@ yarn workspace @aztec/protocol-contracts test -u --max-workers 8
 
 # format the noir code in noir-projects (outside of yarn-project)
 cd ../noir-projects
-./scripts/format.sh
+./bootstrap.sh format
 cd ../yarn-project

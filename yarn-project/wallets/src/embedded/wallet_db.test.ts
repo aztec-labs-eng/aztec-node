@@ -7,10 +7,11 @@ import { WalletDB } from './wallet_db.js';
 import type { AccountType } from './wallet_db.js';
 
 describe('WalletDB', () => {
+  let store: AztecAsyncKVStore;
   let db: WalletDB;
 
   beforeEach(async () => {
-    const store = await openTmpStore('wallet-db-test');
+    store = await openTmpStore('wallet-db-test');
     db = new WalletDB(store, () => {});
   });
 
@@ -147,6 +148,20 @@ describe('WalletDB', () => {
       expect(accounts[0].alias).toEqual('bob');
       expect(accounts[0].item.toString()).toEqual(addr2.toString());
     });
+
+    it('deletes every alias pointing at the account', async () => {
+      const address = await AztecAddress.random();
+      const data = makeAccountData('schnorr', 'alice');
+      await db.storeAccount(address, data);
+      await db.storeAccount(address, { ...data, alias: 'alice-again' });
+
+      await db.deleteAccount(address);
+
+      expect(await db.listAccounts()).toHaveLength(0);
+      const aliases = store.openMap<string, Buffer>('aliases');
+      expect(await aliases.getAsync('accounts:alice')).toBeUndefined();
+      expect(await aliases.getAsync('accounts:alice-again')).toBeUndefined();
+    });
   });
 
   describe('storeSender / listSenders', () => {
@@ -189,9 +204,10 @@ describe('WalletDB', () => {
       const wrapMap = (map: AztecAsyncMap<string, Buffer>): AztecAsyncMap<string, Buffer> =>
         new Proxy(map, {
           get(target, prop) {
-            if (prop === 'set') {
-              return (key: string, value: Buffer) =>
-                shouldCrash(key) ? Promise.reject(new Error('simulated write failure')) : target.set(key, value);
+            if (prop === 'set' || prop === 'delete') {
+              const write = (target[prop] as (key: string, value?: Buffer) => Promise<void>).bind(target);
+              return (key: string, value?: Buffer) =>
+                shouldCrash(key) ? Promise.reject(new Error('simulated write failure')) : write(key, value);
             }
             const member = Reflect.get(target, prop);
             return typeof member === 'function' ? member.bind(target) : member;
@@ -225,6 +241,34 @@ describe('WalletDB', () => {
       await expect(dbAfterCrash.retrieveAccount(address)).rejects.toThrow('does not exist');
       expect(await dbAfterCrash.listAccounts()).toEqual([]);
       expect(await store.openMap<string, Buffer>('aliases').getAsync('accounts:alice')).toBeUndefined();
+    });
+
+    it('deletes no account data when a write fails midway through deleteAccount', async () => {
+      const store = await openTmpStore('wallet-db-atomicity-test');
+      const seedDb = new WalletDB(store, () => {});
+      const address = await AztecAddress.random();
+      const data = makeAccountData('schnorr', 'alice');
+      await seedDb.storeAccount(address, data);
+
+      // Fail the alias delete, which happens after all the account entry deletes
+      const failingDb = new WalletDB(
+        crashingStore(store, key => key.startsWith('accounts:')),
+        () => {},
+      );
+      await expect(failingDb.deleteAccount(address)).rejects.toThrow('simulated write failure');
+
+      // Inspect the same underlying store with a fresh WalletDB: the account must be fully intact
+      const dbAfterCrash = new WalletDB(store, () => {});
+      const retrieved = await dbAfterCrash.retrieveAccount(address);
+      expect(retrieved.secretKey).toEqual(data.secretKey);
+      expect(retrieved.salt).toEqual(data.salt);
+      expect(retrieved.type).toEqual('schnorr');
+      expect(retrieved.signingKey).toEqual(data.signingKey.toBuffer());
+
+      const accounts = await dbAfterCrash.listAccounts();
+      expect(accounts).toHaveLength(1);
+      expect(accounts[0].alias).toEqual('alice');
+      expect(accounts[0].item.toString()).toEqual(address.toString());
     });
   });
 

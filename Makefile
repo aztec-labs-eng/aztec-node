@@ -109,34 +109,32 @@ labs-aztec-toolchain:
 
 # Format check. It also warms the nargo dependency cache, so it must complete before the
 # subproject builds to avoid parallel nargo runs tripping over each other downloading.
-noir-projects-labs-format-check: labs-aztec-toolchain
-	$(call build,$@,noir-projects/labs,format_check)
+noir-projects-format-check: labs-aztec-toolchain
+	$(call build,$@,noir-projects,format_check)
 
-noir-contracts: noir-projects-labs-format-check labs-aztec-toolchain
-	$(call build,$@,noir-projects/labs/noir-contracts)
+noir-contracts: noir-projects-format-check labs-aztec-toolchain
+	$(call build,$@,noir-projects/noir-contracts)
 
-aztec-nr: noir-projects-labs-format-check labs-aztec-toolchain
-	$(call build,$@,noir-projects/labs/aztec-nr)
+aztec-nr: noir-projects-format-check labs-aztec-toolchain
+	$(call build,$@,noir-projects/aztec-nr)
 
 # These tests are not included in the dep tree.
 # Rather this target must be explicitly called by bootstrap.sh after it's started the txe's.
 noir-projects-txe-tests:
-	$(call test,$@,noir-projects/labs/aztec-nr)
-	$(call test,$@,noir-projects/labs/noir-contracts)
+	$(call test,$@,noir-projects/aztec-nr)
+	$(call test,$@,noir-projects/noir-contracts)
 
-contract-snapshots-tests: noir-projects-labs-format-check labs-aztec-toolchain
-	$(call test,$@,noir-projects/labs/contract-snapshots)
+contract-snapshots-tests: noir-projects-format-check labs-aztec-toolchain
+	$(call test,$@,noir-projects/contract-snapshots)
 
 # Noir Projects - Aggregate target
-noir-projects-labs: noir-contracts aztec-nr
-
-noir-projects: noir-projects-labs
+noir-projects: noir-contracts aztec-nr
 
 #==============================================================================
 # Yarn Project - TypeScript monorepo with all TS packages
 #==============================================================================
 
-yarn-project: noir-projects-labs labs-aztec-toolchain
+yarn-project: noir-projects labs-aztec-toolchain
 	$(call build,$@,yarn-project)
 
 # crs: the prover e2e tests run in no-network containers, so bb and bb.js must find the

@@ -91,3 +91,69 @@ jobs:
       ref: main
       deploy_contracts: ${{ github.event_name == 'schedule' || inputs.deploy_contracts == true }}
     secrets: inherit
+
+  # next-net must never outlive its nightly: it exists to exercise the latest tag, so a
+  # network left over from an older one misleads anyone testing against it and keeps
+  # burning cluster resources. The only thing that ever deletes the namespace is
+  # deploy_network.sh, and only once a deploy gets far enough to run it, so any run that
+  # does not complete a successful deploy leaves the previous network up until some later
+  # run succeeds — days, if the nightly tag never lands or CI3 stays red.
+  #
+  # Hence the gate is "the deploy did not succeed", not "the deploy failed": a missing
+  # tag or a red CI3 gate stalls this workflow before the deploy job starts, which is
+  # exactly the case that strands a stale network. Tearing down then is deliberate — no
+  # next-net at all is preferable to one serving state from an unknown-age tag, and its
+  # absence is visible where staleness is not.
+  teardown-stale-network:
+    needs: deploy-next-net
+    if: always() && needs.deploy-next-net.result != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # A local action needs the repo on disk. No ref: this run's own commit is enough,
+      # since all the teardown reads is next-net.env and network_teardown.sh.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 1
+
+      # The runner's gcloud has its component manager disabled, so the plugin has to
+      # come from setup-gcloud. The teardown action installs it too, but only after
+      # this step has already run.
+      - name: Setup gcloud and install GKE auth plugin
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: Capture cluster diagnostics before teardown
+        continue-on-error: true
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
+          CI: "1"
+        run: |
+          set -euo pipefail
+          # The ClaudeBox deploy investigation dispatched by deploy-network.yml reads pod
+          # state from this namespace, and runs after teardown has deleted it. Cloud
+          # Logging keeps whatever the pods emitted; pod status, events and helm release
+          # state only survive if they are dumped here. Best effort — the deploy may have
+          # failed before the cluster was ever reachable.
+          set +x
+          umask 077
+          printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          cd spartan
+          source ./scripts/source_env_basic.sh
+          source ./scripts/gcp_auth.sh
+          source_env_basic next-net
+          gcp_auth
+          kubectl get pods -o wide -n "$NAMESPACE" || true
+          kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp | tail -50 || true
+          helm list -n "$NAMESPACE" || true
+
+      - name: Tear down stale network
+        continue-on-error: true
+        uses: ./.github/actions/network-teardown
+        with:
+          env_file: next-net
+          namespace: next-net
+          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
