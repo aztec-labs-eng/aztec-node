@@ -108,8 +108,12 @@ const redirects = [
 ];
 
 const entryPoints = {
-  // src/bin/index.ts → dest/bin/index.js (overwrites the tsc-emitted file).
-  'bin/index': 'src/bin/index.ts',
+  // src/bin/index.ts → dest/bin/index.bundle.js. The `.bundle` suffix (like worker/server below)
+  // keeps the output at a path tsc never emits: a tsc-only rebuild (e.g. `yarn build` at the
+  // yarn-project root) must not be able to replace a bundle with unbundled output, because the
+  // unbundled tree reaches dynamic JSON imports that Node's ESM loader rejects
+  // (ERR_IMPORT_ATTRIBUTE_MISSING) — TXE only runs correctly from the bundles.
+  'bin/index.bundle': 'src/bin/index.ts',
   // src/worker.ts → dest/worker.bundle.js (the file the pool spawns).
   'worker.bundle': 'src/worker.ts',
   // src/rpc_server.ts → dest/server.bundle.js (the entry the parent `@aztec/aztec`

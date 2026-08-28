@@ -50,9 +50,9 @@ export async function buildSharedContractStore(): Promise<{ dataDir: string; sch
 
 /**
  * Resolves `worker.bundle.js` whether this code is running unbundled (next to dispatcher_pool.js
- * inside `dest/`) or bundled into `dest/bin/index.js` (one directory deeper). `import.meta.url`
- * refers to whichever module the calling code actually lives in; we try both relative locations
- * and use whichever exists.
+ * inside `dest/`) or bundled into `dest/bin/index.bundle.js` (one directory deeper).
+ * `import.meta.url` refers to whichever module the calling code actually lives in; we try both
+ * relative locations and use whichever exists.
  */
 // worker.bundle.js is esbuild's bundling of src/worker.ts (see esbuild.config.mjs).
 // @dependency ./worker.ts

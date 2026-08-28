@@ -346,7 +346,7 @@ function start_txes {
   for i in $(seq 0 $((NUM_TXES-1))); do
     port=$((txe_base_port + i))
     kill_port $port
-    dump_fail "LOG_LEVEL=info TXE_PORT=$port retry 'node --no-warnings ./yarn-project/txe/dest/bin/index.js'" &
+    dump_fail "LOG_LEVEL=info TXE_PORT=$port retry 'node --no-warnings ./yarn-project/txe/dest/bin/index.bundle.js'" &
     txe_pids+="$! "
   done
 
