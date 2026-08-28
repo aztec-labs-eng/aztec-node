@@ -24,12 +24,9 @@ export interface StagedStore {
   /**
    * Notifies the store that a change set has been opened.
    *
-   * TODO: make it required once every staged store extends `BaseStagingStore`. It is optional only while
-   * they migrate to per-change-set staging.
-   *
    * @param changeSetId - The change set identifier
    */
-  beginChangeSet?(changeSetId: ChangeSetId): void;
+  beginChangeSet(changeSetId: ChangeSetId): void;
 
   /**
    * Commits staged data to persistent storage. Will be called within a db transaction for atomicity, alongside the
@@ -168,7 +165,7 @@ export class StagedWriteCoordinator {
     const begunStores: StagedStore[] = [];
     try {
       for (const store of this.#stagedStores.values()) {
-        store.beginChangeSet?.(changeSetId);
+        store.beginChangeSet(changeSetId);
         begunStores.push(store);
       }
     } catch (err) {
