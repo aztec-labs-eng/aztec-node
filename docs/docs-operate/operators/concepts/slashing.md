@@ -3,6 +3,7 @@ id: slashing
 title: Slashing
 description: What gets you slashed, how much you lose, the ejection thresholds, zombie status, the veto council, and how to recover after being slashed or ejected.
 displayed_sidebar: operatorsSidebar
+references: ["yarn-project/slasher/src/*"]
 ---
 
 Slashing is the protocol's way of penalizing validators who fail their duties. For the deep technical guide on how your node votes on slashings, see [Slashing and offenses](/operate/operators/sequencer-management/slashing_and_offenses) in Advanced operations.

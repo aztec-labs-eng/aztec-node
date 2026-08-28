@@ -5,6 +5,7 @@ description: A conceptual introduction to Portals and how Aztec communicates wit
 keywords: [portals]
 tags: [portals, protocol, ethereum]
 sidebar_position: 12
+references: ["noir-projects/aztec-nr/aztec/src/messaging.nr"]
 ---
 
 # L1-L2 Communication (Portals)
