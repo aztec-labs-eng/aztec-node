@@ -4,8 +4,6 @@ import { createLogger } from '@aztec/foundation/log';
 import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
 import { BundledProtocolContractsProvider } from '@aztec/protocol-contracts/providers/bundle';
 import { WASMSimulator } from '@aztec/simulator/client';
-import { MemoryCircuitRecorder, SimulatorRecorderWrapper } from '@aztec/simulator/server';
-import { FileCircuitRecorder } from '@aztec/simulator/testing';
 import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
 import { getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry';
 import { getStandardMultiCallEntrypoint } from '@aztec/standard-contracts/multi-call-entrypoint';
@@ -15,6 +13,9 @@ import type { PXEConfig } from '../../config/index.js';
 import { PXE } from '../../pxe.js';
 import { PXE_DATA_SCHEMA_VERSION } from '../../storage/index.js';
 import { type PXECreationOptions, isPrivateKernelProver } from '../pxe_creation_options.js';
+import { FileCircuitRecorder } from './circuit_recording/file_circuit_recorder.js';
+import { MemoryCircuitRecorder } from './circuit_recording/memory_circuit_recorder.js';
+import { SimulatorRecorderWrapper } from './circuit_recording/simulator_recorder_wrapper.js';
 import { openStore } from './store.js';
 
 type PXEConfigWithoutDefaults = Omit<

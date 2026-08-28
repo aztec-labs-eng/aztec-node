@@ -1,8 +1,6 @@
+import type { ACIRCallback, ACIRExecutionResult, ACVMWitness, CircuitSimulator } from '@aztec/simulator/client';
 import type { FunctionArtifactWithContractName } from '@aztec/stdlib/abi';
 
-import type { ACIRCallback, ACIRExecutionResult } from '../acvm/acvm.js';
-import type { ACVMWitness } from '../acvm/acvm_types.js';
-import type { CircuitSimulator } from '../circuit_simulator.js';
 import type { RecordingMetadata } from './circuit_recorder.js';
 import { FileCircuitRecorder } from './file_circuit_recorder.js';
 import { MemoryCircuitRecorder } from './memory_circuit_recorder.js';
