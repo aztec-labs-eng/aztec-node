@@ -21,6 +21,7 @@ type FeeOracleState = {
   manaLimit: bigint;
   provingCostPerManaEth: bigint;
   epochDuration: bigint;
+  protocolFeeMarginBps: bigint;
   /** Pre-resolved L1 fees for each slot in the prediction window. */
   l1FeesBySlot: L1FeeData[];
 };
@@ -75,11 +76,12 @@ export class FeePredictor {
     const opts = { blockNumber };
 
     // Cached constants don't need pinning
-    const [manaTarget, manaLimit, provingCostPerManaEth, epochDuration] = await Promise.all([
+    const [manaTarget, manaLimit, provingCostPerManaEth, epochDuration, protocolFeeMarginBps] = await Promise.all([
       this.rollupContract.getManaTarget(),
       this.rollupContract.getManaLimit(),
       this.rollupContract.getProvingCostPerMana(),
       this.rollupContract.getEpochDuration(),
+      this.rollupContract.getProtocolFeeMargin(),
     ]);
 
     // First, compute the earliest possible nextSlot independently of the checkpoint, so we can
@@ -115,6 +117,7 @@ export class FeePredictor {
       manaLimit,
       provingCostPerManaEth,
       epochDuration: BigInt(epochDuration),
+      protocolFeeMarginBps: BigInt(protocolFeeMarginBps),
       l1FeesBySlot,
     };
   }
@@ -170,6 +173,7 @@ export class FeePredictor {
         provingCostPerManaEth: state.provingCostPerManaEth,
         excessMana,
         ethPerFeeAsset,
+        protocolFeeMarginBps: state.protocolFeeMarginBps,
       }),
     );
   }
