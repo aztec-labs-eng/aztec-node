@@ -99,7 +99,6 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     // A store overrides any pre-existing data on the slot
     return this.withChangeSet(changeSetId, changeSet => {
       this.#writeSlot(changeSet, dbSlotKey, packCapsule(capsule));
-      return Promise.resolve();
     });
   }
 
@@ -115,7 +114,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     changeSetId: ChangeSetId,
     scope: AztecAddress,
   ): Promise<Fr[] | null> {
-    return this.withChangeSet(changeSetId, (changeSet, db) =>
+    return this.withChangeSetAndDb(changeSetId, (changeSet, db) =>
       this.#readCapsule(changeSet, db, contractAddress, slot, scope),
     );
   }
@@ -149,7 +148,6 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     // When we commit this, we will interpret null as a deletion, so we'll propagate the delete to the KV store
     return this.withChangeSet(changeSetId, changeSet => {
       this.#deleteSlot(changeSet, dbSlotToKey(contractAddress, slot, scope));
-      return Promise.resolve();
     });
   }
 
@@ -172,7 +170,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     changeSetId: ChangeSetId,
     scope: AztecAddress,
   ): Promise<void> {
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       // In order to support overlapping source and destination regions, we need to check the relative positions of source
       // and destination. If destination is ahead of source, then by the time we overwrite source elements using forward
       // indexes we'll have already read those. On the contrary, if source is ahead of destination we need to use backward
@@ -210,7 +208,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     changeSetId: ChangeSetId,
     scope: AztecAddress,
   ): Promise<void> {
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       // Load current length, defaulting to 0 if not found
       const lengthData = await this.#readCapsule(changeSet, db, contractAddress, baseSlot, scope);
       const currentLength = lengthData ? lengthData[0].toNumber() : 0;
@@ -233,7 +231,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     changeSetId: ChangeSetId,
     scope: AztecAddress,
   ): Promise<Fr[][]> {
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       // Load length, defaulting to 0 if not found
       const maybeLength = await this.#readCapsule(changeSet, db, contractAddress, baseSlot, scope);
       const length = maybeLength ? maybeLength[0].toBigInt() : 0n;
@@ -263,7 +261,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     changeSetId: ChangeSetId,
     scope: AztecAddress,
   ): Promise<void> {
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       // Load current length, defaulting to 0 if not found
       const maybeLength = await this.#readCapsule(changeSet, db, contractAddress, baseSlot, scope);
       const originalLength = maybeLength ? maybeLength[0].toNumber() : 0;
