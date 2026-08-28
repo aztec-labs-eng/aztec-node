@@ -487,19 +487,21 @@ function release_packages {
     local package_name=$(jq -r .name "$package/package.json")
     package_list+=("$package_name@$1")
   done
+
   # Smoke test the deployed packages.
-  local dir=$(mktemp -d)
-  cd "$dir"
-  do_or_dryrun npm init -y
-  # NOTE: originally this was on one line, but sometimes snagged downloading end-to-end (most recently published package).
-  # --no-audit --no-fund: npm's implicit audit re-scans the whole cumulative tree on every install, dominating
-  # release time. Dependency vulnerabilities are covered by the weekly socket-fix workflow instead.
-  # npm publish is eventually consistent: a just-published version can take a few minutes to
-  # become installable, so give each install a ~5 minute window instead of the default ~10s.
-  for package in "${package_list[@]}"; do
-    RETRY_ATTEMPTS=10 RETRY_SLEEP=30 retry "do_or_dryrun npm install --no-audit --no-fund $package"
-  done
-  rm -rf "$dir"
+  # NOTE: Disabled due to npmjs indexing taking too long.
+  # local dir=$(mktemp -d)
+  # cd "$dir"
+  # do_or_dryrun npm init -y
+  # # NOTE: originally this was on one line, but sometimes snagged downloading end-to-end (most recently published package).
+  # # --no-audit --no-fund: npm's implicit audit re-scans the whole cumulative tree on every install, dominating
+  # # release time. Dependency vulnerabilities are covered by the weekly socket-fix workflow instead.
+  # # npm publish is eventually consistent: a just-published version can take a few minutes to
+  # # become installable, so give each install a ~5 minute window instead of the default ~10s.
+  # for package in "${package_list[@]}"; do
+  #   RETRY_ATTEMPTS=10 RETRY_SLEEP=30 retry "do_or_dryrun npm install --no-audit --no-fund $package"
+  # done
+  # rm -rf "$dir"
 }
 
 function release {
