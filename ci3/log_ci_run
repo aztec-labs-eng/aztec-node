@@ -16,17 +16,9 @@ fi
 SECTION_TTL=$((60 * 60 * 24 * 90))
 
 # The section is the CI_DASHBOARD dimension (prs, a mainline branch name, tags, ...).
-if [ -z "${CI_DASHBOARD:-}" ]; then
-  # Deprecated fallback: derive from the ref (semver tag -> tags, else prs).
-  # Set CI_DASHBOARD explicitly in ci.sh / the trigger runner instead.
-  if semver check "$REF_NAME"; then
-    section="tags"
-  else
-    section="prs"
-  fi
-else
-  section="$CI_DASHBOARD"
-fi
+# ci.sh / the trigger runner normally set CI_DASHBOARD explicitly; ci_dashboard_section
+# (source_refname) is the shared fallback for direct callers that don't.
+section="${CI_DASHBOARD:-$(ci_dashboard_section)}"
 
 # Scope the section by repository so multiple orgs/repos sharing this dashboard don't
 # collide (and one repo's runs can't evict another's under the 1000-entry cap). The

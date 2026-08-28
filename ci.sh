@@ -124,16 +124,11 @@ export RUN_ID=${RUN_ID:-$(date +%s%3N)}
 
 function multi_job_run {
   if [[ -z "${CI_DASHBOARD:-}" ]]; then
-    # Section = a mainline branch's own name (main, v5, ...), "tags" for any tag, else
-    # "prs". log_ci_run prefixes this with the repo. The trigger sets CI_DASHBOARD from
-    # .ci3.yml's push_branches; this is the fallback for direct/local ci.sh runs.
-    if semver check "${REF_NAME:-}"; then
-      export CI_DASHBOARD="tags"
-    elif [[ "${REF_NAME:-}" == "main" || "${REF_NAME:-}" =~ ^v[0-9]+$ ]]; then
-      export CI_DASHBOARD="$REF_NAME"
-    else
-      export CI_DASHBOARD="prs"
-    fi
+    # Section = a mainline branch's own name (the default branch, v5, ...), "tags" for
+    # any tag, else "prs" (see ci_dashboard_section in source_refname). log_ci_run
+    # prefixes this with the repo. The trigger sets CI_DASHBOARD from .ci3.yml's
+    # push_branches; this is the fallback for direct/local ci.sh runs.
+    export CI_DASHBOARD="$(ci_dashboard_section)"
   fi
   export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-75}
   export AWS_SHUTDOWN_TIME_ARM=${AWS_SHUTDOWN_TIME_ARM:-90}
