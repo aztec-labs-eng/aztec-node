@@ -90,7 +90,6 @@ export class FactStore extends BaseStagingStore<FactStoreChangeSet, FactStoreDb>
         kind: 'recordFact',
         fact: new StoredFact(factCollectionKey, factTypeId, payload, originBlock),
       });
-      return Promise.resolve();
     });
   }
 
@@ -102,7 +101,6 @@ export class FactStore extends BaseStagingStore<FactStoreChangeSet, FactStoreDb>
   deleteFactCollection(factCollectionKey: FactCollectionKey, changeSetId: ChangeSetId): Promise<void> {
     return this.withChangeSet(changeSetId, changeSet => {
       changeSet.push({ kind: 'deleteFactCollection', key: factCollectionKey });
-      return Promise.resolve();
     });
   }
 
@@ -113,10 +111,12 @@ export class FactStore extends BaseStagingStore<FactStoreChangeSet, FactStoreDb>
     factCollectionKey: FactCollectionKey,
     changeSetId: ChangeSetId,
   ): Promise<FactCollection | undefined> {
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
-      const committed = await this.#readCollectionsFromDb(db, [factCollectionKey]);
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
+      const collectionKey = factCollectionKey.toString();
+      const committedCollection = await this.#loadCommittedCollection(db, factCollectionKey);
+      const committed = new Map(committedCollection ? [[collectionKey, committedCollection]] : []);
 
-      const collection = this.#foldStagedOps(committed, changeSet).get(factCollectionKey.toString());
+      const collection = this.#foldStagedOps(committed, changeSet).get(collectionKey);
       if (!collection) {
         return undefined;
       }
@@ -132,7 +132,7 @@ export class FactStore extends BaseStagingStore<FactStoreChangeSet, FactStoreDb>
     factCollectionTypeKey: FactCollectionTypeKey,
     changeSetId: ChangeSetId,
   ): Promise<FactCollection[]> {
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       const typeKey = factCollectionTypeKey.toString();
       const committed = await this.#readCollectionsFromDbByType(db, typeKey);
 
@@ -199,26 +199,6 @@ export class FactStore extends BaseStagingStore<FactStoreChangeSet, FactStoreDb>
       }),
     );
     return factReads.size;
-  }
-
-  /**
-   * Reads the given collections (their facts) by key into a Map keyed by collection key, skipping
-   * keys with no committed facts.
-   *
-   * Reads are not wrapped in a transaction: the caller owns the transaction boundary.
-   */
-  async #readCollectionsFromDb(
-    db: ReadonlyDb<FactStoreDb>,
-    keys: FactCollectionKey[],
-  ): Promise<Map<FactCollectionKeyStr, CollectionWithFacts>> {
-    const result = new Map<FactCollectionKeyStr, CollectionWithFacts>();
-    for (const key of keys) {
-      const collection = await this.#loadCommittedCollection(db, key);
-      if (collection) {
-        result.set(key.toString(), collection);
-      }
-    }
-    return result;
   }
 
   async #readCollectionsFromDbByType(
