@@ -3,7 +3,7 @@ title: Aztec.nr Dependencies
 description: Reference list of available Aztec.nr libraries and their Nargo.toml dependency paths.
 tags: [contracts]
 sidebar_position: 2
-references: ["noir-projects/labs/aztec-nr/address-note/*", "noir-projects/labs/aztec-nr/field-note/*", "noir-projects/labs/aztec-nr/uint-note/*", "noir-projects/labs/aztec-nr/balance-set/*", "noir-projects/labs/aztec-nr/compressed-string/*"]
+references: ["noir-projects/aztec-nr/address-note/*", "noir-projects/aztec-nr/field-note/*", "noir-projects/aztec-nr/uint-note/*", "noir-projects/aztec-nr/balance-set/*", "noir-projects/aztec-nr/compressed-string/*"]
 ---
 
 This page lists the available Aztec.nr libraries. Add dependencies to the `[dependencies]` section of your `Nargo.toml`:
