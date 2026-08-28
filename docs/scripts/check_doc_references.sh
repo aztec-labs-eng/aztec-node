@@ -21,6 +21,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
+# When this repo is checked out as a submodule of the foundation monorepo, docs may
+# reference foundation-owned paths (l1-contracts/..., barretenberg/...) that live in the
+# superproject rather than this tree. Fall back to the superproject root for those.
+SUPERPROJECT_ROOT=$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)
+
 # Source shared library for reference extraction
 source "$SCRIPT_DIR/lib/extract_doc_references.sh"
 
@@ -48,7 +53,8 @@ MISSING_PATHS=""
 while IFS='|' read -r ref_path doc_file; do
   # Strip /* suffix for directory references before checking existence
   check_path="${ref_path%/\*}"
-  if [[ ! -e "$check_path" ]]; then
+  if [[ ! -e "$check_path" ]] &&
+    { [[ -z "$SUPERPROJECT_ROOT" ]] || [[ ! -e "$SUPERPROJECT_ROOT/$check_path" ]]; }; then
     MISSING_PATHS="${MISSING_PATHS}  - ${ref_path} (referenced in ${doc_file})\n"
   fi
 done < "$MAPPING_FILE"
