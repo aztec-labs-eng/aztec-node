@@ -192,7 +192,7 @@ describe('CheckpointProposalJob', () => {
     // Default rollup contract reads used by pipelined fee-header derivation. Tests that exercise
     // the failure modes override these via jest.spyOn.
     jest.spyOn(publisher.rollupContract, 'getCheckpoint').mockResolvedValue({
-      feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, congestionCost: 0n, proverCost: 0n },
+      feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
     } as any);
     jest.spyOn(publisher.rollupContract, 'getManaTarget').mockResolvedValue(10_000n);
     publisher.sendRequestsAt.mockResolvedValue({

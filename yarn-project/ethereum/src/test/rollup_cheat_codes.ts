@@ -375,6 +375,30 @@ export class RollupCheatCodes {
   }
 
   /**
+   * Sets the protocol fee margin (in basis points). Throws if the on-chain tx reverts
+   * (e.g. rate-limit cooldown or step cap) instead of silently succeeding.
+   * @param bps - The new protocol fee margin in basis points
+   */
+  public async setProtocolFeeMargin(bps: number) {
+    await this.asOwner(async (account, rollup) => {
+      const hash = await rollup.write.setProtocolFeeMargin([bps], {
+        account,
+        chain: this.client.chain,
+        gasLimit: 1000000n,
+      });
+      const receipt = await this.client.waitForTransactionReceipt({ hash });
+      if (receipt.status !== 'success') {
+        throw new Error(
+          `setProtocolFeeMargin(${bps}) reverted on L1 (tx ${hash}). ` +
+            `Likely FeeLib rate-limit (30-day cooldown or x3/2 step cap on the fee multiplier); ` +
+            `use clearProvingCostCooldown() between successive updates (it clears both cooldowns).`,
+        );
+      }
+      this.logger.warn(`Updated protocol fee margin to ${bps} bps`);
+    });
+  }
+
+  /**
    * Resets the 30-day proving-cost update cooldown enforced by FeeLib.updateProvingCostPerMana
    * by zeroing `FeeStore.provingCostLastUpdate` directly in contract storage. Use between
    * successive setProvingCostPerMana / bumpProvingCostPerMana calls so the later update can
@@ -384,7 +408,8 @@ export class RollupCheatCodes {
    * l1-contracts/src/core/libraries/rollup/FeeLib.sol:
    *   slot + 0: CompressedFeeConfig config          (uint256)
    *   slot + 1: L1GasOracleValues l1GasOracleValues (14+14+4 bytes, packed)
-   *   slot + 2: uint64 provingCostLastUpdate        (only member — zeroing the slot is safe)
+   *   slot + 2: uint64 provingCostLastUpdate + uint64 protocolMarginLastUpdate (packed --
+   *             zeroing the slot clears BOTH the proving-cost and protocol-fee-margin cooldowns)
    * If the struct layout changes, update the offset below.
    */
   public async clearProvingCostCooldown() {

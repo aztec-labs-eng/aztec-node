@@ -112,7 +112,7 @@ describe('Uniswap Price Oracle', () => {
       expect(modifier).toBe(49n);
 
       const child = RollupContract.computeChildFeeHeader(
-        { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: predictedParentE12, congestionCost: 0n, proverCost: 0n },
+        { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: predictedParentE12, protocolFee: 0n, proverCost: 0n },
         0n,
         modifier,
         100n,

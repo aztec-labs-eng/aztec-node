@@ -37,7 +37,7 @@ describe('computePipelinedParentFeeHeader', () => {
     manaUsed: 3000n,
     excessMana: 1000n,
     ethPerFeeAsset: 500n,
-    congestionCost: 50n,
+    protocolFee: 50n,
     proverCost: 10n,
   };
 
@@ -138,7 +138,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
     manaUsed: 3000n,
     excessMana: 1000n,
     ethPerFeeAsset: 500n,
-    congestionCost: 50n,
+    protocolFee: 50n,
     proverCost: 10n,
   };
 

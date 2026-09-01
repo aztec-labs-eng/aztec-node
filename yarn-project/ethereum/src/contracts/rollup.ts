@@ -114,7 +114,7 @@ export type FeeHeader = {
   excessMana: bigint;
   manaUsed: bigint;
   ethPerFeeAsset: bigint;
-  congestionCost: bigint;
+  protocolFee: bigint;
   proverCost: bigint;
 };
 
@@ -177,7 +177,7 @@ export type TempCheckpointLogOverrideFields = {
 export type ManaMinFeeComponents = {
   sequencerCost: bigint;
   proverCost: bigint;
-  congestionCost: bigint;
+  protocolFee: bigint;
   congestionMultiplier: bigint;
 };
 
@@ -432,6 +432,16 @@ export class RollupContract {
     return this.rollup.read.getProvingCostPerManaInFeeAsset();
   }
 
+  /** Returns the current protocol fee margin in basis points. Not memoized: governance can change it. */
+  getProtocolFeeMargin(): Promise<number> {
+    return this.rollup.read.getProtocolFeeMargin();
+  }
+
+  /** Returns the current recipient of the protocol fee tranche. Not memoized: governance can change it. */
+  async getProtocolFeeRecipient(): Promise<EthAddress> {
+    return EthAddress.fromString(await this.rollup.read.getProtocolFeeRecipient());
+  }
+
   @memoize
   getManaLimit(): Promise<bigint> {
     return this.rollup.read.getManaLimit();
@@ -636,7 +646,7 @@ export class RollupContract {
       excessMana: result.excessMana,
       manaUsed: result.manaUsed,
       ethPerFeeAsset: result.ethPerFeeAsset,
-      congestionCost: result.congestionCost,
+      protocolFee: result.protocolFee,
       proverCost: result.proverCost,
     };
   }
@@ -729,7 +739,7 @@ export class RollupContract {
         excessMana: result.feeHeader.excessMana,
         manaUsed: result.feeHeader.manaUsed,
         ethPerFeeAsset: result.feeHeader.ethPerFeeAsset,
-        congestionCost: result.feeHeader.congestionCost,
+        protocolFee: result.feeHeader.protocolFee,
         proverCost: result.feeHeader.proverCost,
       },
     };
@@ -1079,7 +1089,7 @@ export class RollupContract {
     let value = BigInt(feeHeader.manaUsed) & ((1n << 32n) - 1n); // bits [0:31]
     value |= (feeHeader.excessMana < MASK_48_BITS ? feeHeader.excessMana : MASK_48_BITS) << 32n; // bits [32:79]
     value |= (BigInt(feeHeader.ethPerFeeAsset) & MASK_48_BITS) << 80n; // bits [80:127]
-    value |= (feeHeader.congestionCost < MASK_64_BITS ? feeHeader.congestionCost : MASK_64_BITS) << 128n; // bits [128:191]
+    value |= (feeHeader.protocolFee < MASK_64_BITS ? feeHeader.protocolFee : MASK_64_BITS) << 128n; // bits [128:191]
     value |= (feeHeader.proverCost < MASK_63_BITS ? feeHeader.proverCost : MASK_63_BITS) << 192n; // bits [192:254]
     value |= 1n << 255n; // preheat flag
     return value;
@@ -1121,7 +1131,7 @@ export class RollupContract {
       excessMana,
       manaUsed: childManaUsed,
       ethPerFeeAsset: newPrice,
-      congestionCost: 0n,
+      protocolFee: 0n,
       proverCost: 0n,
     };
   }
@@ -1183,7 +1193,7 @@ export class RollupContract {
     return {
       sequencerCost: result.sequencerCost,
       proverCost: result.proverCost,
-      congestionCost: result.congestionCost,
+      protocolFee: result.protocolFee,
       congestionMultiplier: result.congestionMultiplier,
     };
   }

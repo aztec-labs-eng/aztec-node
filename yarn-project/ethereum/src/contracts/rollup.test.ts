@@ -22,7 +22,7 @@ import { type FeeHeader, RollupContract, TempCheckpointLogField } from './rollup
 describe('compressFeeHeader', () => {
   /** Creates a zero fee header with the given overrides. */
   function makeFeeHeader(overrides: Partial<FeeHeader> = {}): FeeHeader {
-    return { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 0n, congestionCost: 0n, proverCost: 0n, ...overrides };
+    return { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 0n, protocolFee: 0n, proverCost: 0n, ...overrides };
   }
 
   it('sets the preheat flag (bit 255)', () => {
@@ -62,15 +62,15 @@ describe('compressFeeHeader', () => {
     expect((result >> 80n) & ((1n << 48n) - 1n)).toBe(999n);
   });
 
-  it('packs congestionCost into bits [128:191]', () => {
-    const header = makeFeeHeader({ congestionCost: 42n });
+  it('packs protocolFee into bits [128:191]', () => {
+    const header = makeFeeHeader({ protocolFee: 42n });
     const result = RollupContract.compressFeeHeader(header);
     expect((result >> 128n) & ((1n << 64n) - 1n)).toBe(42n);
   });
 
-  it('clamps congestionCost to 64 bits', () => {
+  it('clamps protocolFee to 64 bits', () => {
     const maxValue = (1n << 64n) - 1n;
-    const header = makeFeeHeader({ congestionCost: maxValue + 1n });
+    const header = makeFeeHeader({ protocolFee: maxValue + 1n });
     const result = RollupContract.compressFeeHeader(header);
     expect((result >> 128n) & maxValue).toBe(maxValue);
   });
@@ -93,7 +93,7 @@ describe('compressFeeHeader', () => {
       manaUsed: 1000n,
       excessMana: 2000n,
       ethPerFeeAsset: 3000n,
-      congestionCost: 4000n,
+      protocolFee: 4000n,
       proverCost: 5000n,
     });
     const result = RollupContract.compressFeeHeader(header);
@@ -122,7 +122,7 @@ describe('computeChildFeeHeader', () => {
     manaUsed: 5000n,
     excessMana: 3000n,
     ethPerFeeAsset: 1000n,
-    congestionCost: 100n,
+    protocolFee: 100n,
     proverCost: 200n,
   };
 
@@ -144,9 +144,9 @@ describe('computeChildFeeHeader', () => {
     expect(result.manaUsed).toBe(7777n);
   });
 
-  it('always sets congestionCost and proverCost to zero', () => {
+  it('always sets protocolFee and proverCost to zero', () => {
     const result = RollupContract.computeChildFeeHeader(baseFeeHeader, 0n, 0n, manaTarget);
-    expect(result.congestionCost).toBe(0n);
+    expect(result.protocolFee).toBe(0n);
     expect(result.proverCost).toBe(0n);
   });
 
@@ -217,14 +217,14 @@ describe('computeChildFeeHeader', () => {
       manaUsed: 8000n,
       excessMana: 15000n,
       ethPerFeeAsset: 5000n,
-      congestionCost: 999n,
+      protocolFee: 999n,
       proverCost: 888n,
     };
     const result = RollupContract.computeChildFeeHeader(parent, 42n, 250n, manaTarget);
     expect(result.excessMana).toBe(13000n);
     expect(result.manaUsed).toBe(42n);
     expect(result.ethPerFeeAsset).toBe(5125n);
-    expect(result.congestionCost).toBe(0n);
+    expect(result.protocolFee).toBe(0n);
     expect(result.proverCost).toBe(0n);
   });
 });
@@ -425,7 +425,7 @@ describe('Rollup', () => {
         manaUsed: 12345n,
         excessMana: 67890n,
         ethPerFeeAsset: 1_000_000_000_000n,
-        congestionCost: 99999n,
+        protocolFee: 99999n,
         proverCost: 55555n,
       } as FeeHeader,
     };
@@ -561,7 +561,7 @@ describe('Rollup', () => {
         manaUsed: 12345n,
         excessMana: 67890n,
         ethPerFeeAsset: 1_000_000_000_000n,
-        congestionCost: 99999n,
+        protocolFee: 99999n,
         proverCost: 55555n,
       };
 
@@ -580,7 +580,7 @@ describe('Rollup', () => {
       expect(result.manaUsed).toBe(feeHeader.manaUsed);
       expect(result.excessMana).toBe(feeHeader.excessMana);
       expect(result.ethPerFeeAsset).toBe(feeHeader.ethPerFeeAsset);
-      expect(result.congestionCost).toBe(feeHeader.congestionCost);
+      expect(result.protocolFee).toBe(feeHeader.protocolFee);
       expect(result.proverCost).toBe(feeHeader.proverCost);
     });
   });

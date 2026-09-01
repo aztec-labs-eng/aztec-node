@@ -260,7 +260,7 @@ describe('sequencer', () => {
     rollupContract.isEscapeHatchOpen.mockResolvedValue(false);
     // Default rollup reads used by pipelined fee-header derivation.
     rollupContract.getCheckpoint.mockResolvedValue({
-      feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, congestionCost: 0n, proverCost: 0n },
+      feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
     } as any);
     rollupContract.getManaTarget.mockResolvedValue(10_000n);
 
