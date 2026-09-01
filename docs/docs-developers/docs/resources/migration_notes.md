@@ -47,6 +47,23 @@ proofs falls back to WASM simulation, which is much slower.
 Type names keep the ACVM spelling (`NativeACVMSimulator`, `ACVMConfig`, `ACVMWitness`), since those
 describe the ACIR VM and its witness format rather than the tool that runs it.
 
+### [Protocol] Block header commits to a per-block tx effects tree
+
+The L2 block header gains a `tx_effects_tree_root` field: the root of a per-block merkle tree with one leaf per
+transaction, where each leaf binds the transaction hash to a structured hash of its effects (note hashes, nullifiers,
+L2-to-L1 messages, public data writes, and logs). Holding a block header is now enough to verify that a transaction was
+included in that block and produced exactly a given set of effects with a short membership proof, instead of replaying
+the checkpoint's full sponge blob. The root is computed by the rollup circuits and is available on `BlockHeader` as
+`txEffectsTreeRoot`; `TxEffect.computeTxEffectLeaf()` and `Body.computeTxEffectsTreeRoot()` compute the leaves and root
+from published data.
+
+This is a breaking protocol change: the block header serialization grew by one field, so every transaction hash,
+verification key, contract artifact, canonical contract address, and the genesis constants change. Contracts must be
+recompiled against the updated `aztec-nr`. The PXE oracle interface version was bumped (30 → 31), as was the TXE
+oracle interface version (8 → 9), and existing PXE databases are re-initialized on next open (data schema version
+14 → 15). Nodes resync their archiver, which now also stores the tx effects tree leaves of each block (archiver data
+schema version 9 → 10).
+
 ### [npm] Packages moved to the `@aztec-labs` scope
 
 Every package published from this repository is now scoped `@aztec-labs` instead of `@aztec`.
