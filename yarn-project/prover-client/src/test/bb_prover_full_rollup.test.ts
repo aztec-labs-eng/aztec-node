@@ -125,8 +125,10 @@ describe('prover/bb_prover/full-rollup', () => {
 
         // Generate test data for the 1/1 blocks epoch scenario. This has to run before the pairing point
         // hack below mutates numPublicInputs, since integration_proof_verification.test.ts consumes the
-        // dump with the full public input count and subtracts the pairing points itself.
-        if (numCheckpoints === 1 && numBlockPerCheckpoint === 1 && isGenerateTestDataEnabled()) {
+        // dump with the full public input count and subtracts the pairing points itself. Only a native
+        // prover may write it: under FAKE_PROOFS, or on a machine with no bb, epochResult carries a
+        // placeholder proof that would replace the fixture with something nothing can verify.
+        if (prover && numCheckpoints === 1 && numBlockPerCheckpoint === 1 && isGenerateTestDataEnabled()) {
           writeTestData(
             'yarn-project/end-to-end/src/fixtures/dumps/epoch_proof_result.json',
             JSON.stringify({
