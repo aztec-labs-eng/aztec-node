@@ -28,12 +28,13 @@ import { getLogger, startAnvil } from '../fixtures/utils.js';
 // loads a serialised RootRollupPublicInputs fixture, and verifies the proof on-chain via BBCircuitVerifier.
 // No Aztec node.
 //
-// EXCLUDED from every CI test list (see bootstrap.sh) and does NOT run anywhere. The committed
-// fixtures/dumps/epoch_proof_result.json is stale: it was last regenerated in Feb 2026, but the rollup
-// circuits and verification key have changed since, so bb and the on-chain HonkVerifier both reject the
-// proof ("Failed to verify RootRollupArtifact proof!"). Re-enabling it needs the fixture regenerated
-// against the current circuits (see the command above) and is better relocated alongside the bb-prover
-// circuit tests than kept here.
+// The committed fixtures/dumps/epoch_proof_result.json pins one root rollup proof and the verification key
+// it was produced against, so it has to be regenerated (see the command above) whenever the root rollup
+// circuit changes, the pinned bb version moves, or RootRollupPublicInputs' serialisation changes -- a layout
+// change makes RootRollupPublicInputs.fromString throw on the old dump before any proof is verified.
+//
+// TODO: this belongs alongside the bb-prover circuit tests rather than in end-to-end/composed. It needs no
+// local network -- it starts its own anvil -- but the compose runner starts a full one for it anyway.
 describe('proof_verification', () => {
   let proof: Proof;
   let publicInputs: RootRollupPublicInputs;

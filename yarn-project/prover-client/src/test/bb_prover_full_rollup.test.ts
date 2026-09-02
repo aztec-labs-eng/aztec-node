@@ -6,7 +6,7 @@ import { parseBooleanEnv } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
-import { getTestData, isGenerateTestDataEnabled } from '@aztec-labs/foundation/testing';
+import { isGenerateTestDataEnabled } from '@aztec-labs/foundation/testing';
 import { writeTestData } from '@aztec-labs/foundation/testing/files';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 
@@ -123,19 +123,23 @@ describe('prover/bb_prover/full-rollup', () => {
           await topTree.stop();
         }
 
+        // Generate test data for the 1/1 blocks epoch scenario. This has to run before the pairing point
+        // hack below mutates numPublicInputs, since integration_proof_verification.test.ts consumes the
+        // dump with the full public input count and subtracts the pairing points itself.
+        if (numCheckpoints === 1 && numBlockPerCheckpoint === 1 && isGenerateTestDataEnabled()) {
+          writeTestData(
+            'yarn-project/end-to-end/src/fixtures/dumps/epoch_proof_result.json',
+            JSON.stringify({
+              proof: epochResult.proof.toString(),
+              publicInputs: epochResult.publicInputs.toString(),
+            }),
+          );
+        }
+
         if (prover) {
           // TODO(https://github.com/AztecProtocol/aztec-packages/issues/13188): Handle the pairing point object without these hacks.
           epochResult.proof.numPublicInputs -= PAIRING_POINTS_SIZE;
           await expect(prover.verifyProof('RootRollupArtifact', epochResult.proof)).resolves.not.toThrow();
-        }
-
-        // Generate test data for the 1/1 blocks epoch scenario.
-        if (numCheckpoints === 1 && numBlockPerCheckpoint === 1 && isGenerateTestDataEnabled()) {
-          const epochProof = getTestData('epochProofResult').at(-1);
-          writeTestData(
-            'yarn-project/end-to-end/src/fixtures/dumps/epoch_proof_result.json',
-            JSON.stringify(epochProof!),
-          );
         }
       } finally {
         await Promise.all(subTrees.map(s => s.stop()));
