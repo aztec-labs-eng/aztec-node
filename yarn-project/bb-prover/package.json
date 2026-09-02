@@ -70,15 +70,15 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/bb.js": "0.1.0-dummy",
+    "@aztec-foundation/noir-noirc_abi": "0.1.0-dummy",
+    "@aztec-foundation/noir-types": "0.1.0-dummy",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/noir-protocol-circuits-types": "workspace:^",
     "@aztec-labs/simulator": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/telemetry-client": "workspace:^",
-    "@aztec-foundation/bb.js": "0.1.0-dummy",
-    "@aztec-foundation/noir-noirc_abi": "0.1.0-dummy",
-    "@aztec-foundation/noir-types": "0.1.0-dummy",
     "commander": "^12.1.0",
     "msgpackr": "^1.11.2",
     "pako": "^2.1.0",

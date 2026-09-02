@@ -59,13 +59,13 @@
     ]
   },
   "dependencies": {
-    "@aztec-labs/constants": "workspace:^",
-    "@aztec-labs/foundation": "workspace:^",
-    "@aztec-labs/stdlib": "workspace:^",
     "@aztec-foundation/bb.js": "0.1.0-dummy",
     "@aztec-foundation/noir-noir_codegen": "0.1.0-dummy",
     "@aztec-foundation/noir-noir_js": "0.1.0-dummy",
     "@aztec-foundation/noir-types": "0.1.0-dummy",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "change-case": "^5.4.4",
     "pako": "^2.1.0",
     "playwright": "1.49.0",
@@ -73,12 +73,12 @@
     "tslib": "^2.4.0"
   },
   "devDependencies": {
+    "@aztec-foundation/mock-protocol-circuits-artifacts": "0.1.0-dummy",
     "@aztec-labs/bb-prover": "workspace:^",
     "@aztec-labs/noir-protocol-circuits-types": "workspace:^",
     "@aztec-labs/noir-test-contracts.js": "workspace:^",
     "@aztec-labs/simulator": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
-    "@aztec-foundation/mock-protocol-circuits-artifacts": "0.1.0-dummy",
     "@jest/globals": "^30.0.0",
     "@playwright/test": "1.49.0",
     "@types/jest": "^30.0.0",

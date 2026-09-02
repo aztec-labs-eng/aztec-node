@@ -29,6 +29,8 @@
     "formatting": "run -T prettier --check ./src && run -T eslint ./src"
   },
   "dependencies": {
+    "@aztec-foundation/bb.js": "0.1.0-dummy",
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@aztec-labs/accounts": "workspace:^",
     "@aztec-labs/archiver": "workspace:^",
     "@aztec-labs/aztec": "workspace:^",
@@ -65,8 +67,6 @@
     "@aztec-labs/wallet-sdk": "workspace:^",
     "@aztec-labs/wallets": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
-    "@aztec-foundation/bb.js": "0.1.0-dummy",
-    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@iarna/toml": "^2.2.5",
     "@jest/globals": "^30.0.0",
     "@noble/curves": "=1.0.0",

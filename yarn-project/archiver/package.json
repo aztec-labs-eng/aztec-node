@@ -65,6 +65,7 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@aztec-labs/blob-client": "workspace:^",
     "@aztec-labs/blob-lib": "workspace:^",
     "@aztec-labs/constants": "workspace:^",
@@ -76,7 +77,6 @@
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/telemetry-client": "workspace:^",
-    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "lodash.groupby": "^4.6.0",
     "lodash.omit": "^4.5.0",
     "tslib": "^2.5.0",

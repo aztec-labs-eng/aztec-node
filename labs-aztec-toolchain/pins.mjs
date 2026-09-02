@@ -166,7 +166,7 @@ const SITES = [
     // Only bb.js and the noir packages track BB_VERSION: other @aztec-foundation-scoped pins (e.g. the viem
     // fork) version independently and must not be checked. A missing or empty version would
     // float to the registry's latest, so it is reported (found: null) rather than skipped.
-    name: "published @aztec npm pin",
+    name: "published @aztec-foundation npm pin",
     files: () => tracked("docs/examples/ts/*/config.yaml"),
     required: ["docs/examples/ts/recursive_verification/config.yaml"],
     pins(content, { bb }) {
@@ -175,7 +175,7 @@ const SITES = [
       for (const line of content.split("\n")) {
         if (!/^\s*#/.test(line)) {
           for (const m of line.matchAll(
-            /npm:@aztec\/(?:bb\.js|noir-[^@"'\s]*)(?:@([^"'\s]*))?/dg,
+            /npm:@aztec-foundation\/(?:bb\.js|noir-[^@"'\s]*)(?:@([^"'\s]*))?/dg,
           )) {
             const pin = m[1]
               ? { start: m.indices[1][0], end: m.indices[1][1], found: m[1] }
@@ -192,13 +192,12 @@ const SITES = [
       }
       return pins;
     },
-    // These have no local form (and keep the @aztec scope until the @aztec-foundation releases exist):
-    // the examples runner links bare @aztec names from
+    // These have no local form: the examples runner links bare @aztec-labs names from
     // yarn-project/, where bb.js and the noir packages do not exist, and its link: entries
     // install no transitive dependencies. Examples consume the published release even in
     // use-local mode.
     useLocal(content) {
-      if (/npm:@aztec\/(?:bb\.js|noir-)/.test(content)) {
+      if (/npm:@aztec-foundation\/(?:bb\.js|noir-)/.test(content)) {
         console.log(
           "docs example npm pins: left pinned (no local form for packages outside yarn-project).",
         );

@@ -63,14 +63,14 @@
     ]
   },
   "dependencies": {
-    "@aztec-labs/blob-lib": "workspace:^",
-    "@aztec-labs/constants": "workspace:^",
-    "@aztec-labs/foundation": "workspace:^",
-    "@aztec-labs/stdlib": "workspace:^",
     "@aztec-foundation/noir-acvm_js": "0.1.0-dummy",
     "@aztec-foundation/noir-noir_codegen": "0.1.0-dummy",
     "@aztec-foundation/noir-noirc_abi": "0.1.0-dummy",
     "@aztec-foundation/noir-types": "0.1.0-dummy",
+    "@aztec-labs/blob-lib": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "change-case": "^5.4.4",
     "tslib": "^2.4.0"
   },

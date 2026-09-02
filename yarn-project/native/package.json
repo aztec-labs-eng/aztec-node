@@ -15,8 +15,8 @@
     "../package.common.json"
   ],
   "dependencies": {
-    "@aztec-labs/foundation": "workspace:^",
     "@aztec-foundation/bb.js": "0.1.0-dummy",
+    "@aztec-labs/foundation": "workspace:^",
     "msgpackr": "^1.11.2"
   },
   "devDependencies": {

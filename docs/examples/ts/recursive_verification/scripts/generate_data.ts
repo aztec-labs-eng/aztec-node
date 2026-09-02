@@ -1,7 +1,7 @@
 import circuitJson from "../../../../target/hello_circuit.json" with { type: "json" };
 // docs:start:generate_data
-import { Noir } from "@aztec/noir-noir_js";
-import { Barretenberg, UltraHonkBackend, deflattenFields } from "@aztec/bb.js";
+import { Noir } from "@aztec-foundation/noir-noir_js";
+import { Barretenberg, UltraHonkBackend, deflattenFields } from "@aztec-foundation/bb.js";
 import fs from "fs";
 import { exit } from "process";
 

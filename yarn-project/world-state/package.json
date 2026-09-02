@@ -64,19 +64,19 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/wsdb": "0.1.0-dummy",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/protocol-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/telemetry-client": "workspace:^",
-    "@aztec-foundation/wsdb": "0.1.0-dummy",
     "msgpackr": "^1.11.2",
     "tslib": "^2.4.0",
     "zod": "^4"
   },
   "devDependencies": {
-    "@aztec-labs/archiver": "workspace:^",
     "@aztec-foundation/ipc-runtime": "0.1.0-dummy",
+    "@aztec-labs/archiver": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

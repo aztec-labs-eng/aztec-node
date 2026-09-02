@@ -76,6 +76,7 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@aztec-labs/accounts": "workspace:^",
     "@aztec-labs/archiver": "workspace:^",
     "@aztec-labs/aztec.js": "workspace:^",
@@ -88,7 +89,6 @@
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/wallets": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
-    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@ethersproject/wallet": "^5.8.0",
     "@iarna/toml": "^2.2.5",
     "@libp2p/peer-id-factory": "^3.0.4",
@@ -118,6 +118,7 @@
     "typescript": "^5.3.3"
   },
   "peerDependencies": {
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@aztec-labs/accounts": "workspace:^",
     "@aztec-labs/bb-prover": "workspace:^",
     "@aztec-labs/ethereum": "workspace:^",
@@ -125,8 +126,7 @@
     "@aztec-labs/noir-protocol-circuits-types": "workspace:^",
     "@aztec-labs/noir-test-contracts.js": "workspace:^",
     "@aztec-labs/protocol-contracts": "workspace:^",
-    "@aztec-labs/stdlib": "workspace:^",
-    "@aztec-foundation/l1-artifacts": "0.1.0-dummy"
+    "@aztec-labs/stdlib": "workspace:^"
   },
   "files": [
     "dest",

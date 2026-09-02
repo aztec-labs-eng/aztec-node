@@ -45,7 +45,7 @@
     "remark-math": "6"
   },
   "devDependencies": {
-    "@aztec-foundation/l1-artifacts": "6.0.0-nightly.20260826",
+    "@aztec-foundation/l1-artifacts": "6.0.0-nightly.20260902",
     "@docusaurus/tsconfig": "3.10.1",
     "@tsconfig/docusaurus": "^1.0.7",
     "cspell": "^8.19.4",
