@@ -11,12 +11,12 @@ import { getGenesisValues } from '@aztec-labs/world-state/testing';
  */
 describe('Testnet compatibility', () => {
   it('has expected VK tree root', () => {
-    const expectedRoots = [Fr.fromHexString('0x18e358ea5367f6069a4c1c08a2e0628fbb1b25c00b0b98160072d4ad397bae7c')];
+    const expectedRoots = [Fr.fromHexString('0x258bc0b99bbadc087d8d8f7c78e4b41ba24c8d6979dbe698e00411bd7ec11891')];
     expect(expectedRoots).toContainEqual(getVKTreeRoot());
   });
   it('has expected Protocol Contracts hash', () => {
     expect(protocolContractsHash).toEqual(
-      Fr.fromHexString('0x2d0277dcfbd0213fa60233bb3edb87acabedcaff904a4e65830be9f30b881f70'),
+      Fr.fromHexString('0x04b0ccfafec7ff9a4a31c67c21377f73a8c01dcadc8710ee2a8e7751565db7f4'),
     );
   });
   it('has expected Genesis tree roots', async () => {
@@ -26,7 +26,7 @@ describe('Testnet compatibility', () => {
     const { genesisArchiveRoot } = await getGenesisValues(initialFundedAccounts);
 
     expect(genesisArchiveRoot).toEqual(
-      Fr.fromHexString('0x1166dcb89990c7e99ee40ae5cd2bb2ea2542a28e5e72aa6c11daa4a7b1fa1e12'),
+      Fr.fromHexString('0x271f7321aa0cb733bdee9ddd1b0497bb1b4b97eea2182cee0f516c19005ab2bf'),
     );
   });
 });

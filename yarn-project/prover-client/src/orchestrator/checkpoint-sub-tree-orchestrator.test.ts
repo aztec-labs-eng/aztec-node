@@ -40,6 +40,7 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
     const { constants, blocks, l1ToL2Messages, previousBlockHeader } = await context.makeCheckpoint(numBlocks, {
       numTxsPerBlock,
     });
+    const computeTxEffectLeaf = jest.spyOn(blocks[0].txs[0].txEffect, 'computeTxEffectLeaf');
 
     const subTree = await CheckpointSubTreeOrchestrator.start(
       context.worldState,
@@ -70,6 +71,7 @@ describe('prover/orchestrator/checkpoint-sub-tree', () => {
       const result = await resultPromise;
       expect(result.blockProofOutputs).toHaveLength(1);
       expect(result.blockProofOutputs[0].proof).toBeDefined();
+      expect(computeTxEffectLeaf).toHaveBeenCalledTimes(1);
       // Parity gates the checkpoint root: the sub-tree proves it once per checkpoint and surfaces it for the top tree
       // to feed into the checkpoint root rollup.
       expect(result.inboxParityProof).toBeDefined();
