@@ -1,5 +1,5 @@
-import { BackendType, Barretenberg } from '@aztec/bb.js';
-import { FeeAssetHandlerAbi } from '@aztec/l1-artifacts';
+import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
+import { FeeAssetHandlerAbi } from '@aztec-foundation/l1-artifacts';
 
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
 import { AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';

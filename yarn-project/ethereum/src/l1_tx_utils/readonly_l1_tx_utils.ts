@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import { getKeys, merge, pick, times } from '@aztec-labs/foundation/collection';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';

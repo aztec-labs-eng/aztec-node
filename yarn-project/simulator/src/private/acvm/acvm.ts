@@ -3,7 +3,7 @@ import {
   type ForeignCallInput,
   type ForeignCallOutput,
   executeCircuitWithReturnWitness,
-} from '@aztec/noir-acvm_js';
+} from '@aztec-foundation/noir-acvm_js';
 
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
 import type { FunctionDebugMetadata } from '@aztec-labs/stdlib/abi';

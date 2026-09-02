@@ -1,5 +1,5 @@
-import { MockZKPassportVerifierAbi } from '@aztec/l1-artifacts/MockZKPassportVerifierAbi';
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { MockZKPassportVerifierAbi } from '@aztec-foundation/l1-artifacts/MockZKPassportVerifierAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';

@@ -94,6 +94,7 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/entrypoints": "workspace:^",
     "@aztec-labs/ethereum": "workspace:^",
@@ -101,15 +102,14 @@
     "@aztec-labs/protocol-contracts": "workspace:^",
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy",
     "axios": "^1.15.1",
     "tslib": "^2.4.0",
     "viem": "npm:@aztec/viem@2.38.2",
     "zod": "^4"
   },
   "devDependencies": {
+    "@aztec-foundation/protocol-contracts-artifacts": "0.1.0-dummy",
     "@aztec-labs/builder": "workspace:^",
-    "@aztec/protocol-contracts-artifacts": "0.1.0-dummy",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

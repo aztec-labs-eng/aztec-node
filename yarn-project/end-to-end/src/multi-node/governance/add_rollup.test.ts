@@ -4,7 +4,7 @@ import {
   RegisterNewRollupVersionPayloadAbi,
   RegisterNewRollupVersionPayloadBytecode,
   RegistryAbi,
-} from '@aztec/l1-artifacts';
+} from '@aztec-foundation/l1-artifacts';
 
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
 import type { AztecNodeService } from '@aztec-labs/aztec-node';

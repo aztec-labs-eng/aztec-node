@@ -1,5 +1,5 @@
-import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
-import { TestERC20Bytecode } from '@aztec/l1-artifacts/TestERC20Bytecode';
+import { TestERC20Abi } from '@aztec-foundation/l1-artifacts/TestERC20Abi';
+import { TestERC20Bytecode } from '@aztec-foundation/l1-artifacts/TestERC20Bytecode';
 
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';

@@ -1,6 +1,6 @@
-import { CircuitKind } from '@aztec/bb.js';
-import type { WitnessMap } from '@aztec/noir-acvm_js';
-import { serializeWitness } from '@aztec/noir-noirc_abi';
+import { CircuitKind } from '@aztec-foundation/bb.js';
+import type { WitnessMap } from '@aztec-foundation/noir-acvm_js';
+import { serializeWitness } from '@aztec-foundation/noir-noirc_abi';
 
 import { bufferSchema, mapSchema } from '@aztec-labs/foundation/schemas';
 import { Encoder } from 'msgpackr';

@@ -1,4 +1,4 @@
-import { AvmService } from '@aztec/bb-avm-sim';
+import { AvmService } from '@aztec-foundation/bb-avm-sim';
 
 import { AbortError } from '@aztec-labs/foundation/error';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';

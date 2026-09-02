@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { BatchedBlob, getEthBlobEvaluationInputs } from '@aztec-labs/blob-lib';
 import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';

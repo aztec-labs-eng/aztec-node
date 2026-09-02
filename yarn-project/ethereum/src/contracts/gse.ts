@@ -1,4 +1,4 @@
-import { GSEAbi } from '@aztec/l1-artifacts/GSEAbi';
+import { GSEAbi } from '@aztec-foundation/l1-artifacts/GSEAbi';
 
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { ProjPointType } from '@noble/curves/abstract/weierstrass';

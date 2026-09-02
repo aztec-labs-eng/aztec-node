@@ -1,5 +1,5 @@
-import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
-import { TestERC20Bytecode } from '@aztec/l1-artifacts/TestERC20Bytecode';
+import { TestERC20Abi } from '@aztec-foundation/l1-artifacts/TestERC20Abi';
+import { TestERC20Bytecode } from '@aztec-foundation/l1-artifacts/TestERC20Bytecode';
 
 import { NO_FROM } from '@aztec-labs/aztec.js/account';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';

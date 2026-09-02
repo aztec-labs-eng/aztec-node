@@ -108,8 +108,8 @@ export default [
             // See https://github.com/import-js/eslint-plugin-import/issues/2703
             '@libp2p/bootstrap',
             // Seems like ignoring l1-artifacts in the eslint call messes up no-unresolved
-            '@aztec/l1-artifacts',
-            '@aztec/bb.js',
+            '@aztec-foundation/l1-artifacts',
+            '@aztec-foundation/bb.js',
             // Conditional exports (browser/default) not resolved by eslint-import-resolver-typescript
             '@aztec-labs/wallets',
           ],

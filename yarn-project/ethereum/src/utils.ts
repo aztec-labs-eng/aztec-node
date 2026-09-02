@@ -1,4 +1,4 @@
-import { ErrorsAbi } from '@aztec/l1-artifacts/ErrorsAbi';
+import { ErrorsAbi } from '@aztec-foundation/l1-artifacts/ErrorsAbi';
 
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Logger } from '@aztec-labs/foundation/log';

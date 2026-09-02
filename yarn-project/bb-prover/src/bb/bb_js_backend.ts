@@ -1,4 +1,4 @@
-import { type AvmStat, type BackendOptions, BackendType, Barretenberg } from '@aztec/bb.js';
+import { type AvmStat, type BackendOptions, BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { FifoMemoryQueue } from '@aztec-labs/foundation/queue';

@@ -1,4 +1,4 @@
-import { BackendType, Barretenberg, BarretenbergSync } from '@aztec/bb.js';
+import { BackendType, Barretenberg, BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { parentPort, workerData } from 'node:worker_threads';

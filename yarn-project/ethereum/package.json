@@ -49,9 +49,9 @@
     "../package.common.json"
   ],
   "dependencies": {
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@aztec-labs/blob-lib": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy",
     "dotenv": "^16.0.3",
     "lodash.chunk": "^4.2.0",
     "lodash.pickby": "^4.5.0",

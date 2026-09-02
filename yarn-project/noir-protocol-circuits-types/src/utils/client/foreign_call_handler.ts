@@ -1,4 +1,4 @@
-import type { ForeignCallInput, ForeignCallOutput } from '@aztec/noir-acvm_js';
+import type { ForeignCallInput, ForeignCallOutput } from '@aztec-foundation/noir-acvm_js';
 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { LogLevels, applyStringFormatting, createLogger } from '@aztec-labs/foundation/log';

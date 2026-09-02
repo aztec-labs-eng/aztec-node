@@ -1,4 +1,4 @@
-import { findBbBinary } from '@aztec/bb.js';
+import { findBbBinary } from '@aztec-foundation/bb.js';
 
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';

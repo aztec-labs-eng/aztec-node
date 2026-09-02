@@ -33,8 +33,34 @@ The `@aztec` scope keeps the packages published for earlier versions, so an exis
 pinned to an older release continues to install unchanged. There is no `@aztec-labs` release of
 those older versions.
 
-Packages this repository does not publish keep their existing names. Notably `@aztec/viem`, the
-vendored viem fork consumed as `"viem": "npm:@aztec/viem@<version>"`, is unchanged.
+The vendored viem fork is unchanged: it is still consumed as
+`"viem": "npm:@aztec/viem@<version>"`.
+
+### [npm] Foundation packages moved to the `@aztec-foundation` scope
+
+The packages built by the foundation repository and consumed here - `bb.js`, `bb-avm-sim`,
+`cdb`, `wsdb`, `ipc-runtime`, the `noir-*` packages, `l1-artifacts`, `constants-codegen` and
+the protocol artifacts packages - are now scoped `@aztec-foundation` instead of `@aztec`.
+Update any direct dependency on them:
+
+```diff
+-import { Barretenberg } from '@aztec/bb.js';
++import { Barretenberg } from '@aztec-foundation/bb.js';
+```
+
+```diff
+-  "@aztec/bb.js": "<version>",
+-  "@aztec/noir-noir_js": "<version>",
++  "@aztec-foundation/bb.js": "<version>",
++  "@aztec-foundation/noir-noir_js": "<version>",
+```
+
+Most projects reach these packages only through `@aztec-labs/*`, which carries the change for
+them; only a direct dependency needs updating.
+
+The `@aztec` scope keeps the packages published for earlier versions, so an existing project
+pinned to an older release continues to install unchanged. There is no `@aztec-foundation`
+release of those older versions: the scope starts at `6.0.0-nightly.20260901`.
 
 ### [Aztec.nr] `DelayedPublicMutable` rejects delays below one hour
 

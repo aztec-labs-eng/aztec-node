@@ -1,4 +1,4 @@
-import { EmpireBaseAbi, ErrorsAbi, RollupAbi, SlashingProposerAbi } from '@aztec/l1-artifacts';
+import { EmpireBaseAbi, ErrorsAbi, RollupAbi, SlashingProposerAbi } from '@aztec-foundation/l1-artifacts';
 
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { Blob, getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';

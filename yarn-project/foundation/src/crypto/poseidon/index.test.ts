@@ -1,4 +1,4 @@
-import { BarretenbergSync } from '@aztec/bb.js';
+import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { Fr } from '../../curves/bn254/field.js';
 import { poseidon2Permutation } from './index.js';

@@ -1,5 +1,5 @@
-import initACVM, { type ExecutionError, type ForeignCallHandler, executeCircuit } from '@aztec/noir-acvm_js';
-import initAbi from '@aztec/noir-noirc_abi';
+import initACVM, { type ExecutionError, type ForeignCallHandler, executeCircuit } from '@aztec-foundation/noir-acvm_js';
+import initAbi from '@aztec-foundation/noir-noirc_abi';
 
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';

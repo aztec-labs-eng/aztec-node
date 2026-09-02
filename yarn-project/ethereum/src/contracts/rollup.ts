@@ -1,6 +1,6 @@
-import { EscapeHatchAbi } from '@aztec/l1-artifacts/EscapeHatchAbi';
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
-import { RollupStorage } from '@aztec/l1-artifacts/RollupStorage';
+import { EscapeHatchAbi } from '@aztec-foundation/l1-artifacts/EscapeHatchAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
+import { RollupStorage } from '@aztec-foundation/l1-artifacts/RollupStorage';
 
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';

@@ -1,4 +1,4 @@
-import { TestERC20Abi, TestERC20Bytecode } from '@aztec/l1-artifacts';
+import { TestERC20Abi, TestERC20Bytecode } from '@aztec-foundation/l1-artifacts';
 
 import { Blob } from '@aztec-labs/blob-lib';
 import { times, timesAsync } from '@aztec-labs/foundation/collection';

@@ -1,4 +1,4 @@
-import { RollupAbi, StakingAssetHandlerAbi, TestERC20Abi } from '@aztec/l1-artifacts';
+import { RollupAbi, StakingAssetHandlerAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import { createEthereumChain, isAnvilTestChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client, getPublicClient } from '@aztec-labs/ethereum/client';

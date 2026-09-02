@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { L1RpcError } from '@aztec-labs/ethereum/client';
 import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec-labs/ethereum/contracts';

@@ -1,4 +1,4 @@
-import { TestERC20Abi } from '@aztec/l1-artifacts';
+import { TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { BatchCall } from '@aztec-labs/aztec.js/contracts';

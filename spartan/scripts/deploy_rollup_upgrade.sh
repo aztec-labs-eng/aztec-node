@@ -10,7 +10,7 @@ set -euo pipefail
 # Loads L1 contract defaults from network-defaults.yml (with YAML anchor inheritance),
 # infers L1 chain from L1_CHAIN_ID, fetches GCP secrets, builds yarn-project for
 # genesis values, then runs the DeployRollupForUpgrade forge script from the foundry
-# bundle shipped in @aztec/l1-artifacts (via run_rollup_upgrade.js).
+# bundle shipped in @aztec-foundation/l1-artifacts (via run_rollup_upgrade.js).
 #
 # Usage:
 #   ./deploy_rollup_upgrade.sh <registry_address>

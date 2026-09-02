@@ -1,5 +1,5 @@
-import { NewGovernanceProposerPayloadAbi } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadAbi';
-import { NewGovernanceProposerPayloadBytecode } from '@aztec/l1-artifacts/NewGovernanceProposerPayloadBytecode';
+import { NewGovernanceProposerPayloadAbi } from '@aztec-foundation/l1-artifacts/NewGovernanceProposerPayloadAbi';
+import { NewGovernanceProposerPayloadBytecode } from '@aztec-foundation/l1-artifacts/NewGovernanceProposerPayloadBytecode';
 
 import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';

@@ -1,4 +1,4 @@
-import { TestERC20Abi } from '@aztec/l1-artifacts';
+import { TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';

@@ -71,6 +71,8 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/bb.js": "0.1.0-dummy",
+    "@aztec-foundation/noir-acvm_js": "0.1.0-dummy",
     "@aztec-labs/bb-prover": "workspace:^",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/ethereum": "workspace:^",
@@ -82,8 +84,6 @@
     "@aztec-labs/simulator": "workspace:^",
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
-    "@aztec/bb.js": "0.1.0-dummy",
-    "@aztec/noir-acvm_js": "0.1.0-dummy",
     "koa": "^2.16.1",
     "koa-router": "^13.1.1",
     "lodash.omit": "^4.5.0",

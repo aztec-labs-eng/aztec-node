@@ -1,4 +1,4 @@
-import { SlashingProposerAbi } from '@aztec/l1-artifacts/SlashingProposerAbi';
+import { SlashingProposerAbi } from '@aztec-foundation/l1-artifacts/SlashingProposerAbi';
 
 import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';

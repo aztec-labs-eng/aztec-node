@@ -258,14 +258,16 @@ function checkVkBlocksFit(families: Family[], dimensionsByGroup: Record<string, 
 const main = async () => {
   const config = JSON.parse(
     await fs.readFile(
-      new URL(import.meta.resolve('@aztec/protocol-circuits-artifacts/private_kernel_reset_config.json')),
+      new URL(import.meta.resolve('@aztec-foundation/protocol-circuits-artifacts/private_kernel_reset_config.json')),
       'utf8',
     ),
   ) as PrivateKernelResetDimensionsConfig;
 
   const dimensionsByGroup = JSON.parse(
     await fs.readFile(
-      new URL(import.meta.resolve('@aztec/protocol-circuits-artifacts/private_kernel_reset_dimensions.json')),
+      new URL(
+        import.meta.resolve('@aztec-foundation/protocol-circuits-artifacts/private_kernel_reset_dimensions.json'),
+      ),
       'utf8',
     ),
   ) as Record<string, number[][]>;

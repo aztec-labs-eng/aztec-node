@@ -1,5 +1,5 @@
-import { RegistryAbi } from '@aztec/l1-artifacts/RegistryAbi';
-import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
+import { RegistryAbi } from '@aztec-foundation/l1-artifacts/RegistryAbi';
+import { TestERC20Abi } from '@aztec-foundation/l1-artifacts/TestERC20Abi';
 
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';

@@ -1,4 +1,4 @@
-import type { WitnessMap } from '@aztec/noir-types';
+import type { WitnessMap } from '@aztec-foundation/noir-types';
 
 import {
   AVM_V2_PROOF_LENGTH_IN_FIELDS,

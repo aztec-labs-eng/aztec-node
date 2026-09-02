@@ -1,4 +1,4 @@
-import { FeeAssetHandlerAbi } from '@aztec/l1-artifacts/FeeAssetHandlerAbi';
+import { FeeAssetHandlerAbi } from '@aztec-foundation/l1-artifacts/FeeAssetHandlerAbi';
 
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Hex, encodeFunctionData, getContract } from 'viem';

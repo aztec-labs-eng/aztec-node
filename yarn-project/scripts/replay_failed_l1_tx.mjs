@@ -4,7 +4,7 @@
  * Supports GCS, S3, R2, and local file paths.
  * Usage: node scripts/replay_failed_l1_tx.mjs gs://bucket/path/simulation/0xabc123.json [--rpc-url URL]
  */
-import { ErrorsAbi, RollupAbi } from '@aztec/l1-artifacts';
+import { ErrorsAbi, RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { createLogger } from '@aztec-labs/foundation/log';
 import { createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';

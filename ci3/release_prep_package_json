@@ -19,7 +19,7 @@ fi
 
 # NPM_RELEASE_RESOLUTIONS (a JSON map: the enclosing workspace root's `resolutions` field)
 # selects scoped mode: only the @aztec-labs packages local to the workspace being released are
-# co-published right now and get $version; every other @aztec/@aztec-labs dependency is an external pin
+# co-published right now and get $version; every other first-party dependency is an external pin
 # and gets the version the root resolutions field decides. A resolutions entry takes
 # precedence over the declared specifier — resolutions override manifest declarations at
 # install time too, so a mis-declared specifier (e.g. workspace:* for a package that is not
@@ -27,16 +27,17 @@ fi
 # workspace:/portal:/file: specifier mark the dependency as workspace-local; anything else
 # is a hard error — the manifests declare pins as placeholders (0.1.0-dummy), and one with
 # no resolutions entry would be published as an uninstallable placeholder. Without the
-# variable, every @aztec/@aztec-labs dependency gets $version (all packages released
-# simultaneously with one version). Both scopes are selected because the workspace publishes
-# under @aztec-labs while the foundation packages it pins are still @aztec-scoped.
+# variable, every first-party dependency gets $version (all packages released
+# simultaneously with one version). All three scopes are selected: the workspace publishes
+# under @aztec-labs, the foundation packages it pins are @aztec-foundation, and @aztec still
+# holds the vendored viem fork.
 if [ -n "${NPM_RELEASE_RESOLUTIONS:-}" ]; then
   for deps in dependencies devDependencies peerDependencies optionalDependencies; do
     # No && between jq and mv: a failing non-final command in an && list doesn't trip
     # set -e, and the resolution errors below must abort the release.
     jq --arg v "$version" --argjson res "$NPM_RELEASE_RESOLUTIONS" "
       if .$deps == null then . else .$deps |= with_entries(
-        if (.key | (startswith(\"@aztec/\") or startswith(\"@aztec-labs/\"))) then
+        if (.key | (startswith(\"@aztec/\") or startswith(\"@aztec-labs/\") or startswith(\"@aztec-foundation/\"))) then
           if \$res[.key] then
             .value = (if (\$res[.key] | test(\"^(workspace|portal|file):\")) then \$v else \$res[.key] end)
           elif (.value | test(\"^(workspace|portal|file):\")) then .value = \$v
@@ -50,7 +51,7 @@ elif [ "$check_only" -eq 0 ]; then
   # While we don't strictly need to update devDependencies, 'workspace:^' is not a valid URL in npm.
   for deps in dependencies devDependencies peerDependencies optionalDependencies; do
     # Update each dependency @aztec package version in package.json.
-    for pkg in $(jq --raw-output "(.$deps // {}) | keys[] | select(startswith(\"@aztec/\") or startswith(\"@aztec-labs/\"))" package.json); do
+    for pkg in $(jq --raw-output "(.$deps // {}) | keys[] | select(startswith(\"@aztec/\") or startswith(\"@aztec-labs/\") or startswith(\"@aztec-foundation/\"))" package.json); do
       jq --arg v $version ".$deps[\"$pkg\"] = \$v" package.json >$tmp
       mv $tmp package.json
     done

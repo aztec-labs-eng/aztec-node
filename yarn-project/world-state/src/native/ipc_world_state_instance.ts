@@ -1,4 +1,4 @@
-import { AsyncApi, WsdbService } from '@aztec/wsdb';
+import { AsyncApi, WsdbService } from '@aztec-foundation/wsdb';
 import type {
   WorldStateDBStats as WsdbDBStats,
   DBStats as WsdbDBStatsInner,
@@ -8,7 +8,7 @@ import type {
   WorldStateStatusSummary as WsdbStatusSummary,
   TreeDBStats as WsdbTreeDBStats,
   TreeMeta as WsdbTreeMeta,
-} from '@aztec/wsdb';
+} from '@aztec-foundation/wsdb';
 
 import {
   ARCHIVE_HEIGHT,

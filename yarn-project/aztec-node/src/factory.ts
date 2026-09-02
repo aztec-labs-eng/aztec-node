@@ -91,7 +91,7 @@ export async function createAztecNodeService(
   const log = deps.logger ?? createLogger('node');
 
   // Initialise the bb.js sync WASM singleton here, before any subsystem runs.
-  const { BarretenbergSync } = await import('@aztec/bb.js');
+  const { BarretenbergSync } = await import('@aztec-foundation/bb.js');
   await BarretenbergSync.initSingleton();
 
   // Warm the KZG trusted-setup singleton before any subsystem runs. getKzg() synchronously builds

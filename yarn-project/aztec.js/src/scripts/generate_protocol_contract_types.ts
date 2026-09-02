@@ -19,7 +19,7 @@ import path from 'path';
 const log = console.log;
 
 const artifactsPkgRoot = path.dirname(
-  fileURLToPath(import.meta.resolve('@aztec/protocol-contracts-artifacts/package.json')),
+  fileURLToPath(import.meta.resolve('@aztec-foundation/protocol-contracts-artifacts/package.json')),
 );
 const srcPath = path.join(artifactsPkgRoot, 'artifacts');
 const outputDir = path.join(import.meta.dirname, '../contract/protocol_contracts');

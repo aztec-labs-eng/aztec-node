@@ -1,5 +1,5 @@
-import type { RawAssertionPayload } from '@aztec/noir-acvm_js';
-import { abiDecodeError } from '@aztec/noir-noirc_abi';
+import type { RawAssertionPayload } from '@aztec-foundation/noir-acvm_js';
+import { abiDecodeError } from '@aztec-foundation/noir-noirc_abi';
 
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';

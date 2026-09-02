@@ -1,4 +1,4 @@
-import { BackendType, BarretenbergSync } from '@aztec/bb.js';
+import { BackendType, BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { DefaultWaitOpts } from '@aztec-labs/aztec.js/contracts';
 import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';

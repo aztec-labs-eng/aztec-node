@@ -1,4 +1,4 @@
-import { BBApiException, BarretenbergSync } from '@aztec/bb.js';
+import { BBApiException, BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { Fq, Fr } from './field.js';
 import { Bn254G1Point, Bn254G2Point } from './index.js';

@@ -1,4 +1,4 @@
-import { AztecClientBackend, Barretenberg } from '@aztec/bb.js';
+import { AztecClientBackend, Barretenberg } from '@aztec-foundation/bb.js';
 
 import { CHONK_PROOF_LENGTH, CHONK_VK_LENGTH_IN_FIELDS, ULTRA_VK_LENGTH_IN_FIELDS } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';

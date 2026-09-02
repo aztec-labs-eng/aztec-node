@@ -67,6 +67,7 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/bb.js": "0.1.0-dummy",
     "@aztec-labs/accounts": "workspace:^",
     "@aztec-labs/aztec.js": "workspace:^",
     "@aztec-labs/cli": "workspace:^",
@@ -78,7 +79,6 @@
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/wallet-sdk": "workspace:^",
-    "@aztec/bb.js": "0.1.0-dummy",
     "commander": "^12.1.0",
     "inquirer": "^10.1.8",
     "source-map-support": "^0.5.21",

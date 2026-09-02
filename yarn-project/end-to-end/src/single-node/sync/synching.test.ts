@@ -31,7 +31,7 @@
  * checkpointCount: 10, txCount: 36, complexity: PublicTransfer:  {"numberOfBlocks":18, "syncTime":21.340179460525512}
  * checkpointCount: 10, txCount: 9,  complexity: Spam:            {"numberOfBlocks":17, "syncTime":49.40888188171387}
  */
-import { RollupAbi } from '@aztec/l1-artifacts';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
 import { createArchiver } from '@aztec-labs/archiver';

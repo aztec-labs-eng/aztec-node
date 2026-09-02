@@ -1,4 +1,4 @@
-import { BackendType, BarretenbergSync } from '@aztec/bb.js';
+import { BackendType, BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import {
   MAX_APPS_PER_KERNEL,

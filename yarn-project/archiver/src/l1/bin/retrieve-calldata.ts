@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';

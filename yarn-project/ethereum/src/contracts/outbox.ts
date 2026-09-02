@@ -1,4 +1,4 @@
-import { OutboxAbi } from '@aztec/l1-artifacts/OutboxAbi';
+import { OutboxAbi } from '@aztec-foundation/l1-artifacts/OutboxAbi';
 
 import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';

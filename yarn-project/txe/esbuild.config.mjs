@@ -4,7 +4,7 @@
 // This is the dominant cost of cold-starting TXE.
 //
 // Native modules (LMDB, @aztec-labs/native, msgpackr, snappy, etc.) and packages that load their own
-// .wasm assets at runtime (@aztec/noir-acvm_js, @aztec/noir-noirc_abi, @aztec/bb.js) stay
+// .wasm assets at runtime (@aztec-foundation/noir-acvm_js, @aztec-foundation/noir-noirc_abi, @aztec-foundation/bb.js) stay
 // external — esbuild cannot bundle .node binaries, and bundling the WASM-loader JS would break
 // relative paths to the .wasm files.
 //
@@ -145,11 +145,11 @@ const result = await build({
     'node-eth-kzg',
     '@aztec-labs/native',
     // WASM-loading packages.
-    '@aztec/noir-acvm_js',
-    '@aztec/noir-noirc_abi',
+    '@aztec-foundation/noir-acvm_js',
+    '@aztec-foundation/noir-noirc_abi',
     // bb.js loads barretenberg-threads.wasm.gz via a path computed relative to its own module
     // location — bundling moves the JS but not the .wasm.gz, breaking the load.
-    '@aztec/bb.js',
+    '@aztec-foundation/bb.js',
     // Artifacts the TXE worker never executes (rollup, parity, kernel circuits, VKs). They ship
     // as large JSON files and get re-exported from a barrel without proper `sideEffects: false`,
     // so esbuild can't tree-shake them. Externalizing the whole package keeps them off the
@@ -173,7 +173,7 @@ const result = await build({
     // Keeping it external avoids bundling forwarder_proxy (whose CLI guard executes when
     // bundled), viem, abitype, and the rest of the L1 client surface.
     '@aztec-labs/ethereum',
-    '@aztec/l1-artifacts',
+    '@aztec-foundation/l1-artifacts',
     // Same reasoning: stdlib/p2p/signature_utils, archiver/l1, and aztec-node/config all
     // statically import `viem` for L1 RPC + signing primitives. None of those code paths execute
     // in TXE, so externalize the whole tree.

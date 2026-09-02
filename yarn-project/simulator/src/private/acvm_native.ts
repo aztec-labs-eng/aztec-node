@@ -1,4 +1,4 @@
-import type { ForeignCallHandler, WitnessMap } from '@aztec/noir-acvm_js';
+import type { ForeignCallHandler, WitnessMap } from '@aztec-foundation/noir-acvm_js';
 
 import { runInDirectory } from '@aztec-labs/foundation/fs';
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';

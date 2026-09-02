@@ -77,7 +77,7 @@ The preprocessing system uses these environment variables:
 - `#include_aztec_version` - Uses `COMMIT_TAG`
 - `#include_devnet_version`, `#include_testnet_version`, `#include_mainnet_version` - Version-specific macros
 
-**`#include_code` paths**: Snippet paths may point into `docs/node_modules` (e.g. `docs/node_modules/@aztec/l1-artifacts/...`). For those snippets the generated source link resolves to the installed package's own version tag, NOT `COMMIT_TAG` - only the package's tag is guaranteed to match the extracted snippet line-for-line (see `src/preprocess/include_code.js`).
+**`#include_code` paths**: Snippet paths may point into `docs/node_modules` (e.g. `docs/node_modules/@aztec-foundation/l1-artifacts/...`). For those snippets the generated source link resolves to the installed package's own version tag, NOT `COMMIT_TAG` - only the package's tag is guaranteed to match the extracted snippet line-for-line (see `src/preprocess/include_code.js`).
 
 ### Conditional Content
 
@@ -162,7 +162,7 @@ The `examples/` directory contains runnable code examples that are included in d
 
 **Validation (type-checking)**: `examples/bootstrap.sh` compiles Noir circuits, Noir contracts, Solidity, and type-checks TypeScript examples. This runs on every PR.
 
-The Solidity examples compile against the l1-contracts sources shipped in the `@aztec/l1-artifacts` devDependency (see `examples/solidity/foundry.toml`). Its pin in `package.json` must equal `BB_VERSION` in `labs-aztec-toolchain/bootstrap.sh` - bumping one without the other fails CI (`check_pin_drift`).
+The Solidity examples compile against the l1-contracts sources shipped in the `@aztec-foundation/l1-artifacts` devDependency (see `examples/solidity/foundry.toml`). Its pin in `package.json` must equal `BB_VERSION` in `labs-aztec-toolchain/bootstrap.sh` - bumping one without the other fails CI (`check_pin_drift`).
 
 **Execution (runtime testing)**: TypeScript examples in `examples/ts/` are executed against a live Aztec network via Docker Compose. The `examples/ts/docker-compose.yml` spins up Anvil (L1 fork), an Aztec local network, and a runner service that executes the examples.
 

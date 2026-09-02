@@ -56,6 +56,7 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/l1-artifacts": "0.1.0-dummy",
     "@aztec-labs/archiver": "workspace:^",
     "@aztec-labs/bb-prover": "workspace:^",
     "@aztec-labs/blob-client": "workspace:^",
@@ -74,7 +75,6 @@
     "@aztec-labs/stdlib": "workspace:^",
     "@aztec-labs/telemetry-client": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
-    "@aztec/l1-artifacts": "0.1.0-dummy",
     "source-map-support": "^0.5.21",
     "tslib": "^2.4.0",
     "viem": "npm:@aztec/viem@2.38.2"

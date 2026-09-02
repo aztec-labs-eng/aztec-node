@@ -1,5 +1,5 @@
-import { type IpcClientAsync, UdsIpcClient, createNapiShmAsyncClient } from '@aztec/ipc-runtime';
-import { AsyncApi } from '@aztec/wsdb';
+import { type IpcClientAsync, UdsIpcClient, createNapiShmAsyncClient } from '@aztec-foundation/ipc-runtime';
+import { AsyncApi } from '@aztec-foundation/wsdb';
 
 import { createLogger } from '@aztec-labs/foundation/log';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';

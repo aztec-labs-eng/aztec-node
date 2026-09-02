@@ -1,6 +1,6 @@
-import { GovernanceProposerAbi } from '@aztec/l1-artifacts/GovernanceProposerAbi';
-import { TestERC20Abi } from '@aztec/l1-artifacts/TestERC20Abi';
-import { TestERC20Bytecode } from '@aztec/l1-artifacts/TestERC20Bytecode';
+import { GovernanceProposerAbi } from '@aztec-foundation/l1-artifacts/GovernanceProposerAbi';
+import { TestERC20Abi } from '@aztec-foundation/l1-artifacts/TestERC20Abi';
+import { TestERC20Bytecode } from '@aztec-foundation/l1-artifacts/TestERC20Bytecode';
 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';

@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import type { BlobKzgInstance } from '@aztec-labs/blob-lib/types';
 import { maxBigint } from '@aztec-labs/foundation/bigint';

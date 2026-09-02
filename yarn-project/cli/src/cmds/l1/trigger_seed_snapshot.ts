@@ -1,4 +1,4 @@
-import { RollupAbi } from '@aztec/l1-artifacts/RollupAbi';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';

@@ -1,4 +1,4 @@
-import { BarretenbergSync, flattenChonkProofFields } from '@aztec/bb.js';
+import { BarretenbergSync, flattenChonkProofFields } from '@aztec-foundation/bb.js';
 
 import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { times } from '@aztec-labs/foundation/collection';

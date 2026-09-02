@@ -1,5 +1,5 @@
-import { GSEAbi } from '@aztec/l1-artifacts/GSEAbi';
-import { SlasherAbi } from '@aztec/l1-artifacts/SlasherAbi';
+import { GSEAbi } from '@aztec-foundation/l1-artifacts/GSEAbi';
+import { SlasherAbi } from '@aztec-foundation/l1-artifacts/SlasherAbi';
 
 import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';

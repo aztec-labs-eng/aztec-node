@@ -283,7 +283,7 @@ export async function preloadCrsDataForVerifying(
   log: LogFn,
 ): Promise<void> {
   if (realProofs) {
-    const { Crs, GrumpkinCrs } = await import('@aztec/bb.js');
+    const { Crs, GrumpkinCrs } = await import('@aztec-foundation/bb.js');
     await Promise.all([Crs.new(2 ** 1, undefined, log), GrumpkinCrs.new(2 ** 16, undefined, log)]);
   }
 }
@@ -298,7 +298,7 @@ export async function preloadCrsDataForServerSideProving(
   log: LogFn,
 ): Promise<void> {
   if (realProofs) {
-    const { Crs, GrumpkinCrs } = await import('@aztec/bb.js');
+    const { Crs, GrumpkinCrs } = await import('@aztec-foundation/bb.js');
     await Promise.all([Crs.new(2 ** 25, undefined, log), GrumpkinCrs.new(2 ** 18, undefined, log)]);
   }
 }

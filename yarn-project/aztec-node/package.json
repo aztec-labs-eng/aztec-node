@@ -65,6 +65,7 @@
     ]
   },
   "dependencies": {
+    "@aztec-foundation/bb.js": "0.1.0-dummy",
     "@aztec-labs/archiver": "workspace:^",
     "@aztec-labs/bb-prover": "workspace:^",
     "@aztec-labs/blob-client": "workspace:^",
@@ -89,7 +90,6 @@
     "@aztec-labs/validator-client": "workspace:^",
     "@aztec-labs/validator-ha-signer": "workspace:^",
     "@aztec-labs/world-state": "workspace:^",
-    "@aztec/bb.js": "0.1.0-dummy",
     "koa": "^2.16.1",
     "koa-router": "^13.1.1",
     "tslib": "^2.4.0",
