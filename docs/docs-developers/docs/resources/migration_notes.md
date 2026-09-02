@@ -33,8 +33,34 @@ The `@aztec` scope keeps the packages published for earlier versions, so an exis
 pinned to an older release continues to install unchanged. There is no `@aztec-labs` release of
 those older versions.
 
-Packages this repository does not publish keep their existing names. Notably `@aztec/viem`, the
-vendored viem fork consumed as `"viem": "npm:@aztec/viem@<version>"`, is unchanged.
+The vendored viem fork is unchanged: it is still consumed as
+`"viem": "npm:@aztec/viem@<version>"`.
+
+### [npm] Foundation packages moved to the `@aztec-foundation` scope
+
+The packages built by the foundation repository and consumed here - `bb.js`, `bb-avm-sim`,
+`cdb`, `wsdb`, `ipc-runtime`, the `noir-*` packages, `l1-artifacts`, `constants-codegen` and
+the protocol artifacts packages - are now scoped `@aztec-foundation` instead of `@aztec`.
+Update any direct dependency on them:
+
+```diff
+-import { Barretenberg } from '@aztec/bb.js';
++import { Barretenberg } from '@aztec-foundation/bb.js';
+```
+
+```diff
+-  "@aztec/bb.js": "<version>",
+-  "@aztec/noir-noir_js": "<version>",
++  "@aztec-foundation/bb.js": "<version>",
++  "@aztec-foundation/noir-noir_js": "<version>",
+```
+
+Most projects reach these packages only through `@aztec-labs/*`, which carries the change for
+them; only a direct dependency needs updating.
+
+The `@aztec` scope keeps the packages published for earlier versions, so an existing project
+pinned to an older release continues to install unchanged. There is no `@aztec-foundation`
+release of those older versions: the scope starts at `6.0.0-nightly.20260901`.
 
 ### [Aztec.nr] `DelayedPublicMutable` rejects delays below one hour
 
@@ -1219,7 +1245,7 @@ If you were already using `emit_private_log_vec_unsafe` / `emit_raw_note_log_vec
 
 ### [bb.js / accounts / aztec.nr] Schnorr signatures switched to Poseidon2
 
-The Schnorr challenge hash function changed from `blake2s(pedersen(R.x, pubkey.x, pubkey.y) ‖ message)` to `Poseidon2(DST, R.x, pubkey.x, pubkey.y, message)`, where `DST = poseidon2_hash_bytes("schnorr_grumpkin_poseidon2")` is a domain separation tag binding signatures to this scheme. The change applies end-to-end across the native signer (`bb`), `@aztec-foundation/bb.js`, the noir verifier library (`noir-lang/schnorr` v0.2.0 → v0.4.0), and both standard Schnorr account contracts. The auth witness on-wire shape also changes from `[u8; 64]` (the serialized `(s, e)` bytes) to `[Field; 4]` (`[s.lo, s.hi, e.lo, e.hi]`, each scalar split into two 128-bit limbs).
+The Schnorr challenge hash function changed from `blake2s(pedersen(R.x, pubkey.x, pubkey.y) ‖ message)` to `Poseidon2(DST, R.x, pubkey.x, pubkey.y, message)`, where `DST = poseidon2_hash_bytes("schnorr_grumpkin_poseidon2")` is a domain separation tag binding signatures to this scheme. The change applies end-to-end across the native signer (`bb`), `@aztec/bb.js`, the noir verifier library (`noir-lang/schnorr` v0.2.0 → v0.4.0), and both standard Schnorr account contracts. The auth witness on-wire shape also changes from `[u8; 64]` (the serialized `(s, e)` bytes) to `[Field; 4]` (`[s.lo, s.hi, e.lo, e.hi]`, each scalar split into two 128-bit limbs).
 
 **Impact:** A previously-deployed Schnorr account cannot be controlled by the new TypeScript code. Both the signature scheme and the auth witness format change, so signatures produced by the new code will fail in-circuit verification against the old account contract, and old-style 64-byte auth witnesses will not decode in the new contract. Users with existing Schnorr accounts on testnet must deploy a fresh account contract and migrate funds. ECDSA accounts (`ecdsa_k`, `ecdsa_r`) are unaffected.
 
