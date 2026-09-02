@@ -3,67 +3,53 @@ import type { InputMap } from '@aztec-foundation/noir-types';
 
 import { INBOX_PARITY_SIZE_LARGE, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_SMALL } from '@aztec-labs/constants';
 import { pushTestData } from '@aztec-labs/foundation/testing';
-import type { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec-labs/stdlib/parity';
+import type { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
 import type {
   BlockMergeRollupPrivateInputs,
-  BlockRollupPublicInputs,
   BlockRootNoTxsRollupPrivateInputs,
   BlockRootRollupPrivateInputs,
   BlockRootSingleTxRollupPrivateInputs,
   CheckpointMergeRollupPrivateInputs,
   CheckpointPaddingRollupPrivateInputs,
-  CheckpointRollupPublicInputs,
   CheckpointRootRollupPrivateInputs,
   CheckpointRootSingleBlockRollupPrivateInputs,
   PrivateTxBaseRollupPrivateInputs,
   PublicChonkVerifierPrivateInputs,
-  PublicChonkVerifierPublicInputs,
   PublicTxBaseRollupPrivateInputs,
   RootRollupPrivateInputs,
-  RootRollupPublicInputs,
   TxMergeRollupPrivateInputs,
-  TxRollupPublicInputs,
 } from '@aztec-labs/stdlib/rollup';
 
 import { type ServerProtocolArtifact, mapProtocolArtifactNameToCircuitName } from '../artifacts/types.js';
 import {
   mapBlockMergeRollupPrivateInputsToNoir,
-  mapBlockRollupPublicInputsFromNoir,
   mapBlockRootNoTxsRollupPrivateInputsToNoir,
   mapBlockRootRollupPrivateInputsToNoir,
   mapBlockRootSingleTxRollupPrivateInputsToNoir,
   mapCheckpointMergeRollupPrivateInputsToNoir,
-  mapCheckpointRollupPublicInputsFromNoir,
   mapCheckpointRootRollupPrivateInputsToNoir,
   mapCheckpointRootSingleBlockRollupPrivateInputsToNoir,
   mapInboxParityPrivateInputsToNoir,
-  mapParityPublicInputsFromNoir,
   mapPrivateTxBaseRollupPrivateInputsToNoir,
   mapPublicChonkVerifierPrivateInputsToNoir,
-  mapPublicChonkVerifierPublicInputsFromNoir,
   mapPublicTxBaseRollupPrivateInputsToNoir,
   mapRootRollupPrivateInputsToNoir,
-  mapRootRollupPublicInputsFromNoir,
   mapTxMergeRollupPrivateInputsToNoir,
+} from '../conversion/server.js';
+
+// The mappers callers need directly. A protocol circuit's return value is decoded against its ABI
+// by the simulator, so turning it into public inputs is just the mapping; several circuits share a
+// mapper, since the rollup ladders return the same public inputs at a given level and every
+// InboxParity size shares one return ABI.
+export {
+  mapAvmCircuitPublicInputsToNoir,
+  mapBlockRollupPublicInputsFromNoir,
+  mapCheckpointRollupPublicInputsFromNoir,
+  mapParityPublicInputsFromNoir,
+  mapPublicChonkVerifierPublicInputsFromNoir,
+  mapRootRollupPublicInputsFromNoir,
   mapTxRollupPublicInputsFromNoir,
 } from '../conversion/server.js';
-import type {
-  ChonkVerifierPublicReturnType,
-  InboxParity64ReturnType,
-  RollupBlockMergeReturnType,
-  RollupBlockRootNoTxsReturnType,
-  RollupBlockRootReturnType,
-  RollupBlockRootSingleTxReturnType,
-  RollupCheckpointMergeReturnType,
-  RollupCheckpointRootReturnType,
-  RollupCheckpointRootSingleBlockReturnType,
-  RollupRootReturnType,
-  RollupTxBasePrivateReturnType,
-  RollupTxBasePublicReturnType,
-  RollupTxMergeReturnType,
-} from '../types/index.js';
-
-export { mapAvmCircuitPublicInputsToNoir } from '../conversion/server.js';
 
 /**
  * Converts the inputs of the inbox parity circuit into an ABI input map.
@@ -165,95 +151,6 @@ export function convertCheckpointMergeRollupPrivateInputsToNoir(inputs: Checkpoi
  */
 export function convertRootRollupPrivateInputsToNoir(inputs: RootRollupPrivateInputs): InputMap {
   return convertPrivateInputsToNoir('RootRollupArtifact', mapRootRollupPrivateInputsToNoir(inputs));
-}
-
-export function convertPublicChonkVerifierOutputsFromNoir(
-  publicInputs: ChonkVerifierPublicReturnType,
-): PublicChonkVerifierPublicInputs {
-  return mapPublicChonkVerifierPublicInputsFromNoir(publicInputs);
-}
-
-export function convertPrivateTxBaseRollupOutputsFromNoir(
-  publicInputs: RollupTxBasePrivateReturnType,
-): TxRollupPublicInputs {
-  return mapTxRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertPublicTxBaseRollupOutputsFromNoir(
-  publicInputs: RollupTxBasePublicReturnType,
-): TxRollupPublicInputs {
-  return mapTxRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertTxMergeRollupOutputsFromNoir(publicInputs: RollupTxMergeReturnType): TxRollupPublicInputs {
-  return mapTxRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertBlockRootRollupOutputsFromNoir(
-  publicInputs: RollupBlockRootReturnType,
-): BlockRollupPublicInputs {
-  return mapBlockRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertBlockRootSingleTxRollupOutputsFromNoir(
-  publicInputs: RollupBlockRootSingleTxReturnType,
-): BlockRollupPublicInputs {
-  return mapBlockRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertBlockRootNoTxsRollupOutputsFromNoir(
-  publicInputs: RollupBlockRootNoTxsReturnType,
-): BlockRollupPublicInputs {
-  return mapBlockRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertBlockMergeRollupOutputsFromNoir(
-  publicInputs: RollupBlockMergeReturnType,
-): BlockRollupPublicInputs {
-  return mapBlockRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertCheckpointRootRollupOutputsFromNoir(
-  publicInputs: RollupCheckpointRootReturnType,
-): CheckpointRollupPublicInputs {
-  return mapCheckpointRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertCheckpointRootSingleBlockRollupOutputsFromNoir(
-  publicInputs: RollupCheckpointRootSingleBlockReturnType,
-): CheckpointRollupPublicInputs {
-  return mapCheckpointRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertCheckpointPaddingRollupOutputsFromNoir(
-  publicInputs: RollupCheckpointRootReturnType,
-): CheckpointRollupPublicInputs {
-  return mapCheckpointRollupPublicInputsFromNoir(publicInputs);
-}
-
-export function convertCheckpointMergeRollupOutputsFromNoir(
-  publicInputs: RollupCheckpointMergeReturnType,
-): CheckpointRollupPublicInputs {
-  return mapCheckpointRollupPublicInputsFromNoir(publicInputs);
-}
-
-/**
- * Converts the return value of the root rollup circuit into public inputs.
- * @param publicInputs - The circuit's decoded return value.
- * @returns The public inputs.
- */
-export function convertRootRollupOutputsFromNoir(publicInputs: RollupRootReturnType): RootRollupPublicInputs {
-  return mapRootRollupPublicInputsFromNoir(publicInputs);
-}
-
-/**
- * Converts the return value of the inbox parity circuit into public inputs.
- * @param publicInputs - The circuit's decoded return value. Every ladder size shares the same
- * `ParityPublicInputs` return ABI, so this is identical across sizes.
- * @returns The public inputs.
- */
-export function convertInboxParityOutputsFromNoir(publicInputs: InboxParity64ReturnType): ParityPublicInputs {
-  return mapParityPublicInputsFromNoir(publicInputs);
 }
 
 /**

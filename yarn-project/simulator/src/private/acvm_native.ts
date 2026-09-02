@@ -1,4 +1,4 @@
-import type { ForeignCallHandler } from '@aztec-foundation/noir-acvm_js';
+import { type ForeignCallHandler, decompressWitness } from '@aztec-foundation/noir-acvm_js';
 import { abiDecode } from '@aztec-foundation/noir-noirc_abi';
 import type { InputMap } from '@aztec-foundation/noir-types';
 
@@ -9,9 +9,7 @@ import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 import * as proc from 'child_process';
 import { promises as fs } from 'fs';
-import { Unpackr } from 'msgpackr';
 import * as path from 'path';
-import { gunzipSync } from 'zlib';
 
 import type { ACIRCallback, ACIRExecutionResult } from './acvm/acvm.js';
 import type { ACVMWitness } from './acvm/acvm_types.js';
@@ -45,27 +43,6 @@ const EMPTY_DEBUG_SYMBOLS = 'q1ZKSU0qTY/PzEvLL1ayio6tBQA=';
 
 const PROVER_FILE = 'Prover.json';
 const WITNESS_NAME = 'output-witness';
-
-/** Witness stack values arrive as big-endian 32-byte field elements; the ACVM witness map holds hex strings. */
-const witnessUnpackr = new Unpackr({ mapsAsObjects: false });
-
-/**
- * Decodes the witness file `noir-execute` writes: a gzipped, single-byte-tagged msgpack
- * `WitnessStack`, whose top entry holds the solved witness of the circuit that was executed.
- * @param witnessGz - The raw contents of the output witness file.
- * @returns The solved witness map.
- */
-function parseWitnessStack(witnessGz: Buffer): Map<number, string> {
-  const decompressed = gunzipSync(witnessGz);
-  // The leading byte is the serialization format marker, which is not part of the msgpack payload.
-  const stack = witnessUnpackr.unpack(decompressed.subarray(1)) as [[[number, Map<number, Buffer>]]];
-  const [, witness] = stack[0][stack[0].length - 1];
-  const result = new Map<number, string>();
-  for (const [index, value] of witness) {
-    result.set(index, `0x${value.toString('hex')}`);
-  }
-  return result;
-}
 
 export class NativeACVMSimulator implements CircuitSimulator {
   private logger: Logger;
@@ -136,7 +113,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
         const timer = new Timer();
         await this.run(artifactPath, path.join(directory, PROVER_FILE), directory, true);
         const witnessPath = path.join(directory, `${WITNESS_NAME}.gz`);
-        const witness = parseWitnessStack(await fs.readFile(witnessPath));
+        const witness = decompressWitness(await fs.readFile(witnessPath));
         const duration = timer.ms();
 
         if (this.witnessFilename !== undefined) {

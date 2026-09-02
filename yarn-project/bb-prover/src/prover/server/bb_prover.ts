@@ -13,36 +13,28 @@ import { runInDirectory } from '@aztec-labs/foundation/fs';
 import { createLogger } from '@aztec-labs/foundation/log';
 import {
   type ServerProtocolArtifact,
-  convertBlockMergeRollupOutputsFromNoir,
   convertBlockMergeRollupPrivateInputsToNoir,
-  convertBlockRootNoTxsRollupOutputsFromNoir,
   convertBlockRootNoTxsRollupPrivateInputsToNoir,
-  convertBlockRootRollupOutputsFromNoir,
   convertBlockRootRollupPrivateInputsToNoir,
-  convertBlockRootSingleTxRollupOutputsFromNoir,
   convertBlockRootSingleTxRollupPrivateInputsToNoir,
-  convertCheckpointMergeRollupOutputsFromNoir,
   convertCheckpointMergeRollupPrivateInputsToNoir,
-  convertCheckpointPaddingRollupOutputsFromNoir,
   convertCheckpointPaddingRollupPrivateInputsToNoir,
-  convertCheckpointRootRollupOutputsFromNoir,
   convertCheckpointRootRollupPrivateInputsToNoir,
-  convertCheckpointRootSingleBlockRollupOutputsFromNoir,
   convertCheckpointRootSingleBlockRollupPrivateInputsToNoir,
-  convertInboxParityOutputsFromNoir,
   convertInboxParityPrivateInputsToNoir,
-  convertPrivateTxBaseRollupOutputsFromNoir,
   convertPrivateTxBaseRollupPrivateInputsToNoir,
-  convertPublicChonkVerifierOutputsFromNoir,
   convertPublicChonkVerifierPrivateInputsToNoir,
-  convertPublicTxBaseRollupOutputsFromNoir,
   convertPublicTxBaseRollupPrivateInputsToNoir,
-  convertRootRollupOutputsFromNoir,
   convertRootRollupPrivateInputsToNoir,
-  convertTxMergeRollupOutputsFromNoir,
   convertTxMergeRollupPrivateInputsToNoir,
   getServerCircuitArtifact,
   inboxParityArtifactForSize,
+  mapBlockRollupPublicInputsFromNoir,
+  mapCheckpointRollupPublicInputsFromNoir,
+  mapParityPublicInputsFromNoir,
+  mapPublicChonkVerifierPublicInputsFromNoir,
+  mapRootRollupPublicInputsFromNoir,
+  mapTxRollupPublicInputsFromNoir,
 } from '@aztec-labs/noir-protocol-circuits-types/server';
 import { ServerCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import { mapProtocolArtifactNameToCircuitName } from '@aztec-labs/noir-protocol-circuits-types/types';
@@ -140,7 +132,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       inboxParityArtifactForSize(inputs.size),
       RECURSIVE_PROOF_LENGTH,
       convertInboxParityPrivateInputsToNoir,
-      convertInboxParityOutputsFromNoir,
+      mapParityPublicInputsFromNoir,
     );
   }
 
@@ -170,7 +162,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       artifactName,
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertPublicChonkVerifierPrivateInputsToNoir,
-      convertPublicChonkVerifierOutputsFromNoir,
+      mapPublicChonkVerifierPublicInputsFromNoir,
     );
 
     const verificationKey = this.getVerificationKeyDataForCircuit(artifactName);
@@ -193,7 +185,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'PrivateTxBaseRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertPrivateTxBaseRollupPrivateInputsToNoir,
-      convertPrivateTxBaseRollupOutputsFromNoir,
+      mapTxRollupPublicInputsFromNoir,
     );
   }
 
@@ -210,7 +202,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'PublicTxBaseRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertPublicTxBaseRollupPrivateInputsToNoir,
-      convertPublicTxBaseRollupOutputsFromNoir,
+      mapTxRollupPublicInputsFromNoir,
     );
   }
 
@@ -227,7 +219,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'TxMergeRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertTxMergeRollupPrivateInputsToNoir,
-      convertTxMergeRollupOutputsFromNoir,
+      mapTxRollupPublicInputsFromNoir,
     );
   }
 
@@ -239,7 +231,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'BlockRootRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertBlockRootRollupPrivateInputsToNoir,
-      convertBlockRootRollupOutputsFromNoir,
+      mapBlockRollupPublicInputsFromNoir,
     );
   }
 
@@ -251,7 +243,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'BlockRootSingleTxRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertBlockRootSingleTxRollupPrivateInputsToNoir,
-      convertBlockRootSingleTxRollupOutputsFromNoir,
+      mapBlockRollupPublicInputsFromNoir,
     );
   }
 
@@ -263,7 +255,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'BlockRootNoTxsRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertBlockRootNoTxsRollupPrivateInputsToNoir,
-      convertBlockRootNoTxsRollupOutputsFromNoir,
+      mapBlockRollupPublicInputsFromNoir,
     );
   }
 
@@ -275,7 +267,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'BlockMergeRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertBlockMergeRollupPrivateInputsToNoir,
-      convertBlockMergeRollupOutputsFromNoir,
+      mapBlockRollupPublicInputsFromNoir,
     );
   }
 
@@ -289,7 +281,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'CheckpointRootRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertCheckpointRootRollupPrivateInputsToNoir,
-      convertCheckpointRootRollupOutputsFromNoir,
+      mapCheckpointRollupPublicInputsFromNoir,
     );
   }
 
@@ -303,7 +295,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'CheckpointRootSingleBlockRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertCheckpointRootSingleBlockRollupPrivateInputsToNoir,
-      convertCheckpointRootSingleBlockRollupOutputsFromNoir,
+      mapCheckpointRollupPublicInputsFromNoir,
     );
   }
 
@@ -317,7 +309,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'CheckpointPaddingRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertCheckpointPaddingRollupPrivateInputsToNoir,
-      convertCheckpointPaddingRollupOutputsFromNoir,
+      mapCheckpointRollupPublicInputsFromNoir,
     );
   }
 
@@ -331,7 +323,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'CheckpointMergeRollupArtifact',
       NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
       convertCheckpointMergeRollupPrivateInputsToNoir,
-      convertCheckpointMergeRollupOutputsFromNoir,
+      mapCheckpointRollupPublicInputsFromNoir,
     );
   }
 
@@ -348,7 +340,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       'RootRollupArtifact',
       ULTRA_KECCAK_PROOF_LENGTH,
       convertRootRollupPrivateInputsToNoir,
-      convertRootRollupOutputsFromNoir,
+      mapRootRollupPublicInputsFromNoir,
     );
 
     const recursiveProof = makeRecursiveProofFromBinary(proof.binaryProof, NESTED_RECURSIVE_PROOF_LENGTH);
