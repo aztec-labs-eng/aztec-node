@@ -8,7 +8,7 @@ export { deployAndInitializeTokenAndBridgeContracts } from '../shared/cross_chai
 
 const { TEMP_DIR = '/tmp', ACVM_BINARY_PATH = '', ACVM_WORKING_DIRECTORY = '', ACVM_FORCE_WASM = '' } = process.env;
 
-// Determines if we have access to the acvm binary and a tmp folder for temp files
+// Determines if we have access to the noir-execute binary and a tmp folder for temp files
 export async function getACVMConfig(logger: Logger): Promise<
   | {
       acvmWorkingDirectory: string;
@@ -21,12 +21,12 @@ export async function getACVMConfig(logger: Logger): Promise<
     if (parseBooleanEnv(ACVM_FORCE_WASM)) {
       return undefined;
     }
-    const acvmBinaryPath = ACVM_BINARY_PATH ? ACVM_BINARY_PATH : `../../labs-aztec-toolchain/bin/acvm`;
+    const acvmBinaryPath = ACVM_BINARY_PATH ? ACVM_BINARY_PATH : `../../labs-aztec-toolchain/bin/noir-execute`;
     await fs.access(acvmBinaryPath, fs.constants.R_OK);
     const tempWorkingDirectory = `${TEMP_DIR}/${randomBytes(4).toString('hex')}`;
     const acvmWorkingDirectory = ACVM_WORKING_DIRECTORY ? ACVM_WORKING_DIRECTORY : `${tempWorkingDirectory}/acvm`;
     await fs.mkdir(acvmWorkingDirectory, { recursive: true });
-    logger.verbose(`Using native ACVM binary at ${acvmBinaryPath} with working directory ${acvmWorkingDirectory}`);
+    logger.verbose(`Using noir-execute binary at ${acvmBinaryPath} with working directory ${acvmWorkingDirectory}`);
 
     const directoryToCleanup = ACVM_WORKING_DIRECTORY ? undefined : tempWorkingDirectory;
 
@@ -38,7 +38,7 @@ export async function getACVMConfig(logger: Logger): Promise<
       cleanup,
     };
   } catch (err) {
-    logger.verbose(`Native ACVM not available, error: ${err}`);
+    logger.verbose(`noir-execute not available, error: ${err}`);
     return undefined;
   }
 }

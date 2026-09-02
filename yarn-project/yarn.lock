@@ -1983,6 +1983,8 @@ __metadata:
   dependencies:
     "@aztec-foundation/bb.js": "npm:0.1.0-dummy"
     "@aztec-foundation/noir-acvm_js": "npm:0.1.0-dummy"
+    "@aztec-foundation/noir-noirc_abi": "npm:0.1.0-dummy"
+    "@aztec-foundation/noir-types": "npm:0.1.0-dummy"
     "@aztec-labs/bb-prover": "workspace:^"
     "@aztec-labs/constants": "workspace:^"
     "@aztec-labs/ethereum": "workspace:^"

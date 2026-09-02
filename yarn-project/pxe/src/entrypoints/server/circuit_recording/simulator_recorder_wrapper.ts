@@ -1,4 +1,6 @@
 import type { ForeignCallHandler } from '@aztec-foundation/noir-acvm_js';
+import { abiDecode, abiEncode } from '@aztec-foundation/noir-noirc_abi';
+import type { InputMap } from '@aztec-foundation/noir-types';
 
 import type {
   ACIRCallback,
@@ -7,6 +9,7 @@ import type {
   ACVMSuccess,
   ACVMWitness,
   CircuitSimulator,
+  ProtocolCircuitResult,
 } from '@aztec-labs/simulator/client';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
@@ -23,7 +26,21 @@ export class SimulatorRecorderWrapper implements CircuitSimulator {
     private recorder: CircuitRecorder,
   ) {}
 
-  executeProtocolCircuit(
+  async executeProtocolCircuit<ReturnType>(
+    inputs: InputMap,
+    artifact: NoirCompiledCircuitWithName,
+    callback: ForeignCallHandler | undefined,
+  ): Promise<ProtocolCircuitResult<ReturnType>> {
+    // Routed through the witness-level call so the recording keeps its witness-map format.
+    const { witness, duration } = await this.executeProtocolCircuitToWitness(
+      abiEncode(artifact.abi, inputs),
+      artifact,
+      callback,
+    );
+    return { returnValue: abiDecode(artifact.abi, witness).return_value as ReturnType, duration };
+  }
+
+  executeProtocolCircuitToWitness(
     input: ACVMWitness,
     artifact: NoirCompiledCircuitWithName,
     callback: ForeignCallHandler | undefined,
@@ -31,7 +48,7 @@ export class SimulatorRecorderWrapper implements CircuitSimulator {
     const bytecode = Buffer.from(artifact.bytecode, 'base64');
 
     return this.#simulate<ForeignCallHandler | undefined, ACVMSuccess>(
-      wrappedCallback => this.simulator.executeProtocolCircuit(input, artifact, wrappedCallback),
+      wrappedCallback => this.simulator.executeProtocolCircuitToWitness(input, artifact, wrappedCallback),
       input,
       bytecode,
       artifact.name,
