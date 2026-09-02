@@ -46,9 +46,10 @@ publish:
   allow_offline: true
 
 packages:
-  # The fake-published workspace packages are @aztec-labs and resolve from storage; @aztec (the
-  # foundation pins from yarn-project's resolutions, and the viem fork) falls through to npmjs
-  # and caches into storage for the offline test image.
+  # The fake-published workspace packages are @aztec-labs and resolve from storage;
+  # @aztec-foundation (the foundation pins from yarn-project's resolutions) and @aztec (the viem
+  # fork) fall through to npmjs via the @*/* rule below, and cache into storage for the offline
+  # test image.
   "@aztec-labs/*":
     access: \$all
     publish: \$all

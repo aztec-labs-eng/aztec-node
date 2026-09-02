@@ -582,27 +582,29 @@ function private_release {
   ci3/gcp_artifact_login
   set +x  # Never echo the access token.
   export NPM_TOKEN=$(gcloud auth print-access-token)
-  # Route our scope to the internal npm registry; public deps still resolve from the default registry
+  # Route our scopes to the internal npm registry; public deps still resolve from the default registry
   # (npmjs), so publishes and yarn-project's install smoke-test both work. Everything we publish is
-  # @aztec-labs-scoped, and the foundation packages we depend on are @aztec-scoped and mirrored
-  # in below, so both scopes route there. Exported so deploy_npm and that smoke-test share one config.
+  # @aztec-labs-scoped; the foundation packages we depend on are @aztec-foundation-scoped and the
+  # viem fork is @aztec-scoped, and both are mirrored in below, so all three route there. Exported
+  # so deploy_npm and that smoke-test share one config.
   local npmrc reg
   reg="${INTERNAL_NPM_REGISTRY%/}/"
   npmrc=$(mktemp)
   (umask 077; {
     echo "@aztec:registry=$reg"
     echo "@aztec-labs:registry=$reg"
+    echo "@aztec-foundation:registry=$reg"
     echo "${reg#https:}:_authToken=\${NPM_TOKEN}"
   } > "$npmrc")
   export NPM_CONFIG_GLOBALCONFIG="$npmrc"
   set -x
 
-  # Mirror external @aztec-scoped dependencies from public npm into our internal registry: fork
+  # Mirror external first-party-scoped dependencies from public npm into our internal registry: fork
   # dependencies (e.g. the vendored "viem": "npm:@aztec/viem@x") and the foundation packages that
   # yarn-project consumes at the versions pinned in its root resolutions field. Because we scope ALL
-  # of @aztec to the internal registry, these packages — which we don't build/publish ourselves —
-  # must also live there, or installs of our published packages 404 (this is what yarn-project's
-  # release smoke-test exercises). amd64 only; the registry is shared across arches.
+  # of @aztec and @aztec-foundation to the internal registry, these packages — which we don't
+  # build/publish ourselves — must also live there, or installs of our published packages 404 (this
+  # is what yarn-project's release smoke-test exercises). amd64 only; the registry is shared across arches.
   if [ "$(arch)" != arm64 ]; then
     local spec name ver td
     for spec in $({
@@ -613,7 +615,8 @@ function private_release {
         # would 404 on it. All current pins are exact versions. To be fixed when private
         # releases get proper treatment.
         jq -r '.resolutions // {} | to_entries[]
-               | select(.key | startswith("@aztec/")) | select(.value | test("^[0-9]"))
+               | select(.key | startswith("@aztec/") or startswith("@aztec-foundation/"))
+               | select(.value | test("^[0-9]"))
                | "\(.key)@\(.value)"' yarn-project/package.json
       } | sort -u); do
       name="${spec%@*}"; ver="${spec##*@}"
@@ -623,9 +626,10 @@ function private_release {
       fi
       echo "Mirror: copying ${spec} from public npm to internal registry."
       td=$(mktemp -d)
-      # Override the @aztec scope registry for the fetch (our .npmrc points @aztec at the internal
-      # registry, which doesn't have the fork yet); publish then uses the inherited @aztec->internal config.
-      npm pack "${spec}" --@aztec:registry=https://registry.npmjs.org/ --pack-destination "$td" --quiet
+      # Override the scope registries for the fetch (our .npmrc points them at the internal registry,
+      # which doesn't have these yet); publish then uses the inherited scope->internal config.
+      npm pack "${spec}" --@aztec:registry=https://registry.npmjs.org/ \
+        --@aztec-foundation:registry=https://registry.npmjs.org/ --pack-destination "$td" --quiet
       npm publish "$td"/*.tgz
       rm -rf "$td"
     done

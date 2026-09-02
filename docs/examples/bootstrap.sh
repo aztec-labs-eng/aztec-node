@@ -175,8 +175,10 @@ function validate-webapp-tutorial {
       const packageDirs = new Map();
 
       // Workspace packages are @aztec-labs; the foundation packages yarn-project pins
-      // (bb.js, wsdb, noir-*, ...) are @aztec. Both are "ours" for linking purposes.
-      const isAztecScoped = name => name.startsWith('@aztec/') || name.startsWith('@aztec-labs/');
+      // (bb.js, wsdb, noir-*, ...) are @aztec-foundation, and @aztec still holds the viem
+      // fork. All three are "ours" for linking purposes.
+      const isAztecScoped = name =>
+        name.startsWith('@aztec/') || name.startsWith('@aztec-labs/') || name.startsWith('@aztec-foundation/');
 
       function addPackageDir(dir) {
         const pkgPath = path.join(dir, 'package.json');
@@ -195,8 +197,8 @@ function validate-webapp-tutorial {
         }
       }
 
-      // yarn-project pins the @aztec packages built outside it (e.g. @aztec-foundation/bb.js,
-      // @aztec-foundation/ipc-runtime, @aztec-foundation/wsdb, @aztec/noir-*) to published npm versions via
+      // yarn-project pins the packages built outside it (e.g. @aztec-foundation/bb.js,
+      // @aztec-foundation/ipc-runtime, @aztec-foundation/wsdb, @aztec-foundation/noir-*) to published npm versions via
       // its root resolutions. Workspace manifests declare those with placeholder
       // versions that only the resolutions rewrite, so mirror the pins here: consume
       // them from npm at the pinned version, never link them. Path-based entries
