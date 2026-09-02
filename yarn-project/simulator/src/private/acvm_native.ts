@@ -194,18 +194,23 @@ export class NativeACVMSimulator implements CircuitSimulator {
         const { noir_version, hash, abi, bytecode } = artifact as NoirCompiledCircuitWithName & {
           noir_version?: string;
         };
-        await fs.writeFile(
-          artifactPath,
-          JSON.stringify({
-            noir_version: noir_version ?? '0.0.0',
-            hash: hash ?? 0,
-            abi,
-            bytecode,
-            debug_symbols: EMPTY_DEBUG_SYMBOLS,
-            file_map: {},
-          }),
-        );
+        const contents = JSON.stringify({
+          noir_version: noir_version ?? '0.0.0',
+          hash: hash ?? 0,
+          abi,
+          bytecode,
+          debug_symbols: EMPTY_DEBUG_SYMBOLS,
+          file_map: {},
+        });
         /* eslint-enable camelcase */
+        // The working directory is shared: it comes from configuration (ACVM_WORKING_DIRECTORY), so
+        // another process can be reading this artifact while this one writes it. The key covers the
+        // compiled output, so concurrent writers agree on the contents, but a plain write is not
+        // atomic and would expose a truncated file. Write aside and rename, which is atomic within
+        // a filesystem, so a reader sees either no file or a complete one.
+        const pendingPath = `${artifactPath}.${process.pid}.tmp`;
+        await fs.writeFile(pendingPath, contents);
+        await fs.rename(pendingPath, artifactPath);
         return artifactPath;
       })();
       this.artifactPaths.set(key, written);
