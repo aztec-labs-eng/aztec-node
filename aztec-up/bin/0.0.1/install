@@ -263,8 +263,10 @@ function install_npm_bin_symlinks {
   for bin_link in "$npm_bin_dir"/*; do
     [ -L "$bin_link" ] || continue
     target=$(readlink "$bin_link")
-    # npm writes relative symlinks like ../@aztec-labs/aztec/... for scoped packages.
-    [[ "$target" == ../@aztec-labs/* ]] || continue
+    # npm writes relative symlinks like ../@aztec-labs/aztec/... for scoped packages. The
+    # foundation packages we ship bins from (bb, bb-avm-sim, aztec-wsdb, noir-codegen) are
+    # @aztec-foundation, so both scopes count as ours.
+    [[ "$target" == ../@aztec-labs/* || "$target" == ../@aztec-foundation/* ]] || continue
     bin_name=$(basename "$bin_link")
 
     # `aztec` is a wrapper, written by install_aztec_wrapper.

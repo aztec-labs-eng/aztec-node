@@ -113,6 +113,8 @@ export class PrivateExecutionResult {
   }
 }
 
+let privateCallExecutionResultSchema: ZodFor<PrivateCallExecutionResult> | undefined;
+
 /**
  * The result of executing a call to a private function.
  */
@@ -149,8 +151,11 @@ export class PrivateCallExecutionResult {
     public profileResult?: PrivateExecutionProfileResult,
   ) {}
 
+  // Built once and cached: the schema references itself through z.lazy, and rebuilding it on
+  // every access makes that self-reference a fresh schema each time, which zod >= 4.5 walks
+  // eagerly while parsing until the stack overflows. One instance keeps the cycle finite.
   static get schema(): ZodFor<PrivateCallExecutionResult> {
-    return z
+    return (privateCallExecutionResultSchema ??= z
       .object({
         acir: schemas.Buffer,
         vk: schemas.Buffer,
@@ -164,7 +169,7 @@ export class PrivateCallExecutionResult {
         nestedExecutionResults: z.array(z.lazy(() => PrivateCallExecutionResult.schema)),
         contractClassLogs: z.array(CountedContractClassLog.schema),
       })
-      .transform(PrivateCallExecutionResult.from);
+      .transform(PrivateCallExecutionResult.from));
   }
 
   static from(fields: FieldsOf<PrivateCallExecutionResult>) {
