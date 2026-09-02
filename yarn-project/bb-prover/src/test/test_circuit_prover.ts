@@ -1,4 +1,4 @@
-import type { WitnessMap } from '@aztec-foundation/noir-types';
+import type { InputMap } from '@aztec-foundation/noir-types';
 
 import {
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
@@ -11,35 +11,27 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import { Timer } from '@aztec-labs/foundation/timer';
 import {
   type ServerProtocolArtifact,
-  convertBlockMergeRollupOutputsFromWitnessMap,
-  convertBlockMergeRollupPrivateInputsToWitnessMap,
-  convertBlockRootNoTxsRollupOutputsFromWitnessMap,
-  convertBlockRootNoTxsRollupPrivateInputsToWitnessMap,
-  convertBlockRootRollupOutputsFromWitnessMap,
-  convertBlockRootRollupPrivateInputsToWitnessMap,
-  convertBlockRootSingleTxRollupOutputsFromWitnessMap,
-  convertBlockRootSingleTxRollupPrivateInputsToWitnessMap,
-  convertCheckpointMergeRollupOutputsFromWitnessMap,
-  convertCheckpointMergeRollupPrivateInputsToWitnessMap,
-  convertCheckpointPaddingRollupOutputsFromWitnessMap,
-  convertCheckpointPaddingRollupPrivateInputsToWitnessMap,
-  convertCheckpointRootRollupOutputsFromWitnessMap,
-  convertCheckpointRootRollupPrivateInputsToWitnessMap,
-  convertCheckpointRootSingleBlockRollupOutputsFromWitnessMap,
-  convertCheckpointRootSingleBlockRollupPrivateInputsToWitnessMap,
-  convertInboxParityOutputsFromWitnessMap,
-  convertInboxParityPrivateInputsToWitnessMap,
-  convertPrivateTxBaseRollupOutputsFromWitnessMap,
-  convertPrivateTxBaseRollupPrivateInputsToWitnessMap,
-  convertPublicTxBaseRollupOutputsFromWitnessMap,
-  convertPublicTxBaseRollupPrivateInputsToWitnessMap,
-  convertRootRollupOutputsFromWitnessMap,
-  convertRootRollupPrivateInputsToWitnessMap,
-  convertTxMergeRollupOutputsFromWitnessMap,
-  convertTxMergeRollupPrivateInputsToWitnessMap,
+  convertBlockMergeRollupPrivateInputsToNoir,
+  convertBlockRootNoTxsRollupPrivateInputsToNoir,
+  convertBlockRootRollupPrivateInputsToNoir,
+  convertBlockRootSingleTxRollupPrivateInputsToNoir,
+  convertCheckpointMergeRollupPrivateInputsToNoir,
+  convertCheckpointPaddingRollupPrivateInputsToNoir,
+  convertCheckpointRootRollupPrivateInputsToNoir,
+  convertCheckpointRootSingleBlockRollupPrivateInputsToNoir,
+  convertInboxParityPrivateInputsToNoir,
+  convertPrivateTxBaseRollupPrivateInputsToNoir,
+  convertPublicTxBaseRollupPrivateInputsToNoir,
+  convertRootRollupPrivateInputsToNoir,
+  convertTxMergeRollupPrivateInputsToNoir,
   foreignCallHandler,
   getSimulatedServerCircuitArtifact,
   inboxParityArtifactForSize,
+  mapBlockRollupPublicInputsFromNoir,
+  mapCheckpointRollupPublicInputsFromNoir,
+  mapParityPublicInputsFromNoir,
+  mapRootRollupPublicInputsFromNoir,
+  mapTxRollupPublicInputsFromNoir,
 } from '@aztec-labs/noir-protocol-circuits-types/server';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import { mapProtocolArtifactNameToCircuitName } from '@aztec-labs/noir-protocol-circuits-types/types';
@@ -132,8 +124,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         inputs,
         inboxParityArtifactForSize(inputs.size),
         RECURSIVE_PROOF_LENGTH,
-        convertInboxParityPrivateInputsToWitnessMap,
-        outputs => convertInboxParityOutputsFromWitnessMap(outputs, inputs.size),
+        convertInboxParityPrivateInputsToNoir,
+        mapParityPublicInputsFromNoir,
       ),
     );
   }
@@ -161,8 +153,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         inputs,
         'PrivateTxBaseRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertPrivateTxBaseRollupPrivateInputsToWitnessMap,
-        convertPrivateTxBaseRollupOutputsFromWitnessMap,
+        convertPrivateTxBaseRollupPrivateInputsToNoir,
+        mapTxRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -176,8 +168,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         inputs,
         'PublicTxBaseRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertPublicTxBaseRollupPrivateInputsToWitnessMap,
-        convertPublicTxBaseRollupOutputsFromWitnessMap,
+        convertPublicTxBaseRollupPrivateInputsToNoir,
+        mapTxRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -196,8 +188,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'TxMergeRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertTxMergeRollupPrivateInputsToWitnessMap,
-        convertTxMergeRollupOutputsFromWitnessMap,
+        convertTxMergeRollupPrivateInputsToNoir,
+        mapTxRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -211,8 +203,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'BlockRootNoTxsRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertBlockRootNoTxsRollupPrivateInputsToWitnessMap,
-        convertBlockRootNoTxsRollupOutputsFromWitnessMap,
+        convertBlockRootNoTxsRollupPrivateInputsToNoir,
+        mapBlockRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -226,8 +218,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'BlockRootRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertBlockRootRollupPrivateInputsToWitnessMap,
-        convertBlockRootRollupOutputsFromWitnessMap,
+        convertBlockRootRollupPrivateInputsToNoir,
+        mapBlockRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -241,8 +233,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'BlockRootSingleTxRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertBlockRootSingleTxRollupPrivateInputsToWitnessMap,
-        convertBlockRootSingleTxRollupOutputsFromWitnessMap,
+        convertBlockRootSingleTxRollupPrivateInputsToNoir,
+        mapBlockRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -256,8 +248,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'BlockMergeRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertBlockMergeRollupPrivateInputsToWitnessMap,
-        convertBlockMergeRollupOutputsFromWitnessMap,
+        convertBlockMergeRollupPrivateInputsToNoir,
+        mapBlockRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -273,8 +265,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'CheckpointRootRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertCheckpointRootRollupPrivateInputsToWitnessMap,
-        convertCheckpointRootRollupOutputsFromWitnessMap,
+        convertCheckpointRootRollupPrivateInputsToNoir,
+        mapCheckpointRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -290,8 +282,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'CheckpointRootSingleBlockRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertCheckpointRootSingleBlockRollupPrivateInputsToWitnessMap,
-        convertCheckpointRootSingleBlockRollupOutputsFromWitnessMap,
+        convertCheckpointRootSingleBlockRollupPrivateInputsToNoir,
+        mapCheckpointRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -307,8 +299,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'CheckpointPaddingRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertCheckpointPaddingRollupPrivateInputsToWitnessMap,
-        convertCheckpointPaddingRollupOutputsFromWitnessMap,
+        convertCheckpointPaddingRollupPrivateInputsToNoir,
+        mapCheckpointRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -324,8 +316,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'CheckpointMergeRollupArtifact',
         NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-        convertCheckpointMergeRollupPrivateInputsToWitnessMap,
-        convertCheckpointMergeRollupOutputsFromWitnessMap,
+        convertCheckpointMergeRollupPrivateInputsToNoir,
+        mapCheckpointRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -344,8 +336,8 @@ export class TestCircuitProver implements ServerCircuitProver {
         input,
         'RootRollupArtifact',
         NESTED_RECURSIVE_PROOF_LENGTH,
-        convertRootRollupPrivateInputsToWitnessMap,
-        convertRootRollupOutputsFromWitnessMap,
+        convertRootRollupPrivateInputsToNoir,
+        mapRootRollupPublicInputsFromNoir,
       ),
     );
   }
@@ -380,42 +372,40 @@ export class TestCircuitProver implements ServerCircuitProver {
     PROOF_LENGTH extends number,
     CircuitInputType extends { toBuffer: () => Buffer },
     CircuitOutputType extends { toBuffer: () => Buffer },
+    CircuitReturnType,
   >(
     input: CircuitInputType,
     artifactName: ServerProtocolArtifact,
     proofLength: PROOF_LENGTH,
-    convertInput: (input: CircuitInputType, simulated?: boolean) => WitnessMap,
-    convertOutput: (outputWitness: WitnessMap, simulated?: boolean) => CircuitOutputType,
+    convertInput: (input: CircuitInputType) => InputMap,
+    convertOutput: (returnValue: CircuitReturnType) => CircuitOutputType,
   ) {
     const timer = new Timer();
-    const witnessMap = convertInput(input, true /* simulated */);
+    const inputs = convertInput(input);
     const circuitName = mapProtocolArtifactNameToCircuitName(artifactName);
+    const artifact = getSimulatedServerCircuitArtifact(artifactName);
 
-    let witness: WitnessMap;
+    let returnValue: CircuitReturnType;
     if (
       ['CheckpointRootRollupArtifact', 'CheckpointRootSingleBlockRollupArtifact'].includes(artifactName) ||
       this.simulator == undefined
     ) {
       // TODO(#10323): Native ACVM simulator does not support foreign call handler so we use the wasm simulator
       // when simulating checkpoint root rollup circuits or when the native ACVM simulator is not provided.
-      witness = (
-        await this.wasmSimulator.executeProtocolCircuit(
-          witnessMap,
-          getSimulatedServerCircuitArtifact(artifactName),
-          foreignCallHandler,
-        )
-      ).witness;
+      returnValue = (
+        await this.wasmSimulator.executeProtocolCircuit<CircuitReturnType>(inputs, artifact, foreignCallHandler)
+      ).returnValue;
     } else {
-      witness = (
-        await this.simulator.executeProtocolCircuit(
-          witnessMap,
-          getSimulatedServerCircuitArtifact(artifactName),
+      returnValue = (
+        await this.simulator.executeProtocolCircuit<CircuitReturnType>(
+          inputs,
+          artifact,
           undefined, // Native ACM simulator does not support foreign call handler
         )
-      ).witness;
+      ).returnValue;
     }
 
-    const result = convertOutput(witness, true /* simulated */);
+    const result = convertOutput(returnValue);
 
     this.instrumentation.recordDuration('simulationDuration', circuitName, timer);
     emitCircuitSimulationStats(circuitName, timer.ms(), input.toBuffer().length, result.toBuffer().length, this.logger);

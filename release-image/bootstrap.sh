@@ -46,7 +46,7 @@ export -f build_prover_agent_image
 # would dangle in the image (build_monorepo provisions bin/ as symlinks).
 function check_toolchain_binaries {
   local binary path
-  for binary in bb-avm acvm; do
+  for binary in bb-avm noir-execute; do
     path=$root/labs-aztec-toolchain/bin/$binary
     if [ -L "$path" ]; then
       echo "labs-aztec-toolchain/bin/$binary is a symlink and would dangle in the image. Run labs-aztec-toolchain/bootstrap.sh first."
@@ -54,8 +54,8 @@ function check_toolchain_binaries {
     fi
     if [ ! -f "$path" ]; then
       echo "Missing labs-aztec-toolchain/bin/$binary. Run labs-aztec-toolchain/bootstrap.sh first."
-      if [ "$binary" = acvm ]; then
-        echo "Building acvm requires cargo to be installed."
+      if [ "$binary" = noir-execute ]; then
+        echo "Building noir-execute requires cargo to be installed."
       fi
       exit 1
     fi

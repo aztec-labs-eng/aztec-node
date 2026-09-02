@@ -73,6 +73,8 @@
   "dependencies": {
     "@aztec-foundation/bb.js": "0.1.0-dummy",
     "@aztec-foundation/noir-acvm_js": "0.1.0-dummy",
+    "@aztec-foundation/noir-noirc_abi": "0.1.0-dummy",
+    "@aztec-foundation/noir-types": "0.1.0-dummy",
     "@aztec-labs/bb-prover": "workspace:^",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/ethereum": "workspace:^",

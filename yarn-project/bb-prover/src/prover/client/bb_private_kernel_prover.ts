@@ -406,7 +406,7 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
     const witnessMap = convertInputs(inputs, compiledCircuit.abi);
 
     const outputWitness = await this.simulator
-      .executeProtocolCircuit(witnessMap, compiledCircuit, foreignCallHandler)
+      .executeProtocolCircuitToWitness(witnessMap, compiledCircuit, foreignCallHandler)
       .catch((err: Error) => {
         this.log.debug(`Failed to simulate ${circuitType}`, {
           circuitName: mapProtocolArtifactNameToCircuitName(circuitType),
@@ -441,7 +441,11 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
       await this.artifactProvider.getClientCircuitArtifactByName(circuitType);
 
     const witnessMap = convertInputs(inputs, compiledCircuit.abi);
-    const outputWitness = await this.simulator.executeProtocolCircuit(witnessMap, compiledCircuit, foreignCallHandler);
+    const outputWitness = await this.simulator.executeProtocolCircuitToWitness(
+      witnessMap,
+      compiledCircuit,
+      foreignCallHandler,
+    );
     const output = convertOutputs(outputWitness.witness, compiledCircuit.abi);
 
     this.log.debug(`Generated witness for ${circuitType}`, {

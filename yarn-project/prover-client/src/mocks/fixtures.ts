@@ -38,11 +38,11 @@ export const getEnvironmentConfig = async (logger: Logger) => {
 
     const expectedAcvmPath = ACVM_BINARY_PATH
       ? ACVM_BINARY_PATH
-      : `${path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../labs-aztec-toolchain/bin')}/acvm`;
+      : `${path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../labs-aztec-toolchain/bin')}/noir-execute`;
     await fs.access(expectedAcvmPath, fs.constants.R_OK);
     const acvmWorkingDirectory = ACVM_WORKING_DIRECTORY ? ACVM_WORKING_DIRECTORY : `${tempWorkingDirectory}/acvm`;
     await fs.mkdir(acvmWorkingDirectory, { recursive: true });
-    logger.info(`Found native ACVM binary at ${expectedAcvmPath} with working directory ${acvmWorkingDirectory}`);
+    logger.info(`Found noir-execute binary at ${expectedAcvmPath} with working directory ${acvmWorkingDirectory}`);
 
     const bbSkipCleanup = ['1', 'true'].includes(BB_SKIP_CLEANUP);
     bbSkipCleanup && logger.verbose(`Not going to clean up BB working directory ${bbWorkingDirectory} after run`);

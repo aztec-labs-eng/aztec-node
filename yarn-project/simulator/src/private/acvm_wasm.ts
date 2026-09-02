@@ -1,5 +1,6 @@
 import initACVM, { type ExecutionError, type ForeignCallHandler, executeCircuit } from '@aztec-foundation/noir-acvm_js';
-import initAbi from '@aztec-foundation/noir-noirc_abi';
+import initAbi, { abiDecode, abiEncode } from '@aztec-foundation/noir-noirc_abi';
+import type { InputMap } from '@aztec-foundation/noir-types';
 
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -9,7 +10,7 @@ import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 import { type ACIRCallback, type ACIRExecutionResult, acvm } from './acvm/acvm.js';
 import type { ACVMWitness } from './acvm/acvm_types.js';
 import type { ACVMSuccess } from './acvm_native.js';
-import { type CircuitSimulator, enrichNoirError } from './circuit_simulator.js';
+import { type CircuitSimulator, type ProtocolCircuitResult, enrichNoirError } from './circuit_simulator.js';
 
 let wasmInitPromise: Promise<unknown> | undefined;
 
@@ -31,7 +32,23 @@ export class WASMSimulator implements CircuitSimulator {
     }
   }
 
-  async executeProtocolCircuit(
+  async executeProtocolCircuit<ReturnType>(
+    inputs: InputMap,
+    artifact: NoirCompiledCircuitWithName,
+    callback: ForeignCallHandler,
+  ): Promise<ProtocolCircuitResult<ReturnType>> {
+    await this.init();
+    // `executeCircuit` only speaks witness maps, so the ABI encode/decode happens here rather than
+    // in the caller. See the note on CircuitSimulator.executeProtocolCircuit.
+    const { witness, duration } = await this.executeProtocolCircuitToWitness(
+      abiEncode(artifact.abi, inputs),
+      artifact,
+      callback,
+    );
+    return { returnValue: abiDecode(artifact.abi, witness).return_value as ReturnType, duration };
+  }
+
+  async executeProtocolCircuitToWitness(
     input: ACVMWitness,
     artifact: NoirCompiledCircuitWithName,
     callback: ForeignCallHandler,
