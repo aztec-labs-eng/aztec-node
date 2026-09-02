@@ -76,6 +76,9 @@ describe('proof_verification', () => {
 
   afterAll(async () => {
     await anvil?.stop();
+    // Shuts down the pooled bb processes BBCircuitVerifier keeps alive; without it their sockets
+    // stay open and jest never exits. Must precede bbTeardown, which deletes their working directory.
+    await circuitVerifier.stop();
     await bbTeardown();
     await acvmTeardown();
   });
