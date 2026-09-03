@@ -20,8 +20,8 @@ import { TxStatus } from '@aztec-labs/stdlib/tx';
 import { getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
 import { registerInitialLocalNetworkAccountsInWallet } from '@aztec-labs/wallets/testing';
 
-import { getACVMConfig } from '../fixtures/get_acvm_config.js';
 import { getBBConfig } from '../fixtures/get_bb_config.js';
+import { getACVMConfig } from '../fixtures/get_noir_execute_config.js';
 import { getSponsoredFPCAddress, registerSponsoredFPC } from '../fixtures/utils.js';
 import { TestWallet } from '../test-wallet/test_wallet.js';
 import { proveInteraction } from '../test-wallet/utils.js';

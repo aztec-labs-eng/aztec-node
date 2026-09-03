@@ -11,8 +11,8 @@ import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { getACVMConfig } from '../../fixtures/get_acvm_config.js';
 import { getBBConfig } from '../../fixtures/get_bb_config.js';
+import { getACVMConfig } from '../../fixtures/get_noir_execute_config.js';
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { PROVING_SLOT_TIMING, setupWithProver } from '../setup.js';
 import { SingleNodeTestContext } from '../single_node_test_context.js';

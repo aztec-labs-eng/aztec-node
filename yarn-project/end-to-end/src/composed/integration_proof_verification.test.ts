@@ -16,8 +16,8 @@ import { type GetContractReturnType, type Hex, getContract } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 
 import { MNEMONIC } from '../fixtures/fixtures.js';
-import { getACVMConfig } from '../fixtures/get_acvm_config.js';
 import { getBBConfig } from '../fixtures/get_bb_config.js';
+import { getACVMConfig } from '../fixtures/get_noir_execute_config.js';
 import { getLogger, startAnvil } from '../fixtures/utils.js';
 
 /**
