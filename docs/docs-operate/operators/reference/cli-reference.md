@@ -344,11 +344,11 @@ tags:
     --sequencer.feeRecipient <value>                                                                                                        ($FEE_RECIPIENT)
           Address to receive fees.
 
-    --sequencer.acvmWorkingDirectory <value>                                                                                                ($ACVM_WORKING_DIRECTORY)
+    --sequencer.noirExecuteWorkingDirectory <value>                                                                                         ($NOIR_EXECUTE_WORKING_DIRECTORY)
           The working directory to use for simulation/proving
 
-    --sequencer.acvmBinaryPath <value>                                                                                                      ($ACVM_BINARY_PATH)
-          The path to the ACVM binary
+    --sequencer.noirExecuteBinaryPath <value>                                                                                               ($NOIR_EXECUTE_BINARY_PATH)
+          The path to the noir-execute binary
 
     --sequencer.governanceProposerPayload <value>                                                                                           ($GOVERNANCE_PROPOSER_PAYLOAD_ADDRESS)
           The address of the payload for the governanceProposer
@@ -496,11 +496,11 @@ tags:
     --proverNode.keyStoreDirectory <value>                                                                                                  ($KEY_STORE_DIRECTORY)
           Location of key store directory
 
-    --proverNode.acvmWorkingDirectory <value>                                                                                               ($ACVM_WORKING_DIRECTORY)
+    --proverNode.noirExecuteWorkingDirectory <value>                                                                                        ($NOIR_EXECUTE_WORKING_DIRECTORY)
           The working directory to use for simulation/proving
 
-    --proverNode.acvmBinaryPath <value>                                                                                                     ($ACVM_BINARY_PATH)
-          The path to the ACVM binary
+    --proverNode.noirExecuteBinaryPath <value>                                                                                              ($NOIR_EXECUTE_BINARY_PATH)
+          The path to the noir-execute binary
 
     --proverNode.bbWorkingDirectory <value>                                                                                                 ($BB_WORKING_DIRECTORY)
           The working directory to use for proving
@@ -998,8 +998,14 @@ tags:
     --tel.otelMinTraceDurationMs <value>                                      (default: 10)                                                 ($OTEL_MIN_TRACE_DURATION_MS)
           The minimum successful trace duration to export in milliseconds. Set to 0 to export all traces.
 
-    --tel.otelBspMaxQueueSize <value>                                         (default: 16384)                                              ($OTEL_BSP_MAX_QUEUE_SIZE)
+    --tel.otelBspMaxQueueSize <value>                                         (default: 65536)                                              ($OTEL_BSP_MAX_QUEUE_SIZE)
           The maximum number of completed spans to queue before export.
+
+    --tel.otelBspMaxExportBatchSize <value>                                   (default: 4096)                                               ($OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+          The maximum number of spans to send to the collector in a single export.
+
+    --tel.otelBspScheduleDelayMs <value>                                      (default: 5000)                                               ($OTEL_BSP_SCHEDULE_DELAY)
+          How long to wait before exporting a partially filled batch of spans, in milliseconds.
 
     --tel.otelIncludeMetrics <value>                                          (default: )                                                   ($OTEL_INCLUDE_METRICS)
           A list of metric prefixes to include in export (ignored if OTEL_EXCLUDE_METRICS is set)
@@ -1112,6 +1118,9 @@ tags:
 
     --pxe.autoSync <value>                                                    (default: true)                                               ($PXE_AUTO_SYNC)
           Whether PXE syncs with the node automatically before each operation. Disable to let the caller (e.g. a wallet) drive syncs explicitly via pxe.sync().
+
+    --pxe.concurrentContractSyncEnabled <value>                                                                                             ($PXE_CONCURRENT_CONTRACT_SYNC_ENABLED)
+          Whether PXE speculatively syncs contracts it predicts will follow the one requested, running them concurrently with it. Repeated flows sync faster, but a wrong prediction spends unnecessary node requests. Experimental, off by default.
 
     --pxe.nodeUrl <value>                                                                                                                   ($AZTEC_NODE_URL)
           Custom Aztec Node URL to connect to
