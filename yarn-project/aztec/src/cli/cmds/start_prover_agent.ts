@@ -34,8 +34,8 @@ export async function startProverAgent(
     ...extractRelevantOptions<ProverAgentConfig>(options, proverAgentConfigMappings, 'proverAgent'), // override with command line options
   };
 
-  if (config.realProofs && (!config.bbBinaryPath || !config.acvmBinaryPath)) {
-    userLog(`Requested real proving but no path to bb or acvm binaries provided`);
+  if (config.realProofs && (!config.bbBinaryPath || !config.noirExecuteBinaryPath)) {
+    userLog(`Requested real proving but no path to bb or noir-execute binaries provided`);
     process.exit(1);
   }
 

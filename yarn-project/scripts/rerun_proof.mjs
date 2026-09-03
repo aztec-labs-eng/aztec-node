@@ -36,9 +36,9 @@ const bbBinary = type === ProvingRequestType.PUBLIC_VM ? 'bb-avm' : 'bb';
 const prover = await BBNativeRollupProver.new({
   bbBinaryPath: process.env.BB_BINARY_PATH ?? join(import.meta.dirname, `../../labs-aztec-toolchain/bin/${bbBinary}`),
   bbWorkingDirectory: join(tmp, 'bb'),
-  acvmBinaryPath:
-    process.env.ACVM_BINARY_PATH ?? join(import.meta.dirname, '../../labs-aztec-toolchain/bin/noir-execute'),
-  acvmWorkingDirectory: join(tmp, 'acvm'),
+  noirExecuteBinaryPath:
+    process.env.NOIR_EXECUTE_BINARY_PATH ?? join(import.meta.dirname, '../../labs-aztec-toolchain/bin/noir-execute'),
+  noirExecuteWorkingDirectory: join(tmp, 'noir-execute'),
   bbSkipCleanup: true,
 });
 

@@ -105,8 +105,8 @@ export class TestContext {
       localProver = new TestCircuitProver();
     } else {
       const bbConfig: BBProverConfig = {
-        acvmBinaryPath: config.expectedAcvmPath,
-        acvmWorkingDirectory: config.acvmWorkingDirectory,
+        noirExecuteBinaryPath: config.expectedNoirExecutePath,
+        noirExecuteWorkingDirectory: config.noirExecuteWorkingDirectory,
         bbBinaryPath: config.expectedBBPath,
         bbWorkingDirectory: config.bbWorkingDirectory,
         bbSkipCleanup: config.bbSkipCleanup,

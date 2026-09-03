@@ -85,7 +85,7 @@ import { type Chain, foundry } from 'viem/chains';
 import { TestWallet } from '../test-wallet/test_wallet.js';
 import { MNEMONIC, TEST_MAX_PENDING_TX_POOL_COUNT, TEST_PEER_CHECK_INTERVAL_MS } from './fixtures.js';
 import { getBBConfig } from './get_bb_config.js';
-import { getACVMConfig } from './get_noir_execute_config.js';
+import { getNoirExecuteConfig } from './get_noir_execute_config.js';
 import { isMetricsLoggingRequested, setupMetricsLogger } from './logging.js';
 import { getStandardContractGenesisNullifiers } from './standard_contracts_genesis.js';
 import { testSpan } from './timing.js';
@@ -299,8 +299,8 @@ export type EndToEndContext<TDeployExtraL1ContractsReturnType = unknown> = {
   genesis: GenesisData | undefined;
   /** Resolved value of the `deployExtraL1Contracts` setup hook, if one was provided. */
   extraL1DeployResult: TDeployExtraL1ContractsReturnType;
-  /** ACVM config (only set if running locally). */
-  acvmConfig: Awaited<ReturnType<typeof getACVMConfig>>;
+  /** noir-execute config (only set if running locally). */
+  noirExecuteConfig: Awaited<ReturnType<typeof getNoirExecuteConfig>>;
   /** BB config (only set if running locally). */
   bbConfig: Awaited<ReturnType<typeof getBBConfig>>;
   /** Directory to cleanup on teardown. */
@@ -591,22 +591,22 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
 
     // These boot steps are independent and write disjoint config keys, so run them concurrently:
     // telemetry returns a client (no config write), shared blob storage writes blobFileStore* keys,
-    // and the ACVM/BB config resolvers write their own acvm*/bb* keys.
-    const [telemetryClient, , acvmConfig, bbConfig] = await Promise.all([
+    // and the noir-execute/BB config resolvers write their own noirExecute*/bb* keys.
+    const [telemetryClient, , noirExecuteConfig, bbConfig] = await Promise.all([
       // Use metricsPort-based telemetry if provided, otherwise use the regular telemetry client
       opts.metricsPort ? getEndToEndTestTelemetryClient(opts.metricsPort) : getTelemetryClient(opts.telemetryConfig),
       setupSharedBlobStorage(config),
-      getACVMConfig(logger),
+      getNoirExecuteConfig(logger),
       getBBConfig(logger),
     ]);
     logger.trace('Created telemetry client');
     logger.trace('Set up shared blob storage');
 
-    if (acvmConfig) {
-      config.acvmWorkingDirectory = acvmConfig.acvmWorkingDirectory;
-      config.acvmBinaryPath = acvmConfig.acvmBinaryPath;
+    if (noirExecuteConfig) {
+      config.noirExecuteWorkingDirectory = noirExecuteConfig.noirExecuteWorkingDirectory;
+      config.noirExecuteBinaryPath = noirExecuteConfig.noirExecuteBinaryPath;
     }
-    logger.trace('Resolved ACVM config');
+    logger.trace('Resolved noir-execute config');
 
     if (bbConfig) {
       config.bbBinaryPath = bbConfig.bbBinaryPath;
@@ -742,8 +742,8 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
           await tryStop(aztecNodeService, logger);
           await tryStop(proverNode, logger);
 
-          if (acvmConfig?.cleanup) {
-            await acvmConfig.cleanup();
+          if (noirExecuteConfig?.cleanup) {
+            await noirExecuteConfig.cleanup();
           }
 
           if (bbConfig?.cleanup) {
@@ -788,7 +788,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       telemetryClient,
       wallet,
       accounts,
-      acvmConfig,
+      noirExecuteConfig,
       bbConfig,
       directoryToCleanup,
     };

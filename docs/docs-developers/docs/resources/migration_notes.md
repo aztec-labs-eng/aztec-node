@@ -9,6 +9,44 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Node] `ACVM_*` config renamed to `NOIR_EXECUTE_*`
+
+Protocol circuits are now executed with noir's `noir-execute` rather than the `acvm` binary, so the
+configuration naming the executor follows the tool. The environment variables, the CLI flags and the
+config fields are renamed; nothing about what you point them at changes, beyond the binary itself no
+longer being called `acvm`.
+
+| Old                          | New                                  |
+| ---------------------------- | ------------------------------------ |
+| `$ACVM_BINARY_PATH`          | `$NOIR_EXECUTE_BINARY_PATH`          |
+| `$ACVM_WORKING_DIRECTORY`    | `$NOIR_EXECUTE_WORKING_DIRECTORY`    |
+| `--sequencer.acvmBinaryPath` | `--sequencer.noirExecuteBinaryPath`  |
+| `--proverNode.acvmBinaryPath`| `--proverNode.noirExecuteBinaryPath` |
+| `acvmBinaryPath`             | `noirExecuteBinaryPath`              |
+| `acvmWorkingDirectory`       | `noirExecuteWorkingDirectory`        |
+
+The same rename applies to the `acvmWorkingDirectory` flags (`--sequencer.acvmWorkingDirectory`,
+`--proverNode.acvmWorkingDirectory`). The release image sets the new variables itself, and its default
+working directory moves from `/usr/src/acvm` to `/usr/src/noir-execute`.
+
+**Migration:**
+
+```diff
+- ACVM_BINARY_PATH=/usr/src/labs-aztec-toolchain/bin/noir-execute
+- ACVM_WORKING_DIRECTORY=/usr/src/acvm
++ NOIR_EXECUTE_BINARY_PATH=/usr/src/labs-aztec-toolchain/bin/noir-execute
++ NOIR_EXECUTE_WORKING_DIRECTORY=/usr/src/noir-execute
+```
+
+There is no fallback to the old names, and a node still setting only `ACVM_BINARY_PATH` fails to start
+rather than running degraded: a prover agent exits with `Requested real proving but no path to bb or
+noir-execute binaries provided`, and a prover node or sequencer configured for real proofs throws from
+`BBNativeRollupProver.new` when it tries to stat an undefined path. Only a node running without real
+proofs falls back to WASM simulation, which is much slower.
+
+Type names keep the ACVM spelling (`NativeACVMSimulator`, `ACVMConfig`, `ACVMWitness`), since those
+describe the ACIR VM and its witness format rather than the tool that runs it.
+
 ### [npm] Packages moved to the `@aztec-labs` scope
 
 Every package published from this repository is now scoped `@aztec-labs` instead of `@aztec`.
