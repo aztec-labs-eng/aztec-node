@@ -126,7 +126,10 @@ describe('TxEffect', () => {
           await fieldHash([new Fr(41), new Fr(42)]),
           await fieldHash([new Fr(3), new Fr(101), new Fr(102), new Fr(103)]),
           await fieldHash([new Fr(2), new Fr(PUBLIC_LOG_ADDRESS), new Fr(201), new Fr(202)]),
-          await fieldHash([new Fr(CONTRACT_CLASS_LOG_ADDRESS), new Fr(301), new Fr(302)]),
+          await fieldHash([
+            new Fr(CONTRACT_CLASS_LOG_ADDRESS),
+            await txEffect.contractClassLogs[0].hash(),
+          ]),
         ],
         DomainSeparator.TX_EFFECT_HASH,
       );
@@ -159,7 +162,7 @@ describe('TxEffect', () => {
     it('computes the leaf of the fixture', async () => {
       const leaf = await smallFixture().computeTxEffectLeaf();
       expect(leaf.toString()).toMatchInlineSnapshot(
-        `"0x23123931ffdee54cf34fbf657b7817ad5fcae54bce508a739a01977591b991cc"`,
+        `"0x09927fb173cb1b27828db4e24d227a621f61bb668aca36f2b1e458a31585455a"`,
       );
 
       // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data

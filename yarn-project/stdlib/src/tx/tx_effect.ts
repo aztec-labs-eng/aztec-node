@@ -298,7 +298,14 @@ export class TxEffect {
    */
   async computeTxEffectHash(): Promise<Fr> {
     const txBlobData = this.toTxBlobData();
-    const fieldHashes = await Promise.all(getTxEffectFieldBlobSlices(txBlobData).map(computeTxEffectFieldHash));
+    const contractClassLogHashFields = (
+      await Promise.all(
+        this.contractClassLogs.map(async log => [log.contractAddress.toField(), await log.hash()]),
+      )
+    ).flat();
+    const fieldHashes = await Promise.all(
+      getTxEffectHashPreimages(txBlobData, contractClassLogHashFields).map(computeTxEffectFieldHash),
+    );
     return poseidon2HashWithSeparator(
       [encodeTxStartMarker(txBlobData.txStartMarker), this.transactionFee, ...fieldHashes],
       DomainSeparator.TX_EFFECT_HASH,
@@ -414,11 +421,11 @@ export class TxEffect {
 }
 
 /**
- * The blob-encoding slices of a tx effect's variable-length fields, in the order they are hashed into the tx effect
- * hash. Each slice is exactly what `encodeTxBlobData` writes for that field, so no new serialization format is
- * introduced.
+ * The preimages of a tx effect's variable-length field hashes, in their fixed order within the tx effect hash.
+ * Every preimage is its field's blob-encoding slice except the contract class log, whose preimage uses the full
+ * kernel-committed log hash to avoid hashing the same padded log fields twice in the rollup circuit.
  */
-function getTxEffectFieldBlobSlices(txBlobData: TxBlobData): Fr[][] {
+function getTxEffectHashPreimages(txBlobData: TxBlobData, contractClassLogHashFields: Fr[]): Fr[][] {
   return [
     txBlobData.noteHashes,
     txBlobData.nullifiers,
@@ -426,7 +433,7 @@ function getTxEffectFieldBlobSlices(txBlobData: TxBlobData): Fr[][] {
     encodePublicDataWritesBlobFields(txBlobData.publicDataWrites),
     encodePrivateLogsBlobFields(txBlobData.privateLogs),
     txBlobData.publicLogs,
-    txBlobData.contractClassLog,
+    contractClassLogHashFields,
   ];
 }
 
