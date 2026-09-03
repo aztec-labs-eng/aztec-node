@@ -38,20 +38,24 @@ Nightlies can partially publish: the tag can exist while an npm package or relea
 artifact is missing. Check all of the following before touching anything; on any miss,
 fall back to the previous nightly rather than pinning a broken release.
 
-- Every `@aztec/*` entry in `yarn-project/package.json`'s `resolutions` exists on npm at
-  the target version:
+- Every `@aztec-foundation/*` entry in `yarn-project/package.json`'s `resolutions` exists
+  on npm at the target version:
 
   ```bash
-  jq -r '.resolutions | keys[] | select(startswith("@aztec/"))' yarn-project/package.json \
+  jq -r '.resolutions | keys[] | select(startswith("@aztec-foundation/"))' yarn-project/package.json \
     | xargs -I{} sh -c 'npm view {}@<version> version >/dev/null || echo "MISSING: {}"'
   ```
 
-- The bb-avm release artifacts exist (linux only): `barretenberg-avm-amd64-linux.tar.gz`
-  and `barretenberg-avm-arm64-linux.tar.gz` under
-  `https://github.com/AztecProtocol/barretenberg/releases/download/v<version>/` (or the
-  same path on `AztecProtocol/aztec-packages`). Check with `curl -sfI`.
-- The bbup installer resolves at the tag (BBUP_URL derives from `BB_VERSION`):
-  `https://raw.githubusercontent.com/AztecProtocol/aztec-packages/v<version>/barretenberg/bbup/bbup`.
+- The per-platform binary packages the toolchain curls exist at the target version:
+  `@aztec-foundation/bb-{linux,darwin}-{x64,arm64}` and `@aztec-foundation/bb-avm-linux-{x64,arm64}`
+  (bb-avm is published for linux only). Check the tarball URLs `bootstrap.sh` builds, since
+  a package can exist without the pinned version being published:
+
+  ```bash
+  for p in bb-linux-x64 bb-linux-arm64 bb-darwin-x64 bb-darwin-arm64 bb-avm-linux-x64 bb-avm-linux-arm64; do
+    curl -sfI "https://registry.npmjs.org/@aztec-foundation/$p/-/$p-<version>.tgz" >/dev/null || echo "MISSING: $p"
+  done
+  ```
 
 ### 3. Derive the paired NOIR_VERSION
 
