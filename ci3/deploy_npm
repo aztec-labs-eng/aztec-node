@@ -5,14 +5,18 @@ version=$1
 
 dry_run=${DRY_RUN:-0}
 
-# Only two npm dist-tags are used: 'latest' for stable releases and 'prerelease' for everything else.
-# Pre-release versions (nightlies, RCs, etc.) are installed by exact version, not by dist-tag.
+# A stable release takes 'latest'; the nightly and rc channels share 'prerelease'; every other
+# channel gets a dist-tag of its own. Sharing is a closed set on purpose: a 'commit' canary cut
+# from a pull request carries that branch's manifest version, so it can be newer than the newest
+# nightly and would otherwise repoint 'prerelease' at an unmerged build. Prerelease versions are
+# installed by exact version anyway.
 prerelease=$(semver prerelease $version)
-if [ -n "$prerelease" ]; then
-  npm_tag="prerelease"
-else
-  npm_tag="latest"
-fi
+channel=${prerelease%%.*}
+case "$channel" in
+  "") npm_tag="latest" ;;
+  nightly | rc) npm_tag="prerelease" ;;
+  *) npm_tag="$channel" ;;
+esac
 
 # Point .npmrc config to one that relies on 'NPM_TOKEN' in the environment.
 export NPM_CONFIG_GLOBALCONFIG="$root/ci3/npm/.npmrc"
@@ -29,15 +33,13 @@ if [ "$version" == "$published_version" ]; then
   exit 0
 fi
 
-# A version older than what the shared dist-tag already points at must not take it. Publishing a
-# 0.0.1 canary, or re-publishing an old release line, would otherwise repoint 'prerelease' away
-# from the newest prerelease (or 'latest' away from the newest release) for everyone. Such a
-# version goes out under its own channel instead — 'commit', 'rc', or 'v<major>' for a stable —
-# so it stays installable by tag without hijacking the shared one.
+# A version older than what a shared dist-tag already points at must not take it: re-publishing
+# an old release line would repoint 'latest' (or 'prerelease') backwards for everyone. Such a
+# version goes out under its own channel instead — 'nightly', 'rc', or 'v<major>' for a stable —
+# so it stays installable by tag without moving the shared one.
 publish_tag=$npm_tag
 if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
-  publish_tag=${prerelease%%.*}
-  [ -n "$publish_tag" ] || publish_tag="v$(semver major "$version")"
+  publish_tag=${channel:-v$(semver major "$version")}
   echo "Version $version is older than the published $npm_tag ($published_version);"
   echo "publishing under dist-tag '$publish_tag' instead of moving '$npm_tag' backwards."
 fi

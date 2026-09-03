@@ -1,5 +1,5 @@
 # Cuts a canary release from a pull request. Adding the `ci-release-pr` label pushes a
-# v0.0.1-commit.g<sha> tag at the PR's head, which runs release.yml like any other release tag.
+# v<version>-commit.g<sha> tag at the PR's head, which runs release.yml like any other release tag.
 #
 # The tag is minted with the release GitHub App, not the workflow token: the Release Tags ruleset
 # restricts tag creation on every ref to that App, and ci3.yml deliberately holds only
@@ -44,11 +44,19 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # 0.0.1 so a canary can never be the newest version of anything: it cannot take an npm
-          # 'latest' dist-tag, and it sorts below every real release. The 'g' prefixes the sha
-          # because a prerelease identifier of digits only may not have a leading zero (semver),
-          # and the Tag Format ruleset rejects the tag if it does.
-          tag="v0.0.1-commit.g${HEAD_SHA:0:8}"
+          # The version comes from the manifest of the commit being tagged, as it does for every
+          # other release. Read over the API rather than from a checkout, and matched against a
+          # bare X.Y.Z: the value is PR-controlled and lands in a ref name.
+          version=$(gh api "repos/${REPO}/contents/.release-please-manifest.json?ref=${HEAD_SHA}" \
+            -H "Accept: application/vnd.github.raw" | jq -r '."."')
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::.release-please-manifest.json holds '$version', which is not an X.Y.Z version."
+            exit 1
+          fi
+          # The 'g' prefixes the sha because a prerelease identifier of digits only may not have a
+          # leading zero (semver), and the Tag Format ruleset rejects the tag if it does. The
+          # 'commit' channel keeps the canary off the shared npm dist-tags (see ci3/deploy_npm).
+          tag="v${version}-commit.g${HEAD_SHA:0:8}"
           echo "Tagging ${HEAD_SHA} as ${tag}"
           if gh api "repos/${REPO}/git/ref/tags/${tag}" >/dev/null 2>&1; then
             echo "::error::Tag ${tag} already exists; push a new commit to cut another canary."
