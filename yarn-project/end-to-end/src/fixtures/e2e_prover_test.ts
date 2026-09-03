@@ -21,8 +21,8 @@ import { privateKeyToAddress } from 'viem/accounts';
 import { TokenSimulator } from '../simulators/token_simulator.js';
 import { SingleNodeTestContext, type SingleNodeTestOpts } from '../single-node/single_node_test_context.js';
 import { TestWallet } from '../test-wallet/test_wallet.js';
-import { getACVMConfig } from './get_acvm_config.js';
 import { getBBConfig } from './get_bb_config.js';
+import { getACVMConfig } from './get_noir_execute_config.js';
 import { getPrivateKeyFromIndex, getSponsoredFPCAddress, setup, setupPXEAndGetWallet } from './setup.js';
 import { getStandardContractGenesisNullifiers } from './standard_contracts_genesis.js';
 

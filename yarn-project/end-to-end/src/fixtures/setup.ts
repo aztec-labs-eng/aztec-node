@@ -84,8 +84,8 @@ import { type Chain, foundry } from 'viem/chains';
 
 import { TestWallet } from '../test-wallet/test_wallet.js';
 import { MNEMONIC, TEST_MAX_PENDING_TX_POOL_COUNT, TEST_PEER_CHECK_INTERVAL_MS } from './fixtures.js';
-import { getACVMConfig } from './get_acvm_config.js';
 import { getBBConfig } from './get_bb_config.js';
+import { getACVMConfig } from './get_noir_execute_config.js';
 import { isMetricsLoggingRequested, setupMetricsLogger } from './logging.js';
 import { getStandardContractGenesisNullifiers } from './standard_contracts_genesis.js';
 import { testSpan } from './timing.js';
