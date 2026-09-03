@@ -66,7 +66,7 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "semver=$SEMVER" >> $GITHUB_OUTPUT
 
-  wait-for-ci3:
+  wait-for-release:
     needs: determine-tag
     runs-on: ubuntu-latest
     steps:
@@ -80,11 +80,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for CI3
-        run: spartan/scripts/wait_for_ci3.ts "${{ needs.determine-tag.outputs.tag }}"
+      - name: Wait for release
+        run: spartan/scripts/wait_for_release.ts "${{ needs.determine-tag.outputs.tag }}"
 
   deploy:
-    needs: [determine-tag, wait-for-ci3]
+    needs: [determine-tag, wait-for-release]
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: staging-internal

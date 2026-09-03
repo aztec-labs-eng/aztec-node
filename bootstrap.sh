@@ -529,19 +529,6 @@ function release {
   echo_header "release all"
   set -x
 
-  # A private release publishes only to our internal GCP Artifact Registry (the docker image and our
-  # npm packages) — see private_release. ci3_labels_to_env.sh sets PRIVATE_RELEASE for every release
-  # outside the canonical public repo; we ALSO backstop on the repo name here so the public release
-  # flow (DockerHub, npmjs, crates.io, github) can never run in any other repo (e.g. a private fork),
-  # even if that env var is missing or this is invoked outside ci3.yml. GITHUB_REPOSITORY is unset in
-  # local runs, which keep the public path.
-  if [ "${PRIVATE_RELEASE:-0}" = 1 ] ||
-     { [ -n "${GITHUB_REPOSITORY:-}" ] &&
-       [ "$(printf '%s' "$GITHUB_REPOSITORY" | tr 'A-Z' 'a-z')" != "aztec-labs-eng/aztec-node" ]; }; then
-    private_release
-    return
-  fi
-
   projects=(
     yarn-project
     aztec-up
@@ -561,91 +548,6 @@ function release {
 
 function release_dryrun {
   DRY_RUN=1 release
-}
-
-function private_release {
-  # Release flow for the private repo, run on a (nightly) ci-private-release PR. We publish only to our
-  # internal GCP Artifact Registry: the docker image (release-image -> INTERNAL_DOCKER_REGISTRY that
-  # GKE/staging pulls from) and the yarn-project npm packages (-> the INTERNAL_NPM_REGISTRY npm repo).
-  # We run the release step for real on exactly those components and do not invoke the others — the
-  # remaining release sources publish public artifacts (github releases, the aztec-up/playground S3
-  # installers) and are not interrelated with these.
-  echo_header "private release"
-
-  # Default to the private staging Artifact Registry; override via the INTERNAL_*_REGISTRY env vars.
-  # Exported so the child project bootstraps and gcp_artifact_login inherit them.
-  export INTERNAL_DOCKER_REGISTRY=${INTERNAL_DOCKER_REGISTRY:-us-west1-docker.pkg.dev/testnet-440309/aztec}
-  export INTERNAL_NPM_REGISTRY=${INTERNAL_NPM_REGISTRY:-https://us-west1-npm.pkg.dev/testnet-440309/aztec-npm}
-
-  # Activate the CI service account (gcp_artifact_login registers the docker credential helper and
-  # activates the SA globally) and mint a short-lived access token for npm auth against the AR npm repo.
-  ci3/gcp_artifact_login
-  set +x  # Never echo the access token.
-  export NPM_TOKEN=$(gcloud auth print-access-token)
-  # Route our scopes to the internal npm registry; public deps still resolve from the default registry
-  # (npmjs), so publishes and yarn-project's install smoke-test both work. Everything we publish is
-  # @aztec-labs-scoped; the foundation packages we depend on are @aztec-foundation-scoped and the
-  # viem fork is @aztec-scoped, and both are mirrored in below, so all three route there. Exported
-  # so deploy_npm and that smoke-test share one config.
-  local npmrc reg
-  reg="${INTERNAL_NPM_REGISTRY%/}/"
-  npmrc=$(mktemp)
-  (umask 077; {
-    echo "@aztec:registry=$reg"
-    echo "@aztec-labs:registry=$reg"
-    echo "@aztec-foundation:registry=$reg"
-    echo "${reg#https:}:_authToken=\${NPM_TOKEN}"
-  } > "$npmrc")
-  export NPM_CONFIG_GLOBALCONFIG="$npmrc"
-  set -x
-
-  # Mirror external first-party-scoped dependencies from public npm into our internal registry: fork
-  # dependencies (e.g. the vendored "viem": "npm:@aztec/viem@x") and the foundation packages that
-  # yarn-project consumes at the versions pinned in its root resolutions field. Because we scope ALL
-  # of @aztec and @aztec-foundation to the internal registry, these packages — which we don't
-  # build/publish ourselves — must also live there, or installs of our published packages 404 (this
-  # is what yarn-project's release smoke-test exercises). amd64 only; the registry is shared across arches.
-  if [ "$(arch)" != arm64 ]; then
-    local spec name ver td
-    for spec in $({
-        grep -rhoE 'npm:@aztec/[a-zA-Z0-9_.-]+@[0-9][^"]*' yarn-project --include=package.json | sed 's/^npm://'
-        # TODO: this mirrors only exact-version pins (^[0-9]), while release_prep_package_json
-        # writes any resolutions entry (range, npm: alias) into the published manifests; such a
-        # pin would be published but never mirrored, and installs from the internal registry
-        # would 404 on it. All current pins are exact versions. To be fixed when private
-        # releases get proper treatment.
-        jq -r '.resolutions // {} | to_entries[]
-               | select(.key | startswith("@aztec/") or startswith("@aztec-foundation/"))
-               | select(.value | test("^[0-9]"))
-               | "\(.key)@\(.value)"' yarn-project/package.json
-      } | sort -u); do
-      name="${spec%@*}"; ver="${spec##*@}"
-      if npm view "${name}@${ver}" version >/dev/null 2>&1; then
-        echo "Mirror: ${spec} already present in internal registry; skipping."
-        continue
-      fi
-      echo "Mirror: copying ${spec} from public npm to internal registry."
-      td=$(mktemp -d)
-      # Override the scope registries for the fetch (our .npmrc points them at the internal registry,
-      # which doesn't have these yet); publish then uses the inherited scope->internal config.
-      npm pack "${spec}" --@aztec:registry=https://registry.npmjs.org/ \
-        --@aztec-foundation:registry=https://registry.npmjs.org/ --pack-destination "$td" --quiet
-      npm publish "$td"/*.tgz
-      rm -rf "$td"
-    done
-  fi
-
-  # Publish for real. The foundation packages yarn-project depends on are not published from
-  # here — they resolve at the versions pinned in yarn-project's root resolutions, mirrored into
-  # the internal registry above, so yarn-project's release smoke-test can install them.
-  # npm packages are platform-independent, so only the docker image is published on arm64.
-  local publish=(yarn-project release-image)
-  if [ $(arch) == arm64 ]; then
-    publish=(release-image)
-  fi
-  for project in "${publish[@]}"; do
-    $project/bootstrap.sh release
-  done
 }
 
 function check_compat_artifacts_tracked {
@@ -1034,23 +936,6 @@ case "$cmd" in
     fi
 
     ./bootstrap.sh build release
-    ./bootstrap.sh release
-    ;;
-
-  "ci-private-release")
-    # Local/dev entrypoint for the PRIVATE_RELEASE flow (see private_release): dry-run every project
-    # except release-image, then publish release-image for real to the internal GCP Artifact Registry.
-    # Same publishing path the private-release.yml workflow runs, minus EC2.
-    # Build first so the release-image (and the artifacts the dry-runs pack) exist; set SKIP_BUILD=1 to
-    # reuse an existing build. Requires INTERNAL_DOCKER_REGISTRY + GCP creds (GCP_SA_KEY or
-    # GOOGLE_APPLICATION_CREDENTIALS) in the environment.
-    export CI=${CI:-1}
-    export PRIVATE_RELEASE=1
-    export REF_NAME=${REF_NAME:-v0.0.1-commit.$(git rev-parse --short HEAD)}
-    # Local convenience: default GCP creds to ~/sa.json (the CI service-account key) when present.
-    [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "$HOME/sa.json" ] && \
-      export GOOGLE_APPLICATION_CREDENTIALS="$HOME/sa.json"
-    [ "${SKIP_BUILD:-0}" = 1 ] || ./bootstrap.sh build release
     ./bootstrap.sh release
     ;;
 

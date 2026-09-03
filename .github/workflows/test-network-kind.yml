@@ -1,8 +1,8 @@
 # KIND-based e2e tests that run on a local Kubernetes cluster on an EC2 instance.
 #
 # Two entry points:
-# - schedule (currently disabled): runs against today's nightly release once its CI3
-#   run has finished (select-image + wait-for-ci3, same model as deploy-next-net.yml).
+# - schedule (currently disabled): runs against today's nightly release once its release
+#   run has finished (select-image + wait-for-release, same model as deploy-next-net.yml).
 #   A day with no nightly tag fails loudly at select-image.
 # - workflow_dispatch: manual runs against an arbitrary ref.
 name: Test Network KIND
@@ -20,7 +20,7 @@ on:
         default: main
 
 # id-token: write lets the job assume the AWS role via OIDC.
-# actions: read covers wait_for_ci3's workflow-run queries on scheduled runs.
+# actions: read covers wait_for_release's workflow-run queries on scheduled runs.
 permissions:
   contents: read
   actions: read
@@ -57,7 +57,7 @@ jobs:
 
   # Block until the nightly tag's release CI has succeeded, so we only test releases
   # that actually shipped.
-  wait-for-ci3:
+  wait-for-release:
     needs: select-image
     runs-on: ubuntu-latest
     env:
@@ -73,13 +73,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for CI3
-        run: spartan/scripts/wait_for_ci3.ts "${{ needs.select-image.outputs.source_ref }}"
+      - name: Wait for release
+        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.source_ref }}"
 
   kind-test:
-    needs: [select-image, wait-for-ci3]
+    needs: [select-image, wait-for-release]
     # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
-    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-ci3.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 180 # 3 hours for KIND tests
     steps:

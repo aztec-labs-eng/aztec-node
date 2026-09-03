@@ -35,7 +35,6 @@ function print_usage {
   echo_cmd "network-tests-kind"    "Spin up an EC2 instance to run a KIND-based spartan test."
   echo_cmd "deploy-rollup-upgrade" "Spin up an EC2 instance to deploy a rollup upgrade."
   echo_cmd "release"               "Spin up an EC2 instance and run bootstrap release."
-  echo_cmd "ci-private-release"     "Locally dry-run the release of every project except release-image, then publish release-image to the internal GCP Artifact Registry."
   echo_cmd "shell-new"             "Spin up an EC2 instance, clone the repo, and drop into a shell."
   echo_cmd "shell-container"       "Shell into a running build container. Optional filter tokens (e.g. 'pr-123 bench') select the instance; defaults to the current branch."
   echo_cmd "shell-host"            "Shell into a running build host. Same instance selection as shell-container."
@@ -396,16 +395,6 @@ case "$cmd" in
     # died), so assemble the multi-arch manifest lists from here. imagetools only talks to
     # the registry: no local images or extra instance needed.
     release-image/bootstrap.sh release_docker_manifest
-    ;;
-  ci-private-release)
-    # Run the private release flow LOCALLY (no EC2): dry-run every project except release-image, then
-    # publish release-image for real to the internal GCP Artifact Registry. Override
-    # INTERNAL_DOCKER_REGISTRY / GOOGLE_APPLICATION_CREDENTIALS as needed; SKIP_BUILD=1 reuses a build.
-    export INTERNAL_DOCKER_REGISTRY=${INTERNAL_DOCKER_REGISTRY:-us-west1-docker.pkg.dev/testnet-440309/aztec}
-    # Default to the local SA key if no GCP creds are set (a no-op in CI, where GCP_SA_KEY is used).
-    [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "$HOME/sa.json" ] && \
-      export GOOGLE_APPLICATION_CREDENTIALS="$HOME/sa.json"
-    ./bootstrap.sh ci-private-release
     ;;
 
   ##################

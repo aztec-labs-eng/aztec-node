@@ -3,8 +3,8 @@
 # (bench/main) is never affected.
 #
 # Two entry points:
-# - schedule (currently disabled): runs against today's nightly release once its CI3
-#   run has finished (select-image + wait-for-ci3, same model as deploy-next-net.yml).
+# - schedule (currently disabled): runs against today's nightly release once its release
+#   run has finished (select-image + wait-for-release, same model as deploy-next-net.yml).
 #   Scheduled runs have no PR number, so results are observational (no upload).
 # - workflow_dispatch: manual runs against an arbitrary ref.
 name: Test Network Bench
@@ -32,7 +32,7 @@ on:
         default: ""
 
 # id-token: write lets the job assume the AWS role via OIDC.
-# actions: read covers wait_for_ci3's workflow-run queries on scheduled runs.
+# actions: read covers wait_for_release's workflow-run queries on scheduled runs.
 permissions:
   contents: read
   actions: read
@@ -69,7 +69,7 @@ jobs:
 
   # Block until the nightly tag's release build has published the docker image,
   # so the deploys below don't race the build and hit ImagePullBackOff.
-  wait-for-ci3:
+  wait-for-release:
     needs: select-image
     runs-on: ubuntu-latest
     env:
@@ -85,14 +85,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for CI3
-        run: spartan/scripts/wait_for_ci3.ts "${{ needs.select-image.outputs.source_ref }}"
+      - name: Wait for release
+        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.source_ref }}"
 
   bench:
     name: ${{ matrix.bench_type }}
-    needs: [select-image, wait-for-ci3]
+    needs: [select-image, wait-for-release]
     # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
-    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-ci3.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
