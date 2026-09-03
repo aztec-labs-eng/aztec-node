@@ -29,6 +29,19 @@ if [ "$version" == "$published_version" ]; then
   exit 0
 fi
 
+# A version older than what the shared dist-tag already points at must not take it. Publishing a
+# 0.0.1 canary, or re-publishing an old release line, would otherwise repoint 'prerelease' away
+# from the newest prerelease (or 'latest' away from the newest release) for everyone. Such a
+# version goes out under its own channel instead — 'commit', 'rc', or 'v<major>' for a stable —
+# so it stays installable by tag without hijacking the shared one.
+publish_tag=$npm_tag
+if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
+  publish_tag=${prerelease%%.*}
+  [ -n "$publish_tag" ] || publish_tag="v$(semver major "$version")"
+  echo "Version $version is older than the published $npm_tag ($published_version);"
+  echo "publishing under dist-tag '$publish_tag' instead of moving '$npm_tag' backwards."
+fi
+
 # Create temp directory for publishing
 tmpdir=$(mktemp -d)
 function cleanup {
@@ -51,20 +64,21 @@ release_prep_package_json $version
 
 # Publish from temp dir
 if [ "$dry_run" -eq 1 ]; then
-  denoise "npm publish --ignore-scripts --dry-run --tag $npm_tag --access public"
+  denoise "npm publish --ignore-scripts --dry-run --tag $publish_tag --access public"
 else
   # Check if version exists.
   if npm view "$package_name@$version" version >/dev/null 2>&1; then
-    # Never move the dist-tag backwards: re-running an old release tag's workflow is idempotent by
-    # design, and must not repoint 'latest'/'prerelease' at the older version it re-publishes.
-    if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
-      echo "Not moving dist-tag $npm_tag backwards from $published_version to $version. Skipping."
+    # Already published, so there is nothing to publish and only a dist-tag to (re)apply. Skip it
+    # when that would move the shared tag backwards: re-running an old release tag's workflow is
+    # idempotent by design.
+    if [ "$publish_tag" != "$npm_tag" ]; then
+      echo "$version is already published and older than $npm_tag ($published_version). Skipping."
       exit 0
     fi
     # Tag the existing version.
     npm dist-tag add $package_name@$version $npm_tag
   else
     # Publish new version.
-    denoise "npm publish --ignore-scripts --tag $npm_tag --access public"
+    denoise "npm publish --ignore-scripts --tag $publish_tag --access public"
   fi
 fi

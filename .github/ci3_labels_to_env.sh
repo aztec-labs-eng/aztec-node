@@ -62,7 +62,7 @@ function main {
 
   local explicit_ci_mode_labels=()
   local mode_label
-  for mode_label in ci-release-pr ci-full ci-full-no-test-cache ci-docs; do
+  for mode_label in ci-full ci-full-no-test-cache ci-docs; do
     if has_label "$mode_label"; then
       explicit_ci_mode_labels+=("$mode_label")
     fi
@@ -78,10 +78,6 @@ function main {
   if [ "$ci_skip_requested" -eq 1 ]; then
     echo "WARNING: Skipping CI because a ci-skip label or --ci-skip commit marker was present. Skip takes precedence over other CI signals." >&2
     ci_mode="skip"
-  elif has_label "ci-release-pr"; then
-    # Release-PR mode creates and pushes a canary release tag for this PR's head
-    # (ci3.sh::handle_release_pr); that tag then runs release.yml like any other release.
-    ci_mode="release-pr"
   elif has_label "ci-full"; then
     ci_mode="full"
   elif has_label "ci-full-no-test-cache"; then
