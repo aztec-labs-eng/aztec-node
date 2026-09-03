@@ -12,7 +12,15 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync(systemPlaywrightPath)) {
   process.env.PLAYWRIGHT_BROWSERS_PATH = systemPlaywrightPath;
 }
 
+// Vite's dependency optimizer stages deps in `<cacheDir>/deps_temp_<rand>` and then renames it over
+// `<cacheDir>/deps`. cacheDir defaults into node_modules, which CI bind-mounts into every ISOLATE
+// container, so concurrent runs of different test files race on the same directory and the rename
+// fails with ENOTEMPTY/ENOENT — the optimizer dies and the browser's module fetch 404s. Give each
+// process its own cacheDir; /tmp is a per-container tmpfs under ISOLATE.
+const cacheDir = path.join(process.env.TMPDIR ?? '/tmp', `kv-store-vite-${process.pid}`);
+
 export default defineConfig({
+  cacheDir,
   define: {
     'process.env': {},
   },

@@ -1,4 +1,7 @@
-// Global setup for vitest - runs before browser is launched
+// Global setup for vitest - runs before browser is launched.
+// Both projects in vitest.config.ts declare `extends: true` and so inherit the root
+// `globalSetup`, which vitest then runs once per project: every log line below appears
+// twice per invocation, on passing runs too.
 export async function setup() {
   console.log('[global-setup] Starting global setup...');
   console.log('[global-setup] Node version:', process.version);
