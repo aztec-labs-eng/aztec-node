@@ -108,12 +108,15 @@ export class BBNativeRollupProver implements ServerCircuitProver {
   }
 
   static async new(config: BBProverConfig, telemetry: TelemetryClient = getTelemetryClient()) {
-    await fs.access(config.acvmBinaryPath, fs.constants.R_OK);
-    await fs.mkdir(config.acvmWorkingDirectory, { recursive: true });
+    await fs.access(config.noirExecuteBinaryPath, fs.constants.R_OK);
+    await fs.mkdir(config.noirExecuteWorkingDirectory, { recursive: true });
     await fs.access(config.bbBinaryPath, fs.constants.R_OK);
     await fs.mkdir(config.bbWorkingDirectory, { recursive: true });
     logger.info(`Using bb.js API with binary at ${config.bbBinaryPath}`);
-    logger.info(`Using native ACVM at ${config.acvmBinaryPath} and working directory ${config.acvmWorkingDirectory}`);
+    logger.info(`Using noir-execute at ${config.noirExecuteBinaryPath}`, {
+      noirExecuteBinaryPath: config.noirExecuteBinaryPath,
+      noirExecuteWorkingDirectory: config.noirExecuteWorkingDirectory,
+    });
 
     return new BBNativeRollupProver(config, telemetry);
   }
@@ -393,8 +396,8 @@ export class BBNativeRollupProver implements ServerCircuitProver {
 
     // Generate the partial witness using the ACVM
     const simulator = new NativeACVMSimulator(
-      this.config.acvmWorkingDirectory,
-      this.config.acvmBinaryPath,
+      this.config.noirExecuteWorkingDirectory,
+      this.config.noirExecuteBinaryPath,
       outputWitnessFile,
       logger,
     );

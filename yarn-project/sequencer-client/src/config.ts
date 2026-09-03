@@ -150,13 +150,13 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
     parseEnv: (val: string) => AztecAddress.fromStringUnsafe(val),
     description: 'Address to receive fees.',
   },
-  acvmWorkingDirectory: {
-    env: 'ACVM_WORKING_DIRECTORY',
+  noirExecuteWorkingDirectory: {
+    env: 'NOIR_EXECUTE_WORKING_DIRECTORY',
     description: 'The working directory to use for simulation/proving',
   },
-  acvmBinaryPath: {
-    env: 'ACVM_BINARY_PATH',
-    description: 'The path to the ACVM binary',
+  noirExecuteBinaryPath: {
+    env: 'NOIR_EXECUTE_BINARY_PATH',
+    description: 'The path to the noir-execute binary',
   },
   governanceProposerPayload: {
     env: 'GOVERNANCE_PROPOSER_PAYLOAD_ADDRESS',

@@ -12,7 +12,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { getBBConfig } from '../../fixtures/get_bb_config.js';
-import { getACVMConfig } from '../../fixtures/get_noir_execute_config.js';
+import { getNoirExecuteConfig } from '../../fixtures/get_noir_execute_config.js';
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { PROVING_SLOT_TIMING, setupWithProver } from '../setup.js';
 import { SingleNodeTestContext } from '../single_node_test_context.js';
@@ -114,7 +114,7 @@ describe('single-node/proving/upload_failed_proof', () => {
         dataDirectory: rerunDataDir,
         proverAgentCount: 2,
         proverId: EthAddress.random(),
-        ...(await getACVMConfig(logger)),
+        ...(await getNoirExecuteConfig(logger)),
         ...(await getBBConfig(logger)),
       },
       context.genesis,
@@ -172,7 +172,7 @@ describe('single-node/proving/upload_failed_proof', () => {
         dataDirectory: rerunDataDir,
         proverAgentCount: 2,
         proverId: EthAddress.random(),
-        ...(await getACVMConfig(logger)),
+        ...(await getNoirExecuteConfig(logger)),
         ...(await getBBConfig(logger)),
       },
       context.genesis,

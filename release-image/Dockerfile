@@ -10,9 +10,9 @@ ENV BUILD_METADATA=$BUILD_METADATA
 ENV UV_THREADPOOL_SIZE=8
 ENV BB_WORKING_DIRECTORY=/usr/src/bb
 ENV BB_BINARY_PATH=/usr/src/labs-aztec-toolchain/bin/bb-avm
-ENV ACVM_WORKING_DIRECTORY=/usr/src/acvm
-ENV ACVM_BINARY_PATH=/usr/src/labs-aztec-toolchain/bin/noir-execute
-RUN mkdir -p $BB_WORKING_DIRECTORY $ACVM_WORKING_DIRECTORY && chmod 777 $BB_WORKING_DIRECTORY $ACVM_WORKING_DIRECTORY
+ENV NOIR_EXECUTE_WORKING_DIRECTORY=/usr/src/noir-execute
+ENV NOIR_EXECUTE_BINARY_PATH=/usr/src/labs-aztec-toolchain/bin/noir-execute
+RUN mkdir -p $BB_WORKING_DIRECTORY $NOIR_EXECUTE_WORKING_DIRECTORY && chmod 777 $BB_WORKING_DIRECTORY $NOIR_EXECUTE_WORKING_DIRECTORY
 WORKDIR "/usr/src/yarn-project"
 
 # Ensure the correct version shows in aztec --version

@@ -17,7 +17,7 @@ import { mnemonicToAccount } from 'viem/accounts';
 
 import { MNEMONIC } from '../fixtures/fixtures.js';
 import { getBBConfig } from '../fixtures/get_bb_config.js';
-import { getACVMConfig } from '../fixtures/get_noir_execute_config.js';
+import { getNoirExecuteConfig } from '../fixtures/get_noir_execute_config.js';
 import { getLogger, startAnvil } from '../fixtures/utils.js';
 
 /**
@@ -43,7 +43,7 @@ describe('proof_verification', () => {
   let logger: Logger;
   let circuitVerifier: BBCircuitVerifier;
   let bbTeardown: () => Promise<void>;
-  let acvmTeardown: () => Promise<void>;
+  let noirExecuteTeardown: () => Promise<void>;
   let verifierContract: GetContractReturnType<typeof IVerifierAbi, typeof l1Client>;
 
   beforeAll(async () => {
@@ -57,13 +57,13 @@ describe('proof_verification', () => {
     logger.info('Anvil started');
 
     const bb = await getBBConfig(logger);
-    const acvm = await getACVMConfig(logger);
+    const acvm = await getNoirExecuteConfig(logger);
 
     circuitVerifier = await BBCircuitVerifier.new(bb!);
 
     bbTeardown = bb!.cleanup;
-    acvmTeardown = acvm!.cleanup;
-    logger.info('BB and ACVM initialized');
+    noirExecuteTeardown = acvm!.cleanup;
+    logger.info('BB and noir-execute initialized');
 
     l1Client = createExtendedL1Client(rpcUrlList!, mnemonicToAccount(MNEMONIC));
 
@@ -80,7 +80,7 @@ describe('proof_verification', () => {
     // stay open and jest never exits. Must precede bbTeardown, which deletes their working directory.
     await circuitVerifier.stop();
     await bbTeardown();
-    await acvmTeardown();
+    await noirExecuteTeardown();
   });
 
   beforeAll(async () => {

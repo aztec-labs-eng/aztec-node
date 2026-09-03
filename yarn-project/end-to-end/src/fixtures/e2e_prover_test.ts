@@ -22,7 +22,7 @@ import { TokenSimulator } from '../simulators/token_simulator.js';
 import { SingleNodeTestContext, type SingleNodeTestOpts } from '../single-node/single_node_test_context.js';
 import { TestWallet } from '../test-wallet/test_wallet.js';
 import { getBBConfig } from './get_bb_config.js';
-import { getACVMConfig } from './get_noir_execute_config.js';
+import { getNoirExecuteConfig } from './get_noir_execute_config.js';
 import { getPrivateKeyFromIndex, getSponsoredFPCAddress, setup, setupPXEAndGetWallet } from './setup.js';
 import { getStandardContractGenesisNullifiers } from './standard_contracts_genesis.js';
 
@@ -59,7 +59,7 @@ export class FullProverTest extends SingleNodeTestContext {
   cheatCodes!: CheatCodes;
   private provenComponents: ProvenSetup[] = [];
   private bbConfigCleanup?: () => Promise<void>;
-  private acvmConfigCleanup?: () => Promise<void>;
+  private noirExecuteConfigCleanup?: () => Promise<void>;
   /** Returns the proof verifier from the prover node (for test assertions). */
   get circuitProofVerifier(): ClientProtocolCircuitVerifier | undefined {
     return this.proverAztecNode?.getProofVerifier();
@@ -149,15 +149,15 @@ export class FullProverTest extends SingleNodeTestContext {
     const config = this.context.aztecNodeConfig;
 
     // Configure a full prover PXE
-    let acvmConfig: Awaited<ReturnType<typeof getACVMConfig>> | undefined;
+    let noirExecuteConfig: Awaited<ReturnType<typeof getNoirExecuteConfig>> | undefined;
     let bbConfig: Awaited<ReturnType<typeof getBBConfig>> | undefined;
     if (this.realProofs) {
-      [acvmConfig, bbConfig] = await Promise.all([getACVMConfig(this.logger), getBBConfig(this.logger)]);
-      if (!acvmConfig || !bbConfig) {
-        throw new Error('Missing ACVM or BB config');
+      [noirExecuteConfig, bbConfig] = await Promise.all([getNoirExecuteConfig(this.logger), getBBConfig(this.logger)]);
+      if (!noirExecuteConfig || !bbConfig) {
+        throw new Error('Missing noir-execute or BB config');
       }
 
-      this.acvmConfigCleanup = acvmConfig.cleanup;
+      this.noirExecuteConfigCleanup = noirExecuteConfig.cleanup;
       this.bbConfigCleanup = bbConfig.cleanup;
 
       await Barretenberg.initSingleton({ backend: BackendType.NativeUnixSocket });
@@ -294,7 +294,7 @@ export class FullProverTest extends SingleNodeTestContext {
 
     await Barretenberg.destroySingleton();
     await this.bbConfigCleanup?.();
-    await this.acvmConfigCleanup?.();
+    await this.noirExecuteConfigCleanup?.();
 
     // Stops the chain monitor, the tracked nodes (main node + the already-stopped prover node, a
     // safe no-op), and the context.

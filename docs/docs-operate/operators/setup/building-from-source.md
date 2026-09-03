@@ -164,7 +164,7 @@ The tag `aztec-local:#release_version` avoids conflicts with the official Docker
 **What this does:**
 - Starts from the `aztecprotocol/release-image-base` image (Step 5)
 - Copies compiled source code from your local filesystem (Step 4)
-- Sets up environment variables for Barretenberg and ACVM binaries
+- Sets up environment variables for the Barretenberg and noir-execute binaries
 - Configures the entrypoint to run the Aztec node
 
 ## Verification

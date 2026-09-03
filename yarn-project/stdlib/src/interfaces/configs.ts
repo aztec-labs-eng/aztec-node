@@ -41,9 +41,9 @@ export interface SequencerConfig {
   /** Address to receive fees. */
   feeRecipient?: AztecAddress;
   /** The working directory to use for simulation/proving */
-  acvmWorkingDirectory?: string;
-  /** The path to the ACVM binary */
-  acvmBinaryPath?: string;
+  noirExecuteWorkingDirectory?: string;
+  /** The path to the `noir-execute` binary */
+  noirExecuteBinaryPath?: string;
   /** Additional entries to extend the default setup allow list. */
   txPublicSetupAllowListExtend?: AllowedElement[];
   /** Payload address to vote for */
@@ -155,8 +155,8 @@ export const SequencerConfigSchema = zodFor<SequencerConfig>()(
     redistributeCheckpointBudget: z.boolean().optional(),
     coinbase: schemas.EthAddress.optional(),
     feeRecipient: schemas.AztecAddress.optional(),
-    acvmWorkingDirectory: z.string().optional(),
-    acvmBinaryPath: z.string().optional(),
+    noirExecuteWorkingDirectory: z.string().optional(),
+    noirExecuteBinaryPath: z.string().optional(),
     txPublicSetupAllowListExtend: z.array(AllowedElementSchema).optional(),
     governanceProposerPayload: schemas.EthAddress.optional(),
     governanceProposerForcePayloadVote: z.boolean().optional(),
@@ -199,8 +199,8 @@ type SequencerConfigOptionalKeys =
   | 'expectedBlockProposalsPerSlot'
   | 'coinbase'
   | 'feeRecipient'
-  | 'acvmWorkingDirectory'
-  | 'acvmBinaryPath'
+  | 'noirExecuteWorkingDirectory'
+  | 'noirExecuteBinaryPath'
   | 'fakeProcessingDelayPerTxMs'
   | 'fakeThrowAfterProcessingTxCount'
   | 'minBlockDuration'
