@@ -457,6 +457,11 @@ describe('L1Publisher integration', () => {
   };
 
   afterEach(async () => {
+    // Interrupt before anvil goes away: the timeouts tests deliberately leave a sendRequests in
+    // flight, and its background tx monitor would otherwise keep polling the (by then dead) L1 node
+    // for the rest of the run, logging an error per iteration and stealing time from later tests.
+    publisher?.interrupt();
+    await publisher?.l1TxUtils.waitMonitoringStopped();
     await tryStop(anvil);
     await tryStop(worldStateSynchronizer);
   });
@@ -1130,6 +1135,16 @@ describe('L1Publisher integration', () => {
       await retryUntil(() => ethCheatCodes.getTxPoolStatus().then(s => s.pending > 0), 'tx sent', 20, 0.1);
     };
 
+    // The tests below drive L1 time and mining explicitly, so *whether* the publisher reaches a state
+    // is deterministic, but *when* it observes the block that triggers it is not: the tx monitor polls
+    // every checkIntervalMs (1s, at an arbitrary phase against the test) and then has to re-sign and
+    // re-broadcast a blob tx before the state flips. That costs over a second on an idle machine and
+    // several under CI load, so these waits are budgeted for the work rather than for a tight deadline.
+    const monitorReactionTimeoutSeconds = 30;
+
+    const waitForPublisherState = (state: TxUtilsState, name: string) =>
+      retryUntil(() => publisher.l1TxUtils.state === state, name, monitorReactionTimeoutSeconds, 0.1);
+
     const enqueueProposeL2Checkpoint = async (checkpoint: Checkpoint) => {
       await publisher.enqueueProposeCheckpoint(
         checkpoint,
@@ -1164,11 +1179,11 @@ describe('L1Publisher integration', () => {
       }
 
       // The publisher should now be in cancelled state
-      await retryUntil(() => publisher.l1TxUtils.state === TxUtilsState.CANCELLED, 'state is cancelled', 3, 0.1);
+      await waitForPublisherState(TxUtilsState.CANCELLED, 'state is cancelled');
 
       // Now allow the cancellation to be mined, check that we transition to MINED, and the last tx was indeed a cancellation.
       await ethCheatCodes.mine();
-      await retryUntil(() => publisher.l1TxUtils.state === TxUtilsState.MINED, 'state is mined', 2, 0.1);
+      await waitForPublisherState(TxUtilsState.MINED, 'state is mined');
       const lastBlock = await l1Client.getBlock({ includeTransactions: true });
       const cancelTx = lastBlock.transactions.at(-1);
       expect(cancelTx).toBeDefined();
@@ -1194,7 +1209,7 @@ describe('L1Publisher integration', () => {
       }
 
       // We should now be in speed-up state
-      await retryUntil(() => publisher.l1TxUtils.state === TxUtilsState.SPEED_UP, 'speed up', 2, 0.1);
+      await waitForPublisherState(TxUtilsState.SPEED_UP, 'speed up');
       const [speedUpTx] = await ethCheatCodes.getTxPoolContents();
       expect(speedUpTx).toBeDefined();
       expect(speedUpTx!.hash).not.toEqual(initialTx!.hash);
@@ -1203,7 +1218,7 @@ describe('L1Publisher integration', () => {
 
       // Now mine an L1 block with txs, and see that we transition to MINED state
       await ethCheatCodes.mine();
-      await retryUntil(() => publisher.l1TxUtils.state === TxUtilsState.MINED, 'state is mined', 2, 0.1);
+      await waitForPublisherState(TxUtilsState.MINED, 'state is mined');
       const lastBlock = await l1Client.getBlock({ includeTransactions: true });
       const minedTx = lastBlock.transactions.find(t => t.hash === speedUpTx!.hash);
       expect(minedTx).toBeDefined();
@@ -1231,7 +1246,7 @@ describe('L1Publisher integration', () => {
 
         // The publisher should now be in cancelled state
         if (nextL2Slot > initialL2Slot) {
-          await retryUntil(() => publisher.l1TxUtils.state === TxUtilsState.CANCELLED, 'state is cancelled', 3, 0.1);
+          await waitForPublisherState(TxUtilsState.CANCELLED, 'state is cancelled');
           expect(sendRequestsResult).toBeNull();
           break;
         }
@@ -1266,8 +1281,8 @@ describe('L1Publisher integration', () => {
       await ethCheatCodes.mine();
 
       // Wait for completion
-      await retryUntil(() => !!sendRequestsResult, 'request resolved', 5, 0.1);
-      await retryUntil(() => publisher.l1TxUtils.state === TxUtilsState.MINED, 'mined', 10, 0.1);
+      await retryUntil(() => !!sendRequestsResult, 'request resolved', monitorReactionTimeoutSeconds, 0.1);
+      await waitForPublisherState(TxUtilsState.MINED, 'mined');
 
       // The second proposal should succeed
       expect(sendRequestsResult).not.toBeNull();
