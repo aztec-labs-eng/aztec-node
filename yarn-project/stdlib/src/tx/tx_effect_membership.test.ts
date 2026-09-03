@@ -40,7 +40,7 @@ describe('TxEffectMembershipWitness', () => {
 
     expect(witness.siblingPath.pathSize).toBe(0);
     expect(witness.leafIndex).toBe(0n);
-    expect(witness.root).toEqual(await body.txEffects[0].computeTxEffectLeaf());
+    expect(witness.root).toEqual(await body.txEffects[0].computeTxEffectsTreeLeaf());
   });
 
   it('verifies witnesses for every tx of a block and rejects tampered ones', async () => {
@@ -48,7 +48,7 @@ describe('TxEffectMembershipWitness', () => {
     const root = await body.computeTxEffectsTreeRoot();
 
     for (let txIndex = 0; txIndex < body.txEffects.length; txIndex++) {
-      const leaf = await body.txEffects[txIndex].computeTxEffectLeaf();
+      const leaf = await body.txEffects[txIndex].computeTxEffectsTreeLeaf();
       const witness = await computeTxEffectMembershipWitness(body.txEffects, txIndex);
 
       expect(await computeRootFromTxEffectMembershipWitness(leaf, witness)).toEqual(root);
@@ -68,7 +68,7 @@ describe('TxEffectMembershipWitness', () => {
 
   it('verifies the single-tx witness where the leaf is the root', async () => {
     const body = await makeBody(1);
-    const leaf = await body.txEffects[0].computeTxEffectLeaf();
+    const leaf = await body.txEffects[0].computeTxEffectsTreeLeaf();
     const witness = await computeTxEffectMembershipWitness(body.txEffects, 0);
 
     expect(await computeRootFromTxEffectMembershipWitness(leaf, witness)).toEqual(leaf);

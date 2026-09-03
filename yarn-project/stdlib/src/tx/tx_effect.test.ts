@@ -37,7 +37,7 @@ function smallFixture(): TxEffect {
   );
 }
 
-const fieldHash = (blobFields: Fr[]) => poseidon2HashWithSeparator(blobFields, DomainSeparator.TX_EFFECT_FIELD_HASH);
+const fieldHash = (blobFields: Fr[]) => poseidon2HashWithSeparator(blobFields, DomainSeparator.TX_EFFECT_CATEGORY_HASH);
 
 describe('TxEffect', () => {
   it('converts to and from buffer', async () => {
@@ -131,10 +131,10 @@ describe('TxEffect', () => {
             await txEffect.contractClassLogs[0].hash(),
           ]),
         ],
-        DomainSeparator.TX_EFFECT_HASH,
+        DomainSeparator.TX_EFFECT_CATEGORIES_HASH,
       );
 
-      expect(await txEffect.computeTxEffectHash()).toEqual(expectedTxEffectHash);
+      expect(await txEffect.computeTxEffectCategoriesHash()).toEqual(expectedTxEffectHash);
     });
 
     it('hashes empty fields to zero', async () => {
@@ -142,27 +142,27 @@ describe('TxEffect', () => {
 
       const expectedTxEffectHash = await poseidon2HashWithSeparator(
         [encodeTxStartMarker(txEffect.getTxStartMarker()), Fr.ZERO, ...Array(7).fill(Fr.ZERO)],
-        DomainSeparator.TX_EFFECT_HASH,
+        DomainSeparator.TX_EFFECT_CATEGORIES_HASH,
       );
 
-      expect(await txEffect.computeTxEffectHash()).toEqual(expectedTxEffectHash);
+      expect(await txEffect.computeTxEffectCategoriesHash()).toEqual(expectedTxEffectHash);
     });
 
     it('binds the tx hash into the leaf', async () => {
       const txEffect = smallFixture();
 
       const expectedLeaf = await poseidon2HashWithSeparator(
-        [txEffect.txHash.hash, await txEffect.computeTxEffectHash()],
-        DomainSeparator.TX_EFFECT_LEAF,
+        [txEffect.txHash.hash, await txEffect.computeTxEffectCategoriesHash()],
+        DomainSeparator.TX_EFFECTS_TREE_LEAF,
       );
 
-      expect(await txEffect.computeTxEffectLeaf()).toEqual(expectedLeaf);
+      expect(await txEffect.computeTxEffectsTreeLeaf()).toEqual(expectedLeaf);
     });
 
     it('computes the leaf of the fixture', async () => {
-      const leaf = await smallFixture().computeTxEffectLeaf();
+      const leaf = await smallFixture().computeTxEffectsTreeLeaf();
       expect(leaf.toString()).toMatchInlineSnapshot(
-        `"0x09927fb173cb1b27828db4e24d227a621f61bb668aca36f2b1e458a31585455a"`,
+        `"0x2d0cc62a893d49f71987d6bddb8d5d3f1efe4c7f015cbc8f4b7b2b04331a8978"`,
       );
 
       // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data

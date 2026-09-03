@@ -22,7 +22,7 @@ export const txEffectsTreeNodeHash = makePoseidonMerkleHash(DomainSeparator.TX_E
  * Proof that a tx was included in a block and produced exactly the effects the block reports for it.
  *
  * The witness is verified against `BlockHeader.txEffectsTreeRoot` of block {@link blockNumber} by hashing the tx's leaf
- * (`TxEffect.computeTxEffectLeaf`, which binds the tx hash to the hash of its effects) up the sibling path.
+ * (`TxEffect.computeTxEffectsTreeLeaf`, which binds the tx hash to the hash of its effects) up the sibling path.
  */
 export type TxEffectMembershipWitness = {
   /** Block the tx was included in, whose header carries the root this witness is built against. */
@@ -56,7 +56,7 @@ export const TxEffectMembershipWitnessSchema = z.object({
  * @param txEffects - All tx effects of the block, in block order.
  */
 export function computeTxEffectLeaves(txEffects: TxEffect[]): Promise<Fr[]> {
-  return Promise.all(txEffects.map(txEffect => txEffect.computeTxEffectLeaf()));
+  return Promise.all(txEffects.map(txEffect => txEffect.computeTxEffectsTreeLeaf()));
 }
 
 /**
@@ -107,7 +107,8 @@ export async function computeTxEffectMembershipWitnessFromLeaves(
  * Hashes `leaf` up the witness' sibling path, taking the side of each step from the witness' leaf index (an even index
  * puts the leaf on the left). For a single-tx block the sibling path is empty and the leaf itself is the root.
  *
- * @param leaf - The tx's leaf, as computed by `TxEffect.computeTxEffectLeaf`.
+ * @param leaf - A leaf recomputed from the full tx effect by `TxEffect.computeTxEffectsTreeLeaf`; callers must not
+ * accept a bare untrusted leaf because a variable-depth path could otherwise present an internal node as a leaf.
  */
 export async function computeRootFromTxEffectMembershipWitness(
   leaf: Fr,
@@ -126,7 +127,8 @@ export async function computeRootFromTxEffectMembershipWitness(
  * Verifies that a membership witness proves inclusion of `leaf` under `expectedRoot`, which callers must take from a
  * trusted source: the `txEffectsTreeRoot` of the header of block {@link TxEffectMembershipWitness.blockNumber}.
  *
- * @param leaf - The tx's leaf, as computed by `TxEffect.computeTxEffectLeaf`.
+ * @param leaf - A leaf recomputed from the full tx effect by `TxEffect.computeTxEffectsTreeLeaf`; callers must not
+ * accept a bare untrusted leaf because a variable-depth path could otherwise present an internal node as a leaf.
  * @returns True iff hashing `leaf` up the sibling path yields `expectedRoot`.
  */
 export async function verifyTxEffectMembershipWitness(

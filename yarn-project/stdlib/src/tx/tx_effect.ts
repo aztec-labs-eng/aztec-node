@@ -290,25 +290,25 @@ export class TxEffect {
   /**
    * Hash committing to the full contents of this tx's effects.
    *
-   * The hash is structured rather than flat: each variable-length field is hashed on its own first, and this hash is
-   * taken over those sub-hashes plus the small scalar fields inline. Proving a single field (e.g. one note hash)
-   * therefore only requires the preimage of that field's sub-hash, with the other sub-hashes as opaque witnesses.
+   * The hash is structured rather than flat: each variable-length effect category is hashed on its own first, and
+   * this hash is taken over those category hashes plus the small scalar fields inline. Proving a single field (e.g.
+   * one note hash) therefore only requires its category preimage, with the other category hashes as opaque witnesses.
    *
-   * Must match `compute_tx_effect_hash` in noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr.
+   * Must match `compute_tx_effect_categories_hash` in noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr.
    */
-  async computeTxEffectHash(): Promise<Fr> {
+  async computeTxEffectCategoriesHash(): Promise<Fr> {
     const txBlobData = this.toTxBlobData();
     const contractClassLogHashFields = (
       await Promise.all(
         this.contractClassLogs.map(async log => [log.contractAddress.toField(), await log.hash()]),
       )
     ).flat();
-    const fieldHashes = await Promise.all(
-      getTxEffectHashPreimages(txBlobData, contractClassLogHashFields).map(computeTxEffectFieldHash),
+    const categoryHashes = await Promise.all(
+      getTxEffectCategoryHashPreimages(txBlobData, contractClassLogHashFields).map(computeTxEffectCategoryHash),
     );
     return poseidon2HashWithSeparator(
-      [encodeTxStartMarker(txBlobData.txStartMarker), this.transactionFee, ...fieldHashes],
-      DomainSeparator.TX_EFFECT_HASH,
+      [encodeTxStartMarker(txBlobData.txStartMarker), this.transactionFee, ...categoryHashes],
+      DomainSeparator.TX_EFFECT_CATEGORIES_HASH,
     );
   }
 
@@ -316,11 +316,12 @@ export class TxEffect {
    * This tx's leaf of the block's tx effects tree: a hash binding the tx hash to the hash of the tx's effects.
    *
    * A holder of the block header can verify "tx X was included in this block and produced exactly effects E" with a
-   * membership proof against `BlockHeader.txEffectsTreeRoot`.
+   * membership proof against `BlockHeader.txEffectsTreeRoot`. The verifier must recompute this leaf from the tx effect
+   * rather than accept an untrusted leaf value, because paths have variable depth and internal nodes are valid roots.
    */
-  async computeTxEffectLeaf(): Promise<Fr> {
-    const txEffectHash = await this.computeTxEffectHash();
-    return poseidon2HashWithSeparator([this.txHash.hash, txEffectHash], DomainSeparator.TX_EFFECT_LEAF);
+  async computeTxEffectsTreeLeaf(): Promise<Fr> {
+    const categoriesHash = await this.computeTxEffectCategoriesHash();
+    return poseidon2HashWithSeparator([this.txHash.hash, categoriesHash], DomainSeparator.TX_EFFECTS_TREE_LEAF);
   }
 
   /**
@@ -421,11 +422,11 @@ export class TxEffect {
 }
 
 /**
- * The preimages of a tx effect's variable-length field hashes, in their fixed order within the tx effect hash.
- * Every preimage is its field's blob-encoding slice except the contract class log, whose preimage uses the full
+ * The preimages of a tx effect's variable-length category hashes, in their fixed order within the categories hash.
+ * Every preimage is its category's blob-encoding slice except the contract class log, whose preimage uses the full
  * kernel-committed log hash to avoid hashing the same padded log fields twice in the rollup circuit.
  */
-function getTxEffectHashPreimages(txBlobData: TxBlobData, contractClassLogHashFields: Fr[]): Fr[][] {
+function getTxEffectCategoryHashPreimages(txBlobData: TxBlobData, contractClassLogHashFields: Fr[]): Fr[][] {
   return [
     txBlobData.noteHashes,
     txBlobData.nullifiers,
@@ -438,13 +439,13 @@ function getTxEffectHashPreimages(txBlobData: TxBlobData, contractClassLogHashFi
 }
 
 /**
- * Hashes one variable-length field of a tx effect over that field's slice of the blob encoding.
+ * Hashes all fields of one tx-effect category over that category's commitment preimage.
  *
- * An empty field hashes to 0 rather than to a hash of nothing. This is unambiguous because every array count is bound
- * by the tx start marker, which is hashed alongside the sub-hashes.
+ * An empty category hashes to 0 rather than to a hash of nothing. This is unambiguous because every category count is
+ * bound by the tx start marker, which is hashed alongside the category hashes.
  */
-function computeTxEffectFieldHash(blobFields: Fr[]): Promise<Fr> {
+function computeTxEffectCategoryHash(blobFields: Fr[]): Promise<Fr> {
   return blobFields.length === 0
     ? Promise.resolve(Fr.ZERO)
-    : poseidon2HashWithSeparator(blobFields, DomainSeparator.TX_EFFECT_FIELD_HASH);
+    : poseidon2HashWithSeparator(blobFields, DomainSeparator.TX_EFFECT_CATEGORY_HASH);
 }

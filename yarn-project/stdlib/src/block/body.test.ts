@@ -35,7 +35,7 @@ describe('Body', () => {
 
     const makeBody = (txsPerBlock: number) => Body.random({ txsPerBlock, maxEffects: 1, numPublicCallsPerTx: 1 });
 
-    const leaves = (body: Body) => Promise.all(body.txEffects.map(txEffect => txEffect.computeTxEffectLeaf()));
+    const leaves = (body: Body) => Promise.all(body.txEffects.map(txEffect => txEffect.computeTxEffectsTreeLeaf()));
 
     it('is zero for a block with no txs', async () => {
       expect(await Body.empty().computeTxEffectsTreeRoot()).toEqual(Fr.ZERO);

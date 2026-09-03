@@ -42,13 +42,15 @@ export class TxRollupPublicInputs {
      */
     public outHash: Fr,
     /**
-     * Root of the tx effects tree over the constituent transactions, with one leaf per tx.
+     * Accumulating root of the tx-effects tree over the constituent transactions, with one leaf per tx. The block
+     * root circuit places the completed value in `BlockHeader.txEffectsTreeRoot`.
      *
      * Accumulated pairwise up the rollup tree with `DomainSeparator.TX_EFFECTS_TREE`, without skipping zero roots. The
      * greedy-fill assertions on the rollup tree admit exactly one shape per tx count, so the root is a function of the
-     * txs and their count alone.
+     * txs and their count alone. Consumers that do not know the tx count must recompute a leaf from its full tx effect,
+     * rather than accept a bare untrusted leaf with a variable-depth membership path.
      */
-    public txEffectsTreeRoot: Fr,
+    public accumulatedTxEffectsTreeRoot: Fr,
     /**
      * The summed `transaction_fee` of the constituent transactions.
      */
@@ -113,7 +115,7 @@ export class TxRollupPublicInputs {
       this.endSpongeBlob,
 
       this.outHash,
-      this.txEffectsTreeRoot,
+      this.accumulatedTxEffectsTreeRoot,
 
       this.accumulatedFees,
       this.accumulatedManaUsed,

@@ -43,7 +43,7 @@ describe('TxEffectsTreeResolver', () => {
       expect(witness).toBeDefined();
       expect(witness!.blockNumber).toBe(BLOCK_NUMBER);
       expect(witness!.root).toEqual(root);
-      expect(await verifyTxEffectMembershipWitness(await txEffect.computeTxEffectLeaf(), witness!, root)).toBe(true);
+      expect(await verifyTxEffectMembershipWitness(await txEffect.computeTxEffectsTreeLeaf(), witness!, root)).toBe(true);
     }
   });
 
@@ -68,14 +68,14 @@ describe('TxEffectsTreeResolver', () => {
     expect(witness!.siblingPath.pathSize).toBe(0);
     expect(witness!.leafIndex).toBe(0n);
     expect(witness!.root).toEqual(root);
-    expect(root).toEqual(await body.txEffects[0].computeTxEffectLeaf());
+    expect(root).toEqual(await body.txEffects[0].computeTxEffectsTreeLeaf());
   });
 
   // Serves a second leaf that does not match the second tx's effects, so a resolver that recomputed the leaves from the
   // block body instead of reading the stored ones would build a different tree and fail the header root check.
   it('builds the witness from the stored leaves rather than recomputing them from the block', async () => {
     const body = await makeBody(2);
-    const storedLeaves = [await body.txEffects[0].computeTxEffectLeaf(), Fr.random()];
+    const storedLeaves = [await body.txEffects[0].computeTxEffectsTreeLeaf(), Fr.random()];
     const root = await wireStore(blocks, body, await hashPair(storedLeaves[0], storedLeaves[1]));
     blocks.getTxEffectLeaves.mockResolvedValue(storedLeaves);
 
@@ -104,7 +104,7 @@ describe('TxEffectsTreeResolver', () => {
       return toBuffer();
     });
     blocks.getTxEffectLeaves.mockResolvedValue(leaves);
-    const computeLeaf = jest.spyOn(body.txEffects[0], 'computeTxEffectLeaf');
+    const computeLeaf = jest.spyOn(body.txEffects[0], 'computeTxEffectsTreeLeaf');
 
     await resolver.getTxEffectMembershipWitness(body.txEffects[0].txHash);
 
