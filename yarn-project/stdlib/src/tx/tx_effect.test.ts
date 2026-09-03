@@ -78,7 +78,8 @@ function maximumFixture(): TxEffect {
   );
 }
 
-const fieldHash = (blobFields: Fr[]) => poseidon2HashWithSeparator(blobFields, DomainSeparator.TX_EFFECT_CATEGORY_HASH);
+const categoryHash = (blobFields: Fr[]) =>
+  poseidon2HashWithSeparator(blobFields, DomainSeparator.TX_EFFECT_CATEGORY_HASH);
 
 describe('TxEffect', () => {
   it('converts to and from buffer', async () => {
@@ -153,21 +154,21 @@ describe('TxEffect', () => {
     ).toThrow(/Too many contract class logs/);
   });
 
-  describe('effect hash', () => {
-    it('hashes each field over its slice of the blob encoding', async () => {
+  describe('categories hash', () => {
+    it('hashes each category over its slice of the blob encoding', async () => {
       const txEffect = smallFixture();
 
-      const expectedTxEffectHash = await poseidon2HashWithSeparator(
+      const expectedCategoriesHash = await poseidon2HashWithSeparator(
         [
           encodeTxStartMarker(txEffect.getTxStartMarker()),
           new Fr(42), // transactionFee
-          await fieldHash([new Fr(11), new Fr(12)]),
-          await fieldHash([new Fr(21)]),
-          await fieldHash([new Fr(31)]),
-          await fieldHash([new Fr(41), new Fr(42)]),
-          await fieldHash([new Fr(3), new Fr(101), new Fr(102), new Fr(103)]),
-          await fieldHash([new Fr(2), new Fr(PUBLIC_LOG_ADDRESS), new Fr(201), new Fr(202)]),
-          await fieldHash([
+          await categoryHash([new Fr(11), new Fr(12)]),
+          await categoryHash([new Fr(21)]),
+          await categoryHash([new Fr(31)]),
+          await categoryHash([new Fr(41), new Fr(42)]),
+          await categoryHash([new Fr(3), new Fr(101), new Fr(102), new Fr(103)]),
+          await categoryHash([new Fr(2), new Fr(PUBLIC_LOG_ADDRESS), new Fr(201), new Fr(202)]),
+          await categoryHash([
             new Fr(CONTRACT_CLASS_LOG_ADDRESS),
             await txEffect.contractClassLogs[0].hash(),
           ]),
@@ -175,18 +176,18 @@ describe('TxEffect', () => {
         DomainSeparator.TX_EFFECT_CATEGORIES_HASH,
       );
 
-      expect(await txEffect.computeTxEffectCategoriesHash()).toEqual(expectedTxEffectHash);
+      expect(await txEffect.computeTxEffectCategoriesHash()).toEqual(expectedCategoriesHash);
     });
 
-    it('hashes empty fields to zero', async () => {
+    it('hashes empty categories to zero', async () => {
       const txEffect = TxEffect.empty();
 
-      const expectedTxEffectHash = await poseidon2HashWithSeparator(
+      const expectedCategoriesHash = await poseidon2HashWithSeparator(
         [encodeTxStartMarker(txEffect.getTxStartMarker()), Fr.ZERO, ...Array(7).fill(Fr.ZERO)],
         DomainSeparator.TX_EFFECT_CATEGORIES_HASH,
       );
 
-      expect(await txEffect.computeTxEffectCategoriesHash()).toEqual(expectedTxEffectHash);
+      expect(await txEffect.computeTxEffectCategoriesHash()).toEqual(expectedCategoriesHash);
     });
 
     it('binds the tx hash into the leaf', async () => {
