@@ -1,6 +1,16 @@
 import { BlobDeserializationError } from '@aztec-labs/blob-lib';
 import { encodeTxStartMarker } from '@aztec-labs/blob-lib/encoding';
-import { DomainSeparator } from '@aztec-labs/constants';
+import {
+  CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
+  DomainSeparator,
+  MAX_L2_TO_L1_MSGS_PER_TX,
+  MAX_NOTE_HASHES_PER_TX,
+  MAX_NULLIFIERS_PER_TX,
+  MAX_PRIVATE_LOGS_PER_TX,
+  MAX_PUBLIC_LOG_SIZE_IN_FIELDS,
+  MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
+  PRIVATE_LOG_SIZE_IN_FIELDS,
+} from '@aztec-labs/constants';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
@@ -9,6 +19,7 @@ import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 import { PublicDataWrite } from '../avm/public_data_write.js';
 import { RevertCode } from '../avm/revert_code.js';
 import { AztecAddress } from '../aztec-address/index.js';
+import { Body } from '../block/body.js';
 import { ContractClassLog } from '../logs/contract_class_log.js';
 import { PrivateLog } from '../logs/private_log.js';
 import { PublicLog } from '../logs/public_log.js';
@@ -34,6 +45,36 @@ function smallFixture(): TxEffect {
     [PrivateLog.fromBlobFields(3, [new Fr(101), new Fr(102), new Fr(103)])],
     [new PublicLog(AztecAddress.fromBigIntUnsafe(PUBLIC_LOG_ADDRESS), [new Fr(201), new Fr(202)])],
     [ContractClassLog.fromBlobFields(2, [new Fr(CONTRACT_CLASS_LOG_ADDRESS), new Fr(301), new Fr(302)])],
+  );
+}
+
+function maximumFixture(): TxEffect {
+  return new TxEffect(
+    RevertCode.OK,
+    TxHash.fromBigInt(0x1234n),
+    new Fr(42),
+    Array.from({ length: MAX_NOTE_HASHES_PER_TX }, (_, i) => new Fr(i + 1)),
+    Array.from({ length: MAX_NULLIFIERS_PER_TX }, (_, i) => new Fr(i + 101)),
+    Array.from({ length: MAX_L2_TO_L1_MSGS_PER_TX }, (_, i) => new Fr(i + 201)),
+    Array.from(
+      { length: MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX },
+      (_, i) => new PublicDataWrite(new Fr(i + 301), new Fr(i + 401)),
+    ),
+    Array.from({ length: MAX_PRIVATE_LOGS_PER_TX }, (_, i) =>
+      PrivateLog.fromBlobFields(PRIVATE_LOG_SIZE_IN_FIELDS, Array(PRIVATE_LOG_SIZE_IN_FIELDS).fill(new Fr(i + 501))),
+    ),
+    [
+      new PublicLog(
+        AztecAddress.fromBigIntUnsafe(601n),
+        Array(MAX_PUBLIC_LOG_SIZE_IN_FIELDS).fill(new Fr(601)),
+      ),
+    ],
+    [
+      ContractClassLog.fromBlobFields(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, [
+        new Fr(801),
+        ...Array(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS).fill(new Fr(701)),
+      ]),
+    ],
   );
 }
 
@@ -170,6 +211,40 @@ describe('TxEffect', () => {
         'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
         'test_data_tx_effect_leaf',
         leaf.toString(),
+      );
+    });
+
+    it('matches the empty, maximum and three-tx Noir fixtures', async () => {
+      const emptyEffect = TxEffect.empty();
+      const maximumEffect = maximumFixture();
+      const emptyLeaf = await emptyEffect.computeTxEffectsTreeLeaf();
+      const maximumLeaf = await maximumEffect.computeTxEffectsTreeLeaf();
+      const threeTxRoot = await new Body([emptyEffect, smallFixture(), maximumEffect]).computeTxEffectsTreeRoot();
+
+      expect(emptyLeaf.toString()).toMatchInlineSnapshot(
+        `"0x036639112ad40a8f951bfcc348b9906cee3f554dd05d0903c6e32a42d3f15d5a"`,
+      );
+      expect(maximumLeaf.toString()).toMatchInlineSnapshot(
+        `"0x228fa718cc3dd39f719454454739a177add7a7ee2a127c3923f47a6b23d68118"`,
+      );
+      expect(threeTxRoot.toString()).toMatchInlineSnapshot(
+        `"0x10aefe4df8cb37d89dc3278432c6c732c7b3740fb53d5ef128f86f9a9b4bbafb"`,
+      );
+
+      updateInlineTestData(
+        'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
+        'test_data_empty_tx_effect_leaf',
+        emptyLeaf.toString(),
+      );
+      updateInlineTestData(
+        'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
+        'test_data_maximum_tx_effect_leaf',
+        maximumLeaf.toString(),
+      );
+      updateInlineTestData(
+        'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
+        'test_data_three_tx_effects_tree_root',
+        threeTxRoot.toString(),
       );
     });
   });
