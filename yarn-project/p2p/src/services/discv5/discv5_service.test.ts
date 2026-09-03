@@ -22,7 +22,11 @@ import { PersistedEnrStore } from './persisted_enr_store.js';
  * Runs discovery queries on all nodes until the condition is met or timeout expires.
  * This is more resilient than fixed iteration loops as it adapts to varying DHT propagation times.
  */
-const runDiscoveryUntil = async (nodes: DiscV5Service[], condition: () => boolean, timeout = 60, interval = 0.2) => {
+// Discovery is driven by findRandomNode(), so a node whose routing table holds only a couple of
+// entries answers most random targets with nothing useful. Tests that start without a bootnode have
+// to converge on that random walk and take tens of seconds with a long tail, against ~2s for the
+// bootnode-seeded ones — hence a budget well clear of the observed worst case rather than of the mean.
+const runDiscoveryUntil = async (nodes: DiscV5Service[], condition: () => boolean, timeout = 100, interval = 0.2) => {
   await retryUntil(
     async () => {
       await Promise.all(nodes.map(n => n.runRandomNodesQuery()));
@@ -35,12 +39,13 @@ const runDiscoveryUntil = async (nodes: DiscV5Service[], condition: () => boolea
 };
 
 describe('Discv5Service', () => {
-  jest.setTimeout(120_000);
+  jest.setTimeout(180_000);
 
   let store: AztecAsyncKVStore;
   let bootNode: BootstrapNode;
   let bootNodePeerId: PeerId;
   let basePort = 7890;
+  let createdNodes: DiscV5Service[];
 
   const bootnodeConfig: BootnodeConfig = {
     p2pIp: '127.0.0.1',
@@ -56,6 +61,7 @@ describe('Discv5Service', () => {
 
   beforeEach(async () => {
     const telemetryClient = getTelemetryClient();
+    createdNodes = [];
     store = await openTmpStore('test');
     bootNode = new BootstrapNode(store, telemetryClient);
     await bootNode.start(bootnodeConfig);
@@ -63,6 +69,11 @@ describe('Discv5Service', () => {
   });
 
   afterEach(async () => {
+    // A test that throws mid-discovery never reaches its own stopNodes call, and some tests never
+    // stop their nodes at all. Left running, the discv5 sockets keep jest alive and the CI container
+    // sits until its timeout kills it, so sweep every node created for the test. stop() is a no-op
+    // on an already-stopped node.
+    await Promise.all(createdNodes.map(node => node.stop()));
     await bootNode.stop();
     await store.close();
   });
@@ -449,6 +460,8 @@ describe('Discv5Service', () => {
       l2QueueSize: 100,
       ...overrides,
     };
-    return new DiscV5Service(peerId, config, testPackageVersion, undefined, undefined, undefined, overrides);
+    const service = new DiscV5Service(peerId, config, testPackageVersion, undefined, undefined, undefined, overrides);
+    createdNodes.push(service);
+    return service;
   };
 });
