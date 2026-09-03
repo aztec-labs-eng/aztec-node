@@ -80,7 +80,7 @@ jobs:
 
   # Block until the nightly tag's release build has published the docker image,
   # so the deploys below don't race the build and hit ImagePullBackOff.
-  wait-for-ci3:
+  wait-for-release:
     needs: select-image
     runs-on: ubuntu-latest
     steps:
@@ -94,14 +94,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for CI3
-        run: spartan/scripts/wait_for_ci3.ts "${{ needs.select-image.outputs.source_ref }}"
+      - name: Wait for release
+        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.source_ref }}"
 
   # ---------------------------------------------------------------------------
   # Proving benchmark (env prove-n-tps-fake, namespace prove-n-tps-fake)
   # ---------------------------------------------------------------------------
   deploy-proving-network:
-    needs: [select-image, wait-for-ci3]
+    needs: [select-image, wait-for-release]
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: prove-n-tps-fake
@@ -257,7 +257,7 @@ jobs:
   # Block capacity benchmark (env block-capacity, namespace nightly-block-capacity)
   # ---------------------------------------------------------------------------
   deploy-block-capacity-network:
-    needs: [select-image, wait-for-ci3]
+    needs: [select-image, wait-for-release]
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: block-capacity

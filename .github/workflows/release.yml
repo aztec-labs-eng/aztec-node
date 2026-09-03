@@ -1,0 +1,101 @@
+# Publishes a release: npm packages to npmjs, docker images to DockerHub, and the aztec-up and
+# playground assets to S3. See RELEASES.md for how a tag gets here.
+#
+# Split out from ci3.yml so that the `release` environment — which holds the only publish
+# credentials in the repo — is requested by exactly one workflow whose only trigger is a v* tag,
+# rather than by an expression inside the CI workflow. The environment's deployment policy
+# (tag: v*) is then the whole story of which refs can publish.
+name: Release
+
+on:
+  workflow_dispatch: # re-run a release for an existing tag; select the tag as the ref.
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  # One run per tag, never cancelled: a cancelled release can leave the version half-published
+  # (some npm packages live, no multi-arch docker manifest), which no re-run undoes cleanly.
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # Orchestrates the amd64 + arm64 EC2 jobs and assembles the multi-arch docker manifest;
+  # see ci.sh::release. Runs no tests — the tag was cut from a commit that passed CI.
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # required for OIDC assume-role with AWS
+      contents: read # checkout/fetch with the default github.token
+      statuses: write # post_github_status posts per-job commit statuses with github.token
+    steps:
+      # Do NOT bump actions/checkout to v6 (see the pinning rationale in ci3.yml).
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: release-${{ github.run_id }}
+          # 2h. ci.sh::release allows the build instances 180 min, so a release that runs past
+          # 2h loses these credentials before the runner gets to terminate them.
+          role-duration-seconds: 7200
+
+      - name: Run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
+          # yarn-project's test_cmds (release-line compatibility tests) and test timing metadata,
+          # neither of which a release runs; kept so the build log names the ref.
+          TARGET_BRANCH: ${{ github.ref_name }}
+          # Groups this workflow's CI dashboard entries under the GitHub run id (stable across re-runs).
+          RUN_ID: ${{ github.run_id }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
+          AWS_OIDC_ROLE_ARN: ${{ vars.AWS_OIDC_ROLE_ARN }}
+        run: ./.github/ci3.sh release
+
+      - name: Post-Actions
+        run: ./.github/ci3_success.sh
+
+      # Covers nightly, rc and stable releases.
+      - name: Notify Slack on release failure
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # The release channel, not the tag name, decides whether this is worth reporting:
+          # 'commit' is a ci-release-pr canary tag, which nobody wants alerts for.
+          channel=$(./ci3/dist_tag)
+          if [ "$channel" = "commit" ]; then
+            echo "Canary release ($TAG); not notifying."
+            exit 0
+          fi
+          case "$channel" in
+            nightly) kind="Nightly release" ;;
+            rc) kind="Release candidate" ;;
+            *) kind="Release" ;;
+          esac
+          text="$kind FAILED for *${TAG}* (${ACTOR}): <${RUN_URL}|View Run>"
+          # Set by ci3/bootstrap_ec2 once the build reaches the instance; absent if we failed earlier.
+          if [ -n "${CI_LOG_ID:-}" ]; then
+            text="${text} | <http://ci.aztec-labs.com/${CI_LOG_ID}|Build Log>"
+          fi
+          ./ci3/slack_notify "$text" "#team-alpha-ci"

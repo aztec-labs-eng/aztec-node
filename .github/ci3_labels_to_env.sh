@@ -79,9 +79,8 @@ function main {
     echo "WARNING: Skipping CI because a ci-skip label or --ci-skip commit marker was present. Skip takes precedence over other CI signals." >&2
     ci_mode="skip"
   elif has_label "ci-release-pr"; then
-    # Release-PR mode creates and pushes a release tag for this PR's head (ci3.sh::handle_release_pr).
-    # In the private repo that tag triggers a private release via the safety gate below — this is the
-    # manual way to cut a private release from a PR, alongside the nightly tag cron.
+    # Release-PR mode creates and pushes a canary release tag for this PR's head
+    # (ci3.sh::handle_release_pr); that tag then runs release.yml like any other release.
     ci_mode="release-pr"
   elif has_label "ci-full"; then
     ci_mode="full"
@@ -91,11 +90,6 @@ function main {
   #   ci_mode="full-no-test-cache"
   elif has_label "ci-docs"; then
     ci_mode="docs"
-  elif [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
-    # A pushed semver tag is a release; REF_NAME is the tag (see ci3/source_refname). In the private
-    # repo this is the nightly path (nightly-release-tag*.yml push v<ver>-nightly.<date> tags on main);
-    # the private-repo safety gate below routes it to the internal Artifact Registry.
-    ci_mode="release"
   elif [[ "${GITHUB_REF:-}" == "refs/heads/main" ]]; then
     # Pushes to main run full CI: with no merge queue, this is the post-merge gate and
     # the producer of the per-commit benchmark series (see BENCH_UPLOAD/BENCH_BRANCH below).
@@ -106,16 +100,6 @@ function main {
 
   echo "CI_MODE=$ci_mode" >> $GITHUB_ENV
   echo "CI mode: $ci_mode"
-
-  # Release safety gate. The release flow can publish to DockerHub/npmjs/crates.io/github; that
-  # MUST ONLY run in the canonical public repo. In any other repo (e.g. a private fork), whenever this
-  # repo would release — for ANY trigger (a pushed nightly tag, a ci-release-pr tag, anything future) —
-  # force the private path: publish only the docker image and npm packages to our internal Artifact
-  # Registry (bootstrap.sh::private_release). Repo name compared case-insensitively.
-  if [ "$ci_mode" = "release" ] &&
-     [ "$(printf '%s' "${GITHUB_REPOSITORY:-}" | tr 'A-Z' 'a-z')" != "aztec-labs-eng/aztec-node" ]; then
-    echo "PRIVATE_RELEASE=1" >> $GITHUB_ENV
-  fi
 
   # Benching modes run their benches on a dedicated, fixed-hardware box (stable numbers)
   # and publish the result; ci-fast never benches. For multi-instance runs only the first

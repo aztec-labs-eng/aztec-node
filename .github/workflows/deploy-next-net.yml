@@ -22,7 +22,7 @@ concurrency:
   group: deploy-next-net-${{ inputs.image_tag || 'nightly' }}
   cancel-in-progress: true
 
-# contents: read for wait_for_ci3's tag/commit lookups; actions: write both for its
+# contents: read for wait_for_release's tag/commit lookups; actions: write both for its
 # workflow-run queries and to cap the called deploy-network.yml high enough that its
 # failure handler can dispatch claudebox.yml.
 permissions:
@@ -65,7 +65,7 @@ jobs:
           echo "SEMVER=$SEMVER" >> "$GITHUB_OUTPUT"
           echo "TAG=v${SEMVER}" >> "$GITHUB_OUTPUT"
 
-  wait-for-ci3:
+  wait-for-release:
     needs: get-image-tag
     runs-on: ubuntu-latest
     steps:
@@ -78,11 +78,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for CI3
-        run: spartan/scripts/wait_for_ci3.ts "${{ needs.get-image-tag.outputs.tag }}"
+      - name: Wait for release
+        run: spartan/scripts/wait_for_release.ts "${{ needs.get-image-tag.outputs.tag }}"
 
   deploy-next-net:
-    needs: [get-image-tag, wait-for-ci3]
+    needs: [get-image-tag, wait-for-release]
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: next-net
@@ -97,10 +97,10 @@ jobs:
   # burning cluster resources. The only thing that ever deletes the namespace is
   # deploy_network.sh, and only once a deploy gets far enough to run it, so any run that
   # does not complete a successful deploy leaves the previous network up until some later
-  # run succeeds — days, if the nightly tag never lands or CI3 stays red.
+  # run succeeds — days, if the nightly tag never lands or the release stays red.
   #
   # Hence the gate is "the deploy did not succeed", not "the deploy failed": a missing
-  # tag or a red CI3 gate stalls this workflow before the deploy job starts, which is
+  # tag or a red release gate stalls this workflow before the deploy job starts, which is
   # exactly the case that strands a stale network. Tearing down then is deliberate — no
   # next-net at all is preferable to one serving state from an unknown-age tag, and its
   # absence is visible where staleness is not.

@@ -315,7 +315,7 @@ The build process uses these key files in the repository:
 - **`release-image/Dockerfile`** - Final release image with compiled Aztec software
 - **`release-image/bootstrap.sh`** - Build script used in CI for Docker images
 
-The official CI pipeline follows a similar process. See `.github/workflows/ci3.yml` for how production images are built and deployed.
+The official CI pipeline follows a similar process. See `.github/workflows/release.yml` for how production images are built and published.
 
 ## Next Steps
 

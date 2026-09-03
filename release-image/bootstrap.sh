@@ -124,24 +124,14 @@ function test_cmds {
   echo "$hash docker run --rm azteclabs/aztec --version"
 }
 
-# Resolve the registry to release to and log docker into it, assigning the repo path to the
-# caller's $repo. In a private release we push to our internal GCP Artifact Registry (the
-# INTERNAL_DOCKER_REGISTRY that GKE/staging pulls from) rather than Docker Hub. Auth via the CI
-# service-account key (gcp_artifact_login). INTERNAL_DOCKER_REGISTRY is the AR repo path, e.g.
-# us-west1-docker.pkg.dev/<project>/<repo>.
+# Log docker into the release registry, assigning the repo path to the caller's $repo.
 function release_registry_login {
-  if [ "${PRIVATE_RELEASE:-0}" = 1 ]; then
-    : "${INTERNAL_DOCKER_REGISTRY:?INTERNAL_DOCKER_REGISTRY required for a private release}"
-    gcp_artifact_login
-    repo="${INTERNAL_DOCKER_REGISTRY%/}"
-  else
-    if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-      echo "Missing DOCKERHUB_PASSWORD."
-      exit 1
-    fi
-    echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-    repo="azteclabs"
+  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
+    echo "Missing DOCKERHUB_PASSWORD."
+    exit 1
   fi
+  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
+  repo="azteclabs"
 }
 
 function release {
