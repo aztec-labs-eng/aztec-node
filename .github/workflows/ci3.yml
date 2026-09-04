@@ -91,6 +91,8 @@ jobs:
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Pushes the aztec-nr release snapshot to the mirror repo in another org, which github.token cannot do.
+          AZTEC_NR_GITHUB_MIRROR_TOKEN: ${{ secrets.AZTEC_NR_GITHUB_MIRROR_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           # Internal GCP Artifact Registry that private releases push the docker image to (see

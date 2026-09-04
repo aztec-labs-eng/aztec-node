@@ -11,7 +11,7 @@ name: Test Network Bench
 
 on:
   # schedule:
-  #   # Run every morning at 6:00 AM UTC, after the nightly tag (04:00 UTC) has built.
+  #   # Run every morning at 6:00 AM UTC, after the nightly tag (03:30 UTC) has built.
   #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:

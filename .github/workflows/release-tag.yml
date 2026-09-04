@@ -30,8 +30,10 @@ name: Release Tag
 
 on:
   schedule:
-    # Every night at 4:00 AM UTC.
-    - cron: "0 4 * * *"
+    # Every night at 3:30 AM UTC, half an hour before the aztec-packages nightly. Both lines
+    # release aztec-nr into the same mirror branch, and two pushes landing at the same moment
+    # would reject one of them as non-fast-forward.
+    - cron: "30 3 * * *"
   workflow_dispatch:
     inputs:
       kind:

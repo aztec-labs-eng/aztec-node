@@ -99,23 +99,14 @@ function release_git_push {
 
   cd release-out
 
-  # Find all Nargo.toml files that reference noir-protocol-circuits
-  nargo_files="$(find . -name 'Nargo.toml' | xargs grep --files-with-matches 'noir-protocol-circuits' || true)"
-
-  # Move the noir-protocol-circuits pin from whatever monorepo tag the sources track to the tag
-  # being released. Only lines mentioning noir-protocol-circuits are touched, so the other git
-  # dependencies keep their own tags.
-  for nargo_file in $nargo_files; do
-    sed --regexp-extended --in-place \
-      "/noir-protocol-circuits/ s;tag\s*=\s*\"[^\"]*\";tag = \"$tag_name\";" \
-      $nargo_file
-  done
-
-  # CI needs to authenticate from GITHUB_TOKEN.
-  gh auth setup-git &>/dev/null || true
+  # The mirror lives in another GitHub org, so the job's own GITHUB_TOKEN cannot push to it.
+  if [ "${DRY_RUN:-0}" = 0 ]; then
+    : "${AZTEC_NR_GITHUB_MIRROR_TOKEN:?must be set to push to $mirrored_repo_url}"
+  fi
 
   git init &>/dev/null
   git remote add origin "$mirrored_repo_url" &>/dev/null
+  git remote set-url --push origin "https://x-access-token:${AZTEC_NR_GITHUB_MIRROR_TOKEN:-}@${mirrored_repo_url#https://}"
   git fetch origin --quiet
 
   # Checkout the existing branch or create it if it doesn't exist.

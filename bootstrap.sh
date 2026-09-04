@@ -543,6 +543,7 @@ function release {
   fi
 
   projects=(
+    noir-projects/aztec-nr
     yarn-project
     aztec-up
     playground
