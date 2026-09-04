@@ -87,7 +87,12 @@ export interface ITxeExecutionOracle {
   setAuthorizeAllUtilityCallTargets(authorizeAll: boolean): void;
   getLastBlockTimestamp(): Promise<bigint>;
   getLastTxEffects(): Promise<TxEffectsData>;
-  getPrivateEvents(selector: EventSelector, contractAddress: AztecAddress, scope: AztecAddress): Promise<Fr[][]>;
+  getPrivateEvents(
+    selector: EventSelector,
+    contractAddress: AztecAddress,
+    scope: AztecAddress,
+    changeSetId: ChangeSetId,
+  ): Promise<Fr[][]>;
   privateCallNewFlow(
     from: AztecAddress | undefined,
     targetContractAddress: AztecAddress,

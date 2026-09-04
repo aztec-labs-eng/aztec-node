@@ -109,6 +109,7 @@ describe('StagedWriteCoordinator', () => {
       const committed: { changeSetId: ChangeSetId; inTransaction: boolean }[] = [];
       const mockStore = makeStagedStore({
         storeName: 'mock_store',
+        beginChangeSet: () => {},
         commitChangeSet: changeSetId => {
           committed.push({ changeSetId, inTransaction });
           return Promise.resolve();
@@ -155,6 +156,7 @@ describe('StagedWriteCoordinator', () => {
       const discardChangeSetMock = jest.fn<() => void>();
       const mockStore = makeStagedStore({
         storeName: 'mock_store',
+        beginChangeSet: () => {},
         commitChangeSet: commitMock,
         discardChangeSet: discardChangeSetMock,
       });
@@ -235,6 +237,7 @@ describe('StagedWriteCoordinator', () => {
       const discardChangeSetMock = jest.fn<() => void>();
       const mockStore = makeStagedStore({
         storeName: 'mock_store',
+        beginChangeSet: () => {},
         commitChangeSet: commitMock,
         discardChangeSet: discardChangeSetMock,
       });
@@ -247,6 +250,11 @@ describe('StagedWriteCoordinator', () => {
 
   /** A staged store that does nothing on commit and discard, so a test only spells out the part it exercises. */
   function makeStagedStore(overrides: Partial<StagedStore> & Pick<StagedStore, 'storeName'>): StagedStore {
-    return { commitChangeSet: () => Promise.resolve(), discardChangeSet: () => {}, ...overrides };
+    return {
+      beginChangeSet: () => {},
+      commitChangeSet: () => Promise.resolve(),
+      discardChangeSet: () => {},
+      ...overrides,
+    };
   }
 });
