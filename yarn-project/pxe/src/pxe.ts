@@ -328,11 +328,23 @@ export class PXE {
     );
     const txResolver = new TxResolverService(readCachedNode);
 
+    // Every staged store is also rollbackable, so the same set is handed to the coordinator to stage writes under a
+    // change set and to the synchronizer to truncate on a prune. Keeping it as one list means a store added here can
+    // never be silently left out of reorg handling.
+    const stagedStores = [
+      capsuleStore,
+      senderTaggingStore,
+      recipientTaggingStore,
+      privateEventStore,
+      noteStore,
+      factStore,
+    ];
+
     const synchronizer = new BlockSynchronizer(
       readCachedNode,
       store,
       anchorBlockStore,
-      [noteStore, privateEventStore, factStore, capsuleStore, recipientTaggingStore],
+      stagedStores,
       l2TipsStore,
       contractSyncService,
       config,
@@ -341,7 +353,7 @@ export class PXE {
 
     const stagedWriteCoordinator = new StagedWriteCoordinator({
       kvStore: store,
-      stagedStores: [capsuleStore, senderTaggingStore, recipientTaggingStore, privateEventStore, noteStore, factStore],
+      stagedStores,
       bindings,
     });
 
