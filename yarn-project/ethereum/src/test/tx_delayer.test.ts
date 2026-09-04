@@ -80,8 +80,20 @@ describe('tx_delayer', () => {
 
     logger.info(`Delayed tx sent. Awaiting receipt.`);
     const delayedTxReceipt = await client.waitForTransactionReceipt({ hash: delayedTxHash });
-    expect(delayedTxReceipt.blockNumber).toEqual(block.number + 3n);
-  }, 20000);
+
+    // Anvil stamps each block with the wall clock at mining time, so block timestamps are not exactly
+    // ETHEREUM_SLOT_DURATION apart and a target timestamp does not map to a fixed block number: a mining
+    // tick that runs late rounds its block's timestamp up, leaving the following ones a second short.
+    // The delayer releases the tx as soon as it sees a block within a slot of the target, so assert the
+    // tx landed on the block right after the first such block.
+    const releaseTimestamp = targetTimestamp - BigInt(ETHEREUM_SLOT_DURATION);
+    const [releaseBlock, blockBeforeRelease] = await Promise.all([
+      client.getBlock({ blockNumber: delayedTxReceipt.blockNumber - 1n }),
+      client.getBlock({ blockNumber: delayedTxReceipt.blockNumber - 2n }),
+    ]);
+    expect(releaseBlock.timestamp).toBeGreaterThanOrEqual(releaseTimestamp);
+    expect(blockBeforeRelease.timestamp).toBeLessThan(releaseTimestamp);
+  }, 30000);
 
   it('delays a tx sent through a contract', async () => {
     const deployTxHash = await client.deployContract({

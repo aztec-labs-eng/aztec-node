@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig } from 'vitest/config';
 
+import { cacheDir } from './vitest.global-setup.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Use pre-installed playwright browsers if available (e.g., in CI)
@@ -13,6 +15,7 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync(systemPlaywrightPath)) {
 }
 
 export default defineConfig({
+  cacheDir,
   define: {
     'process.env': {},
   },
