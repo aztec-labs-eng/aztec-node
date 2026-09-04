@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
@@ -26,12 +27,14 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
    * Reads a capsule's slot from the change set's staged data.
    *
    * If it is not there, it reads it from the KV store.
+   * @returns The slot's contents, or `null` when the slot holds no capsule, whether it was never written or was
+   * deleted in the change set.
    */
   async #readSlot(
     changeSet: CapsuleStoreChangeSet,
     db: ReadonlyDb<CapsuleStoreDb>,
     dbSlotKey: string,
-  ): Promise<Buffer | null | undefined> {
+  ): Promise<Buffer | null> {
     const staged: Buffer | null | undefined = changeSet.get(dbSlotKey);
 
     // Always issue DB read to keep IndexedDB transaction alive, even if the value is in the staged data. This
@@ -45,16 +48,22 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
   /**
    * Writes a capsule to the staging area.
    */
-  #writeSlot(changeSet: CapsuleStoreChangeSet, dbSlotKey: string, capsuleData: Buffer) {
-    changeSet.set(dbSlotKey, capsuleData);
+  #writeCapsule(
+    changeSet: CapsuleStoreChangeSet,
+    contractAddress: AztecAddress,
+    slot: Fr,
+    capsule: Fr[],
+    scope: AztecAddress,
+  ) {
+    changeSet.set(dbSlotToKey(contractAddress, slot, scope), packCapsule(capsule));
   }
 
   /**
    * Deletes a capsule on the staging area. Note the capsule will still
    * exist in storage until the change set is committed.
    */
-  #deleteSlot(changeSet: CapsuleStoreChangeSet, dbSlotKey: string) {
-    changeSet.set(dbSlotKey, null);
+  #deleteCapsule(changeSet: CapsuleStoreChangeSet, contractAddress: AztecAddress, slot: Fr, scope: AztecAddress) {
+    changeSet.set(dbSlotToKey(contractAddress, slot, scope), null);
   }
 
   protected async flushChangeSet(changeSet: CapsuleStoreChangeSet, db: CapsuleStoreDb): Promise<void> {
@@ -94,11 +103,9 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
     changeSetId: ChangeSetId,
     scope: AztecAddress,
   ): Promise<void> {
-    const dbSlotKey = dbSlotToKey(contractAddress, slot, scope);
-
     // A store overrides any pre-existing data on the slot
     return this.withChangeSet(changeSetId, changeSet => {
-      this.#writeSlot(changeSet, dbSlotKey, packCapsule(capsule));
+      this.#writeCapsule(changeSet, contractAddress, slot, capsule, scope);
     });
   }
 
@@ -132,11 +139,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
       this.logger.trace(`Data not found for contract ${contractAddress.toString()} and slot ${slot.toString()}`);
       return null;
     }
-    const capsule: Fr[] = [];
-    for (let i = 0; i < dataBuffer.length; i += Fr.SIZE_IN_BYTES) {
-      capsule.push(Fr.fromBuffer(dataBuffer.subarray(i, i + Fr.SIZE_IN_BYTES)));
-    }
-    return capsule;
+    return BufferReader.asReader(dataBuffer).readArray(dataBuffer.length / Fr.SIZE_IN_BYTES, Fr);
   }
 
   /**
@@ -147,7 +150,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
   deleteCapsule(contractAddress: AztecAddress, slot: Fr, changeSetId: ChangeSetId, scope: AztecAddress): Promise<void> {
     // When we commit this, we will interpret null as a deletion, so we'll propagate the delete to the KV store
     return this.withChangeSet(changeSetId, changeSet => {
-      this.#deleteSlot(changeSet, dbSlotToKey(contractAddress, slot, scope));
+      this.#deleteCapsule(changeSet, contractAddress, slot, scope);
     });
   }
 
@@ -189,7 +192,7 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
           throw new Error(`Attempted to copy empty slot ${currentSrcSlot} for contract ${contractAddress.toString()}`);
         }
 
-        this.#writeSlot(changeSet, currentDstSlot, toCopy);
+        changeSet.set(currentDstSlot, toCopy);
       }
     });
   }
@@ -216,12 +219,12 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
       // Store each capsule at consecutive slots after baseSlot + 1 + currentLength
       for (let i = 0; i < content.length; i++) {
         const nextSlot = arraySlot(baseSlot, currentLength + i);
-        this.#writeSlot(changeSet, dbSlotToKey(contractAddress, nextSlot, scope), packCapsule(content[i]));
+        this.#writeCapsule(changeSet, contractAddress, nextSlot, content[i], scope);
       }
 
       // Update length to include all new capsules
       const newLength = currentLength + content.length;
-      this.#writeSlot(changeSet, dbSlotToKey(contractAddress, baseSlot, scope), packCapsule([new Fr(newLength)]));
+      this.#writeCapsule(changeSet, contractAddress, baseSlot, [new Fr(newLength)], scope);
     });
   }
 
@@ -267,20 +270,16 @@ export class CapsuleStore extends BaseStagingStore<CapsuleStoreChangeSet, Capsul
       const originalLength = maybeLength ? maybeLength[0].toNumber() : 0;
 
       // Set the new length
-      this.#writeSlot(changeSet, dbSlotToKey(contractAddress, baseSlot, scope), packCapsule([new Fr(content.length)]));
+      this.#writeCapsule(changeSet, contractAddress, baseSlot, [new Fr(content.length)], scope);
 
       // Store the new content, possibly overwriting existing values
       for (let i = 0; i < content.length; i++) {
-        this.#writeSlot(
-          changeSet,
-          dbSlotToKey(contractAddress, arraySlot(baseSlot, i), scope),
-          packCapsule(content[i]),
-        );
+        this.#writeCapsule(changeSet, contractAddress, arraySlot(baseSlot, i), content[i], scope);
       }
 
       // Clear any stragglers
       for (let i = content.length; i < originalLength; i++) {
-        this.#deleteSlot(changeSet, dbSlotToKey(contractAddress, arraySlot(baseSlot, i), scope));
+        this.#deleteCapsule(changeSet, contractAddress, arraySlot(baseSlot, i), scope);
       }
     });
   }
@@ -295,7 +294,7 @@ function arraySlot(baseSlot: Fr, index: number) {
 }
 
 function packCapsule(capsule: Fr[]): Buffer {
-  return Buffer.concat(capsule.map(value => value.toBuffer()));
+  return serializeToBuffer(capsule);
 }
 
 /**
@@ -305,7 +304,7 @@ function packCapsule(capsule: Fr[]): Buffer {
 type CapsuleStoreChangeSet = Map<string, Buffer | null>;
 
 type CapsuleStoreDb = {
-  // Arbitrary data stored by contracts. Key is computed as `${contractAddress}:${scope}:${key}`, using the zero
+  // Arbitrary data stored by contracts. Key is computed as `${contractAddress}:${scope}:${slot}`, using the zero
   // address for the global scope.
   capsules: AztecAsyncMap<string, Buffer>;
 };
