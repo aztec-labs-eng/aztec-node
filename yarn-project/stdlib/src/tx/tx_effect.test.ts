@@ -63,12 +63,7 @@ function maximumFixture(): TxEffect {
     Array.from({ length: MAX_PRIVATE_LOGS_PER_TX }, (_, i) =>
       PrivateLog.fromBlobFields(PRIVATE_LOG_SIZE_IN_FIELDS, Array(PRIVATE_LOG_SIZE_IN_FIELDS).fill(new Fr(i + 501))),
     ),
-    [
-      new PublicLog(
-        AztecAddress.fromBigIntUnsafe(601n),
-        Array(MAX_PUBLIC_LOG_SIZE_IN_FIELDS).fill(new Fr(601)),
-      ),
-    ],
+    [new PublicLog(AztecAddress.fromBigIntUnsafe(601n), Array(MAX_PUBLIC_LOG_SIZE_IN_FIELDS).fill(new Fr(601)))],
     [
       ContractClassLog.fromBlobFields(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, [
         new Fr(801),
@@ -168,10 +163,7 @@ describe('TxEffect', () => {
           await categoryHash([new Fr(41), new Fr(42)]),
           await categoryHash([new Fr(3), new Fr(101), new Fr(102), new Fr(103)]),
           await categoryHash([new Fr(2), new Fr(PUBLIC_LOG_ADDRESS), new Fr(201), new Fr(202)]),
-          await categoryHash([
-            new Fr(CONTRACT_CLASS_LOG_ADDRESS),
-            await txEffect.contractClassLogs[0].hash(),
-          ]),
+          await categoryHash([new Fr(CONTRACT_CLASS_LOG_ADDRESS), await txEffect.contractClassLogs[0].hash()]),
         ],
         DomainSeparator.TX_EFFECT_CATEGORIES_HASH,
       );

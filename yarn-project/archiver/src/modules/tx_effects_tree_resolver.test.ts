@@ -43,7 +43,9 @@ describe('TxEffectsTreeResolver', () => {
       expect(witness).toBeDefined();
       expect(witness!.blockNumber).toBe(BLOCK_NUMBER);
       expect(witness!.root).toEqual(root);
-      expect(await verifyTxEffectMembershipWitness(await txEffect.computeTxEffectsTreeLeaf(), witness!, root)).toBe(true);
+      expect(await verifyTxEffectMembershipWitness(await txEffect.computeTxEffectsTreeLeaf(), witness!, root)).toBe(
+        true,
+      );
     }
   });
 

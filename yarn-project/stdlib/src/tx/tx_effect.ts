@@ -299,9 +299,7 @@ export class TxEffect {
   async computeTxEffectCategoriesHash(): Promise<Fr> {
     const txBlobData = this.toTxBlobData();
     const contractClassLogHashFields = (
-      await Promise.all(
-        this.contractClassLogs.map(async log => [log.contractAddress.toField(), await log.hash()]),
-      )
+      await Promise.all(this.contractClassLogs.map(async log => [log.contractAddress.toField(), await log.hash()]))
     ).flat();
     const categoryHashes = await Promise.all(
       getTxEffectCategoryHashPreimages(txBlobData, contractClassLogHashFields).map(computeTxEffectCategoryHash),
