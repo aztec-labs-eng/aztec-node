@@ -43,10 +43,6 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
     return staged !== undefined ? staged : (dbValue ?? []);
   }
 
-  #writePendingIndexes(changeSet: SenderTaggingChangeSet, secret: string, pendingIndexes: PendingIndexesEntry[]) {
-    changeSet.pendingIndexes.set(secret, pendingIndexes);
-  }
-
   async #readLastFinalizedIndex(
     changeSet: SenderTaggingChangeSet,
     db: ReadonlyDb<SenderTaggingDb>,
@@ -57,10 +53,6 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
     const dbValue = await db.lastFinalizedIndexes.getAsync(secret);
     const staged = changeSet.lastFinalizedIndexes.get(secret);
     return staged ?? dbValue;
-  }
-
-  #writeLastFinalizedIndex(changeSet: SenderTaggingChangeSet, secret: string, lastFinalizedIndex: number) {
-    changeSet.lastFinalizedIndexes.set(secret, lastFinalizedIndex);
   }
 
   protected async flushChangeSet(changeSet: SenderTaggingChangeSet, db: SenderTaggingDb): Promise<void> {
@@ -204,7 +196,7 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
         // mergeExisting): duplicate evidence, nothing to write.
 
         if (updatedPending) {
-          this.#writePendingIndexes(changeSet, secretStr, updatedPending);
+          changeSet.pendingIndexes.set(secretStr, updatedPending);
         }
       }
     });
@@ -306,10 +298,10 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
         if (pendingData && pendingData.length > 0) {
           const filtered = pendingData.filter(item => !txHashStrings.has(item.txHash));
           if (filtered.length === 0) {
-            this.#writePendingIndexes(changeSet, secret, []);
+            changeSet.pendingIndexes.set(secret, []);
           } else if (filtered.length !== pendingData.length) {
             // Some items were filtered out, so update the pending data
-            this.#writePendingIndexes(changeSet, secret, filtered);
+            changeSet.pendingIndexes.set(secret, filtered);
           }
           // else: No items were filtered out (txHashes not found for this secret) --> no-op
         }
@@ -434,10 +426,10 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
 
         // Write final state if changed
         if (currentFinalized !== lastFinalized) {
-          this.#writeLastFinalizedIndex(changeSet, secret, currentFinalized!);
+          changeSet.lastFinalizedIndexes.set(secret, currentFinalized!);
         }
         if (currentPending !== pendingData) {
-          this.#writePendingIndexes(changeSet, secret, currentPending);
+          changeSet.pendingIndexes.set(secret, currentPending);
         }
       }
     });
@@ -494,13 +486,13 @@ export class SenderTaggingStore extends BaseStagingStore<SenderTaggingChangeSet,
 
         if (highestSurvivingIndex !== undefined) {
           const newFinalized = Math.max(lastFinalized ?? 0, highestSurvivingIndex);
-          this.#writeLastFinalizedIndex(changeSet, secret, newFinalized);
+          changeSet.lastFinalizedIndexes.set(secret, newFinalized);
 
           // Prune pending indexes that are now <= the finalized index.
           currentPending = currentPending.filter(item => item.highestIndex > newFinalized);
         }
 
-        this.#writePendingIndexes(changeSet, secret, currentPending);
+        changeSet.pendingIndexes.set(secret, currentPending);
       }
     });
   }
