@@ -263,6 +263,8 @@ The following labels can be used to control CI behavior on pull requests:
 
 - **`ci-no-fail-fast`**: Continues running all tests even if some fail.
 
+- **`ci-release-pr`**: Cuts a canary release from the PR. [`release-pr-tag.yml`](.github/workflows/release-pr-tag.yml) tags the PR head as `v<version>-commit.g<sha>`, taking the version from `.release-please-manifest.json` as any other release does, and that tag runs the release workflow. The build publishes to npm and DockerHub under that version, reachable by exact version or the `commit` npm dist-tag — a canary never takes the shared `latest` or `prerelease` tags. The label removes itself; re-add it after a new commit to cut another. Normal CI runs alongside.
+
 ### Top-level Content-Based CI Caching
 
 CI3 has granular caching, but as well it includes an additional layer of caching based on git content. When CI completes successfully, it stores a success marker keyed by the hash of the repository's file tree. On subsequent runs, if the exact same content is detected (same tree hash), CI will skip execution entirely.

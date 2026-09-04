@@ -47,7 +47,6 @@ function check_cache {
     "full"
     "full-no-test-cache"
     "docs"
-    "ci-release-pr"
   )
   # Check if CI_MODE is in cached_ci_modes
   if [[ " ${cached_ci_modes[@]} " =~ " ${CI_MODE} " && "$GITHUB_RUN_ATTEMPT" -eq 1 ]]; then
@@ -61,32 +60,12 @@ function check_cache {
   fi
 }
 
-function handle_release_pr {
-  echo_header "Release PR"
-  # Create and push a tag for release PR testing
-  local github_repository
-  github_repository=$(git remote get-url origin | sed -E 's|.*github\.com[/:]([^/]+/[^/]+)(\.git)?$|\1|')
-  git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${github_repository}"
-  local tag_name="v0.0.1-commit.$(git rev-parse --short HEAD)"
-  git config --unset-all http.https://github.com/.extraheader || true
-  git tag "${tag_name}"
-  git push origin "${tag_name}"
-  echo "Created and pushed tag: ${tag_name}"
-  gh pr edit $PR_NUMBER --remove-label ci-release-pr || true
-}
-
 function main {
   echo_header "CI3 Main Script"
   echo "CI mode: $CI_MODE"
   setup_environment
-  # Handle release-pr mode separately (creates tag instead of running CI)
-
   if [ "${CI_MODE}" == "skip" ]; then
     echo "WARNING: CI is being skipped in this PR." >&2
-    exit 0
-  fi
-  if [ "${CI_MODE}" == "release-pr" ]; then
-    handle_release_pr
     exit 0
   fi
   check_cache

@@ -5,14 +5,18 @@ version=$1
 
 dry_run=${DRY_RUN:-0}
 
-# Only two npm dist-tags are used: 'latest' for stable releases and 'prerelease' for everything else.
-# Pre-release versions (nightlies, RCs, etc.) are installed by exact version, not by dist-tag.
+# A stable release takes 'latest'; the nightly and rc channels share 'prerelease'; every other
+# channel gets a dist-tag of its own. Sharing is a closed set on purpose: a 'commit' canary cut
+# from a pull request carries that branch's manifest version, so it can be newer than the newest
+# nightly and would otherwise repoint 'prerelease' at an unmerged build. Prerelease versions are
+# installed by exact version anyway.
 prerelease=$(semver prerelease $version)
-if [ -n "$prerelease" ]; then
-  npm_tag="prerelease"
-else
-  npm_tag="latest"
-fi
+channel=${prerelease%%.*}
+case "$channel" in
+  "") npm_tag="latest" ;;
+  nightly | rc) npm_tag="prerelease" ;;
+  *) npm_tag="$channel" ;;
+esac
 
 # Point .npmrc config to one that relies on 'NPM_TOKEN' in the environment.
 export NPM_CONFIG_GLOBALCONFIG="$root/ci3/npm/.npmrc"
@@ -27,6 +31,17 @@ if [ "$version" == "$published_version" ]; then
   echo "Tagged $npm_tag version $version is equal to published $npm_tag version $published_version."
   echo "Skipping publish."
   exit 0
+fi
+
+# A version older than what a shared dist-tag already points at must not take it: re-publishing
+# an old release line would repoint 'latest' (or 'prerelease') backwards for everyone. Such a
+# version goes out under its own channel instead — 'nightly', 'rc', or 'v<major>' for a stable —
+# so it stays installable by tag without moving the shared one.
+publish_tag=$npm_tag
+if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
+  publish_tag=${channel:-v$(semver major "$version")}
+  echo "Version $version is older than the published $npm_tag ($published_version);"
+  echo "publishing under dist-tag '$publish_tag' instead of moving '$npm_tag' backwards."
 fi
 
 # Create temp directory for publishing
@@ -51,20 +66,21 @@ release_prep_package_json $version
 
 # Publish from temp dir
 if [ "$dry_run" -eq 1 ]; then
-  denoise "npm publish --ignore-scripts --dry-run --tag $npm_tag --access public"
+  denoise "npm publish --ignore-scripts --dry-run --tag $publish_tag --access public"
 else
   # Check if version exists.
   if npm view "$package_name@$version" version >/dev/null 2>&1; then
-    # Never move the dist-tag backwards: re-running an old release tag's workflow is idempotent by
-    # design, and must not repoint 'latest'/'prerelease' at the older version it re-publishes.
-    if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
-      echo "Not moving dist-tag $npm_tag backwards from $published_version to $version. Skipping."
+    # Already published, so there is nothing to publish and only a dist-tag to (re)apply. Skip it
+    # when that would move the shared tag backwards: re-running an old release tag's workflow is
+    # idempotent by design.
+    if [ "$publish_tag" != "$npm_tag" ]; then
+      echo "$version is already published and older than $npm_tag ($published_version). Skipping."
       exit 0
     fi
     # Tag the existing version.
     npm dist-tag add $package_name@$version $npm_tag
   else
     # Publish new version.
-    denoise "npm publish --ignore-scripts --tag $npm_tag --access public"
+    denoise "npm publish --ignore-scripts --tag $publish_tag --access public"
   fi
 fi
