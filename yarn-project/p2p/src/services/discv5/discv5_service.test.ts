@@ -21,11 +21,12 @@ import { PersistedEnrStore } from './persisted_enr_store.js';
 /**
  * Runs discovery queries on all nodes until the condition is met or timeout expires.
  * This is more resilient than fixed iteration loops as it adapts to varying DHT propagation times.
+ *
+ * Discovery is driven by findRandomNode(), so a node whose routing table holds only a couple of
+ * entries answers most random targets with nothing useful. Tests that start without a bootnode have
+ * to converge on that random walk and take tens of seconds with a long tail, against ~2s for the
+ * bootnode-seeded ones — hence a budget well clear of the observed worst case rather than of the mean.
  */
-// Discovery is driven by findRandomNode(), so a node whose routing table holds only a couple of
-// entries answers most random targets with nothing useful. Tests that start without a bootnode have
-// to converge on that random walk and take tens of seconds with a long tail, against ~2s for the
-// bootnode-seeded ones — hence a budget well clear of the observed worst case rather than of the mean.
 const runDiscoveryUntil = async (nodes: DiscV5Service[], condition: () => boolean, timeout = 100, interval = 0.2) => {
   await retryUntil(
     async () => {
