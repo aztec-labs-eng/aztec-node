@@ -6,13 +6,18 @@ import { promises as fs } from 'fs';
 
 export { deployAndInitializeTokenAndBridgeContracts } from '../shared/cross_chain_test_harness.js';
 
-const { TEMP_DIR = '/tmp', ACVM_BINARY_PATH = '', ACVM_WORKING_DIRECTORY = '', ACVM_FORCE_WASM = '' } = process.env;
+const {
+  TEMP_DIR = '/tmp',
+  NOIR_EXECUTE_BINARY_PATH = '',
+  NOIR_EXECUTE_WORKING_DIRECTORY = '',
+  ACVM_FORCE_WASM = '',
+} = process.env;
 
 // Determines if we have access to the noir-execute binary and a tmp folder for temp files
-export async function getACVMConfig(logger: Logger): Promise<
+export async function getNoirExecuteConfig(logger: Logger): Promise<
   | {
-      acvmWorkingDirectory: string;
-      acvmBinaryPath: string;
+      noirExecuteWorkingDirectory: string;
+      noirExecuteBinaryPath: string;
       cleanup: () => Promise<void>;
     }
   | undefined
@@ -21,20 +26,20 @@ export async function getACVMConfig(logger: Logger): Promise<
     if (parseBooleanEnv(ACVM_FORCE_WASM)) {
       return undefined;
     }
-    const acvmBinaryPath = ACVM_BINARY_PATH ? ACVM_BINARY_PATH : `../../labs-aztec-toolchain/bin/noir-execute`;
-    await fs.access(acvmBinaryPath, fs.constants.R_OK);
+    const binaryPath = NOIR_EXECUTE_BINARY_PATH || `../../labs-aztec-toolchain/bin/noir-execute`;
+    await fs.access(binaryPath, fs.constants.R_OK);
     const tempWorkingDirectory = `${TEMP_DIR}/${randomBytes(4).toString('hex')}`;
-    const acvmWorkingDirectory = ACVM_WORKING_DIRECTORY ? ACVM_WORKING_DIRECTORY : `${tempWorkingDirectory}/acvm`;
-    await fs.mkdir(acvmWorkingDirectory, { recursive: true });
-    logger.verbose(`Using noir-execute binary at ${acvmBinaryPath} with working directory ${acvmWorkingDirectory}`);
+    const workingDirectory = NOIR_EXECUTE_WORKING_DIRECTORY || `${tempWorkingDirectory}/noir-execute`;
+    await fs.mkdir(workingDirectory, { recursive: true });
+    logger.verbose(`Using noir-execute binary at ${binaryPath}`, { binaryPath, workingDirectory });
 
-    const directoryToCleanup = ACVM_WORKING_DIRECTORY ? undefined : tempWorkingDirectory;
+    const directoryToCleanup = NOIR_EXECUTE_WORKING_DIRECTORY ? undefined : tempWorkingDirectory;
 
     const cleanup = () => tryRmDir(directoryToCleanup, logger);
 
     return {
-      acvmWorkingDirectory,
-      acvmBinaryPath,
+      noirExecuteWorkingDirectory: workingDirectory,
+      noirExecuteBinaryPath: binaryPath,
       cleanup,
     };
   } catch (err) {

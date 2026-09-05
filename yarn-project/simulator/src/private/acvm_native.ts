@@ -54,11 +54,11 @@ export class NativeACVMSimulator implements CircuitSimulator {
 
   constructor(
     private workingDirectory: string,
-    private pathToAcvm: string,
+    private pathToNoirExecute: string,
     private witnessFilename?: string,
     loggerOrBindings?: Logger | LoggerBindings,
   ) {
-    this.logger = resolveLogger('simulator:acvm-native', loggerOrBindings);
+    this.logger = resolveLogger('simulator:noir-execute', loggerOrBindings);
   }
 
   async executeProtocolCircuit<ReturnType>(
@@ -159,7 +159,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
     return new Promise((resolve, reject) => {
       const errChunks: Buffer[] = [];
       let errLen = 0;
-      const child = proc.spawn(this.pathToAcvm, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      const child = proc.spawn(this.pathToNoirExecute, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr.on('data', (data: Buffer) => {
         errChunks.push(data);
         errLen += data.length;
@@ -203,7 +203,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
           file_map: {},
         });
         /* eslint-enable camelcase */
-        // The working directory is shared: it comes from configuration (ACVM_WORKING_DIRECTORY), so
+        // The working directory is shared: it comes from configuration (NOIR_EXECUTE_WORKING_DIRECTORY), so
         // another process can be reading this artifact while this one writes it. The key covers the
         // compiled output, so concurrent writers agree on the contents, but a plain write is not
         // atomic and would expose a truncated file. Write aside and rename, which is atomic within

@@ -21,13 +21,13 @@ export type ProverClientUserConfig = ProverConfig & ProverAgentConfig & ProverBr
 export type ProverClientConfig = ProverClientUserConfig & Required<Pick<ProverClientUserConfig, 'proverId'>>;
 
 export const bbConfigMappings: ConfigMappingsType<BBConfig & ACVMConfig> = {
-  acvmWorkingDirectory: {
-    env: 'ACVM_WORKING_DIRECTORY',
+  noirExecuteWorkingDirectory: {
+    env: 'NOIR_EXECUTE_WORKING_DIRECTORY',
     description: 'The working directory to use for simulation/proving',
   },
-  acvmBinaryPath: {
-    env: 'ACVM_BINARY_PATH',
-    description: 'The path to the ACVM binary',
+  noirExecuteBinaryPath: {
+    env: 'NOIR_EXECUTE_BINARY_PATH',
+    description: 'The path to the noir-execute binary',
   },
   bbWorkingDirectory: {
     env: 'BB_WORKING_DIRECTORY',

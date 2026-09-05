@@ -1197,13 +1197,13 @@ aztec setup-protocol-contracts [options]
   Address to receive fees.
   *Environment: `$FEE_RECIPIENT`*
 
-- `--sequencer.acvmWorkingDirectory <value>`
+- `--sequencer.noirExecuteWorkingDirectory <value>`
   The working directory to use for simulation/proving
-  *Environment: `$ACVM_WORKING_DIRECTORY`*
+  *Environment: `$NOIR_EXECUTE_WORKING_DIRECTORY`*
 
-- `--sequencer.acvmBinaryPath <value>`
-  The path to the ACVM binary
-  *Environment: `$ACVM_BINARY_PATH`*
+- `--sequencer.noirExecuteBinaryPath <value>`
+  The path to the noir-execute binary
+  *Environment: `$NOIR_EXECUTE_BINARY_PATH`*
 
 - `--sequencer.governanceProposerPayload <value>`
   The address of the payload for the governanceProposer
@@ -1385,13 +1385,13 @@ aztec setup-protocol-contracts [options]
   Location of key store directory
   *Environment: `$KEY_STORE_DIRECTORY`*
 
-- `--proverNode.acvmWorkingDirectory <value>`
+- `--proverNode.noirExecuteWorkingDirectory <value>`
   The working directory to use for simulation/proving
-  *Environment: `$ACVM_WORKING_DIRECTORY`*
+  *Environment: `$NOIR_EXECUTE_WORKING_DIRECTORY`*
 
-- `--proverNode.acvmBinaryPath <value>`
-  The path to the ACVM binary
-  *Environment: `$ACVM_BINARY_PATH`*
+- `--proverNode.noirExecuteBinaryPath <value>`
+  The path to the noir-execute binary
+  *Environment: `$NOIR_EXECUTE_BINARY_PATH`*
 
 - `--proverNode.bbWorkingDirectory <value>`
   The working directory to use for proving

@@ -20,8 +20,8 @@ const {
   BB_BINARY_PATH = '',
   BB_WORKING_DIRECTORY = '',
   BB_SKIP_CLEANUP = '',
-  ACVM_BINARY_PATH = '',
-  ACVM_WORKING_DIRECTORY = '',
+  NOIR_EXECUTE_BINARY_PATH = '',
+  NOIR_EXECUTE_WORKING_DIRECTORY = '',
 } = process.env;
 
 // Determines if we have access to the bb binary and a tmp folder for temp files
@@ -36,23 +36,28 @@ export const getEnvironmentConfig = async (logger: Logger) => {
     await fs.mkdir(bbWorkingDirectory, { recursive: true });
     logger.info(`Found native BB binary at ${expectedBBPath} with working directory ${bbWorkingDirectory}`);
 
-    const expectedAcvmPath = ACVM_BINARY_PATH
-      ? ACVM_BINARY_PATH
+    const expectedNoirExecutePath = NOIR_EXECUTE_BINARY_PATH
+      ? NOIR_EXECUTE_BINARY_PATH
       : `${path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../labs-aztec-toolchain/bin')}/noir-execute`;
-    await fs.access(expectedAcvmPath, fs.constants.R_OK);
-    const acvmWorkingDirectory = ACVM_WORKING_DIRECTORY ? ACVM_WORKING_DIRECTORY : `${tempWorkingDirectory}/acvm`;
-    await fs.mkdir(acvmWorkingDirectory, { recursive: true });
-    logger.info(`Found noir-execute binary at ${expectedAcvmPath} with working directory ${acvmWorkingDirectory}`);
+    await fs.access(expectedNoirExecutePath, fs.constants.R_OK);
+    const noirExecuteWorkingDirectory = NOIR_EXECUTE_WORKING_DIRECTORY
+      ? NOIR_EXECUTE_WORKING_DIRECTORY
+      : `${tempWorkingDirectory}/noir-execute`;
+    await fs.mkdir(noirExecuteWorkingDirectory, { recursive: true });
+    logger.info(`Found noir-execute binary at ${expectedNoirExecutePath}`, {
+      noirExecuteBinaryPath: expectedNoirExecutePath,
+      noirExecuteWorkingDirectory,
+    });
 
     const bbSkipCleanup = ['1', 'true'].includes(BB_SKIP_CLEANUP);
     bbSkipCleanup && logger.verbose(`Not going to clean up BB working directory ${bbWorkingDirectory} after run`);
 
     return {
-      acvmWorkingDirectory,
+      noirExecuteWorkingDirectory,
       bbWorkingDirectory,
-      expectedAcvmPath,
+      expectedNoirExecutePath,
       expectedBBPath,
-      directoryToCleanup: ACVM_WORKING_DIRECTORY && BB_WORKING_DIRECTORY ? undefined : tempWorkingDirectory,
+      directoryToCleanup: NOIR_EXECUTE_WORKING_DIRECTORY && BB_WORKING_DIRECTORY ? undefined : tempWorkingDirectory,
       bbSkipCleanup,
     };
   } catch (err) {
@@ -62,20 +67,28 @@ export const getEnvironmentConfig = async (logger: Logger) => {
 };
 
 export async function getSimulator(
-  config: { acvmWorkingDirectory: string | undefined; acvmBinaryPath: string | undefined },
+  config: { noirExecuteWorkingDirectory: string | undefined; noirExecuteBinaryPath: string | undefined },
   logger?: Logger,
 ): Promise<CircuitSimulator> {
-  if (config.acvmBinaryPath && config.acvmWorkingDirectory) {
+  if (config.noirExecuteBinaryPath && config.noirExecuteWorkingDirectory) {
     try {
-      await fs.access(config.acvmBinaryPath, fs.constants.R_OK);
-      await fs.mkdir(config.acvmWorkingDirectory, { recursive: true });
-      logger?.info(
-        `Using native ACVM at ${config.acvmBinaryPath} and working directory ${config.acvmWorkingDirectory}`,
+      await fs.access(config.noirExecuteBinaryPath, fs.constants.R_OK);
+      await fs.mkdir(config.noirExecuteWorkingDirectory, { recursive: true });
+      logger?.info(`Using noir-execute at ${config.noirExecuteBinaryPath}`, {
+        noirExecuteBinaryPath: config.noirExecuteBinaryPath,
+        noirExecuteWorkingDirectory: config.noirExecuteWorkingDirectory,
+      });
+      const noirExecuteLogger = logger?.createChild('noir-execute');
+      return new NativeACVMSimulator(
+        config.noirExecuteWorkingDirectory,
+        config.noirExecuteBinaryPath,
+        undefined,
+        noirExecuteLogger,
       );
-      const acvmLogger = logger?.createChild('acvm-native');
-      return new NativeACVMSimulator(config.acvmWorkingDirectory, config.acvmBinaryPath, undefined, acvmLogger);
     } catch {
-      logger?.warn(`Failed to access ACVM at ${config.acvmBinaryPath}, falling back to WASM`);
+      logger?.warn(`Failed to access noir-execute at ${config.noirExecuteBinaryPath}, falling back to WASM`, {
+        noirExecuteBinaryPath: config.noirExecuteBinaryPath,
+      });
     }
   }
   logger?.info('Using WASM ACVM simulation');
