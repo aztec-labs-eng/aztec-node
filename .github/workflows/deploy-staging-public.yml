@@ -1,13 +1,11 @@
 name: Deploy to staging public
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to deploy (v5.0.0 or any v5.0.0 prerelease). Leave empty to use today's 5.0.0 nightly tag."
-        required: false
+        description: "Tag to deploy (vN.0.0 or any vN.0.0 prerelease)."
+        required: true
         type: string
       deploy_contracts:
         description: "Redeploy rollup contracts before deploying infra."
@@ -45,21 +43,18 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 1
 
-      - name: Resolve nightly tag
+      - name: Resolve tag
         id: resolve
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
         run: |
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            TAG="${{ inputs.tag }}"
-            echo "Using manually specified tag: $TAG"
-          else
-            TAG="v5.0.0-nightly.$(date -u +%Y%m%d)"
-            echo "Using today's nightly tag: $TAG"
-            if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-              echo "Error: nightly tag $TAG does not exist on origin"
-              exit 1
-            fi
-            echo "Confirmed nightly tag $TAG exists on origin"
+          # Tolerate a tag pasted without the leading v.
+          TAG="v${TAG_INPUT#v}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "Error: tag $TAG does not exist on origin"
+            exit 1
           fi
+          echo "Confirmed tag $TAG exists on origin"
 
           SEMVER="${TAG#v}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
