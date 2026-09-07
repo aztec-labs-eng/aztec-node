@@ -66,6 +66,14 @@ function test_cmds {
   # Long-running avm_simulator
   echo "$(dep_hash src/automine/simulation/avm_simulator.test.ts)$flags:TIMEOUT=30m:NAME=automine/simulation/avm_simulator $(set_dump_avm e2e_avm_simulator) $run_test_script simple src/automine/simulation/avm_simulator.test.ts"
 
+  # Lives under src/composed but runs as a simple test: the mainnet fork it needs comes from the
+  # anvil state dump it loads, not from the compose fork service. It also needs the anvil that
+  # setup() spawns itself: the compose fork service runs anvil with no --block-time, so it is already
+  # automining and setup()'s `enableAutomine` guard skips the automine/interval-mining handover.
+  # L1 then only advances when a tx arrives, the sequencer never reaches a proposable slot, and the
+  # setup deploys time out on isMined.
+  echo "$(dep_hash src/composed/uniswap_trade_on_l1_from_l2.test.ts)$flags:NAME=composed/uniswap_trade_on_l1_from_l2 $run_test_script simple src/composed/uniswap_trade_on_l1_from_l2.test.ts"
+
   local tests=(
     # List all standalone and nested tests, except for the ones listed above.
     # Keep these globs non-overlapping: docker_isolate derives the container name from the test path, so a
@@ -141,7 +149,8 @@ function test_cmds {
   tests=(
     # e2e_persistence is excluded and runs nowhere: its beforeAll no longer completes (the single-node
     # sequencer stalls in checkpoint proposal). See the file's header comment. It stays excluded until fixed.
-    src/composed/!(e2e_persistence).test.ts
+    # uniswap_trade_on_l1_from_l2 is excluded here because it is scheduled as a simple test above.
+    src/composed/!(e2e_persistence|uniswap_trade_on_l1_from_l2).test.ts
     src/guides/*.test.ts
   )
   for test in "${tests[@]}"; do

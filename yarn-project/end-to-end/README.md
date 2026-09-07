@@ -179,8 +179,11 @@ depth-agnostic and survive folder renames; path-specific entries must be updated
 `src/composed/` tests run against a **running local network** rather than an in-process stack, via
 `scripts/run_test.sh` in different modes:
 
-- `src/composed/*.test.ts` → `compose` mode (e.g. `e2e_persistence`, `uniswap_trade_on_l1_from_l2`,
-  `e2e_cheat_codes` — the compose variant, distinct from the relocated unit-style one).
+- `src/composed/*.test.ts` → `compose` mode (e.g. `e2e_cheat_codes` — the compose variant, distinct from the
+  relocated unit-style one). `uniswap_trade_on_l1_from_l2` is the exception: it gets its forked-mainnet state
+  from a committed anvil dump, and it needs the interval-mining anvil that `setup()` spawns rather than the
+  compose fork service's automining one, so `bootstrap.sh` schedules it as a `simple` test and excludes it
+  from this glob.
 - `src/composed/web3signer/*.test.ts` → `web3signer` mode (remote-signer scenarios).
 - `src/composed/ha/*.test.ts` → `ha` mode (high-availability multi-process scenarios).
 - `src/guides/*.test.ts` → tutorial/guide flows; `src/bench/` → benchmarks (see `bench_cmds`).

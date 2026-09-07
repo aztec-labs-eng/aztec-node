@@ -30,7 +30,8 @@ import { CrossChainTestHarness } from './cross_chain_test_harness.js';
 // To generate a new dump, use the `dumpChainState` cheatcode.
 // To start an actual fork, use the command:
 // anvil --fork-url https://mainnet.infura.io/v3/9928b52099854248b3a096be07a6b23c --fork-block-number 17514288 --chain-id 31337
-// For CI, this is configured in `run_tests.sh` and `docker-compose-images.yml`
+// The dump must keep anvil's full `SerializableState` envelope: `block` and `best_block_number` may be
+// null but must be present, or anvil >= 1.4 rejects the whole payload with "Failed to decode state dump".
 
 const TIMEOUT = 15 * 60 * 1000;
 
