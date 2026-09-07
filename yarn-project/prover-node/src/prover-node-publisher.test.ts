@@ -1,3 +1,5 @@
+import { RollupAbi } from '@aztec-foundation/l1-artifacts';
+
 import { BatchedBlob } from '@aztec-labs/blob-lib/types';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
@@ -13,6 +15,7 @@ import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
+import { decodeFunctionData, getAddress } from 'viem';
 
 import { ProverNodePublisher } from './prover-node-publisher.js';
 
@@ -197,6 +200,30 @@ describe('prover-node-publisher', () => {
     },
   );
 
+  describe('compact checkpoint headers', () => {
+    it.each([
+      { proven: 32, end: 48, prefixLength: 0 },
+      { proven: 40, end: 48, prefixLength: 8 },
+      { proven: 48, end: 48, prefixLength: 16 },
+    ])('encodes $prefixLength compact entries when proven is $proven', async ({ proven, end, prefixLength }) => {
+      const args = setupPublishData(64, proven, 33, end);
+      await publisher.submitEpochProof(args);
+      const [{ data }] = l1Utils.sendAndMonitorTransaction.mock.calls[0];
+      const decoded = decodeFunctionData({ abi: RollupAbi, data: data! });
+      if (decoded.functionName !== 'submitEpochRootProof') {
+        throw new Error(`Unexpected function ${decoded.functionName}`);
+      }
+      const [submission] = decoded.args;
+      const fullHeaders = args.headers.map(header => header.toViem());
+      const headers = fullHeaders.map(header => ({ ...header, coinbase: getAddress(header.coinbase) }));
+      expect(submission.provenCheckpointFees).toEqual(
+        headers.slice(0, prefixLength).map(({ coinbase, accumulatedFees }) => ({ coinbase, accumulatedFees })),
+      );
+      expect(submission.headers).toEqual(headers.slice(prefixLength));
+      expect(rollup.getEpochProofPublicInputs.mock.calls[0][0][3]).toEqual(fullHeaders);
+    });
+  });
+
   describe('proof submission target', () => {
     it('defaults the submit tx target to the rollup address', async () => {
       const rollupAddress = EthAddress.random().toString();
@@ -227,11 +254,11 @@ describe('prover-node-publisher', () => {
     });
   });
 
-  it('analyzeEpochProofSubmission validates, estimates, and does not send tx', async () => {
+  it.each([32, 40, 64])('estimates compact calldata without sending when proven is %i', async proven => {
     const fromCheckpoint = 33;
     const toCheckpoint = 64;
 
-    rollup.getTips.mockResolvedValue({ pending: CheckpointNumber(65), proven: CheckpointNumber(32) });
+    rollup.getTips.mockResolvedValue({ pending: CheckpointNumber(65), proven: CheckpointNumber(proven) });
 
     const checkpoints = Array.from({ length: 100 }, () => RootRollupPublicInputs.random());
     rollup.getCheckpoint.mockImplementation((n: CheckpointNumber) =>
@@ -271,18 +298,33 @@ describe('prover-node-publisher', () => {
       ourPublicInputs.blobPublicInputs.c.negate(),
     );
 
+    const headers = makeHeadersForRange(fromCheckpoint, toCheckpoint);
     await publisher.analyzeEpochProofSubmission({
       epochNumber: EpochNumber(2),
       fromCheckpoint: CheckpointNumber(fromCheckpoint),
       toCheckpoint: CheckpointNumber(toCheckpoint),
       publicInputs: ourPublicInputs,
-      headers: makeHeadersForRange(fromCheckpoint, toCheckpoint),
+      headers,
       proof: Proof.empty(),
       batchedBlobInputs: batchedBlob,
       attestations: [],
     });
 
-    expect(l1Utils.estimateGas).toHaveBeenCalled();
+    const [, { data }] = l1Utils.estimateGas.mock.calls[0];
+    const decoded = decodeFunctionData({ abi: RollupAbi, data: data! });
+    if (decoded.functionName !== 'submitEpochRootProof') {
+      throw new Error(`Unexpected function ${decoded.functionName}`);
+    }
+    const [submission] = decoded.args;
+    const prefixLength = proven - fromCheckpoint + 1;
+    const expectedHeaders = headers.map(header => {
+      const viem = header.toViem();
+      return { ...viem, coinbase: getAddress(viem.coinbase) };
+    });
+    expect(submission.provenCheckpointFees).toEqual(
+      expectedHeaders.slice(0, prefixLength).map(({ coinbase, accumulatedFees }) => ({ coinbase, accumulatedFees })),
+    );
+    expect(submission.headers).toEqual(expectedHeaders.slice(prefixLength));
     expect(l1Utils.getFeesPerGas).toHaveBeenCalled();
     expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
   });
