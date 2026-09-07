@@ -26,6 +26,9 @@ describe('Port Change', () => {
   let testConfig: P2PConfig;
   const logger = createLogger('testbench-ports');
 
+  // Setup spends 20s in unconditional peer-settle sleeps (PEER_DISCOVERY_WAIT_MS plus the one
+  // below) on top of forking five libp2p nodes, so the hook budget has to leave room for that
+  // startup to be descheduled under CI CPU contention.
   beforeEach(async () => {
     logger.info('Starting test setup');
     // Use 5 node configuration for this test
@@ -48,7 +51,7 @@ describe('Port Change', () => {
     // wait a bit longer for all peers to be ready
     await sleep(10000);
     logger.info('Workers Ready');
-  }, 30 * 1000);
+  }, 120 * 1000);
 
   it(
     'should change port and propagate the gossip message correctly',

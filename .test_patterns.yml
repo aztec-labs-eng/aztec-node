@@ -48,11 +48,14 @@ tests:
     owners:
       - *nico
 
-  # e2e tests skipped
+  # Setup forks five libp2p nodes inside a hook whose budget also covers 20s of peer-settle sleeps,
+  # so heavy CI CPU contention can starve the startup past the hook or worker-ready ceiling.
   - regex: "testbench/port_change.test.ts"
-    skip: true
+    error_regex: "Exceeded timeout of [0-9]+ ms for a hook|Timeout waiting for worker"
     owners:
       - *sean
+
+  # e2e tests skipped
   # bricked in new version of anvil added to build image (foundry 1.4.1).
   - regex: "src/composed/uniswap_trade_on_l1_from_l2.test.ts"
     skip: true
