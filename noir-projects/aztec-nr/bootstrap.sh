@@ -101,7 +101,9 @@ function release_git_push {
   # Clean up our release directory.
   rm -rf release-out && mkdir release-out
 
-  # Copy our git files to our release directory.
+  # Copy our git files to our release directory. The crates ship exactly as committed, including
+  # the protocol_types pin: it names the foundation release this tree is built and tested against,
+  # which is unrelated to this repo's own version, so it must not be rewritten to the released tag.
   git archive HEAD -- . | tar -x -C release-out
 
   cd release-out
