@@ -21,12 +21,24 @@ trap cleanup EXIT
 
 trap exit SIGINT SIGTERM
 
+# Force-removes the container holding $name, but only when it is not running: CI can schedule two
+# invocations with the same NAME onto one host, and removing a live holder kills that run's test
+# mid-flight (it surfaces as "can not get logs from container which is dead or marked for removal").
+# Returns 0 when the name is free or was reclaimed, 1 when a running container still holds it.
+function release_name {
+  local state
+  state=$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null) || return 0
+  [ "$state" = "true" ] && return 1
+  docker rm -f "$name" &>/dev/null || true
+  return 0
+}
+
 # Compute container name.
 if [ -n "${NAME:-}" ]; then
   name="$(echo "${NAME}" | sed 's/^[^a-zA-Z0-9]*//' | tr '/' '_')${NAME_POSTFIX:-}"
   name_arg="--name $name"
-  # Kill any existing container with the same name.
-  docker rm -f "$name" &>/dev/null || true
+  # Reclaim the name from a container an earlier run left behind.
+  release_name || true
 fi
 
 # For pinning to given CPUs.
@@ -60,9 +72,10 @@ fi
 # Don't use & as we want to block, and be sure it starts before processing any signals.
 # Under host load, dockerd can release a removed container's name several seconds after
 # `rm -f` returns (teardown/name-registry race), so `docker run --name` can hit
-# "Conflict, name already in use". Retry with backoff (~31s total), force-removing the
-# name's holder between attempts. This does not help when a concurrent run legitimately
-# holds the name; NAME_POSTFIX is what keeps those apart.
+# "Conflict, name already in use". Retry with backoff (~31s total), reclaiming the name
+# between attempts only when its holder is not running. A live holder is waited out rather
+# than killed, so a same-name sibling is never cut short; NAME_POSTFIX is what keeps a flake
+# retry from contending with the attempt it is retrying.
 run_err=$(mktemp)
 max_attempts=6
 for attempt in $(seq 1 $max_attempts); do
@@ -103,8 +116,11 @@ for attempt in $(seq 1 $max_attempts); do
   fi
   if [ "$attempt" -lt "$max_attempts" ] && [ -n "${name:-}" ] \
       && grep -qi "already in use by container" "$run_err"; then
-    echo "docker_isolate: name conflict for $name (attempt $attempt/$max_attempts), removing and retrying" >&2
-    docker rm -f "$name" &>/dev/null || true
+    if release_name; then
+      echo "docker_isolate: reclaimed stale container name $name (attempt $attempt/$max_attempts)" >&2
+    else
+      echo "docker_isolate: $name held by a running container (attempt $attempt/$max_attempts), waiting" >&2
+    fi
     sleep $((1 << (attempt - 1)))
     continue
   fi

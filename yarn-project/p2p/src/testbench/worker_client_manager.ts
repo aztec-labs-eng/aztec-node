@@ -467,8 +467,9 @@ class WorkerClientManager {
     return mesh;
   }
 
-  private getPeerCount(clientIndex: number, timeoutMs: number): Promise<number> {
-    return this.queryPeerCounts(clientIndex, timeoutMs).then(c => c.count);
+  private async getPeerCount(clientIndex: number, timeoutMs: number): Promise<number> {
+    const { count } = await this.queryPeerCounts(clientIndex, timeoutMs);
+    return count;
   }
 
   private queryPeerCounts(clientIndex: number, timeoutMs: number): Promise<{ count: number; meshCount: number }> {

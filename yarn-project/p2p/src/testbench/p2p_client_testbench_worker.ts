@@ -246,10 +246,9 @@ function getConnectedPeerCount(client: P2PClient): number {
  * will actually reach a peer: the reqresp connection sampler above can report a peer whose mesh graft
  * has not happened yet, which is exactly the window a port change opens.
  */
-function getTxMeshPeerCount(client: P2PClient): number {
-  const p2pService = (client as any).p2pService;
+async function getTxMeshPeerCount(client: P2PClient): Promise<number> {
   try {
-    return p2pService?.getGossipMeshPeerCount?.(TopicType.tx) ?? 0;
+    return await client.getGossipMeshPeerCount(TopicType.tx);
   } catch {
     return 0;
   }
@@ -486,7 +485,7 @@ process.on('message', async msg => {
         process.send!({
           type: 'PEER_COUNT',
           count: workerClient ? getConnectedPeerCount(workerClient) : 0,
-          meshCount: workerClient ? getTxMeshPeerCount(workerClient) : 0,
+          meshCount: workerClient ? await getTxMeshPeerCount(workerClient) : 0,
         });
         break;
 
