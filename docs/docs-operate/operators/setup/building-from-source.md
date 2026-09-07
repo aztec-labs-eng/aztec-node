@@ -133,11 +133,11 @@ The bootstrap process is incremental—if interrupted, restart it to resume from
 Build the runtime base image with Node.js dependencies. This image contains only runtime requirements—no build tools or compiled code:
 
 ```bash
-docker build -f release-image/Dockerfile.base -t aztecprotocol/release-image-base .
+docker build -f release-image/Dockerfile.base -t azteclabs/release-image-base .
 ```
 
 :::note
-The tag `aztecprotocol/release-image-base` must match exactly—the Dockerfile in Step 6 references this specific tag. This image is not published to Docker Hub; it exists only locally.
+The tag `azteclabs/release-image-base` must match exactly—the Dockerfile in Step 6 references this specific tag. This image is not published to Docker Hub; it exists only locally.
 :::
 
 **What this does:**
@@ -162,7 +162,7 @@ The tag `aztec-local:#release_version` avoids conflicts with the official Docker
 - `VERSION` - Sets the version string that appears in `aztec --version`
 
 **What this does:**
-- Starts from the `aztecprotocol/release-image-base` image (Step 5)
+- Starts from the `azteclabs/release-image-base` image (Step 5)
 - Copies compiled source code from your local filesystem (Step 4)
 - Sets up environment variables for Barretenberg and ACVM binaries
 - Configures the entrypoint to run the Aztec node
@@ -228,8 +228,8 @@ If all checks pass, your image is ready to use.
 **Issue**: The release image build cannot find the base image.
 
 **Solutions**:
-- Ensure you completed Step 5 and built the base image with the exact tag: `aztecprotocol/release-image-base`
-- Verify the base image exists locally: `docker images aztecprotocol/release-image-base`
+- Ensure you completed Step 5 and built the base image with the exact tag: `azteclabs/release-image-base`
+- Verify the base image exists locally: `docker images azteclabs/release-image-base`
 - If missing, return to Step 5 and rebuild the base image
 
 ### Bootstrap compilation fails
