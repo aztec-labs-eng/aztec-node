@@ -35,11 +35,14 @@ fi
 
 # A version older than what a shared dist-tag already points at must not take it: re-publishing
 # an old release line would repoint 'latest' (or 'prerelease') backwards for everyone. Such a
-# version goes out under its own channel instead — 'nightly', 'rc', or 'v<major>' for a stable —
-# so it stays installable by tag without moving the shared one.
+# version goes out under its own channel instead — 'nightly', 'rc', or 'release-v<major>' for a
+# stable — so it stays installable by tag without moving the shared one.
+#
+# The 'release-' prefix is what makes that name usable: npm rejects any dist-tag that parses as a
+# semver range, and 'v5' is the range '>=5.0.0 <6.0.0-0'.
 publish_tag=$npm_tag
 if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
-  publish_tag=${channel:-v$(semver major "$version")}
+  publish_tag=${channel:-release-v$(semver major "$version")}
   echo "Version $version is older than the published $npm_tag ($published_version);"
   echo "publishing under dist-tag '$publish_tag' instead of moving '$npm_tag' backwards."
 fi
