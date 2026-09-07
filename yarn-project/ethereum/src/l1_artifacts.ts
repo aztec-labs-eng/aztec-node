@@ -3,6 +3,8 @@ import {
   CoinIssuerBytecode,
   DateGatedRelayerAbi,
   DateGatedRelayerBytecode,
+  EpochProofExtLibAbi,
+  EpochProofExtLibBytecode,
   FeeAssetHandlerAbi,
   FeeAssetHandlerBytecode,
   FeeJuicePortalAbi,
@@ -90,6 +92,11 @@ export const RollupArtifact = {
         name: 'RollupOperationsExtLib',
         contractAbi: RollupOperationsExtLibAbi,
         contractBytecode: RollupOperationsExtLibBytecode as Hex,
+      },
+      EpochProofExtLib: {
+        name: 'EpochProofExtLib',
+        contractAbi: EpochProofExtLibAbi,
+        contractBytecode: EpochProofExtLibBytecode as Hex,
       },
       ValidatorOperationsExtLib: {
         name: 'ValidatorOperationsExtLib',
