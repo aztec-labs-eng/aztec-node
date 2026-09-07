@@ -164,15 +164,6 @@ function release_docker_manifest {
   #   $repo/aztec:$tag-arm64
 }
 
-function push {
-  echo_header "release-image push"
-
-  source $ci3/source_release_target
-  docker_login
-  do_or_dryrun docker push azteclabs/aztec:$COMMIT_HASH
-  do_or_dryrun docker push azteclabs/aztec-prover-agent:$COMMIT_HASH
-}
-
 # Publish the just-built image so a Kubernetes cluster can pull it. The network deploy and bench
 # jobs run against real GKE namespaces, which cannot use an image that only exists in the local
 # docker daemon, so an unreleased commit needs to reach a registry before it can be deployed.
@@ -190,8 +181,16 @@ function push_pr {
 
   source $ci3/source_release_target
   docker_login
-  docker tag azteclabs/aztec:$COMMIT_HASH azteclabs/aztec-dev:$COMMIT_HASH
-  do_or_dryrun docker push azteclabs/aztec-dev:$COMMIT_HASH
+  local image=$(pr_image_name)
+  docker tag azteclabs/aztec:$COMMIT_HASH $image
+  do_or_dryrun docker push $image
+}
+
+# The name push_pr publishes, for the deploys that consume it: one definition, so the image a
+# deploy asks for is the image that was pushed.
+function pr_image_name {
+  source $ci3/source_release_target
+  echo "${DOCKER_REGISTRY%/}/aztec-dev:$COMMIT_HASH"
 }
 
 case "$cmd" in
