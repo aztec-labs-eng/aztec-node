@@ -55,45 +55,6 @@ tests:
     owners:
       - *sean
 
-  - regex: "src/single-node/fees/private_payments"
-    owners:
-      - *phil
-  - regex: "src/automine/token/access_control"
-    error_regex: "HttpRequestError: HTTP request failed."
-    owners:
-      - *charlie
-  - regex: "src/automine/token/lending"
-    error_regex: "✕ Depositing"
-    owners:
-      - *lasse
-  - regex: "src/automine/token/lending"
-    error_regex: "✕ Repay"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/l1_to_l2"
-    owners:
-      - *palla
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Claim secret is enough to consume the message"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Someone else can mint funds to me on my behalf"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Publicly deposit funds"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Can't claim funds"
-    owners:
-      - *lasse
-  - regex: "src/single-node/bot/bot.test.ts"
-    error_regex: "Tx dropped"
-    owners:
-      - *palla
-
   # Nightly GKE tests
   - regex: "spartan/bootstrap.sh"
     owners:
@@ -114,11 +75,6 @@ tests:
       - *luke
   - regex: "aztec-up/scripts/run_test.sh bridge_and_claim"
     error_regex: "Cannot satisfy constraint"
-    owners:
-      - *adam
-
-  - regex: "yarn-project/end-to-end/scripts/run_test.sh simple src/single-node/bot/bot.test.ts"
-    error_regex: "Nonce provided for the transaction is lower than the current nonce of the account"
     owners:
       - *adam
 
