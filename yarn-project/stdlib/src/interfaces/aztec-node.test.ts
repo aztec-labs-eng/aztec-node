@@ -507,6 +507,41 @@ describe('AztecNodeApiSchema', () => {
     expect(response).toEqual(handler.singleValidatorStats);
   });
 
+  it('getValidatorStatsBatch(results and null entries)', async () => {
+    const address = EthAddress.random();
+    handler.singleValidatorStats = {
+      validator: {
+        address,
+        totalSlots: 1,
+        missedAttestations: { currentStreak: 0, count: 0, total: 1 },
+        missedProposals: { currentStreak: 0, count: 0, total: 0 },
+        history: [{ slot: SlotNumber(5), status: 'attestation-sent' }],
+      },
+      allTimeEpochPerformance: [],
+      slotWindow: 10,
+    };
+    const result = await context.client.getValidatorStatsBatch(
+      [address, EthAddress.random(), address],
+      SlotNumber(0),
+      SlotNumber(10),
+    );
+    expect(result).toEqual([handler.singleValidatorStats, null, handler.singleValidatorStats]);
+  });
+
+  it('getValidatorStatsBatch(empty list)', async () => {
+    await expect(context.client.getValidatorStatsBatch([])).resolves.toEqual([]);
+  });
+
+  it('getValidatorStatsBatch(disabled)', async () => {
+    const addresses = Array.from({ length: 100 }, () => EthAddress.random());
+    await expect(context.client.getValidatorStatsBatch(addresses)).resolves.toEqual(addresses.map(() => null));
+  });
+
+  it('getValidatorStatsBatch(size limit)', async () => {
+    const address = EthAddress.random();
+    await expect(context.client.getValidatorStatsBatch(Array.from({ length: 101 }, () => address))).rejects.toThrow();
+  });
+
   it('getValidatorStats(non-existent)', async () => {
     const response = await context.client.getValidatorStats(EthAddress.random());
     expect(response).toBeUndefined();
@@ -949,6 +984,18 @@ class MockAztecNode implements AztecNode {
       expect(typeof toSlot).toBe('number');
     }
     return Promise.resolve(this.singleValidatorStats);
+  }
+  getValidatorStatsBatch(
+    validatorAddresses: EthAddress[],
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<(SingleValidatorStats | null)[]> {
+    return Promise.all(
+      validatorAddresses.map(async address => {
+        const stats = await this.getValidatorStats(address, fromSlot, toSlot);
+        return stats?.validator.address.equals(address) ? stats : null;
+      }),
+    );
   }
   simulatePublicCalls(tx: Tx, _enforceFeePayment = false): Promise<PublicSimulationOutput> {
     expect(tx).toBeInstanceOf(Tx);

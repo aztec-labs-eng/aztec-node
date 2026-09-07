@@ -513,6 +513,17 @@ export interface AztecNode {
   ): Promise<SingleValidatorStats | undefined>;
 
   /**
+   * Returns stats for up to 100 validators using a shared slot range.
+   * The slot difference must not exceed the node sentinel's retained history window, and fromSlot must not exceed toSlot.
+   * Results follow input order, including duplicates; missing validators or disabled statistics return null entries.
+   */
+  getValidatorStatsBatch(
+    validatorAddresses: EthAddress[],
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<(SingleValidatorStats | null)[]>;
+
+  /**
    * Simulates the public part of a transaction with the current state.
    * This currently just checks that the transaction execution succeeds.
    * @param tx - The transaction to simulate.
@@ -769,6 +780,11 @@ export const AztecNodeApiSchema: ApiSchemaFor<AztecNode> = {
   getValidatorStats: z.function({
     input: z.tuple([schemas.EthAddress, optional(schemas.SlotNumber), optional(schemas.SlotNumber)]),
     output: SingleValidatorStatsSchema.optional(),
+  }),
+
+  getValidatorStatsBatch: z.function({
+    input: z.tuple([z.array(schemas.EthAddress).max(100), optional(schemas.SlotNumber), optional(schemas.SlotNumber)]),
+    output: z.array(SingleValidatorStatsSchema.nullable()),
   }),
 
   simulatePublicCalls: z.function({

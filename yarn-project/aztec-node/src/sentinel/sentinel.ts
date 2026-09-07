@@ -606,39 +606,59 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     fromSlot?: SlotNumber,
     toSlot?: SlotNumber,
   ): Promise<SingleValidatorStats | undefined> {
-    const history = await this.store.getHistory(validatorAddress);
+    const [result] = await this.getValidatorStatsBatch([validatorAddress], fromSlot, toSlot);
+    return result ?? undefined;
+  }
 
-    if (!history || history.length === 0) {
-      return undefined;
+  /** Computes stats in input order, sharing slot bounds and reads for duplicate validators. */
+  public async getValidatorStatsBatch(
+    validatorAddresses: EthAddress[],
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<(SingleValidatorStats | null)[]> {
+    if (validatorAddresses.length === 0) {
+      return [];
     }
 
-    const slotNow = await this.getCurrentSlot();
-    const effectiveFromSlot =
-      fromSlot ?? SlotNumber(Math.max((this.lastProcessedSlot ?? slotNow) - this.store.getHistoryLength(), 0));
-    const effectiveToSlot = toSlot ?? this.lastProcessedSlot ?? slotNow;
+    const lastProcessedSlot = this.lastProcessedSlot;
+    const initialSlot = this.initialSlot;
+    const slotWindow = this.store.getHistoryLength();
+    const slot =
+      lastProcessedSlot ?? (fromSlot === undefined || toSlot === undefined ? await this.getCurrentSlot() : 0);
+    const effectiveFromSlot = fromSlot ?? SlotNumber(Math.max(slot - slotWindow, 0));
+    const effectiveToSlot = toSlot ?? SlotNumber(slot);
 
-    const historyLength = BigInt(this.store.getHistoryLength());
-    if (BigInt(effectiveToSlot) - BigInt(effectiveFromSlot) > historyLength) {
+    if (effectiveFromSlot > effectiveToSlot) {
+      throw new Error('fromSlot must be less than or equal to toSlot');
+    }
+
+    if (BigInt(effectiveToSlot) - BigInt(effectiveFromSlot) > BigInt(slotWindow)) {
       throw new Error(
-        `Slot range (${BigInt(effectiveToSlot) - BigInt(effectiveFromSlot)}) exceeds history length (${historyLength}). ` +
+        `Slot range (${BigInt(effectiveToSlot) - BigInt(effectiveFromSlot)}) exceeds history length (${slotWindow}). ` +
           `Requested range: ${effectiveFromSlot} to ${effectiveToSlot}.`,
       );
     }
 
-    const validator = this.computeStatsForValidator(
-      validatorAddress.toString(),
-      history,
-      effectiveFromSlot,
-      effectiveToSlot,
-    );
+    const addresses = [...new Map(validatorAddresses.map(address => [address.toString(), address])).values()];
+    const histories = await Promise.all(addresses.map(address => this.store.getHistory(address)));
 
-    return {
-      validator,
-      allTimeEpochPerformance: await this.store.getEpochPerformance(validatorAddress),
-      lastProcessedSlot: this.lastProcessedSlot,
-      initialSlot: this.initialSlot,
-      slotWindow: this.store.getHistoryLength(),
-    };
+    const results = await Promise.all(
+      addresses.map(async (address, index): Promise<SingleValidatorStats | null> => {
+        const history = histories[index];
+        if (!history?.length) {
+          return null;
+        }
+        return {
+          validator: this.computeStatsForValidator(address.toString(), history, effectiveFromSlot, effectiveToSlot),
+          allTimeEpochPerformance: await this.store.getEpochPerformance(address),
+          lastProcessedSlot,
+          initialSlot,
+          slotWindow,
+        };
+      }),
+    );
+    const resultsByAddress = new Map(addresses.map((address, index) => [address.toString(), results[index]]));
+    return validatorAddresses.map(address => resultsByAddress.get(address.toString()) ?? null);
   }
 
   protected computeStatsForValidator(

@@ -448,6 +448,84 @@ describe('sentinel', () => {
     });
   });
 
+  describe('getValidatorStatsBatch', () => {
+    it('matches individual results, preserving order, duplicates and missing validators', async () => {
+      const validators = times(50, () => EthAddress.random());
+      const missing = EthAddress.random();
+      await store.updateValidators(
+        SlotNumber(1),
+        Object.fromEntries(validators.map(address => [address.toString(), 'attestation-sent'])),
+      );
+      const addresses = [...validators, missing, validators[0]];
+      const expected = await Promise.all(
+        addresses.map(address => sentinel.getValidatorStats(address, SlotNumber(0), SlotNumber(10))),
+      );
+      const results = await sentinel.getValidatorStatsBatch(addresses, SlotNumber(0), SlotNumber(10));
+      expect(results).toEqual(expected.map(result => result ?? null));
+    });
+
+    it('shares the fallback slot lookup across validators', async () => {
+      const validators = times(50, () => EthAddress.random());
+      await store.updateValidators(
+        SlotNumber(1),
+        Object.fromEntries(validators.map(address => [address.toString(), 'attestation-sent'])),
+      );
+      archiver.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(10));
+      const results = await sentinel.getValidatorStatsBatch(validators);
+      expect(results.map(result => result?.validator.totalSlots)).toEqual(times(50, () => 1));
+      expect(archiver.getSyncedL2SlotNumber).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not need the archiver when the processed slot is known', async () => {
+      const validator = EthAddress.random();
+      await store.updateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      sentinel.setLastProcessedSlot(SlotNumber(10));
+      archiver.getSyncedL2SlotNumber.mockRejectedValue(new Error('Archiver unavailable'));
+      const results = await sentinel.getValidatorStatsBatch([validator]);
+      expect(results[0]?.validator.totalSlots).toBe(1);
+      expect(results[0]?.lastProcessedSlot).toBe(SlotNumber(10));
+    });
+
+    it('returns an empty array for an empty request', async () => {
+      await expect(sentinel.getValidatorStatsBatch([])).resolves.toEqual([]);
+    });
+
+    it('rejects oversized ranges before reading any validator history', async () => {
+      const validators = times(100, () => EthAddress.random());
+      jest.spyOn(store, 'getHistory').mockRejectedValue(new Error('History must not be read'));
+      await expect(sentinel.getValidatorStatsBatch(validators, SlotNumber(0), SlotNumber(100_000))).rejects.toThrow(
+        'Slot range (100000) exceeds history length (10)',
+      );
+    });
+
+    it('rejects oversized ranges even for validators without history', async () => {
+      await expect(
+        sentinel.getValidatorStatsBatch([EthAddress.random()], SlotNumber(0), SlotNumber(100_000)),
+      ).rejects.toThrow('exceeds history length');
+    });
+
+    it('rejects reversed slot ranges', async () => {
+      await expect(
+        sentinel.getValidatorStatsBatch([EthAddress.random()], SlotNumber(10), SlotNumber(1)),
+      ).rejects.toThrow('fromSlot must be less than or equal to toSlot');
+    });
+
+    it('accepts the maximum slot difference', async () => {
+      const validator = EthAddress.random();
+      await store.updateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      const results = await sentinel.getValidatorStatsBatch([validator], SlotNumber(0), SlotNumber(10));
+      expect(results[0]?.validator.totalSlots).toBe(1);
+    });
+
+    it('rejects ranges exceeding the retained history', async () => {
+      const validator = EthAddress.random();
+      await store.updateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      await expect(sentinel.getValidatorStatsBatch([validator], SlotNumber(0), SlotNumber(11))).rejects.toThrow(
+        'exceeds history length',
+      );
+    });
+  });
+
   describe('slot range validation', () => {
     let validator: EthAddress;
 
