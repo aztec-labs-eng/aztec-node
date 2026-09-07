@@ -6,7 +6,13 @@ COPY . /usr/src
 # Install yarn-project production dependencies.
 # Explicitly specify projects that we use to keep as slim as possible.
 WORKDIR /usr/src/yarn-project
-RUN yarn workspaces focus @aztec-labs/aztec --production
+# yarnrc carries the scope routing for a registry other than npmjs, npmauth the credential its
+# ${NPM_AUTH_VALUE} refers to. Both are BuildKit secrets, so neither reaches a layer, and both are
+# absent in a public build, where yarn's defaults are already right.
+RUN --mount=type=secret,id=yarnrc,target=/root/.yarnrc.yml \
+    --mount=type=secret,id=npmauth \
+    NPM_AUTH_VALUE="$(cat /run/secrets/npmauth 2>/dev/null || true)" \
+    yarn workspaces focus @aztec-labs/aztec --production
 
 # Create base of our final slim image.
 # This can be cached and will only update if dependencies change.

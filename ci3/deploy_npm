@@ -18,7 +18,7 @@ case "$channel" in
   *) npm_tag="$channel" ;;
 esac
 
-# Authenticate npm against NPM_REGISTRY with the credential in the environment.
+# Route our scopes at NPM_REGISTRY and authenticate with whatever credential the environment set.
 source $ci3/source_npm_auth
 
 package_name=$(jq -r '.name' package.json)

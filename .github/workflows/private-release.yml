@@ -1,0 +1,108 @@
+# Publishes a private release: npm packages and docker images to the Labs-owned GCP Artifact
+# Registry, and nothing public. See RELEASES.md for how a private/v* tag gets here.
+#
+# This is release.yml with a different target. The two workflows differ in the tag pattern, the
+# environment, the RELEASE_TARGET literal, the credentials named, and REF_NAME — everything else
+# about a release is the same code (ci.sh release), driven by ci3/source_release_target.
+#
+# The environments are what keep the two apart: release-private holds the Artifact Registry
+# credential and nothing that can publish publicly, `release` holds the npmjs and DockerHub
+# credentials and nothing that can read the private registry, and a job declares exactly one. The
+# deployment policies (tag: private/v* here, tag: v* there) cannot match each other's refs, since
+# a GitHub tag pattern's * does not match a /.
+name: Private Release
+
+on:
+  workflow_dispatch: # re-run a release for an existing tag; select the tag as the ref.
+  push:
+    tags:
+      - "private/v*"
+
+concurrency:
+  # One run per tag, never cancelled: a cancelled release can leave the version half-published
+  # (some npm packages live, no multi-arch docker manifest), which no re-run undoes cleanly.
+  group: private-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # Orchestrates the amd64 + arm64 EC2 jobs and assembles the multi-arch docker manifest;
+  # see ci.sh::release. Runs no tests — the tag was cut from a commit that passed CI.
+  release:
+    runs-on: ubuntu-latest
+    environment: release-private
+    # Nothing a private build produces may reach the build cache: it is served over plain HTTP with
+    # no credentials. The build itself gets this from ci3/source_release_target; this covers the
+    # runner's own cache write in ci3_success.sh.
+    env:
+      NO_CACHE_UPLOAD: 1
+    permissions:
+      id-token: write # required for OIDC assume-role with AWS
+      contents: read # checkout/fetch with the default github.token
+      statuses: write # post_github_status posts per-job commit statuses with github.token
+    steps:
+      # Do NOT bump actions/checkout to v6 (see the pinning rationale in ci3.yml).
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+          role-session-name: private-release-${{ github.run_id }}
+          # 2h. ci.sh::release allows the build instances 180 min, so a release that runs past
+          # 2h loses these credentials before the runner gets to terminate them.
+          role-duration-seconds: 7200
+
+      - name: Run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          # The release target, its registries and its credentials. The INTERNAL_* names exist only
+          # in this file: the public workflow names none of them, and this one names neither
+          # NPM_TOKEN nor the DockerHub secrets, so neither can pick up the other's credential
+          # whatever an environment holds.
+          RELEASE_TARGET: private
+          NPM_REGISTRY: ${{ vars.INTERNAL_NPM_REGISTRY }}
+          NPM_USERNAME: ${{ vars.INTERNAL_NPM_USERNAME }}
+          NPM_PASSWORD: ${{ secrets.INTERNAL_NPM_PASSWORD }}
+          DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
+          DOCKER_USERNAME: ${{ vars.INTERNAL_DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.INTERNAL_DOCKER_PASSWORD }}
+          # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
+          # yarn-project's test_cmds (release-line compatibility tests) and test timing metadata,
+          # neither of which a release runs; kept so the build log names the ref.
+          TARGET_BRANCH: ${{ github.ref_name }}
+          # Groups this workflow's CI dashboard entries under the GitHub run id (stable across re-runs).
+          RUN_ID: ${{ github.run_id }}
+          CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
+          CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
+          AWS_OIDC_ROLE_ARN: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          REF_NAME: ${{ github.ref_name }}
+        # The private/ prefix routes the ref; everything downstream (semver, dist_tag, deploy_npm,
+        # the image tags) wants the bare version, and GitHub Actions expressions have no
+        # string-replace function.
+        run: REF_NAME=${REF_NAME#private/} ./.github/ci3.sh release
+
+      - name: Post-Actions
+        run: ./.github/ci3_success.sh
+
+      - name: Notify Slack on release failure
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          text="Private release FAILED for *${TAG}* (${ACTOR}): <${RUN_URL}|View Run>"
+          # Set by ci3/bootstrap_ec2 once the build reaches the instance; absent if we failed earlier.
+          if [ -n "${CI_LOG_ID:-}" ]; then
+            text="${text} | <http://ci.aztec-labs.com/${CI_LOG_ID}|Build Log>"
+          fi
+          ./ci3/slack_notify "$text" "#team-alpha-ci"
