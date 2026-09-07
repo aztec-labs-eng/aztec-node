@@ -83,9 +83,7 @@ jobs:
       - name: Run
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
