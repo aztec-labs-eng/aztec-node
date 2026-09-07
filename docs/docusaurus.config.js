@@ -427,7 +427,7 @@ const config = {
                 className: "github-item",
               },
               {
-                to: "https://github.com/AztecProtocol/aztec-nr",
+                to: "https://github.com/aztec-labs-eng/aztec-nr",
                 label: "Aztec.nr",
                 target: "_blank",
                 rel: "noopener noreferrer",
@@ -516,7 +516,7 @@ const config = {
               },
               {
                 label: "Aztec.nr",
-                to: "https://github.com/AztecProtocol/aztec-nr",
+                to: "https://github.com/aztec-labs-eng/aztec-nr",
               },
             ],
           },

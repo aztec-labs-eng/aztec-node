@@ -53,7 +53,7 @@ aztec = { path = "../../../../noir-projects/aztec-nr/aztec" }
 :::note
 The `aztec` dependency path assumes you're working within the `aztec-packages` monorepo. If you're working outside the monorepo, use the git dependency instead:
 ```toml
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
 ```
 Replace the tag with your Aztec version.
 :::

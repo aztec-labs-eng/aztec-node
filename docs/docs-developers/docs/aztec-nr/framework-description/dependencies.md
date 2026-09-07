@@ -9,7 +9,7 @@ This page lists the available Aztec.nr libraries. Add dependencies to the `[depe
 
 ```toml
 [dependencies]
-aztec = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="aztec" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="aztec" }
 # Add other libraries as needed
 ```
 
@@ -18,7 +18,7 @@ aztec = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_
 ### Aztec (required)
 
 ```toml
-aztec = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="aztec" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="aztec" }
 ```
 
 The core Aztec library required for every Aztec.nr smart contract.
@@ -28,7 +28,7 @@ The core Aztec library required for every Aztec.nr smart contract.
 ### Address Note
 
 ```toml
-address_note = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="address-note" }
+address_note = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="address-note" }
 ```
 
 Provides `AddressNote`, a note type for storing `AztecAddress` values.
@@ -36,7 +36,7 @@ Provides `AddressNote`, a note type for storing `AztecAddress` values.
 ### Field Note
 
 ```toml
-field_note = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="field-note" }
+field_note = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="field-note" }
 ```
 
 Provides `FieldNote`, a note type for storing a single `Field` value.
@@ -44,7 +44,7 @@ Provides `FieldNote`, a note type for storing a single `Field` value.
 ### Uint Note
 
 ```toml
-uint_note = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="uint-note" }
+uint_note = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="uint-note" }
 ```
 
 Provides `UintNote`, a note type for storing `u128` values. Also includes `PartialUintNote` for partial note workflows where the value is completed in public execution.
@@ -54,7 +54,7 @@ Provides `UintNote`, a note type for storing `u128` values. Also includes `Parti
 ### Balance Set
 
 ```toml
-balance_set = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="balance-set" }
+balance_set = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="balance-set" }
 ```
 
 Provides `BalanceSet`, a state variable for managing private balances. Includes helper functions for adding, subtracting, and querying balances.
@@ -64,7 +64,7 @@ Provides `BalanceSet`, a state variable for managing private balances. Includes 
 ### Compressed String
 
 ```toml
-compressed_string = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="compressed-string" }
+compressed_string = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="compressed-string" }
 ```
 
 Provides `CompressedString` and `FieldCompressedString` utilities for working with compressed string data.
@@ -78,13 +78,13 @@ running.
 For example, if your CLI is `v#include_aztec_version`, change:
 
 ```toml
-aztec = { git="https://github.com/AztecProtocol/aztec-nr/", tag="v<old-version>", directory="aztec" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="v<old-version>", directory="aztec" }
 ```
 
 to:
 
 ```toml
-aztec = { git="https://github.com/AztecProtocol/aztec-nr/", tag="v#include_aztec_version", directory="aztec" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="v#include_aztec_version", directory="aztec" }
 ```
 
 Repeat for every other Aztec.nr dependency in your `Nargo.toml` (e.g. `address_note`,

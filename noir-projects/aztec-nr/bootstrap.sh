@@ -83,13 +83,14 @@ function format {
 }
 
 function release {
-  release_git_push "master" $REF_NAME
+  release_git_push "main" $REF_NAME
 }
 
 function release_git_push {
   local branch_name=$1
   local tag_name=$2
-  local mirrored_repo_url="https://github.com/AztecProtocol/aztec-nr.git"
+  local mirrored_repo_url="https://github.com/aztec-labs-eng/aztec-nr.git"
+  local mirrored_repo_push_url="git@github.com:aztec-labs-eng/aztec-nr.git"
 
   # Clean up our release directory.
   rm -rf release-out && mkdir release-out
@@ -99,15 +100,23 @@ function release_git_push {
 
   cd release-out
 
-  # The mirror lives in another GitHub org, so the job's own GITHUB_TOKEN cannot push to it.
-  if [ "${DRY_RUN:-0}" = 0 ]; then
-    : "${AZTEC_NR_GITHUB_MIRROR_TOKEN:?must be set to push to $mirrored_repo_url}"
-  fi
-
   git init &>/dev/null
+  git config user.name "Aztec Labs aztec-nr release"
+  git config user.email "noreply@aztec-labs.com"
   git remote add origin "$mirrored_repo_url" &>/dev/null
-  git remote set-url --push origin "https://x-access-token:${AZTEC_NR_GITHUB_MIRROR_TOKEN:-}@${mirrored_repo_url#https://}"
   git fetch origin --quiet
+
+  # Pushes authenticate over ssh with the mirror's deploy key; fetches stay anonymous.
+  if [ "${DRY_RUN:-0}" = 0 ]; then
+    local ssh_dir=$(mktemp -d)
+    trap "rm -rf $ssh_dir" EXIT
+    printf '%s\n' "$(echo "${AZTEC_NR_GITHUB_MIRROR_TOKEN_B64:?must be set to push to $mirrored_repo_push_url}" | base64 -d)" > $ssh_dir/key
+    chmod 600 $ssh_dir/key
+    # GitHub's ssh host key, as published at https://api.github.com/meta.
+    echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > $ssh_dir/known_hosts
+    export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes"
+    git remote set-url --push origin "$mirrored_repo_push_url"
+  fi
 
   # Checkout the existing branch or create it if it doesn't exist.
   if git ls-remote --heads origin "$branch_name" | grep -q "$branch_name"; then

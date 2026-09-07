@@ -47,7 +47,7 @@ storage.votes.insert(new_vote).deliver(MessageDelivery::onchain_constrained()); 
 ```toml
 # my_project_contract/Nargo.toml
 [dependencies]
-aztec = { git="https://github.com/AztecProtocol/aztec-nr/", tag="#include_aztec_version", directory="aztec" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="aztec" }
 ```
 
 Update your `my_project_contract/src/main.nr` contract file to use the Aztec.nr macros for writing contracts.

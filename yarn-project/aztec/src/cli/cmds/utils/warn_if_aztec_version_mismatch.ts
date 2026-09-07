@@ -7,7 +7,11 @@ import { join } from 'path';
 
 import { collectCrateDirs } from './collect_crate_dirs.js';
 
-/** Returns true if the given git URL points to the AztecProtocol/aztec-nr repository. */
+// Projects scaffolded before the mirror moved from foundation to labs still point at the old repository; their tags are
+// checked too so the move does not silence the warning for them.
+const AZTEC_NR_REPOS = ['aztec-labs-eng/aztec-nr', 'AztecProtocol/aztec-nr'];
+
+/** Returns true if the given git URL points to an aztec-nr repository, current or previous. */
 function isAztecNrGitUrl(gitUrl: string): boolean {
   let url: URL;
   try {
@@ -22,7 +26,7 @@ function isAztecNrGitUrl(gitUrl: string): boolean {
     .replace(/^\//, '')
     .replace(/\.git$/, '')
     .replace(/\/$/, '');
-  return repoPath === 'AztecProtocol/aztec-nr';
+  return AZTEC_NR_REPOS.includes(repoPath);
 }
 
 /** Warns if any aztec-nr git dependency in a crate's Nargo.toml has a tag that doesn't match the CLI version. */
