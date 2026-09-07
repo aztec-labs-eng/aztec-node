@@ -1,5 +1,6 @@
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import { type ChildProcess, fork } from 'child_process';
@@ -103,6 +104,7 @@ class WorkerClientManager {
       peerIdPrivateKey: string;
     } & Partial<ChainConfig>,
     clientIndex: number,
+    readyTimeoutMs: number = BENCHMARK_CONSTANTS.WORKER_READY_TIMEOUT_MS,
   ): [ChildProcess, Promise<void>] {
     const useCompiled = existsSync(workerJsPath);
     const workerPath = useCompiled ? workerJsPath : workerTsPath;
@@ -149,7 +151,7 @@ class WorkerClientManager {
         childProcess.off('message', messageHandler);
         childProcess.off('exit', exitHandler);
         reject(new Error(`Timeout waiting for worker ${clientIndex} to be ready`));
-      }, BENCHMARK_CONSTANTS.WORKER_READY_TIMEOUT_MS);
+      }, readyTimeoutMs);
 
       const messageHandler = (msg: any) => {
         if (resolved) {
@@ -211,6 +213,7 @@ class WorkerClientManager {
       seedPeerLimit?: number;
       batchSize?: number;
       batchDelayMs?: number;
+      readyTimeoutMs?: number;
     } = {},
   ) {
     try {
@@ -241,7 +244,7 @@ class WorkerClientManager {
               : this.peerEnrs.filter((_, ind) => ind < Math.min(i, seedPeerLimit));
 
           const config = this.createClientConfig(i, this.ports[i], otherNodes);
-          const [childProcess, readySignal] = this.spawnWorkerProcess(config, i);
+          const [childProcess, readySignal] = this.spawnWorkerProcess(config, i, options.readyTimeoutMs);
 
           readySignals.push(readySignal);
           batchPromises.push(readySignal);
@@ -440,8 +443,37 @@ class WorkerClientManager {
     return finalCount;
   }
 
-  private getPeerCount(clientIndex: number, timeoutMs: number): Promise<number> {
-    return new Promise<number>(resolve => {
+  /**
+   * Waits until every worker client has at least `minPeers` peers in its gossipsub mesh for the tx
+   * topic. Mesh membership rather than raw connection count is what decides whether a gossiped tx
+   * reaches a peer, so this is the condition to wait on before asserting on propagation. Returns the
+   * per-client mesh counts from the last poll.
+   */
+  async waitForAllConnectivity(minPeers: number, timeoutMs: number): Promise<number[]> {
+    let mesh: number[] = [];
+    const settled = await retryUntil(
+      async () => {
+        const counts = await Promise.all(this.processes.map((_, i) => this.queryPeerCounts(i, 5000)));
+        mesh = counts.map(c => c.meshCount);
+        return mesh.every(c => c >= minPeers) ? mesh : undefined;
+      },
+      `all clients to reach ${minPeers} mesh peers`,
+      timeoutMs / 1000,
+      0.5,
+    ).catch(() => undefined);
+    if (!settled) {
+      this.logger.warn(`Mesh wait timed out after ${timeoutMs}ms; per-client mesh peers: ${mesh.join(',')}`);
+    }
+    return mesh;
+  }
+
+  private async getPeerCount(clientIndex: number, timeoutMs: number): Promise<number> {
+    const { count } = await this.queryPeerCounts(clientIndex, timeoutMs);
+    return count;
+  }
+
+  private queryPeerCounts(clientIndex: number, timeoutMs: number): Promise<{ count: number; meshCount: number }> {
+    return new Promise<{ count: number; meshCount: number }>(resolve => {
       let resolved = false;
 
       const handler = (msg: any) => {
@@ -452,7 +484,7 @@ class WorkerClientManager {
           resolved = true;
           clearTimeout(timeout);
           this.processes[clientIndex].off('message', handler);
-          resolve(msg.count as number);
+          resolve({ count: (msg.count as number) ?? 0, meshCount: (msg.meshCount as number) ?? 0 });
         }
       };
 
@@ -462,7 +494,7 @@ class WorkerClientManager {
         }
         resolved = true;
         this.processes[clientIndex].off('message', handler);
-        resolve(0);
+        resolve({ count: 0, meshCount: 0 });
       }, timeoutMs);
 
       this.processes[clientIndex].on('message', handler);

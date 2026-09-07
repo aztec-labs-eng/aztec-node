@@ -21,7 +21,7 @@ import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdl
 import { GasFees } from '@aztec-labs/stdlib/gas';
 import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
-import { type BlockProposal, P2PMessage } from '@aztec-labs/stdlib/p2p';
+import { type BlockProposal, P2PMessage, TopicType } from '@aztec-labs/stdlib/p2p';
 import { ChonkProof } from '@aztec-labs/stdlib/proofs';
 import { makeAztecAddress, makeBlockHeader, makeBlockProposal, mockTx } from '@aztec-labs/stdlib/testing';
 import { Tx, TxHash, type TxValidationResult, type TxValidator } from '@aztec-labs/stdlib/tx';
@@ -239,6 +239,19 @@ function getConnectedPeerCount(client: P2PClient): number {
     return connectionSampler.getPeerListSortedByConnectionCountAsc().length;
   }
   return 0;
+}
+
+/**
+ * Peers in the gossipsub mesh for the tx topic. This is the count that decides whether a gossiped tx
+ * will actually reach a peer: the reqresp connection sampler above can report a peer whose mesh graft
+ * has not happened yet, which is exactly the window a port change opens.
+ */
+async function getTxMeshPeerCount(client: P2PClient): Promise<number> {
+  try {
+    return await client.getGossipMeshPeerCount(TopicType.tx);
+  } catch {
+    return 0;
+  }
 }
 
 async function runAggregatorBenchmark(
@@ -472,6 +485,7 @@ process.on('message', async msg => {
         process.send!({
           type: 'PEER_COUNT',
           count: workerClient ? getConnectedPeerCount(workerClient) : 0,
+          meshCount: workerClient ? await getTxMeshPeerCount(workerClient) : 0,
         });
         break;
 
