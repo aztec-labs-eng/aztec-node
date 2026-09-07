@@ -48,13 +48,6 @@ tests:
     owners:
       - *nico
 
-  # Setup forks five libp2p nodes inside a hook whose budget also covers 20s of peer-settle sleeps,
-  # so heavy CI CPU contention can starve the startup past the hook or worker-ready ceiling.
-  - regex: "testbench/port_change.test.ts"
-    error_regex: "Exceeded timeout of [0-9]+ ms for a hook|Timeout waiting for worker"
-    owners:
-      - *sean
-
   # Nightly GKE tests
   - regex: "spartan/bootstrap.sh"
     owners:
