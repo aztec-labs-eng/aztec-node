@@ -53,7 +53,7 @@ NOIRUP_URL=${NOIRUP_URL:-https://raw.githubusercontent.com/noir-lang/noirup/v0.1
 # bb and bb-avm come from the npm packages the foundation publishes, fetched as plain
 # tarballs over https rather than through a package manager: no node_modules tree, no
 # lockfile, and the pinned version makes the URL fully determined (see install_npm_binary).
-NPM_REGISTRY_URL=${NPM_REGISTRY_URL:-https://registry.npmjs.org}
+NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org}
 # The published platform packages, named by node's process.platform-process.arch (see
 # npm_platform). bb-avm builds only for linux, so a mac keeps working without it while
 # CI - where the AVM tests run - requires it, see require_optional_binaries.
@@ -216,7 +216,7 @@ function install_npm_binary {
     exit 1
   fi
   local pkg=$binary-$NPM_PLATFORM
-  local url=$NPM_REGISTRY_URL/@aztec-foundation/$pkg/-/$pkg-$BB_VERSION.tgz
+  local url=${NPM_REGISTRY%/}/@aztec-foundation/$pkg/-/$pkg-$BB_VERSION.tgz
   local archive=$tmp/$pkg.tgz
   echo "Installing $binary $BB_VERSION from @aztec-foundation/$pkg..."
   if ! curl -fsSL "$url" -o "$archive"; then

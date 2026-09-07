@@ -124,21 +124,12 @@ function test_cmds {
   echo "$hash docker run --rm azteclabs/aztec --version"
 }
 
-# Log docker into the release registry, assigning the repo path to the caller's $repo.
-function release_registry_login {
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  repo="azteclabs"
-}
-
 function release {
   echo_header "release-image release"
 
-  local repo
-  release_registry_login
+  source $ci3/source_release_target
+  docker_login
+  local repo=${DOCKER_REGISTRY%/}
 
   # We strip leading 'v' so that this is a valid semver.
   tag=${REF_NAME#v}
@@ -155,8 +146,9 @@ function release {
 function release_docker_manifest {
   echo_header "release-image manifest"
 
-  local repo
-  release_registry_login
+  source $ci3/source_release_target
+  docker_login
+  local repo=${DOCKER_REGISTRY%/}
 
   local tag=${REF_NAME#v}
   local image
@@ -175,11 +167,8 @@ function release_docker_manifest {
 function push {
   echo_header "release-image push"
 
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
+  source $ci3/source_release_target
+  docker_login
   do_or_dryrun docker push azteclabs/aztec:$COMMIT_HASH
   do_or_dryrun docker push azteclabs/aztec-prover-agent:$COMMIT_HASH
 }
@@ -199,11 +188,8 @@ function push {
 function push_pr {
   echo_header "release-image push_pr"
 
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
+  source $ci3/source_release_target
+  docker_login
   docker tag azteclabs/aztec:$COMMIT_HASH azteclabs/aztec-dev:$COMMIT_HASH
   do_or_dryrun docker push azteclabs/aztec-dev:$COMMIT_HASH
 }

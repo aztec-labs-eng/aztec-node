@@ -51,11 +51,17 @@ jobs:
       - name: Run
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
+          # The release target and the credentials it publishes with. NPM_REGISTRY and
+          # DOCKER_REGISTRY are deliberately unset: ci3/source_release_target defaults them to
+          # npmjs and docker.io/azteclabs and asserts as much, so no variable edit can retarget a
+          # public release. The DockerHub secrets keep their names and are read into the
+          # target-neutral names the build uses.
+          RELEASE_TARGET: public
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
           # yarn-project's test_cmds (release-line compatibility tests) and test timing metadata,
           # neither of which a release runs; kept so the build log names the ref.
