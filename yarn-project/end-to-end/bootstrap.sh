@@ -72,7 +72,11 @@ function test_cmds {
   # automining and setup()'s `enableAutomine` guard skips the automine/interval-mining handover.
   # L1 then only advances when a tx arrives, the sequencer never reaches a proposable slot, and the
   # setup deploys time out on isMined.
-  echo "$(dep_hash src/composed/uniswap_trade_on_l1_from_l2.test.ts)$flags:NAME=composed/uniswap_trade_on_l1_from_l2 $run_test_script simple src/composed/uniswap_trade_on_l1_from_l2.test.ts"
+  # CI_FULL only: the L1-side swap round-trip it uniquely covers costs ~8.5 minutes in its own
+  # container, which is not worth paying on every PR.
+  if [ "$CI_FULL" -eq 1 ]; then
+    echo "$(dep_hash src/composed/uniswap_trade_on_l1_from_l2.test.ts)$flags:NAME=composed/uniswap_trade_on_l1_from_l2 $run_test_script simple src/composed/uniswap_trade_on_l1_from_l2.test.ts"
+  fi
 
   local tests=(
     # List all standalone and nested tests, except for the ones listed above.
