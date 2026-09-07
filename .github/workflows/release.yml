@@ -51,12 +51,10 @@ jobs:
       - name: Run
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GITHUB_ACTOR: ${{ github.actor }}
           # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
           # yarn-project's test_cmds (release-line compatibility tests) and test timing metadata,
