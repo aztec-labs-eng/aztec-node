@@ -1,5 +1,5 @@
 # Create our final slim image.
-FROM aztecprotocol/release-image-base
+FROM azteclabs/release-image-base
 # Copy in project files.
 COPY . /usr/src
 
