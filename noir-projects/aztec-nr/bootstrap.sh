@@ -92,6 +92,12 @@ function release_git_push {
   local mirrored_repo_url="https://github.com/aztec-labs-eng/aztec-nr.git"
   local mirrored_repo_push_url="git@github.com:aztec-labs-eng/aztec-nr.git"
 
+  # Tested via :+ so the value never lands on a command line that an xtrace would log.
+  if [ "${DRY_RUN:-0}" = 0 ] && [ -z "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY:+x}" ]; then
+    echo "AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY must be set to push to $mirrored_repo_push_url" >&2
+    exit 1
+  fi
+
   # Clean up our release directory.
   rm -rf release-out && mkdir release-out
 
@@ -110,7 +116,9 @@ function release_git_push {
   if [ "${DRY_RUN:-0}" = 0 ]; then
     local ssh_dir=$(mktemp -d)
     trap "rm -rf $ssh_dir" EXIT
-    printf '%s\n' "$(echo "${AZTEC_NR_GITHUB_MIRROR_TOKEN_B64:?must be set to push to $mirrored_repo_push_url}" | base64 -d)" > $ssh_dir/key
+    # The here-string keeps the key off the command line, so an xtrace cannot log it, and ends
+    # the file with the newline ssh insists on (a second one, if the key already has it, is fine).
+    cat <<<"$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY" > $ssh_dir/key
     chmod 600 $ssh_dir/key
     # GitHub's ssh host key, as published at https://api.github.com/meta.
     echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > $ssh_dir/known_hosts
@@ -130,22 +138,24 @@ function release_git_push {
     git checkout -b "$branch_name"
   fi
 
-  if git rev-parse "$tag_name" >/dev/null 2>&1; then
+  if [ -n "$(git ls-remote --tags origin "refs/tags/$tag_name")" ]; then
     echo "Tag $tag_name already exists. Skipping release."
-  else
-    git add .
-    git commit -m "Release $tag_name." >/dev/null
-    git tag -a "$tag_name" -m "Release $tag_name."
-    do_or_dryrun git push origin "$branch_name" --quiet
-    do_or_dryrun git push origin --quiet --force "$tag_name" --tags
-
-    echo "Release complete ($tag_name) on branch $branch_name."
+    return
   fi
 
-  do_or_dryrun git push origin "$branch_name" --quiet
-  do_or_dryrun git push origin --quiet --force "$tag_name" --tags
+  git add .
+  # Every release gets its own commit even when the crates did not change since the last one.
+  git commit --allow-empty -m "Release $tag_name." >/dev/null
+  git tag -a "$tag_name" -m "Release $tag_name."
 
-  echo "Release complete ($tag_name) on branch $branch_name."
+  # Canary tags cut from release PRs are published so the release can be tested end to end, but
+  # only real releases move the branch: it is what people browse, and must never show unreviewed code.
+  if [ "$(REF_NAME=$tag_name dist_tag)" != commit ]; then
+    do_or_dryrun git push origin "$branch_name" --quiet
+  fi
+  do_or_dryrun git push origin --quiet --force "$tag_name"
+
+  echo "Release complete ($tag_name)."
 }
 
 case "$cmd" in

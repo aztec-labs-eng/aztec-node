@@ -135,8 +135,8 @@ fi
 if [ -f "${NETWORK_ENV_FILE}" ]; then
   export NETWORK_ENV_FILE_B64=$(cat "${NETWORK_ENV_FILE}" | base64 -w 0)
 fi
-if [ -n "${AZTEC_NR_GITHUB_MIRROR_TOKEN:-}" ]; then
-  export AZTEC_NR_GITHUB_MIRROR_TOKEN_B64=$(printf '%s' "$AZTEC_NR_GITHUB_MIRROR_TOKEN" | base64 -w 0)
+if [ -n "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY:-}" ]; then
+  export AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64=$(base64 -w 0 <<<"$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY")
 fi
 
 # SSH-specific: encode SSH keys for transfer to the instance.
@@ -194,6 +194,12 @@ container_script=$(
 
   if [ -n "\$DOCKERHUB_PASSWORD" ]; then
     echo \$DOCKERHUB_PASSWORD | docker login -u \$DOCKERHUB_USERNAME --password-stdin
+  fi
+
+  # The aztec-nr mirror deploy key is multi-line, so it travels base64-encoded; the release
+  # expects it raw.
+  if [ -n "\${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:-}" ]; then
+    export AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY=\$(base64 -d <<<"\$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64")
   fi
 
   # Heartbeat.
@@ -378,7 +384,7 @@ start_build() {
     -e NETLIFY_SITE_ID=${NETLIFY_SITE_ID:-} \
     -e NETLIFY_AUTH_TOKEN=${NETLIFY_AUTH_TOKEN:-} \
     -e NPM_TOKEN=${NPM_TOKEN:-} \
-    -e AZTEC_NR_GITHUB_MIRROR_TOKEN_B64=${AZTEC_NR_GITHUB_MIRROR_TOKEN_B64:-} \
+    -e AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64=${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:-} \
     -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-} \
     -e AWS_TOKEN=\$aws_token \
     -e NAMESPACE=${NAMESPACE:-} \

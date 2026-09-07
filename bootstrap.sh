@@ -542,6 +542,8 @@ function release {
     return
   fi
 
+  # The aztec-nr mirror goes first: a failure there aborts the whole release, since a CLI whose
+  # scaffold pins an aztec-nr tag that does not exist is worse than no release at all.
   projects=(
     noir-projects/aztec-nr
     yarn-project
