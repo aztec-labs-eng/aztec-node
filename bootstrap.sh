@@ -527,14 +527,12 @@ function release {
   # We ensure there is a github release for our REF_NAME.
   # We derive a dist tag from our prerelease portion of our REF_NAME semver. It is latest if no prerelease.
   echo_header "release all"
+  # RELEASE_PROJECTS is what the target publishes; a private release names neither aztec-up nor
+  # playground, whose artifacts are public by nature.
+  source $ci3/source_release_target
   set -x
 
-  projects=(
-    yarn-project
-    aztec-up
-    playground
-    release-image
-  )
+  local projects=($RELEASE_PROJECTS)
   if [ $(arch) == arm64 ]; then
     projects=(
       release-image
@@ -739,7 +737,7 @@ case "$cmd" in
     # If no docker image provided, build and push to aztec-dev
     if [ -z "$docker_image" ]; then
       release-image/bootstrap.sh push_pr
-      docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
+      docker_image=$(release-image/bootstrap.sh pr_image_name)
     fi
     # Set up environment and deploy using spartan
     export NAMESPACE="$namespace"
@@ -786,7 +784,7 @@ case "$cmd" in
       # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -813,7 +811,7 @@ case "$cmd" in
       # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -839,7 +837,7 @@ case "$cmd" in
       # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -868,7 +866,7 @@ case "$cmd" in
       # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -898,7 +896,7 @@ case "$cmd" in
       # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="azteclabs/aztec-dev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -934,6 +932,9 @@ case "$cmd" in
     if ! semver check $REF_NAME; then
       exit 1
     fi
+    # Before the build, so a misconfigured release environment fails in seconds. Exported values
+    # reach both children below.
+    source $ci3/source_release_target
 
     ./bootstrap.sh build release
     ./bootstrap.sh release

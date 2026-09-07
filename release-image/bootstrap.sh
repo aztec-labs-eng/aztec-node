@@ -124,21 +124,12 @@ function test_cmds {
   echo "$hash docker run --rm azteclabs/aztec --version"
 }
 
-# Log docker into the release registry, assigning the repo path to the caller's $repo.
-function release_registry_login {
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  repo="azteclabs"
-}
-
 function release {
   echo_header "release-image release"
 
-  local repo
-  release_registry_login
+  source $ci3/source_release_target
+  docker_login
+  local repo=${DOCKER_REGISTRY%/}
 
   # We strip leading 'v' so that this is a valid semver.
   tag=${REF_NAME#v}
@@ -155,8 +146,9 @@ function release {
 function release_docker_manifest {
   echo_header "release-image manifest"
 
-  local repo
-  release_registry_login
+  source $ci3/source_release_target
+  docker_login
+  local repo=${DOCKER_REGISTRY%/}
 
   local tag=${REF_NAME#v}
   local image
@@ -170,18 +162,6 @@ function release_docker_manifest {
   # docker buildx imagetools create -t $repo/aztec:$(dist_tag) \
   #   $repo/aztec:$tag-amd64 \
   #   $repo/aztec:$tag-arm64
-}
-
-function push {
-  echo_header "release-image push"
-
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  do_or_dryrun docker push azteclabs/aztec:$COMMIT_HASH
-  do_or_dryrun docker push azteclabs/aztec-prover-agent:$COMMIT_HASH
 }
 
 # Publish the just-built image so a Kubernetes cluster can pull it. The network deploy and bench
@@ -199,13 +179,18 @@ function push {
 function push_pr {
   echo_header "release-image push_pr"
 
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  docker tag azteclabs/aztec:$COMMIT_HASH azteclabs/aztec-dev:$COMMIT_HASH
-  do_or_dryrun docker push azteclabs/aztec-dev:$COMMIT_HASH
+  source $ci3/source_release_target
+  docker_login
+  local image=$(pr_image_name)
+  docker tag azteclabs/aztec:$COMMIT_HASH $image
+  do_or_dryrun docker push $image
+}
+
+# The name push_pr publishes, for the deploys that consume it: one definition, so the image a
+# deploy asks for is the image that was pushed.
+function pr_image_name {
+  source $ci3/source_release_target
+  echo "${DOCKER_REGISTRY%/}/aztec-dev:$COMMIT_HASH"
 }
 
 case "$cmd" in

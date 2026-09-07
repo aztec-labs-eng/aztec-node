@@ -1,0 +1,24 @@
+# Authenticate npm against $NPM_REGISTRY with the credential the environment set.
+#
+# Sourced rather than run: npm is configured through NPM_CONFIG_GLOBALCONFIG, which has to be
+# exported into the caller. Idempotent, and a no-op when no credential is set — ordinary CI runs
+# and dev machines resolve everything from the default registry and publish nothing.
+#
+# The file holds no credential: npm expands ${VAR} when it reads its config, so only the variable
+# name is written and the value stays in the environment — nothing to leak into a cache artifact or
+# a build log. It also lands under /tmp rather than in the repo, where the ignored-file sweeps that
+# build the yarn-project and playground cache artifacts would pick it up.
+
+export NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org}
+
+if [ -n "${NPM_TOKEN:-}" ]; then
+  # npm keys its auth lines on the registry without a scheme and with a trailing slash.
+  npm_auth_registry="${NPM_REGISTRY%/}/"
+  npm_auth_npmrc=$(mktemp)
+  (
+    umask 077
+    echo "//${npm_auth_registry#*://}:_authToken=\${NPM_TOKEN}"
+  ) > "$npm_auth_npmrc"
+  export NPM_CONFIG_GLOBALCONFIG="$npm_auth_npmrc"
+  unset npm_auth_registry npm_auth_npmrc
+fi

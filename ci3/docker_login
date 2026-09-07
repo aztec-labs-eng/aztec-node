@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Log docker into $DOCKER_REGISTRY's host with the credential the environment supplied.
+#
+# One command for every registry: DOCKER_REGISTRY is fully qualified (docker.io/azteclabs,
+# us-west1-docker.pkg.dev/<project>/<repo>), so the login host is a prefix strip and nothing has to
+# ask which registry this is. Artifact Registry accepts a service-account key through plain
+# `docker login`, so the release path needs no gcloud.
+NO_CD=1 source $(git rev-parse --show-toplevel)/ci3/source
+
+set +x # Never echo the password.
+: "${DOCKER_REGISTRY:?DOCKER_REGISTRY is required}"
+: "${DOCKER_USERNAME:?DOCKER_USERNAME is required}"
+: "${DOCKER_PASSWORD:?DOCKER_PASSWORD is required}"
+
+printf '%s' "$DOCKER_PASSWORD" | docker login "${DOCKER_REGISTRY%%/*}" -u "$DOCKER_USERNAME" --password-stdin

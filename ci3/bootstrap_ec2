@@ -192,8 +192,12 @@ container_script=$(
   ci_log_id=\$CI_LOG_ID
   log_ci_run \$ci_log_id
 
-  if [ -n "\$DOCKERHUB_PASSWORD" ]; then
-    echo \$DOCKERHUB_PASSWORD | docker login -u \$DOCKERHUB_USERNAME --password-stdin
+  # A release forwards its docker credential but not its registry: the public URLs are defaults in
+  # ci3/source_release_target, which the build sources later. Source it here too, so this login
+  # knows where it is logging in; it is idempotent and only reached when there is a credential.
+  if [ -n "\$DOCKER_PASSWORD" ]; then
+    source \$ci3/source_release_target
+    docker_login
   fi
 
   # Heartbeat.
@@ -364,8 +368,10 @@ start_build() {
     -e LOCAL_USER_ID=\$local_uid \
     -e LOCAL_GROUP_ID=\$local_gid \
     -e GCP_PROJECT_ID=${GCP_PROJECT_ID:-} \
-    -e DOCKERHUB_PASSWORD=${DOCKERHUB_PASSWORD:-} \
-    -e DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME:-} \
+    -e RELEASE_TARGET=${RELEASE_TARGET:-} \
+    -e DOCKER_REGISTRY=${DOCKER_REGISTRY:-} \
+    -e DOCKER_PASSWORD=${DOCKER_PASSWORD:-} \
+    -e DOCKER_USERNAME=${DOCKER_USERNAME:-} \
     -e R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-} \
     -e R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-} \
     -e BUILD_SYSTEM_DEBUG=${BUILD_SYSTEM_DEBUG:-} \
@@ -377,6 +383,7 @@ start_build() {
     -e CHONK_INPUTS_STATE_DIR=${CHONK_INPUTS_STATE_DIR:-} \
     -e NETLIFY_SITE_ID=${NETLIFY_SITE_ID:-} \
     -e NETLIFY_AUTH_TOKEN=${NETLIFY_AUTH_TOKEN:-} \
+    -e NPM_REGISTRY=${NPM_REGISTRY:-} \
     -e NPM_TOKEN=${NPM_TOKEN:-} \
     -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-} \
     -e AWS_TOKEN=\$aws_token \

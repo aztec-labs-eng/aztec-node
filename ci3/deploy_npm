@@ -18,8 +18,8 @@ case "$channel" in
   *) npm_tag="$channel" ;;
 esac
 
-# Point .npmrc config to one that relies on 'NPM_TOKEN' in the environment.
-export NPM_CONFIG_GLOBALCONFIG="$root/ci3/npm/.npmrc"
+# Authenticate npm against NPM_REGISTRY with the credential in the environment.
+source $ci3/source_npm_auth
 
 package_name=$(jq -r '.name' package.json)
 echo_header "publishing $package_name"
