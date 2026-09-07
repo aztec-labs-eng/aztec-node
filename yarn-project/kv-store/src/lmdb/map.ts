@@ -39,6 +39,11 @@ export class LmdbAztecMap<K extends Key, V extends Value> implements AztecMap<K,
     return Promise.resolve(this.get(key));
   }
 
+  /** Returns values in input order, including missing keys and duplicates. */
+  getManyAsync(keys: K[]): Promise<(V | undefined)[]> {
+    return Promise.resolve(keys.map(key => this.get(key)));
+  }
+
   has(key: K): boolean {
     return this.db.doesExist(this.slot(key));
   }

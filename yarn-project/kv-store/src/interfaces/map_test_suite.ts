@@ -23,6 +23,54 @@ export function describeAztecMap(
       await store.delete();
     });
 
+    it('bulk reads preserve order, missing values, duplicates and map isolation', async () => {
+      if (!('getManyAsync' in map)) {
+        throw new Error('Map does not implement bulk reads');
+      }
+      await map.set('a', 'A');
+      await map.set('b', 'B');
+      await store.openMap<string, string>('other').set('a', 'other');
+      expect(await map.getManyAsync(['b', 'missing', 'a', 'b'])).toEqual(['B', undefined, 'A', 'B']);
+      expect(await map.getManyAsync([])).toEqual([]);
+    });
+
+    it('bulk reads preserve positions across large key lists', async () => {
+      if (!('getManyAsync' in map)) {
+        throw new Error('Map does not implement bulk reads');
+      }
+      await map.set('first', 'A');
+      await map.set('last', 'B');
+      const missing = Array.from({ length: 901 }, (_, index) => `missing-${index}`);
+      expect(await map.getManyAsync(['first', ...missing, 'last', 'first'])).toEqual([
+        'A',
+        ...missing.map(() => undefined),
+        'B',
+        'A',
+      ]);
+    });
+
+    it('bulk reads observe transaction writes and deletions', async () => {
+      if (!('transactionAsync' in store) || !('getManyAsync' in map)) {
+        throw new Error('Store does not implement async bulk reads');
+      }
+      const bulkMap = map;
+      await map.set('a', 'old');
+      await map.set('b', 'deleted');
+      await map.set('c', 'unchanged');
+      await store.transactionAsync(async () => {
+        await bulkMap.set('a', 'new');
+        await bulkMap.delete('b');
+        expect(await bulkMap.getManyAsync(['a', 'b', 'c', 'missing', 'a'])).toEqual([
+          'new',
+          undefined,
+          'unchanged',
+          undefined,
+          'new',
+        ]);
+      });
+      expect(await bulkMap.getManyAsync(['a', 'b', 'c'])).toEqual(['new', undefined, 'unchanged']);
+    });
+
     async function get(key: Key, sut: AztecAsyncMap<any, any> | AztecMap<any, any> = map) {
       return isSyncStore(store) && !forceAsync
         ? (sut as AztecMap<any, any>).get(key)

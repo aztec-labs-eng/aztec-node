@@ -640,23 +640,24 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     }
 
     const addresses = [...new Map(validatorAddresses.map(address => [address.toString(), address])).values()];
-    const histories = await Promise.all(addresses.map(address => this.store.getHistory(address)));
+    const [histories, performances] = await Promise.all([
+      this.store.getHistoryBatch(addresses),
+      this.store.getEpochPerformanceBatch(addresses),
+    ]);
 
-    const results = await Promise.all(
-      addresses.map(async (address, index): Promise<SingleValidatorStats | null> => {
-        const history = histories[index];
-        if (!history?.length) {
-          return null;
-        }
-        return {
-          validator: this.computeStatsForValidator(address.toString(), history, effectiveFromSlot, effectiveToSlot),
-          allTimeEpochPerformance: await this.store.getEpochPerformance(address),
-          lastProcessedSlot,
-          initialSlot,
-          slotWindow,
-        };
-      }),
-    );
+    const results = addresses.map((address, index): SingleValidatorStats | null => {
+      const history = histories[index];
+      if (!history?.length) {
+        return null;
+      }
+      return {
+        validator: this.computeStatsForValidator(address.toString(), history, effectiveFromSlot, effectiveToSlot),
+        allTimeEpochPerformance: performances[index],
+        lastProcessedSlot,
+        initialSlot,
+        slotWindow,
+      };
+    });
     const resultsByAddress = new Map(addresses.map((address, index) => [address.toString(), results[index]]));
     return validatorAddresses.map(address => resultsByAddress.get(address.toString()) ?? null);
   }
