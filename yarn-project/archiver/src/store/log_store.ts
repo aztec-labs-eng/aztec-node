@@ -245,7 +245,7 @@ export class LogStore {
       if (!loc) {
         return tags.map(() => []);
       }
-      txLocation = loc;
+      txLocation = [loc.blockNumber, loc.txIndexInBlock];
       if (upperExclusive !== undefined && txLocation[0] >= upperExclusive) {
         return tags.map(() => []);
       }

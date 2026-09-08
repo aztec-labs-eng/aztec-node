@@ -212,7 +212,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
       l1Constants.epochDuration,
     );
 
-    this.txEffectsTreeResolver = new TxEffectsTreeResolver(this.dataStores.blocks, this.dataStores.db);
+    this.txEffectsTreeResolver = new TxEffectsTreeResolver(this.dataStores.blocks);
 
     // Running promise starts with a small interval inbetween runs, so all iterations needed for the initial sync
     // are done as fast as possible. This then gets updated once the initial sync completes.

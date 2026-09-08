@@ -1,22 +1,26 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
-import type { BlockData } from '@aztec-labs/stdlib/block';
+import type { BlockData, BlockHash } from '@aztec-labs/stdlib/block';
 import {
   type TxEffectMembershipWitness,
   type TxHash,
   computeTxEffectMembershipWitnessFromLeaves,
 } from '@aztec-labs/stdlib/tx';
 
+import type { TxLocation } from '../store/block_store.js';
+
 /**
  * Store-side view of the data the resolver needs to assemble a witness. The archiver block store holds each of these
  * natively, so no L2 RPC plumbing is required.
  */
 export interface TxEffectsTreeStoreView {
+  /** Reads the block currently stored at the requested height. */
   getBlockData(query: { number: BlockNumber }): Promise<BlockData | undefined>;
-  getTxLocation(txHash: TxHash): Promise<[blockNumber: BlockNumber, txIndexInBlock: number] | undefined>;
-  getTxEffectLeaves(blockNumber: BlockNumber): Promise<Fr[] | undefined>;
+  /** Reads the owning block and transaction index from the same stored entry. */
+  getTxLocation(txHash: TxHash): Promise<TxLocation | undefined>;
+  /** Reads the leaves belonging to the given block hash. */
+  getTxEffectLeaves(blockHash: BlockHash): Promise<Fr[] | undefined>;
 }
 
 /**
@@ -29,7 +33,6 @@ export interface TxEffectsTreeStoreView {
 export class TxEffectsTreeResolver {
   constructor(
     private readonly blocks: TxEffectsTreeStoreView,
-    private readonly store: AztecAsyncKVStore,
     private readonly log: Logger = createLogger('archiver:tx_effects_tree'),
   ) {}
 
@@ -38,44 +41,52 @@ export class TxEffectsTreeResolver {
    * archiver stores for it. Returns `undefined` if the tx is not in a block the archiver knows about.
    *
    * Throws if the stored leaves do not hash up to the root in the block header, which would mean the stored block is
-   * corrupted.
+   * corrupted. Retries inconsistent or missing block data up to three total attempts, then throws.
    */
   public async getTxEffectMembershipWitness(txHash: TxHash): Promise<TxEffectMembershipWitness | undefined> {
-    const snapshot = await this.store.transactionAsync(async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
       const location = await this.blocks.getTxLocation(txHash);
       if (!location) {
         this.log.trace(`No tx effect for tx, no witness available`, { txHash });
         return undefined;
       }
 
-      const [blockNumber, txIndexInBlock] = location;
+      const { blockNumber, blockHash, txIndexInBlock } = location;
       const blockData = await this.blocks.getBlockData({ number: blockNumber });
-      if (!blockData) {
-        this.log.trace(`No block for tx, no witness available`, { txHash, blockNumber });
-        return undefined;
+      if (!blockData || !blockData.blockHash.equals(blockHash)) {
+        this.log.debug(`Block no longer matches the tx location, retrying witness lookup`, {
+          txHash,
+          blockNumber,
+          blockHash,
+          actualBlockHash: blockData?.blockHash,
+          attempt,
+        });
+        continue;
       }
 
-      const leaves = await this.blocks.getTxEffectLeaves(blockNumber);
+      // Hash-keyed leaves bind this read to the index and header even if the block at this height changes.
+      const leaves = await this.blocks.getTxEffectLeaves(blockHash);
       if (!leaves) {
-        throw new Error(`No tx effects tree leaves stored for block ${blockNumber} holding tx ${txHash}`);
+        this.log.debug(`Tx effects tree leaves are no longer available, retrying witness lookup`, {
+          txHash,
+          blockNumber,
+          blockHash,
+          attempt,
+        });
+        continue;
       }
 
-      return { blockNumber, txIndexInBlock, blockData, leaves };
-    });
+      const { root, leafIndex, siblingPath } = await computeTxEffectMembershipWitnessFromLeaves(leaves, txIndexInBlock);
+      if (!root.equals(blockData.header.txEffectsTreeRoot)) {
+        throw new Error(
+          `Tx effects tree root rebuilt from the stored leaves of block ${blockNumber} does not match its header: ` +
+            `rebuilt=${root} header=${blockData.header.txEffectsTreeRoot}`,
+        );
+      }
 
-    if (!snapshot) {
-      return undefined;
+      return { blockNumber, root, leafIndex, siblingPath };
     }
 
-    const { blockNumber, txIndexInBlock, blockData, leaves } = snapshot;
-    const { root, leafIndex, siblingPath } = await computeTxEffectMembershipWitnessFromLeaves(leaves, txIndexInBlock);
-    if (!root.equals(blockData.header.txEffectsTreeRoot)) {
-      throw new Error(
-        `Tx effects tree root rebuilt from the stored leaves of block ${blockNumber} does not match its header: ` +
-          `rebuilt=${root} header=${blockData.header.txEffectsTreeRoot}`,
-      );
-    }
-
-    return { blockNumber, root, leafIndex, siblingPath };
+    throw new Error(`Could not read consistent tx effects tree data for tx ${txHash} after 3 attempts`);
   }
 }

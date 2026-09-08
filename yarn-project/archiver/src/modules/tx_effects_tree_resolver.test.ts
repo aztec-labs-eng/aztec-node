@@ -1,10 +1,10 @@
 import { DomainSeparator } from '@aztec-labs/constants';
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
-import { Body } from '@aztec-labs/stdlib/block';
-import { TxHash, computeTxEffectLeaves, verifyTxEffectMembershipWitness } from '@aztec-labs/stdlib/tx';
+import { type BlockData, BlockHash, Body } from '@aztec-labs/stdlib/block';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, TxHash, computeTxEffectLeaves, verifyTxEffectMembershipWitness } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { TxEffectsTreeResolver, type TxEffectsTreeStoreView } from './tx_effects_tree_resolver.js';
@@ -18,7 +18,7 @@ describe('TxEffectsTreeResolver', () => {
 
   beforeEach(() => {
     blocks = mock<TxEffectsTreeStoreView>();
-    resolver = new TxEffectsTreeResolver(blocks, makeFakeStore());
+    resolver = new TxEffectsTreeResolver(blocks);
   });
 
   it('returns undefined for a tx the archiver does not know', async () => {
@@ -26,12 +26,122 @@ describe('TxEffectsTreeResolver', () => {
     expect(await resolver.getTxEffectMembershipWitness(TxHash.random())).toBeUndefined();
   });
 
-  it('returns undefined when the tx is indexed but its block is gone', async () => {
-    const body = await makeBody(2);
-    await wireStore(blocks, body);
-    blocks.getBlockData.mockResolvedValue(undefined);
+  describe('consistent reads', () => {
+    const root = new Fr(123);
+    let txHash: TxHash;
+    let blockData: BlockData;
 
-    expect(await resolver.getTxEffectMembershipWitness(body.txEffects[0].txHash)).toBeUndefined();
+    beforeEach(() => {
+      txHash = TxHash.random();
+      blockData = makeBlockData(root);
+      blocks.getTxLocation.mockResolvedValue({
+        blockNumber: BLOCK_NUMBER,
+        blockHash: blockData.blockHash,
+        txIndexInBlock: 0,
+      });
+      blocks.getBlockData.mockResolvedValue(blockData);
+      blocks.getTxEffectLeaves.mockImplementation(hash =>
+        Promise.resolve(hash.equals(blockData.blockHash) ? [root] : undefined),
+      );
+    });
+
+    it.each(['getBlockData', 'getTxEffectLeaves'] as const)(
+      'retries when %s temporarily returns no data',
+      async method => {
+        blocks[method].mockResolvedValueOnce(undefined);
+
+        const witness = await resolver.getTxEffectMembershipWitness(txHash);
+
+        expect(witness?.root).toEqual(root);
+        expect(witness?.leafIndex).toBe(0n);
+        expect(witness?.siblingPath.pathSize).toBe(0);
+      },
+    );
+
+    it('can succeed on the third attempt', async () => {
+      blocks.getTxEffectLeaves.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+
+      const witness = await resolver.getTxEffectMembershipWitness(txHash);
+
+      expect(witness?.root).toEqual(root);
+      expect(blocks.getTxLocation).toHaveBeenCalledTimes(3);
+    });
+
+    it('retries when the header hash does not match the indexed block', async () => {
+      blocks.getBlockData.mockResolvedValueOnce(makeBlockData(new Fr(456)));
+
+      const witness = await resolver.getTxEffectMembershipWitness(txHash);
+
+      expect(witness?.root).toEqual(root);
+      expect(blocks.getTxLocation).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses the updated transaction location on retry', async () => {
+      const newBlockNumber = BlockNumber(8);
+      blocks.getTxLocation
+        .mockResolvedValueOnce({ blockNumber: BLOCK_NUMBER, blockHash: BlockHash.random(), txIndexInBlock: 1 })
+        .mockResolvedValue({ blockNumber: newBlockNumber, blockHash: blockData.blockHash, txIndexInBlock: 0 });
+      blocks.getBlockData.mockImplementation(({ number }) =>
+        Promise.resolve(number === newBlockNumber ? blockData : makeBlockData(new Fr(456))),
+      );
+
+      const witness = await resolver.getTxEffectMembershipWitness(txHash);
+
+      expect(witness?.blockNumber).toBe(newBlockNumber);
+      expect(witness?.root).toEqual(root);
+      expect(witness?.leafIndex).toBe(0n);
+    });
+
+    it('returns undefined when the transaction disappears during retry', async () => {
+      blocks.getTxLocation
+        .mockResolvedValueOnce({ blockNumber: BLOCK_NUMBER, blockHash: blockData.blockHash, txIndexInBlock: 0 })
+        .mockResolvedValue(undefined);
+      blocks.getTxEffectLeaves.mockResolvedValueOnce(undefined);
+
+      expect(await resolver.getTxEffectMembershipWitness(txHash)).toBeUndefined();
+    });
+
+    it.each(['missing block', 'hash mismatch', 'missing leaves'])(
+      'fails after three attempts with %s',
+      async condition => {
+        if (condition === 'missing block') {
+          blocks.getBlockData.mockResolvedValue(undefined);
+        } else if (condition === 'hash mismatch') {
+          blocks.getBlockData.mockResolvedValue(makeBlockData(root));
+        } else {
+          blocks.getTxEffectLeaves.mockResolvedValue(undefined);
+        }
+
+        await expect(resolver.getTxEffectMembershipWitness(txHash)).rejects.toThrow('after 3 attempts');
+        expect(blocks.getTxLocation).toHaveBeenCalledTimes(3);
+      },
+    );
+
+    it('throws without retrying when stored leaves do not match the header root', async () => {
+      blocks.getTxEffectLeaves.mockResolvedValue([new Fr(456)]);
+
+      await expect(resolver.getTxEffectMembershipWitness(txHash)).rejects.toThrow('does not match its header');
+      expect(blocks.getTxLocation).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws without retrying when the transaction index is outside the stored leaves', async () => {
+      blocks.getTxLocation.mockResolvedValue({
+        blockNumber: BLOCK_NUMBER,
+        blockHash: blockData.blockHash,
+        txIndexInBlock: 1,
+      });
+
+      await expect(resolver.getTxEffectMembershipWitness(txHash)).rejects.toThrow('out of bounds');
+      expect(blocks.getTxLocation).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates database errors without retrying', async () => {
+      const error = new Error('Store is closed');
+      blocks.getBlockData.mockRejectedValue(error);
+
+      await expect(resolver.getTxEffectMembershipWitness(txHash)).rejects.toBe(error);
+      expect(blocks.getTxLocation).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('builds a verifiable witness for every tx of a multi-tx block', async () => {
@@ -86,77 +196,7 @@ describe('TxEffectsTreeResolver', () => {
     expect(witness!.root).toEqual(root);
     expect(witness!.siblingPath.toFields()).toEqual([storedLeaves[1]]);
   });
-
-  it('releases the store transaction before building the witness and does not recompute the stored leaf', async () => {
-    const body = await makeBody(2);
-    await wireStore(blocks, body);
-
-    let transactionActive = false;
-    resolver = new TxEffectsTreeResolver(
-      blocks,
-      makeFakeStore(active => {
-        transactionActive = active;
-      }),
-    );
-
-    const leaves = await computeTxEffectLeaves(body.txEffects);
-    const toBuffer = leaves[0].toBuffer.bind(leaves[0]);
-    jest.spyOn(leaves[0], 'toBuffer').mockImplementation(() => {
-      expect(transactionActive).toBe(false);
-      return toBuffer();
-    });
-    blocks.getTxEffectLeaves.mockResolvedValue(leaves);
-    const computeLeaf = jest.spyOn(body.txEffects[0], 'computeTxEffectsTreeLeaf');
-
-    await resolver.getTxEffectMembershipWitness(body.txEffects[0].txHash);
-
-    expect(computeLeaf).not.toHaveBeenCalled();
-  });
-
-  it('throws when the block has no stored leaves', async () => {
-    const body = await makeBody(2);
-    await wireStore(blocks, body);
-    blocks.getTxEffectLeaves.mockResolvedValue(undefined);
-
-    await expect(resolver.getTxEffectMembershipWitness(body.txEffects[0].txHash)).rejects.toThrow(
-      'No tx effects tree leaves stored for block 7',
-    );
-  });
-
-  it('throws when the stored leaves do not hash up to the root in the block header', async () => {
-    const body = await makeBody(2);
-    await wireStore(blocks, body, Fr.random());
-
-    await expect(resolver.getTxEffectMembershipWitness(body.txEffects[0].txHash)).rejects.toThrow(
-      'does not match its header',
-    );
-  });
-
-  it('throws when the tx index is outside the stored leaves', async () => {
-    const body = await makeBody(2);
-    await wireStore(blocks, body);
-    blocks.getTxLocation.mockResolvedValue([BLOCK_NUMBER, 2]);
-
-    await expect(resolver.getTxEffectMembershipWitness(body.txEffects[0].txHash)).rejects.toThrow('out of bounds');
-  });
 });
-
-/**
- * Store double whose `transactionAsync` just runs the callback. The store view is mocked here, so there is no real
- * snapshot to isolate; the resolver only needs the callback invoked.
- */
-function makeFakeStore(onTransactionStateChange?: (active: boolean) => void): AztecAsyncKVStore {
-  const store = mock<AztecAsyncKVStore>();
-  store.transactionAsync.mockImplementation(async callback => {
-    onTransactionStateChange?.(true);
-    try {
-      return await callback();
-    } finally {
-      onTransactionStateChange?.(false);
-    }
-  });
-  return store;
-}
 
 function makeBody(txsPerBlock: number): Promise<Body> {
   return Body.random({ txsPerBlock, maxEffects: 1, numPublicCallsPerTx: 1 });
@@ -169,19 +209,30 @@ function makeBody(txsPerBlock: number): Promise<Body> {
  */
 async function wireStore(blocks: MockProxy<TxEffectsTreeStoreView>, body: Body, headerRoot?: Fr): Promise<Fr> {
   const txEffectsTreeRoot = headerRoot ?? (await body.computeTxEffectsTreeRoot());
-  blocks.getBlockData.mockResolvedValue({ header: { txEffectsTreeRoot } } as never);
+  const blockData = makeBlockData(txEffectsTreeRoot);
+  blocks.getBlockData.mockResolvedValue(blockData);
   blocks.getTxEffectLeaves.mockResolvedValue(await computeTxEffectLeaves(body.txEffects));
-  blocks.getTxLocation.mockImplementation(((txHash: TxHash) => {
+  blocks.getTxLocation.mockImplementation((txHash: TxHash) => {
     const txIndexInBlock = body.txEffects.findIndex(txEffect => txEffect.txHash.equals(txHash));
     if (txIndexInBlock === -1) {
       return Promise.resolve(undefined);
     }
-    return Promise.resolve([BLOCK_NUMBER, txIndexInBlock]);
-  }) as never);
+    return Promise.resolve({ blockNumber: BLOCK_NUMBER, blockHash: blockData.blockHash, txIndexInBlock });
+  });
   return txEffectsTreeRoot;
 }
 
 /** Hashes a pair of nodes the way the tx effects tree does. */
 function hashPair(left: Fr, right: Fr): Promise<Fr> {
   return poseidon2HashWithSeparator([left, right], DomainSeparator.TX_EFFECTS_TREE);
+}
+
+function makeBlockData(txEffectsTreeRoot: Fr, blockHash = BlockHash.random()): BlockData {
+  return {
+    header: BlockHeader.empty({ txEffectsTreeRoot }),
+    archive: AppendOnlyTreeSnapshot.empty(),
+    blockHash,
+    checkpointNumber: CheckpointNumber(1),
+    indexWithinCheckpoint: IndexWithinCheckpoint(0),
+  };
 }
