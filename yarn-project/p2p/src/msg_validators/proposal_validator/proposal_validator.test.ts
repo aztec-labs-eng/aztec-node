@@ -214,12 +214,12 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.MidToleranceError });
     });
 
-    it('rejects with high tolerance error when proposer is undefined (open committee)', async () => {
+    it('accepts a valid proposal when proposer is undefined (empty committee, anyone may propose)', async () => {
       const proposal = await factory(currentSlot, Secp256k1Signer.random());
 
       epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'accept' });
     });
 
     it('rejects with low tolerance error on NoCommitteeError', async () => {
