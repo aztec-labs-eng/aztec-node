@@ -1,4 +1,4 @@
-import { type VerificationKeyData, VkData } from '@aztec/stdlib/vks';
+import { type VerificationKeyData, VkData } from '@aztec-labs/stdlib/vks';
 
 import type { ProtocolCircuitName } from '../../artifacts/types.js';
 import { ClientCircuitVks } from '../../artifacts/vks/client.js';

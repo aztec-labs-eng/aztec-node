@@ -1,8 +1,8 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { type AppTaggingSecret, type LogResult, SiloedTag } from '@aztec/stdlib/logs';
-import { TxHash } from '@aztec/stdlib/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { type AppTaggingSecret, type LogResult, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { ChangeSetId } from '../../../storage/staged_write_coordinator.js';
 import type { SenderTaggingStore } from '../../../storage/tagging_store/sender_tagging_store.js';

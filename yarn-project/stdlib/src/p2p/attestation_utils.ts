@@ -1,5 +1,5 @@
-import { normalizeSignature } from '@aztec/foundation/crypto/secp256k1-signer';
-import type { EthAddress } from '@aztec/foundation/eth-address';
+import { normalizeSignature } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 import { CommitteeAttestation } from '../block/index.js';
 import type { CheckpointAttestation } from './checkpoint_attestation.js';

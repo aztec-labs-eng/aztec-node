@@ -8,17 +8,17 @@
  *     aztec-node import these subpaths only for event classes (`ContractClassPublishedEvent`,
  *     `ContractInstancePublishedEvent`, …) which the `/lazy` barrel also re-exports.
  *   - standard-contracts `auth-registry` / `handshake-registry` / `multi-call-entrypoint`: pulled
- *     in eagerly by `@aztec/pxe/server` (node entrypoint), which calls only the async
+ *     in eagerly by `@aztec-labs/pxe/server` (node entrypoint), which calls only the async
  *     `getStandard*()` getters — those exist identically on the `/lazy` barrels.
  *
  * `fee-juice/index.js` is intentionally NOT rewritten: the eager barrel exposes synchronous
  * utilities (`computeFeePayerBalanceStorageSlot`) the simulator calls on every public tx, and
  * those need `storageLayout.balances.slot` from the loaded artifact. The standard-contracts
- * `*Artifact` eager consts are likewise only imported by `@aztec/p2p` / `@aztec/aztec`, which are
+ * `*Artifact` eager consts are likewise only imported by `@aztec-labs/p2p` / `@aztec-labs/aztec`, which are
  * stubbed or absent in the TXE bundle, so rewriting their barrels here is safe.
  *
  * Two filters per family handle the two specifier forms seen by esbuild:
- *   - the package subpath (e.g. `@aztec/protocol-contracts/class-registry`), before esbuild does
+ *   - the package subpath (e.g. `@aztec-labs/protocol-contracts/class-registry`), before esbuild does
  *     package.json `exports` resolution. We delegate back to esbuild via `build.resolve()` with
  *     `/lazy` appended so it picks the right per-package file.
  *   - the relative-path form after resolution (e.g.
@@ -35,7 +35,7 @@ export const protocolContractsEagerToLazyPlugin = {
   setup(build) {
     for (const { pkg, subpaths } of eagerBarrels) {
       const alt = subpaths.join('|');
-      const bareSpecifier = new RegExp(`^@aztec\\/${pkg}\\/(${alt})$`);
+      const bareSpecifier = new RegExp(`^@aztec-labs\\/${pkg}\\/(${alt})$`);
       const resolvedPath = new RegExp(`${pkg}\\/(dest|src)\\/(${alt})\\/index\\.(js|ts)$`);
 
       build.onResolve({ filter: bareSpecifier }, async args => {

@@ -1,10 +1,9 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { deriveKeys } from '@aztec/aztec.js/keys';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { PrivateTokenContract } from '@aztec/noir-contracts.js/PrivateToken';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { deriveKeys } from '@aztec-labs/aztec.js/keys';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { PrivateTokenContract } from '@aztec-labs/noir-contracts.js/PrivateToken';
 import { foundry, sepolia } from 'viem/chains';
 
 import { PIPELINING_SETUP_OPTS } from '../fixtures/fixtures.js';

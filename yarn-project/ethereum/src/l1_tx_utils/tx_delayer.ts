@@ -1,8 +1,7 @@
-import { omit } from '@aztec/foundation/collection';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { DateProvider } from '@aztec/foundation/timer';
-
+import { omit } from '@aztec-labs/foundation/collection';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
 import { inspect } from 'util';
 import {
   type Client,

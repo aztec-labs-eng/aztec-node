@@ -1,5 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { BufferReader, bigintToUInt64BE, bigintToUInt128BE, serializeToBuffer } from '@aztec/foundation/serialize';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { BufferReader, bigintToUInt64BE, bigintToUInt128BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import type { Offense, OffenseType } from './types.js';
 

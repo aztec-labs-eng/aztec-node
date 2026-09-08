@@ -1,6 +1,6 @@
-import { DomainSeparator } from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 /**
  * Computes the resulting storage slot for an entry in a map.

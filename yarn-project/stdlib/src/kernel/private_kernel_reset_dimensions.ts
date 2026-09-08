@@ -1,5 +1,5 @@
-import { serializeToBuffer } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 export class PrivateKernelResetDimensions {
   constructor(
@@ -78,7 +78,7 @@ export interface ResetCatalogEntry {
   cost: number;
 }
 
-// Must match the shipped private_kernel_reset_config.json, loaded by @aztec/noir-protocol-circuits-types.
+// Must match the shipped private_kernel_reset_config.json, loaded by @aztec-labs/noir-protocol-circuits-types.
 export interface PrivateKernelResetDimensionsConfig {
   // Variants used for mid-tx resets that prevent overflow. Never the last kernel in the chain.
   inner: ResetCatalogEntry[];

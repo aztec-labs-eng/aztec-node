@@ -1,9 +1,8 @@
-import { toHex as toPaddedHex } from '@aztec/foundation/bigint-buffer';
-import type { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import { merge } from '@aztec/foundation/collection';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-
+import { toHex as toPaddedHex } from '@aztec-labs/foundation/bigint-buffer';
+import type { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { merge } from '@aztec-labs/foundation/collection';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { StateOverride } from 'viem';
 
 import { type FeeHeader, RollupContract } from './rollup.js';

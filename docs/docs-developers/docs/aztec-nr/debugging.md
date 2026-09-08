@@ -3,6 +3,7 @@ title: Debugging Aztec Code
 sidebar_position: 5
 tags: [debugging, errors, local_network, aztec.nr]
 description: This guide shows you how to debug issues in your Aztec contracts.
+references: ["noir-projects/aztec-nr/aztec/src/logging.nr"]
 ---
 
 This guide shows you how to debug issues in your Aztec development environment.
@@ -95,7 +96,7 @@ export default {
 ### Profile transactions
 
 ```javascript
-import { serializePrivateExecutionSteps } from "@aztec/stdlib";
+import { serializePrivateExecutionSteps } from "@aztec-labs/stdlib";
 
 // Profile the transaction
 const profileTx = await contract.methods

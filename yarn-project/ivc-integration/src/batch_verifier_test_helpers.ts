@@ -1,5 +1,5 @@
-import { BatchChonkVerifier } from '@aztec/bb-prover';
-import type { IVCProofVerificationResult } from '@aztec/stdlib/interfaces/server';
+import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
+import type { IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 
 /** Corrupt flat proof fields by flipping bytes in an early field element. */
 export function corruptProofFields(fields: Uint8Array[]): Uint8Array[] {

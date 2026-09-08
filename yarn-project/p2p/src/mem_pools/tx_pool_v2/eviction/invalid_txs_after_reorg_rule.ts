@@ -1,7 +1,7 @@
-import { createLogger } from '@aztec/foundation/log';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 import type { EvictionContext, EvictionResult, EvictionRule, PoolOperations } from './interfaces.js';
 import { EvictionEvent } from './interfaces.js';

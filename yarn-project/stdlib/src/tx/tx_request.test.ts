@@ -1,8 +1,8 @@
-import { TX_REQUEST_LENGTH } from '@aztec/constants';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { setupCustomSnapshotSerializers } from '@aztec/foundation/testing';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { TX_REQUEST_LENGTH } from '@aztec-labs/constants';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import { FunctionSelector } from '../abi/index.js';
 import { AztecAddress } from '../aztec-address/index.js';

@@ -3,7 +3,7 @@
 // Copied into the scaffolded workspace at test time by ../test.ts, then executed with
 // `node --test`. Runs from inside the workspace so that:
 //   - `./artifacts/Counter.js` resolves to the codegen'd bindings (and its types flow).
-//   - `@aztec/*` imports resolve via the workspace's `node_modules` symlink to the
+//   - `@aztec-labs/*` imports resolve via the workspace's `node_modules` symlink to the
 //     installed Aztec toolchain — i.e. the same packages a real user would have.
 //
 // The test expects an `aztec start --local-network` node reachable at NODE_URL. It uses the
@@ -14,8 +14,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { CounterContract } from './artifacts/Counter.ts';
 

@@ -1,6 +1,5 @@
-import { sha256Hash } from '@aztec/foundation/json-rpc/server';
-import { createLogger } from '@aztec/foundation/log';
-
+import { sha256Hash } from '@aztec-labs/foundation/json-rpc/server';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { promises as fs } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';

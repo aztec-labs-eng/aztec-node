@@ -1,5 +1,5 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Wallet } from '@aztec/aztec.js/wallet';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 // @ts-ignore — generated artifact, may not exist until compiled
 import { PodRacingContract, PodRacingContractArtifact } from './artifacts/PodRacing';
 import { createSponsoredFeePayment } from './fees';

@@ -1,10 +1,10 @@
-import { minBigint } from '@aztec/foundation/bigint';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { BlockHash, type L2BlockId } from '@aztec/stdlib/block';
-import { Gas, GasFees } from '@aztec/stdlib/gas';
-import { type Tx, TxHash } from '@aztec/stdlib/tx';
+import { minBigint } from '@aztec-labs/foundation/bigint';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { BlockHash, type L2BlockId } from '@aztec-labs/stdlib/block';
+import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
+import { type Tx, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { getFeePayerBalanceDelta } from '../../msg_validators/tx_validator/fee_payer_balance.js';
 import { type PreAddResult, TxPoolRejectionCode } from './eviction/interfaces.js';

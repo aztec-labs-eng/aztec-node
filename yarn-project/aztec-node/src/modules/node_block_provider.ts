@@ -1,7 +1,7 @@
-import type { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { BadRequestError } from '@aztec/foundation/json-rpc';
-import type { BlockData, BlockParameter, CommitteeAttestation, L2BlockSource } from '@aztec/stdlib/block';
-import type { CheckpointData, L1PublishedData, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
+import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
+import type { BlockData, BlockParameter, CommitteeAttestation, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { CheckpointData, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type {
   BlockIncludeOptions,
   BlockResponse,
@@ -9,7 +9,7 @@ import type {
   CheckpointIncludeOptions,
   CheckpointParameter,
   CheckpointResponse,
-} from '@aztec/stdlib/interfaces/client';
+} from '@aztec-labs/stdlib/interfaces/client';
 
 import {
   blockResponseFromBlockData,

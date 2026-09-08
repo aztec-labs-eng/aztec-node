@@ -6,9 +6,9 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_PRIVATE_CALL_STACK_LENGTH_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
-} from '@aztec/constants';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+} from '@aztec-labs/constants';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { ScopedCountedL2ToL1Message } from '../messaging/l2_to_l1_message.js';
 import { ClaimedLengthArray, ClaimedLengthArrayFromBuffer } from './claimed_length_array.js';

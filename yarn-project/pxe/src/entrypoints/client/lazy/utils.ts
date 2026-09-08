@@ -1,11 +1,11 @@
-import { BBLazyPrivateKernelProver } from '@aztec/bb-prover/client/lazy';
-import { createLogger } from '@aztec/foundation/log';
-import { LazyProtocolContractsProvider } from '@aztec/protocol-contracts/providers/lazy';
-import { WASMSimulator } from '@aztec/simulator/client';
-import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry/lazy';
-import { getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry/lazy';
-import { getStandardMultiCallEntrypoint } from '@aztec/standard-contracts/multi-call-entrypoint/lazy';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import { BBLazyPrivateKernelProver } from '@aztec-labs/bb-prover/client/lazy';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { LazyProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/lazy';
+import { WASMSimulator } from '@aztec-labs/simulator/client';
+import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry/lazy';
+import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry/lazy';
+import { getStandardMultiCallEntrypoint } from '@aztec-labs/standard-contracts/multi-call-entrypoint/lazy';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 import type { PXEConfig } from '../../../config/index.js';
 import { PXE } from '../../../pxe.js';

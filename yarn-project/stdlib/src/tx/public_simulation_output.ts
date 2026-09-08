@@ -1,6 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import times from 'lodash.times';
 import { z } from 'zod';
 
@@ -14,6 +13,8 @@ import { GlobalVariables } from './global_variables.js';
 
 /** Return values of simulating a circuit. */
 export type ProcessReturnValues = Fr[] | undefined;
+
+let nestedProcessReturnValuesSchema: ZodFor<NestedProcessReturnValues> | undefined;
 
 /** Return values of simulating complete callstack. */
 export class NestedProcessReturnValues {
@@ -34,13 +35,16 @@ export class NestedProcessReturnValues {
     );
   }
 
+  // Built once and cached: the schema references itself through z.lazy, and rebuilding it on
+  // every access makes that self-reference a fresh schema each time, which zod >= 4.5 walks
+  // eagerly while parsing until the stack overflows. One instance keeps the cycle finite.
   static get schema(): ZodFor<NestedProcessReturnValues> {
-    return z
+    return (nestedProcessReturnValuesSchema ??= z
       .object({
         values: NullishToUndefined(z.array(schemas.Fr)),
         nested: z.array(z.lazy(() => NestedProcessReturnValues.schema)),
       })
-      .transform(({ values, nested }) => new NestedProcessReturnValues(values, nested));
+      .transform(({ values, nested }) => new NestedProcessReturnValues(values, nested)));
   }
 
   static fromPlainObject(obj: any): NestedProcessReturnValues {

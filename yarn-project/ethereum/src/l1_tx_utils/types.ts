@@ -1,8 +1,7 @@
-import type { BlobKzgInstance } from '@aztec/blob-lib/types';
-import { TimeoutError } from '@aztec/foundation/error';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { ViemTransactionSignature } from '@aztec/foundation/eth-signature';
-
+import type { BlobKzgInstance } from '@aztec-labs/blob-lib/types';
+import { TimeoutError } from '@aztec-labs/foundation/error';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { ViemTransactionSignature } from '@aztec-labs/foundation/eth-signature';
 import type { Abi, Address, Hex, TransactionReceipt, TransactionSerializable } from 'viem';
 
 import type { L1TxUtilsConfig } from './config.js';

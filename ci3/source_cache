@@ -73,11 +73,18 @@ function cache_persistent {
     cat "$tmpfile" | redis_cli -x SETEX "$key" "$expire" &>/dev/null
   fi
 
-  # Write to S3 in background
-  {
+  # Write to S3 in background, or in the foreground for a log that must outlive the caller:
+  # the build instance's top-level log is persisted as its last act, and a background upload
+  # is killed with the container before it lands.
+  if [ "${CACHE_PERSIST_SYNC:-0}" -eq 1 ]; then
     cat "$tmpfile" | cache_s3_transfer "$key"
     rm -f "$tmpfile"
-  } >&- 2>&- &
+  else
+    {
+      cat "$tmpfile" | cache_s3_transfer "$key"
+      rm -f "$tmpfile"
+    } >&- 2>&- &
+  fi
 }
 
 # Export functions

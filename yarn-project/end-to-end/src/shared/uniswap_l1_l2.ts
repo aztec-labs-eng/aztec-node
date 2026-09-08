@@ -1,23 +1,23 @@
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { computeAuthWitMessageHash } from '@aztec/aztec.js/authorization';
-import { waitForProven } from '@aztec/aztec.js/contracts';
-import { generateClaimSecret } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { CheatCodes } from '@aztec/aztec/testing';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { DeployAztecL1ContractsReturnType } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { deployL1Contract } from '@aztec/ethereum/deploy-l1-contract';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { extractEvent } from '@aztec/ethereum/utils';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { retryUntil } from '@aztec/foundation/retry';
-import { InboxAbi, UniswapPortalAbi, UniswapPortalBytecode } from '@aztec/l1-artifacts';
-import { UniswapContract } from '@aztec/noir-contracts.js/Uniswap';
-import { computeL2ToL1MessageHash } from '@aztec/stdlib/hash';
+import { InboxAbi, UniswapPortalAbi, UniswapPortalBytecode } from '@aztec-foundation/l1-artifacts';
 
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { computeAuthWitMessageHash } from '@aztec-labs/aztec.js/authorization';
+import { waitForProven } from '@aztec-labs/aztec.js/contracts';
+import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { extractEvent } from '@aztec-labs/ethereum/utils';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { UniswapContract } from '@aztec-labs/noir-contracts.js/Uniswap';
+import { computeL2ToL1MessageHash } from '@aztec-labs/stdlib/hash';
 import { jest } from '@jest/globals';
 import { type GetContractReturnType, getContract, parseEther, toFunctionSelector } from 'viem';
 
@@ -30,7 +30,8 @@ import { CrossChainTestHarness } from './cross_chain_test_harness.js';
 // To generate a new dump, use the `dumpChainState` cheatcode.
 // To start an actual fork, use the command:
 // anvil --fork-url https://mainnet.infura.io/v3/9928b52099854248b3a096be07a6b23c --fork-block-number 17514288 --chain-id 31337
-// For CI, this is configured in `run_tests.sh` and `docker-compose-images.yml`
+// The dump must keep anvil's full `SerializableState` envelope: `block` and `best_block_number` may be
+// null but must be present, or anvil >= 1.4 rejects the whole payload with "Failed to decode state dump".
 
 const TIMEOUT = 15 * 60 * 1000;
 

@@ -1,7 +1,6 @@
-import { TREE_SNAPSHOTS_LENGTH } from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec/foundation/serialize';
-
+import { TREE_SNAPSHOTS_LENGTH } from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec-labs/foundation/serialize';
 import { inspect } from 'util';
 import { z } from 'zod';
 

@@ -1,4 +1,4 @@
-import type { ChainInfo } from '@aztec/aztec.js/account';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
 
 import type { ExportedPublicKey } from './crypto.js';
 
@@ -177,8 +177,8 @@ export interface HeartbeatOptions {
  *
  * Defined locally so that wallet hosts (browser extensions, iframe wallet pages)
  * can pass a simple `console`-backed logger without pulling in the full
- * `@aztec/foundation` logging runtime, which is non-trivial to bundle in those
- * contexts. Structurally compatible with `Logger` from `@aztec/foundation/log`,
+ * `@aztec-labs/foundation` logging runtime, which is non-trivial to bundle in those
+ * contexts. Structurally compatible with `Logger` from `@aztec-labs/foundation/log`,
  * so dApp-side callers can pass that type directly.
  */
 export interface WalletSdkLogger {

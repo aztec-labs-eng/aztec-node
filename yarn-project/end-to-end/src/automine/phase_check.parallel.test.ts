@@ -1,15 +1,15 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall } from '@aztec/aztec.js/contracts';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { SPONSORED_FPC_SALT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { SponsoredFPCNoEndSetupContract } from '@aztec/noir-test-contracts.js/SponsoredFPCNoEndSetup';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import { getContractInstanceFromInstantiationParams } from '@aztec/stdlib/contract';
-import { PublicDataTreeLeaf } from '@aztec/stdlib/trees';
-import { ExecutionPayload } from '@aztec/stdlib/tx';
-import { defaultInitialAccountFeeJuice } from '@aztec/world-state/testing';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { SponsoredFPCNoEndSetupContract } from '@aztec-labs/noir-test-contracts.js/SponsoredFPCNoEndSetup';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/stdlib/contract';
+import { PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
+import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
+import { defaultInitialAccountFeeJuice } from '@aztec-labs/world-state/testing';
 
 import type { TestWallet } from '../test-wallet/test_wallet.js';
 import { AutomineTestContext } from './automine_test_context.js';

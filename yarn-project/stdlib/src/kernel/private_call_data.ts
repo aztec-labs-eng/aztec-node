@@ -1,8 +1,8 @@
-import { FUNCTION_TREE_HEIGHT, PUBLIC_DATA_TREE_HEIGHT, UPDATES_VALUE_SIZE } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { FUNCTION_TREE_HEIGHT, PUBLIC_DATA_TREE_HEIGHT, UPDATES_VALUE_SIZE } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { DelayedPublicMutableValues } from '../delayed_public_mutable/delayed_public_mutable_values.js';
 import { PublicKeys } from '../keys/public_keys.js';

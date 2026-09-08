@@ -1,5 +1,5 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 import { type Offense, OffenseType } from './types.js';
 import { encodeSlashConsensusVotes, getSlashConsensusVotesFromOffenses } from './votes.js';

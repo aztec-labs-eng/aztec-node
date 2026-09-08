@@ -1,6 +1,6 @@
-import { Grumpkin } from '@aztec/foundation/crypto/grumpkin';
-import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { PublicKey } from '@aztec/stdlib/keys';
+import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { PublicKey } from '@aztec-labs/stdlib/keys';
 
 /**
  * Method for generating a public grumpkin key from a private key.

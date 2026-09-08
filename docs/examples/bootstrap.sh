@@ -86,7 +86,7 @@ function compile-solidity {
   local OUTPUT_DIR="$REPO_ROOT/docs/target/solidity"
 
   # The examples compile against the l1-contracts sources shipped in the
-  # @aztec/l1-artifacts package (see foundry.toml), so docs' node_modules
+  # @aztec-foundation/l1-artifacts package (see foundry.toml), so docs' node_modules
   # must be populated. Unconditional so that a pin bump refreshes an
   # existing node_modules instead of compiling against stale sources.
   (cd "$REPO_ROOT/docs" && npm_install_deps)
@@ -174,11 +174,17 @@ function validate-webapp-tutorial {
       const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
       const packageDirs = new Map();
 
+      // Workspace packages are @aztec-labs; the foundation packages yarn-project pins
+      // (bb.js, wsdb, noir-*, ...) are @aztec-foundation, and @aztec still holds the viem
+      // fork. All three are "ours" for linking purposes.
+      const isAztecScoped = name =>
+        name.startsWith('@aztec/') || name.startsWith('@aztec-labs/') || name.startsWith('@aztec-foundation/');
+
       function addPackageDir(dir) {
         const pkgPath = path.join(dir, 'package.json');
         if (!fs.existsSync(pkgPath)) return;
         const manifest = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-        if (manifest.name?.startsWith('@aztec/')) {
+        if (manifest.name && isAztecScoped(manifest.name)) {
           packageDirs.set(manifest.name, dir);
         }
       }
@@ -191,8 +197,8 @@ function validate-webapp-tutorial {
         }
       }
 
-      // yarn-project pins the @aztec packages built outside it (e.g. @aztec/bb.js,
-      // @aztec/ipc-runtime, @aztec/wsdb, @aztec/noir-*) to published npm versions via
+      // yarn-project pins the packages built outside it (e.g. @aztec-foundation/bb.js,
+      // @aztec-foundation/ipc-runtime, @aztec-foundation/wsdb, @aztec-foundation/noir-*) to published npm versions via
       // its root resolutions. Workspace manifests declare those with placeholder
       // versions that only the resolutions rewrite, so mirror the pins here: consume
       // them from npm at the pinned version, never link them. Path-based entries
@@ -200,7 +206,7 @@ function validate-webapp-tutorial {
       const rootManifest = JSON.parse(fs.readFileSync(path.join(yp, 'package.json'), 'utf8'));
       const npmPins = new Map();
       for (const [name, ver] of Object.entries(rootManifest.resolutions || {})) {
-        if (!name.startsWith('@aztec/')) continue;
+        if (!isAztecScoped(name)) continue;
         const m = /^(portal:|file:)(.*)$/.exec(String(ver));
         if (m) addPackageDir(path.resolve(yp, m[2]));
         else npmPins.set(name, String(ver));
@@ -229,7 +235,7 @@ function validate-webapp-tutorial {
       }
 
       function registerLocalDependency(ownerDir, dep, ver) {
-        if (!dep.startsWith('@aztec/')) return false;
+        if (!isAztecScoped(dep)) return false;
         ver = String(ver);
 
         if (ver.startsWith('workspace:')) {
@@ -248,7 +254,7 @@ function validate-webapp-tutorial {
       const queued = new Set();
       for (const section of ['dependencies', 'devDependencies']) {
         for (const [name, ver] of Object.entries(pkg[section] || {})) {
-          if (ver === '#include_aztec_version' && name.startsWith('@aztec/')) {
+          if (ver === '#include_aztec_version' && isAztecScoped(name)) {
             if (npmPins.has(name)) {
               pkg[section][name] = npmPins.get(name);
             } else {
@@ -280,7 +286,7 @@ function validate-webapp-tutorial {
             // Link any @aztec dep we have a local dir for — either resolved by
             // version (workspace:/portal:/file:) or discovered as a local portal
             // in the root resolutions above. Otherwise it's a published npm dep.
-            const localByDir = dep.startsWith('@aztec/') && packageDirs.has(dep);
+            const localByDir = isAztecScoped(dep) && packageDirs.has(dep);
             if (!queued.has(dep) && (registerLocalDependency(dir, dep, ver) || localByDir)) {
               queue.push(dep);
               queued.add(dep);

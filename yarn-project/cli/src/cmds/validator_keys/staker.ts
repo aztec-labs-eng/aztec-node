@@ -1,12 +1,12 @@
-import { prettyPrintJSON } from '@aztec/cli/utils';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { GSEContract } from '@aztec/ethereum/contracts';
-import { decryptBn254Keystore } from '@aztec/foundation/crypto/bls/bn254_keystore';
-import { computeBn254G1PublicKey, computeBn254G2PublicKey } from '@aztec/foundation/crypto/bn254';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn } from '@aztec/foundation/log';
-import { loadKeystoreFile } from '@aztec/node-keystore/loader';
+import { prettyPrintJSON } from '@aztec-labs/cli/utils';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { GSEContract } from '@aztec-labs/ethereum/contracts';
+import { decryptBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
+import { computeBn254G1PublicKey, computeBn254G2PublicKey } from '@aztec-labs/foundation/crypto/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { loadKeystoreFile } from '@aztec-labs/node-keystore/loader';
 import type {
   AttesterAccount,
   AttesterAccounts,
@@ -14,8 +14,7 @@ import type {
   EncryptedKeyFileConfig,
   EthAccount,
   MnemonicConfig,
-} from '@aztec/node-keystore/types';
-
+} from '@aztec-labs/node-keystore/types';
 import { Wallet } from '@ethersproject/wallet';
 import { readFileSync, writeFileSync } from 'fs';
 import { basename, dirname, join } from 'path';

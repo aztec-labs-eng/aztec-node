@@ -1,19 +1,19 @@
-import { getL1Config } from '@aztec/cli/config';
-import { getGenesisStateConfigEnvVars } from '@aztec/ethereum/config';
-import type { NamespacedApiHandlers } from '@aztec/foundation/json-rpc/server';
-import type { LogFn } from '@aztec/foundation/log';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
+import { getL1Config } from '@aztec-labs/cli/config';
+import { getGenesisStateConfigEnvVars } from '@aztec-labs/ethereum/config';
+import type { NamespacedApiHandlers } from '@aztec-labs/foundation/json-rpc/server';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import {
   type ProverBrokerConfig,
   ProvingJobBrokerSchema,
   ProvingJobBrokerSchemaWithDebug,
   createAndStartProvingBroker,
   proverBrokerConfigMappings,
-} from '@aztec/prover-client/broker';
-import { getProverNodeBrokerConfigFromEnv } from '@aztec/prover-node';
-import type { ProvingJobBroker } from '@aztec/stdlib/interfaces/server';
-import { getConfigEnvVars as getTelemetryClientConfig, initTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/prover-client/broker';
+import { getProverNodeBrokerConfigFromEnv } from '@aztec-labs/prover-node';
+import type { ProvingJobBroker } from '@aztec-labs/stdlib/interfaces/server';
+import { getConfigEnvVars as getTelemetryClientConfig, initTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { extractRelevantOptions } from '../util.js';
 import { computeExpectedGenesisRoot, waitForCompatibleRollup } from './standby.js';

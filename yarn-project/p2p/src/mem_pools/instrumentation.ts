@@ -1,4 +1,4 @@
-import type { Gossipable } from '@aztec/stdlib/p2p';
+import type { Gossipable } from '@aztec-labs/stdlib/p2p';
 import {
   Attributes,
   type BatchObservableResult,
@@ -12,7 +12,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 export enum PoolName {
   TX_POOL = 'TxPool',

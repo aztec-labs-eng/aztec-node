@@ -1,12 +1,12 @@
-import { generateSchnorrAccounts } from '@aztec/accounts/testing';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { DomainSeparator, INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { siloNullifier } from '@aztec/stdlib/hash';
+import { generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { DomainSeparator, INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import {
   computeAppNullifierHidingKey,
   computeAppSecretKey,
@@ -14,8 +14,7 @@ import {
   deriveMasterOutgoingViewingSecretKey,
   derivePublicKeyFromSecretKey,
   hashPublicKey,
-} from '@aztec/stdlib/keys';
-
+} from '@aztec-labs/stdlib/keys';
 import { jest } from '@jest/globals';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';

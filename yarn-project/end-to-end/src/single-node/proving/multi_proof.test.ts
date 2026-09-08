@@ -1,9 +1,8 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

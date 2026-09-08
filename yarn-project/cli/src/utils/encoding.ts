@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ABIParameter, AbiType, StructType } from '@aztec/stdlib/abi';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ABIParameter, AbiType, StructType } from '@aztec-labs/stdlib/abi';
 
 /**
  * Parses a hex string into an ABI struct type.

@@ -1,9 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ContractStore } from '@aztec/pxe/server';
-import { type ContractArtifact, FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractClassPublic, ContractDataSource, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractStore } from '@aztec-labs/pxe/server';
+import { type ContractArtifact, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractClassPublic, ContractDataSource, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 
 export class TXEPublicContractDataSource implements ContractDataSource {
   constructor(

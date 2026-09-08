@@ -1,9 +1,8 @@
-import { createLogger } from '@aztec/aztec.js/log';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-import { createAztecNodeClient } from '@aztec/stdlib/interfaces/client';
-
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { createAztecNodeClient } from '@aztec-labs/stdlib/interfaces/client';
 import type { ChildProcess } from 'child_process';
 import { createPublicClient, fallback, http } from 'viem';
 

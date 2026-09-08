@@ -1,19 +1,18 @@
-import { MAX_TX_LIFETIME } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { times, timesParallel } from '@aztec/foundation/collection';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { MAX_RPC_LEN } from '@aztec/stdlib/interfaces/api-limit';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
+import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times, timesParallel } from '@aztec-labs/foundation/collection';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type AppTaggingSecret,
   AppTaggingSecretKind,
   type PrivateLogsQuery,
   type SiloedTag,
   randomLogResult,
-} from '@aztec/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec/stdlib/testing';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/logs';
+import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';

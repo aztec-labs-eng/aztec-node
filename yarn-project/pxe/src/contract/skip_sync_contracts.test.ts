@@ -1,12 +1,11 @@
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec/standard-contracts/auth-registry/constants';
-import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec/standard-contracts/handshake-registry/constants';
-import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec/standard-contracts/multi-call-entrypoint/constants';
-import { STANDARD_PUBLIC_CHECKS_ADDRESS } from '@aztec/standard-contracts/public-checks/constants';
-import type { FunctionCall } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry/constants';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
+import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint/constants';
+import { STANDARD_PUBLIC_CHECKS_ADDRESS } from '@aztec-labs/standard-contracts/public-checks/constants';
+import type { FunctionCall } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

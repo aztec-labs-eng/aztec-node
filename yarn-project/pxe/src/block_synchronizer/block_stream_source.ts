@@ -1,5 +1,11 @@
-import { type BlockData, type BlockQuery, type BlocksQuery, L2Block, type L2BlockSource } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import {
+  type BlockData,
+  type BlockQuery,
+  type BlocksQuery,
+  L2Block,
+  type L2BlockSource,
+} from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 /**
  * Lifts an {@link AztecNode} RPC client into the shape {@link L2BlockStream} expects.

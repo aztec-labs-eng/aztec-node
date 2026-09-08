@@ -1,8 +1,8 @@
-import { getSchnorrInitializerlessAccountContractAddress } from '@aztec/accounts/schnorr';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { TestTokenContract } from '@aztec/noir-test-contracts.js/TestToken';
+import { getSchnorrInitializerlessAccountContractAddress } from '@aztec-labs/accounts/schnorr';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 
 import { deployTestToken, expectTokenBalance } from '../../fixtures/token_utils.js';
 import type { TestWallet } from '../../test-wallet/test_wallet.js';

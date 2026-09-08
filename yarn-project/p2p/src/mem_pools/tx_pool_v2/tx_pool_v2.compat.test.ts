@@ -3,18 +3,18 @@
  * These tests mirror the original TxPool test suite (aztec_kv_tx_pool.test.ts)
  * but use the new TxPoolV2 interface.
  */
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { times, timesAsync } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { map, sort, toArray } from '@aztec/foundation/iterable';
-import { unfreeze } from '@aztec/foundation/types';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import { RevertCode } from '@aztec/stdlib/avm';
-import { Body, L2Block, type L2BlockId, type L2BlockSource } from '@aztec/stdlib/block';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { mockTx } from '@aztec/stdlib/testing';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { map, sort, toArray } from '@aztec-labs/foundation/iterable';
+import { unfreeze } from '@aztec-labs/foundation/types';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { RevertCode } from '@aztec-labs/stdlib/avm';
+import { Body, L2Block, type L2BlockId, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { mockTx } from '@aztec-labs/stdlib/testing';
 import {
   AppendOnlyTreeSnapshot,
   MerkleTreeId,
@@ -22,9 +22,8 @@ import {
   NullifierLeafPreimage,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, type Tx, TxEffect, TxHash, type TxValidator } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, type Tx, TxEffect, TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

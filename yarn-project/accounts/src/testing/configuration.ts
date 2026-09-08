@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { deriveMasterIncomingViewingSecretKey } from '@aztec/stdlib/keys';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { deriveMasterIncomingViewingSecretKey } from '@aztec-labs/stdlib/keys';
 
 export const INITIAL_TEST_SECRET_KEYS = [
   Fr.fromHexString('2153536ff6628eee01cf4024889ff977a18d9fa61d0e414422f7681cf085c281'),

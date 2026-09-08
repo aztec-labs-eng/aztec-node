@@ -1,6 +1,5 @@
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { schemas, zodFor } from '@aztec/foundation/schemas';
-
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 export const SnapshotDataKeys = [

@@ -4,17 +4,16 @@ import {
   FunctionType,
   getAllFunctionAbis,
   loadContractArtifact,
-} from '@aztec/aztec.js/abi';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { L1ContractsConfig } from '@aztec/ethereum/config';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { Operator } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { SecretValue } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type LogFn, createLogger } from '@aztec/foundation/log';
-import type { NoirPackageConfig } from '@aztec/foundation/noir';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-
+} from '@aztec-labs/aztec.js/abi';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type LogFn, createLogger } from '@aztec-labs/foundation/log';
+import type { NoirPackageConfig } from '@aztec-labs/foundation/noir';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import TOML from '@iarna/toml';
 import { readFile } from 'fs/promises';
 import type { HDAccount, Hex, PrivateKeyAccount } from 'viem';
@@ -50,9 +49,9 @@ export async function deployNewRollupContracts(
   config: L1ContractsConfig,
   realVerifier: boolean,
 ): Promise<{ rollup: RollupContract }> {
-  const { deployRollupForUpgrade } = await import('@aztec/ethereum/deploy-aztec-l1-contracts');
+  const { deployRollupForUpgrade } = await import('@aztec-labs/ethereum/deploy-aztec-l1-contracts');
   const { mnemonicToAccount, privateKeyToAccount } = await import('viem/accounts');
-  const { getVKTreeRoot } = await import('@aztec/noir-protocol-circuits-types/vk-tree');
+  const { getVKTreeRoot } = await import('@aztec-labs/noir-protocol-circuits-types/vk-tree');
 
   let account: HDAccount | PrivateKeyAccount;
   if (privateKey) {
@@ -94,13 +93,13 @@ export async function deployNewRollupContracts(
 }
 
 /**
- * Gets all contracts available in \@aztec/noir-contracts.js.
+ * Gets all contracts available in \@aztec-labs/noir-contracts.js.
  * @returns The contract names.
  */
 export async function getExampleContractNames(): Promise<string[]> {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore - Importing noir-contracts.js even in devDeps results in a circular dependency error. Need to ignore because this line doesn't cause an error in a dev environment
-  const { ContractNames } = await import('@aztec/noir-contracts.js');
+  const { ContractNames } = await import('@aztec-labs/noir-contracts.js');
   return ContractNames;
 }
 
@@ -120,10 +119,12 @@ export async function getContractArtifact(fileDir: string, log: LogFn) {
     // @dependency ../../../noir-contracts.js/src/*.ts, ../../../noir-contracts.js/scripts/generate-types.sh, ../../../noir-contracts.js/package.json
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - Importing noir-contracts.js even in devDeps results in a circular dependency error. Need to ignore because this line doesn't cause an error in a dev environment
-    const imported = await import(`@aztec/noir-contracts.js/${contractName}`);
+    const imported = await import(`@aztec-labs/noir-contracts.js/${contractName}`);
     const artifact = imported[`${contractName}ContractArtifact`] as ContractArtifact;
     if (!artifact) {
-      throw Error(`Could not import ${contractName}ContractArtifact from @aztec/noir-contracts.js/${contractName}`);
+      throw Error(
+        `Could not import ${contractName}ContractArtifact from @aztec-labs/noir-contracts.js/${contractName}`,
+      );
     }
     return artifact;
   }

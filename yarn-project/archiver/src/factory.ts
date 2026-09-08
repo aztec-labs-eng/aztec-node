@@ -1,30 +1,29 @@
-import { EpochCache } from '@aztec/epoch-cache';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { makeL1HttpTransport } from '@aztec/ethereum/client';
-import { InboxContract, OutboxContract, RollupContract } from '@aztec/ethereum/contracts';
-import { pickL1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import type { ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { merge } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { DateProvider } from '@aztec/foundation/timer';
-import { createStore } from '@aztec/kv-store/lmdb-v2';
-import { protocolContractNames } from '@aztec/protocol-contracts';
-import { BundledProtocolContractsProvider } from '@aztec/protocol-contracts/providers/bundle';
-import { getPublishableStandardContracts } from '@aztec/standard-contracts';
-import { FunctionType, decodeFunctionSignature } from '@aztec/stdlib/abi';
-import type { ArchiverEmitter, BlockHash } from '@aztec/stdlib/block';
-import { DEFAULT_BLOCK_DURATION_MS } from '@aztec/stdlib/config';
-import { type ContractClassPublicWithCommitment, computePublicBytecodeCommitment } from '@aztec/stdlib/contract';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
+import { InboxContract, OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { merge } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { createStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { protocolContractNames } from '@aztec-labs/protocol-contracts';
+import { BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/bundle';
+import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts';
+import { FunctionType, decodeFunctionSignature } from '@aztec-labs/stdlib/abi';
+import type { ArchiverEmitter, BlockHash } from '@aztec-labs/stdlib/block';
+import { DEFAULT_BLOCK_DURATION_MS } from '@aztec-labs/stdlib/config';
+import { type ContractClassPublicWithCommitment, computePublicBytecodeCommitment } from '@aztec-labs/stdlib/contract';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import {
   DEFAULT_ORPHAN_PRUNE_NO_PROPOSAL_TOLERANCE,
   getDefaultCheckpointProposalSyncGrace,
-} from '@aztec/stdlib/timetable';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/timetable';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { EventEmitter } from 'events';
 import { createPublicClient } from 'viem';
 

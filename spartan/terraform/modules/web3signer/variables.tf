@@ -62,7 +62,7 @@ variable "VALIDATOR_PUBLISHERS_PER_REPLICA" {
 variable "AZTEC_DOCKER_IMAGE" {
   description = "The Aztec image to deploy"
   type        = string
-  default     = "aztecprotocol/aztec:latest"
+  default     = "azteclabs/aztec:latest"
 }
 
 variable "WEB3SIGNER_DOCKER_IMAGE" {

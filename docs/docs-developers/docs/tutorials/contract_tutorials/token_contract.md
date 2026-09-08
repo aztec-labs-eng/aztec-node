@@ -44,7 +44,7 @@ cd bob_token
 yarn init -y
 # This is to ensure yarn uses node_modules instead of pnp for dependency installation
 yarn config set nodeLinker node-modules
-yarn add @aztec/aztec.js@#include_aztec_version @aztec/accounts@#include_aztec_version @aztec/kv-store@#include_aztec_version @aztec/wallets@#include_aztec_version
+yarn add @aztec-labs/aztec.js@#include_aztec_version @aztec-labs/accounts@#include_aztec_version @aztec-labs/kv-store@#include_aztec_version @aztec-labs/wallets@#include_aztec_version
 ```
 
 ## Contract structure

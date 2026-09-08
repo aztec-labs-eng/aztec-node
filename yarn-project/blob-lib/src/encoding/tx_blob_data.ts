@@ -1,6 +1,6 @@
-import { chunk } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
+import { chunk } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
 
 import { BlobDeserializationError } from '../errors.js';
 import { type TxStartMarker, decodeTxStartMarker, encodeTxStartMarker } from './tx_start_marker.js';

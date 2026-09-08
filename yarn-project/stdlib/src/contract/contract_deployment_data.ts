@@ -1,6 +1,5 @@
-import { ContractClassLog, PrivateLog } from '@aztec/stdlib/logs';
-import type { Tx } from '@aztec/stdlib/tx';
-
+import { ContractClassLog, PrivateLog } from '@aztec-labs/stdlib/logs';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 import { z } from 'zod';
 
 /**

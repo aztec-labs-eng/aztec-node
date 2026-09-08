@@ -1,8 +1,8 @@
-import type { Logger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import { Timer } from '@aztec/foundation/timer';
-import { SimulationError } from '@aztec/stdlib/errors';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { SimulationError } from '@aztec-labs/stdlib/errors';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { BlockSynchronizer } from './block_synchronizer/index.js';
 import type { Recording } from './node/benchmarked_node.js';

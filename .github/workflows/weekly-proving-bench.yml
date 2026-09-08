@@ -45,7 +45,7 @@ jobs:
             nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
 
-          docker_image="aztecprotocol/aztec:${nightly_tag}"
+          docker_image="azteclabs/aztec:${nightly_tag}"
           source_ref="v${nightly_tag}"
           echo "nightly_tag=$nightly_tag" >> "$GITHUB_OUTPUT"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"

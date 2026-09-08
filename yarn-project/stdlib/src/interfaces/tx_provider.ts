@@ -1,7 +1,6 @@
-import type { L2Block } from '@aztec/stdlib/block';
-import type { BlockProposal } from '@aztec/stdlib/p2p';
-import { type Tx, TxHash } from '@aztec/stdlib/tx';
-
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
+import { type Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 export interface ITxProvider {

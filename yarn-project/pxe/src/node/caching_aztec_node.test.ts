@@ -1,16 +1,15 @@
-import { ARCHIVE_HEIGHT } from '@aztec/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, type BlockParameter, randomInBlock } from '@aztec/stdlib/block';
-import type { BlockResponse } from '@aztec/stdlib/interfaces/client';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { LogCursor, type PrivateLogsQuery, SiloedTag, Tag, randomLogResult } from '@aztec/stdlib/logs';
-import { AppendOnlyTreeSnapshot, MerkleTreeId, PublicDataWitness } from '@aztec/stdlib/trees';
-import { BlockHeader, type NodeStats } from '@aztec/stdlib/tx';
-
+import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, type BlockParameter, randomInBlock } from '@aztec-labs/stdlib/block';
+import type { BlockResponse } from '@aztec-labs/stdlib/interfaces/client';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { LogCursor, type PrivateLogsQuery, SiloedTag, Tag, randomLogResult } from '@aztec-labs/stdlib/logs';
+import { AppendOnlyTreeSnapshot, MerkleTreeId, PublicDataWitness } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, type NodeStats } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 
 import { type CachingAztecNode, withCache } from './caching_aztec_node.js';

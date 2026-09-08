@@ -1,6 +1,5 @@
-import type { ViemCommitteeAttestations } from '@aztec/ethereum/contracts';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { encodeAbiParameters, parseAbiParameters } from 'viem';
 import { z } from 'zod';
 

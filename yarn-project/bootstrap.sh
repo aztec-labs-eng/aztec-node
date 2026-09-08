@@ -185,7 +185,7 @@ function get_projects {
   if [ "${1:-}" == 'topological' ]; then
     yarn workspaces foreach --topological-dev -A \
       --exclude @aztec/aztec3-packages \
-      --exclude @aztec/scripts \
+      --exclude @aztec-labs/scripts \
       exec 'echo $(pwd)' | cat | grep -v "Done"
   else
     dirname */src | xargs realpath
@@ -336,13 +336,13 @@ function compile_all {
   fi
 }
 
-# The @aztec/l1-artifacts foundry bundle references solc by version (a portable npm
+# The @aztec-foundation/l1-artifacts foundry bundle references solc by version (a portable npm
 # package cannot ship a platform binary), so the runtime forge deploy resolves it through
 # ~/.svm. The e2e containers run without network and inherit ~/.svm from the host's home
 # mount, so warm it at build time. The version is read from the installed bundle, so it
 # cannot drift from what the deploy will request.
 function warm_solc_cache {
-  local foundry_toml=node_modules/@aztec/l1-artifacts/l1-contracts/foundry.toml
+  local foundry_toml=node_modules/@aztec-foundation/l1-artifacts/l1-contracts/foundry.toml
   [ -f "$foundry_toml" ] || return 0
   local solc_version=$(sed -n 's/^solc_version = "\(.*\)"$/\1/p' "$foundry_toml")
   # A bundle that ships its own solc binary (solc = "./solc-x.y.z") needs no warming.
@@ -466,7 +466,7 @@ function release_packages {
   echo "Computing packages to publish..."
   local packages=$(get_projects topological)
 
-  # Scoped release (see ci3/release_prep_package_json): only the @aztec deps local to this
+  # Scoped release (see ci3/release_prep_package_json): only the @aztec-labs deps local to this
   # workspace are co-published at $1; foundation deps keep the version the root resolutions
   # field pins them to.
   local resolutions

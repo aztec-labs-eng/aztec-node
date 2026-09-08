@@ -1,8 +1,8 @@
-import { toBigIntBE } from '@aztec/foundation/bigint-buffer';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { hexSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader } from '@aztec/foundation/serialize';
+import { toBigIntBE } from '@aztec-labs/foundation/bigint-buffer';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { hexSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader } from '@aztec-labs/foundation/serialize';
 
 import { Selector } from './selector.js';
 

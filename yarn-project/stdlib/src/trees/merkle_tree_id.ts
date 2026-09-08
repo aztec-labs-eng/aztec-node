@@ -9,7 +9,7 @@ import {
   NULLIFIER_TREE_ID,
   PUBLIC_DATA_TREE_HEIGHT,
   PUBLIC_DATA_TREE_ID,
-} from '@aztec/constants';
+} from '@aztec-labs/constants';
 
 /**
  * Defines the possible Merkle tree IDs.

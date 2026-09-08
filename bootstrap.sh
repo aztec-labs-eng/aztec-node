@@ -527,30 +527,12 @@ function release {
   # We ensure there is a github release for our REF_NAME.
   # We derive a dist tag from our prerelease portion of our REF_NAME semver. It is latest if no prerelease.
   echo_header "release all"
+  # RELEASE_PROJECTS is what the target publishes; a private release names neither aztec-up nor
+  # playground, whose artifacts are public by nature.
+  source $ci3/source_release_target
   set -x
 
-  # A private release publishes only to our internal GCP Artifact Registry (the docker image and our
-  # npm packages) — see private_release. ci3_labels_to_env.sh sets PRIVATE_RELEASE for every release
-  # outside the canonical public repo; we ALSO backstop on the repo name here so the public release
-  # flow (DockerHub, npmjs, crates.io, github) can never run in any other repo (e.g. a private fork),
-  # even if that env var is missing or this is invoked outside ci3.yml. GITHUB_REPOSITORY is unset in
-  # local runs, which keep the public path.
-  if [ "${PRIVATE_RELEASE:-0}" = 1 ] ||
-     { [ -n "${GITHUB_REPOSITORY:-}" ] &&
-       [ "$(printf '%s' "$GITHUB_REPOSITORY" | tr 'A-Z' 'a-z')" != "aztec-labs-eng/aztec-node" ]; }; then
-    private_release
-    return
-  fi
-
-  # The aztec-nr mirror goes first: a failure there aborts the whole release, since a CLI whose
-  # scaffold pins an aztec-nr tag that does not exist is worse than no release at all.
-  projects=(
-    noir-projects/aztec-nr
-    yarn-project
-    aztec-up
-    playground
-    release-image
-  )
+  local projects=($RELEASE_PROJECTS)
   if [ $(arch) == arm64 ]; then
     projects=(
       release-image
@@ -564,85 +546,6 @@ function release {
 
 function release_dryrun {
   DRY_RUN=1 release
-}
-
-function private_release {
-  # Release flow for the private repo, run on a (nightly) ci-private-release PR. We publish only to our
-  # internal GCP Artifact Registry: the docker image (release-image -> INTERNAL_DOCKER_REGISTRY that
-  # GKE/staging pulls from) and the yarn-project npm packages (-> the INTERNAL_NPM_REGISTRY npm repo).
-  # We run the release step for real on exactly those components and do not invoke the others — the
-  # remaining release sources publish public artifacts (github releases, the aztec-up/playground S3
-  # installers) and are not interrelated with these.
-  echo_header "private release"
-
-  # Default to the private staging Artifact Registry; override via the INTERNAL_*_REGISTRY env vars.
-  # Exported so the child project bootstraps and gcp_artifact_login inherit them.
-  export INTERNAL_DOCKER_REGISTRY=${INTERNAL_DOCKER_REGISTRY:-us-west1-docker.pkg.dev/testnet-440309/aztec}
-  export INTERNAL_NPM_REGISTRY=${INTERNAL_NPM_REGISTRY:-https://us-west1-npm.pkg.dev/testnet-440309/aztec-npm}
-
-  # Activate the CI service account (gcp_artifact_login registers the docker credential helper and
-  # activates the SA globally) and mint a short-lived access token for npm auth against the AR npm repo.
-  ci3/gcp_artifact_login
-  set +x  # Never echo the access token.
-  export NPM_TOKEN=$(gcloud auth print-access-token)
-  # Route our scope to the internal npm registry; public deps still resolve from the default registry
-  # (npmjs), so publishes and yarn-project's install smoke-test both work. Everything we publish is
-  # @aztec-scoped. Exported so deploy_npm and that smoke-test share one config.
-  local npmrc reg
-  reg="${INTERNAL_NPM_REGISTRY%/}/"
-  npmrc=$(mktemp)
-  (umask 077; {
-    echo "@aztec:registry=$reg"
-    echo "${reg#https:}:_authToken=\${NPM_TOKEN}"
-  } > "$npmrc")
-  export NPM_CONFIG_GLOBALCONFIG="$npmrc"
-  set -x
-
-  # Mirror external @aztec-scoped dependencies from public npm into our internal registry: fork
-  # dependencies (e.g. the vendored "viem": "npm:@aztec/viem@x") and the foundation packages that
-  # yarn-project consumes at the versions pinned in its root resolutions field. Because we scope ALL
-  # of @aztec to the internal registry, these packages — which we don't build/publish ourselves —
-  # must also live there, or installs of our published packages 404 (this is what yarn-project's
-  # release smoke-test exercises). amd64 only; the registry is shared across arches.
-  if [ "$(arch)" != arm64 ]; then
-    local spec name ver td
-    for spec in $({
-        grep -rhoE 'npm:@aztec/[a-zA-Z0-9_.-]+@[0-9][^"]*' yarn-project --include=package.json | sed 's/^npm://'
-        # TODO: this mirrors only exact-version pins (^[0-9]), while release_prep_package_json
-        # writes any resolutions entry (range, npm: alias) into the published manifests; such a
-        # pin would be published but never mirrored, and installs from the internal registry
-        # would 404 on it. All current pins are exact versions. To be fixed when private
-        # releases get proper treatment.
-        jq -r '.resolutions // {} | to_entries[]
-               | select(.key | startswith("@aztec/")) | select(.value | test("^[0-9]"))
-               | "\(.key)@\(.value)"' yarn-project/package.json
-      } | sort -u); do
-      name="${spec%@*}"; ver="${spec##*@}"
-      if npm view "${name}@${ver}" version >/dev/null 2>&1; then
-        echo "Mirror: ${spec} already present in internal registry; skipping."
-        continue
-      fi
-      echo "Mirror: copying ${spec} from public npm to internal registry."
-      td=$(mktemp -d)
-      # Override the @aztec scope registry for the fetch (our .npmrc points @aztec at the internal
-      # registry, which doesn't have the fork yet); publish then uses the inherited @aztec->internal config.
-      npm pack "${spec}" --@aztec:registry=https://registry.npmjs.org/ --pack-destination "$td" --quiet
-      npm publish "$td"/*.tgz
-      rm -rf "$td"
-    done
-  fi
-
-  # Publish for real. The foundation packages yarn-project depends on are not published from
-  # here — they resolve at the versions pinned in yarn-project's root resolutions, mirrored into
-  # the internal registry above, so yarn-project's release smoke-test can install them.
-  # npm packages are platform-independent, so only the docker image is published on arm64.
-  local publish=(yarn-project release-image)
-  if [ $(arch) == arm64 ]; then
-    publish=(release-image)
-  fi
-  for project in "${publish[@]}"; do
-    $project/bootstrap.sh release
-  done
 }
 
 function check_compat_artifacts_tracked {
@@ -831,10 +734,10 @@ case "$cmd" in
     docker_image="${3:-}"
     test_set="${4:-}"
     build
-    # If no docker image provided, build and push to aztecdev
+    # If no docker image provided, build and push to aztec-dev
     if [ -z "$docker_image" ]; then
       release-image/bootstrap.sh push_pr
-      docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+      docker_image=$(release-image/bootstrap.sh pr_image_name)
     fi
     # Set up environment and deploy using spartan
     export NAMESPACE="$namespace"
@@ -862,7 +765,7 @@ case "$cmd" in
     export CI=1
     [ "${SKIP_BUILD:-0}" -eq 0 ] && build
     # Set the docker image to the locally built image and load it into KIND
-    export AZTEC_DOCKER_IMAGE="aztecprotocol/aztec:$(git rev-parse HEAD)"
+    export AZTEC_DOCKER_IMAGE="azteclabs/aztec:$(git rev-parse HEAD)"
     spartan/bootstrap.sh kind
     kind load docker-image "$AZTEC_DOCKER_IMAGE"
     # Just one test for now
@@ -878,10 +781,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -905,10 +808,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -931,10 +834,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -960,10 +863,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -990,10 +893,10 @@ case "$cmd" in
     build
     export NAMESPACE="$namespace"
     if [ "${SKIP_NETWORK_DEPLOY:-0}" != "1" ]; then
-      # If no docker image provided, build and push to aztecdev
+      # If no docker image provided, build and push to aztec-dev
       if [ -z "$docker_image" ]; then
         release-image/bootstrap.sh push_pr
-        docker_image="aztecprotocol/aztecdev:$(git rev-parse HEAD)"
+        docker_image=$(release-image/bootstrap.sh pr_image_name)
       fi
       export AZTEC_DOCKER_IMAGE="$docker_image"
       spartan/bootstrap.sh network_deploy "${env_file}"
@@ -1029,25 +932,11 @@ case "$cmd" in
     if ! semver check $REF_NAME; then
       exit 1
     fi
+    # Before the build, so a misconfigured release environment fails in seconds. Exported values
+    # reach both children below.
+    source $ci3/source_release_target
 
     ./bootstrap.sh build release
-    ./bootstrap.sh release
-    ;;
-
-  "ci-private-release")
-    # Local/dev entrypoint for the PRIVATE_RELEASE flow (see private_release): dry-run every project
-    # except release-image, then publish release-image for real to the internal GCP Artifact Registry.
-    # Same publishing path the private-release.yml workflow runs, minus EC2.
-    # Build first so the release-image (and the artifacts the dry-runs pack) exist; set SKIP_BUILD=1 to
-    # reuse an existing build. Requires INTERNAL_DOCKER_REGISTRY + GCP creds (GCP_SA_KEY or
-    # GOOGLE_APPLICATION_CREDENTIALS) in the environment.
-    export CI=${CI:-1}
-    export PRIVATE_RELEASE=1
-    export REF_NAME=${REF_NAME:-v0.0.1-commit.$(git rev-parse --short HEAD)}
-    # Local convenience: default GCP creds to ~/sa.json (the CI service-account key) when present.
-    [ -z "${GCP_SA_KEY:-}" ] && [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -f "$HOME/sa.json" ] && \
-      export GOOGLE_APPLICATION_CREDENTIALS="$HOME/sa.json"
-    [ "${SKIP_BUILD:-0}" = 1 ] || ./bootstrap.sh build release
     ./bootstrap.sh release
     ;;
 

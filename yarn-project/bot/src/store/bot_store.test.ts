@@ -1,8 +1,8 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { L2AmountClaim } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { L2AmountClaim } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 
 import { BotStore } from './bot_store.js';
 

@@ -1,5 +1,5 @@
-import { padArrayEnd } from '@aztec/foundation/collection';
-import type { Tuple } from '@aztec/foundation/serialize';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
 
 import type { ClaimedLengthArray } from '../claimed_length_array.js';
 import type { ScopedNoteHash } from '../note_hash.js';

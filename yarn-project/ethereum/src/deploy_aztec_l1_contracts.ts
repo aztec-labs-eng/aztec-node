@@ -1,11 +1,10 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { SecretValue, getActiveNetworkName } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import type { Fr } from '@aztec/foundation/schemas';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { SecretValue, getActiveNetworkName } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { Fr } from '@aztec-labs/foundation/schemas';
 import { bn254 } from '@noble/curves/bn254';
 import type { Abi, Narrow } from 'abitype';
 import { spawn } from 'child_process';
@@ -131,13 +130,13 @@ export interface ValidatorJson {
 }
 
 /**
- * Gets the path to the l1-contracts foundry artifacts directory bundled inside @aztec/l1-artifacts.
+ * Gets the path to the l1-contracts foundry artifacts directory bundled inside @aztec-foundation/l1-artifacts.
  * Resolved through the package (its "." export -> dest/index.js) so it works whether the package is
  * linked via portal (monorepo) or installed under node_modules (published npm) — resolution follows
  * the symlink in the portal case. The bundled foundry subtree sits alongside dest/, at <pkg>/l1-contracts.
  */
 export function getL1ContractsPath(): string {
-  return resolve(dirname(require.resolve('@aztec/l1-artifacts')), '..', 'l1-contracts');
+  return resolve(dirname(require.resolve('@aztec-foundation/l1-artifacts')), '..', 'l1-contracts');
 }
 
 // Cached deployment directory

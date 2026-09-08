@@ -1,15 +1,14 @@
-import { type InitialAccountData, generateSchnorrAccounts } from '@aztec/accounts/testing';
-import type { ContractInstanceWithAddress } from '@aztec/aztec.js/contracts';
-import { computeSecretHash } from '@aztec/aztec.js/crypto';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { TxHash } from '@aztec/aztec.js/tx';
-import type { DeployAztecL1ContractsReturnType } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import type { ContractInstanceWithAddress } from '@aztec-labs/aztec.js/contracts';
+import { computeSecretHash } from '@aztec-labs/aztec.js/crypto';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { TxHash } from '@aztec-labs/aztec.js/tx';
+import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 // We use TokenBlacklist because we want to test the persistence of manually added notes and standard token no longer
 // implements TransparentNote shield flow.
-import { TokenBlacklistContract } from '@aztec/noir-contracts.js/TokenBlacklist';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { TokenBlacklistContract } from '@aztec-labs/noir-contracts.js/TokenBlacklist';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { jest } from '@jest/globals';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';

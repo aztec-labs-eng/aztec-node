@@ -1,8 +1,8 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { TxStatus } from '@aztec/aztec.js/tx';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import type { AztecNode, AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { TxStatus } from '@aztec-labs/aztec.js/tx';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 
 import type { EndToEndContext } from '../fixtures/utils.js';
 import type { TestWallet } from '../test-wallet/test_wallet.js';

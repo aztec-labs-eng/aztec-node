@@ -83,4 +83,4 @@ export {
   getContractClassFromArtifact,
   getContractInstanceFromInstantiationParams,
   type NodeInfo,
-} from '@aztec/stdlib/contract';
+} from '@aztec-labs/stdlib/contract';

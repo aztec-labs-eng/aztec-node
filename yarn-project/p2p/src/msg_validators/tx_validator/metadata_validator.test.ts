@@ -1,12 +1,12 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { mockTx, mockTxForRollup } from '@aztec/stdlib/testing';
-import type { AnyTx, Tx } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { mockTx, mockTxForRollup } from '@aztec-labs/stdlib/testing';
+import type { AnyTx, Tx } from '@aztec-labs/stdlib/tx';
 import {
   TX_ERROR_INCORRECT_L1_CHAIN_ID,
   TX_ERROR_INCORRECT_PROTOCOL_CONTRACTS_HASH,
   TX_ERROR_INCORRECT_ROLLUP_VERSION,
   TX_ERROR_INCORRECT_VK_TREE_ROOT,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import { MetadataTxValidator } from './metadata_validator.js';
 

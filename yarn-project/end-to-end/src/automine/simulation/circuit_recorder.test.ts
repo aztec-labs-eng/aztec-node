@@ -1,6 +1,5 @@
-import { MAX_APPS_PER_KERNEL } from '@aztec/constants';
-import { ChildContract } from '@aztec/noir-test-contracts.js/Child';
-
+import { MAX_APPS_PER_KERNEL } from '@aztec-labs/constants';
+import { ChildContract } from '@aztec-labs/noir-test-contracts.js/Child';
 import fs from 'fs/promises';
 import path from 'path';
 

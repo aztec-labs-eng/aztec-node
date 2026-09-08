@@ -1,9 +1,9 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { PrivateVotingContract } from '@aztec/noir-contracts.js/PrivateVoting';
-import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec/stdlib/tx';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { PrivateVotingContract } from '@aztec-labs/noir-contracts.js/PrivateVoting';
+import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec-labs/stdlib/tx';
 
 import { AutomineTestContext } from './automine_test_context.js';
 

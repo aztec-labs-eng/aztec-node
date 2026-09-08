@@ -1,10 +1,9 @@
-import { Blob, type BlobJson } from '@aztec/blob-lib';
-import { makeRandomBlob } from '@aztec/blob-lib/testing';
-import { times } from '@aztec/foundation/collection';
-import { SecretValue } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { sleep } from '@aztec/foundation/sleep';
-
+import { Blob, type BlobJson } from '@aztec-labs/blob-lib';
+import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
+import { times } from '@aztec-labs/foundation/collection';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { jest } from '@jest/globals';
 import http from 'http';
 import type { AddressInfo } from 'net';

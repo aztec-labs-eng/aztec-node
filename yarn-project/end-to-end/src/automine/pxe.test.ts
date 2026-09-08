@@ -1,7 +1,7 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec/stdlib/tx';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec-labs/stdlib/tx';
 
 import type { TestWallet } from '../test-wallet/test_wallet.js';
 import { AutomineTestContext } from './automine_test_context.js';

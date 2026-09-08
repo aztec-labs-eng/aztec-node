@@ -1,6 +1,5 @@
-import { CheckpointNumberSchema, IndexWithinCheckpointSchema } from '@aztec/foundation/branded-types';
-import type { CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-
+import { CheckpointNumberSchema, IndexWithinCheckpointSchema } from '@aztec-labs/foundation/branded-types';
+import type { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
 import { z } from 'zod';
 
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';

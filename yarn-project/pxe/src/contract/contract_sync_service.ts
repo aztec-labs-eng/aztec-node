@@ -1,11 +1,11 @@
-import type { Logger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { Semaphore } from '@aztec/foundation/queue';
-import { isProtocolContract } from '@aztec/protocol-contracts';
-import { type FunctionCall, FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { Semaphore } from '@aztec-labs/foundation/queue';
+import { isProtocolContract } from '@aztec-labs/protocol-contracts';
+import { type FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { ContractSyncConfig } from '../config/index.js';
 import { NoteService } from '../notes/note_service.js';

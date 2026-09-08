@@ -1,8 +1,8 @@
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { computePublicDataTreeLeafSlot } from '@aztec/stdlib/hash';
-import type { PublicStorageOverride } from '@aztec/stdlib/interfaces/client';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
+import type { PublicStorageOverride } from '@aztec-labs/stdlib/interfaces/client';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 /**
  * Injects public-state overrides into an (ephemeral) world-state fork before simulation.

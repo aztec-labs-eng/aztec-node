@@ -1,7 +1,7 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { TxHash, TxStatus } from '@aztec/stdlib/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { TxHash, TxStatus } from '@aztec-labs/stdlib/tx';
 
 import type { PendingTx } from '../../../storage/tagging_store/sender_tagging_store.js';
 import type { TxInLogs } from './load_and_store_new_tagging_indexes.js';

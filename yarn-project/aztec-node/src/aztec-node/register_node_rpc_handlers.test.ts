@@ -1,15 +1,19 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { createSafeJsonRpcClient } from '@aztec/foundation/json-rpc/client';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createSafeJsonRpcClient } from '@aztec-labs/foundation/json-rpc/client';
 import {
   type NamespacedApiHandlers,
   createNamespacedSafeJsonRpcServer,
   startHttpRpcServer,
-} from '@aztec/foundation/json-rpc/server';
-import type { L2Tips } from '@aztec/stdlib/block';
-import { AztecNodeAdminApiSchema, AztecNodeApiSchema, AztecNodeDebugApiSchema } from '@aztec/stdlib/interfaces/client';
-import { P2PApiSchema, type P2PConnectivity } from '@aztec/stdlib/interfaces/server';
-import type { ApiSchemaFor } from '@aztec/stdlib/schemas';
+} from '@aztec-labs/foundation/json-rpc/server';
+import type { L2Tips } from '@aztec-labs/stdlib/block';
+import {
+  AztecNodeAdminApiSchema,
+  AztecNodeApiSchema,
+  AztecNodeDebugApiSchema,
+} from '@aztec-labs/stdlib/interfaces/client';
+import { P2PApiSchema, type P2PConnectivity } from '@aztec-labs/stdlib/interfaces/server';
+import type { ApiSchemaFor } from '@aztec-labs/stdlib/schemas';
 
 import { registerAztecNodeRpcHandlers } from './register_node_rpc_handlers.js';
 import type { AztecNodeService } from './server.js';

@@ -1,7 +1,7 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 
 import { randomCheckpointInfo } from '../checkpoint/checkpoint_info.js';
 import { CommitteeAttestationsAndSigners } from './proposal/attestations_and_signers.js';

@@ -1,9 +1,9 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
-import { AuthorizationSelector, FunctionSelector } from '@aztec/stdlib/abi';
-import { computeInnerAuthWitHash } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { computeVarArgsHash } from '@aztec/stdlib/hash';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
+import { AuthorizationSelector, FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { computeInnerAuthWitHash } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { computeVarArgsHash } from '@aztec-labs/stdlib/hash';
 
 /**
  * An authwit request for a function call. Includes the preimage of the data

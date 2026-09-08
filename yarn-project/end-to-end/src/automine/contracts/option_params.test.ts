@@ -1,9 +1,8 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { MAX_FIELD_VALUE } from '@aztec/constants';
-import { OptionParamContract } from '@aztec/noir-test-contracts.js/OptionParam';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { MAX_FIELD_VALUE } from '@aztec-labs/constants';
+import { OptionParamContract } from '@aztec-labs/noir-test-contracts.js/OptionParam';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

@@ -3,6 +3,7 @@ title: Creating Accounts
 tags: [accounts]
 sidebar_position: 2
 description: Step-by-step guide to creating and deploying new user accounts in Aztec.js applications.
+references: ["docs/examples/ts/aztecjs_connection/index.ts", "yarn-project/accounts/src/schnorr/*", "yarn-project/wallets/src/embedded/*", "yarn-project/aztec.js/src/fee/fee_juice_payment_method_with_claim.ts"]
 ---
 
 This guide shows you how to create and deploy a new account on Aztec.
@@ -15,7 +16,7 @@ This guide shows you how to create and deploy a new account on Aztec.
 ## Install dependencies
 
 ```bash
-yarn add @aztec/aztec.js@#include_version_without_prefix @aztec/wallets@#include_version_without_prefix @aztec/noir-contracts.js@#include_version_without_prefix
+yarn add @aztec-labs/aztec.js@#include_version_without_prefix @aztec-labs/wallets@#include_version_without_prefix @aztec-labs/noir-contracts.js@#include_version_without_prefix
 ```
 
 ## Create a new account

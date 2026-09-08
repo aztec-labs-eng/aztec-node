@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/wallet-sdk",
+  "name": "@aztec-labs/wallet-sdk",
   "homepage": "https://github.com/AztecProtocol/aztec-packages/tree/master/yarn-project/wallet-sdk",
   "version": "0.1.0",
   "type": "module",
@@ -75,15 +75,15 @@
     ]
   },
   "dependencies": {
-    "@aztec/aztec.js": "workspace:^",
-    "@aztec/constants": "workspace:^",
-    "@aztec/entrypoints": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/pxe": "workspace:^",
-    "@aztec/stdlib": "workspace:^"
+    "@aztec-labs/aztec.js": "workspace:^",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/entrypoints": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/pxe": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^"
   },
   "devDependencies": {
-    "@aztec/noir-contracts.js": "workspace:^",
+    "@aztec-labs/noir-contracts.js": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

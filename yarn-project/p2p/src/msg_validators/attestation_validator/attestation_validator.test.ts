@@ -1,12 +1,11 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { NoCommitteeError } from '@aztec/ethereum/contracts';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { TEST_COORDINATION_SIGNATURE_CONTEXT, makeCheckpointAttestation } from '@aztec/stdlib/testing';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { TEST_COORDINATION_SIGNATURE_CONTEXT, makeCheckpointAttestation } from '@aztec-labs/stdlib/testing';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { CheckpointAttestationValidator } from './attestation_validator.js';

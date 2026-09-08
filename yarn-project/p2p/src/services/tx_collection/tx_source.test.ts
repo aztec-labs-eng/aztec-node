@@ -1,6 +1,5 @@
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { Tx, type TxValidator } from '@aztec/stdlib/tx';
-
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { Tx, type TxValidator } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { NodeRpcTxSource } from './tx_source.js';

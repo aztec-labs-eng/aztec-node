@@ -1,6 +1,6 @@
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import { BlockHash } from '../block/block_hash.js';
 import { type DataInBlock, dataInBlockSchemaFor, randomDataInBlock } from '../block/in_block.js';

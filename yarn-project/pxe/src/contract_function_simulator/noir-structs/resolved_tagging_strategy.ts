@@ -1,4 +1,4 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 // Keep in sync with aztec::messages::delivery::ResolvedTaggingStrategy
 const NON_INTERACTIVE_HANDSHAKE = 1;

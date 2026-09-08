@@ -1,6 +1,7 @@
 ---
 title: "Verify Noir Proofs in Aztec Contracts"
 description: "Learn to generate offchain ZK proofs with Noir and verify them onchain in Aztec private smart contracts"
+references: ["docs/examples/circuits/hello_circuit/*", "docs/examples/contracts/recursive_verification_contract/*", "docs/examples/ts/recursive_verification/*"]
 ---
 
 ## Overview
@@ -394,14 +395,14 @@ Create the following files in your project root directory.
     "recursion": "tsx index.ts"
   },
   "dependencies": {
-    "@aztec/accounts": "#include_version_without_prefix",
-    "@aztec/aztec.js": "#include_version_without_prefix",
-    "@aztec/bb.js": "#include_version_without_prefix",
-    "@aztec/kv-store": "#include_version_without_prefix",
-    "@aztec/noir-contracts.js": "#include_version_without_prefix",
-    "@aztec/noir-noir_js": "#include_version_without_prefix",
-    "@aztec/pxe": "#include_version_without_prefix",
-    "@aztec/wallets": "#include_version_without_prefix",
+    "@aztec-labs/accounts": "#include_version_without_prefix",
+    "@aztec-labs/aztec.js": "#include_version_without_prefix",
+    "@aztec-foundation/bb.js": "#include_version_without_prefix",
+    "@aztec-labs/kv-store": "#include_version_without_prefix",
+    "@aztec-labs/noir-contracts.js": "#include_version_without_prefix",
+    "@aztec-foundation/noir-noir_js": "#include_version_without_prefix",
+    "@aztec-labs/pxe": "#include_version_without_prefix",
+    "@aztec-labs/wallets": "#include_version_without_prefix",
     "tsx": "^4.20.6"
   },
   "devDependencies": {

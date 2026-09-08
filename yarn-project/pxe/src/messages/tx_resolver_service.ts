@@ -1,10 +1,10 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { uniqueBy } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { BlockHash } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { type IndexedTxEffect, TxHash } from '@aztec/stdlib/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { uniqueBy } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { BlockHash } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { type IndexedTxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 /** Resolves transaction hashes into their on-chain context (note hashes, nullifiers, and mined position). */
 export class TxResolverService {

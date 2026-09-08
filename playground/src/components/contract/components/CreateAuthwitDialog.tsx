@@ -1,7 +1,7 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { computeAuthWitMessageHash, SetPublicAuthwitContractInteraction } from '@aztec/aztec.js/authorization';
-import { type SendInteractionOptions, Contract, ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { computeAuthWitMessageHash, SetPublicAuthwitContractInteraction } from '@aztec-labs/aztec.js/authorization';
+import { type SendInteractionOptions, Contract, ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';

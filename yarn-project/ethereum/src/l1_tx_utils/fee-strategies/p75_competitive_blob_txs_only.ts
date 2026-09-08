@@ -1,5 +1,4 @@
-import { median } from '@aztec/foundation/collection';
-
+import { median } from '@aztec-labs/foundation/collection';
 import { type GetFeeHistoryReturnType, formatGwei } from 'viem';
 
 import type { ViemClient } from '../../types.js';

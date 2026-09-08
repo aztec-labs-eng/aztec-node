@@ -1,7 +1,7 @@
-import { TX_CONSTANT_DATA_LENGTH } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, FieldReader, serializeToBuffer, serializeToFields } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { TX_CONSTANT_DATA_LENGTH } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, FieldReader, serializeToBuffer, serializeToFields } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { BlockHeader } from './block_header.js';
 import { ProtocolContracts } from './protocol_contracts.js';

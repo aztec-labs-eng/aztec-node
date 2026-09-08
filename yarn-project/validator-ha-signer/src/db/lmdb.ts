@@ -7,13 +7,13 @@
  * The LMDB store is single-writer, making setIfNotExists inherently atomic.
  * This means we get crash-restart protection without needing an external database.
  */
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { openStoreAt } from '@aztec/kv-store/lmdb-v2';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { openStoreAt } from '@aztec-labs/kv-store/lmdb-v2';
 
 import type { SlashingProtectionDatabase, TryInsertOrGetResult } from '../types.js';
 import {

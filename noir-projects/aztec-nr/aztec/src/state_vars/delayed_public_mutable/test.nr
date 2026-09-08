@@ -1,6 +1,6 @@
 use crate::{
     context::{PrivateContext, PublicContext, UtilityContext},
-    state_vars::{delayed_public_mutable::DelayedPublicMutable, StateVariable},
+    state_vars::{delayed_public_mutable::{DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY, DelayedPublicMutable}, StateVariable},
     test::{helpers::test_environment::TestEnvironment, mocks::MockStruct},
 };
 use crate::protocol::traits::Empty;
@@ -9,7 +9,9 @@ use std::mem::zeroed;
 
 global new_value: MockStruct = MockStruct { a: 17, b: 42 };
 
-global new_delay: u64 = 20;
+global new_delay: u64 = 60 * 60 * 2;
+
+global BELOW_MINIMUM_DELAY: u64 = DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY - 1;
 
 global storage_slot: Field = 47;
 
@@ -31,6 +33,18 @@ unconstrained fn in_utility(
     context: UtilityContext,
 ) -> DelayedPublicMutable<MockStruct, TEST_INITIAL_DELAY, UtilityContext> {
     DelayedPublicMutable::new(context, storage_slot)
+}
+
+#[test]
+unconstrained fn declaring_with_minimum_delay() {
+    let _: DelayedPublicMutable<MockStruct, DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY, PublicContext> =
+        DelayedPublicMutable::new(zeroed(), storage_slot);
+}
+
+#[test(should_fail_with = "DelayedPublicMutable delay must be at least")]
+unconstrained fn declaring_with_delay_below_minimum() {
+    let _: DelayedPublicMutable<MockStruct, BELOW_MINIMUM_DELAY, PublicContext> =
+        DelayedPublicMutable::new(zeroed(), storage_slot);
 }
 
 #[test]
@@ -149,6 +163,30 @@ unconstrained fn get_scheduled_delay_in_public() {
         assert_eq(scheduled, new_delay);
         // The new delay is smaller, therefore we need to wait for the difference between current and new
         assert_eq(timestamp_of_change, context.timestamp() + TEST_INITIAL_DELAY - new_delay);
+    });
+}
+
+#[test]
+unconstrained fn schedule_delay_change_to_minimum_delay() {
+    let env = TestEnvironment::new();
+
+    env.public_context(|context| {
+        let state_var = in_public(context);
+
+        state_var.schedule_delay_change(DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY);
+
+        let (scheduled, _) = state_var.get_scheduled_delay();
+        assert_eq(scheduled, DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY);
+    });
+}
+
+#[test(should_fail_with = "DelayedPublicMutable delay must be at least")]
+unconstrained fn schedule_delay_change_below_minimum_delay() {
+    let env = TestEnvironment::new();
+
+    env.public_context(|context| {
+        let state_var = in_public(context);
+        state_var.schedule_delay_change(BELOW_MINIMUM_DELAY);
     });
 }
 

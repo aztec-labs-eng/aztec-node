@@ -1,8 +1,7 @@
-import { createLogger } from '@aztec/aztec.js/log';
-import type { Logger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { type ChildProcess, exec, spawn } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';

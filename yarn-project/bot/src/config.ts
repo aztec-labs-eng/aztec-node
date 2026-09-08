@@ -10,14 +10,13 @@ import {
   pickConfigMappings,
   secretFrConfigHelper,
   secretStringConfigHelper,
-} from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { type DataStoreConfig, dataConfigMappings } from '@aztec/stdlib/kv-store';
-import { schemas, zodFor } from '@aztec/stdlib/schemas';
-import type { ComponentsVersions } from '@aztec/stdlib/versioning';
-
+} from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
+import { schemas, zodFor } from '@aztec-labs/stdlib/schemas';
+import type { ComponentsVersions } from '@aztec-labs/stdlib/versioning';
 import { z } from 'zod';
 
 const BotFollowChain = ['NONE', 'PROPOSED', 'CHECKPOINTED', 'PROVEN'] as const;

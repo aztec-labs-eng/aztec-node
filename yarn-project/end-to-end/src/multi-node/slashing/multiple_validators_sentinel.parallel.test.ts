@@ -1,9 +1,8 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 

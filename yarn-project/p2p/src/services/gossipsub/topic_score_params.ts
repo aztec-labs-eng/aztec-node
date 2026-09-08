@@ -1,5 +1,4 @@
-import { TopicType, createTopicString } from '@aztec/stdlib/p2p';
-
+import { TopicType, createTopicString } from '@aztec-labs/stdlib/p2p';
 import { createTopicScoreParams } from '@chainsafe/libp2p-gossipsub/score';
 
 /**

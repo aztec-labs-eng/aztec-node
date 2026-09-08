@@ -1,7 +1,7 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { getPublishableStandardContracts } from '@aztec/standard-contracts';
-import { siloNullifier } from '@aztec/stdlib/hash';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts';
+import { siloNullifier } from '@aztec-labs/stdlib/hash';
 
 /**
  * Computes the genesis nullifiers that pre-publish the standard contracts (AuthRegistry, PublicChecks,

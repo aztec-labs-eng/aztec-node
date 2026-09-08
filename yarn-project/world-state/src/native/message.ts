@@ -1,7 +1,7 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec/stdlib/trees';
-import type { StateReference } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { StateReference } from '@aztec-labs/stdlib/tx';
 
 export interface WorldStateStatusSummary {
   /** Last block number that can still be unwound. */

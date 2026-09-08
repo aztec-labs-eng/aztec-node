@@ -7,12 +7,11 @@ import {
   EpochNumberSchema,
   type SlotNumber,
   SlotNumberSchema,
-} from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { schemas } from '@aztec/foundation/schemas';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-
+} from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import type { CheckpointData, ProposedCheckpointData, ProposedCheckpointInput } from '../checkpoint/checkpoint_data.js';

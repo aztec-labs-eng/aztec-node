@@ -1,14 +1,14 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import {
   type ContractInstanceWithAddress,
   type DeployOptions,
   DeployMethod,
   getContractInstanceFromInstantiationParams,
   Contract,
-} from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { PublicKeys } from '@aztec/aztec.js/keys';
-import type { Wallet } from '@aztec/aztec.js/wallet';
+} from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { PublicKeys } from '@aztec-labs/aztec.js/keys';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -30,7 +30,7 @@ import {
   getInitializer,
   getAllFunctionAbis,
   isAddressStruct,
-} from '@aztec/stdlib/abi';
+} from '@aztec-labs/stdlib/abi';
 import { AztecContext } from '../../../aztecContext';
 import { FunctionParameter } from '../../common/FnParameter';
 import { FeePaymentSelector } from '../../common/FeePaymentSelector';

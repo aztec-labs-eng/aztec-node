@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Note } from '@aztec/stdlib/note';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Note } from '@aztec-labs/stdlib/note';
 
 import { packAsHintedNote } from './note_packing_utils.js';
 

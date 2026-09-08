@@ -1,20 +1,20 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import type { ViemCommitteeAttestations } from '@aztec/ethereum/contracts';
-import { type CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { compactArray } from '@aztec/foundation/collection';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { type CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray } from '@aztec-labs/foundation/collection';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
 import {
   type AttestationInfo,
   type CommitteeAttestation,
   type ValidateCheckpointNegativeResult,
   type ValidateCheckpointResult,
   getAttestationInfoFromPayload,
-} from '@aztec/stdlib/block';
-import type { CheckpointInfo, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { type L1RollupConstants, computeQuorum, getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import type { CheckpointHeader } from '@aztec/stdlib/rollup';
+} from '@aztec-labs/stdlib/block';
+import type { CheckpointInfo, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { type L1RollupConstants, computeQuorum, getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 
 export type { ValidateCheckpointResult };
 

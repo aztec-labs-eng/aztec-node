@@ -1,10 +1,9 @@
-import { fileURLToPath } from '@aztec/foundation/url';
-
+import { fileURLToPath } from '@aztec-labs/foundation/url';
 import { readdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 
 const contract = `\
-import { type NoirCompiledCircuit } from '@aztec/stdlib/noir';
+import { type NoirCompiledCircuit } from '@aztec-labs/stdlib/noir';
 const circuit: NoirCompiledCircuit;
 export = circuit;
 `;

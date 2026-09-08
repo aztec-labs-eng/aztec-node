@@ -1,15 +1,15 @@
-import { AztecAddress, type CompleteAddress } from '@aztec/aztec.js/addresses';
-import { DomainSeparator } from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { Schnorr, type SchnorrSignature } from '@aztec/foundation/crypto/schnorr';
-import { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { CustomRequest } from '@aztec/pxe/config';
+import { AztecAddress, type CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { Schnorr, type SchnorrSignature } from '@aztec-labs/foundation/crypto/schnorr';
+import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { CustomRequest } from '@aztec-labs/pxe/config';
 import {
   INTERACTIVE_HANDSHAKE_REQUEST_KIND,
   STANDARD_HANDSHAKE_REGISTRY_ADDRESS,
-} from '@aztec/standard-contracts/handshake-registry/constants';
-import { type PublicKeys, derivePublicKeyFromSecretKey } from '@aztec/stdlib/keys';
+} from '@aztec-labs/standard-contracts/handshake-registry/constants';
+import { type PublicKeys, derivePublicKeyFromSecretKey } from '@aztec-labs/stdlib/keys';
 
 /**
  * The decoded payload of the registry's interactive-handshake signature request. Note it never carries the sender,

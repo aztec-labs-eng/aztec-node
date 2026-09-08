@@ -11,23 +11,22 @@
  * the cluster unusable; giving it its own file (its own cluster) removes the previous "must run last"
  * ordering contract without changing what any test asserts.
  */
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec/aztec-node';
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { type AztecNode, waitForTx } from '@aztec/aztec.js/node';
-import { GovernanceProposerContract } from '@aztec/ethereum/contracts';
-import type { DeployAztecL1ContractsReturnType } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { SecretValue } from '@aztec/foundation/config';
-import { withLoggerBindings } from '@aztec/foundation/log/server';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { TestDateProvider } from '@aztec/foundation/timer';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { TopicType } from '@aztec/stdlib/p2p';
-import { TxHash, type TxReceipt, TxStatus } from '@aztec/stdlib/tx';
-import type { GenesisData } from '@aztec/stdlib/world-state';
-
+import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
+import { GovernanceProposerContract } from '@aztec-labs/ethereum/contracts';
+import type { DeployAztecL1ContractsReturnType } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { TopicType } from '@aztec-labs/stdlib/p2p';
+import { TxHash, type TxReceipt, TxStatus } from '@aztec-labs/stdlib/tx';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 import getPort, { portNumbers } from 'get-port';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

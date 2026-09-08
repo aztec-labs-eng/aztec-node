@@ -1,4 +1,4 @@
-import type { LoggerBindings } from '@aztec/foundation/log';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
 import {
   AvmCircuitInputs,
   AvmCircuitPublicInputs,
@@ -6,9 +6,8 @@ import {
   type PublicSimulatorConfig,
   type PublicTxResult,
   serializeWithMessagePack,
-} from '@aztec/stdlib/avm';
-import type { GlobalVariables, Tx } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/avm';
+import type { GlobalVariables, Tx } from '@aztec-labs/stdlib/tx';
 import { strict as assert } from 'assert';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';

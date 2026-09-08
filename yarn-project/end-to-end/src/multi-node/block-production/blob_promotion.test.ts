@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/aztec.js/fields';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { executeTimeout } from '@aztec/foundation/timer';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
 
 import { proveAndSendTxs } from '../../test-wallet/utils.js';
 import {

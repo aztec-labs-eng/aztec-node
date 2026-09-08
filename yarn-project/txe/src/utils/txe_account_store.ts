@@ -1,6 +1,6 @@
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { CompleteAddress } from '@aztec/stdlib/contract';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { CompleteAddress } from '@aztec-labs/stdlib/contract';
 
 export class TXEAccountStore {
   #accounts: AztecAsyncMap<string, Buffer>;

@@ -1,15 +1,15 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { type AztecNode, createAztecNodeClient } from '@aztec/aztec.js/node';
-import { ContractInitializationStatus, type Wallet } from '@aztec/aztec.js/wallet';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { CounterContract } from '@aztec/noir-test-contracts.js/Counter';
-import { InitTestContract } from '@aztec/noir-test-contracts.js/InitTest';
-import { NoConstructorContract } from '@aztec/noir-test-contracts.js/NoConstructor';
-import { StatefulTestContract } from '@aztec/noir-test-contracts.js/StatefulTest';
-import { GasFees } from '@aztec/stdlib/gas';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { type AztecNode, createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { ContractInitializationStatus, type Wallet } from '@aztec-labs/aztec.js/wallet';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { CounterContract } from '@aztec-labs/noir-test-contracts.js/Counter';
+import { InitTestContract } from '@aztec-labs/noir-test-contracts.js/InitTest';
+import { NoConstructorContract } from '@aztec-labs/noir-test-contracts.js/NoConstructor';
+import { StatefulTestContract } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 
 import { TestWallet } from '../../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../../automine_test_context.js';

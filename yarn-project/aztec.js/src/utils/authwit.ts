@@ -1,11 +1,11 @@
-import type { ChainInfo } from '@aztec/entrypoints/interfaces';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec/standard-contracts/auth-registry/constants';
-import { type ABIParameterVisibility, type FunctionAbi, type FunctionCall, FunctionType } from '@aztec/stdlib/abi';
-import { AuthWitness, computeInnerAuthWitHash, computeOuterAuthWitHash } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { computeVarArgsHash } from '@aztec/stdlib/hash';
-import type { TxProfileResult } from '@aztec/stdlib/tx';
+import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry/constants';
+import { type ABIParameterVisibility, type FunctionAbi, type FunctionCall, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AuthWitness, computeInnerAuthWitHash, computeOuterAuthWitHash } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { computeVarArgsHash } from '@aztec-labs/stdlib/hash';
+import type { TxProfileResult } from '@aztec-labs/stdlib/tx';
 
 import { ContractFunctionInteraction } from '../contract/contract_function_interaction.js';
 import type {

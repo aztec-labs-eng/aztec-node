@@ -5,25 +5,25 @@ import {
   MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT,
   MAX_PROCESSABLE_L2_GAS,
   PRIVATE_LOG_SIZE_IN_FIELDS,
-} from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { CONTRACT_INSTANCE_PUBLISHED_EVENT_TAG } from '@aztec/protocol-contracts';
-import { bufferAsFields } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractClassPublic, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import { siloNullifier } from '@aztec/stdlib/hash';
+} from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { CONTRACT_INSTANCE_PUBLISHED_EVENT_TAG } from '@aztec-labs/protocol-contracts';
+import { bufferAsFields } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractClassPublic, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import {
   LogHash,
   PartialPrivateTailPublicInputsForPublic,
   PartialPrivateTailPublicInputsForRollup,
   PrivateKernelTailCircuitPublicInputs,
   countAccumulatedItems,
-} from '@aztec/stdlib/kernel';
-import { ContractClassLogFields, PrivateLog } from '@aztec/stdlib/logs';
-import type { ScopedL2ToL1Message } from '@aztec/stdlib/messaging';
-import { ChonkProof } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/kernel';
+import { ContractClassLogFields, PrivateLog } from '@aztec-labs/stdlib/logs';
+import type { ScopedL2ToL1Message } from '@aztec-labs/stdlib/messaging';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
 import {
   BlockHeader,
   GlobalVariables,
@@ -32,8 +32,7 @@ import {
   Tx,
   TxConstantData,
   TxContext,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { strict as assert } from 'assert';
 
 const TEARDOWN_DA_GAS_LIMIT = 98_304;

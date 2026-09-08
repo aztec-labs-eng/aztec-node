@@ -5,6 +5,7 @@ tags: [PXE]
 description: Explore the PXE, a client-side library that handles private function execution, proof generation, secret management, and transaction orchestration in Aztec.
 keywords: [pxe, private execution environment]
 importance: 1
+references: ["yarn-project/pxe/src/*", "yarn-project/key-store/src/*", "noir-projects/aztec-nr/aztec/src/oracle/version.nr"]
 ---
 
 This page describes the Private Execution Environment (PXE, pronounced "pixie"), a client-side library for the execution of private operations. It is a TypeScript library that can be run within Node.js, inside wallet software or a browser.
@@ -102,7 +103,7 @@ The canonical version constants live in the PXE (`ORACLE_VERSION_MAJOR` / `ORACL
 
 If you see an error like _"Oracle '…' not found. … The contract was compiled with Aztec.nr oracle version X.Y, but this private execution environment only supports up to A.B"_, the contract uses one or more oracles from a newer Aztec.nr than your PXE supports.
 
-To fix it, upgrade the software that ships the PXE (sandbox, wallet, or whatever embeds `@aztec/pxe`) to a release whose Aztec.nr version is at least as new as the one the contract was compiled with.
+To fix it, upgrade the software that ships the PXE (sandbox, wallet, or whatever embeds `@aztec-labs/pxe`) to a release whose Aztec.nr version is at least as new as the one the contract was compiled with.
 
 If the PXE reports a version that _should_ include every oracle the contract needs but an oracle is still missing, that is a contract bug rather than a version problem and you should likely report it to the app developer.
 

@@ -1,32 +1,31 @@
-import type { BBProverConfig } from '@aztec/bb-prover';
-import { TestCircuitProver } from '@aztec/bb-prover';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { times, timesAsync } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import type { FieldsOf } from '@aztec/foundation/types';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { ProtocolContractsList } from '@aztec/protocol-contracts';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Checkpoint } from '@aztec/stdlib/checkpoint';
-import type { MerkleTreeWriteOperations, ServerCircuitProver } from '@aztec/stdlib/interfaces/server';
-import type { CheckpointConstantData } from '@aztec/stdlib/rollup';
-import { mockProcessedTx } from '@aztec/stdlib/testing';
-import { MerkleTreeId, PublicDataTreeLeaf } from '@aztec/stdlib/trees';
+import type { BBProverConfig } from '@aztec-labs/bb-prover';
+import { TestCircuitProver } from '@aztec-labs/bb-prover';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { ProtocolContractsList } from '@aztec-labs/protocol-contracts';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { MerkleTreeWriteOperations, ServerCircuitProver } from '@aztec-labs/stdlib/interfaces/server';
+import type { CheckpointConstantData } from '@aztec-labs/stdlib/rollup';
+import { mockProcessedTx } from '@aztec-labs/stdlib/testing';
+import { MerkleTreeId, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
 import {
   type BlockHeader,
   type GlobalVariables,
   type ProcessedTx,
   StateReference,
   TreeSnapshots,
-} from '@aztec/stdlib/tx';
-import type { GenesisData } from '@aztec/stdlib/world-state';
-import type { MerkleTreeAdminDatabase } from '@aztec/world-state';
-import { NativeWorldStateService } from '@aztec/world-state/native';
-
+} from '@aztec-labs/stdlib/tx';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
+import type { MerkleTreeAdminDatabase } from '@aztec-labs/world-state';
+import { NativeWorldStateService } from '@aztec-labs/world-state/native';
 import { promises as fs } from 'fs';
 
 import { LightweightCheckpointBuilder } from '../light/lightweight_checkpoint_builder.js';

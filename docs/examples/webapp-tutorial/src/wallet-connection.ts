@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Wallet, AppCapabilities } from '@aztec/aztec.js/wallet';
-import { WalletManager, type WalletProvider } from '@aztec/wallet-sdk/manager';
-import { hashToEmoji } from '@aztec/wallet-sdk/crypto';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Wallet, AppCapabilities } from '@aztec-labs/aztec.js/wallet';
+import { WalletManager, type WalletProvider } from '@aztec-labs/wallet-sdk/manager';
+import { hashToEmoji } from '@aztec-labs/wallet-sdk/crypto';
 
 // docs:start:wallet-sdk-types
 export interface WalletDiscoveryState {

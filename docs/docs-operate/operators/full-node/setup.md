@@ -3,6 +3,7 @@ id: setup
 title: Full node setup
 description: How to run a full node on the Aztec network using Docker Compose.
 displayed_sidebar: operatorsSidebar
+references: ["yarn-project/aztec/src/cli/cmds/start_node.ts", "yarn-project/aztec/src/cli/aztec_start_options.ts", "yarn-project/ethereum/src/config.ts", "yarn-project/p2p/src/config.ts"]
 ---
 
 ## Setup
@@ -52,7 +53,7 @@ Create a `docker-compose.yml` file in your `aztec-node` directory:
 ```yaml
 services:
   aztec-node:
-    image: "aztecprotocol/aztec:#release_version"
+    image: "azteclabs/aztec:#release_version"
     container_name: "aztec-node"
     ports:
       - ${AZTEC_PORT}:${AZTEC_PORT}

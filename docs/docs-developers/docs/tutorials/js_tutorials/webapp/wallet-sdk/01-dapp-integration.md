@@ -2,6 +2,7 @@
 title: "1. dApp Integration"
 sidebar_position: 1
 description: "Connect your dApp to Aztec wallet extensions — discovery, secure channels, capabilities, and wallet usage"
+references: ["docs/examples/webapp-tutorial/src/wallet-connection.ts", "docs/examples/webapp-tutorial/src/components/WalletConnect.tsx", "yarn-project/wallet-sdk/src/*"]
 ---
 
 # dApp Integration
@@ -13,16 +14,16 @@ This page covers how a dApp discovers wallet extensions, establishes an encrypte
 Your dApp needs two packages:
 
 ```bash
-npm install @aztec/wallet-sdk @aztec/aztec.js
+npm install @aztec-labs/wallet-sdk @aztec-labs/aztec.js
 ```
 
 The key imports:
 
 ```typescript
-import { WalletManager, type WalletProvider, type PendingConnection } from '@aztec/wallet-sdk/manager';
-import { hashToEmoji } from '@aztec/wallet-sdk/crypto';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Wallet, AppCapabilities, GrantedAccountsCapability } from '@aztec/aztec.js/wallet';
+import { WalletManager, type WalletProvider, type PendingConnection } from '@aztec-labs/wallet-sdk/manager';
+import { hashToEmoji } from '@aztec-labs/wallet-sdk/crypto';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Wallet, AppCapabilities, GrantedAccountsCapability } from '@aztec-labs/aztec.js/wallet';
 ```
 
 ## Step 1: Discover Wallets

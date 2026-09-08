@@ -1,5 +1,4 @@
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
-
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
 import EventEmitter from 'node:events';
 
 import { WANT_TO_SLASH_EVENT, type WantToSlashArgs, type Watcher, type WatcherEmitter } from '../watcher.js';

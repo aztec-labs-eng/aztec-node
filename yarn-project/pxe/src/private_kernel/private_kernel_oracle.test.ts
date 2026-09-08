@@ -1,15 +1,14 @@
-import { PUBLIC_DATA_TREE_HEIGHT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { SiblingPath } from '@aztec/foundation/trees';
-import type { KeyStore } from '@aztec/key-store';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { DelayedPublicMutableValuesWithHash } from '@aztec/stdlib/delayed-public-mutable';
-import { computePublicDataTreeLeafSlot } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { PublicDataTreeLeaf, PublicDataTreeLeafPreimage, PublicDataWitness } from '@aztec/stdlib/trees';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+import { PUBLIC_DATA_TREE_HEIGHT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { SiblingPath } from '@aztec-labs/foundation/trees';
+import type { KeyStore } from '@aztec-labs/key-store';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { DelayedPublicMutableValuesWithHash } from '@aztec-labs/stdlib/delayed-public-mutable';
+import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { PublicDataTreeLeaf, PublicDataTreeLeafPreimage, PublicDataWitness } from '@aztec-labs/stdlib/trees';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 
 import type { ContractClassService } from '../contract/contract_class_service.js';

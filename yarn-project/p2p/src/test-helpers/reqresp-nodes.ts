@@ -1,22 +1,21 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import { timesParallel } from '@aztec/foundation/collection';
-import { SecretValue } from '@aztec/foundation/config';
-import { createLogger } from '@aztec/foundation/log';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import { type ChainConfig, emptyChainConfig } from '@aztec/stdlib/config';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { GasFees } from '@aztec/stdlib/gas';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { type ChainConfig, emptyChainConfig } from '@aztec-labs/stdlib/config';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   IVCProofVerificationResult,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-import type { Tx } from '@aztec/stdlib/tx';
-import { compressComponentVersions } from '@aztec/stdlib/versioning';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import type { Tx } from '@aztec-labs/stdlib/tx';
+import { compressComponentVersions } from '@aztec-labs/stdlib/versioning';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { gossipsub } from '@chainsafe/libp2p-gossipsub';
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';

@@ -1,4 +1,4 @@
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { TxExecutionRequest } from './tx_execution_request.js';
 

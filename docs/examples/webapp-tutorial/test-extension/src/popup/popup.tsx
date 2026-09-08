@@ -20,7 +20,7 @@ import { createRoot } from 'react-dom/client';
 
 import { MessageTypes } from '../config';
 import type { WalletExportData, PublicAccountInfo, PendingTransaction, PendingCapabilities, ConnectedSite, PendingSessionVerification, BackgroundTask, View } from '../shared-types';
-import type { PendingDiscovery } from '@aztec/wallet-sdk/extension/handlers';
+import type { PendingDiscovery } from '@aztec-labs/wallet-sdk/extension/handlers';
 import { sendToBackground, waitForTask, handleTaskUpdate } from './helpers';
 import { Header, SubHeader } from './Header';
 import { SetupScreen } from './SetupScreen';

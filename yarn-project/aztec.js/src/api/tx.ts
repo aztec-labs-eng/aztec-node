@@ -16,5 +16,5 @@ export {
   TxProfileResult,
   ExecutionPayload,
   mergeExecutionPayloads,
-} from '@aztec/stdlib/tx';
-export type { TxReceipt, GetTxReceiptOptions } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
+export type { TxReceipt, GetTxReceiptOptions } from '@aztec-labs/stdlib/tx';

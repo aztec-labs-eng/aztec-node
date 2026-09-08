@@ -1,4 +1,4 @@
-import { ProvingError } from '@aztec/stdlib/errors';
+import { ProvingError } from '@aztec-labs/stdlib/errors';
 
 import { BBJsInstance } from './bb_js_backend.js';
 

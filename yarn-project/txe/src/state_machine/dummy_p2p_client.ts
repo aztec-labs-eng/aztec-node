@@ -1,4 +1,4 @@
-import type { CheckpointProposalHash, SlotNumber } from '@aztec/foundation/branded-types';
+import type { CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type {
   AuthRequest,
   ENR,
@@ -15,17 +15,17 @@ import type {
   ReqRespSubProtocol,
   ReqRespSubProtocolHandler,
   StatusMessage,
-} from '@aztec/p2p';
-import type { EthAddress, L2BlockStreamEvent, L2Tips } from '@aztec/stdlib/block';
-import type { ITxProvider, P2PConnectivity, PeerInfo } from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/p2p';
+import type { EthAddress, L2BlockStreamEvent, L2Tips } from '@aztec-labs/stdlib/block';
+import type { ITxProvider, P2PConnectivity, PeerInfo } from '@aztec-labs/stdlib/interfaces/server';
 import type {
   BlockProposal,
   CheckpointAttestation,
   CheckpointProposal,
   CheckpointProposalCore,
   TopicType,
-} from '@aztec/stdlib/p2p';
-import type { BlockHeader, Tx, TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/p2p';
+import type { BlockHeader, Tx, TxHash } from '@aztec-labs/stdlib/tx';
 
 export class DummyP2P implements P2P {
   public validateTxsReceivedInBlockProposal(_txs: Tx[]): Promise<void> {

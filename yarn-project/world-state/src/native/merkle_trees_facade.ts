@@ -1,10 +1,10 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { serializeToBuffer } from '@aztec/foundation/serialize';
-import { sleep } from '@aztec/foundation/sleep';
-import { type IndexedTreeLeafPreimage, SiblingPath } from '@aztec/foundation/trees';
-import { BlockHash } from '@aztec/stdlib/block';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { type IndexedTreeLeafPreimage, SiblingPath } from '@aztec-labs/foundation/trees';
+import { BlockHash } from '@aztec-labs/stdlib/block';
 import type {
   BatchInsertionResult,
   IndexedTreeId,
@@ -13,17 +13,16 @@ import type {
   MerkleTreeWriteOperations,
   SequentialInsertionResult,
   TreeInfo,
-} from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/interfaces/server';
 import {
   MerkleTreeId,
   NullifierLeaf,
   NullifierLeafPreimage,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
-import { type BlockHeader, PartialStateReference, StateReference } from '@aztec/stdlib/tx';
-import type { WorldStateRevision } from '@aztec/stdlib/world-state';
-
+} from '@aztec-labs/stdlib/trees';
+import { type BlockHeader, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
+import type { WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 import assert from 'assert';
 
 import {

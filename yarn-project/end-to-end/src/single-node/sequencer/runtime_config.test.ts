@@ -1,17 +1,16 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import type { TestAztecNodeService } from '@aztec/aztec-node/test';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { TxReceipt } from '@aztec/aztec.js/tx';
-import { Bot, type BotConfig, BotStore, getBotDefaultConfig } from '@aztec/bot';
-import { MAX_TX_DA_GAS } from '@aztec/constants';
-import type { Logger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import type { SequencerClient } from '@aztec/sequencer-client';
-import type { SlasherClientInterface } from '@aztec/slasher';
-import type { AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
-
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { TxReceipt } from '@aztec-labs/aztec.js/tx';
+import { Bot, type BotConfig, BotStore, getBotDefaultConfig } from '@aztec-labs/bot';
+import { MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { SequencerClient } from '@aztec-labs/sequencer-client';
+import type { SlasherClientInterface } from '@aztec-labs/slasher';
+import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { jest } from '@jest/globals';
 
 import { PIPELINED_FEE_PADDING, PIPELINING_SETUP_OPTS } from '../../fixtures/fixtures.js';

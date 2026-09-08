@@ -1,5 +1,5 @@
-import { PRIVATE_LOG_CIPHERTEXT_LEN } from '@aztec/constants';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { PRIVATE_LOG_CIPHERTEXT_LEN } from '@aztec-labs/constants';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 export const DEFAULT_ADDRESS = AztecAddress.fromNumberUnsafe(42);
 

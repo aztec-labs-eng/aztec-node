@@ -1,5 +1,5 @@
-import type { Archiver } from '@aztec/archiver';
-import type { UploadSnapshotMetadata } from '@aztec/stdlib/snapshots';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { UploadSnapshotMetadata } from '@aztec-labs/stdlib/snapshots';
 
 import type { UploadSnapshotConfig } from './upload-snapshot.js';
 

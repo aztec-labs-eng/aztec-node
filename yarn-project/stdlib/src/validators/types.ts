@@ -1,5 +1,5 @@
-import type { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
+import type { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 export type ValidatorStatusType = 'proposer' | 'attestation';
 

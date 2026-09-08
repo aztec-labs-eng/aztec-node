@@ -5,22 +5,25 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
   MAX_PROTOCOL_CONTRACTS,
-} from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AvmTxHint, type PublicTxResult } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { contractClassPublicFromPlainObject, contractInstanceWithAddressFromPlainObject } from '@aztec/stdlib/contract';
+} from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AvmTxHint, type PublicTxResult } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import {
+  contractClassPublicFromPlainObject,
+  contractInstanceWithAddressFromPlainObject,
+} from '@aztec-labs/stdlib/contract';
 import {
   PartialPrivateTailPublicInputsForPublic,
   PrivateKernelTailCircuitPublicInputs,
   PrivateToPublicAccumulatedData,
   PublicCallRequest,
-} from '@aztec/stdlib/kernel';
-import { PrivateLog } from '@aztec/stdlib/logs';
-import { ScopedL2ToL1Message } from '@aztec/stdlib/messaging';
-import { ChonkProof } from '@aztec/stdlib/proofs';
-import { MerkleTreeId, type MerkleTreeWriteOperations, PublicDataTreeLeaf } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/kernel';
+import { PrivateLog } from '@aztec-labs/stdlib/logs';
+import { ScopedL2ToL1Message } from '@aztec-labs/stdlib/messaging';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
+import { MerkleTreeId, type MerkleTreeWriteOperations, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   GlobalVariables,
@@ -30,8 +33,8 @@ import {
   TxConstantData,
   TxContext,
   TxHash,
-} from '@aztec/stdlib/tx';
-import type { NativeWorldStateService } from '@aztec/world-state';
+} from '@aztec-labs/stdlib/tx';
+import type { NativeWorldStateService } from '@aztec-labs/world-state';
 
 import { BaseAvmSimulationTester } from '../avm/testing/base_avm_simulation_tester.js';
 import { AvmSimulatorPool } from '../avm_simulator_pool.js';

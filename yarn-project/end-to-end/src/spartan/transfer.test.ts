@@ -1,9 +1,8 @@
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { readFieldCompressedString } from '@aztec/aztec.js/utils';
-import { createLogger } from '@aztec/foundation/log';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { readFieldCompressedString } from '@aztec-labs/aztec.js/utils';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { jest } from '@jest/globals';
 
 import { getSponsoredFPCAddress } from '../fixtures/utils.js';

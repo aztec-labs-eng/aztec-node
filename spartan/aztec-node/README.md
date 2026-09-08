@@ -21,7 +21,7 @@ times, each with a different p2p port set.
 # -- Image to use for the container
 image:
   # -- Image repository
-  repository: aztecprotocol/aztec
+  repository: azteclabs/aztec
   # -- Image tag
   tag: 0.85.0-alpha-testnet.9
   # -- Container pull policy
@@ -70,7 +70,7 @@ service:
 ## Example running a validator node
 ```yaml
 image:
-  repository: aztecprotocol/aztec
+  repository: azteclabs/aztec
   tag: 0.85.0-alpha-testnet.9
   pullPolicy: IfNotPresent
 
@@ -123,7 +123,7 @@ service:
 |------------|---------|-------------|
 | nameOverride | "" | Overrides the chart name |
 | fullnameOverride | "" | Overrides the chart computed fullname |
-| image.repository | aztecprotocol/aztec | Image repository for the container |
+| image.repository | azteclabs/aztec | Image repository for the container |
 | image.tag | alpha-testnet | Image tag for the container |
 | image.pullPolicy | IfNotPresent | Container pull policy |
 | podManagementPolicy | Parallel | Pod management policy |

@@ -1,7 +1,7 @@
-import { TX_CONTEXT_LENGTH } from '@aztec/constants';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { setupCustomSnapshotSerializers } from '@aztec/foundation/testing';
+import { TX_CONTEXT_LENGTH } from '@aztec-labs/constants';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
 
 import { makeTxContext } from '../tests/factories.js';
 import { TxContext } from './tx_context.js';

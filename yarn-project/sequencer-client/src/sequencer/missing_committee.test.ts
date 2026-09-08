@@ -1,6 +1,5 @@
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
 import {

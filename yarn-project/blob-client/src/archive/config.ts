@@ -1,5 +1,5 @@
-import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec/ethereum/l1-reader';
-import { type ConfigMappingsType, pickConfigMappings } from '@aztec/foundation/config';
+import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
+import { type ConfigMappingsType, pickConfigMappings } from '@aztec-labs/foundation/config';
 
 export type BlobArchiveApiConfig = {
   archiveApiUrl?: string;

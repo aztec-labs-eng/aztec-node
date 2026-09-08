@@ -1,11 +1,10 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BlockProposal, MAX_TX_SIZE_KB } from '@aztec/stdlib/p2p';
-import { makeBlockHeader, makeBlockProposal, mockTx } from '@aztec/stdlib/testing';
-import { TxArray, TxHash, TxHashArray } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BlockProposal, MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
+import { makeBlockHeader, makeBlockProposal, mockTx } from '@aztec-labs/stdlib/testing';
+import { TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it } from '@jest/globals';
 
 import { BitVector } from './bitvector.js';

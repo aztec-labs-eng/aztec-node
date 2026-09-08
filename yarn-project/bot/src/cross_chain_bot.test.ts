@@ -1,5 +1,5 @@
-import type { AztecNode, AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
+import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { type BotConfig, getBotDefaultConfig } from './config.js';
 import { CrossChainBot } from './cross_chain_bot.js';

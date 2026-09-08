@@ -1,8 +1,8 @@
-import { times } from '@aztec/foundation/collection';
-import type { NamespacedApiHandlers } from '@aztec/foundation/json-rpc/server';
-import { Agent, makeUndiciFetch } from '@aztec/foundation/json-rpc/undici';
-import type { LogFn } from '@aztec/foundation/log';
-import { buildServerCircuitProver } from '@aztec/prover-client';
+import { times } from '@aztec-labs/foundation/collection';
+import type { NamespacedApiHandlers } from '@aztec-labs/foundation/json-rpc/server';
+import { Agent, makeUndiciFetch } from '@aztec-labs/foundation/json-rpc/undici';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { buildServerCircuitProver } from '@aztec-labs/prover-client';
 import {
   type ProverAgentConfig,
   ProvingAgent,
@@ -10,10 +10,10 @@ import {
   createProvingJobBrokerClient,
   proverAgentConfigMappings,
   proverBrokerBackoff,
-} from '@aztec/prover-client/broker';
-import { getProverNodeAgentConfigFromEnv } from '@aztec/prover-node';
-import { ProverAgentApiSchema } from '@aztec/stdlib/interfaces/server';
-import { initTelemetryClient, makeTracedFetch, telemetryClientConfigMappings } from '@aztec/telemetry-client';
+} from '@aztec-labs/prover-client/broker';
+import { getProverNodeAgentConfigFromEnv } from '@aztec-labs/prover-node';
+import { ProverAgentApiSchema } from '@aztec-labs/stdlib/interfaces/server';
+import { initTelemetryClient, makeTracedFetch, telemetryClientConfigMappings } from '@aztec-labs/telemetry-client';
 
 import { extractRelevantOptions, preloadCrsDataForServerSideProving } from '../util.js';
 import { getVersions } from '../versioning.js';

@@ -1,4 +1,4 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 
 import { BlacklistTokenContractTest, Role } from './blacklist_token_contract_test.js';
 

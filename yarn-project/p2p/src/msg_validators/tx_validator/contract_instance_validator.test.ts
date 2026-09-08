@@ -1,17 +1,17 @@
-import { PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { CONTRACT_INSTANCE_PUBLISHED_EVENT_TAG } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { computeContractAddressFromInstance } from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import { PrivateLog } from '@aztec/stdlib/logs';
-import { mockTxForRollup } from '@aztec/stdlib/testing';
+import { PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { CONTRACT_INSTANCE_PUBLISHED_EVENT_TAG } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { computeContractAddressFromInstance } from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { PrivateLog } from '@aztec-labs/stdlib/logs';
+import { mockTxForRollup } from '@aztec-labs/stdlib/testing';
 import {
   TX_ERROR_INCORRECT_CONTRACT_ADDRESS,
   TX_ERROR_MALFORMED_CONTRACT_INSTANCE_LOG,
   type Tx,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import { ContractInstanceTxValidator } from './contract_instance_validator.js';
 

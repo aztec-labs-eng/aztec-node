@@ -1,4 +1,4 @@
-import { AppTaggingSecretKind } from '@aztec/stdlib/logs';
+import { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
 import { buildMessageDeliveryTest } from './onchain_delivery_harness.js';
 

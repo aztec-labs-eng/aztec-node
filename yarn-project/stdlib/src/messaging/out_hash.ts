@@ -1,7 +1,7 @@
-import { OUT_HASH_TREE_LEAF_COUNT } from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { computeBalancedShaRoot, computeUnbalancedShaRoot, computeWonkyShaRoot } from '@aztec/foundation/trees';
+import { OUT_HASH_TREE_LEAF_COUNT } from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { computeBalancedShaRoot, computeUnbalancedShaRoot, computeWonkyShaRoot } from '@aztec-labs/foundation/trees';
 
 /**
  * Computes the out hash of a tx. It's the root of the unbalanced tree of all the L2-to-L1 messages emitted by the tx.

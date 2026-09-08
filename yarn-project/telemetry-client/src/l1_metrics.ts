@@ -1,5 +1,4 @@
-import type { EthAddress } from '@aztec/foundation/eth-address';
-
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Chain, type FallbackTransport, type Hex, type HttpTransport, type PublicClient, formatEther } from 'viem';
 
 import { L1_SENDER } from './attributes.js';

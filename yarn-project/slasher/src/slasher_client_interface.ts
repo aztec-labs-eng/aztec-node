@@ -1,6 +1,6 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import type { Offense, ProposerSlashAction } from '@aztec/stdlib/slashing';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import type { Offense, ProposerSlashAction } from '@aztec-labs/stdlib/slashing';
 
 /** Common interface for slasher clients used by the Aztec node. */
 export interface SlasherClientInterface {

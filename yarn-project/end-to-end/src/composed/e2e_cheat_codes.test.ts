@@ -1,9 +1,9 @@
-import { createLogger } from '@aztec/aztec.js/log';
-import { createAztecNodeClient, waitForNode } from '@aztec/aztec.js/node';
-import { CheatCodes } from '@aztec/aztec/testing';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { AztecNode, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-import { createAztecNodeDebugClient } from '@aztec/stdlib/interfaces/client';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { createAztecNodeClient, waitForNode } from '@aztec-labs/aztec.js/node';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
+import { createAztecNodeDebugClient } from '@aztec-labs/stdlib/interfaces/client';
 
 const { AZTEC_NODE_URL = 'http://localhost:8080', ETHEREUM_HOSTS = 'http://localhost:8545' } = process.env;
 

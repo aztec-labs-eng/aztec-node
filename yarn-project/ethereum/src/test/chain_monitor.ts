@@ -1,11 +1,10 @@
-import type { ManaMinFeeComponents, RollupContract } from '@aztec/ethereum/contracts';
-import { InboxContract } from '@aztec/ethereum/contracts';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import type { ManaMinFeeComponents, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { InboxContract } from '@aztec-labs/ethereum/contracts';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { EventEmitter } from 'events';
 
 import type { ViemClient } from '../types.js';

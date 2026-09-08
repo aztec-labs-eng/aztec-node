@@ -4,31 +4,30 @@ import {
   PRIVATE_TX_L2_GAS_OVERHEAD,
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
-} from '@aztec/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider, ManualDateProvider } from '@aztec/foundation/timer';
-import type { AztecAsyncMap } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { RevertCode } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Body, L2Block, type L2BlockId, type L2BlockSource } from '@aztec/stdlib/block';
-import { type CheckpointData, L1PublishedData } from '@aztec/stdlib/checkpoint';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { mockTx } from '@aztec/stdlib/testing';
+} from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider, ManualDateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncMap } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { RevertCode } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Body, L2Block, type L2BlockId, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import { type CheckpointData, L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { mockTx } from '@aztec-labs/stdlib/testing';
 import {
   AppendOnlyTreeSnapshot,
   MerkleTreeId,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
-import { BlockHeader, GlobalVariables, Tx, TxEffect, TxHash, type TxValidator } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, Tx, TxEffect, TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { AggregateTxValidator } from '../../msg_validators/tx_validator/aggregate_tx_validator.js';

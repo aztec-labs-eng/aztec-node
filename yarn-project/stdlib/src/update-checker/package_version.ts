@@ -1,5 +1,4 @@
-import { fileURLToPath } from '@aztec/foundation/url';
-
+import { fileURLToPath } from '@aztec-labs/foundation/url';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 

@@ -1,5 +1,5 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { Offense, ProposerSlashAction } from '@aztec/stdlib/slashing';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Offense, ProposerSlashAction } from '@aztec-labs/stdlib/slashing';
 
 import type { SlasherConfig } from './config.js';
 import type { SlasherClientInterface } from './slasher_client_interface.js';

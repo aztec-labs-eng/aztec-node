@@ -1,14 +1,13 @@
-import { BLOBS_PER_CHECKPOINT, DomainSeparator, FIELDS_PER_BLOB } from '@aztec/constants';
-import { fromHex } from '@aztec/foundation/bigint-buffer';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { BLS12Fr, BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toInlineStrArray } from '@aztec/foundation/testing';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
-import { fileURLToPath } from '@aztec/foundation/url';
-
+import { BLOBS_PER_CHECKPOINT, DomainSeparator, FIELDS_PER_BLOB } from '@aztec-labs/constants';
+import { fromHex } from '@aztec-labs/foundation/bigint-buffer';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toInlineStrArray } from '@aztec-labs/foundation/testing';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { fileURLToPath } from '@aztec-labs/foundation/url';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 

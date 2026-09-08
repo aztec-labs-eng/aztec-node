@@ -1,4 +1,4 @@
-import { PublicCallRequestWithCalldata, type Tx, TxExecutionPhase } from '@aztec/stdlib/tx';
+import { PublicCallRequestWithCalldata, type Tx, TxExecutionPhase } from '@aztec-labs/stdlib/tx';
 
 export function getCallRequestsWithCalldataByPhase(tx: Tx, phase: TxExecutionPhase): PublicCallRequestWithCalldata[] {
   switch (phase) {

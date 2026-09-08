@@ -8,10 +8,10 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
 
-/** Read the installed @aztec/aztec.js version so it can be injected at build time. */
+/** Read the installed @aztec-labs/aztec.js version so it can be injected at build time. */
 let aztecVersion = 'unknown';
 try {
-  aztecVersion = JSON.parse(readFileSync('./node_modules/@aztec/aztec.js/package.json', 'utf8')).version;
+  aztecVersion = JSON.parse(readFileSync('./node_modules/@aztec-labs/aztec.js/package.json', 'utf8')).version;
 } catch {
   // node_modules may not exist yet during initial config loading
 }
@@ -103,10 +103,10 @@ export default defineConfig({
   optimizeDeps: {
     include: ['pino', 'pino/browser'],
     exclude: [
-      '@aztec/noir-noirc_abi',
-      '@aztec/noir-acvm_js',
-      '@aztec/bb.js',
-      '@aztec/noir-noir_js',
+      '@aztec-foundation/noir-noirc_abi',
+      '@aztec-foundation/noir-acvm_js',
+      '@aztec-foundation/bb.js',
+      '@aztec-foundation/noir-noir_js',
     ],
   },
   resolve: {

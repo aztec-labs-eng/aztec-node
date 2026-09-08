@@ -1,5 +1,5 @@
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { RevertCode } from '../avm/revert_code.js';
 import { BlockHash } from '../block/block_hash.js';

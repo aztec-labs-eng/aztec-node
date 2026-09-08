@@ -1,15 +1,14 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { timesParallel } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { BlockHash, type EventDrivenL2BlockStream, L2Block, type L2BlockSource } from '@aztec/stdlib/block';
-import type { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { type MerkleTreeReadOperations, WorldStateRunningState } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { mockCheckpointAndMessages } from '@aztec/stdlib/testing';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { BlockHash, type EventDrivenL2BlockStream, L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { type MerkleTreeReadOperations, WorldStateRunningState } from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

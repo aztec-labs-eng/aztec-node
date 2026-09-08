@@ -3,10 +3,9 @@ import {
   BlockNumberSchema,
   CheckpointNumber,
   CheckpointNumberSchema,
-} from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-
+} from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { CommitteeAttestation } from '../block/proposal/committee_attestation.js';

@@ -1,13 +1,12 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { CheatCodes } from '@aztec/aztec/testing';
-import { range } from '@aztec/foundation/array';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import type { AztecNode, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { CheatCodes } from '@aztec-labs/aztec/testing';
+import { range } from '@aztec-labs/foundation/array';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 

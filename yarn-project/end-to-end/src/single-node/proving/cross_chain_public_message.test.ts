@@ -1,13 +1,12 @@
-import { generateClaimSecret } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { waitForL1ToL2MessageReady } from '@aztec/aztec.js/messaging';
-import { TxExecutionResult } from '@aztec/aztec.js/tx';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-
+import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
 import { sendL1ToL2Message } from '../../fixtures/l1_to_l2_messaging.js';

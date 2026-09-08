@@ -1,6 +1,6 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Note } from '@aztec/stdlib/note';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Note } from '@aztec-labs/stdlib/note';
 
 /**
  * Information about a note needed during execution.

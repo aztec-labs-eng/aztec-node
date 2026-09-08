@@ -1,11 +1,10 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { computeInnerAuthWitHash } from '@aztec/aztec.js/authorization';
-import { Fr } from '@aztec/aztec.js/fields';
-import { AuthRegistryContract } from '@aztec/noir-contracts.js/AuthRegistry';
-import { AuthWitTestContract } from '@aztec/noir-test-contracts.js/AuthWitTest';
-import { GenericProxyContract } from '@aztec/noir-test-contracts.js/GenericProxy';
-import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec/standard-contracts/auth-registry';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { computeInnerAuthWitHash } from '@aztec-labs/aztec.js/authorization';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { AuthRegistryContract } from '@aztec-labs/noir-contracts.js/AuthRegistry';
+import { AuthWitTestContract } from '@aztec-labs/noir-test-contracts.js/AuthWitTest';
+import { GenericProxyContract } from '@aztec-labs/noir-test-contracts.js/GenericProxy';
+import { STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry';
 import { jest } from '@jest/globals';
 
 import { sendThroughAuthwitProxy } from '../../fixtures/authwit_proxy.js';

@@ -1,36 +1,40 @@
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec/constants';
-import { PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec/epoch-cache';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
+import { PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import {
   type RollupContract,
   SimulationOverridesBuilder,
   type SimulationOverridesPlan,
-} from '@aztec/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { compactArray } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { BadRequestError } from '@aztec/foundation/json-rpc';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import { type InboxBucketSource, selectInboxBucketForBlock } from '@aztec/sequencer-client';
-import { type AvmSimulator, PublicContractsDB, PublicProcessorFactory } from '@aztec/simulator/server';
-import { CollectionLimitsConfig, PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { L2BlockSource, L2Tips } from '@aztec/stdlib/block';
-import { type ProposedCheckpointData, buildCheckpointSimulationOverridesPlan } from '@aztec/stdlib/checkpoint';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import type { MerkleTreeWriteOperations, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { type L1ToL2MessageSource, appendL1ToL2MessagesToTree, getInboxCutoffTimestamp } from '@aztec/stdlib/messaging';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { type InboxBucketSource, selectInboxBucketForBlock } from '@aztec-labs/sequencer-client';
+import { type AvmSimulator, PublicContractsDB, PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import { CollectionLimitsConfig, PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { L2BlockSource, L2Tips } from '@aztec-labs/stdlib/block';
+import { type ProposedCheckpointData, buildCheckpointSimulationOverridesPlan } from '@aztec-labs/stdlib/checkpoint';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import type { MerkleTreeWriteOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import {
+  type L1ToL2MessageSource,
+  appendL1ToL2MessagesToTree,
+  getInboxCutoffTimestamp,
+} from '@aztec-labs/stdlib/messaging';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   type GlobalVariableBuilder,
   GlobalVariables,
   PublicSimulationOutput,
   type SimulationOverrides,
   type Tx,
-} from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { applyPublicDataOverrides } from './public_data_overrides.js';
 

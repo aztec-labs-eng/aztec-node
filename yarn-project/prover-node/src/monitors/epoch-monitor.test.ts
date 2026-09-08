@@ -1,8 +1,7 @@
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { EpochMonitor, type EpochMonitorHandler } from './epoch-monitor.js';

@@ -1,17 +1,17 @@
-import type { BatchedBlob } from '@aztec/blob-lib/types';
-import type { CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec/foundation/promise';
-import { Timer } from '@aztec/foundation/timer';
-import type { EpochProverFactory } from '@aztec/prover-client';
-import { buildFinalBlobChallenges } from '@aztec/prover-client/helpers';
+import type { BatchedBlob } from '@aztec-labs/blob-lib/types';
+import type { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
+import { buildFinalBlobChallenges } from '@aztec-labs/prover-client/helpers';
 import {
   type CheckpointTopTreeData,
   TopTreeCancelledError,
   type TopTreeOrchestrator,
-} from '@aztec/prover-client/orchestrator';
-import type { Proof } from '@aztec/stdlib/proofs';
-import type { RootRollupPublicInputs } from '@aztec/stdlib/rollup';
+} from '@aztec-labs/prover-client/orchestrator';
+import type { Proof } from '@aztec-labs/stdlib/proofs';
+import type { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 
 import type { ProverNodeJobMetrics } from '../metrics.js';
 import type { CheckpointProver } from './checkpoint-prover.js';

@@ -4,7 +4,7 @@ import FormControl from '@mui/material/FormControl';
 import Typography from '@mui/material/Typography';
 import { CircularProgress, MenuItem } from '@mui/material';
 import { useContext, useEffect, useState } from 'react';
-import type { FeePaymentMethod } from '@aztec/aztec.js/fee';
+import type { FeePaymentMethod } from '@aztec-labs/aztec.js/fee';
 import { AztecContext } from '../../aztecContext';
 import { progressIndicator, select } from '../../styles/common';
 import { INFO_TEXT } from '../../constants';

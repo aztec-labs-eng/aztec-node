@@ -1,10 +1,9 @@
-import { FunctionSelector } from '@aztec/aztec.js/abi';
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { MAX_FIELD_VALUE } from '@aztec/constants';
-import { AbiTypesContract } from '@aztec/noir-test-contracts.js/AbiTypes';
-
+import { FunctionSelector } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { MAX_FIELD_VALUE } from '@aztec-labs/constants';
+import { AbiTypesContract } from '@aztec-labs/noir-test-contracts.js/AbiTypes';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

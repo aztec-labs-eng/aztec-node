@@ -1,7 +1,7 @@
 // docs:start:wallet-connect-imports
 import React, { useState, useEffect } from 'react';
-import type { Wallet, GrantedAccountsCapability } from '@aztec/aztec.js/wallet';
-import type { WalletProvider } from '@aztec/wallet-sdk/manager';
+import type { Wallet, GrantedAccountsCapability } from '@aztec-labs/aztec.js/wallet';
+import type { WalletProvider } from '@aztec-labs/wallet-sdk/manager';
 import type { NetworkType } from '../config';
 import { EmbeddedWallet } from '../embedded-wallet';
 import { discoverWallets, connectToProvider, getAppCapabilities } from '../wallet-connection';

@@ -1,6 +1,5 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import type { EvictionContext, PoolOperations } from './interfaces.js';

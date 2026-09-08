@@ -1,4 +1,4 @@
-import { mockTx } from '@aztec/stdlib/testing';
+import { mockTx } from '@aztec-labs/stdlib/testing';
 
 import { TxPoolRejectionCode } from './eviction/interfaces.js';
 import {

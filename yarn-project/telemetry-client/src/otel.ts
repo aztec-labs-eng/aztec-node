@@ -1,5 +1,4 @@
-import { type LogData, type Logger, addLogDataHandler } from '@aztec/foundation/log';
-
+import { type LogData, type Logger, addLogDataHandler } from '@aztec-labs/foundation/log';
 import {
   type Context,
   DiagConsoleLogger,

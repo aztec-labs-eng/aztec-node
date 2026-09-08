@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       docker_image:
-        description: "Full Docker image (e.g., aztecprotocol/aztec:my-tag). Takes precedence over nightly_tag."
+        description: "Full Docker image (e.g., azteclabs/aztec:my-tag). Takes precedence over nightly_tag."
         required: false
         type: string
       nightly_tag:
@@ -64,13 +64,13 @@ jobs:
             image_tag="${docker_image##*:}"
           elif [[ -n "${{ inputs.nightly_tag }}" ]]; then
             nightly_tag="${{ inputs.nightly_tag }}"
-            docker_image="aztecprotocol/aztec:${nightly_tag}"
+            docker_image="azteclabs/aztec:${nightly_tag}"
             image_label="${nightly_tag}"
             image_tag="${nightly_tag}"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
             nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
-            docker_image="aztecprotocol/aztec:${nightly_tag}"
+            docker_image="azteclabs/aztec:${nightly_tag}"
             image_label="${nightly_tag}"
             image_tag="${nightly_tag}"
           fi

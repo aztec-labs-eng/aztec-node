@@ -1,10 +1,10 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { InBlock } from '@aztec/stdlib/block';
-import { computePrivateEventCommitment, siloNullifier } from '@aztec/stdlib/hash';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { InBlock } from '@aztec-labs/stdlib/block';
+import { computePrivateEventCommitment, siloNullifier } from '@aztec-labs/stdlib/hash';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { EventValidationRequest } from '../contract_function_simulator/noir-structs/event_validation_request.js';
 import { PrivateEventStore } from '../storage/private_event_store/private_event_store.js';

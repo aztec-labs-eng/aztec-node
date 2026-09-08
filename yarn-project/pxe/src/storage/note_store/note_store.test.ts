@@ -1,9 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecLMDBStoreV2, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, type DataInBlock } from '@aztec/stdlib/block';
-import { NoteDao, NoteStatus } from '@aztec/stdlib/note';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, type DataInBlock } from '@aztec-labs/stdlib/block';
+import { NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 
 import type { ChangeSetId } from '../staged_write_coordinator.js';
 import { NoteStore } from './note_store.js';

@@ -1,7 +1,9 @@
-import { AztecClientBackend, type BackendOptions, Barretenberg } from '@aztec/bb.js';
-import { type LogLevel, type Logger, createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import { serializeWitness } from '@aztec/noir-noirc_abi';
+import { AztecClientBackend, type BackendOptions, Barretenberg } from '@aztec-foundation/bb.js';
+import { serializeWitness } from '@aztec-foundation/noir-noirc_abi';
+import type { Abi, WitnessMap } from '@aztec-foundation/noir-types';
+
+import { type LogLevel, type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 import {
   convertHidingKernelPublicInputsToWitnessMapWithAbi,
   convertHidingKernelToRollupInputsToWitnessMapWithAbi,
@@ -35,15 +37,14 @@ import {
   getPrivateKernelResetArtifactName,
   getPrivateKernelResetTailArtifactName,
   updateResetCircuitSampleInputs,
-} from '@aztec/noir-protocol-circuits-types/client';
+} from '@aztec-labs/noir-protocol-circuits-types/client';
 import {
   type ArtifactProvider,
   type ClientProtocolArtifact,
   mapProtocolArtifactNameToCircuitName,
-} from '@aztec/noir-protocol-circuits-types/types';
-import type { Abi, WitnessMap } from '@aztec/noir-types';
-import type { CircuitSimulator } from '@aztec/simulator/client';
-import type { PrivateKernelProver } from '@aztec/stdlib/interfaces/client';
+} from '@aztec-labs/noir-protocol-circuits-types/types';
+import type { CircuitSimulator } from '@aztec-labs/simulator/client';
+import type { PrivateKernelProver } from '@aztec-labs/stdlib/interfaces/client';
 import type {
   HidingKernelToPublicPrivateInputs,
   HidingKernelToRollupPrivateInputs,
@@ -63,11 +64,10 @@ import type {
   PrivateKernelResetTailCircuitPrivateInputs,
   PrivateKernelSimulateOutput,
   PrivateKernelTailCircuitPublicInputs,
-} from '@aztec/stdlib/kernel';
-import type { NoirCompiledCircuitWithName } from '@aztec/stdlib/noir';
-import { ChonkProofWithPublicInputs } from '@aztec/stdlib/proofs';
-import type { CircuitSimulationStats, CircuitWitnessGenerationStats } from '@aztec/stdlib/stats';
-
+} from '@aztec-labs/stdlib/kernel';
+import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
+import { ChonkProofWithPublicInputs } from '@aztec-labs/stdlib/proofs';
+import type { CircuitSimulationStats, CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
 import { ungzip } from 'pako';
 
 export type BBPrivateKernelProverOptions = Omit<BackendOptions, 'logger'> & { logger?: Logger };
@@ -406,7 +406,7 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
     const witnessMap = convertInputs(inputs, compiledCircuit.abi);
 
     const outputWitness = await this.simulator
-      .executeProtocolCircuit(witnessMap, compiledCircuit, foreignCallHandler)
+      .executeProtocolCircuitToWitness(witnessMap, compiledCircuit, foreignCallHandler)
       .catch((err: Error) => {
         this.log.debug(`Failed to simulate ${circuitType}`, {
           circuitName: mapProtocolArtifactNameToCircuitName(circuitType),
@@ -441,7 +441,11 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
       await this.artifactProvider.getClientCircuitArtifactByName(circuitType);
 
     const witnessMap = convertInputs(inputs, compiledCircuit.abi);
-    const outputWitness = await this.simulator.executeProtocolCircuit(witnessMap, compiledCircuit, foreignCallHandler);
+    const outputWitness = await this.simulator.executeProtocolCircuitToWitness(
+      witnessMap,
+      compiledCircuit,
+      foreignCallHandler,
+    );
     const output = convertOutputs(outputWitness.witness, compiledCircuit.abi);
 
     this.log.debug(`Generated witness for ${circuitType}`, {

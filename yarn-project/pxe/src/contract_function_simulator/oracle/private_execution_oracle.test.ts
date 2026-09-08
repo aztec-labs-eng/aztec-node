@@ -1,18 +1,17 @@
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar, Point } from '@aztec/foundation/curves/grumpkin';
-import type { KeyStore } from '@aztec/key-store';
-import { WASMSimulator } from '@aztec/simulator/client';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { L2TipsProvider } from '@aztec/stdlib/block';
-import { CompleteAddress } from '@aztec/stdlib/contract';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { AppTaggingSecret, AppTaggingSecretKind } from '@aztec/stdlib/logs';
-import { type BlockHeader, CallContext, type Capsule, TxContext } from '@aztec/stdlib/tx';
-
+import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
+import type { KeyStore } from '@aztec-labs/key-store';
+import { WASMSimulator } from '@aztec-labs/simulator/client';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
+import { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { AppTaggingSecret, AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { type BlockHeader, CallContext, type Capsule, TxContext } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 

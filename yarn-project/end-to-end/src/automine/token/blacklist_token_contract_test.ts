@@ -1,13 +1,12 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { computeSecretHash } from '@aztec/aztec.js/crypto';
-import { Fr } from '@aztec/aztec.js/fields';
-import { createLogger } from '@aztec/aztec.js/log';
-import type { TxHash } from '@aztec/aztec.js/tx';
-import type { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { TokenBlacklistContract } from '@aztec/noir-contracts.js/TokenBlacklist';
-import { GenericProxyContract } from '@aztec/noir-test-contracts.js/GenericProxy';
-import { InvalidAccountContract } from '@aztec/noir-test-contracts.js/InvalidAccount';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { computeSecretHash } from '@aztec-labs/aztec.js/crypto';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { TxHash } from '@aztec-labs/aztec.js/tx';
+import type { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { TokenBlacklistContract } from '@aztec-labs/noir-contracts.js/TokenBlacklist';
+import { GenericProxyContract } from '@aztec-labs/noir-test-contracts.js/GenericProxy';
+import { InvalidAccountContract } from '@aztec-labs/noir-test-contracts.js/InvalidAccount';
 import { jest } from '@jest/globals';
 
 import { ensureAuthRegistryPublished } from '../../fixtures/setup.js';

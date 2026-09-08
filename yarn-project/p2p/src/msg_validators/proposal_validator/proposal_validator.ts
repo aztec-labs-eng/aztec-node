@@ -1,7 +1,7 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { NoCommitteeError } from '@aztec/ethereum/contracts';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '@aztec/stdlib/deserialization';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
 import {
   type BlockProposal,
   type CheckpointProposalCore,
@@ -9,8 +9,8 @@ import {
   PeerErrorSeverity,
   type ValidationResult,
   hasValidSignatureContext,
-} from '@aztec/stdlib/p2p';
-import type { ConsensusTimetable } from '@aztec/stdlib/timetable';
+} from '@aztec-labs/stdlib/p2p';
+import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
 /** Validates header-level and tx-level fields of block and checkpoint proposals. */
 export class ProposalValidator {

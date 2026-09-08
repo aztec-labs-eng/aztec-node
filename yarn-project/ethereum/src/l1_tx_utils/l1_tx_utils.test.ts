@@ -1,14 +1,13 @@
-import { Blob } from '@aztec/blob-lib';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { TimeoutError } from '@aztec/foundation/error';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
-import { retryFastUntil, retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
-import { getErrorCause } from '@aztec/foundation/types';
-
+import { Blob } from '@aztec-labs/blob-lib';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { TimeoutError } from '@aztec-labs/foundation/error';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryFastUntil, retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import assert from 'node:assert';
@@ -1849,8 +1848,8 @@ describe('L1TxUtils', () => {
       // We need dynamic imports here since we do NOT depend on this projects
       // and we need to mark them as non-const so ts does not try to look for them
       // @dependency ../../../kv-store/src/lmdb-v2/index.ts, ../../../node-lib/src/stores/index.ts
-      const { openTmpStore } = await import('@aztec/kv-store/lmdb-v2' as string);
-      const { L1TxStore } = await import('@aztec/node-lib/stores' as string);
+      const { openTmpStore } = await import('@aztec-labs/kv-store/lmdb-v2' as string);
+      const { L1TxStore } = await import('@aztec-labs/node-lib/stores' as string);
 
       const kvStore = await openTmpStore('l1-tx-utils-rehydration-test', true);
       const store = new L1TxStore(kvStore);

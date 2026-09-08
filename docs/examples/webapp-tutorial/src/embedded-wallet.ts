@@ -1,15 +1,15 @@
 // docs:start:embedded-wallet-imports
-import { type NoFrom, NO_FROM } from '@aztec/aztec.js/account';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { Fr } from '@aztec/aztec.js/fields';
-import { SPONSORED_FPC_SALT } from '@aztec/constants';
-import { AccountFeePaymentMethodOptions } from '@aztec/entrypoints/account';
-import { getInitialTestAccountsData } from '@aztec/accounts/testing/lazy';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import { type CompleteFeeOptionsConfig, type FeeOptions } from '@aztec/wallet-sdk/base-wallet';
-import { EmbeddedWallet as BaseEmbeddedWallet } from '@aztec/wallets/embedded';
+import { type NoFrom, NO_FROM } from '@aztec-labs/aztec.js/account';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
+import { AccountFeePaymentMethodOptions } from '@aztec-labs/entrypoints/account';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing/lazy';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import { type CompleteFeeOptionsConfig, type FeeOptions } from '@aztec-labs/wallet-sdk/base-wallet';
+import { EmbeddedWallet as BaseEmbeddedWallet } from '@aztec-labs/wallets/embedded';
 // docs:end:embedded-wallet-imports
 
 // docs:start:embedded-wallet-class
@@ -73,7 +73,7 @@ export class EmbeddedWallet extends BaseEmbeddedWallet {
 
   static async #getSponsoredFPCContract() {
     const { SponsoredFPCContractArtifact } = await import(
-      '@aztec/noir-contracts.js/SponsoredFPC'
+      '@aztec-labs/noir-contracts.js/SponsoredFPC'
     );
     const instance = await getContractInstanceFromInstantiationParams(
       SponsoredFPCContractArtifact,

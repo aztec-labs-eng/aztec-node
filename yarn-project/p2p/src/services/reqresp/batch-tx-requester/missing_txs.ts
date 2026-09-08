@@ -1,5 +1,4 @@
-import { type Tx, TxHash } from '@aztec/stdlib/tx';
-
+import { type Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { IRequestTracker } from '../../tx_collection/request_tracker.js';

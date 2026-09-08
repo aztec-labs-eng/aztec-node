@@ -1,7 +1,6 @@
-import { toBufferBE } from '@aztec/foundation/bigint-buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferToHex } from '@aztec/foundation/string';
-
+import { toBufferBE } from '@aztec-labs/foundation/bigint-buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 import { inspect } from 'util';
 
 /** A selector is the low 4 bytes of the poseidon2 hash of a signature. */

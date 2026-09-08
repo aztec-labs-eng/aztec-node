@@ -1,7 +1,7 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { StaticChildContract } from '@aztec/noir-test-contracts.js/StaticChild';
-import { StaticParentContract } from '@aztec/noir-test-contracts.js/StaticParent';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { StaticChildContract } from '@aztec-labs/noir-test-contracts.js/StaticChild';
+import { StaticParentContract } from '@aztec-labs/noir-test-contracts.js/StaticParent';
 
 import { STATIC_CALL_STATE_MODIFICATION_ERROR, STATIC_CONTEXT_ASSERTION_ERROR } from '../../fixtures/fixtures.js';
 import { AutomineTestContext } from '../automine_test_context.js';

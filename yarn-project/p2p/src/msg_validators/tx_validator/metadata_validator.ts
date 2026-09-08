@@ -1,5 +1,5 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import {
   type AnyTx,
   TX_ERROR_INCORRECT_L1_CHAIN_ID,
@@ -8,7 +8,7 @@ import {
   TX_ERROR_INCORRECT_VK_TREE_ROOT,
   type TxValidationResult,
   type TxValidator,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 export class MetadataTxValidator<T extends AnyTx> implements TxValidator<T> {
   #log: Logger;

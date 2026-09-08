@@ -1,13 +1,12 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { executeTimeout } from '@aztec/foundation/timer';
-import { TestContractArtifact } from '@aztec/noir-test-contracts.js/Test';
-import { FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { makeBlockHeader } from '@aztec/stdlib/testing';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import { TestContractArtifact } from '@aztec-labs/noir-test-contracts.js/Test';
+import { FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { makeBlockHeader } from '@aztec-labs/stdlib/testing';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 

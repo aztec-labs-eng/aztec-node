@@ -1,9 +1,9 @@
-import { SpongeBlob } from '@aztec/blob-lib/types';
-import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, type Tuple, bigintToUInt64BE, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { SpongeBlob } from '@aztec-labs/blob-lib/types';
+import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, type Tuple, bigintToUInt64BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { L1ToL2MessageBundle } from '../messaging/l1_to_l2_message_bundle.js';
 import { L1ToL2MessageSponge } from '../messaging/l1_to_l2_message_sponge.js';

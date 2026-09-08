@@ -1,4 +1,4 @@
-import { type ContractArtifact, loadContractArtifact } from '@aztec/stdlib/abi';
+import { type ContractArtifact, loadContractArtifact } from '@aztec-labs/stdlib/abi';
 
 import { makeProtocolContract } from '../make_protocol_contract.js';
 import type { ProtocolContract } from '../protocol_contract.js';

@@ -1,10 +1,9 @@
 /**
  * Common interface for all signer implementations
  */
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
 import type { TransactionSerializable, TypedDataDefinition } from 'viem';
 
 /**

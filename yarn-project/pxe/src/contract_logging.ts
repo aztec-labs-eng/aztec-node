@@ -1,7 +1,7 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type LogLevel, type Logger, applyStringFormatting, createLogger } from '@aztec/foundation/log';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { DebugLog } from '@aztec/stdlib/logs';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type LogLevel, type Logger, applyStringFormatting, createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { DebugLog } from '@aztec-labs/stdlib/logs';
 
 /** Resolves a contract address to a human-readable name, if available. */
 export type ContractNameResolver = (address: AztecAddress) => Promise<string | undefined>;

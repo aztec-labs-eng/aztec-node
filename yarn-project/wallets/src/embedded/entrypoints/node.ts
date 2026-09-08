@@ -1,11 +1,11 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { type PXEConfig, getPXEConfig } from '@aztec/pxe/config';
-import { type PXE, type PXECreationOptions, createPXE, openStore } from '@aztec/pxe/server';
-import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
-import { getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry';
-import { getStandardMultiCallEntrypoint } from '@aztec/standard-contracts/multi-call-entrypoint';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/config';
+import { type PXE, type PXECreationOptions, createPXE, openStore } from '@aztec-labs/pxe/server';
+import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
+import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry';
+import { getStandardMultiCallEntrypoint } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 import { BundleAccountContractsProvider } from '../account-contract-providers/bundle.js';
 import type { AccountContractsProvider } from '../account-contract-providers/types.js';

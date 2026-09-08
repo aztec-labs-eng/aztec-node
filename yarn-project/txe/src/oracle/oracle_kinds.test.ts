@@ -1,5 +1,5 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { TypeMapping } from '@aztec/pxe/simulator';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { TypeMapping } from '@aztec-labs/pxe/simulator';
 
 import { SCALAR_MAPPINGS, testValueFor } from './test-resolver/default_fixtures.js';
 

@@ -1,21 +1,25 @@
-import { SpongeBlob } from '@aztec/blob-lib';
+import { SpongeBlob } from '@aztec-labs/blob-lib';
 import type {
   ARCHIVE_HEIGHT,
   L1_TO_L2_MSG_TREE_HEIGHT,
   NESTED_RECURSIVE_PROOF_LENGTH,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-} from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Tuple } from '@aztec/foundation/serialize';
-import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec/foundation/trees';
-import type { PublicInputsAndRecursiveProof } from '@aztec/stdlib/interfaces/server';
-import { L1ToL2MessageSponge } from '@aztec/stdlib/messaging';
-import { InboxParityPrivateInputs, type ParityPublicInputs } from '@aztec/stdlib/parity';
-import { BlockMergeRollupPrivateInputs, BlockRollupPublicInputs, CheckpointConstantData } from '@aztec/stdlib/rollup';
-import type { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import type { BlockHeader, StateReference } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
+import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec-labs/foundation/trees';
+import type { PublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import { L1ToL2MessageSponge } from '@aztec-labs/stdlib/messaging';
+import { InboxParityPrivateInputs, type ParityPublicInputs } from '@aztec-labs/stdlib/parity';
+import {
+  BlockMergeRollupPrivateInputs,
+  BlockRollupPublicInputs,
+  CheckpointConstantData,
+} from '@aztec-labs/stdlib/rollup';
+import type { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader, StateReference } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import { toProofData } from './block-building-helpers.js';
 import { BlockProvingState, type ProofState } from './block-proving-state.js';

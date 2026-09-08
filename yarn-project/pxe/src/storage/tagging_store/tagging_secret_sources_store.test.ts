@@ -1,6 +1,6 @@
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { TaggingSecretSourcesStore } from './tagging_secret_sources_store.js';
 

@@ -1,4 +1,4 @@
-import { getConfigFromMappings } from '@aztec/foundation/config';
+import { getConfigFromMappings } from '@aztec-labs/foundation/config';
 
 import { type SharedNodeConfig, sharedNodeConfigMappings } from './index.js';
 

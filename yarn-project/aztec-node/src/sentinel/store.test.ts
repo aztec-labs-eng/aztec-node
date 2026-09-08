@@ -1,9 +1,9 @@
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { AztecLMDBStoreV2, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import type { ValidatorStatusInSlot } from '@aztec/stdlib/validators';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { ValidatorStatusInSlot } from '@aztec-labs/stdlib/validators';
 
 import { SentinelStore } from './store.js';
 

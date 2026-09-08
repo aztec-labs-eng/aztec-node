@@ -1,16 +1,15 @@
-import { createLogger } from '@aztec/aztec.js/log';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import type { RollupCheatCodes } from '@aztec/aztec/testing';
-import type { CheckpointNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
-import { makeBackoff, retry, retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import type { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import {
   type AztecNodeAdmin,
   type AztecNodeAdminConfig,
   createAztecNodeAdminClient,
-} from '@aztec/stdlib/interfaces/client';
-
+} from '@aztec-labs/stdlib/interfaces/client';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 

@@ -1,6 +1,5 @@
-import { mockTx } from '@aztec/stdlib/testing';
-import type { Tx, TxValidationResult, TxValidator } from '@aztec/stdlib/tx';
-
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import type { Tx, TxValidationResult, TxValidator } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { CachedTxValidator } from './cached_tx_validator.js';

@@ -1,5 +1,4 @@
-import type { Logger } from '@aztec/foundation/log';
-
+import type { Logger } from '@aztec-labs/foundation/log';
 import type { Block } from 'viem';
 
 import type { ViemClient } from '../../types.js';

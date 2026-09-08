@@ -1,6 +1,6 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /** Information about a cross-contract utility call that requires authorization. */
 export type UtilityCallAuthorizationRequest = {

@@ -1,35 +1,42 @@
-import type { Archiver } from '@aztec/archiver';
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { INITIAL_L2_BLOCK_NUM, MAX_BLOCKS_PER_CHECKPOINT } from '@aztec/constants';
-import type { EpochCache } from '@aztec/epoch-cache';
-import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { type FieldsOf, unfreeze } from '@aztec/foundation/types';
-import type { P2P } from '@aztec/p2p';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { BlockData, L2Block, L2BlockSink, L2BlockSource } from '@aztec/stdlib/block';
-import { type Checkpoint, CheckpointReexecutionTracker, type ProposedCheckpointData } from '@aztec/stdlib/checkpoint';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { ITxProvider, ValidatorClientFullConfig, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { InboxBucket, L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { InboxBucketRef, accumulateCheckpointOutHashes } from '@aztec/stdlib/messaging';
-import { ValidatedBlockProposal, ValidatedCheckpointProposalCore } from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { INITIAL_L2_BLOCK_NUM, MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { type FieldsOf, unfreeze } from '@aztec-labs/foundation/types';
+import type { P2P } from '@aztec-labs/p2p';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { BlockData, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
+import {
+  type Checkpoint,
+  CheckpointReexecutionTracker,
+  type ProposedCheckpointData,
+} from '@aztec-labs/stdlib/checkpoint';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type {
+  ITxProvider,
+  ValidatorClientFullConfig,
+  WorldStateSynchronizer,
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxBucket, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { InboxBucketRef, accumulateCheckpointOutHashes } from '@aztec-labs/stdlib/messaging';
+import { ValidatedBlockProposal, ValidatedCheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
   makeBlockProposal,
   makeCheckpointHeader,
   makeCheckpointProposal,
-} from '@aztec/stdlib/testing';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { GlobalVariables, TX_ERROR_INVALID_PROOF, TxHash } from '@aztec/stdlib/tx';
-import { InvalidBlockProposalTxsError } from '@aztec/stdlib/validators';
-
+} from '@aztec-labs/stdlib/testing';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { GlobalVariables, TX_ERROR_INVALID_PROOF, TxHash } from '@aztec-labs/stdlib/tx';
+import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

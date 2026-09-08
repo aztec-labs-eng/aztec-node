@@ -1,4 +1,4 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { makePoseidonMerkleHash } from './hasher.js';
 import { MerkleTreeCalculator } from './merkle_tree_calculator.js';

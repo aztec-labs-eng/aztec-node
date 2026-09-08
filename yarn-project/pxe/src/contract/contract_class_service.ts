@@ -1,8 +1,8 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { isProtocolContract } from '@aztec/protocol-contracts';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { isProtocolContract } from '@aztec-labs/protocol-contracts';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { ContractStore } from '../storage/contract_store/contract_store.js';
 

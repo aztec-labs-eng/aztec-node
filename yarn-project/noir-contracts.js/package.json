@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/noir-contracts.js",
+  "name": "@aztec-labs/noir-contracts.js",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -57,11 +57,11 @@
     ]
   },
   "dependencies": {
-    "@aztec/aztec.js": "workspace:^",
+    "@aztec-labs/aztec.js": "workspace:^",
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@aztec/builder": "workspace:^",
+    "@aztec-labs/builder": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260113.1",

@@ -1,5 +1,5 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
 
 import { U128_OVERFLOW_ERROR } from '../../fixtures/fixtures.js';
 import { TokenContractTest } from './token_contract_test.js';

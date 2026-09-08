@@ -1,19 +1,19 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { ContractStore } from '@aztec/pxe/server';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { L2Block } from '@aztec/stdlib/block';
-import type { ContractInstancePreimageWithAddress } from '@aztec/stdlib/contract';
-import { computePublicDataTreeLeafSlot, siloNoteHash, siloNullifier } from '@aztec/stdlib/hash';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { ContractStore } from '@aztec-labs/pxe/server';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import type { ContractInstancePreimageWithAddress } from '@aztec-labs/stdlib/contract';
+import { computePublicDataTreeLeafSlot, siloNoteHash, siloNullifier } from '@aztec-labs/stdlib/hash';
 import {
   MerkleTreeId,
   type MerkleTreeWriteOperations,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
-import { GlobalVariables, TxEffect, TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/trees';
+import { GlobalVariables, TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 import { insertTxEffectIntoWorldTrees, makeTXEBlock } from '../utils/block_creation.js';
 import type { IAvmExecutionOracle } from './interfaces.js';

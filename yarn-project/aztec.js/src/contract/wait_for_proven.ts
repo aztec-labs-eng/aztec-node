@@ -1,7 +1,7 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { TxReceipt } from '@aztec/stdlib/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { TxReceipt } from '@aztec-labs/stdlib/tx';
 
 import { DefaultWaitOpts } from './wait_opts.js';
 

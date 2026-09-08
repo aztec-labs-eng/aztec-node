@@ -1,12 +1,12 @@
-import type { EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { waitForTx } from '@aztec/aztec.js/node';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { executeTimeout } from '@aztec/foundation/timer';
-import type { SequencerEvents } from '@aztec/sequencer-client';
-import { L2BlockSourceEvents } from '@aztec/stdlib/block';
-import { getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
+import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import type { SequencerEvents } from '@aztec-labs/sequencer-client';
+import { L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
+import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 
 import { proveAndSendTxs } from '../../test-wallet/utils.js';
 import {

@@ -1,6 +1,6 @@
-import { createLogger } from '@aztec/foundation/log';
-import { TokenContractArtifact } from '@aztec/noir-contracts.js/Token';
-import { NativeWorldStateService } from '@aztec/world-state/native';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { TokenContractArtifact } from '@aztec-labs/noir-contracts.js/Token';
+import { NativeWorldStateService } from '@aztec-labs/world-state/native';
 
 import { PublicTxSimulationTester } from '../../fixtures/public_tx_simulation_tester.js';
 import { tokenTest } from '../../fixtures/token_test.js';

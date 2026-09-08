@@ -3,6 +3,7 @@ id: running_a_prover
 displayed_sidebar: operatorsSidebar
 title: Running a Prover
 description: A comprehensive guide on how to run an Aztec prover on the network using Docker Compose in a distributed configuration.
+references: ["yarn-project/aztec/src/cli/aztec_start_options.ts", "yarn-project/aztec/src/cli/cmds/start_prover_agent.ts", "yarn-project/aztec/src/cli/cmds/start_prover_broker.ts", "yarn-project/prover-node/src/config.ts", "yarn-project/prover-client/src/proving_broker/*"]
 ---
 
 ## Overview
@@ -148,7 +149,7 @@ Create `docker-compose.yml`:
 name: aztec-prover-node
 services:
   prover-node:
-    image: aztecprotocol/aztec:#release_version
+    image: azteclabs/aztec:#release_version
     entrypoint: >-
       node
       --no-warnings
@@ -180,7 +181,7 @@ services:
     restart: unless-stopped
 
   prover-broker:
-    image: aztecprotocol/aztec:#release_version
+    image: azteclabs/aztec:#release_version
     entrypoint: >-
       node
       --no-warnings
@@ -260,7 +261,7 @@ Create `docker-compose.yml`:
 name: aztec-prover-agent
 services:
   prover-agent:
-    image: aztecprotocol/aztec:#release_version
+    image: azteclabs/aztec:#release_version
     entrypoint: >-
       node
       --no-warnings

@@ -1,10 +1,10 @@
-import { DomainSeparator, type L1_TO_L2_MSG_TREE_HEIGHT } from '@aztec/constants';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex } from '@aztec/foundation/string';
-import { SiblingPath } from '@aztec/foundation/trees';
+import { DomainSeparator, type L1_TO_L2_MSG_TREE_HEIGHT } from '@aztec-labs/constants';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { SiblingPath } from '@aztec-labs/foundation/trees';
 
 import type { AztecAddress } from '../aztec-address/index.js';
 import type { BlockParameter } from '../block/block_parameter.js';

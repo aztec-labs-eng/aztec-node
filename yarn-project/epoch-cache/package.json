@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/epoch-cache",
+  "name": "@aztec-labs/epoch-cache",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -26,9 +26,9 @@
     "../package.common.json"
   ],
   "dependencies": {
-    "@aztec/ethereum": "workspace:*",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/stdlib": "workspace:*",
+    "@aztec-labs/ethereum": "workspace:*",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:*",
     "dotenv": "^16.0.3",
     "get-port": "^7.1.0",
     "jest-mock-extended": "^4.0.0",

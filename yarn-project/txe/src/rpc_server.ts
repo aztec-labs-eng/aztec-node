@@ -1,6 +1,5 @@
-import { createSafeJsonRpcServer } from '@aztec/foundation/json-rpc/server';
-import type { Logger } from '@aztec/foundation/log';
-
+import { createSafeJsonRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import type { Logger } from '@aztec-labs/foundation/log';
 import type { Socket } from 'node:net';
 
 import { TXEDispatcherPool, buildSharedContractStore } from './dispatcher_pool.js';

@@ -1,6 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { ViemTransactionSignature } from '@aztec/foundation/eth-signature';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { ViemTransactionSignature } from '@aztec-labs/foundation/eth-signature';
 import { type TransactionSerializable, type WalletClient, parseTransaction } from 'viem';
 
 import type { SigningCallback } from './types.js';

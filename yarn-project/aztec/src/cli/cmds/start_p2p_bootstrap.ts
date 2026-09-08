@@ -1,15 +1,15 @@
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { NamespacedApiHandlers } from '@aztec/foundation/json-rpc/server';
-import type { LogFn } from '@aztec/foundation/log';
-import { createStore } from '@aztec/kv-store/lmdb-v2';
-import { type BootnodeConfig, BootstrapNode, bootnodeConfigMappings } from '@aztec/p2p';
-import { emptyChainConfig } from '@aztec/stdlib/config';
-import { P2PBootstrapApiSchema } from '@aztec/stdlib/interfaces/server';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { NamespacedApiHandlers } from '@aztec-labs/foundation/json-rpc/server';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { createStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { type BootnodeConfig, BootstrapNode, bootnodeConfigMappings } from '@aztec-labs/p2p';
+import { emptyChainConfig } from '@aztec-labs/stdlib/config';
+import { P2PBootstrapApiSchema } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type TelemetryClientConfig,
   initTelemetryClient,
   telemetryClientConfigMappings,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import { extractRelevantOptions } from '../util.js';
 

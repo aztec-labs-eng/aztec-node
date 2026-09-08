@@ -1,5 +1,5 @@
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import type { Wallet } from '@aztec/aztec.js/wallet';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 
 /**
  * A pending connection that requires user verification before finalizing.

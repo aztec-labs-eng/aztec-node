@@ -1,5 +1,4 @@
-import type { LogFn } from '@aztec/foundation/log';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
 
 export async function generateP2PPrivateKey(log: LogFn) {

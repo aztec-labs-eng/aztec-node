@@ -1,6 +1,6 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { EthAddress } from '@aztec/aztec.js/addresses';
-import { EpochNumber } from '@aztec/foundation/branded-types';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 
 import {
   MultiNodeTestContext,

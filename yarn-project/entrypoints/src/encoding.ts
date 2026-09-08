@@ -1,10 +1,10 @@
-import { DomainSeparator } from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Tuple } from '@aztec/foundation/serialize';
-import { FunctionCall, FunctionType } from '@aztec/stdlib/abi';
-import { HashedValues } from '@aztec/stdlib/tx';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
+import { FunctionCall, FunctionType } from '@aztec-labs/stdlib/abi';
+import { HashedValues } from '@aztec-labs/stdlib/tx';
 
 // These must match the values defined in:
 // - noir-projects/aztec-nr/aztec/src/authwit/entrypoint/app.nr

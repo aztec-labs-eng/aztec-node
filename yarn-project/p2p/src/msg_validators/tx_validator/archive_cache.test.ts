@@ -1,7 +1,6 @@
-import { BlockHash } from '@aztec/stdlib/block';
-import type { MerkleTreeReadOperations } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { MerkleTreeReadOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { ArchiveCache } from './archive_cache.js';

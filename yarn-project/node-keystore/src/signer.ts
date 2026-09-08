@@ -3,15 +3,14 @@
  *
  * Common interface for different signing backends (local, remote, encrypted)
  */
-import type { EthSigner } from '@aztec/ethereum/eth-signer';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Secp256k1Signer, toRecoveryBit } from '@aztec/foundation/crypto/secp256k1-signer';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature, type ViemTransactionSignature } from '@aztec/foundation/eth-signature';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { bufferToHex, withHexPrefix } from '@aztec/foundation/string';
-
+import type { EthSigner } from '@aztec-labs/ethereum/eth-signer';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Secp256k1Signer, toRecoveryBit } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature, type ViemTransactionSignature } from '@aztec-labs/foundation/eth-signature';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { bufferToHex, withHexPrefix } from '@aztec-labs/foundation/string';
 import {
   type TransactionSerializable,
   type TypedDataDefinition,

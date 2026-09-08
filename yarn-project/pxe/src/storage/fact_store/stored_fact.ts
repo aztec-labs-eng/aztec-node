@@ -1,7 +1,7 @@
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { FactCollectionKey, type OriginBlock } from './fact_store_keys.js';
 

@@ -1,6 +1,6 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec/foundation/json-rpc/test';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 
 import { ProvingRequestType } from '../proofs/proving_request_type.js';
 import { type ProverAgentApi, ProverAgentApiSchema, type ProverAgentStatus } from './prover-agent.js';

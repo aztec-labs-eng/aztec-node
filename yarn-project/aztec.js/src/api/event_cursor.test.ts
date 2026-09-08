@@ -1,5 +1,5 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { LogCursor } from '@aztec/stdlib/logs';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { LogCursor } from '@aztec-labs/stdlib/logs';
 
 import { EventCursor } from './event_cursor.js';
 

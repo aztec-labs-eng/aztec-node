@@ -2,8 +2,8 @@ import {
   DEFAULT_TAGGING_SECRET_STRATEGY,
   type ResolveTaggingSecretStrategy,
   type TaggingSecretStrategy,
-} from '@aztec/pxe/server';
-import type { AppTaggingSecretKind } from '@aztec/stdlib/logs';
+} from '@aztec-labs/pxe/server';
+import type { AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
 
 /** The tagging secret strategies a TXE test has configured, keyed by delivery mode. Absence means "not configured". */
 export type TXETaggingSecretStrategies = Map<AppTaggingSecretKind, TaggingSecretStrategy>;

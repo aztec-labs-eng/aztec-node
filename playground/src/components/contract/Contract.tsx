@@ -5,8 +5,8 @@ import {
   type DeployOptions,
   Contract,
   DeployMethod,
-} from '@aztec/aztec.js/contracts';
-import { type FunctionAbi, getAllFunctionAbis, FunctionType } from '@aztec/stdlib/abi';
+} from '@aztec-labs/aztec.js/contracts';
+import { type FunctionAbi, getAllFunctionAbis, FunctionType } from '@aztec-labs/stdlib/abi';
 import { AztecContext } from '../../aztecContext';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';

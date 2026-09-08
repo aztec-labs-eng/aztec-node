@@ -14,7 +14,7 @@ const path = require("path");
 // track the pinned toolchain release rather than the docs release.
 const PUBLISHED_SNIPPET_SOURCES = [
   {
-    pathPrefix: "docs/node_modules/@aztec/l1-artifacts/",
+    pathPrefix: "docs/node_modules/@aztec-foundation/l1-artifacts/",
     repoUrl: "https://github.com/AztecProtocol/aztec-packages",
   },
 ];

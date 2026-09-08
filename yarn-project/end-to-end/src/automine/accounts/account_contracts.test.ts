@@ -1,20 +1,20 @@
-import { EcdsaKAccountContract } from '@aztec/accounts/ecdsa';
-import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec/accounts/schnorr';
+import { EcdsaKAccountContract } from '@aztec-labs/accounts/ecdsa';
+import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec-labs/accounts/schnorr';
 import {
   type Account,
   type AccountContract,
   BaseAccount,
   NO_FROM,
   getAccountContractAddress,
-} from '@aztec/aztec.js/account';
-import { AztecAddress, CompleteAddress } from '@aztec/aztec.js/addresses';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { DefaultAccountEntrypoint } from '@aztec/entrypoints/account';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { ChildContract } from '@aztec/noir-test-contracts.js/Child';
-import { createPXE, getPXEConfig } from '@aztec/pxe/server';
+} from '@aztec-labs/aztec.js/account';
+import { AztecAddress, CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { DefaultAccountEntrypoint } from '@aztec-labs/entrypoints/account';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { ChildContract } from '@aztec-labs/noir-test-contracts.js/Child';
+import { createPXE, getPXEConfig } from '@aztec-labs/pxe/server';
 
 import { TestWallet } from '../../test-wallet/test_wallet.js';
 import { AztecNodeProxy } from '../../test-wallet/utils.js';

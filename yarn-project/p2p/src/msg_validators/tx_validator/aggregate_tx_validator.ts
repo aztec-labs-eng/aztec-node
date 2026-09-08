@@ -1,4 +1,4 @@
-import type { TxValidationResult, TxValidator } from '@aztec/stdlib/tx';
+import type { TxValidationResult, TxValidator } from '@aztec-labs/stdlib/tx';
 
 export class AggregateTxValidator<T> implements TxValidator<T> {
   readonly validators: TxValidator<T>[];

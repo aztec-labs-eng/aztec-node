@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { Checkpoint } from '@aztec/stdlib/checkpoint';
-import type { InboxBucket, L1ToL2MessageSource } from '@aztec/stdlib/messaging';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { InboxBucket, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 
 import { MockL1ToL2MessageSource } from './mock_l1_to_l2_message_source.js';
 import { MockL2BlockSource } from './mock_l2_block_source.js';

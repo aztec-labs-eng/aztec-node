@@ -1,6 +1,6 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { NoCommitteeError } from '@aztec/ethereum/contracts';
-import { type Logger, createLogger } from '@aztec/foundation/log';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import {
   type CheckpointAttestation,
   type CoordinationSignatureContext,
@@ -8,8 +8,8 @@ import {
   PeerErrorSeverity,
   type ValidationResult,
   hasValidSignatureContext,
-} from '@aztec/stdlib/p2p';
-import type { ConsensusTimetable } from '@aztec/stdlib/timetable';
+} from '@aztec-labs/stdlib/p2p';
+import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
 export class CheckpointAttestationValidator implements P2PValidator<CheckpointAttestation> {
   protected epochCache: EpochCacheInterface;

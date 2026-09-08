@@ -1,15 +1,14 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { P2PConnectivity, PeerInfo } from '@aztec/stdlib/interfaces/server';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { P2PConnectivity, PeerInfo } from '@aztec-labs/stdlib/interfaces/server';
 import type {
   CheckpointAttestation,
   Gossipable,
   TopicType,
   ValidatedBlockProposal,
   ValidatedCheckpointProposalCore,
-} from '@aztec/stdlib/p2p';
-import type { Tx } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/p2p';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 import type { ENR } from '@nethermindeth/enr';
 import type EventEmitter from 'events';

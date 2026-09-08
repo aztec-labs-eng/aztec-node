@@ -2,13 +2,13 @@ import {
   MAX_CONTRACT_CLASS_LOGS_PER_TX,
   MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS,
   PRIVATE_LOG_SIZE_IN_FIELDS,
-} from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { times } from '@aztec/foundation/collection';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+} from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { times } from '@aztec-labs/foundation/collection';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { LogHash, ScopedLogHash } from '../kernel/log_hash.js';

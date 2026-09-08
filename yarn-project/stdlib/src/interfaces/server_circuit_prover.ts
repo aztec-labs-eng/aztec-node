@@ -3,7 +3,7 @@ import type {
   NESTED_RECURSIVE_PROOF_LENGTH,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
-} from '@aztec/constants';
+} from '@aztec-labs/constants';
 
 import type { AvmCircuitInputs } from '../avm/avm.js';
 import type { InboxParityPrivateInputs } from '../parity/inbox_parity_private_inputs.js';

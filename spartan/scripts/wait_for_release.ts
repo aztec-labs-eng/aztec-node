@@ -1,22 +1,20 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
 /**
- * Wait for the `ci` job of the CI3 workflow run triggered by a tag, and gate
- * the deploy on that single job succeeding.
+ * Wait for the `release` job of the release workflow run triggered by a tag, and
+ * gate the deploy on that job succeeding.
  *
  * Usage:
- *   wait_for_ci3.ts <tag> [repo]
+ *   wait_for_release.ts <tag> [repo]
  *
  * Arguments:
  *   tag  - The git tag to wait for (e.g., v4.0.0-devnet.1-patch.0)
  *   repo - Optional GitHub repo (default: GITHUB_REPOSITORY or 'aztec-labs-eng/aztec-node')
  *
- * The script resolves the tag's commit, finds the ci3.yml run for it, then
- * polls that run's `ci` job and exits 0 as soon as it completes successfully.
- * The `ci` job runs the whole release flow (`ci.sh release`, which builds and
- * publishes on amd64 + arm64 via `parallel --halt now,fail=1`), so its success
- * already implies the release jobs succeeded. We gate on it alone rather than
- * the overall run, which also bundles network benches and other jobs that
- * should not block the deploy.
+ * The script resolves the tag's commit, finds the release.yml run for it, then
+ * polls that run's `release` job and exits 0 as soon as it completes
+ * successfully. That job runs the whole release flow (`ci.sh release`, which
+ * builds and publishes on amd64 + arm64 via `parallel --halt now,fail=1`), so
+ * its success already implies every published artifact is live.
  *
  * Writes run_id to GITHUB_OUTPUT when running in CI.
  */
@@ -28,7 +26,7 @@ const positional = process.argv.slice(2);
 
 const tag = positional[0];
 if (!tag) {
-  console.error("Usage: wait_for_ci3.ts <tag> [repo]");
+  console.error("Usage: wait_for_release.ts <tag> [repo]");
   process.exit(1);
 }
 
@@ -53,52 +51,52 @@ async function main(): Promise<void> {
     ).object.sha;
   }
 
-  console.log(`Waiting for CI3 run for tag ${tag} (commit: ${commitSha})`);
+  console.log(`Waiting for release run for tag ${tag} (commit: ${commitSha})`);
 
-  // Find the CI3 run for that commit (poll up to 10 minutes). Query filtered
+  // Find the release run for that commit (poll up to 10 minutes). Query filtered
   // server-side by head_sha so we find the run no matter how far down the
   // history it has aged.
   let runId = "";
   for (let i = 1; i <= 60; i++) {
     runId = gh(
-      `api "repos/${repo}/actions/workflows/ci3.yml/runs?head_sha=${commitSha}" --jq '.workflow_runs[0].id // empty'`,
+      `api "repos/${repo}/actions/workflows/release.yml/runs?head_sha=${commitSha}" --jq '.workflow_runs[0].id // empty'`,
     );
     if (runId) {
-      console.log(`Found CI3 run: ${runId}`);
+      console.log(`Found release run: ${runId}`);
       break;
     }
-    console.log(`Attempt ${i}/60: CI3 run not found yet, waiting 10s...`);
+    console.log(`Attempt ${i}/60: release run not found yet, waiting 10s...`);
     await sleep(10_000);
   }
 
   if (!runId) {
-    console.error(`Error: CI3 run never appeared for tag ${tag}`);
+    console.error(`Error: release run never appeared for tag ${tag}`);
     process.exit(1);
   }
 
   writeGithubOutputs({ run_id: runId });
 
-  // Poll the run's `ci` job until it completes, then gate on its conclusion.
-  console.log(`Waiting for the ci job of run ${runId}...`);
+  // Poll the run's `release` job until it completes, then gate on its conclusion.
+  console.log(`Waiting for the release job of run ${runId}...`);
   while (true) {
     const job = JSON.parse(
       gh(
-        `api repos/${repo}/actions/runs/${runId}/jobs --paginate --jq '[.jobs[] | select(.name == "ci")][0] // empty'`,
+        `api repos/${repo}/actions/runs/${runId}/jobs --paginate --jq '[.jobs[] | select(.name == "release")][0] // empty'`,
       ) || "null",
     );
 
     if (job?.status === "completed") {
-      console.log(`ci job ${job.id} completed: ${job.conclusion} (${job.html_url})`);
+      console.log(`release job ${job.id} completed: ${job.conclusion} (${job.html_url})`);
       if (job.conclusion !== "success") {
-        console.error(`Error: ci job did not succeed (${job.conclusion}).`);
+        console.error(`Error: release job did not succeed (${job.conclusion}).`);
         process.exit(1);
       }
-      console.log("ci job succeeded.");
+      console.log("release job succeeded.");
       return;
     }
 
     console.log(
-      `ci job ${job ? `${job.id} is ${job.status}` : "not found yet"}, waiting 10s...`,
+      `release job ${job ? `${job.id} is ${job.status}` : "not found yet"}, waiting 10s...`,
     );
     await sleep(10_000);
   }

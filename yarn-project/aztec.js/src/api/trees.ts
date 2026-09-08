@@ -1,2 +1,2 @@
-export { SiblingPath } from '@aztec/foundation/trees';
-export { MerkleTreeId, merkleTreeIds } from '@aztec/stdlib/trees';
+export { SiblingPath } from '@aztec-labs/foundation/trees';
+export { MerkleTreeId, merkleTreeIds } from '@aztec-labs/stdlib/trees';

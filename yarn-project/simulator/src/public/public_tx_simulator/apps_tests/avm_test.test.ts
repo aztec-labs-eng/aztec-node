@@ -1,11 +1,11 @@
-import { MAX_PUBLIC_CALLS_TO_UNIQUE_CONTRACT_CLASS_IDS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { AvmTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmTest';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { makeContractInstanceFromClassId } from '@aztec/stdlib/testing';
-import { NativeWorldStateService } from '@aztec/world-state/native';
+import { MAX_PUBLIC_CALLS_TO_UNIQUE_CONTRACT_CLASS_IDS } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { makeContractInstanceFromClassId } from '@aztec-labs/stdlib/testing';
+import { NativeWorldStateService } from '@aztec-labs/world-state/native';
 
 import { bulkTest } from '../../fixtures/bulk_test.js';
 import { PublicTxSimulationTester } from '../../fixtures/public_tx_simulation_tester.js';

@@ -1,8 +1,7 @@
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn } from '@aztec/foundation/log';
-import { loadKeystoreFile } from '@aztec/node-keystore/loader';
-import type { KeyStore } from '@aztec/node-keystore/types';
-
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { loadKeystoreFile } from '@aztec-labs/node-keystore/loader';
+import type { KeyStore } from '@aztec-labs/node-keystore/types';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { dirname, isAbsolute, join } from 'path';
 import { generateMnemonic } from 'viem/accounts';

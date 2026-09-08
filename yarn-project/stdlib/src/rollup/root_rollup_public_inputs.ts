@@ -1,11 +1,11 @@
-import { FinalBlobAccumulator } from '@aztec/blob-lib/types';
-import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, type Tuple, serializeToBuffer, serializeToFields } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { FinalBlobAccumulator } from '@aztec-labs/blob-lib/types';
+import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, type Tuple, serializeToBuffer, serializeToFields } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { FeeRecipient } from './checkpoint_rollup_public_inputs.js';
 import { EpochConstantData } from './epoch_constant_data.js';

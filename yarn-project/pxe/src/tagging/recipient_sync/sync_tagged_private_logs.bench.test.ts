@@ -1,14 +1,13 @@
-import { MAX_TX_LIFETIME } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { sum, times } from '@aztec/foundation/collection';
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { AppTaggingSecretKind, type PrivateLogsQuery, randomLogResult } from '@aztec/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec/stdlib/testing';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { sum, times } from '@aztec-labs/foundation/collection';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { AppTaggingSecretKind, type PrivateLogsQuery, randomLogResult } from '@aztec-labs/stdlib/logs';
+import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { mkdir, writeFile } from 'fs/promises';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import path from 'path';
@@ -30,7 +29,7 @@ import { computeSiloedTagForIndex, extractTags } from '../testing/tag_query_test
  * Manual run:
  * ```bash
  * RUN_TAG_SYNC_BENCH=1 JEST_MAX_WORKERS=1 BENCH_OUTPUT=/tmp/tag-sync-bench-current.json \
- *   yarn workspace @aztec/pxe test src/tagging/recipient_sync/sync_tagged_private_logs.bench.test.ts
+ *   yarn workspace @aztec-labs/pxe test src/tagging/recipient_sync/sync_tagged_private_logs.bench.test.ts
  * ```
  *
  * Metrics, per scenario:

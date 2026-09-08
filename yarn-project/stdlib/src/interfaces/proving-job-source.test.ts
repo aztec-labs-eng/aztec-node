@@ -1,7 +1,7 @@
-import { NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec/constants';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
-import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec/foundation/json-rpc/test';
+import { NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec-labs/constants';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 
 import { ProvingRequestType } from '../proofs/proving_request_type.js';
 import { makeRecursiveProof } from '../proofs/recursive_proof.js';

@@ -1,15 +1,15 @@
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
 import {
   BlockNumber,
   CheckpointNumber,
   type EpochNumber,
   IndexWithinCheckpoint,
   type SlotNumber,
-} from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   type BlockHash,
@@ -22,14 +22,14 @@ import {
   L2Block,
   type L2Tips,
   type ProposedCheckpointQuery,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
   type CheckpointData,
   type ProposedCheckpointData,
   PublishedCheckpoint,
-} from '@aztec/stdlib/checkpoint';
-import type { ContractClassPublic, ContractDataSource, ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+} from '@aztec-labs/stdlib/checkpoint';
+import type { ContractClassPublic, ContractDataSource, ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import {
   type L1RollupConstants,
   getEpochAtSlot,
@@ -37,13 +37,13 @@ import {
   getLastL1SlotTimestampForL2Slot,
   getProofSubmissionDeadlineEpoch,
   getSlotRangeForEpoch,
-} from '@aztec/stdlib/epoch-helpers';
-import type { L2LogsSource } from '@aztec/stdlib/interfaces/server';
-import type { LogResult, PrivateLogsQuery, PublicLogsQuery } from '@aztec/stdlib/logs';
-import type { InboxBucket, L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec/stdlib/messaging';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import type { BlockHeader, IndexedTxEffect, TxHash } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/epoch-helpers';
+import type { L2LogsSource } from '@aztec-labs/stdlib/interfaces/server';
+import type { LogResult, PrivateLogsQuery, PublicLogsQuery } from '@aztec-labs/stdlib/logs';
+import type { InboxBucket, L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader, IndexedTxEffect, TxHash } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { ArchiverDataSource } from '../interfaces.js';
 import type { ResolvedBlockQuery, ResolvedBlocksQuery } from '../store/block_store.js';

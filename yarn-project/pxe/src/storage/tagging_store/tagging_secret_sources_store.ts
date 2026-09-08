@@ -1,7 +1,7 @@
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { toArray } from '@aztec/foundation/iterable';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec/kv-store';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec-labs/kv-store';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /**
  * The kinds of shared secret an entry can hold.

@@ -1,7 +1,6 @@
-import type { NetworkNames } from '@aztec/foundation/config';
-import { createLogger } from '@aztec/foundation/log';
-import { type ConsensusEnvVar, checkConsensusEnvOverrides } from '@aztec/stdlib/config';
-
+import type { NetworkNames } from '@aztec-labs/foundation/config';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { type ConsensusEnvVar, checkConsensusEnvOverrides } from '@aztec-labs/stdlib/config';
 import path from 'path';
 
 import { devnetConfig, mainnetConfig, testnetConfig } from './generated/networks.js';

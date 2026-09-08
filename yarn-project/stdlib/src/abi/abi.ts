@@ -1,8 +1,7 @@
 /* eslint-disable camelcase */
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { schemas, zodFor } from '@aztec/foundation/schemas';
-
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { inflate } from 'pako';
 import { z } from 'zod';
 

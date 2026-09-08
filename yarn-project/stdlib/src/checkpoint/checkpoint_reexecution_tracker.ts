@@ -1,5 +1,5 @@
-import type { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 /**
  * Outcome of attempting to re-execute a checkpoint proposal locally.

@@ -1,5 +1,4 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Hex } from 'viem';
 
 /**

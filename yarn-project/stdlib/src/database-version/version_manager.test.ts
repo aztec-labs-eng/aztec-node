@@ -1,6 +1,5 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jest } from '@jest/globals';
 import { join } from 'path';
 

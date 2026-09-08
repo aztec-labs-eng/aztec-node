@@ -1,8 +1,8 @@
-import { MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS } from '@aztec/constants';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { ContractClassPublishedEvent } from '@aztec/protocol-contracts/class-registry';
-import { computeContractClassId } from '@aztec/stdlib/contract';
-import { computeCalldataHash } from '@aztec/stdlib/hash';
+import { MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS } from '@aztec-labs/constants';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { ContractClassPublishedEvent } from '@aztec-labs/protocol-contracts/class-registry';
+import { computeContractClassId } from '@aztec-labs/stdlib/contract';
+import { computeCalldataHash } from '@aztec-labs/stdlib/hash';
 import {
   TX_ERROR_CALLDATA_COUNT_MISMATCH,
   TX_ERROR_CALLDATA_COUNT_TOO_LARGE,
@@ -17,7 +17,7 @@ import {
   Tx,
   type TxValidationResult,
   type TxValidator,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 export class DataTxValidator implements TxValidator<Tx> {
   public readonly identifier: symbol = Symbol('DataTxValidator');

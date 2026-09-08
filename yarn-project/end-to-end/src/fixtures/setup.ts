@@ -1,64 +1,74 @@
-import { type InitialAccountData, generateSchnorrAccounts } from '@aztec/accounts/testing';
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService, getConfigEnvVars } from '@aztec/aztec-node';
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import type { ContractMethod } from '@aztec/aztec.js/contracts';
-import { publishContractClass, publishInstance } from '@aztec/aztec.js/deployment';
-import { Fr } from '@aztec/aztec.js/fields';
-import { type Logger, createLogger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { CheatCodes } from '@aztec/aztec/testing';
-import { SPONSORED_FPC_SALT } from '@aztec/constants';
-import { isAnvilTestChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { NULL_KEY } from '@aztec/ethereum/constants';
-import { deployMulticall3 } from '@aztec/ethereum/contracts';
+import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import {
+  type AztecNodeConfig,
+  AztecNodeService,
+  createAztecNodeService,
+  getConfigEnvVars,
+} from '@aztec-labs/aztec-node';
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractMethod } from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass, publishInstance } from '@aztec-labs/aztec.js/deployment';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
+import { isAnvilTestChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { NULL_KEY } from '@aztec-labs/ethereum/constants';
+import { deployMulticall3 } from '@aztec-labs/ethereum/contracts';
 import {
   type DeployAztecL1ContractsArgs,
   type DeployAztecL1ContractsReturnType,
   type Operator,
   type ZKPassportArgs,
   deployAztecL1Contracts,
-} from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import type { Delayer } from '@aztec/ethereum/l1-tx-utils';
-import { EthCheatCodes, EthCheatCodesWithState, startAnvil, warmBlobKzg } from '@aztec/ethereum/test';
-import type { Anvil } from '@aztec/ethereum/test';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { BlockNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { SecretValue } from '@aztec/foundation/config';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { tryRmDir } from '@aztec/foundation/fs';
-import { withLoggerBindings } from '@aztec/foundation/log/server';
-import { retryUntil } from '@aztec/foundation/retry';
-import { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
-import { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import type { P2PClientDeps } from '@aztec/p2p';
-import { MockGossipSubNetwork, getMockPubSubP2PServiceFactory } from '@aztec/p2p/test-helpers';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { ProverNodeConfig, ProverNodeDeps } from '@aztec/prover-node';
-import { type PXEConfig, type PXECreationOptions, getPXEConfig } from '@aztec/pxe/server';
-import type { SequencerClient } from '@aztec/sequencer-client';
-import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
-import { HandshakeRegistryArtifact, getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry';
-import { PublicChecksArtifact, getStandardPublicChecks } from '@aztec/standard-contracts/public-checks';
-import { ARTIFACT_VERSION_BEFORE_INJECTION } from '@aztec/stdlib/abi';
-import { type ContractInstanceWithAddress, getContractInstanceFromInstantiationParams } from '@aztec/stdlib/contract';
-import type { AztecNodeAdmin, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-import type { PublicDataTreeLeaf } from '@aztec/stdlib/trees';
-import type { GenesisData } from '@aztec/stdlib/world-state';
+} from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import { EthCheatCodes, EthCheatCodesWithState, startAnvil, warmBlobKzg } from '@aztec-labs/ethereum/test';
+import type { Anvil } from '@aztec-labs/ethereum/test';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { BlockNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { tryRmDir } from '@aztec-labs/foundation/fs';
+import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { SponsoredFPCContract } from '@aztec-labs/noir-contracts.js/SponsoredFPC';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import type { P2PClientDeps } from '@aztec-labs/p2p';
+import { MockGossipSubNetwork, getMockPubSubP2PServiceFactory } from '@aztec-labs/p2p/test-helpers';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { ProverNodeConfig, ProverNodeDeps } from '@aztec-labs/prover-node';
+import { type PXEConfig, type PXECreationOptions, getPXEConfig } from '@aztec-labs/pxe/server';
+import type { SequencerClient } from '@aztec-labs/sequencer-client';
+import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
+import {
+  HandshakeRegistryArtifact,
+  getStandardHandshakeRegistry,
+} from '@aztec-labs/standard-contracts/handshake-registry';
+import { PublicChecksArtifact, getStandardPublicChecks } from '@aztec-labs/standard-contracts/public-checks';
+import { ARTIFACT_VERSION_BEFORE_INJECTION } from '@aztec-labs/stdlib/abi';
+import {
+  type ContractInstanceWithAddress,
+  getContractInstanceFromInstantiationParams,
+} from '@aztec-labs/stdlib/contract';
+import type { AztecNodeAdmin, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import type { PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 import {
   type TelemetryClient,
   type TelemetryClientConfig,
   getConfigEnvVars as getTelemetryConfig,
   initTelemetryClient,
-} from '@aztec/telemetry-client';
-import { BenchmarkTelemetryClient } from '@aztec/telemetry-client/bench';
-import { createFundedInitializerlessAccounts } from '@aztec/wallets/testing';
-import { getGenesisValues } from '@aztec/world-state/testing';
-
+} from '@aztec-labs/telemetry-client';
+import { BenchmarkTelemetryClient } from '@aztec-labs/telemetry-client/bench';
+import { createFundedInitializerlessAccounts } from '@aztec-labs/wallets/testing';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 import fs from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';

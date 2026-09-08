@@ -4,11 +4,11 @@
  * Provides distributed locking and slashing protection for validator duties.
  * Uses an external database to coordinate across multiple validator nodes.
  */
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { BaseSignerConfig } from '@aztec/stdlib/ha-signing';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { BaseSignerConfig } from '@aztec-labs/stdlib/ha-signing';
 
 import {
   type CheckAndRecordParams,

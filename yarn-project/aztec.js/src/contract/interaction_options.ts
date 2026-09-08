@@ -1,8 +1,8 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { FieldsOf } from '@aztec/foundation/types';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { GasSettings, GasUsed, ManaUsageEstimate } from '@aztec/stdlib/gas';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { GasSettings, GasUsed, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
 import {
   type Capsule,
   OFFCHAIN_MESSAGE_IDENTIFIER,
@@ -11,7 +11,7 @@ import {
   type SimulationStats,
   type TxHash,
   type TxReceipt,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import type { FeePaymentMethod } from '../fee/fee_payment_method.js';
 import type { ProfileOptions, SendOptions, SimulateOptions } from '../wallet/index.js';

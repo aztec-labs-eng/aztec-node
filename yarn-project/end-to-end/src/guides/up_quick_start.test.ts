@@ -1,5 +1,4 @@
-import { createAztecNodeClient, waitForNode } from '@aztec/aztec.js/node';
-
+import { createAztecNodeClient, waitForNode } from '@aztec-labs/aztec.js/node';
 import { execSync } from 'child_process';
 
 const { AZTEC_NODE_URL = 'http://localhost:8080' } = process.env;

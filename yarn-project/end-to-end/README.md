@@ -179,8 +179,11 @@ depth-agnostic and survive folder renames; path-specific entries must be updated
 `src/composed/` tests run against a **running local network** rather than an in-process stack, via
 `scripts/run_test.sh` in different modes:
 
-- `src/composed/*.test.ts` → `compose` mode (e.g. `e2e_persistence`, `uniswap_trade_on_l1_from_l2`,
-  `e2e_cheat_codes` — the compose variant, distinct from the relocated unit-style one).
+- `src/composed/*.test.ts` → `compose` mode (e.g. `e2e_cheat_codes` — the compose variant, distinct from the
+  relocated unit-style one). `uniswap_trade_on_l1_from_l2` is the exception: it gets its forked-mainnet state
+  from a committed anvil dump, and it needs the interval-mining anvil that `setup()` spawns rather than the
+  compose fork service's automining one, so `bootstrap.sh` schedules it as a `simple` test and excludes it
+  from this glob.
 - `src/composed/web3signer/*.test.ts` → `web3signer` mode (remote-signer scenarios).
 - `src/composed/ha/*.test.ts` → `ha` mode (high-availability multi-process scenarios).
 - `src/guides/*.test.ts` → tutorial/guide flows; `src/bench/` → benchmarks (see `bench_cmds`).
@@ -192,9 +195,9 @@ you), or `docker-compose up` for separate containers.
 
 Tests with **no Aztec node** that exercise one package belong in that package, not here:
 
-- L1 cheat-code behavior (`EthCheatCodes`/`RollupCheatCodes` against raw anvil) → `@aztec/ethereum`
+- L1 cheat-code behavior (`EthCheatCodes`/`RollupCheatCodes` against raw anvil) → `@aztec-labs/ethereum`
   (`ethereum/src/test/eth_cheat_codes.test.ts`).
-- The `SequencerPublisher` integration test (anvil + L1 deploy, no node) → `@aztec/sequencer-client`
+- The `SequencerPublisher` integration test (anvil + L1 deploy, no node) → `@aztec-labs/sequencer-client`
   (`sequencer-client/src/publisher/`).
 
 These run in their own package's test lane (both packages already run anvil-backed integration tests).
@@ -215,15 +218,15 @@ These run in their own package's test lane (both packages already run anvil-back
 ### Running tests against legacy contract artifacts
 
 To verify that contracts deployed from a previous release still work against the current stack, set
-`CONTRACT_ARTIFACTS_VERSION` to a published version of `@aztec/noir-contracts.js` /
-`@aztec/noir-test-contracts.js`:
+`CONTRACT_ARTIFACTS_VERSION` to a published version of `@aztec-labs/noir-contracts.js` /
+`@aztec-labs/noir-test-contracts.js`:
 
 ```bash
 CONTRACT_ARTIFACTS_VERSION=4.1.3 yarn test:e2e src/automine/token/access_control.parallel.test.ts
 ```
 
 Only the JSON artifact files (`.../artifacts/*.json`) are redirected. The TypeScript wrapper classes
-(e.g. `TokenContract`) continue to load from the current workspace and use the current `@aztec/aztec.js` —
+(e.g. `TokenContract`) continue to load from the current workspace and use the current `@aztec-labs/aztec.js` —
 so this exercises whether a deployed contract's ABI / bytecode / notes still work through the *new* client,
 not whether the legacy wrapper code still imports cleanly.
 
@@ -233,7 +236,7 @@ artifacts were actually loaded:
 
 ```
 [legacy-contracts][jest] CONTRACT_ARTIFACTS_VERSION=4.1.3
-[legacy-contracts][jest] redirecting @aztec/noir-contracts.js/artifacts/*.json -> .legacy-contracts/4.1.3/...
+[legacy-contracts][jest] redirecting @aztec-labs/noir-contracts.js/artifacts/*.json -> .legacy-contracts/4.1.3/...
 [legacy-contracts][jest] redirected token_contract-Token.json -> /abs/.../.legacy-contracts/4.1.3/.../token_contract-Token.json
 ```
 

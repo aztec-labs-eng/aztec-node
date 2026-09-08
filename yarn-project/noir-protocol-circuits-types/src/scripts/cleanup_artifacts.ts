@@ -1,5 +1,4 @@
-import { fileURLToPath } from '@aztec/foundation/url';
-
+import { fileURLToPath } from '@aztec-labs/foundation/url';
 import { readFile, readdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 

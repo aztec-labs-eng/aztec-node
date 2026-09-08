@@ -2,6 +2,7 @@
 displayed_sidebar: operatorsSidebar
 title: Complete Example and Troubleshooting
 description: Complete Docker Compose example with all monitoring components and troubleshooting guide for common monitoring issues.
+references: ["yarn-project/telemetry-client/src/config.ts", "yarn-project/telemetry-client/src/otel.ts", "yarn-project/telemetry-client/src/metrics.ts"]
 ---
 
 ## Complete Docker Compose Example
@@ -12,7 +13,7 @@ Here's a complete example with all monitoring components integrated with your Az
 services:
   # Your Aztec node (example for full node)
   aztec-node:
-    image: "aztecprotocol/aztec:#release_version"
+    image: "azteclabs/aztec:#release_version"
     container_name: "aztec-node"
     ports:
       - ${AZTEC_PORT}:${AZTEC_PORT}

@@ -1,22 +1,22 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { GrumpkinScalar, Point } from '@aztec/foundation/curves/grumpkin';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { KeyStore } from '@aztec/key-store';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { L2TipsProvider } from '@aztec/stdlib/block';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { KeyStore } from '@aztec-labs/key-store';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { L2TipsProvider } from '@aztec-labs/stdlib/block';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import {
   AppTaggingSecret,
   AppTaggingSecretKind,
   type LogResult,
   SiloedTag,
   computeSharedTaggingSecret,
-} from '@aztec/stdlib/logs';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/logs';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import {
   type LogRetrievalRequest,

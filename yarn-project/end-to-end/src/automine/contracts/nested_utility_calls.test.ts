@@ -1,12 +1,11 @@
-import { NO_FROM } from '@aztec/aztec.js/account';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ContractFunctionInteraction } from '@aztec/aztec.js/contracts';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { NestedUtilityContract } from '@aztec/noir-test-contracts.js/NestedUtility';
-import type { UtilityCallAuthorizationRequest } from '@aztec/pxe/server';
-import { getContractClassFromArtifact } from '@aztec/stdlib/contract';
-
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { NestedUtilityContract } from '@aztec-labs/noir-test-contracts.js/NestedUtility';
+import type { UtilityCallAuthorizationRequest } from '@aztec-labs/pxe/server';
+import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

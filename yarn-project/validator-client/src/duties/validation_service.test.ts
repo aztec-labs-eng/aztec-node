@@ -1,17 +1,16 @@
-import { getAddressFromPrivateKey } from '@aztec/ethereum/account';
-import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { getAddressFromPrivateKey } from '@aztec-labs/ethereum/account';
+import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
   makeCheckpointHeader,
   makeCheckpointProposal,
-} from '@aztec/stdlib/testing';
-import { Tx } from '@aztec/stdlib/tx';
-import { DutyType } from '@aztec/validator-ha-signer/types';
-
+} from '@aztec-labs/stdlib/testing';
+import { Tx } from '@aztec-labs/stdlib/tx';
+import { DutyType } from '@aztec-labs/validator-ha-signer/types';
 import { generatePrivateKey } from 'viem/accounts';
 
 import { LocalKeyStore } from '../key_store/local_key_store.js';

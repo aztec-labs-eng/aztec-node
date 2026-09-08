@@ -1,5 +1,5 @@
-import { BaseBuffer32 } from '@aztec/foundation/buffer';
-import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec/foundation/serialize';
+import { BaseBuffer32 } from '@aztec-labs/foundation/buffer';
+import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 import type { TopicType } from './topic_type.js';
 

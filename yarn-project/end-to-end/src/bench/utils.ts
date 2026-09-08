@@ -1,15 +1,18 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall, NO_WAIT, type WaitOpts } from '@aztec/aztec.js/contracts';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { mean, stdDev, times } from '@aztec/foundation/collection';
-import { BenchmarkingContract } from '@aztec/noir-test-contracts.js/Benchmarking';
-import { type Sequencer, type SequencerEvents, SequencerState } from '@aztec/sequencer-client';
-import type { TxHash } from '@aztec/stdlib/tx';
-import type { MetricDefinition } from '@aztec/telemetry-client';
-import type { BenchmarkDataPoint, BenchmarkMetricsType, BenchmarkTelemetryClient } from '@aztec/telemetry-client/bench';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall, NO_WAIT, type WaitOpts } from '@aztec-labs/aztec.js/contracts';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { mean, stdDev, times } from '@aztec-labs/foundation/collection';
+import { BenchmarkingContract } from '@aztec-labs/noir-test-contracts.js/Benchmarking';
+import { type Sequencer, type SequencerEvents, SequencerState } from '@aztec-labs/sequencer-client';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
+import type { MetricDefinition } from '@aztec-labs/telemetry-client';
+import type {
+  BenchmarkDataPoint,
+  BenchmarkMetricsType,
+  BenchmarkTelemetryClient,
+} from '@aztec-labs/telemetry-client/bench';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 

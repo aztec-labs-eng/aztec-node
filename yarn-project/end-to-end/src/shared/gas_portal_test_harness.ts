@@ -1,13 +1,13 @@
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { L1FeeJuicePortalManager, type L1TokenManager, type L2AmountClaim } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { FeeJuiceContract } from '@aztec/aztec.js/protocol';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { AztecNodeAdmin, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { L1FeeJuicePortalManager, type L1TokenManager, type L2AmountClaim } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { AztecNodeAdmin, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 
 import { testSpan } from '../fixtures/timing.js';
 import { waitForL1ToL2MessageSeen } from './wait_for_l1_to_l2_message.js';

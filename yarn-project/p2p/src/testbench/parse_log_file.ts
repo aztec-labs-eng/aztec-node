@@ -3,8 +3,7 @@
 // 2. Parse all Received Tx logs, extracting the timestamp and peer ID
 // 3. Compute the delay for each peer relative to the timestamp of the sent message
 // 4. Print the delays
-import { createLogger } from '@aztec/foundation/log';
-
+import { createLogger } from '@aztec-labs/foundation/log';
 import * as fs from 'fs';
 
 const logger = createLogger('parse_log_file');

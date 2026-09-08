@@ -1,11 +1,10 @@
-import type { AztecNodeConfig } from '@aztec/aztec-node';
-import type { AccountManager } from '@aztec/aztec.js/wallet';
-import type { ConfigMappingsType } from '@aztec/foundation/config';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { LogFn } from '@aztec/foundation/log';
-import type { ProverConfig } from '@aztec/stdlib/interfaces/server';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
-
+import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
+import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
+import type { ConfigMappingsType } from '@aztec-labs/foundation/config';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { ProverConfig } from '@aztec-labs/stdlib/interfaces/server';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 
@@ -284,7 +283,7 @@ export async function preloadCrsDataForVerifying(
   log: LogFn,
 ): Promise<void> {
   if (realProofs) {
-    const { Crs, GrumpkinCrs } = await import('@aztec/bb.js');
+    const { Crs, GrumpkinCrs } = await import('@aztec-foundation/bb.js');
     await Promise.all([Crs.new(2 ** 1, undefined, log), GrumpkinCrs.new(2 ** 16, undefined, log)]);
   }
 }
@@ -299,7 +298,7 @@ export async function preloadCrsDataForServerSideProving(
   log: LogFn,
 ): Promise<void> {
   if (realProofs) {
-    const { Crs, GrumpkinCrs } = await import('@aztec/bb.js');
+    const { Crs, GrumpkinCrs } = await import('@aztec-foundation/bb.js');
     await Promise.all([Crs.new(2 ** 25, undefined, log), GrumpkinCrs.new(2 ** 18, undefined, log)]);
   }
 }

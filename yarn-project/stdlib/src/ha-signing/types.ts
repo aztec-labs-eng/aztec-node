@@ -3,7 +3,7 @@ import {
   CheckpointNumber,
   type IndexWithinCheckpoint,
   type SlotNumber,
-} from '@aztec/foundation/branded-types';
+} from '@aztec-labs/foundation/branded-types';
 
 /**
  * Type of validator duty being performed

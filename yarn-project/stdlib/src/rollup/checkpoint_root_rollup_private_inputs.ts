@@ -1,11 +1,11 @@
-import { BlobAccumulator, FinalBlobBatchingChallenges } from '@aztec/blob-lib/types';
-import { ARCHIVE_HEIGHT, BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, OUT_HASH_TREE_HEIGHT } from '@aztec/constants';
-import { BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, type Tuple, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { BlobAccumulator, FinalBlobBatchingChallenges } from '@aztec-labs/blob-lib/types';
+import { ARCHIVE_HEIGHT, BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, OUT_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, type Tuple, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { ParityPublicInputs } from '../parity/parity_public_inputs.js';
 import { ProofData, type RollupHonkProofData, type UltraHonkProofData } from '../proofs/proof_data.js';

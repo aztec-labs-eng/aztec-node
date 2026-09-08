@@ -1,26 +1,25 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { type OutboxContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { type OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { DateProvider } from '@aztec/foundation/timer';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec/stdlib/block';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { makeStateReference } from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import { BlockHeader } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { makeStateReference } from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { EventEmitter } from 'events';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

@@ -1,13 +1,12 @@
-import { Fr } from '@aztec/aztec.js/fields';
-import { PublicKeys, deriveKeys } from '@aztec/aztec.js/keys';
-import type { Logger } from '@aztec/aztec.js/log';
-import { CheatCodes } from '@aztec/aztec/testing';
-import { ClaimContract } from '@aztec/noir-contracts.js/Claim';
-import { CrowdfundingContract } from '@aztec/noir-contracts.js/Crowdfunding';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { AztecNode, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { PublicKeys, deriveKeys } from '@aztec-labs/aztec.js/keys';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import { ClaimContract } from '@aztec-labs/noir-contracts.js/Claim';
+import { CrowdfundingContract } from '@aztec-labs/noir-contracts.js/Crowdfunding';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
 
 import { mintTokensToPrivate } from '../../fixtures/token_utils.js';

@@ -1,6 +1,5 @@
-import type { Logger } from '@aztec/foundation/log';
-import { elapsedSync } from '@aztec/foundation/timer';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { elapsedSync } from '@aztec-labs/foundation/timer';
 import type { DasContextJs } from '@crate-crypto/node-eth-kzg';
 import { createRequire } from 'module';
 

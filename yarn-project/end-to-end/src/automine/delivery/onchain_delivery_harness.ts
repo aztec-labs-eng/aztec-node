@@ -1,14 +1,16 @@
-import { type InitialAccountData, generateSchnorrAccounts } from '@aztec/accounts/testing';
-import type { FieldLike } from '@aztec/aztec.js/abi';
-import { NO_FROM } from '@aztec/aztec.js/account';
-import type { AztecAddress, CompleteAddress } from '@aztec/aztec.js/addresses';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { AccountManager } from '@aztec/aztec.js/wallet';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { type DeliveryEvent, OnchainDeliveryTestContract } from '@aztec/noir-test-contracts.js/OnchainDeliveryTest';
-import type { CustomRequest, ResolveCustomRequest, ResolveTaggingSecretStrategy } from '@aztec/pxe/config';
-import type { AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-
+import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import type { FieldLike } from '@aztec-labs/aztec.js/abi';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import type { AztecAddress, CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  type DeliveryEvent,
+  OnchainDeliveryTestContract,
+} from '@aztec-labs/noir-test-contracts.js/OnchainDeliveryTest';
+import type { CustomRequest, ResolveCustomRequest, ResolveTaggingSecretStrategy } from '@aztec-labs/pxe/config';
+import type { AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
 
 import { AUTOMINE_E2E_OPTS } from '../../fixtures/fixtures.js';

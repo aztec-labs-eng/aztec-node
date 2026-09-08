@@ -1,5 +1,4 @@
-import { createLogger } from '@aztec/foundation/log';
-
+import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 
 import { OpenTelemetryClient } from './otel.js';

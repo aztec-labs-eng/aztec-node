@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Runs a forge deploy script (e.g. DeployRollupForUpgrade) against the foundry bundle
-// shipped in the @aztec/l1-artifacts npm package, forwarding all arguments to
+// shipped in the @aztec-foundation/l1-artifacts npm package, forwarding all arguments to
 // forge_broadcast.js. Requires yarn-project to be built.
 //
 // prepareL1ContractsForDeployment copies the bundle to a temp directory (forge writes

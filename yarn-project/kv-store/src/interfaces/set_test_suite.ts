@@ -1,4 +1,4 @@
-import { toArray } from '@aztec/foundation/iterable';
+import { toArray } from '@aztec-labs/foundation/iterable';
 
 import type { Range } from './common.js';
 import type { AztecAsyncSet, AztecSet } from './set.js';

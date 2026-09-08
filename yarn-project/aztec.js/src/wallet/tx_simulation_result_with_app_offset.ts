@@ -1,6 +1,6 @@
-import type { ZodFor } from '@aztec/foundation/schemas';
-import { optional } from '@aztec/foundation/schemas';
-import { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
+import { optional } from '@aztec-labs/foundation/schemas';
+import { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import {
   type NestedProcessReturnValues,
   PrivateExecutionResult,
@@ -8,8 +8,7 @@ import {
   type SimulationStats,
   SimulationStatsSchema,
   TxSimulationResult,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { z } from 'zod';
 
 /**

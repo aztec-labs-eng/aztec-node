@@ -3,6 +3,7 @@ title: Testing Governance Rollup Upgrade on Local Network
 sidebar_position: 5
 tags: [local_network, governance, testing]
 description: Deploy a new rollup and execute a governance upgrade on a local Aztec network for testing.
+references: ["yarn-project/cli/src/cmds/l1/*"]
 ---
 
 This guide walks through deploying a new rollup and executing a governance upgrade on a local Aztec network.
@@ -52,10 +53,10 @@ Note the `registryAddress` from the output.
 
 ## Step 2: Download the l1-contracts bundle
 
-The [`@aztec/l1-artifacts`](https://www.npmjs.com/package/@aztec/l1-artifacts) npm package bundles a self-contained Foundry project with the L1 contract sources, prebuilt artifacts, deploy scripts, and governance payload contracts. Download the version matching your Aztec installation (run `aztec --version` to find it):
+The [`@aztec-foundation/l1-artifacts`](https://www.npmjs.com/package/@aztec-foundation/l1-artifacts) npm package bundles a self-contained Foundry project with the L1 contract sources, prebuilt artifacts, deploy scripts, and governance payload contracts. Download the version matching your Aztec installation (run `aztec --version` to find it):
 
 ```bash
-npm pack @aztec/l1-artifacts@#release_version
+npm pack @aztec-foundation/l1-artifacts@#release_version
 mkdir l1-contracts
 tar xzf aztec-l1-artifacts-#release_version.tgz --strip-components=2 -C l1-contracts package/l1-contracts
 cd l1-contracts

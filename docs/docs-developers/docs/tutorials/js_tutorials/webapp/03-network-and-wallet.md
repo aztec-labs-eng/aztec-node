@@ -2,6 +2,7 @@
 title: "3. Network & Wallet"
 sidebar_position: 3
 description: "Connect to Aztec using an embedded wallet for local dev or the wallet SDK for browser extensions"
+references: ["docs/examples/webapp-tutorial/src/config.ts", "docs/examples/webapp-tutorial/src/embedded-wallet.ts", "docs/examples/webapp-tutorial/src/wallet-connection.ts", "docs/examples/webapp-tutorial/src/fees.ts", "docs/examples/webapp-tutorial/src/components/*"]
 ---
 
 # Network & Wallet
@@ -43,7 +44,7 @@ Both modes produce the same `Wallet` interface, so the rest of your app doesn't 
 
 ## Embedded wallet (local development)
 
-For local development, the app uses a custom `EmbeddedWallet` class that extends the official `EmbeddedWallet` from `@aztec/wallets/embedded`. The official wallet already provides account creation and persistence, transaction sending with gas estimation, automatic authwitness generation, and stub-account simulation. The tutorial subclass adds one thing: **SponsoredFPC fee payment** so users don't need to hold fee tokens.
+For local development, the app uses a custom `EmbeddedWallet` class that extends the official `EmbeddedWallet` from `@aztec-labs/wallets/embedded`. The official wallet already provides account creation and persistence, transaction sending with gas estimation, automatic authwitness generation, and stub-account simulation. The tutorial subclass adds one thing: **SponsoredFPC fee payment** so users don't need to hold fee tokens.
 
 Open `src/embedded-wallet.ts`:
 

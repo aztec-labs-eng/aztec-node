@@ -1,5 +1,5 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { LogCursor } from './log_cursor.js';
 import { randomLogResult } from './log_result.js';

@@ -1,5 +1,5 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { EnvVar } from '@aztec/foundation/config';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { EnvVar } from '@aztec-labs/foundation/config';
 
 export function enrichVar(envVar: EnvVar, value: string | undefined) {
   // Don't override

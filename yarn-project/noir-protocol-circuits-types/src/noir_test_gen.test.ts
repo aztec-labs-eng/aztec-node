@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { setupCustomSnapshotSerializers } from '@aztec/foundation/testing';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractClass,
   type ContractInstance,
@@ -13,8 +13,8 @@ import {
   computePartialAddress,
   computePrivateFunctionsTree,
   computeSaltedInitializationHash,
-} from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
+} from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
 
 describe('Data generation for noir tests', () => {
   setupCustomSnapshotSerializers(expect);

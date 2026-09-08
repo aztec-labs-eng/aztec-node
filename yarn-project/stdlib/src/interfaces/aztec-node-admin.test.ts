@@ -1,5 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec/foundation/json-rpc/test';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 
 import { type Offense, OffenseType } from '../slashing/index.js';
 import { type AztecNodeAdmin, AztecNodeAdminApiSchema } from './aztec-node-admin.js';

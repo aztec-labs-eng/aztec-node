@@ -1,8 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, BufferSink, FieldReader, serializeToFields } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, BufferSink, FieldReader, serializeToFields } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { inspect } from 'util';
 import { z } from 'zod';
 

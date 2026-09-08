@@ -1,7 +1,7 @@
-import { BLOCK_HEADER_LENGTH } from '@aztec/constants';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { setupCustomSnapshotSerializers } from '@aztec/foundation/testing';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { BLOCK_HEADER_LENGTH } from '@aztec-labs/constants';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import { makeBlockHeader } from '../tests/factories.js';
 import { BlockHeader } from './block_header.js';

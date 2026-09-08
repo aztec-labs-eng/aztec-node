@@ -48,106 +48,6 @@ tests:
     owners:
       - *nico
 
-  # e2e tests skipped
-  - regex: "testbench/port_change.test.ts"
-    skip: true
-    owners:
-      - *sean
-  # bricked in new version of anvil added to build image (foundry 1.4.1).
-  - regex: "src/composed/uniswap_trade_on_l1_from_l2.test.ts"
-    skip: true
-    owners:
-      - *alex
-  - regex: "src/single-node/fees/private_payments"
-    owners:
-      - *phil
-  - regex: "src/automine/token/access_control"
-    error_regex: "HttpRequestError: HTTP request failed."
-    owners:
-      - *charlie
-  - regex: "src/automine/token/lending"
-    error_regex: "✕ Depositing"
-    owners:
-      - *lasse
-  - regex: "src/automine/token/lending"
-    error_regex: "✕ Repay"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/l1_to_l2"
-    owners:
-      - *palla
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Claim secret is enough to consume the message"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Someone else can mint funds to me on my behalf"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Publicly deposit funds"
-    owners:
-      - *lasse
-  - regex: "src/single-node/cross-chain/token_bridge"
-    error_regex: "✕ Can't claim funds"
-    owners:
-      - *lasse
-  - regex: "src/single-node/bot/bot.test.ts"
-    error_regex: "Tx dropped"
-    owners:
-      - *palla
-
-  # yarn-project tests
-  # Attempt to catch all kv-store browser test failures (consider them quarantined for now)
-  - regex: "yarn-project/kv-store"
-    error_regex: "vitest"
-    owners:
-      - *martin
-  - regex: "yarn-project/kv-store"
-    error_regex: "Could not import your test module"
-    owners:
-      - *grego
-  - regex: "yarn-project/kv-store"
-    error_regex: "timeout: sending signal TERM to command"
-    owners:
-      - *martin
-  - regex: "yarn-project/kv-store"
-    error_regex: "Failed to fetch dynamically imported module"
-    owners:
-      - *grego
-  - regex: "yarn-project/kv-store"
-    error_regex: "Error: Timeout of 2000ms exceeded"
-    owners:
-      - *martin
-  - regex: "kv-store/.*store\\.test"
-    error_regex: "guards against too many cursors"
-    owners:
-      - *palla
-  - regex: "ethereum/src/test/tx_delayer.test.ts"
-    error_regex: "delays a transaction until a given L1 timestamp"
-    owners:
-      - *esau
-  - regex: "slasher/src/slasher_client.test.ts"
-    error_regex: "ContractFunctionExecutionError: The contract function"
-    owners:
-      - *mitch
-  - regex: "archiver/src/archiver/archiver.test.ts"
-    error_regex: "Received number of calls: 1"
-    owners:
-      - *palla
-  - regex: "archiver/src/archiver/archiver.test.ts"
-    error_regex: "Failed to commit transaction: InitialBlockNumberNotSequentialError: Cannot insert new block"
-    owners:
-      - *palla
-  - regex: "p2p/src/services/discv5/discv5_service.test.ts"
-    owners:
-      - *phil
-      - *palla
-  - regex: "sequencer-client/src/publisher/l1_publisher.integration.test.ts"
-    error_regex: "Anvil failed to stop in time|Cannot read properties of undefined"
-    owners:
-      - *palla
-
   # Nightly GKE tests
   - regex: "spartan/bootstrap.sh"
     owners:
@@ -168,11 +68,6 @@ tests:
       - *luke
   - regex: "aztec-up/scripts/run_test.sh bridge_and_claim"
     error_regex: "Cannot satisfy constraint"
-    owners:
-      - *adam
-
-  - regex: "yarn-project/end-to-end/scripts/run_test.sh simple src/single-node/bot/bot.test.ts"
-    error_regex: "Nonce provided for the transaction is lower than the current nonce of the account"
     owners:
       - *adam
 
@@ -328,7 +223,7 @@ tests:
   # http://ci.aztec-labs.com/98d59d04f85223f8
   # Build-cache flake: module not found during Jest startup
   - regex: "src/single-node/sequencer/gov_proposal.parallel.test.ts"
-    error_regex: "Cannot find module '@aztec/sequencer-client/config'"
+    error_regex: "Cannot find module '@aztec-labs/sequencer-client/config'"
     owners:
       - *palla
 

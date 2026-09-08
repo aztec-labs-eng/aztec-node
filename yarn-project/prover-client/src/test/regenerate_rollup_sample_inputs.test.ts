@@ -1,13 +1,12 @@
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec/constants';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { times, timesAsync } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { getTestData, isGenerateTestDataEnabled } from '@aztec/foundation/testing';
-import { updateProtocolCircuitSampleInputs } from '@aztec/foundation/testing/files';
-import type { CircuitName } from '@aztec/stdlib/stats';
-
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { times, timesAsync } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { getTestData, isGenerateTestDataEnabled } from '@aztec-labs/foundation/testing';
+import { updateProtocolCircuitSampleInputs } from '@aztec-labs/foundation/testing/files';
+import type { CircuitName } from '@aztec-labs/stdlib/stats';
 import TOML from '@iarna/toml';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
@@ -21,7 +20,7 @@ import { type CheckpointTopTreeData, TopTreeOrchestrator } from '../orchestrator
 // rollup circuits push their serialized inputs via `pushTestData` whenever they run through the
 // prover, so driving representative epochs through the (simulated) orchestrator and then dumping
 // `getTestData(circuitName)` produces fresh, ABI-current fixtures. Run with:
-//   AZTEC_GENERATE_TEST_DATA=1 yarn workspace @aztec/prover-client test regenerate_rollup_sample_inputs
+//   AZTEC_GENERATE_TEST_DATA=1 yarn workspace @aztec-labs/prover-client test regenerate_rollup_sample_inputs
 // Without that flag the whole suite is skipped, so it is a no-op (no prover setup) in normal CI. The
 // `rollup-tx-base-private`/`rollup-tx-base-public` fixtures and the private-kernel fixtures depend on
 // real client-proved transactions the simulated orchestrator cannot produce, so those are regenerated

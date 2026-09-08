@@ -1,14 +1,13 @@
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { BenchmarkingContractArtifact } from '@aztec/noir-test-contracts.js/Benchmarking';
-import { TestContractArtifact } from '@aztec/noir-test-contracts.js/Test';
-import { FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { BenchmarkingContractArtifact } from '@aztec-labs/noir-test-contracts.js/Benchmarking';
+import { TestContractArtifact } from '@aztec-labs/noir-test-contracts.js/Test';
+import { FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   SerializableContractInstance,
   SerializableContractInstancePreimage,
   getContractClassFromArtifact,
-} from '@aztec/stdlib/contract';
-
+} from '@aztec-labs/stdlib/contract';
 import { jest } from '@jest/globals';
 
 import { ContractStore } from './contract_store.js';

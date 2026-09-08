@@ -1,11 +1,10 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { L2Block } from '@aztec/stdlib/block';
-import { Tx, TxHash } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { L2Block } from '@aztec-labs/stdlib/block';
+import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

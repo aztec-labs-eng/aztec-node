@@ -296,7 +296,7 @@ const otlpEndpoint = process.env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT' satisfies En
 const otlpEnabled = !!otlpEndpoint && !useGcloudLogging;
 const otelOpts = { levels };
 const otelTransport: pino.TransportTargetOptions = {
-  target: '@aztec/telemetry-client/otel-pino-stream',
+  target: '@aztec-labs/telemetry-client/otel-pino-stream',
   options: otelOpts,
   level: 'trace',
 };

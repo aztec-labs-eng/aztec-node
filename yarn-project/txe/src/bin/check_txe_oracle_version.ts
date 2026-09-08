@@ -1,6 +1,6 @@
-import { keccak256String } from '@aztec/foundation/crypto/keccak';
-import { getOracleRegistrySignature } from '@aztec/pxe/bin';
-import { ORACLE_REGISTRY, type OracleRegistryEntry } from '@aztec/pxe/simulator';
+import { keccak256String } from '@aztec-labs/foundation/crypto/keccak';
+import { getOracleRegistrySignature } from '@aztec-labs/pxe/bin';
+import { ORACLE_REGISTRY, type OracleRegistryEntry } from '@aztec-labs/pxe/simulator';
 
 import { TXE_ORACLE_REGISTRY } from '../oracle/txe_oracle_registry.js';
 import { TXE_ORACLE_INTERFACE_HASH } from '../oracle/txe_oracle_version.js';

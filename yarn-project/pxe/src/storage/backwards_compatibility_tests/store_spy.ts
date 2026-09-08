@@ -7,7 +7,7 @@ import type {
   AztecAsyncSet,
   AztecAsyncSingleton,
   Key,
-} from '@aztec/kv-store';
+} from '@aztec-labs/kv-store';
 
 type Value = NonNullable<any>;
 

@@ -1,8 +1,7 @@
-import type { WindowBlockFees } from '@aztec/ethereum/l1-fee-analysis';
-import type { FeesPerGas } from '@aztec/ethereum/l1-tx-utils';
-import type { Branded } from '@aztec/foundation/branded-types';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-
+import type { WindowBlockFees } from '@aztec-labs/ethereum/l1-fee-analysis';
+import type { FeesPerGas } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { Branded } from '@aztec-labs/foundation/branded-types';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import type { Hex } from 'viem';
 import { z } from 'zod';
 

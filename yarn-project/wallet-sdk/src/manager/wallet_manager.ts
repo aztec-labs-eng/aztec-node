@@ -1,5 +1,5 @@
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 
 import { type DiscoveredWallet, ExtensionProvider, ExtensionWallet } from '../extension/provider/index.js';
 import { discoverWebWallets } from '../iframe/provider/iframe_discovery.js';

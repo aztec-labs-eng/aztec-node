@@ -1,6 +1,5 @@
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import type { PeerId } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';
 

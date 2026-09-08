@@ -3,13 +3,12 @@ import {
   CheckpointProposalHash,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { type BaseBuffer32, Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { BufferReader, serializeSignedBigInt, serializeToBuffer } from '@aztec/foundation/serialize';
-
+} from '@aztec-labs/foundation/branded-types';
+import { type BaseBuffer32, Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { BufferReader, serializeSignedBigInt, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import type { TypedDataDefinition } from 'viem';
 
 import type { L2BlockInfo } from '../block/l2_block_info.js';
@@ -37,7 +36,7 @@ import {
 import { SignedTxs } from './signed_txs.js';
 import { TopicType } from './topic_type.js';
 
-export type { CheckpointProposalHash } from '@aztec/foundation/branded-types';
+export type { CheckpointProposalHash } from '@aztec-labs/foundation/branded-types';
 
 export type CheckpointProposalOptions = {
   /**

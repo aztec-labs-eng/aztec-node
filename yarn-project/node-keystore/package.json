@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/node-keystore",
+  "name": "@aztec-labs/node-keystore",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -64,9 +64,9 @@
     ]
   },
   "dependencies": {
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "@ethersproject/wallet": "^5.7.0",
     "tslib": "^2.4.0",
     "viem": "npm:@aztec/viem@2.38.2",

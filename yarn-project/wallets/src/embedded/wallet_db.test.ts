@@ -1,7 +1,7 @@
-import { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { WalletDB } from './wallet_db.js';
 import type { AccountType } from './wallet_db.js';

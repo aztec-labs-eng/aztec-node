@@ -1,21 +1,20 @@
-import type { InitialAccountData } from '@aztec/accounts/testing';
-import type { Archiver } from '@aztec/archiver';
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { TxHash } from '@aztec/aztec.js/tx';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { SpamContract } from '@aztec/noir-test-contracts.js/Spam';
-import { TestContract, TestContractArtifact } from '@aztec/noir-test-contracts.js/Test';
-import { getPXEConfig, getPXEConfig as getRpcConfig } from '@aztec/pxe/server';
-import type { SequencerClient } from '@aztec/sequencer-client';
-import { CheckpointAttestation, ConsensusPayload, type TopicType } from '@aztec/stdlib/p2p';
-
+import type { InitialAccountData } from '@aztec-labs/accounts/testing';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { TxHash } from '@aztec-labs/aztec.js/tx';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { SpamContract } from '@aztec-labs/noir-test-contracts.js/Spam';
+import { TestContract, TestContractArtifact } from '@aztec-labs/noir-test-contracts.js/Test';
+import { getPXEConfig, getPXEConfig as getRpcConfig } from '@aztec-labs/pxe/server';
+import type { SequencerClient } from '@aztec-labs/sequencer-client';
+import { CheckpointAttestation, ConsensusPayload, type TopicType } from '@aztec-labs/stdlib/p2p';
 import { expect } from '@jest/globals';
 
 import { shouldCollectMetrics } from '../fixtures/fixtures.js';

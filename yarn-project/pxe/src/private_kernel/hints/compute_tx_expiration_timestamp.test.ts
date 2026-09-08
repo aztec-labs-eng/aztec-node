@@ -1,5 +1,5 @@
-import { MAX_TX_LIFETIME } from '@aztec/constants';
-import { PrivateKernelCircuitPublicInputs } from '@aztec/stdlib/kernel';
+import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
+import { PrivateKernelCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 
 import { computeTxExpirationTimestamp } from './compute_tx_expiration_timestamp.js';
 

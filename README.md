@@ -16,7 +16,7 @@ Projects owned by [Aztec Labs](https://aztec-labs.com/) supporting the [Aztec Ne
 
 ## Releases
 
-The projects in this repo are released via npm ([@aztec](https://www.npmjs.com/org/aztec)) and DockerHub ([aztecprotocol/aztec](https://hub.docker.com/r/aztecprotocol/aztec)).
+The projects in this repo are released via npm ([@aztec](https://www.npmjs.com/org/aztec)) and DockerHub ([azteclabs/aztec](https://hub.docker.com/r/azteclabs/aztec)).
 
 ## Contribute
 

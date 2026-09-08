@@ -1,19 +1,18 @@
-import { BBJsFactory, type UltraHonkFlavor, constructRecursiveProofFromBuffers } from '@aztec/bb-prover';
+import { BBJsFactory, type UltraHonkFlavor, constructRecursiveProofFromBuffers } from '@aztec-labs/bb-prover';
 import {
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
   CHONK_PROOF_LENGTH,
   HIDING_KERNEL_IO_PUBLIC_INPUTS_SIZE,
   NESTED_RECURSIVE_PROOF_LENGTH,
   RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
-import type { AvmCircuitInputs, AvmCircuitPublicInputs } from '@aztec/stdlib/avm';
-import { makeProofAndVerificationKey } from '@aztec/stdlib/interfaces/server';
-import type { NoirCompiledCircuit } from '@aztec/stdlib/noir';
-import { Proof, RecursiveProof } from '@aztec/stdlib/proofs';
-import { VerificationKeyAsFields, VerificationKeyData } from '@aztec/stdlib/vks';
-
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { AvmCircuitInputs, AvmCircuitPublicInputs } from '@aztec-labs/stdlib/avm';
+import { makeProofAndVerificationKey } from '@aztec-labs/stdlib/interfaces/server';
+import type { NoirCompiledCircuit } from '@aztec-labs/stdlib/noir';
+import { Proof, RecursiveProof } from '@aztec-labs/stdlib/proofs';
+import { VerificationKeyAsFields, VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { ungzip } from 'pako';
 import * as path from 'path';
 

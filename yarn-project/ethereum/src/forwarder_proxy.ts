@@ -1,9 +1,8 @@
 /* eslint-disable no-console */
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type Hex, extractChain } from 'viem';
 import { anvil, mainnet, sepolia } from 'viem/chains';
 

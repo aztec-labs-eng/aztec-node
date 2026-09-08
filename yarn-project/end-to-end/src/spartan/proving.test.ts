@@ -1,7 +1,6 @@
-import { type AztecNode, createAztecNodeClient } from '@aztec/aztec.js/node';
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-
+import { type AztecNode, createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { jest } from '@jest/globals';
 
 import { ChainHealth, type ServiceEndpoint, getRPCEndpoint, setupEnvironment } from './utils.js';

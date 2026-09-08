@@ -1,14 +1,13 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { chunk } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import { DateProvider, Timer } from '@aztec/foundation/timer';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { L2Block, L2BlockId } from '@aztec/stdlib/block';
-import { BlockHeader, Tx, TxHash } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { chunk } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { L2Block, L2BlockId } from '@aztec-labs/stdlib/block';
+import { BlockHeader, Tx, TxHash } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import EventEmitter from 'node:events';
 
 import { PoolInstrumentation, PoolName } from '../instrumentation.js';

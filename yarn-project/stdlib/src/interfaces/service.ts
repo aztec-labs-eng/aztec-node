@@ -1,4 +1,4 @@
-import type { Logger } from '@aztec/foundation/log';
+import type { Logger } from '@aztec-labs/foundation/log';
 
 /** Represents a local service that can be started and stopped. */
 export interface Service {

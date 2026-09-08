@@ -1,9 +1,8 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

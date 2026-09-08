@@ -1,4 +1,4 @@
-import type { Branded } from '@aztec/foundation/branded-types';
+import type { Branded } from '@aztec-labs/foundation/branded-types';
 
 import type { BlockProposal } from './block_proposal.js';
 import type { CheckpointProposalCore } from './checkpoint_proposal.js';

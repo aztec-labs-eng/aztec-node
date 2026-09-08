@@ -1,12 +1,11 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import type { CheckpointProposalHash } from '@aztec/foundation/branded-types';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
-import type { L2Block, L2BlockId } from '@aztec/stdlib/block';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { BlockProposal, CheckpointAttestation, CheckpointProposalCore } from '@aztec/stdlib/p2p';
-import { type BlockHeader, Tx, TxHash } from '@aztec/stdlib/tx';
-
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import type { CheckpointProposalHash } from '@aztec-labs/foundation/branded-types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { L2Block, L2BlockId } from '@aztec-labs/stdlib/block';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { BlockProposal, CheckpointAttestation, CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
+import { type BlockHeader, Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import EventEmitter from 'events';
 
 import type { TryAddResult } from '../mem_pools/attestation_pool/attestation_pool.js';

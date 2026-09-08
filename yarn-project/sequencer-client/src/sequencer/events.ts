@@ -1,5 +1,10 @@
-import type { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import type { BlockHash } from '@aztec/stdlib/block';
+import type {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  SlotNumber,
+} from '@aztec-labs/foundation/branded-types';
+import type { BlockHash } from '@aztec-labs/stdlib/block';
 
 import type { Action } from '../publisher/sequencer-publisher.js';
 import type { SequencerState } from './utils.js';

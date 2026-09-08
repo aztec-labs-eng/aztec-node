@@ -1,13 +1,13 @@
-import { CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
-import { bufferFromFields } from '@aztec/stdlib/abi';
+import { CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
+import { bufferFromFields } from '@aztec-labs/stdlib/abi';
 import {
   type ContractClassPublic,
   type ContractClassPublicWithCommitment,
   computePublicBytecodeCommitment,
-} from '@aztec/stdlib/contract';
-import type { ContractClassLog } from '@aztec/stdlib/logs';
+} from '@aztec-labs/stdlib/contract';
+import type { ContractClassLog } from '@aztec-labs/stdlib/logs';
 
 import { ProtocolContractAddress } from '../protocol_contract_data.js';
 

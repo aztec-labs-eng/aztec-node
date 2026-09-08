@@ -2,10 +2,9 @@ import {
   BlockNumberSchema,
   CheckpointNumberSchema,
   IndexWithinCheckpointSchema,
-} from '@aztec/foundation/branded-types';
-import type { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import type { PickIfFlag, Prettify } from '@aztec/foundation/types';
-
+} from '@aztec-labs/foundation/branded-types';
+import type { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import type { PickIfFlag, Prettify } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { BlockHash } from '../block/block_hash.js';

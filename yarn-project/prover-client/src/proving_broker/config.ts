@@ -1,16 +1,15 @@
-import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec/ethereum/l1-reader';
+import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
 import {
   type ConfigMappingsType,
   booleanConfigHelper,
   getDefaultConfig,
   numberConfigHelper,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
-import { pickConfigMappings } from '@aztec/foundation/config';
-import { type ChainConfig, chainConfigMappings } from '@aztec/stdlib/config';
-import { type DataStoreConfig, dataConfigMappings } from '@aztec/stdlib/kv-store';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-
+} from '@aztec-labs/foundation/config';
+import { pickConfigMappings } from '@aztec-labs/foundation/config';
+import { type ChainConfig, chainConfigMappings } from '@aztec-labs/stdlib/config';
+import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 import { z } from 'zod';
 
 export const ProverBrokerConfig = z.object({

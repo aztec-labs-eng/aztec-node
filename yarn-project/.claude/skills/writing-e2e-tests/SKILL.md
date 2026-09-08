@@ -226,7 +226,7 @@ from six months of deflake PRs — write the test right the first time.
 
 1. **Never `sleep()` to wait for a state change.** Poll the condition with the named waiters
    (Readability above), or `retryUntil(fn, name, timeoutSec, intervalSec)` from
-   `@aztec/foundation/retry` when no named helper fits. A raw sleep is only acceptable to yield
+   `@aztec-labs/foundation/retry` when no named helper fits. A raw sleep is only acceptable to yield
    the event loop, never to "give X time to finish".
 2. **Assert against the tx receipt, not the chain tip.** Use `receipt.blockNumber`; never
    `getBlock('latest')` right after sending — an empty block/checkpoint may have landed in
@@ -302,11 +302,11 @@ from six months of deflake PRs — write the test right the first time.
 
 ### Before you ship it
 
-- Run the test repeatedly: `scripts/deflaker.sh yarn workspace @aztec/end-to-end test:e2e <file>`
+- Run the test repeatedly: `scripts/deflaker.sh yarn workspace @aztec-labs/end-to-end test:e2e <file>`
   (100 runs, stops at first failure). At minimum run it 3-5 times locally, including once under
   load.
 - Run with verbose logs once and read them: `LOG_LEVEL='info; debug:sequencer,archiver,publisher'
-  yarn workspace @aztec/end-to-end test:e2e src/<category>/<file>.test.ts -t 'test name'`.
+  yarn workspace @aztec-labs/end-to-end test:e2e src/<category>/<file>.test.ts -t 'test name'`.
 - If a known-unfixable external flake remains, the last resort is an entry in `.test_patterns.yml`
   (repo root) with a **tightly-scoped `error_regex`** and an owner — it alerts instead of failing
   CI. This is for tracked product fragility, not a substitute for fixing the test.

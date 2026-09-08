@@ -1,20 +1,19 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getPublicEvents } from '@aztec/aztec.js/events';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { PrivateEventFilter, PublicEventFilter, Wallet } from '@aztec/aztec.js/wallet';
-import { makeTuple } from '@aztec/foundation/array';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { timesParallel } from '@aztec/foundation/collection';
-import type { Tuple } from '@aztec/foundation/serialize';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getPublicEvents } from '@aztec-labs/aztec.js/events';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { PrivateEventFilter, PublicEventFilter, Wallet } from '@aztec-labs/aztec.js/wallet';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
 import {
   type ExampleEvent0,
   type ExampleEvent1,
   type ExampleNestedEvent,
   TestLogContract,
-} from '@aztec/noir-test-contracts.js/TestLog';
-
+} from '@aztec-labs/noir-test-contracts.js/TestLog';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

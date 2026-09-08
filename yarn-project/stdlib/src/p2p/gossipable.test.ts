@@ -1,5 +1,5 @@
-import { P2PMessage } from '@aztec/stdlib/p2p';
-import { Tx } from '@aztec/stdlib/tx';
+import { P2PMessage } from '@aztec-labs/stdlib/p2p';
+import { Tx } from '@aztec-labs/stdlib/tx';
 
 import { makeBlockProposal } from '../tests/mocks.js';
 

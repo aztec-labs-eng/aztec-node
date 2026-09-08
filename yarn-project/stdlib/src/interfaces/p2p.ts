@@ -1,6 +1,5 @@
-import type { CheckpointProposalHash, SlotNumber } from '@aztec/foundation/branded-types';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-
+import type { CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { BlockProposal } from '../p2p/block_proposal.js';

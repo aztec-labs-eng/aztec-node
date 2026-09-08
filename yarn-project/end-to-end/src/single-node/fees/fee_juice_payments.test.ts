@@ -1,11 +1,10 @@
-import { SchnorrAccountContract } from '@aztec/accounts/schnorr';
-import { generateSchnorrAccounts } from '@aztec/accounts/testing';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { FeeJuicePaymentMethodWithClaim } from '@aztec/aztec.js/fee';
-import type { FeeJuiceContract } from '@aztec/aztec.js/protocol';
-import type { TokenContract as BananaCoin } from '@aztec/noir-contracts.js/Token';
-import type { GasSettings } from '@aztec/stdlib/gas';
-
+import { SchnorrAccountContract } from '@aztec-labs/accounts/schnorr';
+import { generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { FeeJuicePaymentMethodWithClaim } from '@aztec-labs/aztec.js/fee';
+import type { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
+import type { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
 import { jest } from '@jest/globals';
 
 import { PIPELINING_SETUP_OPTS } from '../../fixtures/fixtures.js';

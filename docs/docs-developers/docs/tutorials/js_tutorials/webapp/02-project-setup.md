@@ -2,6 +2,7 @@
 title: "2. Project Setup"
 sidebar_position: 2
 description: "Understand the webapp project structure, Vite configuration, and environment setup"
+references: ["docs/examples/webapp-tutorial/vite.config.ts", "docs/examples/webapp-tutorial/package.json"]
 ---
 
 # Project Setup
@@ -49,7 +50,7 @@ Aztec uses WASM modules that require `SharedArrayBuffer`, which needs specific H
 Why each piece is needed:
 - **COOP/COEP headers**: Enable `SharedArrayBuffer` for multithreaded WASM (barretenberg proving)
 - **Node polyfills**: Aztec libraries use Node.js APIs that need polyfilling in the browser
-- **optimizeDeps.exclude**: Prevents Vite from pre-bundling WASM-containing packages (`@aztec/bb.js`, `@aztec/noir-noirc_abi`, etc.) which would corrupt the WASM modules
+- **optimizeDeps.exclude**: Prevents Vite from pre-bundling WASM-containing packages (`@aztec-foundation/bb.js`, `@aztec-foundation/noir-noirc_abi`, etc.) which would corrupt the WASM modules
 
 ## TypeScript configuration
 

@@ -1,5 +1,4 @@
-import { createLogger } from '@aztec/aztec.js/log';
-
+import { createLogger } from '@aztec-labs/aztec.js/log';
 import { afterAll, afterEach, beforeEach, expect } from '@jest/globals';
 import { readlinkSync } from 'fs';
 import { basename } from 'path';

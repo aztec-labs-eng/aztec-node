@@ -1,10 +1,10 @@
 // Custom Jest resolver. When CONTRACT_ARTIFACTS_VERSION is set, redirects *only* JSON artifact files under
-// @aztec/noir-contracts.js/artifacts/, @aztec/noir-test-contracts.js/artifacts/, and @aztec/accounts/artifacts/ to
+// @aztec-labs/noir-contracts.js/artifacts/, @aztec-labs/noir-test-contracts.js/artifacts/, and @aztec-labs/accounts/artifacts/ to
 // that version's historical artifacts, committed as legacy-contracts/<version>.tar.gz and unpacked on demand into
 // .legacy-contracts/<version>/ by install_legacy_contracts.cjs.
 //
 // Why JSON-only: the JSON artifact is the actual interchange surface a "deployed contract" exposes. The TS wrapper is
-// generated client-side ergonomics that's tightly coupled to the current @aztec/aztec.js API. Redirecting the wrapper
+// generated client-side ergonomics that's tightly coupled to the current @aztec-labs/aztec.js API. Redirecting the wrapper
 // would couple this test to a moving aztec.js surface and break at import time on unrelated breaking changes; we want
 // to fail only on actual artifact-compat regressions.
 //
@@ -68,7 +68,7 @@ function legacyArtifactPath(resolved) {
 
 module.exports = function legacyResolver(request, options) {
   // Always run the default resolver first. We only inspect (and possibly rewrite) the *result*; this catches both
-  // bare-specifier imports of `@aztec/noir-contracts.js/artifacts/foo.json` and the relative `../artifacts/foo.json`
+  // bare-specifier imports of `@aztec-labs/noir-contracts.js/artifacts/foo.json` and the relative `../artifacts/foo.json`
   // imports inside the workspace TS wrapper classes — both resolve to the same workspace artifact path that we then
   // redirect.
   const resolved = options.defaultResolver(request, options);

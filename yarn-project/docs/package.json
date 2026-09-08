@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/docs",
+  "name": "@aztec-labs/docs",
   "version": "0.0.0",
   "packageManager": "yarn@4.13.0",
   "scripts": {

@@ -2,7 +2,7 @@ import {
   type L1ContractAddresses,
   pickL1ContractAddressMappings,
   pickL1ContractAddressesSchema,
-} from '@aztec/ethereum/l1-contract-addresses';
+} from '@aztec-labs/ethereum/l1-contract-addresses';
 import {
   type ConfigMappingsType,
   SecretValue,
@@ -12,9 +12,8 @@ import {
   numberConfigHelper,
   optionalNumberConfigHelper,
   secretStringConfigHelper,
-} from '@aztec/foundation/config';
-import type { ZodFor } from '@aztec/foundation/schemas';
-
+} from '@aztec-labs/foundation/config';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 /**

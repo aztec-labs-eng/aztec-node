@@ -1,4 +1,4 @@
-import type { IMiscOracle, IPrivateExecutionOracle, IUtilityExecutionOracle } from '@aztec/pxe/simulator';
+import type { IMiscOracle, IPrivateExecutionOracle, IUtilityExecutionOracle } from '@aztec-labs/pxe/simulator';
 
 import type { IAvmExecutionOracle, ITxeExecutionOracle } from './oracle/interfaces.js';
 import { callTxeHandler } from './oracle/txe_oracle_registry.js';

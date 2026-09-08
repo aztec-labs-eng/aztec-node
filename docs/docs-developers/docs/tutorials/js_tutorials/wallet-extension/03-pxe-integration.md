@@ -2,6 +2,7 @@
 title: "3. PXE Integration"
 description: Running the Private eXecution Environment in a browser extension and extending BaseWallet
 sidebar_position: 3
+references: ["docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts"]
 ---
 
 # PXE Integration
@@ -118,7 +119,7 @@ Errors are serialized and sent back to the background, which can:
 
 ## PXE State Persistence
 
-The PXE uses IndexedDB for persistence (via `@aztec/kv-store`). This means:
+The PXE uses IndexedDB for persistence (via `@aztec-labs/kv-store`). This means:
 - Synced notes persist across extension restarts
 - Registered contracts are remembered
 - Account registrations survive restarts

@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/world-state",
+  "name": "@aztec-labs/world-state",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -64,19 +64,19 @@
     ]
   },
   "dependencies": {
-    "@aztec/constants": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/protocol-contracts": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/telemetry-client": "workspace:^",
-    "@aztec/wsdb": "0.1.0-dummy",
+    "@aztec-foundation/wsdb": "0.1.0-dummy",
+    "@aztec-labs/constants": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/protocol-contracts": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/telemetry-client": "workspace:^",
     "msgpackr": "^1.11.2",
     "tslib": "^2.4.0",
     "zod": "^4"
   },
   "devDependencies": {
-    "@aztec/archiver": "workspace:^",
-    "@aztec/ipc-runtime": "0.1.0-dummy",
+    "@aztec-foundation/ipc-runtime": "0.1.0-dummy",
+    "@aztec-labs/archiver": "workspace:^",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",

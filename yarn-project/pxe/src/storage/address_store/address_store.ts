@@ -1,8 +1,8 @@
-import { toArray } from '@aztec/foundation/iterable';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecAsyncArray, AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { CompleteAddress } from '@aztec/stdlib/contract';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecAsyncArray, AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { CompleteAddress } from '@aztec-labs/stdlib/contract';
 
 export class AddressStore {
   #store: AztecAsyncKVStore;

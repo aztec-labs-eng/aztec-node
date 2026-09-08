@@ -1,6 +1,6 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TxHash, type TxReceipt, TxStatus } from '@aztec/aztec.js/tx';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TxHash, type TxReceipt, TxStatus } from '@aztec-labs/aztec.js/tx';
 
 export type UserTx = {
   txHash?: TxHash;

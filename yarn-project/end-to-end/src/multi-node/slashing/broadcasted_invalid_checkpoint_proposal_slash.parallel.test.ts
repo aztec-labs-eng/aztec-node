@@ -1,22 +1,21 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { TestAztecNodeService } from '@aztec/aztec-node/test';
-import type { EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { BlockNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { OffenseType } from '@aztec/slasher';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
+import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { BlockNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { OffenseType } from '@aztec-labs/slasher';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import {
   makeBlockHeader,
   makeBlockProposal,
   makeCheckpointHeader,
   makeCheckpointProposal,
-} from '@aztec/stdlib/testing';
-import { TxHash } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/testing';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { getPrivateKeyFromIndex } from '../../fixtures/utils.js';

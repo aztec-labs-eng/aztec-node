@@ -1,7 +1,6 @@
-import { getPublicClient } from '@aztec/ethereum/client';
-import { GSEContract } from '@aztec/ethereum/contracts';
-import { Fr } from '@aztec/foundation/curves/bn254';
-
+import { getPublicClient } from '@aztec-labs/ethereum/client';
+import { GSEContract } from '@aztec-labs/ethereum/contracts';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { foundry } from 'viem/chains';
 
 import { DefaultL1ContractsConfig } from '../config.js';

@@ -187,7 +187,7 @@ When `VALIDATOR_HA_SIGNING_ENABLED=true`, the validator client automatically:
 - Coordinates signing across nodes via PostgreSQL to prevent double-signing
 - Provides slashing protection to block conflicting signatures
 
-See [`@aztec/validator-ha-signer`](../validator-ha-signer/README.md) for more details.
+See [`@aztec-labs/validator-ha-signer`](../validator-ha-signer/README.md) for more details.
 
 ### Fisherman Mode
 
@@ -287,10 +287,10 @@ beforeEach(() => {
 
 ### Creating Test Proposals
 
-Use factory functions from `@aztec/stdlib/testing`:
+Use factory functions from `@aztec-labs/stdlib/testing`:
 
 ```typescript
-import { makeBlockHeader, makeBlockProposal, makeCheckpointHeader, makeCheckpointProposal } from '@aztec/stdlib/testing';
+import { makeBlockHeader, makeBlockProposal, makeCheckpointHeader, makeCheckpointProposal } from '@aztec-labs/stdlib/testing';
 
 // These are async - always await
 const blockProposal = await makeBlockProposal({

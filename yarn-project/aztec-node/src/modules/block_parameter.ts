@@ -1,13 +1,13 @@
-import type { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { BadRequestError } from '@aztec/foundation/json-rpc';
+import type { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import {
   BlockHash,
   type BlockParameter,
   BlockTag,
   type L2BlockSource,
   type NormalizedBlockParameter,
-} from '@aztec/stdlib/block';
-import type { CheckpointParameter, CheckpointTag } from '@aztec/stdlib/interfaces/client';
+} from '@aztec-labs/stdlib/block';
+import type { CheckpointParameter, CheckpointTag } from '@aztec-labs/stdlib/interfaces/client';
 
 /** True when `value` is a {@link BlockTag}. */
 export function isBlockTag(value: string): value is BlockTag {

@@ -4,11 +4,11 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
   PRIVATE_LOG_SIZE_IN_FIELDS,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { withHexPrefix, withoutHexPrefix } from '@aztec/foundation/string';
-import type { TaggingSecretStrategy } from '@aztec/pxe/server';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { withHexPrefix, withoutHexPrefix } from '@aztec-labs/foundation/string';
+import type { TaggingSecretStrategy } from '@aztec-labs/pxe/server';
 import {
   ARRAY,
   AZTEC_ADDRESS,
@@ -41,11 +41,11 @@ import {
   VECTOR,
   buildACIRCallback,
   makeEntry,
-} from '@aztec/pxe/simulator';
-import { EventSelector } from '@aztec/stdlib/abi';
-import { CompleteAddress } from '@aztec/stdlib/contract';
-import type { PrivateContextInputs } from '@aztec/stdlib/kernel';
-import type { CallContext, TxContext } from '@aztec/stdlib/tx';
+} from '@aztec-labs/pxe/simulator';
+import { EventSelector } from '@aztec-labs/stdlib/abi';
+import { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import type { PrivateContextInputs } from '@aztec-labs/stdlib/kernel';
+import type { CallContext, TxContext } from '@aztec-labs/stdlib/tx';
 
 import {
   MAX_OFFCHAIN_EFFECTS_PER_TXE_QUERY,
@@ -66,9 +66,9 @@ export type {
   NullifierMembershipWitnessData,
   PublicDataWitnessData,
   TxEffectData,
-} from '@aztec/pxe/simulator';
-export type { BlockHash } from '@aztec/stdlib/block';
-export type { MembershipWitness } from '@aztec/foundation/trees';
+} from '@aztec-labs/pxe/simulator';
+export type { BlockHash } from '@aztec-labs/stdlib/block';
+export type { MembershipWitness } from '@aztec-labs/foundation/trees';
 
 const GAS: TypeMapping<GasData> = STRUCT([
   { name: 'daGas', type: U32 },

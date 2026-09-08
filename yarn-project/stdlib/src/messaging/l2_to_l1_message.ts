@@ -1,8 +1,13 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, BufferSink, FieldReader, serializeToFields, serializeToSink } from '@aztec/foundation/serialize';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import {
+  BufferReader,
+  BufferSink,
+  FieldReader,
+  serializeToFields,
+  serializeToSink,
+} from '@aztec-labs/foundation/serialize';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

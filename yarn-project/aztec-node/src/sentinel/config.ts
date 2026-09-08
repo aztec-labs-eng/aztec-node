@@ -1,4 +1,4 @@
-import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec/foundation/config';
+import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec-labs/foundation/config';
 
 export type SentinelConfig = {
   sentinelHistoryLengthInEpochs: number;

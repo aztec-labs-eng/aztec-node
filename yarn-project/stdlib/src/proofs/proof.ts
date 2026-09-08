@@ -1,8 +1,7 @@
-import { PAIRING_POINTS_SIZE } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-
+import { PAIRING_POINTS_SIZE } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { strict as assert } from 'assert';
 
 const EMPTY_PROOF_SIZE = 42;

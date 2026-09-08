@@ -1,4 +1,4 @@
-import type { LogFn, Logger } from '@aztec/foundation/log';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 
 import { preloadCrsDataForServerSideProving } from './util.js';
 

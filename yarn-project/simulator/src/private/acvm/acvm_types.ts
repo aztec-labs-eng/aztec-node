@@ -1,4 +1,4 @@
-import type { WitnessMap } from '@aztec/noir-acvm_js';
+import type { WitnessMap } from '@aztec-foundation/noir-acvm_js';
 
 /**
  * ACVMField

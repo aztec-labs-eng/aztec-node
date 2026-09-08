@@ -28,16 +28,16 @@ function build_prover_agent_image {
   set -euo pipefail
   local tag=$(git rev-parse HEAD)
 
-  if ! docker image inspect aztecprotocol/aztec:$tag &>/dev/null; then
-    echo "Base image aztecprotocol/aztec:$tag not found. Run 'release-image/bootstrap.sh' first."
+  if ! docker image inspect azteclabs/aztec:$tag &>/dev/null; then
+    echo "Base image azteclabs/aztec:$tag not found. Run 'release-image/bootstrap.sh' first."
     exit 1
   fi
 
   prepare_crs
   echo_header "build prover-agent image"
   docker build -f Dockerfile.prover-agent --build-arg AZTEC_IMAGE_TAG=$tag \
-    -t aztecprotocol/aztec-prover-agent:$tag .
-  docker tag aztecprotocol/aztec-prover-agent:$tag aztecprotocol/aztec-prover-agent:latest
+    -t azteclabs/aztec-prover-agent:$tag .
+  docker tag azteclabs/aztec-prover-agent:$tag azteclabs/aztec-prover-agent:latest
 }
 export -f build_prover_agent_image
 
@@ -46,7 +46,7 @@ export -f build_prover_agent_image
 # would dangle in the image (build_monorepo provisions bin/ as symlinks).
 function check_toolchain_binaries {
   local binary path
-  for binary in bb-avm acvm; do
+  for binary in bb-avm noir-execute; do
     path=$root/labs-aztec-toolchain/bin/$binary
     if [ -L "$path" ]; then
       echo "labs-aztec-toolchain/bin/$binary is a symlink and would dangle in the image. Run labs-aztec-toolchain/bootstrap.sh first."
@@ -54,8 +54,8 @@ function check_toolchain_binaries {
     fi
     if [ ! -f "$path" ]; then
       echo "Missing labs-aztec-toolchain/bin/$binary. Run labs-aztec-toolchain/bootstrap.sh first."
-      if [ "$binary" = acvm ]; then
-        echo "Building acvm requires cargo to be installed."
+      if [ "$binary" = noir-execute ]; then
+        echo "Building noir-execute requires cargo to be installed."
       fi
       exit 1
     fi
@@ -75,17 +75,17 @@ function build_image {
     # Otherwise, use the commit hash as the version.
     local version=$(git rev-parse HEAD)
   fi
-  local previous_ids=$(docker images aztecprotocol/aztec --format "{{.ID}}" | uniq)
-  docker build -f release-image/Dockerfile --build-arg VERSION=$version -t aztecprotocol/aztec:$(git rev-parse HEAD) .
-  docker tag aztecprotocol/aztec:$(git rev-parse HEAD) aztecprotocol/aztec:latest
+  local previous_ids=$(docker images azteclabs/aztec --format "{{.ID}}" | uniq)
+  docker build -f release-image/Dockerfile --build-arg VERSION=$version -t azteclabs/aztec:$(git rev-parse HEAD) .
+  docker tag azteclabs/aztec:$(git rev-parse HEAD) azteclabs/aztec:latest
 
   # In CI, dump all files under /usr/src.
   if [ "$CI" -eq 1 ]; then
-    docker run --rm --entrypoint /bin/bash aztecprotocol/aztec:latest -c 'cd /usr/src && find . -print | grep -v node_modules'
+    docker run --rm --entrypoint /bin/bash azteclabs/aztec:latest -c 'cd /usr/src && find . -print | grep -v node_modules'
   fi
 
   # If we actually built a new image (not from cache), remove all but the just-built image.
-  local new_ids=$(docker images aztecprotocol/aztec --format "{{.ID}}" | uniq)
+  local new_ids=$(docker images azteclabs/aztec --format "{{.ID}}" | uniq)
   if [ "$previous_ids" != "$new_ids" ]; then
     echo "$previous_ids" | xargs -r docker rmi -f
   fi
@@ -101,8 +101,8 @@ function build {
   fi
 
   if ! cache_download release-image-base-$hash.zst; then
-    denoise "cd .. && docker build -f release-image/Dockerfile.base -t aztecprotocol/release-image-base ."
-    docker save aztecprotocol/release-image-base:latest > release-image-base
+    denoise "cd .. && docker build -f release-image/Dockerfile.base -t azteclabs/release-image-base ."
+    docker save azteclabs/release-image-base:latest > release-image-base
     cache_upload release-image-base-$hash.zst release-image-base
   else
     docker load < release-image-base
@@ -121,41 +121,22 @@ function test_cmds {
   fi
 
   # Very simple sanity test.
-  echo "$hash docker run --rm aztecprotocol/aztec --version"
-}
-
-# Resolve the registry to release to and log docker into it, assigning the repo path to the
-# caller's $repo. In a private release we push to our internal GCP Artifact Registry (the
-# INTERNAL_DOCKER_REGISTRY that GKE/staging pulls from) rather than Docker Hub. Auth via the CI
-# service-account key (gcp_artifact_login). INTERNAL_DOCKER_REGISTRY is the AR repo path, e.g.
-# us-west1-docker.pkg.dev/<project>/<repo>.
-function release_registry_login {
-  if [ "${PRIVATE_RELEASE:-0}" = 1 ]; then
-    : "${INTERNAL_DOCKER_REGISTRY:?INTERNAL_DOCKER_REGISTRY required for a private release}"
-    gcp_artifact_login
-    repo="${INTERNAL_DOCKER_REGISTRY%/}"
-  else
-    if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-      echo "Missing DOCKERHUB_PASSWORD."
-      exit 1
-    fi
-    echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-    repo="aztecprotocol"
-  fi
+  echo "$hash docker run --rm azteclabs/aztec --version"
 }
 
 function release {
   echo_header "release-image release"
 
-  local repo
-  release_registry_login
+  source $ci3/source_release_target
+  docker_login
+  local repo=${DOCKER_REGISTRY%/}
 
   # We strip leading 'v' so that this is a valid semver.
   tag=${REF_NAME#v}
-  docker tag aztecprotocol/aztec:$COMMIT_HASH $repo/aztec:$tag-$(arch)
+  docker tag azteclabs/aztec:$COMMIT_HASH $repo/aztec:$tag-$(arch)
   do_or_dryrun docker push $repo/aztec:$tag-$(arch)
 
-  docker tag aztecprotocol/aztec-prover-agent:$COMMIT_HASH $repo/aztec-prover-agent:$tag-$(arch)
+  docker tag azteclabs/aztec-prover-agent:$COMMIT_HASH $repo/aztec-prover-agent:$tag-$(arch)
   do_or_dryrun docker push $repo/aztec-prover-agent:$tag-$(arch)
 }
 
@@ -165,8 +146,9 @@ function release {
 function release_docker_manifest {
   echo_header "release-image manifest"
 
-  local repo
-  release_registry_login
+  source $ci3/source_release_target
+  docker_login
+  local repo=${DOCKER_REGISTRY%/}
 
   local tag=${REF_NAME#v}
   local image
@@ -182,34 +164,33 @@ function release_docker_manifest {
   #   $repo/aztec:$tag-arm64
 }
 
-function push {
-  echo_header "release-image push"
-
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  do_or_dryrun docker push aztecprotocol/aztec:$COMMIT_HASH
-  do_or_dryrun docker push aztecprotocol/aztec-prover-agent:$COMMIT_HASH
-}
-
+# Publish the just-built image so a Kubernetes cluster can pull it. The network deploy and bench
+# jobs run against real GKE namespaces, which cannot use an image that only exists in the local
+# docker daemon, so an unreleased commit needs to reach a registry before it can be deployed.
+#
+# These go to aztec-dev rather than aztec: the tags are per-commit build artifacts with no
+# lifecycle, and mixing thousands of them into the repo operators pull from would bury the
+# released versions. Nothing outside CI is expected to pull aztec-dev, and its tags may be
+# pruned at any time.
+#
+# Only the node image is pushed. Deployments leave PROVER_AGENT_DOCKER_IMAGE unset, so the prover
+# agents run this same image; the dedicated prover-agent image only exists to bake in the CRS, and
+# is only built for tagged releases anyway.
 function push_pr {
   echo_header "release-image push_pr"
 
-  if [ -z "${DOCKERHUB_PASSWORD:-}" ]; then
-    echo "Missing DOCKERHUB_PASSWORD."
-    exit 1
-  fi
-  echo $DOCKERHUB_PASSWORD | docker login -u ${DOCKERHUB_USERNAME:-aztecprotocolci} --password-stdin
-  docker tag aztecprotocol/aztec:$COMMIT_HASH aztecprotocol/aztecdev:$COMMIT_HASH
-  do_or_dryrun docker push aztecprotocol/aztecdev:$COMMIT_HASH
-  # Best-effort: push prover-agent image if available.
-  if docker tag aztecprotocol/aztec-prover-agent:$COMMIT_HASH aztecprotocol/aztec-prover-agent-dev:$COMMIT_HASH 2>/dev/null; then
-    do_or_dryrun docker push aztecprotocol/aztec-prover-agent-dev:$COMMIT_HASH || echo "Warning: failed to push prover-agent-dev image, continuing."
-  else
-    echo "Warning: prover-agent image not found locally, skipping push."
-  fi
+  source $ci3/source_release_target
+  docker_login
+  local image=$(pr_image_name)
+  docker tag azteclabs/aztec:$COMMIT_HASH $image
+  do_or_dryrun docker push $image
+}
+
+# The name push_pr publishes, for the deploys that consume it: one definition, so the image a
+# deploy asks for is the image that was pushed.
+function pr_image_name {
+  source $ci3/source_release_target
+  echo "${DOCKER_REGISTRY%/}/aztec-dev:$COMMIT_HASH"
 }
 
 case "$cmd" in

@@ -8,6 +8,7 @@ tags:
   - node
   - tutorial
   - infrastructure
+references: ["yarn-project/ethereum/src/config.ts", "yarn-project/p2p/src/config.ts", "yarn-project/node-keystore/src/schemas.ts", "yarn-project/node-lib/src/config/index.ts"]
 ---
 
 ## Overview
@@ -242,9 +243,9 @@ To update to a specific version:
 
 ```yaml
 # Change the image tag from:
-image: "aztecprotocol/aztec:latest"
+image: "azteclabs/aztec:latest"
 # To:
-image: "aztecprotocol/aztec:#release_version"
+image: "azteclabs/aztec:#release_version"
 ```
 
 Then run:

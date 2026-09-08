@@ -3,6 +3,7 @@ id: sequencer_management
 displayed_sidebar: operatorsSidebar
 title: Running a Sequencer
 description: Learn how to manage your sequencer on the Aztec network, including registration, keystore configuration, stake management, and status monitoring.
+references: ["yarn-project/node-keystore/src/schemas.ts", "yarn-project/cli/src/cmds/validator_keys/new.ts", "yarn-project/aztec/src/cli/aztec_start_options.ts", "yarn-project/sequencer-client/src/config.ts"]
 ---
 
 ## Overview
@@ -381,7 +382,7 @@ Create a `docker-compose.yml` file in your `aztec-sequencer` directory:
 ```yaml
 services:
   aztec-sequencer:
-    image: "aztecprotocol/aztec:#release_version"
+    image: "azteclabs/aztec:#release_version"
     container_name: "aztec-sequencer"
     ports:
       - ${AZTEC_PORT}:${AZTEC_PORT}

@@ -1,7 +1,7 @@
-import { PROOF_DELAY_MS, WITGEN_DELAY_MS } from '@aztec/bb-prover/test';
-import { insertIntoSortedArray } from '@aztec/foundation/array';
-import { times } from '@aztec/foundation/collection';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+import { PROOF_DELAY_MS, WITGEN_DELAY_MS } from '@aztec-labs/bb-prover/test';
+import { insertIntoSortedArray } from '@aztec-labs/foundation/array';
+import { times } from '@aztec-labs/foundation/collection';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 /**
  * Priority order for proof types - matches the real broker's PROOF_TYPES_IN_PRIORITY_ORDER

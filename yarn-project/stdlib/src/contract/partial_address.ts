@@ -1,4 +1,4 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 /**
  * The contract-side preimage of an Aztec address, i.e. the commitment to a specific contract instance.

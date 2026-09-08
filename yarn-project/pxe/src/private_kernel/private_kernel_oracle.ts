@@ -4,23 +4,26 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
   UPDATES_VALUE_SIZE,
   VK_TREE_HEIGHT,
-} from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import type { KeyStore } from '@aztec/key-store';
-import { getVKIndex, getVKSiblingPath } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type ContractInstanceWithAddress, computeSaltedInitializationHash } from '@aztec/stdlib/contract';
-import { DelayedPublicMutableValues, DelayedPublicMutableValuesWithHash } from '@aztec/stdlib/delayed-public-mutable';
-import { computePublicDataTreeLeafSlot } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { UpdatedClassIdHints } from '@aztec/stdlib/kernel';
-import type { NullifierMembershipWitness } from '@aztec/stdlib/trees';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-import type { VerificationKeyAsFields } from '@aztec/stdlib/vks';
+} from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { KeyStore } from '@aztec-labs/key-store';
+import { getVKIndex, getVKSiblingPath } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type ContractInstanceWithAddress, computeSaltedInitializationHash } from '@aztec-labs/stdlib/contract';
+import {
+  DelayedPublicMutableValues,
+  DelayedPublicMutableValuesWithHash,
+} from '@aztec-labs/stdlib/delayed-public-mutable';
+import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { UpdatedClassIdHints } from '@aztec-labs/stdlib/kernel';
+import type { NullifierMembershipWitness } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
+import type { VerificationKeyAsFields } from '@aztec-labs/stdlib/vks';
 
 import type { ContractClassService } from '../contract/contract_class_service.js';
 import { AnchoredContractData } from '../contract_function_simulator/anchored_contract_data.js';

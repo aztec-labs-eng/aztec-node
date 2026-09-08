@@ -84,7 +84,7 @@ Added by `MultiNodeTestContext`:
 - `findSlotsWithProposers(count, predicate, opts)` — finds N consecutive slots whose proposers
   satisfy `predicate`, warping the L1 clock forward and retrying on `EpochNotStable`.
 
-On `ChainMonitor` (`@aztec/ethereum/test`):
+On `ChainMonitor` (`@aztec-labs/ethereum/test`):
 
 - `waitUntilCheckpoint(n)` / `waitUntilCheckpointProven(n)`, `waitUntilL2Slot(slot)`,
   `waitUntilL1Block` / `waitUntilL1Timestamp`.

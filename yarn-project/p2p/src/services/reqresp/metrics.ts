@@ -1,6 +1,6 @@
 // Request response metrics
-import { Attributes, Metrics, createUpDownCounterWithDefault } from '@aztec/telemetry-client';
-import type { TelemetryClient, Tracer, UpDownCounter } from '@aztec/telemetry-client';
+import { Attributes, Metrics, createUpDownCounterWithDefault } from '@aztec-labs/telemetry-client';
+import type { TelemetryClient, Tracer, UpDownCounter } from '@aztec-labs/telemetry-client';
 
 import { ReqRespSubProtocol } from './interface.js';
 

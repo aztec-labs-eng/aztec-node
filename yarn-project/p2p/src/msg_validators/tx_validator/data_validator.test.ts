@@ -3,17 +3,17 @@ import {
   CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE,
   MAX_CONTRACT_CLASS_LOGS_PER_TX,
   MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS,
-} from '@aztec/constants';
-import { timesParallel } from '@aztec/foundation/collection';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { bufferAsFields } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { computeContractClassId, computePublicBytecodeCommitment } from '@aztec/stdlib/contract';
-import { LogHash, ScopedLogHash } from '@aztec/stdlib/kernel';
-import { ContractClassLog, ContractClassLogFields } from '@aztec/stdlib/logs';
-import { mockTx } from '@aztec/stdlib/testing';
+} from '@aztec-labs/constants';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { bufferAsFields } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { computeContractClassId, computePublicBytecodeCommitment } from '@aztec-labs/stdlib/contract';
+import { LogHash, ScopedLogHash } from '@aztec-labs/stdlib/kernel';
+import { ContractClassLog, ContractClassLogFields } from '@aztec-labs/stdlib/logs';
+import { mockTx } from '@aztec-labs/stdlib/testing';
 import {
   TX_ERROR_CALLDATA_COUNT_MISMATCH,
   TX_ERROR_CALLDATA_COUNT_TOO_LARGE,
@@ -24,8 +24,7 @@ import {
   TX_ERROR_INCORRECT_CONTRACT_CLASS_ID,
   TX_ERROR_MALFORMED_CONTRACT_CLASS_LOG,
   type Tx,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { DataTxValidator } from './data_validator.js';

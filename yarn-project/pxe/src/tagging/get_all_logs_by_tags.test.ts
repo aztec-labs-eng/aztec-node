@@ -1,10 +1,16 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import { MAX_LOGS_PER_TAG, MAX_RPC_LEN } from '@aztec/stdlib/interfaces/api-limit';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { LogCursor, type LogResult, type PrivateLogsQuery, SiloedTag, Tag, randomLogResult } from '@aztec/stdlib/logs';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import { MAX_LOGS_PER_TAG, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import {
+  LogCursor,
+  type LogResult,
+  type PrivateLogsQuery,
+  SiloedTag,
+  Tag,
+  randomLogResult,
+} from '@aztec-labs/stdlib/logs';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { getAllPrivateLogsByTags } from './get_all_logs_by_tags.js';

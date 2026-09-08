@@ -1,9 +1,8 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { MerkleTreeReadOperations } from '@aztec/stdlib/trees';
-import { BlockHeader } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { MerkleTreeReadOperations } from '@aztec-labs/stdlib/trees';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

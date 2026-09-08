@@ -1,6 +1,6 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { L2Block } from '@aztec/stdlib/block';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { L2Block } from '@aztec-labs/stdlib/block';
 
 import { ChonkCache, type ChonkVerifierProofResult } from './chonk-cache.js';
 

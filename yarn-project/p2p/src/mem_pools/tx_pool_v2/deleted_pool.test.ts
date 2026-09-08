@@ -1,7 +1,7 @@
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncMap } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncMap } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 
 import { DeletedPool } from './deleted_pool.js';
 

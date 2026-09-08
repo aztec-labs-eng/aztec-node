@@ -1,6 +1,6 @@
-import { BlobDeserializationError } from '@aztec/blob-lib';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { BlobDeserializationError } from '@aztec-labs/blob-lib';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { TxEffect } from './tx_effect.js';
 

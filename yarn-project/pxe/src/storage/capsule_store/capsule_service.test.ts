@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { CapsuleService } from './capsule_service.js';
 import { CapsuleStore } from './capsule_store.js';
@@ -20,6 +20,7 @@ describe('CapsuleService', () => {
     disallowedScope = await AztecAddress.random();
     capsuleStore = new CapsuleStore(await openTmpStore('capsule_service_test'));
     capsuleService = new CapsuleService(capsuleStore, [allowedScope]);
+    capsuleStore.beginChangeSet(changeSetId);
   });
 
   describe('scope enforcement', () => {
@@ -72,15 +73,15 @@ describe('CapsuleService', () => {
       const scope = allowedScope;
 
       // setCapsule + getCapsule
-      capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
+      await capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
       expect(await capsuleService.getCapsule(contract, slot, changeSetId, scope)).toEqual(capsule);
 
       // deleteCapsule
-      capsuleService.deleteCapsule(contract, slot, changeSetId, scope);
+      await capsuleService.deleteCapsule(contract, slot, changeSetId, scope);
       expect(await capsuleService.getCapsule(contract, slot, changeSetId, scope)).toBeNull();
 
       // copyCapsule
-      capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
+      await capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
       await capsuleService.copyCapsule(contract, slot, new Fr(5), 1, changeSetId, scope);
       expect(await capsuleService.getCapsule(contract, new Fr(5), changeSetId, scope)).toEqual(capsule);
 
@@ -99,15 +100,15 @@ describe('CapsuleService', () => {
       const scope = AztecAddress.ZERO;
 
       // setCapsule + getCapsule
-      capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
+      await capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
       expect(await capsuleService.getCapsule(contract, slot, changeSetId, scope)).toEqual(capsule);
 
       // deleteCapsule
-      capsuleService.deleteCapsule(contract, slot, changeSetId, scope);
+      await capsuleService.deleteCapsule(contract, slot, changeSetId, scope);
       expect(await capsuleService.getCapsule(contract, slot, changeSetId, scope)).toBeNull();
 
       // copyCapsule
-      capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
+      await capsuleService.setCapsule(contract, slot, capsule, changeSetId, scope);
       await capsuleService.copyCapsule(contract, slot, new Fr(5), 1, changeSetId, scope);
       expect(await capsuleService.getCapsule(contract, new Fr(5), changeSetId, scope)).toEqual(capsule);
 

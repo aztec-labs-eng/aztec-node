@@ -5,8 +5,8 @@ import type {
   ProvingJobInputsMap,
   ProvingJobResult,
   ProvingJobResultsMap,
-} from '@aztec/stdlib/interfaces/server';
-import type { ProvingRequestType } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 /**
  * A database for storing proof inputs and outputs.

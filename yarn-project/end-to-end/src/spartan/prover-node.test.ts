@@ -1,5 +1,5 @@
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 
 import { AlertTriggeredError } from '../quality_of_service/grafana_client.js';
 import {

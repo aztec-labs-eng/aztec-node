@@ -1,5 +1,5 @@
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { CheckpointReexecutionTracker } from './checkpoint_reexecution_tracker.js';
 

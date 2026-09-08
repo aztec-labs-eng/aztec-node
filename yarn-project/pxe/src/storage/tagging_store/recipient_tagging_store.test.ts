@@ -1,6 +1,6 @@
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AppTaggingSecret, AppTaggingSecretKind } from '@aztec/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec/stdlib/testing';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AppTaggingSecret, AppTaggingSecretKind } from '@aztec-labs/stdlib/logs';
+import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
 
 import { RecipientTaggingStore } from './recipient_tagging_store.js';
 

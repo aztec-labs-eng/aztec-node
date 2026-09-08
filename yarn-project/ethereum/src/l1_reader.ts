@@ -3,7 +3,7 @@ import {
   getConfigFromMappings,
   numberConfigHelper,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
+} from '@aztec-labs/foundation/config';
 
 import { type L1ContractAddresses, l1ContractAddressesMapping } from './l1_contract_addresses.js';
 

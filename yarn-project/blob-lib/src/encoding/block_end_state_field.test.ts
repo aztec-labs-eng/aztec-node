@@ -3,8 +3,8 @@ import {
   NOTE_HASH_TREE_HEIGHT,
   NULLIFIER_TREE_HEIGHT,
   PUBLIC_DATA_TREE_HEIGHT,
-} from '@aztec/constants';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+} from '@aztec-labs/constants';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import {
   TOTAL_MANA_USED_BIT_SIZE,

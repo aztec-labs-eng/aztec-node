@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/aztec.js/fields';
-import { ImportTestContract } from '@aztec/noir-test-contracts.js/ImportTest';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { ImportTestContract } from '@aztec-labs/noir-test-contracts.js/ImportTest';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 
 import { AutomineTestContext } from '../../automine_test_context.js';
 

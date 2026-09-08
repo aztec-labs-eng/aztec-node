@@ -1,8 +1,8 @@
-import { AbortError } from '@aztec/foundation/error';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import { truncate } from '@aztec/foundation/string';
-import { ProvingError } from '@aztec/stdlib/errors';
+import { AbortError } from '@aztec-labs/foundation/error';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { truncate } from '@aztec-labs/foundation/string';
+import { ProvingError } from '@aztec-labs/stdlib/errors';
 import type {
   GetProvingJobResponse,
   ProverAgentStatus,
@@ -11,8 +11,8 @@ import type {
   ProvingJobInputs,
   ProvingJobResultsMap,
   ServerCircuitProver,
-} from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 import type { ProofStore } from './proof_store/index.js';
 import { ProvingJobController, ProvingJobControllerStatus } from './proving_job_controller.js';

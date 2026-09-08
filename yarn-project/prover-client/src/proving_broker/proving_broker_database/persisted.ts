@@ -1,16 +1,16 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { BatchQueue } from '@aztec/foundation/queue';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { openVersionedStoreAt } from '@aztec/kv-store/lmdb-v2';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { BatchQueue } from '@aztec-labs/foundation/queue';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { openVersionedStoreAt } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   type ProofUri,
   ProvingJob,
   type ProvingJobId,
   ProvingJobSettledResult,
   getEpochFromProvingJobId,
-} from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/stdlib/interfaces/server';
 import {
   Attributes,
   LmdbMetrics,
@@ -18,8 +18,7 @@ import {
   type Tracer,
   getTelemetryClient,
   trackSpan,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { mkdir, readdir } from 'fs/promises';
 import { join } from 'path';
 

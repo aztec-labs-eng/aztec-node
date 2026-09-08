@@ -1,16 +1,16 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AvmTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmTest';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { defaultGlobals } from '@aztec/simulator/public/fixtures';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { defaultGlobals } from '@aztec-labs/simulator/public/fixtures';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import {
   DelayedPublicMutableValuesWithHash,
   ScheduledDelayChange,
   ScheduledValueChange,
-} from '@aztec/stdlib/delayed-public-mutable';
-import type { UInt64 } from '@aztec/stdlib/types';
-import { NativeWorldStateService } from '@aztec/world-state';
+} from '@aztec-labs/stdlib/delayed-public-mutable';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 
 import { AvmProvingTester } from './avm_proving_tester.js';
 

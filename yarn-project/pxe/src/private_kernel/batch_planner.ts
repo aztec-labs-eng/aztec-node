@@ -1,4 +1,4 @@
-import type { Serializable, Tuple } from '@aztec/foundation/serialize';
+import type { Serializable, Tuple } from '@aztec-labs/foundation/serialize';
 import {
   ClaimedLengthArray,
   PrivateAccumulatedData,
@@ -6,9 +6,9 @@ import {
   PrivateValidationRequests,
   ScopedKeyValidationRequestAndSeparator,
   ScopedPrivateLogData,
-} from '@aztec/stdlib/kernel';
-import type { PrivateCallExecutionResult } from '@aztec/stdlib/tx';
-import { VerificationKeyData } from '@aztec/stdlib/vks';
+} from '@aztec-labs/stdlib/kernel';
+import type { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
+import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 import { PrivateKernelResetPrivateInputsBuilder } from './hints/private_kernel_reset_private_inputs_builder.js';
 

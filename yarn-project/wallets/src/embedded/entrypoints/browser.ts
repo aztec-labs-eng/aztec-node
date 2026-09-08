@@ -1,11 +1,11 @@
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { openTmpStore } from '@aztec/kv-store/sqlite-opfs';
-import { type PXE, type PXECreationOptions, createPXE, openBrowserStore } from '@aztec/pxe/client/lazy';
-import { type PXEConfig, getPXEConfig } from '@aztec/pxe/config';
-import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry/lazy';
-import { getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry/lazy';
-import { getStandardMultiCallEntrypoint } from '@aztec/standard-contracts/multi-call-entrypoint/lazy';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { openTmpStore } from '@aztec-labs/kv-store/sqlite-opfs';
+import { type PXE, type PXECreationOptions, createPXE, openBrowserStore } from '@aztec-labs/pxe/client/lazy';
+import { type PXEConfig, getPXEConfig } from '@aztec-labs/pxe/config';
+import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry/lazy';
+import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry/lazy';
+import { getStandardMultiCallEntrypoint } from '@aztec-labs/standard-contracts/multi-call-entrypoint/lazy';
 
 import { LazyAccountContractsProvider } from '../account-contract-providers/lazy.js';
 import type { AccountContractsProvider } from '../account-contract-providers/types.js';

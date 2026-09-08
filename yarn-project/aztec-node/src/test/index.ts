@@ -1,12 +1,12 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import type { P2P } from '@aztec/p2p';
-import { SequencerClient } from '@aztec/sequencer-client';
-import { DataWithholdingWatcher, type SlasherClientInterface } from '@aztec/slasher';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import type { L2LogsSource, Service, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import type { GlobalVariableBuilder as GlobalVariableBuilderInterface } from '@aztec/stdlib/tx';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import type { P2P } from '@aztec-labs/p2p';
+import { SequencerClient } from '@aztec-labs/sequencer-client';
+import { DataWithholdingWatcher, type SlasherClientInterface } from '@aztec-labs/slasher';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import type { L2LogsSource, Service, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { GlobalVariableBuilder as GlobalVariableBuilderInterface } from '@aztec-labs/stdlib/tx';
 
 import type { AztecNodeConfig } from '../aztec-node/config.js';
 import { AztecNodeService } from '../aztec-node/server.js';

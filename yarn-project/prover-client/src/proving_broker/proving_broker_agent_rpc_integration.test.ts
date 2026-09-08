@@ -1,9 +1,9 @@
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { createNamespacedSafeJsonRpcServer, startHttpRpcServer } from '@aztec/foundation/json-rpc/server';
-import { Agent, makeUndiciFetch } from '@aztec/foundation/json-rpc/undici';
-import type { ProofUri, ProvingJob } from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { createNamespacedSafeJsonRpcServer, startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import { Agent, makeUndiciFetch } from '@aztec-labs/foundation/json-rpc/undici';
+import type { ProofUri, ProvingJob } from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 import { makeInputsUri, makeRandomProvingJobId } from './fixtures.js';
 import { ProvingBroker } from './proving_broker.js';

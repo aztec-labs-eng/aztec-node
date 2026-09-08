@@ -66,6 +66,18 @@ function test_cmds {
   # Long-running avm_simulator
   echo "$(dep_hash src/automine/simulation/avm_simulator.test.ts)$flags:TIMEOUT=30m:NAME=automine/simulation/avm_simulator $(set_dump_avm e2e_avm_simulator) $run_test_script simple src/automine/simulation/avm_simulator.test.ts"
 
+  # Lives under src/composed but runs as a simple test: the mainnet fork it needs comes from the
+  # anvil state dump it loads, not from the compose fork service. It also needs the anvil that
+  # setup() spawns itself: the compose fork service runs anvil with no --block-time, so it is already
+  # automining and setup()'s `enableAutomine` guard skips the automine/interval-mining handover.
+  # L1 then only advances when a tx arrives, the sequencer never reaches a proposable slot, and the
+  # setup deploys time out on isMined.
+  # CI_FULL only: the L1-side swap round-trip it uniquely covers costs ~8.5 minutes in its own
+  # container, which is not worth paying on every PR.
+  if [ "$CI_FULL" -eq 1 ]; then
+    echo "$(dep_hash src/composed/uniswap_trade_on_l1_from_l2.test.ts)$flags:NAME=composed/uniswap_trade_on_l1_from_l2 $run_test_script simple src/composed/uniswap_trade_on_l1_from_l2.test.ts"
+  fi
+
   local tests=(
     # List all standalone and nested tests, except for the ones listed above.
     # Keep these globs non-overlapping: docker_isolate derives the container name from the test path, so a
@@ -139,11 +151,10 @@ function test_cmds {
 
   # compose-based tests (use running local network)
   tests=(
-    # integration_proof_verification and e2e_persistence are excluded and run nowhere: the former's committed
-    # epoch-proof fixture is stale (the proof no longer verifies), and the latter's beforeAll no longer
-    # completes on the current branch (the single-node sequencer stalls in checkpoint proposal). See each
-    # file's header comment. Both stay excluded until fixed/regenerated.
-    src/composed/!(integration_proof_verification|e2e_persistence).test.ts
+    # e2e_persistence is excluded and runs nowhere: its beforeAll no longer completes (the single-node
+    # sequencer stalls in checkpoint proposal). See the file's header comment. It stays excluded until fixed.
+    # uniswap_trade_on_l1_from_l2 is excluded here because it is scheduled as a simple test above.
+    src/composed/!(e2e_persistence|uniswap_trade_on_l1_from_l2).test.ts
     src/guides/*.test.ts
   )
   for test in "${tests[@]}"; do
@@ -224,7 +235,7 @@ function build_bench {
   rm -rf "$ultrahonk_bench_dir" && mkdir -p "$ultrahonk_bench_dir"
   if ! cache_download "bb-ultrahonk-bench-inputs-$hash.tar.gz"; then
     export BASE_PARITY_BENCH_DIR="$(pwd)/$ultrahonk_bench_dir"
-    yarn workspace @aztec/ivc-integration test src/base_parity_inputs.test.ts
+    yarn workspace @aztec-labs/ivc-integration test src/base_parity_inputs.test.ts
     cache_upload "bb-ultrahonk-bench-inputs-$hash.tar.gz" "$ultrahonk_bench_dir"
   fi
 }

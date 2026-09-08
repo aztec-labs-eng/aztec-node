@@ -1,7 +1,7 @@
-import type { ArchiveSource } from '@aztec/p2p';
-import type { BlockHash } from '@aztec/stdlib/block';
-import type { MerkleTreeReadOperations } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+import type { ArchiveSource } from '@aztec-labs/p2p';
+import type { BlockHash } from '@aztec-labs/stdlib/block';
+import type { MerkleTreeReadOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 /**
  * Implements an archive source by checking a DB and an in-memory collection.

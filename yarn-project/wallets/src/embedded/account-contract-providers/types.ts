@@ -1,7 +1,7 @@
-import type { Account, AccountContract } from '@aztec/aztec.js/account';
-import type { Fq } from '@aztec/foundation/curves/bn254';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
+import type { Account, AccountContract } from '@aztec-labs/aztec.js/account';
+import type { Fq } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
 
 import type { AccountType } from '../wallet_db.js';
 

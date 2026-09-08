@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { FieldsOf } from '@aztec/foundation/types';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /**
  * The block a retractable fact originates from.

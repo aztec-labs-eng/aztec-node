@@ -1,6 +1,6 @@
 /* eslint-disable camelcase */
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { withoutHexPrefix } from '@aztec/foundation/string';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { withoutHexPrefix } from '@aztec-labs/foundation/string';
 import {
   AZTEC_ADDRESS,
   BoundedVec,
@@ -9,8 +9,8 @@ import {
   Option,
   type OracleRegistryEntry,
   makeEntry,
-} from '@aztec/pxe/simulator';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/pxe/simulator';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { OracleTestResolver, type OracleTestScenario, SET_SCENARIO_ENTRY } from './resolver.js';
 

@@ -5,7 +5,7 @@ import {
   encodeBlockBlobData,
   getBlobCommitmentsFromBlobs,
   getBlobsPerL1Block,
-} from '@aztec/blob-lib';
+} from '@aztec-labs/blob-lib';
 import {
   ARCHIVE_HEIGHT,
   CHONK_PROOF_LENGTH,
@@ -18,20 +18,20 @@ import {
   NULLIFIER_SUBTREE_ROOT_SIBLING_PATH_LENGTH,
   NULLIFIER_TREE_HEIGHT,
   PUBLIC_DATA_TREE_HEIGHT,
-} from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Bufferable, assertLength, toFriendlyJSON } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import { getVkData } from '@aztec/noir-protocol-circuits-types/server/vks';
-import { getVKIndex, getVKSiblingPath } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import { Body } from '@aztec/stdlib/block';
-import type { MerkleTreeWriteOperations, PublicInputsAndRecursiveProof } from '@aztec/stdlib/interfaces/server';
-import { ContractClassLogFields } from '@aztec/stdlib/logs';
-import { Proof, ProofData, RecursiveProof } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Bufferable, assertLength, toFriendlyJSON } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { getVkData } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import { getVKIndex, getVKSiblingPath } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { Body } from '@aztec-labs/stdlib/block';
+import type { MerkleTreeWriteOperations, PublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import { ContractClassLogFields } from '@aztec-labs/stdlib/logs';
+import { Proof, ProofData, RecursiveProof } from '@aztec-labs/stdlib/proofs';
 import {
   BlockConstantData,
   BlockRollupPublicInputs,
@@ -39,14 +39,14 @@ import {
   PublicBaseRollupHints,
   PublicChonkVerifierPrivateInputs,
   TreeSnapshotDiffHints,
-} from '@aztec/stdlib/rollup';
+} from '@aztec-labs/stdlib/rollup';
 import {
   AppendOnlyTreeSnapshot,
   MerkleTreeId,
   NullifierLeafPreimage,
   PublicDataTreeLeafPreimage,
   getTreeHeight,
-} from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   GlobalVariables,
@@ -54,10 +54,10 @@ import {
   type ProcessedTx,
   StateReference,
   Tx,
-} from '@aztec/stdlib/tx';
-import { VkData } from '@aztec/stdlib/vks';
-import { Attributes, type Span, runInSpan } from '@aztec/telemetry-client';
-import type { MerkleTreeReadOperations } from '@aztec/world-state';
+} from '@aztec-labs/stdlib/tx';
+import { VkData } from '@aztec-labs/stdlib/vks';
+import { Attributes, type Span, runInSpan } from '@aztec-labs/telemetry-client';
+import type { MerkleTreeReadOperations } from '@aztec-labs/world-state';
 
 /**
  * Type representing the names of the trees for the base rollup.

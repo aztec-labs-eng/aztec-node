@@ -1,8 +1,8 @@
-import { ContractBase } from '@aztec/aztec.js/contracts';
-import type { AMMContract } from '@aztec/noir-contracts.js/AMM';
-import type { PrivateTokenContract } from '@aztec/noir-contracts.js/PrivateToken';
-import type { TokenContract } from '@aztec/noir-contracts.js/Token';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { ContractBase } from '@aztec-labs/aztec.js/contracts';
+import type { AMMContract } from '@aztec-labs/noir-contracts.js/AMM';
+import type { PrivateTokenContract } from '@aztec-labs/noir-contracts.js/PrivateToken';
+import type { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /**
  * Gets the private and public balance of the given token for the given address.

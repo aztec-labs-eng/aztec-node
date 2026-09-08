@@ -1,5 +1,5 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { type BlockHash, type CheckpointId, type L2BlockTag, L2TipsStoreBase } from '@aztec/stdlib/block';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { type BlockHash, type CheckpointId, type L2BlockTag, L2TipsStoreBase } from '@aztec-labs/stdlib/block';
 
 import type { AztecAsyncMap } from '../interfaces/map.js';
 import type { AztecAsyncKVStore } from '../interfaces/store.js';

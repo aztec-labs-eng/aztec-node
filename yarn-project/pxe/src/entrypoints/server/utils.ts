@@ -1,13 +1,13 @@
-import { BBBundlePrivateKernelProver } from '@aztec/bb-prover/client/bundle';
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { createLogger } from '@aztec/foundation/log';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { BundledProtocolContractsProvider } from '@aztec/protocol-contracts/providers/bundle';
-import { WASMSimulator } from '@aztec/simulator/client';
-import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
-import { getStandardHandshakeRegistry } from '@aztec/standard-contracts/handshake-registry';
-import { getStandardMultiCallEntrypoint } from '@aztec/standard-contracts/multi-call-entrypoint';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import { BBBundlePrivateKernelProver } from '@aztec-labs/bb-prover/client/bundle';
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/bundle';
+import { WASMSimulator } from '@aztec-labs/simulator/client';
+import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
+import { getStandardHandshakeRegistry } from '@aztec-labs/standard-contracts/handshake-registry';
+import { getStandardMultiCallEntrypoint } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 import type { PXEConfig } from '../../config/index.js';
 import { PXE } from '../../pxe.js';

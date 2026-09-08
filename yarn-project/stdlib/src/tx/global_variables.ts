@@ -1,12 +1,17 @@
-import { GLOBAL_VARIABLES_LENGTH } from '@aztec/constants';
-import { BlockNumber, BlockNumberSchema, SlotNumber } from '@aztec/foundation/branded-types';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import { BufferReader, BufferSink, FieldReader, serializeToFields, serializeToSink } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { GLOBAL_VARIABLES_LENGTH } from '@aztec-labs/constants';
+import { BlockNumber, BlockNumberSchema, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import {
+  BufferReader,
+  BufferSink,
+  FieldReader,
+  serializeToFields,
+  serializeToSink,
+} from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { inspect } from 'util';
 import { z } from 'zod';
 

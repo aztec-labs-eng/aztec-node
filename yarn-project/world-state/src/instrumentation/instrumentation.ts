@@ -1,5 +1,5 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   Attributes,
   type Gauge,
@@ -8,7 +8,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import type { DBStats, TreeDBStats, TreeMeta, WorldStateStatusFull } from '../native/message.js';
 import type { WorldStateOperationName } from '../native/world_state_operation.js';

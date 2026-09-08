@@ -1,9 +1,8 @@
-import type { IL1TxStore, L1BlobInputs, L1TxConfig, L1TxState } from '@aztec/ethereum/l1-tx-utils';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { Logger } from '@aztec/foundation/log';
-import { createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-
+import type { IL1TxStore, L1BlobInputs, L1TxConfig, L1TxState } from '@aztec-labs/ethereum/l1-tx-utils';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import type { TransactionReceipt } from 'viem';
 
 /**

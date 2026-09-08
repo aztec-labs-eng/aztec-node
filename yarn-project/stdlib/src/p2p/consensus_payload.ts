@@ -1,10 +1,9 @@
-import { keccak256 } from '@aztec/foundation/crypto/keccak';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, serializeSignedBigInt, serializeToBuffer } from '@aztec/foundation/serialize';
-import { hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { keccak256 } from '@aztec-labs/foundation/crypto/keccak';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeSignedBigInt, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { encodeAbiParameters, parseAbiParameters } from 'viem';
 import { z } from 'zod';
 

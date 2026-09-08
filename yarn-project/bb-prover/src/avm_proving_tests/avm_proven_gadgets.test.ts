@@ -1,11 +1,10 @@
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { createLogger } from '@aztec/foundation/log';
-import { AvmGadgetsTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmGadgetsTest';
-import { TestExecutorMetrics, defaultGlobals } from '@aztec/simulator/public/fixtures';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { NativeWorldStateService } from '@aztec/world-state';
-
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { AvmGadgetsTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmGadgetsTest';
+import { TestExecutorMetrics, defaultGlobals } from '@aztec-labs/simulator/public/fixtures';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 import { mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 

@@ -5,9 +5,9 @@ import {
   getConfigFromMappings,
   numberConfigHelper,
   parseBooleanEnv,
-} from '@aztec/foundation/config';
-import { type ChainConfig, chainConfigMappings } from '@aztec/stdlib/config';
-import { type DataStoreConfig, dataConfigMappings } from '@aztec/stdlib/kv-store';
+} from '@aztec-labs/foundation/config';
+import { type ChainConfig, chainConfigMappings } from '@aztec-labs/stdlib/config';
+import { type DataStoreConfig, dataConfigMappings } from '@aztec-labs/stdlib/kv-store';
 
 export { getPackageInfo } from './package_info.js';
 export * from '../hooks/index.js';

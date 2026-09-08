@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { FactService } from './fact_service.js';
 import { FactStore } from './fact_store.js';
@@ -34,6 +34,7 @@ describe('FactService', () => {
   beforeEach(async () => {
     kv = await openTmpStore('fact-service-test');
     store = new FactStore(kv);
+    store.beginChangeSet(changeSetId);
   });
 
   it('delegates record+get for an allowed scope', async () => {

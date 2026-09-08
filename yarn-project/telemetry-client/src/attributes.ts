@@ -30,7 +30,7 @@ export const AZTEC_REGISTRY_ADDRESS = 'aztec.registry_address';
 
 /**
  * The name of the protocol circuit being run (e.g. public-kernel-setup or base-rollup)
- * @see {@link @aztec/stdlib/stats:CircuitName}
+ * @see {@link @aztec-labs/stdlib/stats:CircuitName}
  */
 export const PROTOCOL_CIRCUIT_NAME = 'aztec.circuit.protocol_circuit_name';
 

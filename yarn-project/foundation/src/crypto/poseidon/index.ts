@@ -1,4 +1,4 @@
-import { Barretenberg, BarretenbergSync } from '@aztec/bb.js';
+import { Barretenberg, BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { Fr } from '../../curves/bn254/field.js';
 import { type Fieldable, serializeToFields } from '../../serialize/serialize.js';

@@ -1,13 +1,12 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { compactArray } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { elapsed } from '@aztec/foundation/timer';
-import type { L2Block, L2BlockInfo } from '@aztec/stdlib/block';
-import type { ITxProvider } from '@aztec/stdlib/interfaces/server';
-import type { BlockProposal } from '@aztec/stdlib/p2p';
-import { type BlockHeader, Tx, TxHash } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { elapsed } from '@aztec-labs/foundation/timer';
+import type { L2Block, L2BlockInfo } from '@aztec-labs/stdlib/block';
+import type { ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
+import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
+import { type BlockHeader, Tx, TxHash } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 
 import type { P2PClient } from '../client/p2p_client.js';

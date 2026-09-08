@@ -1,7 +1,6 @@
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { LogFn } from '@aztec/foundation/log';
-import { createProverNodeAdminClient } from '@aztec/stdlib/interfaces/server';
-
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { createProverNodeAdminClient } from '@aztec-labs/stdlib/interfaces/server';
 import { type Command, InvalidArgumentError } from 'commander';
 
 function parseEpoch(value: string): number {

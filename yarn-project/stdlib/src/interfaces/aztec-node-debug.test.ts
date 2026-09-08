@@ -1,5 +1,5 @@
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec/foundation/json-rpc/test';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 
 import { type AztecNodeDebug, AztecNodeDebugApiSchema } from './aztec-node-debug.js';
 

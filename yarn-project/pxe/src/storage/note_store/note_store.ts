@@ -1,10 +1,10 @@
-import { createLogger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { Fr } from '@aztec/foundation/schemas';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec/kv-store';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { DataInBlock } from '@aztec/stdlib/block';
-import { NoteDao, NoteStatus } from '@aztec/stdlib/note';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { Fr } from '@aztec-labs/foundation/schemas';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec-labs/kv-store';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { DataInBlock } from '@aztec-labs/stdlib/block';
+import { NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 
 import type { NotesFilter } from '../../notes_filter.js';
 import { BaseStagingStore, type ReadonlyDb } from '../base_staging_store.js';
@@ -50,7 +50,7 @@ export class NoteStore extends BaseStagingStore<NoteStoreChangeSet, NoteStoreDb>
    * @param changeSetId - The change set to stage writes under
    */
   public addNotes(notes: NoteDao[], scope: AztecAddress, changeSetId: ChangeSetId): Promise<void[]> {
-    return this.withChangeSet(changeSetId, (changeSet, db) =>
+    return this.withChangeSetAndDb(changeSetId, (changeSet, db) =>
       allToCompletion(
         notes.map(async note => {
           const noteForChangeSet =
@@ -103,7 +103,7 @@ export class NoteStore extends BaseStagingStore<NoteStoreChangeSet, NoteStoreDb>
    * @returns Filtered and deduplicated notes (a note might be present in multiple scopes, but returned at most once)
    */
   getNotes(filter: NotesFilter, changeSetId: ChangeSetId): Promise<NoteDao[]> {
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       if (filter.scopes.length === 0) {
         return [];
       }
@@ -227,7 +227,7 @@ export class NoteStore extends BaseStagingStore<NoteStoreChangeSet, NoteStoreDb>
       return Promise.reject(new Error('applyNullifiers: nullifiers cannot have been emitted at block 0'));
     }
 
-    return this.withChangeSet(changeSetId, async (changeSet, db) => {
+    return this.withChangeSetAndDb(changeSetId, async (changeSet, db) => {
       // Kick off the note read and the existing-emission read together during the synchronous map so all are in
       // flight before the first await, which keeps the IndexedDB transaction alive.
       const resolved = await allToCompletion(

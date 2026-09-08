@@ -1,6 +1,6 @@
-import { type L1ContractAddresses, pickL1ContractAddressMappings } from '@aztec/ethereum/l1-contract-addresses';
-import { type ConfigMappingsType, numberConfigHelper } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { type L1ContractAddresses, pickL1ContractAddressMappings } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { type ConfigMappingsType, numberConfigHelper } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 export { type SequencerConfig, SequencerConfigSchema } from '../interfaces/configs.js';
 export { type AllowedElement } from '../interfaces/allowed_element.js';

@@ -1,6 +1,10 @@
-import type { NamespacedApiHandlers, StatusCheckFn } from '@aztec/foundation/json-rpc/server';
-import { AztecNodeAdminApiSchema, AztecNodeApiSchema, AztecNodeDebugApiSchema } from '@aztec/stdlib/interfaces/client';
-import { type P2PApi, P2PApiSchema } from '@aztec/stdlib/interfaces/server';
+import type { NamespacedApiHandlers, StatusCheckFn } from '@aztec-labs/foundation/json-rpc/server';
+import {
+  AztecNodeAdminApiSchema,
+  AztecNodeApiSchema,
+  AztecNodeDebugApiSchema,
+} from '@aztec-labs/stdlib/interfaces/client';
+import { type P2PApi, P2PApiSchema } from '@aztec-labs/stdlib/interfaces/server';
 
 import type { AztecNodeService } from './server.js';
 

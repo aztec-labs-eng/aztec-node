@@ -6,12 +6,11 @@ import {
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   PAIRING_POINTS_SIZE,
   ULTRA_KECCAK_PROOF_LENGTH,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
-import { ChonkProofWithPublicInputs, Proof, RecursiveProof } from '@aztec/stdlib/proofs';
-import type { VerificationKeyData } from '@aztec/stdlib/vks';
-
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { ChonkProofWithPublicInputs, Proof, RecursiveProof } from '@aztec-labs/stdlib/proofs';
+import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import assert from 'assert';
 import { promises as fs } from 'fs';
 import * as path from 'path';

@@ -1,5 +1,5 @@
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import type { LogFn } from '@aztec/foundation/log';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import type { LogFn } from '@aztec-labs/foundation/log';
 
 export async function blockNumber(nodeUrl: string, log: LogFn) {
   const aztecNode = createAztecNodeClient(nodeUrl);

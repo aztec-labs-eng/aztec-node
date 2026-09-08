@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, BufferSink, serializeToSink } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, BufferSink, serializeToSink } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { computeCalldataHash, computeVarArgsHash } from '../hash/index.js';

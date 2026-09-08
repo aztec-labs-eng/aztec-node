@@ -1,17 +1,16 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import type { Fr } from '@aztec/aztec.js/fields';
-import { getSponsoredFPCAddress } from '@aztec/cli/cli-utils';
-import { getPublicClient } from '@aztec/ethereum/client';
-import type { GenesisStateConfig } from '@aztec/ethereum/config';
-import { RegistryContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { startHttpRpcServer } from '@aztec/foundation/json-rpc/server';
-import { type LogFn, createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { VersionCheck } from '@aztec/stdlib/update-checker';
-import { getGenesisValues } from '@aztec/world-state/testing';
-
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import type { Fr } from '@aztec-labs/aztec.js/fields';
+import { getSponsoredFPCAddress } from '@aztec-labs/cli/cli-utils';
+import { getPublicClient } from '@aztec-labs/ethereum/client';
+import type { GenesisStateConfig } from '@aztec-labs/ethereum/config';
+import { RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import { type LogFn, createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { VersionCheck } from '@aztec-labs/stdlib/update-checker';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 import Koa from 'koa';
 
 import { isShuttingDown, softShutdown } from '../util.js';
@@ -153,7 +152,7 @@ export async function setupAutoShutdown(
   expected: { genesisArchiveRoot: Fr; vkTreeRoot: Fr; protocolContractsHash: Fr },
   signalHandlers: Array<() => Promise<void>>,
 ): Promise<void> {
-  const { VersionChecker } = await import('@aztec/stdlib/update-checker');
+  const { VersionChecker } = await import('@aztec-labs/stdlib/update-checker');
 
   const logger = createLogger('auto_shutdown');
   const publicClient = getPublicClient(config);

@@ -1,24 +1,24 @@
 import { css } from '@emotion/react';
 import welcomeIconURL from '../../../assets/welcome_icon.svg';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { DeployAccountOptions } from '@aztec/aztec.js/wallet';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { DeployAccountOptions } from '@aztec-labs/aztec.js/wallet';
 import { useNotifications } from '@toolpad/core/useNotifications';
 import { Box, Button, CircularProgress, Tooltip } from '@mui/material';
 import { AztecContext } from '../../../aztecContext';
 import { useContext, useEffect, useState } from 'react';
 import { PREDEFINED_CONTRACTS } from '../../../constants';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { loadContractArtifact } from '@aztec/aztec.js/abi';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { loadContractArtifact } from '@aztec-labs/aztec.js/abi';
 import { useTransaction } from '../../../hooks/useTransaction';
 import { formatFrAsString } from '../../../utils/conversion';
 import { filterDeployedAliasedContracts } from '../../../utils/contracts';
 import { parse } from 'buffer-json';
 import { trackButtonClick } from '../../../utils/matomo';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { prepareForFeePayment } from '../../../utils/sponsoredFPC';
 import { colors, commonStyles } from '../../../global.styles';
-import { NO_FROM } from '@aztec/aztec.js/account';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
 
 const container = css({
   display: 'flex',
@@ -311,7 +311,7 @@ export function Landing() {
     switch (contractValue) {
       case PREDEFINED_CONTRACTS.SIMPLE_VOTING: {
         ({ PrivateVotingContractArtifact: contractArtifactJSON } = await import(
-          '@aztec/noir-contracts.js/PrivateVoting'
+          '@aztec-labs/noir-contracts.js/PrivateVoting'
         ));
 
         defaultContractCreationParams = {
@@ -332,7 +332,7 @@ export function Landing() {
         break;
       }
       case PREDEFINED_CONTRACTS.SIMPLE_TOKEN: {
-        ({ SimpleTokenContractArtifact: contractArtifactJSON } = await import('@aztec/noir-contracts.js/SimpleToken'));
+        ({ SimpleTokenContractArtifact: contractArtifactJSON } = await import('@aztec-labs/noir-contracts.js/SimpleToken'));
         defaultContractCreationParams = {
           initializer: 'constructor',
           name: 'My Token',

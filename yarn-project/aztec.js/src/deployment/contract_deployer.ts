@@ -1,5 +1,5 @@
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 
 import { Contract } from '../contract/contract.js';
 import { type DeployInstantiationOptions, DeployMethod } from '../contract/deploy_method.js';

@@ -1,38 +1,37 @@
-import { EpochCache } from '@aztec/epoch-cache';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { compactArray, times } from '@aztec/foundation/collection';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AztecLMDBStoreV2, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import type { P2PClient } from '@aztec/p2p';
-import { OffenseType, WANT_TO_SLASH_EVENT, type WantToSlashArgs } from '@aztec/slasher';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray, times } from '@aztec-labs/foundation/collection';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AztecLMDBStoreV2, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { P2PClient } from '@aztec-labs/p2p';
+import { OffenseType, WANT_TO_SLASH_EVENT, type WantToSlashArgs } from '@aztec-labs/slasher';
 import {
   CommitteeAttestation,
   GENESIS_BLOCK_HEADER_HASH,
   L2Block,
   type L2BlockSource,
   getAttestationInfoFromPublishedCheckpoint,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
   CheckpointReexecutionTracker,
   L1PublishedData,
   PublishedCheckpoint,
-} from '@aztec/stdlib/checkpoint';
-import { type L1RollupConstants, getSlotRangeForEpoch } from '@aztec/stdlib/epoch-helpers';
-import type { CheckpointAttestation } from '@aztec/stdlib/p2p';
+} from '@aztec-labs/stdlib/checkpoint';
+import { type L1RollupConstants, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
+import type { CheckpointAttestation } from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeCheckpointAttestation,
   makeCheckpointAttestationFromCheckpoint,
-} from '@aztec/stdlib/testing';
+} from '@aztec-labs/stdlib/testing';
 import type {
   ValidatorStats,
   ValidatorStatusHistory,
   ValidatorsEpochPerformance,
   ValidatorsStats,
-} from '@aztec/stdlib/validators';
-
+} from '@aztec-labs/stdlib/validators';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

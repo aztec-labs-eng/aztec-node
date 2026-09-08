@@ -1,10 +1,9 @@
 /**
  * Tests for keystore duplication check logic and validation integration
  */
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { describe, expect, it } from '@jest/globals';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';

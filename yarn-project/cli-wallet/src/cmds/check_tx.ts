@@ -1,16 +1,16 @@
-import type { ContractArtifact } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { ProtocolContractAddress } from '@aztec/aztec.js/protocol';
-import type { TxHash } from '@aztec/aztec.js/tx';
-import type { LogFn } from '@aztec/foundation/log';
+import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { ProtocolContractAddress } from '@aztec-labs/aztec.js/protocol';
+import type { TxHash } from '@aztec-labs/aztec.js/tx';
+import type { LogFn } from '@aztec-labs/foundation/log';
 import {
   computeSiloedPrivateInitializationNullifier,
   computeSiloedPublicInitializationNullifier,
   siloNullifier,
-} from '@aztec/stdlib/hash';
-import { NoteDao } from '@aztec/stdlib/note';
+} from '@aztec-labs/stdlib/hash';
+import { NoteDao } from '@aztec-labs/stdlib/note';
 
 import type { CLIWallet } from '../utils/wallet.js';
 

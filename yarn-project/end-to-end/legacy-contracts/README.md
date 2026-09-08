@@ -1,7 +1,7 @@
 # Legacy contract artifacts
 
 Each tarball, holds the contract artifact JSON's of
-`@aztec/noir-contracts.js`, `@aztec/noir-test-contracts.js`, and `@aztec/accounts` as published at
+`@aztec-labs/noir-contracts.js`, `@aztec-labs/noir-test-contracts.js`, and `@aztec-labs/accounts` as published at
 a specific version:
 
 ```

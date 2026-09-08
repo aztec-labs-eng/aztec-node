@@ -1,4 +1,4 @@
-import { type Logger, createLogger } from '@aztec/aztec.js/log';
+import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
 
 const logLevel = ['silent', 'fatal', 'error', 'warn', 'info', 'verbose', 'debug', 'trace'] as const;
 type LogLevel = (typeof logLevel)[number];

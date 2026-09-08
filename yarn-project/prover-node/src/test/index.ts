@@ -1,5 +1,5 @@
-import type { EpochProverFactory } from '@aztec/prover-client';
-import type { EpochProverManager } from '@aztec/stdlib/interfaces/server';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
+import type { EpochProverManager } from '@aztec-labs/stdlib/interfaces/server';
 
 import type { ProofPublishingService } from '../proof-publishing-service.js';
 import { ProverNode } from '../prover-node.js';

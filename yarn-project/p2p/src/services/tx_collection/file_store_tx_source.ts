@@ -1,15 +1,15 @@
-import { partitionAsync } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import { type ReadOnlyFileStore, createReadOnlyFileStore } from '@aztec/stdlib/file-store';
-import { Tx, type TxHash, type TxValidator } from '@aztec/stdlib/tx';
+import { partitionAsync } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { type ReadOnlyFileStore, createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
+import { Tx, type TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
 import {
   type Histogram,
   Metrics,
   type TelemetryClient,
   type UpDownCounter,
   getTelemetryClient,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import type { TxSource, TxSourceCollectionResult } from './tx_source.js';
 

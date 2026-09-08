@@ -1,5 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 
 import {
   StoreIdentityMismatchError,

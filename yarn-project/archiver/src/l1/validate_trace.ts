@@ -1,6 +1,5 @@
-import type { ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import type { Hex } from 'viem';
 import type { ZodSchema } from 'zod';
 

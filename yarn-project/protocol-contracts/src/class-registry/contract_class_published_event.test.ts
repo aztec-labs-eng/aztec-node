@@ -2,11 +2,11 @@ import {
   CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
   CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE,
   MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { setupCustomSnapshotSerializers } from '@aztec/foundation/testing';
-import { bufferAsFields } from '@aztec/stdlib/abi';
-import { ContractClassLog, ContractClassLogFields } from '@aztec/stdlib/logs';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
+import { bufferAsFields } from '@aztec-labs/stdlib/abi';
+import { ContractClassLog, ContractClassLogFields } from '@aztec-labs/stdlib/logs';
 
 import { ProtocolContractAddress } from '../protocol_contract_data.js';
 import { getSampleContractClassPublishedEventPayload } from '../tests/fixtures.js';

@@ -1,5 +1,5 @@
-import type { ACIRCallback, ACIRExecutionResult, ACVMWitness, CircuitSimulator } from '@aztec/simulator/client';
-import type { FunctionArtifactWithContractName } from '@aztec/stdlib/abi';
+import type { ACIRCallback, ACIRExecutionResult, ACVMWitness, CircuitSimulator } from '@aztec-labs/simulator/client';
+import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 
 import type { RecordingMetadata } from './circuit_recorder.js';
 import { FileCircuitRecorder } from './file_circuit_recorder.js';
@@ -76,6 +76,7 @@ describe('SimulatorRecorderWrapper', () => {
     const simulator: CircuitSimulator = {
       executeUserCircuit: () => Promise.reject(underlyingError),
       executeProtocolCircuit: () => Promise.reject(new Error('not used in this test')),
+      executeProtocolCircuitToWitness: () => Promise.reject(new Error('not used in this test')),
     };
     const wrapper = new SimulatorRecorderWrapper(simulator, new MemoryCircuitRecorder());
 
@@ -110,6 +111,7 @@ describe('SimulatorRecorderWrapper', () => {
 
     const simulator: CircuitSimulator = {
       executeProtocolCircuit: () => Promise.reject(new Error('not used in this test')),
+      executeProtocolCircuitToWitness: () => Promise.reject(new Error('not used in this test')),
       executeUserCircuit: async (_input, artifactArg, callback) => {
         switch (artifactArg.name) {
           case 'parent':

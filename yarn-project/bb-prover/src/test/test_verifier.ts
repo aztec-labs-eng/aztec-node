@@ -1,5 +1,5 @@
-import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec/stdlib/interfaces/server';
-import type { Tx } from '@aztec/stdlib/tx';
+import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
+import type { Tx } from '@aztec-labs/stdlib/tx';
 
 export class TestCircuitVerifier implements ClientProtocolCircuitVerifier {
   constructor(private verificationDelayMs?: number) {}

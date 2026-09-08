@@ -1,4 +1,4 @@
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { LogResultSchema, logResultToHumanReadable, randomLogResult } from './log_result.js';
 

@@ -1,5 +1,5 @@
 /* eslint-disable camelcase */
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import type { NoirCompiledContract } from '../noir/index.js';
 import { getBenchmarkContractArtifact, getTestContractArtifact } from '../tests/fixtures.js';

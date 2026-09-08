@@ -1,17 +1,17 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { type FeeHeader, RollupContract } from '@aztec/ethereum/contracts';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { type FeeHeader, RollupContract } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { unfreeze } from '@aztec/foundation/types';
-import { type AvmSimulator, PublicProcessor, PublicProcessorFactory } from '@aztec/simulator/server';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { unfreeze } from '@aztec-labs/foundation/types';
+import { type AvmSimulator, PublicProcessor, PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
@@ -20,24 +20,23 @@ import {
   type L2BlockSource,
   type L2Tips,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
-import type { ProposedCheckpointData } from '@aztec/stdlib/checkpoint';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { EmptyL1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { MerkleTreeWriteOperations, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { InboxBucket, L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { mockTx } from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/block';
+import type { ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type { MerkleTreeWriteOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxBucket, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   type CheckpointGlobalVariables,
   type GlobalVariableBuilder,
   GlobalVariables,
   TxEffect,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

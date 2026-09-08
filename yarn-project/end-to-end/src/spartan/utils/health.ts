@@ -1,10 +1,9 @@
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import type { Logger } from '@aztec/foundation/log';
-
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import type { Logger } from '@aztec-labs/foundation/log';
 import { createPublicClient, fallback, http } from 'viem';
 
 import { type ServiceEndpoint, getEthereumEndpoint, getRPCEndpoint } from './k8s.js';

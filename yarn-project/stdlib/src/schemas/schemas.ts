@@ -1,10 +1,9 @@
-import type { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import type { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import type { Point } from '@aztec/foundation/curves/grumpkin';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type ZodFor, schemas as foundationSchemas } from '@aztec/foundation/schemas';
-
+import type { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import type { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type ZodFor, schemas as foundationSchemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import type { AbiDecoded } from '../abi/decoder.js';
@@ -111,4 +110,4 @@ export {
   optional,
   mapSchema,
   pickFromSchema,
-} from '@aztec/foundation/schemas';
+} from '@aztec-labs/foundation/schemas';

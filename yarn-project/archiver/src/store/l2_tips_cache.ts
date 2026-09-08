@@ -1,4 +1,4 @@
-import type { BlockHash, L2Tips } from '@aztec/stdlib/block';
+import type { BlockHash, L2Tips } from '@aztec-labs/stdlib/block';
 
 import type { BlockStore } from './block_store.js';
 

@@ -11,7 +11,7 @@
  * is never stored or passed around after initial derivation. (#2)
  */
 
-import { Fr, GrumpkinScalar } from "@aztec/aztec.js/fields";
+import { Fr, GrumpkinScalar } from "@aztec-labs/aztec.js/fields";
 
 import { instantiateAccount } from "../account-utils";
 import type { PublicAccountInfo } from "../shared-types";

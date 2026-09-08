@@ -1,9 +1,9 @@
-import { NULL_MSG_SENDER_CONTRACT_ADDRESS } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { makeAztecAddress, makeSelector, mockTx } from '@aztec/stdlib/testing';
+import { NULL_MSG_SENDER_CONTRACT_ADDRESS } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { makeAztecAddress, makeSelector, mockTx } from '@aztec-labs/stdlib/testing';
 import {
   TX_ERROR_SETUP_FUNCTION_NOT_ALLOWED,
   TX_ERROR_SETUP_FUNCTION_UNKNOWN_CONTRACT,
@@ -11,8 +11,7 @@ import {
   TX_ERROR_SETUP_ONLY_SELF_WRONG_SENDER,
   TX_ERROR_SETUP_WRONG_CALLDATA_LENGTH,
   type Tx,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock, mockFn } from 'jest-mock-extended';
 
 import { PhasesTxValidator } from './phases_validator.js';

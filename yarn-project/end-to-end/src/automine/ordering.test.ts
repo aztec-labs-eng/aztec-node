@@ -1,16 +1,15 @@
 // Test suite for testing proper ordering of side effects
 // See https://github.com/AztecProtocol/aztec-packages/issues/1601 for motivation.
-import type { FunctionSelector } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { toBigIntBE } from '@aztec/foundation/bigint-buffer';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { serializeToBuffer } from '@aztec/foundation/serialize';
-import { ChildContract } from '@aztec/noir-test-contracts.js/Child';
-import { ParentContract } from '@aztec/noir-test-contracts.js/Parent';
-import { computeCalldataHash } from '@aztec/stdlib/hash';
-
+import type { FunctionSelector } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { toBigIntBE } from '@aztec-labs/foundation/bigint-buffer';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { ChildContract } from '@aztec-labs/noir-test-contracts.js/Child';
+import { ParentContract } from '@aztec-labs/noir-test-contracts.js/Parent';
+import { computeCalldataHash } from '@aztec-labs/stdlib/hash';
 import { jest } from '@jest/globals';
 
 import type { TestWallet } from '../test-wallet/test_wallet.js';

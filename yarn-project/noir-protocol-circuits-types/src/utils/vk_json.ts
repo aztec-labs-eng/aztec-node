@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { NoirCompiledCircuit } from '@aztec/stdlib/noir';
-import { VerificationKeyAsFields, VerificationKeyData } from '@aztec/stdlib/vks';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { NoirCompiledCircuit } from '@aztec-labs/stdlib/noir';
+import { VerificationKeyAsFields, VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 export function abiToVKData(json: NoirCompiledCircuit): VerificationKeyData {
   const { verificationKey } = json;

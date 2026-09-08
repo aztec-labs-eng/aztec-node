@@ -23,17 +23,17 @@
  *      Send batch tx (no wait)
  *
  */
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall, NO_WAIT } from '@aztec/aztec.js/contracts';
-import { isL1ToL2MessageReady } from '@aztec/aztec.js/messaging';
-import type { TxHash, TxReceipt } from '@aztec/aztec.js/tx';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import type { BlockTag } from '@aztec/stdlib/block';
-import type { AztecNode, AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall, NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { isL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import type { TxHash, TxReceipt } from '@aztec-labs/aztec.js/tx';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import type { BlockTag } from '@aztec-labs/stdlib/block';
+import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { BaseBot } from './base_bot.js';
 import type { BotConfig } from './config.js';

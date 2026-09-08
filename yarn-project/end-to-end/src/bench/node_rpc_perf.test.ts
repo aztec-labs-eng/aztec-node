@@ -6,20 +6,19 @@
  * 2. Builds a few blocks by sending transactions
  * 3. Benchmarks all node RPC API methods
  */
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { RollupCheatCodes } from '@aztec/ethereum/test';
-import { BlockNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { Timer } from '@aztec/foundation/timer';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-import { SiloedTag, Tag } from '@aztec/stdlib/logs';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { Tx, TxHash } from '@aztec/stdlib/tx';
-
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { RollupCheatCodes } from '@aztec-labs/ethereum/test';
+import { BlockNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
+import { SiloedTag, Tag } from '@aztec-labs/stdlib/logs';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { mkdir, writeFile } from 'fs/promises';
 import 'jest-extended';

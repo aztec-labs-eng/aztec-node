@@ -17,12 +17,12 @@ import {
   getActiveAccount,
   setActiveAccount,
 } from '../wallet/wallet-impl';
-import type { PXE } from '@aztec/pxe/client/lazy';
-import type { Account } from '@aztec/aztec.js/account';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { getPXEConfig } from '@aztec/pxe/config';
-import { createPXE } from '@aztec/pxe/client/lazy';
+import type { PXE } from '@aztec-labs/pxe/client/lazy';
+import type { Account } from '@aztec-labs/aztec.js/account';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { getPXEConfig } from '@aztec-labs/pxe/config';
+import { createPXE } from '@aztec-labs/pxe/client/lazy';
 
 // ============================================================================
 // CRITICAL: Enable SharedArrayBuffer support for Barretenberg WASM
@@ -157,7 +157,7 @@ async function ensurePXE(nodeUrl: string = NODE_URL): Promise<{ pxe: PXE; node: 
 // docs:start:wallet-instance
 /** Single wallet class used for all operations. (#18, #20) */
 
-import type { BaseWallet } from '@aztec/wallet-sdk/base-wallet';
+import type { BaseWallet } from '@aztec-labs/wallet-sdk/base-wallet';
 
 /**
  * The wallet instance holds a BaseWallet subclass with an additional
@@ -294,8 +294,8 @@ async function getWallet() {
       const originalAddress = realAccount.getCompleteAddress();
       log.info('[offscreen] Got complete address:', originalAddress.address.toString());
 
-      const { createStubAccount, getStubAccountContractArtifact } = await import('@aztec/accounts/stub/lazy');
-      log.info('[offscreen] Loaded @aztec/accounts/stub/lazy');
+      const { createStubAccount, getStubAccountContractArtifact } = await import('@aztec-labs/accounts/stub/lazy');
+      log.info('[offscreen] Loaded @aztec-labs/accounts/stub/lazy');
 
       const stubArtifact = await getStubAccountContractArtifact();
       log.info('[offscreen] Loaded stub artifact:', stubArtifact.name);
@@ -331,8 +331,8 @@ async function getWallet() {
 
       // Step 3: Extract auth witness requests from offchain effects
       log.info('[offscreen] Step 3: Extracting offchain effects...');
-      const { collectOffchainEffects } = await import('@aztec/stdlib/tx');
-      const { CallAuthorizationRequest } = await import('@aztec/aztec.js/authorization');
+      const { collectOffchainEffects } = await import('@aztec-labs/stdlib/tx');
+      const { CallAuthorizationRequest } = await import('@aztec-labs/aztec.js/authorization');
 
       if (!simResult.privateExecutionResult) {
         log.warn('[offscreen] No privateExecutionResult in simulation result');

@@ -1,7 +1,7 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import {
   MAX_CONTRACT_CLASS_LOGS_PER_TX,
   MAX_L2_TO_L1_MSGS_PER_TX,
@@ -9,14 +9,13 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_PRIVATE_LOGS_PER_TX,
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
-} from '@aztec/constants';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { TxEffectOracleTestContract } from '@aztec/noir-test-contracts.js/TxEffectOracleTest';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { ContractClassLog, FlatPublicLogs, PrivateLog } from '@aztec/stdlib/logs';
-import type { TxEffect, TxHash } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/constants';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { TxEffectOracleTestContract } from '@aztec-labs/noir-test-contracts.js/TxEffectOracleTest';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { ContractClassLog, FlatPublicLogs, PrivateLog } from '@aztec-labs/stdlib/logs';
+import type { TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

@@ -1,7 +1,6 @@
-import type { LogFn } from '@aztec/foundation/log';
-import { loadKeystoreFile } from '@aztec/node-keystore/loader';
-import type { KeyStore } from '@aztec/node-keystore/types';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { loadKeystoreFile } from '@aztec-labs/node-keystore/loader';
+import type { KeyStore } from '@aztec-labs/node-keystore/types';
 import { dirname } from 'path';
 import { privateKeyToAccount } from 'viem/accounts';
 

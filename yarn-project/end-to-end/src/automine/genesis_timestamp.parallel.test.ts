@@ -1,6 +1,6 @@
-import { generateSchnorrAccounts } from '@aztec/accounts/testing';
-import { NO_FROM } from '@aztec/aztec.js/account';
-import { createLogger } from '@aztec/aztec.js/log';
+import { generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import { createLogger } from '@aztec-labs/aztec.js/log';
 
 import type { EndToEndContext } from '../fixtures/utils.js';
 import { waitForBlockNumber, waitForNodeCheckpoint } from '../fixtures/wait_helpers.js';

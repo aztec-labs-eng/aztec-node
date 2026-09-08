@@ -1,4 +1,4 @@
-import { TimeoutError } from '@aztec/foundation/error';
+import { TimeoutError } from '@aztec-labs/foundation/error';
 
 import { L1TxTimeoutError, type TimedOutTxState } from './types.js';
 

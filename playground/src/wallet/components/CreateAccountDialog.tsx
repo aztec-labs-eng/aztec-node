@@ -1,18 +1,18 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { type DeployOptions, DeployMethod } from '@aztec/aztec.js/contracts';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import type { DeployAccountOptions } from '@aztec/aztec.js/wallet';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { type DeployOptions, DeployMethod } from '@aztec-labs/aztec.js/contracts';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import type { DeployAccountOptions } from '@aztec-labs/aztec.js/wallet';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import { useState } from 'react';
-import { deriveSecretKeyFromSigningKey } from '@aztec/accounts/utils';
+import { deriveSecretKeyFromSigningKey } from '@aztec-labs/accounts/utils';
 import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import type { AccountType } from '@aztec/wallets/embedded';
-import { randomBytes } from '@aztec/foundation/crypto/random';
+import type { AccountType } from '@aztec-labs/wallets/embedded';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { FeePaymentSelector } from '../../components/common/FeePaymentSelector';
 import CircularProgress from '@mui/material/CircularProgress';
 import InputLabel from '@mui/material/InputLabel';
@@ -23,8 +23,8 @@ import { InfoText } from '../../components/common/InfoText';
 import { INFO_TEXT } from '../../constants';
 import { Box, DialogContent } from '@mui/material';
 import { DialogActions } from '@mui/material';
-import type { EmbeddedWallet } from '@aztec/wallets/embedded';
-import { NO_FROM } from '@aztec/aztec.js/account';
+import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
 
 export function CreateAccountDialog({
   wallet,

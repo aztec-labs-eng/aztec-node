@@ -1,6 +1,6 @@
-import type { BenchmarkingContract } from '@aztec/noir-test-contracts.js/Benchmarking';
-import type { SequencerClient } from '@aztec/sequencer-client';
-import { Metrics } from '@aztec/telemetry-client';
+import type { BenchmarkingContract } from '@aztec-labs/noir-test-contracts.js/Benchmarking';
+import type { SequencerClient } from '@aztec-labs/sequencer-client';
+import { Metrics } from '@aztec-labs/telemetry-client';
 
 import type { EndToEndContext } from '../fixtures/utils.js';
 import { benchmarkSetup, sendTxs, waitTxs } from './utils.js';

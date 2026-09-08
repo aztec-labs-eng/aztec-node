@@ -1,9 +1,9 @@
 // Serde test for the block proposal type
-import { IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+import { IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { InboxBucketRef } from '../messaging/inbox_bucket.js';
 import { TEST_COORDINATION_SIGNATURE_CONTEXT, makeBlockProposal } from '../tests/mocks.js';

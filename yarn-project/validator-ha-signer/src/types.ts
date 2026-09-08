@@ -1,6 +1,6 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { DateProvider } from '@aztec/foundation/timer';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import {
   type AttestationSigningContext,
   type CheckpointProposalSigningContext,
@@ -11,9 +11,8 @@ import {
   getBlockNumberFromSigningContext as getBlockNumberFromSigningContextFromStdlib,
   getCheckpointNumberFromSigningContext as getCheckpointNumberFromSigningContextFromStdlib,
   isHAProtectedContext,
-} from '@aztec/stdlib/ha-signing';
-import type { TelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/ha-signing';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import type { Pool } from 'pg';
 
 import type {

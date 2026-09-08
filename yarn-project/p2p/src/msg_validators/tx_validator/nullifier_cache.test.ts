@@ -1,7 +1,6 @@
-import { times } from '@aztec/foundation/collection';
-import type { MerkleTreeReadOperations } from '@aztec/stdlib/interfaces/server';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-
+import { times } from '@aztec-labs/foundation/collection';
+import type { MerkleTreeReadOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { NullifierCache } from './nullifier_cache.js';

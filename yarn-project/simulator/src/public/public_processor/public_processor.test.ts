@@ -1,22 +1,25 @@
-import { CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE, CONTRACT_CLASS_REGISTRY_CONTRACT_ADDRESS } from '@aztec/constants';
-import { timesParallel } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import { bufferAsFields } from '@aztec/stdlib/abi';
-import { PublicDataWrite, PublicTxResult, RevertCode } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { Gas, GasFees } from '@aztec/stdlib/gas';
-import { LogHash } from '@aztec/stdlib/kernel';
-import { ContractClassLogFields } from '@aztec/stdlib/logs';
-import { makeContractClassPublic, mockTx } from '@aztec/stdlib/testing';
-import { type MerkleTreeWriteOperations, PublicDataTreeLeaf, PublicDataTreeLeafPreimage } from '@aztec/stdlib/trees';
-import { GlobalVariables, StateReference, Tx, type TxValidator } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+import { CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE, CONTRACT_CLASS_REGISTRY_CONTRACT_ADDRESS } from '@aztec-labs/constants';
+import { timesParallel } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { bufferAsFields } from '@aztec-labs/stdlib/abi';
+import { PublicDataWrite, PublicTxResult, RevertCode } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
+import { LogHash } from '@aztec-labs/stdlib/kernel';
+import { ContractClassLogFields } from '@aztec-labs/stdlib/logs';
+import { makeContractClassPublic, mockTx } from '@aztec-labs/stdlib/testing';
+import {
+  type MerkleTreeWriteOperations,
+  PublicDataTreeLeaf,
+  PublicDataTreeLeafPreimage,
+} from '@aztec-labs/stdlib/trees';
+import { GlobalVariables, StateReference, Tx, type TxValidator } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { strict as assert } from 'assert';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

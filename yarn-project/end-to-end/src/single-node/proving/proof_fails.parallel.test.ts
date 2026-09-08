@@ -1,19 +1,18 @@
-import { getTimestampRangeForEpoch } from '@aztec/aztec.js/block';
-import type { Logger } from '@aztec/aztec.js/log';
-import { BatchedBlob } from '@aztec/blob-lib/types';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { Delayer } from '@aztec/ethereum/l1-tx-utils';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import type { ViemClient } from '@aztec/ethereum/types';
-import { CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { sleep } from '@aztec/foundation/sleep';
-import type { TestProverNode } from '@aztec/prover-node/test';
-import type { SequencerEvents } from '@aztec/sequencer-client';
-import { type L1RollupConstants, getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import { Proof } from '@aztec/stdlib/proofs';
-import { RootRollupPublicInputs } from '@aztec/stdlib/rollup';
-
+import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { BatchedBlob } from '@aztec-labs/blob-lib/types';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import type { ViemClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { TestProverNode } from '@aztec-labs/prover-node/test';
+import type { SequencerEvents } from '@aztec-labs/sequencer-client';
+import { type L1RollupConstants, getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { Proof } from '@aztec-labs/stdlib/proofs';
+import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

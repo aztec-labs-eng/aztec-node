@@ -1,6 +1,5 @@
-import { createLogger } from '@aztec/aztec.js/log';
-import type { Logger } from '@aztec/foundation/log';
-
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { Logger } from '@aztec-labs/foundation/log';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 

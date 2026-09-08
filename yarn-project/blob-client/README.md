@@ -46,7 +46,7 @@ When uploading is enabled, the sequencer uploads the healthcheck file on startup
 ### Example Usage
 
 ```typescript
-import { createBlobClient, createBlobClientWithFileStores } from '@aztec/blob-client/client';
+import { createBlobClient, createBlobClientWithFileStores } from '@aztec-labs/blob-client/client';
 
 // Simple client with L1 consensus and archive sources
 const client = createBlobClient({

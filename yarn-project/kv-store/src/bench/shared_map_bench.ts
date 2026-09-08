@@ -1,5 +1,5 @@
-import type { Logger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
 
 import type { Key } from '../interfaces/common.js';
 import type { AztecAsyncMap } from '../interfaces/map.js';

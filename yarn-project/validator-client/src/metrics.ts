@@ -1,6 +1,6 @@
-import type { EpochNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { BlockProposal } from '@aztec/stdlib/p2p';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
 import {
   Attributes,
   type Gauge,
@@ -9,7 +9,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import type { BlockProposalValidationFailureReason } from './proposal_handler.js';
 

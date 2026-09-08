@@ -1,13 +1,13 @@
-import { INITIAL_CHECKPOINT_NUMBER, INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toArray } from '@aztec/foundation/iterable';
-import { createLogger } from '@aztec/foundation/log';
-import { BufferReader } from '@aztec/foundation/serialize';
-import { bufferToHex } from '@aztec/foundation/string';
-import { isDefined } from '@aztec/foundation/types';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncSingleton, Range } from '@aztec/kv-store';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { INITIAL_CHECKPOINT_NUMBER, INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { BufferReader } from '@aztec-labs/foundation/serialize';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { isDefined } from '@aztec-labs/foundation/types';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncSingleton, Range } from '@aztec-labs/kv-store';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
@@ -20,7 +20,7 @@ import {
   type ValidateCheckpointResult,
   deserializeValidateCheckpointResult,
   serializeValidateCheckpointResult,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
   type CheckpointData,
@@ -29,9 +29,9 @@ import {
   type ProposedCheckpointData,
   type ProposedCheckpointInput,
   PublishedCheckpoint,
-} from '@aztec/stdlib/checkpoint';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/checkpoint';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   type IndexedTxEffect,
@@ -39,7 +39,7 @@ import {
   TxHash,
   deserializeIndexedTxEffect,
   serializeIndexedTxEffect,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 import {
   BlockAlreadyCheckpointedError,
@@ -58,7 +58,7 @@ import {
   ProposedCheckpointPromotionNotSequentialError,
 } from '../errors.js';
 
-export type { TxEffect, TxHash, TxReceipt } from '@aztec/stdlib/tx';
+export type { TxEffect, TxHash, TxReceipt } from '@aztec-labs/stdlib/tx';
 
 type BlockIndexValue = [blockNumber: number, index: number];
 

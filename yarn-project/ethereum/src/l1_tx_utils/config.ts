@@ -6,7 +6,7 @@ import {
   getDefaultConfig,
   numberConfigHelper,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
+} from '@aztec-labs/foundation/config';
 
 export interface L1TxUtilsConfig {
   /**

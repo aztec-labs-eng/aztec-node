@@ -1,6 +1,5 @@
-import { MAX_TX_SIZE_KB } from '@aztec/stdlib/p2p';
-import { TxHash, TxHashArray } from '@aztec/stdlib/tx';
-
+import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
+import { TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it } from '@jest/globals';
 
 import { calculateTxResponseSize } from './tx.js';

@@ -1,6 +1,6 @@
-import { pick } from '@aztec/foundation/collection';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
+import { pick } from '@aztec-labs/foundation/collection';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 
 import { Multicall3 } from './contracts/multicall.js';
 import { L1TxUtils, TxUtilsState } from './l1_tx_utils/index.js';

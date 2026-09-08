@@ -1,4 +1,4 @@
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import { decodeTxStartMarker, encodeTxStartMarker } from './tx_start_marker.js';
 

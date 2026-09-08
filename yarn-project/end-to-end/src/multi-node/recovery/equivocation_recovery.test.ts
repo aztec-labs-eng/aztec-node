@@ -1,11 +1,10 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { Logger } from '@aztec/aztec.js/log';
-import { asyncMap } from '@aztec/foundation/async-map';
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-import { OffenseType } from '@aztec/stdlib/slashing';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { asyncMap } from '@aztec-labs/foundation/async-map';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import { jest } from '@jest/globals';
 import { privateKeyToAccount } from 'viem/accounts';
 

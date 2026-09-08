@@ -1,5 +1,5 @@
-import type { LogFn } from '@aztec/foundation/log';
-import { createBootnodeENRandPeerId } from '@aztec/p2p/enr';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { createBootnodeENRandPeerId } from '@aztec-labs/p2p/enr';
 
 export async function generateEncodedBootnodeENR(
   privateKey: string,

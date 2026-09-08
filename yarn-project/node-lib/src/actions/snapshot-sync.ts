@@ -4,28 +4,27 @@ import {
   type ArchiverConfig,
   createArchiverStore,
   getArchiverSynchPoint,
-} from '@aztec/archiver';
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { type EthereumClientConfig, getPublicClient } from '@aztec/ethereum/client';
-import type { L1ContractsConfig } from '@aztec/ethereum/config';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { tryRmDir } from '@aztec/foundation/fs';
-import type { Logger } from '@aztec/foundation/log';
-import { P2P_STORE_NAME } from '@aztec/p2p';
-import { GENESIS_BLOCK_HEADER_HASH } from '@aztec/stdlib/block';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import { DatabaseVersionManager } from '@aztec/stdlib/database-version/manager';
-import { type ReadOnlyFileStore, createReadOnlyFileStore } from '@aztec/stdlib/file-store';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
+} from '@aztec-labs/archiver';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { type EthereumClientConfig, getPublicClient } from '@aztec-labs/ethereum/client';
+import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { tryRmDir } from '@aztec-labs/foundation/fs';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { P2P_STORE_NAME } from '@aztec-labs/p2p';
+import { GENESIS_BLOCK_HEADER_HASH } from '@aztec-labs/stdlib/block';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import { DatabaseVersionManager } from '@aztec-labs/stdlib/database-version/manager';
+import { type ReadOnlyFileStore, createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import {
   type SnapshotMetadata,
   type SnapshotsIndexMetadata,
   downloadSnapshot,
   getLatestSnapshotMetadata,
   makeSnapshotPaths,
-} from '@aztec/stdlib/snapshots';
-import { NATIVE_WORLD_STATE_DBS, WORLD_STATE_DB_VERSION, WORLD_STATE_DIR } from '@aztec/world-state';
-
+} from '@aztec-labs/stdlib/snapshots';
+import { NATIVE_WORLD_STATE_DBS, WORLD_STATE_DB_VERSION, WORLD_STATE_DIR } from '@aztec-labs/world-state';
 import { mkdir, mkdtemp, rename } from 'fs/promises';
 import { join } from 'path';
 

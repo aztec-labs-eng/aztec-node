@@ -1,5 +1,4 @@
-import type { LogFn } from '@aztec/foundation/log';
-
+import type { LogFn } from '@aztec-labs/foundation/log';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 import { prettyPrintJSON } from '../../utils/commands.js';

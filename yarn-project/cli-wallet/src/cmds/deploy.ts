@@ -1,15 +1,15 @@
-import { NO_FROM } from '@aztec/aztec.js/account';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { DeployOptions } from '@aztec/aztec.js/contracts';
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { ContractDeployer } from '@aztec/aztec.js/deployment';
-import { Fr } from '@aztec/aztec.js/fields';
-import { type AztecNode, waitForTx } from '@aztec/aztec.js/node';
-import { encodeArgs, getContractArtifact, prettyPrintJSON } from '@aztec/cli/utils';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-import { getAllFunctionAbis, getInitializer } from '@aztec/stdlib/abi';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import type { TxStatus } from '@aztec/stdlib/tx';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { DeployOptions } from '@aztec-labs/aztec.js/contracts';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { ContractDeployer } from '@aztec-labs/aztec.js/deployment';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
+import { encodeArgs, getContractArtifact, prettyPrintJSON } from '@aztec-labs/cli/utils';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { getAllFunctionAbis, getInitializer } from '@aztec-labs/stdlib/abi';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import type { TxStatus } from '@aztec-labs/stdlib/tx';
 
 import { DEFAULT_TX_TIMEOUT_S } from '../utils/cli_wallet_and_node_wrapper.js';
 import { CLIFeeArgs } from '../utils/options/fees.js';

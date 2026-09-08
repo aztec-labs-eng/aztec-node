@@ -1,8 +1,8 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { getFeeJuiceBalance } from '@aztec/aztec.js/utils';
-import { prettyPrintJSON } from '@aztec/cli/cli-utils';
-import type { LogFn } from '@aztec/foundation/log';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { getFeeJuiceBalance } from '@aztec-labs/aztec.js/utils';
+import { prettyPrintJSON } from '@aztec-labs/cli/cli-utils';
+import type { LogFn } from '@aztec-labs/foundation/log';
 
 const FEE_JUICE_DECIMALS = 18;
 const FEE_JUICE_UNIT = 10n ** BigInt(FEE_JUICE_DECIMALS);

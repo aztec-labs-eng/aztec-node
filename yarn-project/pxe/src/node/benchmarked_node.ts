@@ -1,6 +1,6 @@
-import { Timer } from '@aztec/foundation/timer';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { NodeStats } from '@aztec/stdlib/tx';
+import { Timer } from '@aztec-labs/foundation/timer';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { NodeStats } from '@aztec-labs/stdlib/tx';
 
 /*
  * Proxy generator for an AztecNode that tracks the time taken for each RPC call and the number of round trips (actual

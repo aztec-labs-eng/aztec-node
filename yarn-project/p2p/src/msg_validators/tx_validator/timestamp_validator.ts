@@ -1,7 +1,11 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { TX_ERROR_INVALID_EXPIRATION_TIMESTAMP, type TxValidationResult, type TxValidator } from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import {
+  TX_ERROR_INVALID_EXPIRATION_TIMESTAMP,
+  type TxValidationResult,
+  type TxValidator,
+} from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 /** Structural interface for timestamp validation. */
 export interface HasTimestampData {

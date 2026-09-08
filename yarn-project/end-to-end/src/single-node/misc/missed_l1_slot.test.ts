@@ -1,12 +1,11 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { sleep } from '@aztec/foundation/sleep';
-import type { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { registerPhantomGossipPeer } from '@aztec/p2p/test-helpers';
-import { SequencerState } from '@aztec/sequencer-client';
-import { getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { registerPhantomGossipPeer } from '@aztec-labs/p2p/test-helpers';
+import { SequencerState } from '@aztec-labs/sequencer-client';
+import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
 import { proveAndSendTxs } from '../../test-wallet/utils.js';

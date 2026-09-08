@@ -1,8 +1,8 @@
-import { commitmentToFields, computeBlobFieldsHash, encodeCheckpointEndMarker } from '@aztec/blob-lib';
-import { MAX_U32_VALUE } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toInlineStrArray } from '@aztec/foundation/testing';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { commitmentToFields, computeBlobFieldsHash, encodeCheckpointEndMarker } from '@aztec-labs/blob-lib';
+import { MAX_U32_VALUE } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toInlineStrArray } from '@aztec-labs/foundation/testing';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import { buildBlobHints } from './block-building-helpers.js';
 

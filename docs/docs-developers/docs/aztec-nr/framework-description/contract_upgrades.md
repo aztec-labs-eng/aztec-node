@@ -3,6 +3,7 @@ title: Contract Upgrades
 sidebar_position: 14
 tags: [contracts]
 description: Understand contract upgrade patterns in Aztec and how to implement upgradeable contracts.
+references: ["noir-projects/noir-contracts/contracts/protocol_interface/contract_instance_registry_interface/*", "yarn-project/aztec.js/src/deployment/publish_class.ts"]
 ---
 
 :::warning[Upgrades are not yet well supported by the framework]
@@ -111,8 +112,8 @@ Only deployed contract instances can upgrade or change their upgrade delay. This
 The PXE stores contract instances and classes locally. After a contract upgrades, you must register the new artifact with the wallet before interacting with it:
 
 ```typescript
-import { getContractClassFromArtifact } from '@aztec/aztec.js/contracts';
-import { publishContractClass } from '@aztec/aztec.js/deployment';
+import { getContractClassFromArtifact } from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass } from '@aztec-labs/aztec.js/deployment';
 
 // Deploy the original contract (use .wait() to get both contract and instance)
 const { contract, instance } = await UpdatableContract.deploy(wallet, ...args)

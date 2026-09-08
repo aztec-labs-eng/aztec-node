@@ -1,7 +1,7 @@
-import { AztecAddress, CompleteAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { TokenContract, type Transfer } from '@aztec/noir-contracts.js/Token';
+import { AztecAddress, CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { TokenContract, type Transfer } from '@aztec-labs/noir-contracts.js/Token';
 
 import { type AlertConfig, GrafanaClient } from '../../quality_of_service/grafana_client.js';
 import { TokenContractTest } from './token_contract_test.js';

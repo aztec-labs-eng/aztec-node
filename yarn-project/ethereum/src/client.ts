@@ -1,7 +1,6 @@
-import type { Logger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { getErrorCause } from '@aztec/foundation/types';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import {
   type Chain,
   type FallbackTransport,

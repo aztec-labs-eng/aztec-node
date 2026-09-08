@@ -7,17 +7,17 @@ import {
   MAX_PRIVATE_LOGS_PER_TX,
   MAX_PROTOCOL_CONTRACTS,
   PRIVATE_LOG_SIZE_IN_FIELDS,
-} from '@aztec/constants';
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar, Point } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Serializable, type Tuple, assertLength, mapTuple } from '@aztec/foundation/serialize';
-import type { MembershipWitness } from '@aztec/foundation/trees';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import type { PublicDataWrite } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
+} from '@aztec-labs/constants';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Serializable, type Tuple, assertLength, mapTuple } from '@aztec-labs/foundation/serialize';
+import type { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import type { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import {
   ClaimedLengthArray,
   CountedLogHash,
@@ -30,19 +30,19 @@ import {
   PublicCallRequestArrayLengths,
   ScopedCountedLogHash,
   ScopedLogHash,
-} from '@aztec/stdlib/kernel';
-import { PrivateLog } from '@aztec/stdlib/logs';
+} from '@aztec-labs/stdlib/kernel';
+import { PrivateLog } from '@aztec-labs/stdlib/logs';
 import {
   CountedL2ToL1Message,
   L2ToL1Message,
   ScopedCountedL2ToL1Message,
   ScopedL2ToL1Message,
-} from '@aztec/stdlib/messaging';
+} from '@aztec-labs/stdlib/messaging';
 import {
   AppendOnlyTreeSnapshot,
   type NullifierLeafPreimage,
   type PublicDataTreeLeafPreimage,
-} from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
   GlobalVariables,
@@ -52,9 +52,9 @@ import {
   StateReference,
   TxConstantData,
   TxContext,
-} from '@aztec/stdlib/tx';
-import type { UInt64 } from '@aztec/stdlib/types';
-import type { VerificationKeyAsFields, VkData } from '@aztec/stdlib/vks';
+} from '@aztec-labs/stdlib/tx';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
+import type { VerificationKeyAsFields, VkData } from '@aztec-labs/stdlib/vks';
 
 import type {
   AppendOnlyTreeSnapshot as AppendOnlyTreeSnapshotNoir,

@@ -1,5 +1,5 @@
-import { createLogger } from '@aztec/foundation/log';
-import type { L1PublishCheckpointStats, L1PublishStats } from '@aztec/stdlib/stats';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { L1PublishCheckpointStats, L1PublishStats } from '@aztec-labs/stdlib/stats';
 import {
   Attributes,
   type Gauge,
@@ -8,8 +8,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { formatEther } from 'viem/utils';
 
 export type L1TxType = 'process';

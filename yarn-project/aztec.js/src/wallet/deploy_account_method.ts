@@ -1,11 +1,11 @@
-import { DefaultMultiCallEntrypoint } from '@aztec/entrypoints/multicall';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ContractArtifact, FunctionArtifact } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import type { PublicKeys } from '@aztec/stdlib/keys';
-import { type Capsule, ExecutionPayload, type HashedValues, mergeExecutionPayloads } from '@aztec/stdlib/tx';
+import { DefaultMultiCallEntrypoint } from '@aztec-labs/entrypoints/multicall';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ContractArtifact, FunctionArtifact } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import type { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { type Capsule, ExecutionPayload, type HashedValues, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
 
 import type { Account } from '../account/account.js';
 import type { Contract } from '../contract/contract.js';

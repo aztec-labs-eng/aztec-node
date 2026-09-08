@@ -1,9 +1,8 @@
-import { deriveBlsPrivateKey } from '@aztec/foundation/crypto/bls';
-import { decryptBn254Keystore } from '@aztec/foundation/crypto/bls/bn254_keystore';
-import { loadKeystoreFile } from '@aztec/node-keystore/loader';
-import type { KeyStore } from '@aztec/node-keystore/types';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
+import { decryptBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
+import { loadKeystoreFile } from '@aztec-labs/node-keystore/loader';
+import type { KeyStore } from '@aztec-labs/node-keystore/types';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Command, Option } from 'commander';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';

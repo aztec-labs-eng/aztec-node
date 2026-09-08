@@ -63,7 +63,7 @@ The example creates two groups under `outputs.globals`: `constants` and `limits`
 When working directly with an artifact, use `getGlobalsByTag` to return the named entries for one tag as raw `AbiValue` objects:
 
 ```typescript
-import { getGlobalsByTag } from '@aztec/aztec.js/abi';
+import { getGlobalsByTag } from '@aztec-labs/aztec.js/abi';
 
 const constants = getGlobalsByTag(GlobalsContract.artifact, 'constants');
 const exportedString = constants.EXPORTED_STRING_CONSTANT;

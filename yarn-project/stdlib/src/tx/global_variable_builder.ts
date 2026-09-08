@@ -1,6 +1,6 @@
-import type { SimulationOverridesPlan } from '@aztec/ethereum/contracts';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { SlotNumber } from '@aztec/foundation/schemas';
+import type { SimulationOverridesPlan } from '@aztec-labs/ethereum/contracts';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { SlotNumber } from '@aztec-labs/foundation/schemas';
 
 import type { AztecAddress } from '../aztec-address/index.js';
 import type { CheckpointGlobalVariables } from './global_variables.js';

@@ -2,8 +2,8 @@ import {
   NUM_BLOCK_END_BLOB_FIELDS,
   NUM_CHECKPOINT_END_MARKER_FIELDS,
   getNumTxBlobFields,
-} from '@aztec/blob-lib/encoding';
-import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB } from '@aztec/constants';
+} from '@aztec-labs/blob-lib/encoding';
+import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB } from '@aztec-labs/constants';
 
 import { MAX_CAPACITY_BLOCKS_PER_CHECKPOINT } from './index.js';
 

@@ -12,10 +12,10 @@
  */
 
 // Import dependencies to verify they resolve correctly
-import { createAztecNodeClient } from "@aztec/aztec.js/node";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
-import { Fr } from "@aztec/aztec.js/fields";
+import { createAztecNodeClient } from "@aztec-labs/aztec.js/node";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
+import { Fr } from "@aztec-labs/aztec.js/fields";
 
 // Export to satisfy noUnusedLocals
 export { createAztecNodeClient, EmbeddedWallet, TokenContract, Fr };

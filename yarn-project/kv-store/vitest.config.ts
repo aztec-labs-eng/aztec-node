@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig } from 'vitest/config';
 
+import { cacheDir } from './vitest.global-setup.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Use pre-installed playwright browsers if available (e.g., in CI)
@@ -13,6 +15,7 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH && existsSync(systemPlaywrightPath)) {
 }
 
 export default defineConfig({
+  cacheDir,
   define: {
     'process.env': {},
   },
@@ -36,7 +39,7 @@ export default defineConfig({
     ],
     // sqlite3mc-wasm ships its own .wasm asset loader; let Vite serve it as a static asset
     // rather than pre-bundling, per the upstream docs' recommendation.
-    exclude: ['@aztec/sqlite3mc-wasm'],
+    exclude: ['@aztec-labs/sqlite3mc-wasm'],
   },
   test: {
     globals: true,
@@ -65,8 +68,8 @@ export default defineConfig({
         resolve: {
           alias: {
             // Browser stubs for modules that pull in Barretenberg WASM.
-            '@aztec/foundation/eth-address': path.resolve(__dirname, 'browser-stubs/eth-address.js'),
-            '@aztec/foundation/log': path.resolve(__dirname, 'browser-stubs/foundation-log.js'),
+            '@aztec-labs/foundation/eth-address': path.resolve(__dirname, 'browser-stubs/eth-address.js'),
+            '@aztec-labs/foundation/log': path.resolve(__dirname, 'browser-stubs/foundation-log.js'),
             buffer: path.resolve(__dirname, 'browser-stubs/buffer.js'),
             util: path.resolve(__dirname, 'browser-stubs/util.js'),
           },

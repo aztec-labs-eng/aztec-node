@@ -1,4 +1,4 @@
-import type { ApiHandler } from '@aztec/foundation/json-rpc/server';
+import type { ApiHandler } from '@aztec-labs/foundation/json-rpc/server';
 
 import { BotRunnerApiSchema } from './interface.js';
 import type { BotRunner } from './runner.js';

@@ -1,9 +1,9 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { Prettify } from '@aztec/foundation/types';
-import { type L1RollupConstants, getSlotAtTimestamp } from '@aztec/stdlib/epoch-helpers';
-import { getRoundForSlot } from '@aztec/stdlib/slashing';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { Prettify } from '@aztec-labs/foundation/types';
+import { type L1RollupConstants, getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
+import { getRoundForSlot } from '@aztec-labs/stdlib/slashing';
 
 export type SlashRoundMonitorSettings = Prettify<
   Pick<L1RollupConstants, 'epochDuration' | 'l1GenesisTime' | 'slotDuration'> & { slashingRoundSize: number }

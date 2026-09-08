@@ -1,10 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { P2PClient, type PeerId, type TxPoolV2, TxProvider } from '@aztec/p2p';
-import type { BlockProposal } from '@aztec/stdlib/p2p';
-import { makeBlockProposal, mockTx } from '@aztec/stdlib/testing';
-import { Tx, TxHash } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { P2PClient, type PeerId, type TxPoolV2, TxProvider } from '@aztec-labs/p2p';
+import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
+import { makeBlockProposal, mockTx } from '@aztec-labs/stdlib/testing';
+import { Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

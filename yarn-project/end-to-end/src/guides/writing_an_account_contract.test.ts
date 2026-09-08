@@ -1,12 +1,12 @@
-import { DefaultAccountContract } from '@aztec/accounts/defaults';
-import type { ContractArtifact } from '@aztec/aztec.js/abi';
-import type { AuthWitnessProvider } from '@aztec/aztec.js/account';
-import type { CompleteAddress } from '@aztec/aztec.js/addresses';
-import { AuthWitness } from '@aztec/aztec.js/authorization';
-import { Fr, GrumpkinScalar } from '@aztec/aztec.js/fields';
-import { Schnorr } from '@aztec/foundation/crypto/schnorr';
-import { SchnorrHardcodedAccountContractArtifact } from '@aztec/noir-contracts.js/SchnorrHardcodedAccount';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
+import { DefaultAccountContract } from '@aztec-labs/accounts/defaults';
+import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
+import type { AuthWitnessProvider } from '@aztec-labs/aztec.js/account';
+import type { CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { AuthWitness } from '@aztec-labs/aztec.js/authorization';
+import { Fr, GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import { Schnorr } from '@aztec-labs/foundation/crypto/schnorr';
+import { SchnorrHardcodedAccountContractArtifact } from '@aztec-labs/noir-contracts.js/SchnorrHardcodedAccount';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 
 import { AUTOMINE_E2E_OPTS } from '../fixtures/fixtures.js';
 import { setup } from '../fixtures/utils.js';

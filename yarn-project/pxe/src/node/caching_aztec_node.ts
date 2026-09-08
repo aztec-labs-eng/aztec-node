@@ -1,9 +1,9 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { allToCompletion } from '@aztec/foundation/promise';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, type BlockParameter, type DataInBlock } from '@aztec/stdlib/block';
-import type { BlockIncludeOptions } from '@aztec/stdlib/interfaces/client';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, type BlockParameter, type DataInBlock } from '@aztec-labs/stdlib/block';
+import type { BlockIncludeOptions } from '@aztec-labs/stdlib/interfaces/client';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import type {
   LogResult,
   LogsQueryBase,
@@ -12,8 +12,8 @@ import type {
   SiloedTag,
   Tag,
   TagQuery,
-} from '@aztec/stdlib/logs';
-import type { MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/logs';
+import type { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 import { type BenchmarkedAztecNode, withRecording } from './benchmarked_node.js';
 

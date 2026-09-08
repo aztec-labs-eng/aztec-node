@@ -1,11 +1,11 @@
-import { BlobAccumulator, FinalBlobBatchingChallenges } from '@aztec/blob-lib/types';
-import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, type Tuple, serializeToBuffer, serializeToFields } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { BlobAccumulator, FinalBlobBatchingChallenges } from '@aztec-labs/blob-lib/types';
+import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, type Tuple, serializeToBuffer, serializeToFields } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
 import { EpochConstantData } from './epoch_constant_data.js';

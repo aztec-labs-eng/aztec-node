@@ -1,6 +1,6 @@
-import { MAX_TX_LIFETIME } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { type LogResult, randomLogResult } from '@aztec/stdlib/logs';
+import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { type LogResult, randomLogResult } from '@aztec-labs/stdlib/logs';
 
 import { findHighestIndexes } from './find_highest_indexes.js';
 

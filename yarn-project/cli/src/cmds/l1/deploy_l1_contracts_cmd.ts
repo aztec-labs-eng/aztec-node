@@ -1,13 +1,12 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import type { EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { type Operator, deployAztecL1Contracts } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { SecretValue } from '@aztec/foundation/config';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { getGenesisValues } from '@aztec/world-state/testing';
-
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { type Operator, deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 import { mnemonicToAccount } from 'viem/accounts';
 
 import { addLeadingHex } from '../../utils/aztec.js';
@@ -37,7 +36,7 @@ export async function deployL1ContractsCmd(
   const { genesisArchiveRoot, fundingNeeded } = await getGenesisValues(initialFundedAccounts);
 
   // Get the VK tree root
-  const { getVKTreeRoot } = await import('@aztec/noir-protocol-circuits-types/vk-tree');
+  const { getVKTreeRoot } = await import('@aztec-labs/noir-protocol-circuits-types/vk-tree');
   const vkTreeRoot = getVKTreeRoot();
 
   // Get private key (from direct input or mnemonic)

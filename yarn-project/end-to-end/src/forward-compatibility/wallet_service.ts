@@ -7,16 +7,16 @@
  * new artifacts to old runtime code (loadContractArtifact, ACIR simulator, class-ID computation, entrypoint encoding,
  * etc.).
  */
-import { getSchnorrAccountContractAddress } from '@aztec/accounts/schnorr';
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { createLocalNetwork } from '@aztec/aztec';
-import { Fr } from '@aztec/aztec.js/fields';
-import { WalletSchema } from '@aztec/aztec.js/wallet';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { createNamespacedSafeJsonRpcServer, startHttpRpcServer } from '@aztec/foundation/json-rpc/server';
-import { createLogger } from '@aztec/foundation/log';
-import { AztecNodeApiSchema } from '@aztec/stdlib/interfaces/client';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+import { getSchnorrAccountContractAddress } from '@aztec-labs/accounts/schnorr';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { createLocalNetwork } from '@aztec-labs/aztec';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { WalletSchema } from '@aztec-labs/aztec.js/wallet';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { createNamespacedSafeJsonRpcServer, startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { AztecNodeApiSchema } from '@aztec-labs/stdlib/interfaces/client';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 const logger = createLogger('wallet-service');
 
@@ -54,7 +54,7 @@ async function main() {
   // Re-register the initial test accounts so they are available via wallet.getAccounts(). createLocalNetwork deploys
   // them onchain but uses a temporary wallet that is then stopped.
   //
-  // We use the non-lazy import path (@aztec/accounts/testing, not /lazy) to avoid the dynamic JSON import that is
+  // We use the non-lazy import path (@aztec-labs/accounts/testing, not /lazy) to avoid the dynamic JSON import that is
   // incompatible with Node.js import attribute enforcement.
   const testAccountsData = await getInitialTestAccountsData();
   const accounts = await Promise.all(

@@ -1,6 +1,6 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import type { ClientProtocolCircuitVerifier } from '@aztec/stdlib/interfaces/server';
-import { TX_ERROR_INVALID_PROOF, Tx, type TxValidationResult, type TxValidator } from '@aztec/stdlib/tx';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
+import { TX_ERROR_INVALID_PROOF, Tx, type TxValidationResult, type TxValidator } from '@aztec-labs/stdlib/tx';
 
 export class TxProofValidator implements TxValidator<Tx> {
   public readonly identifier: symbol = Symbol('TxProofValidator');

@@ -1,8 +1,7 @@
-import type { Logger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { mock } from 'jest-mock-extended';
 
 import { type OperationContributor, runOperation } from './operation_lifecycle.js';
@@ -24,6 +23,7 @@ describe('runOperation', () => {
     discarded = [];
     const recordingStore: StagedStore = {
       storeName: 'recording_store',
+      beginChangeSet: () => {},
       commitChangeSet: id => {
         committed.push(id);
         return Promise.resolve();
@@ -142,6 +142,7 @@ describe('runOperation', () => {
       stagedStores: [
         {
           storeName: 'undiscardable_store',
+          beginChangeSet: () => {},
           commitChangeSet: () => Promise.resolve(),
           discardChangeSet: () => {
             throw new Error('cannot discard');

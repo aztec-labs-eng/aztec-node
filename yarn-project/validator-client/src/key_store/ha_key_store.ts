@@ -4,20 +4,19 @@
  * A ValidatorKeyStore wrapper that adds slashing protection for HA validator setups.
  * When multiple validator nodes are running, only one node will sign for a given duty.
  */
-import { Buffer32 } from '@aztec/foundation/buffer';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import { createLogger } from '@aztec/foundation/log';
-import type { EthRemoteSignerConfig } from '@aztec/node-keystore';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec/validator-ha-signer/errors';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { EthRemoteSignerConfig } from '@aztec-labs/node-keystore';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/validator-ha-signer/errors';
 import {
   type HAProtectedSigningContext,
   type SigningContext,
   isHAProtectedContext,
-} from '@aztec/validator-ha-signer/types';
-import type { ValidatorHASigner } from '@aztec/validator-ha-signer/validator-ha-signer';
-
+} from '@aztec-labs/validator-ha-signer/types';
+import type { ValidatorHASigner } from '@aztec-labs/validator-ha-signer/validator-ha-signer';
 import { type TypedDataDefinition, hashTypedData } from 'viem';
 
 import type { ExtendedValidatorKeyStore } from './interface.js';

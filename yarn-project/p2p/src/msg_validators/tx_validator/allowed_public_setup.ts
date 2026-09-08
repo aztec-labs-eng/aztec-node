@@ -1,7 +1,7 @@
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { FeeJuiceArtifact } from '@aztec/protocol-contracts/fee-juice';
-import { AuthRegistryArtifact, STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec/standard-contracts/auth-registry';
-import type { AllowedElement } from '@aztec/stdlib/interfaces/server';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { FeeJuiceArtifact } from '@aztec-labs/protocol-contracts/fee-juice';
+import { AuthRegistryArtifact, STANDARD_AUTH_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/auth-registry';
+import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 
 import { buildAllowedElement } from './allowed_setup_helpers.js';
 

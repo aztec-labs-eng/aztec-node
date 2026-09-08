@@ -1,10 +1,9 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { OffenseType } from '@aztec/slasher';
-import { Tx } from '@aztec/stdlib/tx';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { OffenseType } from '@aztec-labs/slasher';
+import { Tx } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import {

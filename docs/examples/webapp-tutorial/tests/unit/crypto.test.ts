@@ -8,7 +8,7 @@ import {
   decrypt,
   hashToEmoji,
   DEFAULT_EMOJI_GRID_SIZE,
-} from '@aztec/wallet-sdk/crypto';
+} from '@aztec-labs/wallet-sdk/crypto';
 
 describe('crypto', () => {
   describe('ECDH key pair generation + export/import roundtrip', () => {

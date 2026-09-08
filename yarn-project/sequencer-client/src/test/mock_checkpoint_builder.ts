@@ -1,20 +1,20 @@
-import { type BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { LoggerBindings } from '@aztec/foundation/log';
-import { unfreeze } from '@aztec/foundation/types';
-import { L2Block } from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
+import { type BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
+import { unfreeze } from '@aztec-labs/foundation/types';
+import { L2Block } from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type {
   BlockBuilderOptions,
   FullNodeBlockBuilderConfig,
   ICheckpointBlockBuilder,
   ICheckpointsBuilder,
   MerkleTreeWriteOperations,
-} from '@aztec/stdlib/interfaces/server';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { makeAppendOnlyTreeSnapshot } from '@aztec/stdlib/testing';
-import type { CheckpointGlobalVariables, Tx } from '@aztec/stdlib/tx';
-import type { BuildBlockInCheckpointResult } from '@aztec/validator-client';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { makeAppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/testing';
+import type { CheckpointGlobalVariables, Tx } from '@aztec-labs/stdlib/tx';
+import type { BuildBlockInCheckpointResult } from '@aztec-labs/validator-client';
 
 /**
  * A fake CheckpointBuilder for testing that implements the same interface as the real one.

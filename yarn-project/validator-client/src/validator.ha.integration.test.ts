@@ -4,37 +4,40 @@
  * These tests use real services (pglite database, HA signer, HA key store)
  * rather than mocks to verify the HA coordination works correctly.
  */
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { EpochCache } from '@aztec/epoch-cache';
-import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { SecretValue } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Hex } from '@aztec/foundation/string';
-import { DateProvider, TestDateProvider } from '@aztec/foundation/timer';
-import { type KeyStore, KeystoreManager } from '@aztec/node-keystore';
-import type { P2P, TxProvider } from '@aztec/p2p';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { L2BlockSink, L2BlockSource } from '@aztec/stdlib/block';
-import { CheckpointReexecutionTracker } from '@aztec/stdlib/checkpoint';
-import type { SlasherConfig, ValidatorClientFullConfig, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Hex } from '@aztec-labs/foundation/string';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { type KeyStore, KeystoreManager } from '@aztec-labs/node-keystore';
+import type { P2P, TxProvider } from '@aztec-labs/p2p';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
+import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import type {
+  SlasherConfig,
+  ValidatorClientFullConfig,
+  WorldStateSynchronizer,
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
   makeCheckpointHeader,
   makeCheckpointProposal,
   mockTx,
-} from '@aztec/stdlib/testing';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import { TxHash } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-import { INSERT_SCHEMA_VERSION, SCHEMA_SETUP, SCHEMA_VERSION } from '@aztec/validator-ha-signer/db';
-import { DutyAlreadySignedError } from '@aztec/validator-ha-signer/errors';
-import { createHASigner } from '@aztec/validator-ha-signer/factory';
-import { Pool } from '@aztec/validator-ha-signer/test';
-import type { ValidatorHASigner } from '@aztec/validator-ha-signer/validator-ha-signer';
-
+} from '@aztec-labs/stdlib/testing';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import { TxHash } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { INSERT_SCHEMA_VERSION, SCHEMA_SETUP, SCHEMA_VERSION } from '@aztec-labs/validator-ha-signer/db';
+import { DutyAlreadySignedError } from '@aztec-labs/validator-ha-signer/errors';
+import { createHASigner } from '@aztec-labs/validator-ha-signer/factory';
+import { Pool } from '@aztec-labs/validator-ha-signer/test';
+import type { ValidatorHASigner } from '@aztec-labs/validator-ha-signer/validator-ha-signer';
 import { PGlite } from '@electric-sql/pglite';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';

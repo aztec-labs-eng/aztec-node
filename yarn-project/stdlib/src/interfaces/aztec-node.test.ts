@@ -1,19 +1,18 @@
-import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec/constants';
-import { type L1ContractAddresses, L1ContractsNames } from '@aztec/ethereum/l1-contract-addresses';
+import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { type L1ContractAddresses, L1ContractsNames } from '@aztec-labs/ethereum/l1-contract-addresses';
 import {
   BlockNumber,
   CheckpointNumber,
   CheckpointProposalHash,
   EpochNumber,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { memoize } from '@aztec/foundation/decorators';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec/foundation/json-rpc/test';
-import { MembershipWitness, SiblingPath } from '@aztec/foundation/trees';
-
+} from '@aztec-labs/foundation/branded-types';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { memoize } from '@aztec-labs/foundation/decorators';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
+import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import omit from 'lodash.omit';
 import times from 'lodash.times';
 

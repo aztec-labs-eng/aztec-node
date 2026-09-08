@@ -1,4 +1,4 @@
-import type { DomainSeparator } from '@aztec/constants';
+import type { DomainSeparator } from '@aztec-labs/constants';
 
 export type KeyGenerator =
   | DomainSeparator.NHK_M

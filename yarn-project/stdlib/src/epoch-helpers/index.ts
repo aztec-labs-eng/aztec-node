@@ -1,5 +1,4 @@
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { z } from 'zod';
 
 import { schemas, zodFor } from '../schemas/index.js';

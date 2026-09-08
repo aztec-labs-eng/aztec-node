@@ -1,13 +1,17 @@
-import { BlockNumber, type CheckpointNumber, type EpochNumber, type SlotNumber } from '@aztec/foundation/branded-types';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { type DateProvider, Timer } from '@aztec/foundation/timer';
-import type { EpochProverFactory } from '@aztec/prover-client';
-import { TopTreeCancelledError } from '@aztec/prover-client/orchestrator';
-import { type EpochProvingJobState, EpochProvingJobTerminalState } from '@aztec/stdlib/interfaces/server';
-import { Attributes, type Traceable, type Tracer, trackSpan } from '@aztec/telemetry-client';
-
+import {
+  BlockNumber,
+  type CheckpointNumber,
+  type EpochNumber,
+  type SlotNumber,
+} from '@aztec-labs/foundation/branded-types';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { type DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
+import { TopTreeCancelledError } from '@aztec-labs/prover-client/orchestrator';
+import { type EpochProvingJobState, EpochProvingJobTerminalState } from '@aztec-labs/stdlib/interfaces/server';
+import { Attributes, type Traceable, type Tracer, trackSpan } from '@aztec-labs/telemetry-client';
 import * as crypto from 'node:crypto';
 
 import type { ProverNodeJobMetrics } from '../metrics.js';

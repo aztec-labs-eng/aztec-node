@@ -1,8 +1,7 @@
-import type { L1BlockId } from '@aztec/ethereum/l1-types';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { BlockHash } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-
+import type { L1BlockId } from '@aztec-labs/ethereum/l1-types';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { BlockHash } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { join } from 'path';
 
 import { ArchiverContractDataSourceAdapter } from '../modules/contract_data_source_adapter.js';

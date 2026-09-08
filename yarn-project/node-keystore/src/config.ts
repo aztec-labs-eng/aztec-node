@@ -1,4 +1,4 @@
-import { type ConfigMappingsType, getConfigFromMappings } from '@aztec/foundation/config';
+import { type ConfigMappingsType, getConfigFromMappings } from '@aztec-labs/foundation/config';
 
 export type KeyStoreConfig = {
   keyStoreDirectory: string | undefined;

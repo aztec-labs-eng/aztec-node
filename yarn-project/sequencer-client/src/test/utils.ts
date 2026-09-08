@@ -1,30 +1,29 @@
-import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import type { P2P } from '@aztec/p2p';
-import { PublicDataWrite } from '@aztec/stdlib/avm';
-import { Body, CommitteeAttestation, L2Block } from '@aztec/stdlib/block';
-import { DEFAULT_BLOCK_DURATION_MS } from '@aztec/stdlib/config';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { BlockProposal, CheckpointAttestation, CheckpointProposal, ConsensusPayload } from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
+import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import type { P2P } from '@aztec-labs/p2p';
+import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
+import { Body, CommitteeAttestation, L2Block } from '@aztec-labs/stdlib/block';
+import { DEFAULT_BLOCK_DURATION_MS } from '@aztec-labs/stdlib/config';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { BlockProposal, CheckpointAttestation, CheckpointProposal, ConsensusPayload } from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeAppendOnlyTreeSnapshot,
   mockTxForRollup,
-} from '@aztec/stdlib/testing';
+} from '@aztec-labs/stdlib/testing';
 import {
   DEFAULT_CHECKPOINT_PROPOSAL_INIT_TIME,
   DEFAULT_CHECKPOINT_PROPOSAL_PREPARE_TIME,
   DEFAULT_MIN_BLOCK_DURATION,
   DEFAULT_P2P_PROPAGATION_TIME,
   ProposerTimetable,
-} from '@aztec/stdlib/timetable';
-import { BlockHeader, GlobalVariables, type Tx, makeProcessedTxFromPrivateOnlyTx } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/timetable';
+import { BlockHeader, GlobalVariables, type Tx, makeProcessedTxFromPrivateOnlyTx } from '@aztec-labs/stdlib/tx';
 import type { MockProxy } from 'jest-mock-extended';
 
 // Re-export mock classes from their dedicated file

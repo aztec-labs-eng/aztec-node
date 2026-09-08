@@ -1,11 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
-import { cloneEphemeralStoreFrom } from '@aztec/kv-store/lmdb-v2';
-import type { ProtocolContractName } from '@aztec/protocol-contracts';
-import { ContractStore } from '@aztec/pxe/client/lazy';
-import type { ApiSchemaFor } from '@aztec/stdlib/schemas';
-import { zodFor } from '@aztec/stdlib/schemas';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { cloneEphemeralStoreFrom } from '@aztec-labs/kv-store/lmdb-v2';
+import type { ProtocolContractName } from '@aztec-labs/protocol-contracts';
+import { ContractStore } from '@aztec-labs/pxe/client/lazy';
+import type { ApiSchemaFor } from '@aztec-labs/stdlib/schemas';
+import { zodFor } from '@aztec-labs/stdlib/schemas';
 import { join } from 'path';
 import { z } from 'zod';
 

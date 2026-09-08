@@ -1,8 +1,7 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { BlockHash } from '@aztec/stdlib/block';
-import { mockTxForRollup } from '@aztec/stdlib/testing';
-import { TX_ERROR_BLOCK_HEADER, type Tx, type TxValidationResult } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import { mockTxForRollup } from '@aztec-labs/stdlib/testing';
+import { TX_ERROR_BLOCK_HEADER, type Tx, type TxValidationResult } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock, mockFn } from 'jest-mock-extended';
 
 import { type ArchiveSource, BlockHeaderTxValidator } from './block_header_validator.js';

@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/sqlite3mc-wasm",
+  "name": "@aztec-labs/sqlite3mc-wasm",
   "version": "0.1.0",
   "type": "module",
   "exports": {

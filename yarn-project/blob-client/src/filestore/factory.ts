@@ -1,11 +1,11 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import {
   type FileStore,
   type HttpFileStoreOptions,
   type ReadOnlyFileStore,
   createFileStore,
   createReadOnlyFileStore,
-} from '@aztec/stdlib/file-store';
+} from '@aztec-labs/stdlib/file-store';
 
 import { FileStoreBlobClient } from './filestore_blob_client.js';
 

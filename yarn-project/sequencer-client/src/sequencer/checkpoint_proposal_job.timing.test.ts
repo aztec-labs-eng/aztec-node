@@ -1,35 +1,34 @@
-import { EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec/epoch-cache';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { ManualDateProvider } from '@aztec/foundation/timer';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-import { type P2P, P2PClientState } from '@aztec/p2p';
-import type { SlasherClientInterface } from '@aztec/slasher';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { L2Block, L2BlockSink, L2BlockSource, ProposedCheckpointSink } from '@aztec/stdlib/block';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { GasFees } from '@aztec/stdlib/gas';
+import { EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { ManualDateProvider } from '@aztec-labs/foundation/timer';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
+import { type P2P, P2PClientState } from '@aztec-labs/p2p';
+import type { SlasherClientInterface } from '@aztec-labs/slasher';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { L2Block, L2BlockSink, L2BlockSource, ProposedCheckpointSink } from '@aztec-labs/stdlib/block';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   BlockBuilderOptions,
   MerkleTreeWriteOperations,
   ResolvedSequencerConfig,
   TreeInfo,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import type { ProposerTimetable } from '@aztec/stdlib/timetable';
-import { type CheckpointGlobalVariables, GlobalVariables, type Tx } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import type { ProposerTimetable } from '@aztec-labs/stdlib/timetable';
+import { type CheckpointGlobalVariables, GlobalVariables, type Tx } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type {
   BuildBlockInCheckpointResult,
   FullNodeCheckpointsBuilder,
   ValidatorClient,
-} from '@aztec/validator-client';
-
+} from '@aztec-labs/validator-client';
 import { jest } from '@jest/globals';
 import EventEmitter from 'events';
 import { type MockProxy, mock, mockDeep, mockFn } from 'jest-mock-extended';

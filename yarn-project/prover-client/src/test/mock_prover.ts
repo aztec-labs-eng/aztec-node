@@ -2,9 +2,9 @@ import {
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
   NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   RECURSIVE_PROOF_LENGTH,
-} from '@aztec/constants';
-import { times } from '@aztec/foundation/collection';
-import type { AvmCircuitInputs } from '@aztec/stdlib/avm';
+} from '@aztec-labs/constants';
+import { times } from '@aztec-labs/foundation/collection';
+import type { AvmCircuitInputs } from '@aztec-labs/stdlib/avm';
 import {
   type ProvingJob,
   type ProvingJobId,
@@ -13,9 +13,9 @@ import {
   type PublicInputsAndRecursiveProof,
   type ServerCircuitProver,
   makePublicInputsAndRecursiveProof,
-} from '@aztec/stdlib/interfaces/server';
-import type { InboxParityPrivateInputs } from '@aztec/stdlib/parity';
-import { makeEmptyRecursiveProof, makeRecursiveProof } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
+import { makeEmptyRecursiveProof, makeRecursiveProof } from '@aztec-labs/stdlib/proofs';
 import type {
   BlockMergeRollupPrivateInputs,
   BlockRollupPublicInputs,
@@ -35,7 +35,7 @@ import type {
   RootRollupPublicInputs,
   TxMergeRollupPrivateInputs,
   TxRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
+} from '@aztec-labs/stdlib/rollup';
 import {
   makeBlockRollupPublicInputs,
   makeCheckpointRollupPublicInputs,
@@ -43,8 +43,8 @@ import {
   makePublicChonkVerifierPublicInputs,
   makeRootRollupPublicInputs,
   makeTxRollupPublicInputs,
-} from '@aztec/stdlib/testing';
-import { VerificationKeyData } from '@aztec/stdlib/vks';
+} from '@aztec-labs/stdlib/testing';
+import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 import { InlineProofStore, type ProofStore } from '../proving_broker/proof_store/index.js';
 import { ProvingAgent } from '../proving_broker/proving_agent.js';

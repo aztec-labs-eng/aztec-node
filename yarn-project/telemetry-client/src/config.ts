@@ -3,7 +3,7 @@ import {
   booleanConfigHelper,
   getConfigFromMappings,
   numberConfigHelper,
-} from '@aztec/foundation/config';
+} from '@aztec-labs/foundation/config';
 
 export interface TelemetryClientConfig {
   metricsCollectorUrl?: URL;

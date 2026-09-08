@@ -1,5 +1,5 @@
-import { PARTIAL_STATE_REFERENCE_LENGTH } from '@aztec/constants';
-import { randomInt } from '@aztec/foundation/crypto/random';
+import { PARTIAL_STATE_REFERENCE_LENGTH } from '@aztec-labs/constants';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
 
 import { makePartialStateReference } from '../tests/factories.js';
 import { PartialStateReference } from './partial_state_reference.js';

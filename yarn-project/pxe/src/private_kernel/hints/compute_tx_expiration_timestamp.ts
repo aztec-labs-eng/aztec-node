@@ -1,6 +1,6 @@
-import { MAX_TX_LIFETIME } from '@aztec/constants';
-import type { PrivateKernelCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import type { UInt64 } from '@aztec/stdlib/types';
+import { MAX_TX_LIFETIME } from '@aztec-labs/constants';
+import type { PrivateKernelCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 const ROUNDED_DURATIONS = [
   3600, // 1 hour

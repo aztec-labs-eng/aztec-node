@@ -3,7 +3,7 @@
 !/.release-please-manifest.json
 # The two toolchain binaries the image runs, via BB_BINARY_PATH and ACVM_BINARY_PATH.
 !/labs-aztec-toolchain/bin/bb-avm
-!/labs-aztec-toolchain/bin/acvm
+!/labs-aztec-toolchain/bin/noir-execute
 !/yarn-project/package.json
 !/yarn-project/yarn.lock
 !/yarn-project/*/package.json

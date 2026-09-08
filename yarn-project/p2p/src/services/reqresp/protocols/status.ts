@@ -1,10 +1,9 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import type { Logger } from '@aztec/foundation/log';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex } from '@aztec/foundation/string';
-import type { WorldStateSyncStatus, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import type { WorldStateSyncStatus, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { PeerId } from '@libp2p/interface';
 
 import { MAX_BLOCK_HASH_STRING_LENGTH, MAX_VERSION_STRING_LENGTH } from '../constants.js';

@@ -1,5 +1,5 @@
-import { type ConfigMappingsType, numberConfigHelper } from '@aztec/foundation/config';
-import { MAX_RPC_TXS_LEN } from '@aztec/stdlib/interfaces/api-limit';
+import { type ConfigMappingsType, numberConfigHelper } from '@aztec-labs/foundation/config';
+import { MAX_RPC_TXS_LEN } from '@aztec-labs/stdlib/interfaces/api-limit';
 
 export type TxCollectionConfig = {
   /** How long to wait before starting reqresp for fast collection  */

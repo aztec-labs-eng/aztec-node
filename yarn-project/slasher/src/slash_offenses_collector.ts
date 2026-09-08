@@ -1,10 +1,10 @@
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import type { Prettify } from '@aztec/foundation/types';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import { type Offense, getOffenseTypeName, getSlotForOffense } from '@aztec/stdlib/slashing';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import type { Prettify } from '@aztec-labs/foundation/types';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import { type Offense, getOffenseTypeName, getSlotForOffense } from '@aztec-labs/stdlib/slashing';
 
 import type { SlasherOffensesStore } from './stores/offenses_store.js';
 import {

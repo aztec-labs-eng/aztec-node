@@ -14,7 +14,7 @@ on:
         required: false
         type: string
       aztec_docker_image:
-        description: "Full Aztec docker image (e.g., aztecprotocol/aztec:2.3.4). If not set, constructed from semver."
+        description: "Full Aztec docker image (e.g., azteclabs/aztec:2.3.4). If not set, constructed from semver."
         required: false
         type: string
       prover_docker_image:
@@ -69,7 +69,7 @@ on:
         required: false
         type: string
       aztec_docker_image:
-        description: "Full Aztec docker image (e.g., aztecprotocol/aztec:2.3.4). If not set, constructed from semver."
+        description: "Full Aztec docker image (e.g., azteclabs/aztec:2.3.4). If not set, constructed from semver."
         required: false
         type: string
       prover_docker_image:
@@ -191,7 +191,7 @@ jobs:
               AZTEC_DOCKER_IMAGE="$INTERNAL_REGISTRY_BASE_URL/aztec:${{ inputs.semver }}"
               echo "::add-mask::$AZTEC_DOCKER_IMAGE"
             else
-              AZTEC_DOCKER_IMAGE="aztecprotocol/aztec:${{ inputs.semver }}"
+              AZTEC_DOCKER_IMAGE="azteclabs/aztec:${{ inputs.semver }}"
             fi
           fi
 
@@ -200,7 +200,7 @@ jobs:
               PROVER_AGENT_DOCKER_IMAGE="$INTERNAL_REGISTRY_BASE_URL/aztec-prover-agent:${{ inputs.semver }}"
               echo "::add-mask::$PROVER_AGENT_DOCKER_IMAGE"
             elif [[ -z "${{ inputs.aztec_docker_image }}" && -n "${{ inputs.semver }}" ]]; then
-              PROVER_AGENT_DOCKER_IMAGE="aztecprotocol/aztec-prover-agent:${{ inputs.semver }}"
+              PROVER_AGENT_DOCKER_IMAGE="azteclabs/aztec-prover-agent:${{ inputs.semver }}"
             fi
           fi
 

@@ -1,15 +1,15 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type FunctionAbi,
   FunctionCall,
   FunctionSelector,
   encodeArguments,
   getFunctionReturnType,
-} from '@aztec/stdlib/abi';
-import { computeOuterAuthWitHash } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { GasSettings } from '@aztec/stdlib/gas';
-import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/abi';
+import { computeOuterAuthWitHash } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
+import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec-labs/stdlib/tx';
 
 import { EncodedAppEntrypointCalls } from './encoding.js';
 import type { AuthWitnessProvider, ChainInfo, EntrypointInterface } from './interfaces.js';

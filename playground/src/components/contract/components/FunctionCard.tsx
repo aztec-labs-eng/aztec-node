@@ -1,8 +1,8 @@
 import { css } from '@mui/styled-engine';
-import type { ContractArtifact } from '@aztec/aztec.js/abi';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { type SendInteractionOptions, ContractFunctionInteraction, Contract } from '@aztec/aztec.js/contracts';
-import { type FunctionAbi, FunctionType } from '@aztec/stdlib/abi';
+import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { type SendInteractionOptions, ContractFunctionInteraction, Contract } from '@aztec-labs/aztec.js/contracts';
+import { type FunctionAbi, FunctionType } from '@aztec-labs/stdlib/abi';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardActions from '@mui/material/CardActions';

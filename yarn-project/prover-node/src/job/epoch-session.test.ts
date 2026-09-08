@@ -1,19 +1,18 @@
-import { BatchedBlob } from '@aztec/blob-lib/types';
-import { ARCHIVE_HEIGHT } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { EpochProverFactory } from '@aztec/prover-client';
-import type { TopTreeOrchestrator } from '@aztec/prover-client/orchestrator';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { Proof } from '@aztec/stdlib/proofs';
-import { RootRollupPublicInputs } from '@aztec/stdlib/rollup';
-import { BlockHeader } from '@aztec/stdlib/tx';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+import { BatchedBlob } from '@aztec-labs/blob-lib/types';
+import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
+import type { TopTreeOrchestrator } from '@aztec-labs/prover-client/orchestrator';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { Proof } from '@aztec-labs/stdlib/proofs';
+import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { mock } from 'jest-mock-extended';
 
 import { ProverNodeJobMetrics } from '../metrics.js';

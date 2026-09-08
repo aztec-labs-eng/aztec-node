@@ -1,4 +1,4 @@
-import type { TxStatus } from '@aztec/stdlib/tx';
+import type { TxStatus } from '@aztec-labs/stdlib/tx';
 
 /** Options related to waiting for a tx. */
 export type WaitOpts = {

@@ -1,15 +1,15 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall, getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { publishContractClass, publishInstance } from '@aztec/aztec.js/deployment';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { ContractInitializationStatus } from '@aztec/aztec.js/wallet';
-import { InitTestContract } from '@aztec/noir-test-contracts.js/InitTest';
-import { NoConstructorContract } from '@aztec/noir-test-contracts.js/NoConstructor';
-import { PrivateInitTestContract } from '@aztec/noir-test-contracts.js/PrivateInitTest';
-import { siloNullifier } from '@aztec/stdlib/hash';
-import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec/stdlib/tx';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall, getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { publishContractClass, publishInstance } from '@aztec-labs/aztec.js/deployment';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { ContractInitializationStatus } from '@aztec-labs/aztec.js/wallet';
+import { InitTestContract } from '@aztec-labs/noir-test-contracts.js/InitTest';
+import { NoConstructorContract } from '@aztec-labs/noir-test-contracts.js/NoConstructor';
+import { PrivateInitTestContract } from '@aztec-labs/noir-test-contracts.js/PrivateInitTest';
+import { siloNullifier } from '@aztec-labs/stdlib/hash';
+import { TX_ERROR_EXISTING_NULLIFIER } from '@aztec-labs/stdlib/tx';
 
 import type { TestWallet } from '../../../test-wallet/test_wallet.js';
 import { AutomineTestContext } from '../../automine_test_context.js';

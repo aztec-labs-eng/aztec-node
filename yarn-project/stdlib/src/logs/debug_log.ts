@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type LogLevel, LogLevels } from '@aztec/foundation/log';
-import { type ZodFor, schemas } from '@aztec/foundation/schemas';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type LogLevel, LogLevels } from '@aztec-labs/foundation/log';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

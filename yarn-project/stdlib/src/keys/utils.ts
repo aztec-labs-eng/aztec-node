@@ -1,4 +1,4 @@
-import { DomainSeparator } from '@aztec/constants';
+import { DomainSeparator } from '@aztec-labs/constants';
 
 import type { KeyGenerator, KeyPrefix } from './key_types.js';
 

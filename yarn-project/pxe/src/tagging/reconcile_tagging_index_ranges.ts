@@ -1,4 +1,4 @@
-import { type AppTaggingSecret, SiloedTag, type TaggingIndexRange } from '@aztec/stdlib/logs';
+import { type AppTaggingSecret, SiloedTag, type TaggingIndexRange } from '@aztec-labs/stdlib/logs';
 
 /**
  * Reconciles tagging index ranges recorded by the PXE during private execution against the set of siloed tags whose

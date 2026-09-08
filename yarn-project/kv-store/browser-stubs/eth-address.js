@@ -1,4 +1,4 @@
-// Browser stub for @aztec/foundation/eth-address
+// Browser stub for @aztec-labs/foundation/eth-address
 // Only used during vitest browser tests to avoid loading Barretenberg WASM.
 import { z } from 'zod';
 

@@ -29,7 +29,7 @@ A successful tagged CI run publishes the following Barretenberg artifacts with t
 
 The following Docker containers are also published:
 
-- aztecprotocol/aztec:latest
+- azteclabs/aztec:latest
 
 Lastly, any changes made to developer documentation are published to <https://docs.aztec.network>
 
@@ -68,7 +68,7 @@ After public testnet deployment, perform these sanity checks (these items can al
 
 After a successful sanity check, share the following network connection information in the `#team-alpha` slack channel:
 
-1. AZTEC_IMAGE (`aztecprotocol/aztec:latest`)
+1. AZTEC_IMAGE (`azteclabs/aztec:latest`)
 2. ETHEREUM_HOSTS (Kubernetes: `kubectl get services -n <namespace> | (head -1; grep ethereum)`)
    - ethereum-lb: `<EXTERNAL-IP>:8545`
 3. BOOT_NODE_URL (Kubernetes: `kubectl get services -n <namespace> | (head -3; grep boot)`)

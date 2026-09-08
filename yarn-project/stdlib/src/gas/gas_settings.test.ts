@@ -1,4 +1,4 @@
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
+import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
 
 import { Gas } from './gas.js';
 import { GasFees } from './gas_fees.js';

@@ -1,15 +1,15 @@
-import { ARCHIVE_HEIGHT } from '@aztec/constants';
-import { BlockNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Grumpkin } from '@aztec/foundation/crypto/grumpkin';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import type { KeyStore } from '@aztec/key-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { StatefulTestContractArtifact } from '@aztec/noir-test-contracts.js/StatefulTest';
-import { type CircuitSimulator, WASMSimulator } from '@aztec/simulator/client';
-import { HandshakeRegistryArtifact } from '@aztec/standard-contracts/handshake-registry';
-import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec/standard-contracts/handshake-registry/constants';
+import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import type { KeyStore } from '@aztec-labs/key-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { StatefulTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
+import { type CircuitSimulator, WASMSimulator } from '@aztec-labs/simulator/client';
+import { HandshakeRegistryArtifact } from '@aztec-labs/standard-contracts/handshake-registry';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 import {
   type ContractArtifact,
   FunctionCall,
@@ -18,20 +18,20 @@ import {
   encodeArguments,
   getFunctionArtifactByName,
   getFunctionReturnType,
-} from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, type L2TipsProvider } from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import {
   CompleteAddress,
   type ContractInstanceWithAddress,
   computeContractAddressFromInstance,
-} from '@aztec/stdlib/contract';
-import { computeUniqueNoteHash, siloNoteHash } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { PublicKeys, deriveKeys, hashPublicKey } from '@aztec/stdlib/keys';
-import { AppTaggingSecret, AppTaggingSecretKind, SiloedTag } from '@aztec/stdlib/logs';
-import { Note, NoteDao } from '@aztec/stdlib/note';
-import { makeL2Tips, randomContractInstanceWithAddress } from '@aztec/stdlib/testing';
+} from '@aztec-labs/stdlib/contract';
+import { computeUniqueNoteHash, siloNoteHash } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { PublicKeys, deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
+import { AppTaggingSecret, AppTaggingSecretKind, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { Note, NoteDao } from '@aztec-labs/stdlib/note';
+import { makeL2Tips, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
 import {
   BlockHeader,
   CallContext,
@@ -43,8 +43,7 @@ import {
   TxExecutionResult,
   TxHash,
   TxStatus,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { mock } from 'jest-mock-extended';
 import type { _MockProxy } from 'jest-mock-extended/lib/Mock.js';
 
@@ -116,6 +115,7 @@ describe('Utility Execution test suite', () => {
     taggingSecretSourcesStore = mock<TaggingSecretSourcesStore>();
     capsuleStore = mock<CapsuleStore>();
     factStore = new FactStore(await openTmpStore('utility-exec-fact-test'));
+    factStore.beginChangeSet('test-change-set-id');
     privateEventStore = mock<PrivateEventStore>();
     contractSyncService = mock<ContractSyncService>();
     l2TipsStore = mock<L2TipsProvider>();
@@ -394,9 +394,9 @@ describe('Utility Execution test suite', () => {
 
         capsuleStore.getCapsule.mockResolvedValueOnce(capsule);
 
-        utilityExecutionOracle.setCapsule(contractAddress, slot, capsule, scope);
+        await utilityExecutionOracle.setCapsule(contractAddress, slot, capsule, scope);
         await utilityExecutionOracle.getCapsule(contractAddress, slot, capsule.length, scope);
-        utilityExecutionOracle.deleteCapsule(contractAddress, slot, scope);
+        await utilityExecutionOracle.deleteCapsule(contractAddress, slot, scope);
         await utilityExecutionOracle.copyCapsule(contractAddress, srcSlot, dstSlot, 1, scope);
 
         expect(capsuleStore.setCapsule).toHaveBeenCalledWith(

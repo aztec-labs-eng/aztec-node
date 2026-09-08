@@ -1,7 +1,6 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { DroppedTxReceipt, TxExecutionResult, TxHash, TxStatus } from '@aztec/stdlib/tx';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { DroppedTxReceipt, TxExecutionResult, TxHash, TxStatus } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { classifyPendingTxsFromLogs, classifyPendingTxsFromReceipts } from './classify_pending_txs.js';

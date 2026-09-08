@@ -14,7 +14,7 @@ This is an auto-generated reference. For tutorials and guides, see the [Aztec.js
 :::
 
 
-*Package: @aztec/aztec.js*
+*Package: @aztec-labs/aztec.js*
 
 *Generated: 2026-08-19T09:19:51.719Z*
 
@@ -4842,7 +4842,7 @@ export async waitForTx(
 
 **Type:** Constant
 
-This is re-exported from `@aztec/stdlib/interfaces/client`. See the source module for full documentation.
+This is re-exported from `@aztec-labs/stdlib/interfaces/client`. See the source module for full documentation.
 
 **Value Type:** `Re-export`
 
@@ -4851,24 +4851,24 @@ This is re-exported from `@aztec/stdlib/interfaces/client`. See the source modul
 
 **Type:** Type Alias
 
-This is a type re-exported from `@aztec/stdlib/interfaces/client`. See the source module for full type definition and documentation.
+This is a type re-exported from `@aztec-labs/stdlib/interfaces/client`. See the source module for full type definition and documentation.
 
 **Signature:**
 
 ```typescript
-export type { AztecNode } from '@aztec/stdlib/interfaces/client'
+export type { AztecNode } from '@aztec-labs/stdlib/interfaces/client'
 ```
 
 #### AztecNodeClientOptions
 
 **Type:** Type Alias
 
-This is a type re-exported from `@aztec/stdlib/interfaces/client`. See the source module for full type definition and documentation.
+This is a type re-exported from `@aztec-labs/stdlib/interfaces/client`. See the source module for full type definition and documentation.
 
 **Signature:**
 
 ```typescript
-export type { AztecNodeClientOptions } from '@aztec/stdlib/interfaces/client'
+export type { AztecNodeClientOptions } from '@aztec-labs/stdlib/interfaces/client'
 ```
 
 ---

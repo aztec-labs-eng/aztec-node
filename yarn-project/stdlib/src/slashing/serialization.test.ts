@@ -1,4 +1,4 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 import { deserializeOffense, serializeOffense } from './serialization.js';
 import type { Offense } from './types.js';

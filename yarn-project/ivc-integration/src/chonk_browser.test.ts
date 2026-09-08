@@ -27,8 +27,7 @@
  *   cd yarn-project/ivc-integration
  *   yarn test client_ivc_browser.test.ts
  */
-import { createLogger } from '@aztec/foundation/log';
-
+import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';

@@ -1,19 +1,18 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
   makeCheckpointAttestation,
   makeCheckpointHeader,
   makeCheckpointProposal,
-} from '@aztec/stdlib/testing';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/testing';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { AttestationPool } from '../../mem_pools/attestation_pool/attestation_pool.js';

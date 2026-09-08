@@ -1,16 +1,16 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import {
   AvmFastSimulationInputs,
   AvmTxHint,
   type PublicSimulatorConfig,
   PublicTxResult,
   deserializeFromMessagePack,
-} from '@aztec/stdlib/avm';
-import { SimulationError } from '@aztec/stdlib/errors';
-import type { GlobalVariables, Tx } from '@aztec/stdlib/tx';
-import { WorldStateRevision } from '@aztec/stdlib/world-state';
-import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/avm';
+import { SimulationError } from '@aztec-labs/stdlib/errors';
+import type { GlobalVariables, Tx } from '@aztec-labs/stdlib/tx';
+import { WorldStateRevision } from '@aztec-labs/stdlib/world-state';
+import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import type { AvmContractsDBContext, AvmSimulator } from '../avm_simulator.js';
 import { ExecutorMetrics } from '../executor_metrics.js';

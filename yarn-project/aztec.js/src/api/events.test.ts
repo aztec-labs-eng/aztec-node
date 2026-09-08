@@ -1,11 +1,10 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type EventMetadataDefinition, EventSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { MAX_LOGS_PER_TAG } from '@aztec/stdlib/interfaces/api-limit';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { LogCursor, type LogResult, type PublicLogsQuery, randomLogResult } from '@aztec/stdlib/logs';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type EventMetadataDefinition, EventSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { MAX_LOGS_PER_TAG } from '@aztec-labs/stdlib/interfaces/api-limit';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { LogCursor, type LogResult, type PublicLogsQuery, randomLogResult } from '@aztec-labs/stdlib/logs';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { EventCursor, getPublicEvents } from './events.js';

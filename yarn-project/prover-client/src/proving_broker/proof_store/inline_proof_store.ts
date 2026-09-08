@@ -1,4 +1,4 @@
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import {
   type ProofUri,
   type ProvingJobId,
@@ -6,9 +6,9 @@ import {
   type ProvingJobInputsMap,
   ProvingJobResult,
   type ProvingJobResultsMap,
-} from '@aztec/stdlib/interfaces/server';
-import type { ProvingRequestType } from '@aztec/stdlib/proofs';
-import type { ZodFor } from '@aztec/stdlib/schemas';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
+import type { ZodFor } from '@aztec-labs/stdlib/schemas';
 
 import type { ProofStore } from './proof_store.js';
 

@@ -12,6 +12,9 @@ use crate::{context::{PrivateContext, PublicContext, UtilityContext}, state_vars
 
 mod test;
 
+/// The smallest delay a [`DelayedPublicMutable`] accepts, both at declaration and when scheduling a delay change.
+pub global DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY: u64 = 60 * 60; // 1 hour
+
 /// Mutable public values with private read access.
 ///
 /// This is an advanced public state variable, with no native Solidity equivalent.
@@ -75,7 +78,9 @@ mod test;
 ///
 /// Additionally, a lower `expiration_timestamp` obviously causes transactions to expire earlier, resulting in
 /// multiple issues. Among others, this can make large transactions that take long to prove be unfeasible, restrict
-/// users with slow proving devices, and force large transaction fees to guarantee fast inclusion.
+/// users with slow proving devices, and force large transaction fees to guarantee fast inclusion. Because of this,
+/// there is a global minimum delay equal to [`DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY`] - any delay change to a value
+/// below this is rejected.
 ///
 /// In practice, a delay of at least a couple hours is recommended. From a privacy point of view the optimal delay is
 /// [`crate::protocol::constants::MAX_TX_LIFETIME`], which puts contracts in the same privacy set as those that do not
@@ -131,6 +136,10 @@ where
     DelayedPublicMutableValues<T, InitialDelay>: Packable<N = M>,
 {
     fn new(context: Context, storage_slot: Field) -> Self {
+        std::static_assert(
+            InitialDelay >= DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY,
+            f"DelayedPublicMutable delay must be at least {DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY} seconds",
+        );
         assert(storage_slot != 0, "Storage slot 0 not allowed. Storage slots must start from 1.");
         Self { context, storage_slot }
     }
@@ -213,6 +222,8 @@ where
     /// [`get_current_delay`](DelayedPublicMutable::get_current_delay) automatically begins to return `new_delay`, and
     /// [`schedule_value_change`](DelayedPublicMutable::schedule_value_change) begins using it.
     ///
+    /// `new_delay` must be at least [`DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY`].
+    ///
     /// ## Multiple Scheduled Changes
     ///
     /// Only a **single** delay can be scheduled to become the new delay at a given point in time. Any prior scheduled
@@ -258,6 +269,11 @@ where
     where
         T: Packable,
     {
+        assert(
+            new_delay >= DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY,
+            f"DelayedPublicMutable delay must be at least {DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY} seconds",
+        );
+
         let mut delay_change = self.read_delay_change();
 
         let current_timestamp = self.context.timestamp();

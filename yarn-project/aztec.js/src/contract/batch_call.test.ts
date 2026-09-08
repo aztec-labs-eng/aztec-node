@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type AbiType, FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type AbiType, FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   Capsule,
   ExecutionPayload,
@@ -10,8 +10,7 @@ import {
   OFFCHAIN_MESSAGE_IDENTIFIER,
   type OffchainEffect,
   UtilityExecutionResult,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { FeePaymentMethod } from '../fee/fee_payment_method.js';

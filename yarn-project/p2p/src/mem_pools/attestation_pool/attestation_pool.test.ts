@@ -1,9 +1,9 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { makeBlockHeader, makeBlockProposal } from '@aztec/stdlib/testing';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { makeBlockHeader, makeBlockProposal } from '@aztec-labs/stdlib/testing';
 
 import { AttestationPool, MAX_ATTESTATIONS_PER_SLOT_AND_SIGNER } from './attestation_pool.js';
 import { describeAttestationPool } from './attestation_pool_test_suite.js';

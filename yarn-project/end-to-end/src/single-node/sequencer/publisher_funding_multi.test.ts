@@ -1,15 +1,14 @@
-import { AztecAddress, EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { EthCheatCodes } from '@aztec/aztec/testing';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { PublisherManager } from '@aztec/ethereum/publisher-manager';
-import { SecretValue } from '@aztec/foundation/config';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { RunningPromise } from '@aztec/foundation/running-promise';
-import type { SequencerClient } from '@aztec/sequencer-client';
-import type { TestSequencerClient } from '@aztec/sequencer-client/test';
-
+import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { EthCheatCodes } from '@aztec-labs/aztec/testing';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import type { SequencerClient } from '@aztec-labs/sequencer-client';
+import type { TestSequencerClient } from '@aztec-labs/sequencer-client/test';
 import { jest } from '@jest/globals';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import 'jest-extended';

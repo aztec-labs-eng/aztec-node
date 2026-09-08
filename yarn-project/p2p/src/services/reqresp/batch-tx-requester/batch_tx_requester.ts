@@ -1,11 +1,10 @@
-import { chunkWrapAround } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { FifoMemoryQueue, type ISemaphore, Semaphore } from '@aztec/foundation/queue';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider } from '@aztec/foundation/timer';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { Tx, TxArray, TxHash, type TxValidator } from '@aztec/stdlib/tx';
-
+import { chunkWrapAround } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { FifoMemoryQueue, type ISemaphore, Semaphore } from '@aztec-labs/foundation/queue';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { Tx, TxArray, TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 import { strict as assert } from 'assert';
 

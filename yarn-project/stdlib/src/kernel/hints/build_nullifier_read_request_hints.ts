@@ -2,9 +2,9 @@ import {
   type MAX_NULLIFIERS_PER_TX,
   MAX_NULLIFIER_READ_REQUESTS_PER_TX,
   type NULLIFIER_TREE_HEIGHT,
-} from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { MembershipWitness } from '@aztec/foundation/trees';
+} from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
 
 import type { NullifierLeafPreimage } from '../../trees/nullifier_leaf.js';
 import type { ClaimedLengthArray } from '../claimed_length_array.js';

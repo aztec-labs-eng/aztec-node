@@ -1,48 +1,53 @@
-import { getKzg } from '@aztec/blob-lib';
-import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec/epoch-cache';
-import { NoCommitteeError, type RollupContract } from '@aztec/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { merge, omit, pick } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { TypedEventEmitter } from '@aztec/foundation/types';
-import type { P2P } from '@aztec/p2p';
-import type { SlasherClientInterface } from '@aztec/slasher';
+import { getKzg } from '@aztec-labs/blob-lib';
+import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { merge, omit, pick } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
+import type { P2P } from '@aztec-labs/p2p';
+import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import type {
   BlockData,
   L2BlockSink,
   L2BlockSource,
   ProposedCheckpointSink,
   ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   type Checkpoint,
   type ProposedCheckpointData,
   buildCheckpointSimulationOverridesPlan,
-} from '@aztec/stdlib/checkpoint';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
+} from '@aztec-labs/stdlib/checkpoint';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   MIN_PER_BLOCK_ALLOCATION_MULTIPLIER,
   MIN_PER_BLOCK_DA_ALLOCATION_MULTIPLIER,
   computeNetworkTxGasLimits,
-} from '@aztec/stdlib/gas';
+} from '@aztec-labs/stdlib/gas';
 import {
   type ResolvedSequencerConfig,
   type SequencerConfig,
   SequencerConfigSchema,
   type WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { pickFromSchema } from '@aztec/stdlib/schemas';
-import { ProposerTimetable, buildProposerTimetable } from '@aztec/stdlib/timetable';
-import { Attributes, type TelemetryClient, type Tracer, getTelemetryClient, trackSpan } from '@aztec/telemetry-client';
-import { FullNodeCheckpointsBuilder, NodeKeystoreAdapter, type ValidatorClient } from '@aztec/validator-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { pickFromSchema } from '@aztec-labs/stdlib/schemas';
+import { ProposerTimetable, buildProposerTimetable } from '@aztec-labs/stdlib/timetable';
+import {
+  Attributes,
+  type TelemetryClient,
+  type Tracer,
+  getTelemetryClient,
+  trackSpan,
+} from '@aztec-labs/telemetry-client';
+import { FullNodeCheckpointsBuilder, NodeKeystoreAdapter, type ValidatorClient } from '@aztec-labs/validator-client';
 import EventEmitter from 'node:events';
 
 import { DefaultSequencerConfig } from '../config.js';

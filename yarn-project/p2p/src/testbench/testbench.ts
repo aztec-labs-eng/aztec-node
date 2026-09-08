@@ -1,8 +1,7 @@
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { ChonkProof } from '@aztec/stdlib/proofs';
-import { mockTx } from '@aztec/stdlib/testing';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
+import { mockTx } from '@aztec-labs/stdlib/testing';
 import assert from 'assert';
 import path from 'path';
 import { fileURLToPath } from 'url';

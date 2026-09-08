@@ -1,15 +1,14 @@
-import { MockPrefilledArchiver } from '@aztec/archiver/test';
-import { GENESIS_ARCHIVE_ROOT } from '@aztec/constants';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import type { Checkpoint } from '@aztec/stdlib/checkpoint';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-
+import { MockPrefilledArchiver } from '@aztec-labs/archiver/test';
+import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { describe, jest } from '@jest/globals';
 
 import { NativeWorldStateService } from '../native/native_world_state.js';

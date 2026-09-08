@@ -1,9 +1,8 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import type { ValidatorsStats } from '@aztec/stdlib/validators';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { ValidatorsStats } from '@aztec-labs/stdlib/validators';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 

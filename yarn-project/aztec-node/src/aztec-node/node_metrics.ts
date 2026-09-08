@@ -5,7 +5,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 export class NodeMetrics {
   private receiveTxCount: UpDownCounter;

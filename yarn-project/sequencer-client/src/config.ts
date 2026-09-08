@@ -1,5 +1,5 @@
-import { type L1ContractsConfig, l1ContractsConfigMappings } from '@aztec/ethereum/config';
-import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec/ethereum/l1-reader';
+import { type L1ContractsConfig, l1ContractsConfigMappings } from '@aztec-labs/ethereum/config';
+import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
 import {
   type ConfigMappingsType,
   booleanConfigHelper,
@@ -8,11 +8,11 @@ import {
   numberConfigHelper,
   optionalNumberConfigHelper,
   pickConfigMappings,
-} from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type KeyStoreConfig, keyStoreConfigMappings } from '@aztec/node-keystore/config';
-import { type P2PConfig, p2pConfigMappings } from '@aztec/p2p/config';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type KeyStoreConfig, keyStoreConfigMappings } from '@aztec-labs/node-keystore/config';
+import { type P2PConfig, p2pConfigMappings } from '@aztec-labs/p2p/config';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ChainConfig,
   DEFAULT_BLOCK_DURATION_MS,
@@ -20,11 +20,11 @@ import {
   type SequencerConfig,
   chainConfigMappings,
   sharedSequencerConfigMappings,
-} from '@aztec/stdlib/config';
-import { MIN_PER_BLOCK_ALLOCATION_MULTIPLIER, MIN_PER_BLOCK_DA_ALLOCATION_MULTIPLIER } from '@aztec/stdlib/gas';
-import type { ResolvedSequencerConfig } from '@aztec/stdlib/interfaces/server';
-import { DEFAULT_P2P_PROPAGATION_TIME } from '@aztec/stdlib/timetable';
-import { type ValidatorClientConfig, validatorClientConfigMappings } from '@aztec/validator-client/config';
+} from '@aztec-labs/stdlib/config';
+import { MIN_PER_BLOCK_ALLOCATION_MULTIPLIER, MIN_PER_BLOCK_DA_ALLOCATION_MULTIPLIER } from '@aztec-labs/stdlib/gas';
+import type { ResolvedSequencerConfig } from '@aztec-labs/stdlib/interfaces/server';
+import { DEFAULT_P2P_PROPAGATION_TIME } from '@aztec-labs/stdlib/timetable';
+import { type ValidatorClientConfig, validatorClientConfigMappings } from '@aztec-labs/validator-client/config';
 
 import {
   type SequencerPublisherConfig,

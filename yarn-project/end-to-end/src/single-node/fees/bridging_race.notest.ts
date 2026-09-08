@@ -1,10 +1,9 @@
-import { SchnorrAccountContract } from '@aztec/accounts/schnorr';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { Fq } from '@aztec/foundation/curves/bn254';
-import { sleep } from '@aztec/foundation/sleep';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { SchnorrAccountContract } from '@aztec-labs/accounts/schnorr';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { Fq } from '@aztec-labs/foundation/curves/bn254';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { jest } from '@jest/globals';
 import type { Hex } from 'viem';
 

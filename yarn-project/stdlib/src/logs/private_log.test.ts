@@ -1,8 +1,8 @@
-import { PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
+import { PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
 import { PrivateLog } from './private_log.js';
 

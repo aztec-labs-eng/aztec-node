@@ -1,7 +1,7 @@
-import type { Logger } from '@aztec/foundation/log';
-import type { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import type { TaggingIndexRange } from '@aztec/stdlib/logs';
-import type { TxHash } from '@aztec/stdlib/tx';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import type { TaggingIndexRange } from '@aztec-labs/stdlib/logs';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { ChangeSetId } from '../storage/staged_write_coordinator.js';
 import type { SenderTaggingStore } from '../storage/tagging_store/sender_tagging_store.js';

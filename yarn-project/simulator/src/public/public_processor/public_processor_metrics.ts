@@ -1,6 +1,6 @@
-import type { ContractClassPublishedEvent } from '@aztec/protocol-contracts/class-registry';
-import type { Gas } from '@aztec/stdlib/gas';
-import { TxExecutionPhase } from '@aztec/stdlib/tx';
+import type { ContractClassPublishedEvent } from '@aztec-labs/protocol-contracts/class-registry';
+import type { Gas } from '@aztec-labs/stdlib/gas';
+import { TxExecutionPhase } from '@aztec-labs/stdlib/tx';
 import {
   Attributes,
   type Gauge,
@@ -10,7 +10,7 @@ import {
   type Tracer,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 export class PublicProcessorMetrics {
   public readonly tracer: Tracer;

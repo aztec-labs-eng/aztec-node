@@ -1,7 +1,7 @@
-import type { LoggerBindings } from '@aztec/foundation/log';
-import { PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import type { GlobalVariables } from '@aztec/stdlib/tx';
-import type { TelemetryClient } from '@aztec/telemetry-client';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
+import { PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import type { GlobalVariables } from '@aztec-labs/stdlib/tx';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 
 import type { AvmSimulator } from '../avm_simulator.js';
 import type { PublicContractsDB } from '../public_db_sources.js';

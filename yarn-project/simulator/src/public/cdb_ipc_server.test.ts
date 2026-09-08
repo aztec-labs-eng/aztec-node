@@ -1,5 +1,5 @@
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { SerializableContractInstance } from '@aztec/stdlib/contract';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { SerializableContractInstance } from '@aztec-labs/stdlib/contract';
 
 import { serializeContractInstance } from './cdb_ipc_server.js';
 

@@ -1,4 +1,4 @@
-import { randomBytes as bbRandomBytes } from '@aztec/bb.js';
+import { randomBytes as bbRandomBytes } from '@aztec-foundation/bb.js';
 
 import { RandomnessSingleton } from './randomness_singleton.js';
 

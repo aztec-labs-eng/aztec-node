@@ -1,9 +1,9 @@
-import { DomainSeparator } from '@aztec/constants';
-import { Grumpkin } from '@aztec/foundation/crypto/grumpkin';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { sha512ToGrumpkinScalar } from '@aztec/foundation/crypto/sha512';
-import { Fq, Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
+import { DomainSeparator } from '@aztec-labs/constants';
+import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { sha512ToGrumpkinScalar } from '@aztec-labs/foundation/crypto/sha512';
+import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import type { KeyPrefix } from './key_types.js';

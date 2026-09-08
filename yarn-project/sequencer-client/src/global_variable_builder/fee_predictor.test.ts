@@ -1,17 +1,20 @@
-import { getPublicClient } from '@aztec/ethereum/client';
-import { DefaultL1ContractsConfig } from '@aztec/ethereum/config';
-import type { FeeHeader } from '@aztec/ethereum/contracts';
-import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS, RollupContract, TempCheckpointLogField } from '@aztec/ethereum/contracts';
-import { deployAztecL1Contracts } from '@aztec/ethereum/deploy-aztec-l1-contracts';
-import { type Anvil, EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec/ethereum/test';
-import type { ViemClient } from '@aztec/ethereum/types';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import { FEE_ORACLE_LAG, type GasFees, ManaUsageEstimate, computeExcessMana } from '@aztec/stdlib/gas';
-
+import { getPublicClient } from '@aztec-labs/ethereum/client';
+import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
+import type { FeeHeader } from '@aztec-labs/ethereum/contracts';
+import {
+  MAX_FEE_ASSET_PRICE_MODIFIER_BPS,
+  RollupContract,
+  TempCheckpointLogField,
+} from '@aztec-labs/ethereum/contracts';
+import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { type Anvil, EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import type { ViemClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { FEE_ORACLE_LAG, type GasFees, ManaUsageEstimate, computeExcessMana } from '@aztec-labs/stdlib/gas';
 import { jest } from '@jest/globals';
 import { foundry } from 'viem/chains';
 

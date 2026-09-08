@@ -1,8 +1,7 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getAddressFromPrivateKey } from '@aztec/ethereum/account';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { EthPrivateKey } from '@aztec/node-keystore';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getAddressFromPrivateKey } from '@aztec-labs/ethereum/account';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { EthPrivateKey } from '@aztec-labs/node-keystore';
 import { writeFile } from 'fs/promises';
 import { createServer } from 'http';
 import { signMessage, signTypedData } from 'viem/accounts';

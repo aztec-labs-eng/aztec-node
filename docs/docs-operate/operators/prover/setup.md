@@ -3,6 +3,7 @@ id: setup
 title: Prover setup
 description: Generate keys, then deploy the prover node, broker, and agents.
 displayed_sidebar: operatorsSidebar
+references: ["yarn-project/prover-node/src/config.ts", "yarn-project/prover-client/src/proving_broker/config.ts", "yarn-project/aztec/src/cli/aztec_start_options.ts"]
 ---
 
 ## Generating Keys
@@ -97,7 +98,7 @@ Create `docker-compose.yml`:
 name: aztec-prover-node
 services:
   prover-node:
-    image: aztecprotocol/aztec:#release_version
+    image: azteclabs/aztec:#release_version
     entrypoint: >-
       node
       --no-warnings
@@ -129,7 +130,7 @@ services:
     restart: unless-stopped
 
   prover-broker:
-    image: aztecprotocol/aztec:#release_version
+    image: azteclabs/aztec:#release_version
     entrypoint: >-
       node
       --no-warnings
@@ -212,7 +213,7 @@ Create `docker-compose.yml`:
 name: aztec-prover-agent
 services:
   prover-agent:
-    image: aztecprotocol/aztec:#release_version
+    image: azteclabs/aztec:#release_version
     entrypoint: >-
       node
       --no-warnings

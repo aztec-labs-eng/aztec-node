@@ -1,6 +1,5 @@
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { createLogger } from '@aztec/foundation/log';
-
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { promises as fs, mkdirSync } from 'fs';
 import { type Database, type RootDatabase, open } from 'lmdb';
 import { tmpdir } from 'os';

@@ -1,4 +1,4 @@
-import { BarretenbergSync, CircuitKind } from '@aztec/bb.js';
+import { BarretenbergSync, CircuitKind } from '@aztec-foundation/bb.js';
 
 import { Fr } from '../../curves/bn254/field.js';
 

@@ -1,6 +1,5 @@
-import type { Logger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 

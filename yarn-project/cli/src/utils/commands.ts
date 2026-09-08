@@ -1,14 +1,13 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn } from '@aztec/foundation/log';
-import type { PXE } from '@aztec/pxe/server';
-import { FunctionSelector } from '@aztec/stdlib/abi/function-selector';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import { LogCursor, Tag } from '@aztec/stdlib/logs';
-import { TxHash } from '@aztec/stdlib/tx/tx-hash';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { PXE } from '@aztec-labs/pxe/server';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi/function-selector';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { LogCursor, Tag } from '@aztec-labs/stdlib/logs';
+import { TxHash } from '@aztec-labs/stdlib/tx/tx-hash';
 import { type Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { lookup } from 'dns/promises';
 import { rename, writeFile } from 'fs/promises';

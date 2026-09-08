@@ -1,16 +1,16 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type ContractArtifact, type FunctionAbi, type FunctionArtifact, getInitializer } from '@aztec/stdlib/abi';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ContractArtifact, type FunctionAbi, type FunctionArtifact, getInitializer } from '@aztec-labs/stdlib/abi';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractInstanceWithAddress,
   computePartialAddress,
   getContractClassFromArtifact,
   getContractInstanceFromInstantiationParams,
-} from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import { type Capsule, HashedValues, type TxProfileResult, type TxReceipt } from '@aztec/stdlib/tx';
-import { ExecutionPayload, mergeExecutionPayloads } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { type Capsule, HashedValues, type TxProfileResult, type TxReceipt } from '@aztec-labs/stdlib/tx';
+import { ExecutionPayload, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
 
 import { publishContractClass } from '../deployment/publish_class.js';
 import { publishInstance } from '../deployment/publish_instance.js';

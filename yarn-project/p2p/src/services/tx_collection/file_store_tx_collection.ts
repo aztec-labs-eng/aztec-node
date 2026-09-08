@@ -1,8 +1,8 @@
-import { times } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider } from '@aztec/foundation/timer';
-import { TxHash } from '@aztec/stdlib/tx';
+import { times } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { FileStoreTxSource } from './file_store_tx_source.js';
 import type { IRequestTracker } from './request_tracker.js';

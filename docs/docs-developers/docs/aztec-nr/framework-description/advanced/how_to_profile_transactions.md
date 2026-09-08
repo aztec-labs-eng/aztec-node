@@ -3,6 +3,7 @@ title: Profiling Transactions
 sidebar_position: 2
 tags: [contracts, profiling]
 description: How to profile Aztec transactions and identify performance bottlenecks using aztec profile, aztec-wallet, and aztec.js.
+references: ["yarn-project/aztec/src/cli/cmds/profile_gates.ts", "yarn-project/aztec/src/cli/cmds/profile_flamegraph.ts", "yarn-project/cli-wallet/src/cmds/profile.ts", "yarn-project/aztec.js/src/contract/contract_function_interaction.ts"]
 ---
 
 This guide shows you how to profile Aztec transactions to understand gate counts and identify optimization opportunities.
@@ -56,7 +57,7 @@ Total: 3 circuit(s)
 These are the gate counts for your contract functions alone, **without** kernel circuit overhead. See [Understanding kernel overhead](#understanding-kernel-overhead) for how this translates to total transaction cost.
 
 :::note BB binary
-`aztec profile` needs the Barretenberg (`bb`) backend binary. It is auto-detected from the `@aztec/bb.js` package. If auto-detection fails, set the `BB` environment variable:
+`aztec profile` needs the Barretenberg (`bb`) backend binary. It is auto-detected from the `@aztec-foundation/bb.js` package. If auto-detection fails, set the `BB` environment variable:
 
 ```bash
 BB=/path/to/bb aztec profile gates ./target

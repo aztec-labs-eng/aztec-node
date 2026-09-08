@@ -1,6 +1,6 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Capsule } from '@aztec/stdlib/tx';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Capsule } from '@aztec-labs/stdlib/tx';
 
 import { assertAllowedScope } from '../allowed_scopes.js';
 import type { ChangeSetId } from '../staged_write_coordinator.js';
@@ -21,9 +21,15 @@ export class CapsuleService {
     this.allowedScopes = [...allowedScopes, AztecAddress.ZERO];
   }
 
-  setCapsule(contractAddress: AztecAddress, slot: Fr, capsule: Fr[], changeSetId: ChangeSetId, scope: AztecAddress) {
+  setCapsule(
+    contractAddress: AztecAddress,
+    slot: Fr,
+    capsule: Fr[],
+    changeSetId: ChangeSetId,
+    scope: AztecAddress,
+  ): Promise<void> {
     assertAllowedScope(scope, this.allowedScopes);
-    this.capsuleStore.setCapsule(contractAddress, slot, capsule, changeSetId, scope);
+    return this.capsuleStore.setCapsule(contractAddress, slot, capsule, changeSetId, scope);
   }
 
   async getCapsule(
@@ -46,9 +52,9 @@ export class CapsuleService {
     return maybeTransientCapsule ?? (await this.capsuleStore.getCapsule(contractAddress, slot, changeSetId, scope));
   }
 
-  deleteCapsule(contractAddress: AztecAddress, slot: Fr, changeSetId: ChangeSetId, scope: AztecAddress) {
+  deleteCapsule(contractAddress: AztecAddress, slot: Fr, changeSetId: ChangeSetId, scope: AztecAddress): Promise<void> {
     assertAllowedScope(scope, this.allowedScopes);
-    this.capsuleStore.deleteCapsule(contractAddress, slot, changeSetId, scope);
+    return this.capsuleStore.deleteCapsule(contractAddress, slot, changeSetId, scope);
   }
 
   copyCapsule(

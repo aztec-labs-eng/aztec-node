@@ -2,6 +2,7 @@
 title: "4. Account Management"
 description: Key derivation, encrypted storage, and SchnorrAccountContract for Aztec wallet accounts
 sidebar_position: 4
+references: ["docs/examples/webapp-tutorial/test-extension/src/wallet/wallet-impl.ts", "docs/examples/webapp-tutorial/test-extension/src/wallet/storage.ts", "docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts"]
 ---
 
 # Account Management
@@ -27,8 +28,8 @@ An Aztec account has:
 The wallet generates a random signing key as the account's root and derives the privacy secret from it:
 
 ```typescript
-import { GrumpkinScalar } from '@aztec/aztec.js/fields';
-import { deriveSecretKeyFromSigningKey } from '@aztec/accounts/utils';
+import { GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import { deriveSecretKeyFromSigningKey } from '@aztec-labs/accounts/utils';
 
 // The signing key is the account's root; the privacy secret is derived from it
 const signingKey = GrumpkinScalar.random();
@@ -53,7 +54,7 @@ export function deriveMasterNullifierHidingSecretKey(secretKey: Fr): GrumpkinSca
 The wallet uses `SchnorrAccountContract` for authentication:
 
 ```typescript
-import { SchnorrAccountContract } from '@aztec/accounts/schnorr/lazy';
+import { SchnorrAccountContract } from '@aztec-labs/accounts/schnorr/lazy';
 
 const accountContract = new SchnorrAccountContract(signingKey);
 ```

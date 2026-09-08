@@ -1,6 +1,5 @@
-import { createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/promise';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/promise';
 import { EventEmitter } from 'node:events';
 
 export type EventMap = {

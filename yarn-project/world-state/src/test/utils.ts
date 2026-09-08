@@ -3,20 +3,20 @@ import {
   MAX_NOTE_HASHES_PER_TX,
   MAX_NULLIFIERS_PER_TX,
   NULLIFIER_SUBTREE_HEIGHT,
-} from '@aztec/constants';
-import { asyncMap } from '@aztec/foundation/async-map';
-import { BlockNumber, type CheckpointNumber, IndexWithinCheckpoint } from '@aztec/foundation/branded-types';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { L2Block } from '@aztec/stdlib/block';
+} from '@aztec-labs/constants';
+import { asyncMap } from '@aztec-labs/foundation/async-map';
+import { BlockNumber, type CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { L2Block } from '@aztec-labs/stdlib/block';
 import type {
   IndexedTreeId,
   MerkleTreeReadOperations,
   MerkleTreeWriteOperations,
-} from '@aztec/stdlib/interfaces/server';
-import { mockCheckpointAndMessages, mockL1ToL2Messages } from '@aztec/stdlib/testing';
-import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec/stdlib/trees';
-import { BlockHeader } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { mockCheckpointAndMessages, mockL1ToL2Messages } from '@aztec-labs/stdlib/testing';
+import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { NativeWorldStateService } from '../native/native_world_state.js';
 

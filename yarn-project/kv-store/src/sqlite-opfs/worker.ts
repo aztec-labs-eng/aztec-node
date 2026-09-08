@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import sqlite3InitModule, { type Database, type SAHPoolUtil, type Sqlite3Static } from '@aztec/sqlite3mc-wasm';
+import sqlite3InitModule, { type Database, type SAHPoolUtil, type Sqlite3Static } from '@aztec-labs/sqlite3mc-wasm';
 
 import { SqliteEncryptionError, type SqliteEncryptionErrorCode, isDecryptFailureMessage } from './errors.js';
 import type { ResultRow, SqlValue, WorkerRequest, WorkerResponse } from './messages.js';

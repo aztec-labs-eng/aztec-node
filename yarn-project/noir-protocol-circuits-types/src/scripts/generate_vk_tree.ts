@@ -1,10 +1,9 @@
-import { VK_TREE_HEIGHT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createConsoleLogger } from '@aztec/foundation/log';
-import { MerkleTreeCalculator } from '@aztec/foundation/trees';
-import { fileURLToPath } from '@aztec/foundation/url';
-import { computeMerkleHash } from '@aztec/stdlib/hash';
-
+import { VK_TREE_HEIGHT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
+import { MerkleTreeCalculator } from '@aztec-labs/foundation/trees';
+import { fileURLToPath } from '@aztec-labs/foundation/url';
+import { computeMerkleHash } from '@aztec-labs/stdlib/hash';
 import { promises as fs } from 'fs';
 
 import type { ProtocolArtifact } from '../artifacts/types.js';
@@ -47,7 +46,7 @@ async function main() {
   const vkTree = await buildVKTree();
   const vkTreePath = resolveRelativePath('../vk_tree.ts');
   const vkTreeFileContents = `
-import { MerkleTree } from '@aztec/foundation/trees';
+import { MerkleTree } from '@aztec-labs/foundation/trees';
 
 export const vkTree = new MerkleTree(${vkTree.height}, [${vkTree.nodes
     .map(node => `'${node.toString('hex')}'`)

@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { HashedValues } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { HashedValues } from '@aztec-labs/stdlib/tx';
 
 /**
  * A cache for hashed values (arguments, returns) during transaction execution.

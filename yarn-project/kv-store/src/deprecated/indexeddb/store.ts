@@ -1,6 +1,5 @@
-import type { Logger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { type DBSchema, type IDBPDatabase, deleteDB, openDB } from 'idb';
 
 import type { AztecAsyncArray } from '../../interfaces/array.js';
@@ -42,7 +41,7 @@ export interface AztecIDBSchema extends DBSchema {
 /**
  * A key-value store backed by IndexedDB.
  *
- * @deprecated The IndexedDB backend is being retired. Use `@aztec/kv-store/sqlite-opfs` instead.
+ * @deprecated The IndexedDB backend is being retired. Use `@aztec-labs/kv-store/sqlite-opfs` instead.
  */
 export class AztecIndexedDBStore implements AztecAsyncKVStore {
   #rootDB: IDBPDatabase<AztecIDBSchema>;

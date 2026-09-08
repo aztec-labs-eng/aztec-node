@@ -1,14 +1,13 @@
-import { type BlobClientConfig, blobClientConfigMapping } from '@aztec/blob-client/client/config';
-import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec/ethereum/l1-reader';
-import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from '@aztec/ethereum/l1-tx-utils/config';
+import { type BlobClientConfig, blobClientConfigMapping } from '@aztec-labs/blob-client/client/config';
+import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
+import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from '@aztec-labs/ethereum/l1-tx-utils/config';
 import {
   type ConfigMappingsType,
   SecretValue,
   booleanConfigHelper,
   numberConfigHelper,
-} from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+} from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { parseEther } from 'viem';
 
 /** Configuration of the transaction publisher. */

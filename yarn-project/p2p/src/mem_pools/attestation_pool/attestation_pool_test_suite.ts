@@ -1,16 +1,16 @@
-import { IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Signature } from '@aztec/foundation/eth-signature';
-import type { BlockProposal, CheckpointProposalCore } from '@aztec/stdlib/p2p';
-import { CheckpointAttestation } from '@aztec/stdlib/p2p';
-import { CheckpointHeader } from '@aztec/stdlib/rollup';
+import { IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import type { BlockProposal, CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
+import { CheckpointAttestation } from '@aztec-labs/stdlib/p2p';
+import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   makeBlockHeader,
   makeBlockProposal,
   makeCheckpointHeader,
   makeCheckpointProposal,
-} from '@aztec/stdlib/testing';
+} from '@aztec-labs/stdlib/testing';
 
 import {
   type AttestationPool,

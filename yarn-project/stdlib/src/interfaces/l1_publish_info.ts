@@ -1,5 +1,4 @@
-import { schemas } from '@aztec/foundation/schemas';
-
+import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { L1PublishedData } from '../checkpoint/published_checkpoint.js';

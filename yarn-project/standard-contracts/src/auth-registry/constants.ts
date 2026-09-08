@@ -1,7 +1,7 @@
 // Address-only leaf export for browser bundles: importing from
-// `@aztec/standard-contracts/auth-registry/constants` avoids dragging in the
+// `@aztec-labs/standard-contracts/auth-registry/constants` avoids dragging in the
 // `AuthRegistry.json` static import.
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { StandardContractAddress, StandardContractClassId, StandardContractSalt } from '../standard_contract_data.js';
 

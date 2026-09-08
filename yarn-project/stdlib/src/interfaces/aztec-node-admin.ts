@@ -1,6 +1,5 @@
-import type { L1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
-import { createSafeJsonRpcClient, defaultFetch } from '@aztec/foundation/json-rpc/client';
-
+import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
+import { createSafeJsonRpcClient, defaultFetch } from '@aztec-labs/foundation/json-rpc/client';
 import { z } from 'zod';
 
 import type { ApiSchemaFor } from '../schemas/schemas.js';

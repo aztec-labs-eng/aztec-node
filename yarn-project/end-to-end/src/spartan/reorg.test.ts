@@ -1,12 +1,11 @@
 // CREATE_CHAOS_MESH should be set to true to run this test
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { RollupCheatCodes } from '@aztec/aztec/testing';
-import { EthCheatCodesWithState } from '@aztec/ethereum/test';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import { EthCheatCodesWithState } from '@aztec-labs/ethereum/test';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { expect, jest } from '@jest/globals';
 
 import { TestWallet } from '../test-wallet/test_wallet.js';

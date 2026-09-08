@@ -1,11 +1,11 @@
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toArray } from '@aztec/foundation/iterable';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { Checkpoint, type PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import { updateInboxRollingHash } from '@aztec/stdlib/messaging';
-import '@aztec/stdlib/testing/jest';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { Checkpoint, type PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import { updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
+import '@aztec-labs/stdlib/testing/jest';
 
 import { InboxBucketBoundaryNotSyncedError, InboxBucketNotSyncedError } from '../errors.js';
 import type { InboxMessage } from '../structs/inbox_message.js';

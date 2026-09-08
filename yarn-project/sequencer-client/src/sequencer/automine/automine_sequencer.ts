@@ -1,38 +1,38 @@
-import type { Archiver } from '@aztec/archiver';
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec/constants';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { type EthCheatCodes, RollupCheatCodes } from '@aztec/ethereum/test';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import type { TestDateProvider } from '@aztec/foundation/timer';
-import { isErrorClass } from '@aztec/foundation/types';
-import type { P2PClient as ConcreteP2PClient, P2P } from '@aztec/p2p';
-import { settleEpochOutbox } from '@aztec/prover-client/test';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { CommitteeAttestationsAndSigners, type L2Block, type L2BlockSource } from '@aztec/stdlib/block';
-import { getPreviousCheckpointInboxRollingHash, getPreviousCheckpointOutHashes } from '@aztec/stdlib/checkpoint';
-import type { ChainConfig } from '@aztec/stdlib/config';
+import type { Archiver } from '@aztec-labs/archiver';
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { type EthCheatCodes, RollupCheatCodes } from '@aztec-labs/ethereum/test';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import type { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { isErrorClass } from '@aztec-labs/foundation/types';
+import type { P2PClient as ConcreteP2PClient, P2P } from '@aztec-labs/p2p';
+import { settleEpochOutbox } from '@aztec-labs/prover-client/test';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { CommitteeAttestationsAndSigners, type L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import { getPreviousCheckpointInboxRollingHash, getPreviousCheckpointOutHashes } from '@aztec-labs/stdlib/checkpoint';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import {
   type L1RollupConstants,
   getEpochAtSlot,
   getSlotAtTimestamp,
   getTimestampForSlot,
-} from '@aztec/stdlib/epoch-helpers';
-import { InsufficientValidTxsError, type WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import { type L1ToL2MessageSource, getInboxCutoffTimestamp } from '@aztec/stdlib/messaging';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import type { FailedTx, Tx } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/epoch-helpers';
+import { InsufficientValidTxsError, type WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import { type L1ToL2MessageSource, getInboxCutoffTimestamp } from '@aztec-labs/stdlib/messaging';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { FailedTx, Tx } from '@aztec-labs/stdlib/tx';
 import type {
   BuildBlockInCheckpointResult,
   CheckpointBuilder,
   FullNodeCheckpointsBuilder,
-} from '@aztec/validator-client';
+} from '@aztec-labs/validator-client';
 
 import type { GlobalVariableBuilder } from '../../global_variable_builder/global_builder.js';
 import type { SequencerPublisherFactory } from '../../publisher/sequencer-publisher-factory.js';

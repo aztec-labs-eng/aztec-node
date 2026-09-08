@@ -1,10 +1,9 @@
 /**
  * Tests for KeystoreManager
  */
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { describe, expect, it, jest } from '@jest/globals';
 import { mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';

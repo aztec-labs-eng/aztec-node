@@ -1,6 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Hex } from '@aztec/foundation/string';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Hex } from '@aztec-labs/foundation/string';
 import { mod } from '@noble/curves/abstract/modular';
 import { bytesToNumberBE } from '@noble/curves/abstract/utils';
 import { hmac } from '@noble/hashes/hmac';

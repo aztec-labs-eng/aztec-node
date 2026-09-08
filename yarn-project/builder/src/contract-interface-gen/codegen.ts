@@ -1,6 +1,5 @@
 /* eslint-disable no-console */
-import { loadContractArtifact } from '@aztec/stdlib/abi';
-
+import { loadContractArtifact } from '@aztec-labs/stdlib/abi';
 import crypto from 'crypto';
 import { access, mkdir, readFile, readdir, stat, writeFile } from 'fs/promises';
 import path from 'path';

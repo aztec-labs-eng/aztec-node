@@ -1,11 +1,11 @@
-import type { ACVMConfig, BBConfig } from '@aztec/bb-prover';
+import type { ACVMConfig, BBConfig } from '@aztec-labs/bb-prover';
 import {
   type ConfigMappingsType,
   booleanConfigHelper,
   getConfigFromMappings,
   numberConfigHelper,
-} from '@aztec/foundation/config';
-import { type ProverConfig, proverConfigMappings } from '@aztec/stdlib/interfaces/prover-config';
+} from '@aztec-labs/foundation/config';
+import { type ProverConfig, proverConfigMappings } from '@aztec-labs/stdlib/interfaces/prover-config';
 
 import {
   type ProverAgentConfig,

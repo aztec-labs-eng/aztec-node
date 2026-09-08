@@ -1,14 +1,13 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall, waitForProven } from '@aztec/aztec.js/contracts';
-import { PrivateFeePaymentMethod, PublicFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee/testing';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { FPCContract } from '@aztec/noir-contracts.js/FPC';
-import type { SponsoredFPCContract } from '@aztec/noir-contracts.js/SponsoredFPC';
-import type { TokenContract as BananaCoin } from '@aztec/noir-contracts.js/Token';
-import { GasSettings } from '@aztec/stdlib/gas';
-import { TX_ERROR_INSUFFICIENT_FEE_PAYER_BALANCE } from '@aztec/stdlib/tx';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall, waitForProven } from '@aztec-labs/aztec.js/contracts';
+import { PrivateFeePaymentMethod, PublicFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee/testing';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
+import type { SponsoredFPCContract } from '@aztec-labs/noir-contracts.js/SponsoredFPC';
+import type { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
+import { GasSettings } from '@aztec-labs/stdlib/gas';
+import { TX_ERROR_INSUFFICIENT_FEE_PAYER_BALANCE } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { PIPELINING_SETUP_OPTS, getPaddedMaxFeesPerGas } from '../../fixtures/fixtures.js';

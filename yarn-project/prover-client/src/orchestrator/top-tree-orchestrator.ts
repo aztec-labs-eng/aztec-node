@@ -1,36 +1,36 @@
-import { BatchedBlobAccumulator, type FinalBlobBatchingChallenges } from '@aztec/blob-lib';
-import type { BatchedBlob } from '@aztec/blob-lib/types';
+import { BatchedBlobAccumulator, type FinalBlobBatchingChallenges } from '@aztec-labs/blob-lib';
+import type { BatchedBlob } from '@aztec-labs/blob-lib/types';
 import {
   type ARCHIVE_HEIGHT,
   BLOBS_PER_CHECKPOINT,
   FIELDS_PER_BLOB,
   type NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   OUT_HASH_TREE_HEIGHT,
-} from '@aztec/constants';
-import type { EpochNumber } from '@aztec/foundation/branded-types';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { LoggerBindings } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import type { SerialQueue } from '@aztec/foundation/queue';
-import type { Tuple } from '@aztec/foundation/serialize';
-import { MerkleTreeCalculator, type TreeNodeLocation, shaMerkleHash } from '@aztec/foundation/trees';
-import type { EthAddress } from '@aztec/stdlib/block';
-import type { PublicInputsAndRecursiveProof, ServerCircuitProver } from '@aztec/stdlib/interfaces/server';
-import { computeCheckpointOutHash } from '@aztec/stdlib/messaging';
-import type { ParityPublicInputs } from '@aztec/stdlib/parity';
-import type { Proof } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/constants';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { LoggerBindings } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import type { SerialQueue } from '@aztec-labs/foundation/queue';
+import type { Tuple } from '@aztec-labs/foundation/serialize';
+import { MerkleTreeCalculator, type TreeNodeLocation, shaMerkleHash } from '@aztec-labs/foundation/trees';
+import type { EthAddress } from '@aztec-labs/stdlib/block';
+import type { PublicInputsAndRecursiveProof, ServerCircuitProver } from '@aztec-labs/stdlib/interfaces/server';
+import { computeCheckpointOutHash } from '@aztec-labs/stdlib/messaging';
+import type { ParityPublicInputs } from '@aztec-labs/stdlib/parity';
+import type { Proof } from '@aztec-labs/stdlib/proofs';
 import {
   type BlockRollupPublicInputs,
   CheckpointRootRollupHints,
   CheckpointRootRollupPrivateInputs,
   CheckpointRootSingleBlockRollupPrivateInputs,
   type RootRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
-import { AppendOnlyTreeSnapshot } from '@aztec/stdlib/trees';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/rollup';
+import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { buildBlobHints, toProofData } from './block-building-helpers.js';
 import type { CheckpointSubTreeProofs } from './checkpoint-sub-tree-orchestrator.js';

@@ -1,7 +1,7 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import type { LogFn } from '@aztec/foundation/log';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { TxHash } from '@aztec/stdlib/tx';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 
 export async function inspectBlock(
   aztecNode: AztecNode,

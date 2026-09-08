@@ -1,7 +1,6 @@
-import { memoize } from '@aztec/foundation/decorators';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-
+import { memoize } from '@aztec-labs/foundation/decorators';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { type Hex, encodeAbiParameters, getContract, keccak256, parseAbiParameters } from 'viem';
 
 import type { ViemClient } from '../types.js';

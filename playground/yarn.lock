@@ -15,63 +15,63 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/accounts@link:../yarn-project/accounts::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/accounts@link:../yarn-project/accounts::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/accounts@link:../yarn-project/accounts::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/accounts@link:../yarn-project/accounts::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/aztec.js@link:../yarn-project/aztec.js::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/aztec.js@link:../yarn-project/aztec.js::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/aztec.js@link:../yarn-project/aztec.js::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/aztec.js@link:../yarn-project/aztec.js::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/constants@link:../yarn-project/constants::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/constants@link:../yarn-project/constants::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/constants@link:../yarn-project/constants::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/constants@link:../yarn-project/constants::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/entrypoints@link:../yarn-project/entrypoints::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/entrypoints@link:../yarn-project/entrypoints::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/entrypoints@link:../yarn-project/entrypoints::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/entrypoints@link:../yarn-project/entrypoints::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/foundation@link:../yarn-project/foundation::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/foundation@link:../yarn-project/foundation::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/foundation@link:../yarn-project/foundation::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/foundation@link:../yarn-project/foundation::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/kv-store@link:../yarn-project/kv-store::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/kv-store@link:../yarn-project/kv-store::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/kv-store@link:../yarn-project/kv-store::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/kv-store@link:../yarn-project/kv-store::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/noir-contracts.js@link:../yarn-project/noir-contracts.js::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/noir-contracts.js@link:../yarn-project/noir-contracts.js::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/noir-contracts.js@link:../yarn-project/noir-contracts.js::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/noir-contracts.js@link:../yarn-project/noir-contracts.js::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/playground@workspace:.":
+"@aztec-labs/playground@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@aztec/playground@workspace:."
+  resolution: "@aztec-labs/playground@workspace:."
   dependencies:
-    "@aztec/accounts": "link:../yarn-project/accounts"
-    "@aztec/aztec.js": "link:../yarn-project/aztec.js"
-    "@aztec/constants": "link:../yarn-project/constants"
-    "@aztec/entrypoints": "link:../yarn-project/entrypoints"
-    "@aztec/foundation": "link:../yarn-project/foundation"
-    "@aztec/kv-store": "link:../yarn-project/kv-store"
-    "@aztec/noir-contracts.js": "link:../yarn-project/noir-contracts.js"
-    "@aztec/pxe": "link:../yarn-project/pxe"
-    "@aztec/stdlib": "link:../yarn-project/stdlib"
-    "@aztec/wallet-sdk": "link:../yarn-project/wallet-sdk"
-    "@aztec/wallets": "link:../yarn-project/wallets"
+    "@aztec-labs/accounts": "link:../yarn-project/accounts"
+    "@aztec-labs/aztec.js": "link:../yarn-project/aztec.js"
+    "@aztec-labs/constants": "link:../yarn-project/constants"
+    "@aztec-labs/entrypoints": "link:../yarn-project/entrypoints"
+    "@aztec-labs/foundation": "link:../yarn-project/foundation"
+    "@aztec-labs/kv-store": "link:../yarn-project/kv-store"
+    "@aztec-labs/noir-contracts.js": "link:../yarn-project/noir-contracts.js"
+    "@aztec-labs/pxe": "link:../yarn-project/pxe"
+    "@aztec-labs/stdlib": "link:../yarn-project/stdlib"
+    "@aztec-labs/wallet-sdk": "link:../yarn-project/wallet-sdk"
+    "@aztec-labs/wallets": "link:../yarn-project/wallets"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.0"
     "@eslint/js": "npm:^9.18.0"
@@ -107,27 +107,27 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@aztec/pxe@link:../yarn-project/pxe::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/pxe@link:../yarn-project/pxe::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/pxe@link:../yarn-project/pxe::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/pxe@link:../yarn-project/pxe::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/stdlib@link:../yarn-project/stdlib::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/stdlib@link:../yarn-project/stdlib::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/stdlib@link:../yarn-project/stdlib::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/stdlib@link:../yarn-project/stdlib::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/wallet-sdk@link:../yarn-project/wallet-sdk::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/wallet-sdk@link:../yarn-project/wallet-sdk::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/wallet-sdk@link:../yarn-project/wallet-sdk::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/wallet-sdk@link:../yarn-project/wallet-sdk::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 
-"@aztec/wallets@link:../yarn-project/wallets::locator=%40aztec%2Fplayground%40workspace%3A.":
+"@aztec-labs/wallets@link:../yarn-project/wallets::locator=%40aztec-labs%2Fplayground%40workspace%3A.":
   version: 0.0.0-use.local
-  resolution: "@aztec/wallets@link:../yarn-project/wallets::locator=%40aztec%2Fplayground%40workspace%3A."
+  resolution: "@aztec-labs/wallets@link:../yarn-project/wallets::locator=%40aztec-labs%2Fplayground%40workspace%3A."
   languageName: node
   linkType: soft
 

@@ -1,13 +1,13 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec/ethereum/contracts';
-import { maxBigint } from '@aztec/foundation/bigint';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { compactArray, partition, times } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { Prettify } from '@aztec/foundation/types';
-import type { SlasherConfig } from '@aztec/stdlib/interfaces/server';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { maxBigint } from '@aztec-labs/foundation/bigint';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray, partition, times } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { Prettify } from '@aztec-labs/foundation/types';
+import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type Offense,
   OffenseType,
@@ -16,9 +16,8 @@ import {
   getEpochsForRound,
   getOffenseTypeName,
   getSlashConsensusVotesFromOffenses,
-} from '@aztec/stdlib/slashing';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/slashing';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type { Hex } from 'viem';
 
 import { SlasherMetrics } from './metrics.js';

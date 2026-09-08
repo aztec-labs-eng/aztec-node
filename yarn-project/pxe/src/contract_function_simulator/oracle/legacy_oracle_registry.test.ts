@@ -1,8 +1,8 @@
 /* eslint-disable camelcase */
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toACVMField } from '@aztec/simulator/client';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { computeFeeJuiceMessageNullifier } from '@aztec/stdlib/messaging';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toACVMField } from '@aztec-labs/simulator/client';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
 import { Option } from '../noir-structs/option.js';
 import { buildACIRCallback } from './acir_callback.js';

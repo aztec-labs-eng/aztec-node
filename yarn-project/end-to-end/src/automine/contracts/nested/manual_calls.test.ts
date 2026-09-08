@@ -1,9 +1,9 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { toBigIntBE } from '@aztec/foundation/bigint-buffer';
-import { serializeToBuffer } from '@aztec/foundation/serialize';
-import { ChildContract } from '@aztec/noir-test-contracts.js/Child';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { toBigIntBE } from '@aztec-labs/foundation/bigint-buffer';
+import { serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { ChildContract } from '@aztec-labs/noir-test-contracts.js/Child';
 
 import { AutomineTestContext } from '../../automine_test_context.js';
 

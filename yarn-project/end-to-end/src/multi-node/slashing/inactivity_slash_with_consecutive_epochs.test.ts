@@ -1,10 +1,9 @@
-import type { EthAddress } from '@aztec/aztec.js/addresses';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { unique } from '@aztec/foundation/collection';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { OffenseType } from '@aztec/slasher';
-
+import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { unique } from '@aztec-labs/foundation/collection';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { OffenseType } from '@aztec-labs/slasher';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 

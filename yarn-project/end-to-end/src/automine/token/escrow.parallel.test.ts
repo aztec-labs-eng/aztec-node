@@ -1,11 +1,11 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { deriveKeys } from '@aztec/aztec.js/keys';
-import type { Logger } from '@aztec/aztec.js/log';
-import { EscrowContract } from '@aztec/noir-contracts.js/Escrow';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import type { PublicKeys } from '@aztec/stdlib/keys';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { deriveKeys } from '@aztec-labs/aztec.js/keys';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { EscrowContract } from '@aztec-labs/noir-contracts.js/Escrow';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import type { PublicKeys } from '@aztec-labs/stdlib/keys';
 
 import { expectTokenBalance, mintTokensToPrivate } from '../../fixtures/token_utils.js';
 import type { TestWallet } from '../../test-wallet/test_wallet.js';

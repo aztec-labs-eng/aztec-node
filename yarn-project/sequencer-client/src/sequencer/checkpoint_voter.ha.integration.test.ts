@@ -5,27 +5,30 @@
  * rather than mocks to verify the HA coordination works correctly for sequencer
  * voting functions (governance and slashing).
  */
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import type { EpochCache } from '@aztec/epoch-cache';
-import { DefaultL1ContractsConfig } from '@aztec/ethereum/config';
-import type { GovernanceProposerContract, RollupContract, SlashingProposerContract } from '@aztec/ethereum/contracts';
-import { Multicall3 } from '@aztec/ethereum/contracts';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { SecretValue } from '@aztec/foundation/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Hex } from '@aztec/foundation/string';
-import { TestDateProvider } from '@aztec/foundation/timer';
-import { type KeyStore, KeystoreManager } from '@aztec/node-keystore';
-import type { ProposerSlashAction } from '@aztec/slasher';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-import { HAKeyStore, NodeKeystoreAdapter, type ValidatorClient } from '@aztec/validator-client';
-import type { ValidatorClientConfig } from '@aztec/validator-client/config';
-import { INSERT_SCHEMA_VERSION, SCHEMA_SETUP, SCHEMA_VERSION } from '@aztec/validator-ha-signer/db';
-import { createHASigner } from '@aztec/validator-ha-signer/factory';
-import { Pool } from '@aztec/validator-ha-signer/test';
-
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
+import type {
+  GovernanceProposerContract,
+  RollupContract,
+  SlashingProposerContract,
+} from '@aztec-labs/ethereum/contracts';
+import { Multicall3 } from '@aztec-labs/ethereum/contracts';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Hex } from '@aztec-labs/foundation/string';
+import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { type KeyStore, KeystoreManager } from '@aztec-labs/node-keystore';
+import type { ProposerSlashAction } from '@aztec-labs/slasher';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { HAKeyStore, NodeKeystoreAdapter, type ValidatorClient } from '@aztec-labs/validator-client';
+import type { ValidatorClientConfig } from '@aztec-labs/validator-client/config';
+import { INSERT_SCHEMA_VERSION, SCHEMA_SETUP, SCHEMA_VERSION } from '@aztec-labs/validator-ha-signer/db';
+import { createHASigner } from '@aztec-labs/validator-ha-signer/factory';
+import { Pool } from '@aztec-labs/validator-ha-signer/test';
 import { PGlite } from '@electric-sql/pglite';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';

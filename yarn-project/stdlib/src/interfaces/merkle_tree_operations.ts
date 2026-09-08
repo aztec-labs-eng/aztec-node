@@ -1,7 +1,7 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import { type IndexedTreeLeafPreimage, SiblingPath } from '@aztec/foundation/trees';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { type IndexedTreeLeafPreimage, SiblingPath } from '@aztec-labs/foundation/trees';
 
 import type { BlockHash } from '../block/block_hash.js';
 import type { MerkleTreeId, TreeHeights } from '../trees/merkle_tree_id.js';

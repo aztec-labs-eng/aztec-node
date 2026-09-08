@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader } from '@aztec/foundation/serialize';
-import { VerificationKeyAsFields, VerificationKeyData } from '@aztec/stdlib/vks';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader } from '@aztec-labs/foundation/serialize';
+import { VerificationKeyAsFields, VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 

@@ -1,8 +1,8 @@
-import { MAX_NOTE_HASH_READ_REQUESTS_PER_TX, NOTE_HASH_TREE_HEIGHT } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { BufferReader } from '@aztec/foundation/serialize';
-import type { MembershipWitness } from '@aztec/foundation/trees';
+import { MAX_NOTE_HASH_READ_REQUESTS_PER_TX, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { BufferReader } from '@aztec-labs/foundation/serialize';
+import type { MembershipWitness } from '@aztec-labs/foundation/trees';
 
 import { PendingReadHint, ReadRequestAction, ReadRequestResetHints, SettledReadHint } from './read_request_hints.js';
 

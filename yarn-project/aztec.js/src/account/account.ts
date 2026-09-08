@@ -1,10 +1,10 @@
-import type { DefaultAccountEntrypointOptions } from '@aztec/entrypoints/account';
-import type { AuthWitnessProvider, ChainInfo, EntrypointInterface } from '@aztec/entrypoints/interfaces';
-import { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { CompleteAddress } from '@aztec/stdlib/contract';
-import type { GasSettings } from '@aztec/stdlib/gas';
-import type { ExecutionPayload, TxExecutionRequest } from '@aztec/stdlib/tx';
+import type { DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
+import type { AuthWitnessProvider, ChainInfo, EntrypointInterface } from '@aztec-labs/entrypoints/interfaces';
+import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
+import type { ExecutionPayload, TxExecutionRequest } from '@aztec-labs/stdlib/tx';
 
 import { type CallIntent, type IntentInnerHash, computeAuthWitMessageHash } from '../utils/authwit.js';
 

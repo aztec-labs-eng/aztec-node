@@ -1,7 +1,7 @@
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import { type ComponentsVersions, getComponentsVersionsFromConfig } from '@aztec/stdlib/versioning';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import { type ComponentsVersions, getComponentsVersionsFromConfig } from '@aztec-labs/stdlib/versioning';
 
 export function getVersions(config?: ChainConfig): Partial<ComponentsVersions> {
   return config

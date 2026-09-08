@@ -1,9 +1,9 @@
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import type { BlockHash, L2Block } from '@aztec/stdlib/block';
-import { MAX_LOGS_PER_TAG } from '@aztec/stdlib/interfaces/api-limit';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import type { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import { MAX_LOGS_PER_TAG } from '@aztec-labs/stdlib/interfaces/api-limit';
 import type {
   LogCursor,
   LogResult,
@@ -12,8 +12,8 @@ import type {
   SiloedTag,
   Tag,
   TagQuery,
-} from '@aztec/stdlib/logs';
-import { TxHash } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/logs';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { BlockStore } from './block_store.js';
 import {

@@ -1,9 +1,8 @@
-import { BlockNumberSchema, CheckpointNumberSchema } from '@aztec/foundation/branded-types';
-import type { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-import type { PickIfFlag, Prettify } from '@aztec/foundation/types';
-
+import { BlockNumberSchema, CheckpointNumberSchema } from '@aztec-labs/foundation/branded-types';
+import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import type { PickIfFlag, Prettify } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { CommitteeAttestation } from '../block/proposal/committee_attestation.js';

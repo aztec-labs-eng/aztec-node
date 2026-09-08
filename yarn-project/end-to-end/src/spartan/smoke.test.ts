@@ -1,11 +1,10 @@
-import { type AztecNode, createAztecNodeClient } from '@aztec/aztec.js/node';
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import { type AztecNode, createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { ChildProcess } from 'child_process';
 import { createPublicClient, fallback, http } from 'viem';
 

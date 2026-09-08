@@ -1,11 +1,11 @@
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { makeL1HttpTransport } from '@aztec/ethereum/client';
-import { NoCommitteeError, RollupContract } from '@aztec/ethereum/contracts';
-import { getFinalizedL1Block } from '@aztec/ethereum/queries';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
+import { NoCommitteeError, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import {
   type L1RollupConstants,
   getEpochAtSlot,
@@ -16,8 +16,7 @@ import {
   getSlotRangeForEpoch,
   getStartTimestampForEpoch,
   getTimestampForSlot,
-} from '@aztec/stdlib/epoch-helpers';
-
+} from '@aztec-labs/stdlib/epoch-helpers';
 import { createPublicClient, encodeAbiParameters, keccak256 } from 'viem';
 
 import { type EpochCacheConfig, getEpochCacheConfigEnvVars } from './config.js';

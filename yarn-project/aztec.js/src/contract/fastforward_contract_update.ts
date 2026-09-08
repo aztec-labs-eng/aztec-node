@@ -1,13 +1,13 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   DelayedPublicMutableValuesWithHash,
   ScheduledDelayChange,
   ScheduledValueChange,
-} from '@aztec/stdlib/delayed-public-mutable';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import { SimulationOverrides } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/delayed-public-mutable';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { SimulationOverrides } from '@aztec-labs/stdlib/tx';
 
 /**
  * Builds `SimulationOverrides` that simulate a deployed instance as if it had already been upgraded to a

@@ -1,5 +1,4 @@
-import type { Logger } from '@aztec/foundation/log';
-
+import type { Logger } from '@aztec-labs/foundation/log';
 import fs from 'fs/promises';
 import path from 'path';
 

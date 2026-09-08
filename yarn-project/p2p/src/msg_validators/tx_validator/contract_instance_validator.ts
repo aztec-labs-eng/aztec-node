@@ -1,13 +1,13 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { ContractInstancePublishedEvent } from '@aztec/protocol-contracts/instance-registry';
-import { computeContractAddressFromInstance } from '@aztec/stdlib/contract';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { ContractInstancePublishedEvent } from '@aztec-labs/protocol-contracts/instance-registry';
+import { computeContractAddressFromInstance } from '@aztec-labs/stdlib/contract';
 import {
   TX_ERROR_INCORRECT_CONTRACT_ADDRESS,
   TX_ERROR_MALFORMED_CONTRACT_INSTANCE_LOG,
   type Tx,
   type TxValidationResult,
   type TxValidator,
-} from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/tx';
 
 /** Validates that contract instance deployment logs contain correct addresses. */
 export class ContractInstanceTxValidator implements TxValidator<Tx> {

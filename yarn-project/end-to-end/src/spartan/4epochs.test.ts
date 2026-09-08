@@ -1,12 +1,11 @@
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { readFieldCompressedString } from '@aztec/aztec.js/utils';
-import { RollupCheatCodes } from '@aztec/aztec/testing';
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { EthCheatCodesWithState } from '@aztec/ethereum/test';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { readFieldCompressedString } from '@aztec-labs/aztec.js/utils';
+import { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { EthCheatCodesWithState } from '@aztec-labs/ethereum/test';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 
 import { getSponsoredFPCAddress } from '../fixtures/utils.js';

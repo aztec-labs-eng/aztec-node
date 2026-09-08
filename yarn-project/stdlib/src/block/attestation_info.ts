@@ -1,5 +1,5 @@
-import { recoverAddress } from '@aztec/foundation/crypto/secp256k1-signer';
-import type { EthAddress } from '@aztec/foundation/eth-address';
+import { recoverAddress } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 import { Checkpoint } from '../checkpoint/checkpoint.js';
 import { ConsensusPayload } from '../p2p/consensus_payload.js';

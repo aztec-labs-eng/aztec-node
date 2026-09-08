@@ -2,7 +2,7 @@
  * UDS server for AVM CDB requests.
  *
  * Transport (socket, framing, per-connection response ordering) is handled by the shared
- * `UdsIpcServer` from `@aztec/ipc-runtime`; message dispatch comes from the generated CDB
+ * `UdsIpcServer` from `@aztec-foundation/ipc-runtime`; message dispatch comes from the generated CDB
  * server. This class only implements the generated handler interface and routes requests to
  * PublicContractsDB instances by fork ID.
  */
@@ -25,14 +25,14 @@ import {
   type CdbRevertCheckpoint,
   type CdbRevertCheckpointResponse,
   handleRequest,
-} from '@aztec/cdb';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { UdsIpcServer } from '@aztec/ipc-runtime';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { ContractDeploymentData, type ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+} from '@aztec-foundation/cdb';
+import { UdsIpcServer } from '@aztec-foundation/ipc-runtime';
 
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { ContractDeploymentData, type ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { Decoder, Encoder } from 'msgpackr';
 import * as os from 'node:os';
 import * as path from 'node:path';

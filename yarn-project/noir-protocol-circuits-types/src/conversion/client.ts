@@ -2,9 +2,9 @@ import {
   MEGA_APP_VK_LENGTH_IN_FIELDS,
   MEGA_KERNEL_VK_LENGTH_IN_FIELDS,
   UPDATES_DELAYED_PUBLIC_MUTABLE_VALUES_LEN,
-} from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Bufferable, assertLength, mapTuple } from '@aztec/foundation/serialize';
+} from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Bufferable, assertLength, mapTuple } from '@aztec-labs/foundation/serialize';
 import {
   CountedPublicCallRequest,
   KeyValidationHint,
@@ -38,9 +38,9 @@ import {
   ScopedReadRequest,
   SettledReadHint,
   TransientDataSquashingHint,
-} from '@aztec/stdlib/kernel';
-import type { PublicKeys } from '@aztec/stdlib/keys';
-import { CallContext, FunctionData, TxRequest } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/kernel';
+import type { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { CallContext, FunctionData, TxRequest } from '@aztec-labs/stdlib/tx';
 
 import type {
   CallContext as CallContextNoir,

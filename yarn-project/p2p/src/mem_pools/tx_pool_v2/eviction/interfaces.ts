@@ -1,5 +1,5 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { BlockHeader, TxHash } from '@aztec/stdlib/tx';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { BlockHeader, TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { TxMetaData } from '../tx_metadata.js';
 

@@ -1,8 +1,8 @@
-import { type L1FeeData, MAX_FEE_ASSET_PRICE_MODIFIER_BPS, type RollupContract } from '@aztec/ethereum/contracts';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import type { DateProvider } from '@aztec/foundation/timer';
-import { getSlotAtNextL1Block, getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
+import { type L1FeeData, MAX_FEE_ASSET_PRICE_MODIFIER_BPS, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import { getSlotAtNextL1Block, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   FEE_ORACLE_LAG,
   GasFees,
@@ -10,7 +10,7 @@ import {
   ManaUsageEstimate,
   computeExcessMana,
   computeManaMinFee,
-} from '@aztec/stdlib/gas';
+} from '@aztec-labs/stdlib/gas';
 
 /** Cached rollup state for fee prediction. Refreshed once per L1 block. */
 type FeeOracleState = {

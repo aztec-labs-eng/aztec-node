@@ -1,6 +1,5 @@
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { toArray } from '@aztec/foundation/iterable';
-
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { toArray } from '@aztec-labs/foundation/iterable';
 import fs from 'fs/promises';
 import { type Database, open } from 'lmdb';
 import { tmpdir } from 'os';

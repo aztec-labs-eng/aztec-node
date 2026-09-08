@@ -3,6 +3,7 @@ title: Testing Smart Contracts
 tags: [contracts, tests]
 sidebar_position: 8
 description: Learn how to write and run tests for your Aztec smart contracts using Aztec.js and a local network.
+references: ["docs/examples/ts/aztecjs_testing/index.ts", "docs/examples/ts/aztecjs_connection/index.ts", "yarn-project/wallets/src/embedded/*", "yarn-project/accounts/src/testing/*"]
 ---
 
 This guide covers how to test Aztec smart contracts by connecting to a local network, deploying contracts, and verifying their behavior.
@@ -88,7 +89,7 @@ Use this to set up state preconditions, reproduce production bugs against pinned
 `fastForwardContractUpdate` returns a `SimulationOverrides` object that simulates a deployed instance as if it had already been upgraded to a new contract class. The new class must already be registered on chain. The cheat mirrors a real onchain upgrade followed by waiting out the upgrade delay: the override instance's `currentContractClassId` is bumped, and the `ContractInstanceRegistry`'s delayed-public-mutable storage is rewritten to look like the upgrade was scheduled in the past.
 
 ```typescript
-import { fastForwardContractUpdate } from '@aztec/aztec.js';
+import { fastForwardContractUpdate } from '@aztec-labs/aztec.js';
 
 const overrides = await fastForwardContractUpdate({
   instanceAddress: contract.address,

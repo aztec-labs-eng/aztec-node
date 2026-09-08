@@ -1,6 +1,6 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { TxHash } from '@aztec/aztec.js/tx';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { TxHash } from '@aztec-labs/aztec.js/tx';
 
 import { shouldCollectMetrics } from '../fixtures/fixtures.js';
 import { createNode, createNodes } from '../fixtures/setup_p2p_test.js';

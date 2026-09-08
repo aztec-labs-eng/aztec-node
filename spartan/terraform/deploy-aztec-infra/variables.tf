@@ -96,7 +96,7 @@ variable "NAMESPACE" {
 variable "AZTEC_DOCKER_IMAGE" {
   description = "Docker image to use for the aztec network"
   type        = string
-  default     = "aztecprotocol/aztec:staging"
+  default     = "azteclabs/aztec:staging"
 }
 
 variable "PROVER_AGENT_DOCKER_IMAGE" {

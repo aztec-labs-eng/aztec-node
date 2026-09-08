@@ -283,12 +283,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/l1-artifacts@npm:6.0.0-nightly.20260826":
-  version: 6.0.0-nightly.20260826
-  resolution: "@aztec/l1-artifacts@npm:6.0.0-nightly.20260826"
+"@aztec-foundation/l1-artifacts@npm:6.0.0-nightly.20260902":
+  version: 6.0.0-nightly.20260902
+  resolution: "@aztec-foundation/l1-artifacts@npm:6.0.0-nightly.20260902"
   dependencies:
     tslib: "npm:^2.4.0"
-  checksum: 10c0/dc664762977c3f73f7f011b9954a12cd4a710dd4a2d01c0b1aa423d178121beb3087c4eb421b3b19388a8523a6dff53aac6ccdb88005caeb11504ce655304ebc
+  checksum: 10c0/5c2fe9137de2adffe1b7691b136fba2bd6d8271d8a217177bbcbd09b9952c556978ee1ff1f8bc5449f4f83e3d4038663d42ab0ebf82d785c14d1100a9a428002
   languageName: node
   linkType: hard
 
@@ -8743,7 +8743,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "aztec-docs@workspace:."
   dependencies:
-    "@aztec/l1-artifacts": "npm:6.0.0-nightly.20260826"
+    "@aztec-foundation/l1-artifacts": "npm:6.0.0-nightly.20260902"
     "@docusaurus/core": "npm:3.10.1"
     "@docusaurus/faster": "npm:3.10.1"
     "@docusaurus/plugin-content-docs": "npm:3.10.1"
@@ -8768,6 +8768,7 @@ __metadata:
     rehype-katex: "npm:7"
     remark-gfm: "npm:^1.0.0"
     remark-math: "npm:6"
+    typescript: "npm:^5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -23292,6 +23293,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"typescript@npm:^5.9.3":
+  version: 5.9.3
+  resolution: "typescript@npm:5.9.3"
+  bin:
+    tsc: bin/tsc
+    tsserver: bin/tsserver
+  checksum: 10c0/6bd7552ce39f97e711db5aa048f6f9995b53f1c52f7d8667c1abdc1700c68a76a308f579cd309ce6b53646deb4e9a1be7c813a93baaf0a28ccd536a30270e1c5
+  languageName: node
+  linkType: hard
+
 "typescript@patch:typescript@npm%3A^5.0.0#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.3#optional!builtin<compat/typescript>":
   version: 5.9.2
   resolution: "typescript@patch:typescript@npm%3A5.9.2#optional!builtin<compat/typescript>::version=5.9.2&hash=5786d5"
@@ -23299,6 +23310,16 @@ __metadata:
     tsc: bin/tsc
     tsserver: bin/tsserver
   checksum: 10c0/34d2a8e23eb8e0d1875072064d5e1d9c102e0bdce56a10a25c0b917b8aa9001a9cf5c225df12497e99da107dc379360bc138163c66b55b95f5b105b50578067e
+  languageName: node
+  linkType: hard
+
+"typescript@patch:typescript@npm%3A^5.9.3#optional!builtin<compat/typescript>":
+  version: 5.9.3
+  resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=5786d5"
+  bin:
+    tsc: bin/tsc
+    tsserver: bin/tsserver
+  checksum: 10c0/ad09fdf7a756814dce65bc60c1657b40d44451346858eea230e10f2e95a289d9183b6e32e5c11e95acc0ccc214b4f36289dcad4bf1886b0adb84d711d336a430
   languageName: node
   linkType: hard
 

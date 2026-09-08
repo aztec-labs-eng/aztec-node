@@ -1,11 +1,10 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import { EthCheatCodes } from '@aztec/aztec/testing';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { RollupContract, STATE_VIEW_ADDRESS } from '@aztec/ethereum/contracts';
-import type { Anvil } from '@aztec/ethereum/test';
-import { retryUntil } from '@aztec/foundation/retry';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { EthCheatCodes } from '@aztec-labs/aztec/testing';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { RollupContract, STATE_VIEW_ADDRESS } from '@aztec-labs/ethereum/contracts';
+import type { Anvil } from '@aztec-labs/ethereum/test';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 import { mnemonicToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

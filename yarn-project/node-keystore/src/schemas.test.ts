@@ -1,9 +1,8 @@
 /**
  * Tests for Zod schema validation using example files
  */
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { describe, expect, it } from '@jest/globals';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';

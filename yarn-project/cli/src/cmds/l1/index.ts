@@ -1,7 +1,6 @@
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { LogFn, Logger } from '@aztec/foundation/log';
-
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { type Command, Option } from 'commander';
 
 import {

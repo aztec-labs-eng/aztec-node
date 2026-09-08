@@ -1,13 +1,12 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import type { EpochCache } from '@aztec/epoch-cache';
-import type { GovernanceProposerContract, RollupContract } from '@aztec/ethereum/contracts';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import type { PublisherManager } from '@aztec/ethereum/publisher-manager';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { DateProvider } from '@aztec/foundation/timer';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-import { NodeKeystoreAdapter } from '@aztec/validator-client';
-
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import type { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { NodeKeystoreAdapter } from '@aztec-labs/validator-client';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { SequencerClientConfig } from '../config.js';

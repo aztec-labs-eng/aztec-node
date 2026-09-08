@@ -1,9 +1,8 @@
-import type { SlashVoteTarget, SlashingProposerContract } from '@aztec/ethereum/contracts';
-import { uniqueBy } from '@aztec/foundation/collection';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-
+import type { SlashVoteTarget, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { uniqueBy } from '@aztec-labs/foundation/collection';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
 import type { Hex } from 'viem';
 
 import type { SlasherMetrics } from './metrics.js';

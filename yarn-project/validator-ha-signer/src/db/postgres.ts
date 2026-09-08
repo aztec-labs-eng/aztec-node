@@ -1,12 +1,11 @@
 /**
  * PostgreSQL implementation of SlashingProtectionDatabase
  */
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { makeBackoff, retry } from '@aztec/foundation/retry';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import type { QueryResult, QueryResultRow } from 'pg';
 
 import type { SlashingProtectionDatabase, TryInsertOrGetResult } from '../types.js';

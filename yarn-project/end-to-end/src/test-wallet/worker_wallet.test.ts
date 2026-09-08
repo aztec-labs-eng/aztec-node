@@ -1,5 +1,5 @@
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import type { ContractInstancePreimage } from '@aztec/stdlib/contract';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { ContractInstancePreimage } from '@aztec-labs/stdlib/contract';
 
 import { WorkerWallet } from './worker_wallet.js';
 

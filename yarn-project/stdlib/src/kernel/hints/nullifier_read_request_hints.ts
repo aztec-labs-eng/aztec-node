@@ -1,7 +1,7 @@
-import { MAX_NULLIFIER_READ_REQUESTS_PER_TX, NULLIFIER_TREE_HEIGHT } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import type { BufferReader } from '@aztec/foundation/serialize';
-import type { MembershipWitness } from '@aztec/foundation/trees';
+import { MAX_NULLIFIER_READ_REQUESTS_PER_TX, NULLIFIER_TREE_HEIGHT } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import type { BufferReader } from '@aztec-labs/foundation/serialize';
+import type { MembershipWitness } from '@aztec-labs/foundation/trees';
 
 import { NullifierLeafPreimage } from '../../trees/index.js';
 import { PendingReadHint, ReadRequestAction, ReadRequestResetHints, SettledReadHint } from './read_request_hints.js';

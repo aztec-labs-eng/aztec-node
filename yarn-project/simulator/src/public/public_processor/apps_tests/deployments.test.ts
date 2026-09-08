@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { TokenContractArtifact } from '@aztec/noir-contracts.js/Token';
-import { AvmTestContractArtifact } from '@aztec/noir-test-contracts.js/AvmTest';
-import { RevertCode } from '@aztec/stdlib/avm';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { TokenContractArtifact } from '@aztec-labs/noir-contracts.js/Token';
+import { AvmTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/AvmTest';
+import { RevertCode } from '@aztec-labs/stdlib/avm';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { createContractClassAndInstance } from '../../avm/testing/utils.js';
 import { PublicProcessorTestEnv } from '../../fixtures/index.js';

@@ -2,8 +2,8 @@ import type {
   ForkMerkleTreeOperations,
   ProvingJobBroker,
   ReadonlyWorldStateAccess,
-} from '@aztec/stdlib/interfaces/server';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/interfaces/server';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import type { ProverClientConfig } from '../config.js';
 import { ProverClient } from './prover-client.js';

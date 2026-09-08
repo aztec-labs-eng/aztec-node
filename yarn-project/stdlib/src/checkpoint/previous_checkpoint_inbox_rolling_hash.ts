@@ -1,6 +1,6 @@
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { Logger } from '@aztec/foundation/log';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { Logger } from '@aztec-labs/foundation/log';
 
 import type { L2BlockSource } from '../block/l2_block_source.js';
 import type { ProposedCheckpointData } from './checkpoint_data.js';

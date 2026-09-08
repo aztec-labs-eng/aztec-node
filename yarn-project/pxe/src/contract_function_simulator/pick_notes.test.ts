@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Comparator, Note } from '@aztec/stdlib/note';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Comparator, Note } from '@aztec-labs/stdlib/note';
 
 import { SortOrder, pickNotes } from './pick_notes.js';
 

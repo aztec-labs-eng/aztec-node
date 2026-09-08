@@ -1,13 +1,12 @@
-import { ARCHIVER_DB_VERSION, type Archiver } from '@aztec/archiver';
-import { tryRmDir } from '@aztec/foundation/fs';
-import type { Logger } from '@aztec/foundation/log';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import { createFileStore } from '@aztec/stdlib/file-store';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-import { uploadSnapshotToIndex } from '@aztec/stdlib/snapshots';
-import { WORLD_STATE_DB_VERSION } from '@aztec/world-state';
-
+import { ARCHIVER_DB_VERSION, type Archiver } from '@aztec-labs/archiver';
+import { tryRmDir } from '@aztec-labs/foundation/fs';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import { createFileStore } from '@aztec-labs/stdlib/file-store';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import { uploadSnapshotToIndex } from '@aztec-labs/stdlib/snapshots';
+import { WORLD_STATE_DB_VERSION } from '@aztec-labs/world-state';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

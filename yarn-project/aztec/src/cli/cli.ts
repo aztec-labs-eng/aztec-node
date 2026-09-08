@@ -1,5 +1,4 @@
-import type { LogFn, Logger } from '@aztec/foundation/log';
-
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { Command } from 'commander';
 
 import { aztecStartOptions } from './aztec_start_options.js';

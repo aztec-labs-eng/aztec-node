@@ -1,9 +1,8 @@
-import { toBigIntBE, toBufferBE } from '@aztec/foundation/bigint-buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader } from '@aztec/foundation/serialize';
-import type { IndexedTreeLeaf, IndexedTreeLeafPreimage } from '@aztec/foundation/trees';
-
+import { toBigIntBE, toBufferBE } from '@aztec-labs/foundation/bigint-buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader } from '@aztec-labs/foundation/serialize';
+import type { IndexedTreeLeaf, IndexedTreeLeafPreimage } from '@aztec-labs/foundation/trees';
 import { z } from 'zod';
 
 /**

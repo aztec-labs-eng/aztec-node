@@ -5,9 +5,9 @@
  * These types define the JSON structure for configuring validators, provers, and
  * their associated keys and addresses.
  */
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Hex } from '@aztec/foundation/string';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Hex } from '@aztec-labs/foundation/string';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 /**
  * An encrypted keystore file config points to a local file with an encrypted private key.

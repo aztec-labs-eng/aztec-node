@@ -4,9 +4,9 @@
  * parameter) to inject controlled failures — sidesteps the need for a real
  * `AztecSQLiteOPFSStore`, which requires browser-only Web Workers + OPFS.
  */
-import type { Logger } from '@aztec/foundation/log';
-import type { AztecSQLiteOPFSStore } from '@aztec/kv-store/sqlite-opfs';
-import { SqliteCorruptionError, SqliteEncryptionError } from '@aztec/kv-store/sqlite-opfs';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { AztecSQLiteOPFSStore } from '@aztec-labs/kv-store/sqlite-opfs';
+import { SqliteCorruptionError, SqliteEncryptionError } from '@aztec-labs/kv-store/sqlite-opfs';
 
 import {
   EmbeddedWalletEncryptionError,

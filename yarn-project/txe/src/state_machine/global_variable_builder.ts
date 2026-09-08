@@ -1,11 +1,11 @@
-import type { SimulationOverridesPlan } from '@aztec/ethereum/contracts';
-import type { SlotNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { FEE_ORACLE_LAG, GasFees } from '@aztec/stdlib/gas';
-import { makeGlobalVariables } from '@aztec/stdlib/testing';
-import type { CheckpointGlobalVariables, FeeProvider, GlobalVariableBuilder } from '@aztec/stdlib/tx';
+import type { SimulationOverridesPlan } from '@aztec-labs/ethereum/contracts';
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { FEE_ORACLE_LAG, GasFees } from '@aztec-labs/stdlib/gas';
+import { makeGlobalVariables } from '@aztec-labs/stdlib/testing';
+import type { CheckpointGlobalVariables, FeeProvider, GlobalVariableBuilder } from '@aztec-labs/stdlib/tx';
 
 /** Simple FeeProvider for TXE that returns zero fees. */
 export class TXEFeeProvider implements FeeProvider {

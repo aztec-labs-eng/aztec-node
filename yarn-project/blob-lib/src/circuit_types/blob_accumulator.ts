@@ -1,7 +1,7 @@
-import { BLS12_FQ_LIMBS, BLS12_FR_LIMBS } from '@aztec/constants';
-import { BLS12Fq, BLS12Fr, BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, FieldReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { BLS12_FQ_LIMBS, BLS12_FR_LIMBS } from '@aztec-labs/constants';
+import { BLS12Fq, BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 /**
  * See `noir-projects/fnd/noir-protocol-circuits/crates/blob/src/abis/blob_accumulator.nr` for documentation.

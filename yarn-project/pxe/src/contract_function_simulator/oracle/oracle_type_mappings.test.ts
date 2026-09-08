@@ -1,8 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
-import { MembershipWitness } from '@aztec/foundation/trees';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { AppTaggingSecretKind, Tag } from '@aztec/stdlib/logs';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { AppTaggingSecretKind, Tag } from '@aztec-labs/stdlib/logs';
 
 import { EphemeralArrayService } from '../ephemeral_array_service.js';
 import { BoundedVec } from '../noir-structs/bounded_vec.js';

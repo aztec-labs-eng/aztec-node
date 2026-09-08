@@ -1,0 +1,73 @@
+# Cuts a canary release from a pull request. Adding the `ci-release-pr` label pushes a
+# v<version>-commit.g<sha> tag at the PR's head, which runs release.yml like any other release tag.
+#
+# The tag is minted with the release GitHub App, not the workflow token: the Release Tags ruleset
+# restricts tag creation on every ref to that App, and ci3.yml deliberately holds only
+# `contents: read`. It is created through the REST API rather than by pushing from a checkout, so
+# the PR's tree never reaches this runner.
+#
+# pull_request_target rather than pull_request, for two reasons: this workflow then runs the base
+# branch's own code (the PR cannot edit what mints its tag), and github.ref is the base branch,
+# which is what the `tagger` environment's branch policy matches. A PR based on a branch that is
+# not in that policy cannot cut a canary until the branch is added to it.
+name: Release PR Tag
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+concurrency:
+  group: release-pr-tag-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # Never for forks: the release this tag triggers builds and publishes the PR's code with the
+    # `release` environment's DockerHub and npm credentials.
+    if: github.event.label.name == 'ci-release-pr' && github.event.pull_request.head.repo.fork != true
+    runs-on: ubuntu-latest
+    environment: tagger
+    permissions:
+      pull-requests: write # remove the label once the tag exists, so re-labelling re-triggers
+    steps:
+      - name: Mint App token
+        uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID || secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Create canary tag
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # The version comes from the manifest of the commit being tagged, as it does for every
+          # other release. Read over the API rather than from a checkout, and matched against a
+          # bare X.Y.Z: the value is PR-controlled and lands in a ref name.
+          version=$(gh api "repos/${REPO}/contents/.release-please-manifest.json?ref=${HEAD_SHA}" \
+            -H "Accept: application/vnd.github.raw" | jq -r '."."')
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::.release-please-manifest.json holds '$version', which is not an X.Y.Z version."
+            exit 1
+          fi
+          # The 'g' prefixes the sha because a prerelease identifier of digits only may not have a
+          # leading zero (semver), and the Tag Format ruleset rejects the tag if it does. The
+          # 'commit' channel keeps the canary off the shared npm dist-tags (see ci3/deploy_npm).
+          tag="v${version}-commit.g${HEAD_SHA:0:8}"
+          echo "Tagging ${HEAD_SHA} as ${tag}"
+          if gh api "repos/${REPO}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+            echo "::error::Tag ${tag} already exists; push a new commit to cut another canary."
+            exit 1
+          fi
+          gh api -X POST "repos/${REPO}/git/refs" \
+            -f "ref=refs/tags/${tag}" -f "sha=${HEAD_SHA}" >/dev/null
+          echo "Pushed ${tag}. Release: https://github.com/${REPO}/actions/workflows/release.yml"
+
+      - name: Remove the label
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --remove-label ci-release-pr

@@ -1,8 +1,8 @@
-import { BaseAccount } from '@aztec/aztec.js/account';
-import type { CompleteAddress } from '@aztec/aztec.js/addresses';
-import { DefaultAccountEntrypoint } from '@aztec/entrypoints/account';
-import { loadContractArtifact } from '@aztec/stdlib/abi';
-import type { NoirCompiledContract } from '@aztec/stdlib/noir';
+import { BaseAccount } from '@aztec-labs/aztec.js/account';
+import type { CompleteAddress } from '@aztec-labs/aztec.js/addresses';
+import { DefaultAccountEntrypoint } from '@aztec-labs/entrypoints/account';
+import { loadContractArtifact } from '@aztec-labs/stdlib/abi';
+import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 
 import SimulatedEcdsaAccountJson from '../../../artifacts/SimulatedEcdsaAccount.json' with { type: 'json' };
 import { StubBaseAccountContract } from '../../defaults/stub_account_contract.js';

@@ -19,7 +19,7 @@ variable "AZTEC_DOCKER_IMAGE" {
 
   validation {
     condition     = can(regex("^.+:.+$", var.AZTEC_DOCKER_IMAGE))
-    error_message = "AZTEC_DOCKER_IMAGE must be in repository:tag form, for example aztecprotocol/aztec:latest."
+    error_message = "AZTEC_DOCKER_IMAGE must be in repository:tag form, for example azteclabs/aztec:latest."
   }
 }
 

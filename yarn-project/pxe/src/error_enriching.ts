@@ -1,10 +1,10 @@
-import type { Logger } from '@aztec/foundation/log';
-import { allToCompletion } from '@aztec/foundation/promise';
-import { resolveAssertionMessageFromRevertData, resolveOpcodeLocations } from '@aztec/simulator/client';
-import { FunctionSelector } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { type SimulationError, isNoirCallStackUnresolved } from '@aztec/stdlib/errors';
-import type { BlockHeader } from '@aztec/stdlib/tx';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { allToCompletion } from '@aztec-labs/foundation/promise';
+import { resolveAssertionMessageFromRevertData, resolveOpcodeLocations } from '@aztec-labs/simulator/client';
+import { FunctionSelector } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { type SimulationError, isNoirCallStackUnresolved } from '@aztec-labs/stdlib/errors';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { ContractClassService } from './contract/contract_class_service.js';
 import type { ContractStore } from './storage/contract_store/contract_store.js';

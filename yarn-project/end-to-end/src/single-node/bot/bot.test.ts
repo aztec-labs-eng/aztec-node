@@ -1,7 +1,7 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { MinedTxReceipt, type TxReceipt } from '@aztec/aztec.js/tx';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { MinedTxReceipt, type TxReceipt } from '@aztec-labs/aztec.js/tx';
 import {
   AmmBot,
   Bot,
@@ -10,14 +10,13 @@ import {
   CrossChainBot,
   SupportedTokenContracts,
   getBotDefaultConfig,
-} from '@aztec/bot';
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
-import { SecretValue } from '@aztec/foundation/config';
-import { bufferToHex } from '@aztec/foundation/string';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import type { AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
-
+} from '@aztec-labs/bot';
+import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { jest } from '@jest/globals';
 
 import { PIPELINED_FEE_PADDING, PIPELINING_SETUP_OPTS } from '../../fixtures/fixtures.js';

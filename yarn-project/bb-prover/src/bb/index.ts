@@ -1,6 +1,5 @@
 #!/usr/bin/env -S node --no-warnings
-import { createConsoleLogger } from '@aztec/foundation/log';
-
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
 import 'source-map-support/register.js';
 
 import { getProgram } from './cli.js';

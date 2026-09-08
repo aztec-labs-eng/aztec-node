@@ -1,14 +1,13 @@
-import type { AztecNodeConfig, AztecNodeService } from '@aztec/aztec-node';
-import type { TestAztecNodeService } from '@aztec/aztec-node/test';
-import type { EthAddress } from '@aztec/aztec.js/addresses';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { unique } from '@aztec/foundation/collection';
-import { retryUntil } from '@aztec/foundation/retry';
-import { OffenseType } from '@aztec/slasher';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-import type { ValidatorStatusInSlot } from '@aztec/stdlib/validators';
-
+import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
+import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { unique } from '@aztec-labs/foundation/collection';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { OffenseType } from '@aztec-labs/slasher';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import type { ValidatorStatusInSlot } from '@aztec-labs/stdlib/validators';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 

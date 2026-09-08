@@ -1,8 +1,7 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { GasSettings } from '@aztec/stdlib/gas';
-import type { ExecutionPayload, TxExecutionRequest } from '@aztec/stdlib/tx';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
+import type { ExecutionPayload, TxExecutionRequest } from '@aztec-labs/stdlib/tx';
 import { z } from 'zod';
 
 /**

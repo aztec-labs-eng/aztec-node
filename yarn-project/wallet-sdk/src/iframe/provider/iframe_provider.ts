@@ -9,8 +9,8 @@
  *   5. Derives shared session keys, exposes verificationHash
  *   6. On confirm(): returns IframeWallet backed by the established session
  */
-import type { ChainInfo } from '@aztec/aztec.js/account';
-import type { Wallet } from '@aztec/aztec.js/wallet';
+import type { ChainInfo } from '@aztec-labs/aztec.js/account';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 
 import {
   type ExportedPublicKey,

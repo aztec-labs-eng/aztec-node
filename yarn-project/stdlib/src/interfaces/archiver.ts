@@ -1,6 +1,5 @@
-import { BlockNumberSchema, CheckpointNumberSchema, EpochNumberSchema } from '@aztec/foundation/branded-types';
-import type { ApiSchemaFor } from '@aztec/foundation/schemas';
-
+import { BlockNumberSchema, CheckpointNumberSchema, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
+import type { ApiSchemaFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { BlockDataSchema } from '../block/block_data.js';

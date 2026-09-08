@@ -8,7 +8,7 @@ import {
   type OracleRegistryEntry,
   U8,
   makeEntry,
-} from '@aztec/pxe/simulator';
+} from '@aztec-labs/pxe/simulator';
 
 import { synthesizeDefaultFixtures } from './default_fixtures.js';
 

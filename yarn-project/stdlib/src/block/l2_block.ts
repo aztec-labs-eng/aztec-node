@@ -1,5 +1,5 @@
-import { type BlockBlobData, encodeBlockBlobData } from '@aztec/blob-lib/encoding';
-import { DA_GAS_PER_FIELD } from '@aztec/constants';
+import { type BlockBlobData, encodeBlockBlobData } from '@aztec-labs/blob-lib/encoding';
+import { DA_GAS_PER_FIELD } from '@aztec-labs/constants';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -7,10 +7,9 @@ import {
   IndexWithinCheckpoint,
   IndexWithinCheckpointSchema,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+} from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { z } from 'zod';
 
 import type { PrivateLog } from '../logs/private_log.js';

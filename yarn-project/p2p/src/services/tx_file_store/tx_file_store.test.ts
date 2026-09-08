@@ -1,8 +1,7 @@
-import { createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { InMemoryFileStore } from '@aztec/stdlib/file-store';
-import { Tx, type TxValidator } from '@aztec/stdlib/tx';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { InMemoryFileStore } from '@aztec-labs/stdlib/file-store';
+import { Tx, type TxValidator } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
-import { createLogger } from '@aztec/foundation/log';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { getBlobClientConfigFromEnv } from '../config.js';
 import { createBlobClient } from '../factory.js';

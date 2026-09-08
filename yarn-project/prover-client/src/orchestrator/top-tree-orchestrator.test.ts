@@ -1,14 +1,14 @@
-import { MAX_L2_TO_L1_MSGS_PER_TX } from '@aztec/constants';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { ScopedL2ToL1Message, accumulateInboxRollingHash, computeEpochOutHash } from '@aztec/stdlib/messaging';
-import { makeScopedL2ToL1Message } from '@aztec/stdlib/testing';
+import { MAX_L2_TO_L1_MSGS_PER_TX } from '@aztec-labs/constants';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { ScopedL2ToL1Message, accumulateInboxRollingHash, computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
+import { makeScopedL2ToL1Message } from '@aztec-labs/stdlib/testing';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from './checkpoint-sub-tree-orchestrator.js';

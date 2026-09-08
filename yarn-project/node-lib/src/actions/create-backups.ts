@@ -1,8 +1,7 @@
-import type { Archiver } from '@aztec/archiver';
-import type { Logger } from '@aztec/foundation/log';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { SnapshotDataUrls } from '@aztec/stdlib/snapshots';
-
+import type { Archiver } from '@aztec-labs/archiver';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { SnapshotDataUrls } from '@aztec-labs/stdlib/snapshots';
 import { existsSync } from 'fs';
 import { join } from 'path/posix';
 

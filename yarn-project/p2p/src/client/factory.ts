@@ -1,16 +1,20 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { AztecLMDBStoreV2, createStore } from '@aztec/kv-store/lmdb-v2';
-import type { BlockHash, L2BlockSource } from '@aztec/stdlib/block';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { type BlockMinFeesProvider, getNetworkTxGasLimits } from '@aztec/stdlib/gas';
-import type { AztecNode, ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { AztecLMDBStoreV2, createStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { BlockHash, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { type BlockMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import type {
+  AztecNode,
+  ClientProtocolCircuitVerifier,
+  WorldStateSynchronizer,
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { P2PClient } from '../client/p2p_client.js';
 import type { P2PConfig } from '../config.js';

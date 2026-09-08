@@ -1,20 +1,23 @@
-import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
+import { MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   MerkleTreeReadOperations,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
-import { mockTx } from '@aztec/stdlib/testing';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import { type GlobalVariables, TX_ERROR_GAS_LIMIT_TOO_HIGH, TX_ERROR_INSUFFICIENT_GAS_LIMIT } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import {
+  type GlobalVariables,
+  TX_ERROR_GAS_LIMIT_TOO_HIGH,
+  TX_ERROR_INSUFFICIENT_GAS_LIMIT,
+} from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { AggregateTxValidator } from './aggregate_tx_validator.js';

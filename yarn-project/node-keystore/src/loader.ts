@@ -3,10 +3,9 @@
  *
  * Handles loading and parsing keystore configuration files.
  */
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import type { Hex } from '@aztec/foundation/string';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { Hex } from '@aztec-labs/foundation/string';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { extname, join } from 'path';
 import { privateKeyToAddress } from 'viem/accounts';

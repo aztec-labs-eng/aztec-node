@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
 import {
   decodeCheckpointEndMarker,

@@ -1,9 +1,8 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { AztecNodeConfig } from '@aztec/aztec-node/config';
-import type { Fr } from '@aztec/aztec.js/fields';
-import { startAnvil } from '@aztec/ethereum/test';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecNodeConfig } from '@aztec-labs/aztec-node/config';
+import type { Fr } from '@aztec-labs/aztec.js/fields';
+import { startAnvil } from '@aztec-labs/ethereum/test';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { foundry } from 'viem/chains';
 
 import { createLocalNetwork } from '../local-network/local-network.js';

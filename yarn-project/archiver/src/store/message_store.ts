@@ -1,9 +1,9 @@
-import type { L1BlockId } from '@aztec/ethereum/l1-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { toArray } from '@aztec/foundation/iterable';
-import { createLogger } from '@aztec/foundation/log';
-import { BufferReader, bigintToUInt64BE, numToUInt32BE, serializeToBuffer } from '@aztec/foundation/serialize';
+import type { L1BlockId } from '@aztec-labs/ethereum/l1-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { BufferReader, bigintToUInt64BE, numToUInt32BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import {
   type AztecAsyncKVStore,
   type AztecAsyncMap,
@@ -11,8 +11,8 @@ import {
   type AztecAsyncSingleton,
   type CustomRange,
   mapRange,
-} from '@aztec/kv-store';
-import { type InboxBucket, updateInboxRollingHash } from '@aztec/stdlib/messaging';
+} from '@aztec-labs/kv-store';
+import { type InboxBucket, updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
 
 import { InboxBucketBoundaryNotSyncedError, InboxBucketNotSyncedError } from '../errors.js';
 import { type InboxMessage, deserializeInboxMessage, serializeInboxMessage } from '../structs/inbox_message.js';

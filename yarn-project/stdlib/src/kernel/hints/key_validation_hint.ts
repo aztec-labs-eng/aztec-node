@@ -1,5 +1,5 @@
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 export class KeyValidationHint {
   constructor(

@@ -1,6 +1,5 @@
-import type { JsonRpcFetch } from '@aztec/foundation/json-rpc/client';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-
+import type { JsonRpcFetch } from '@aztec-labs/foundation/json-rpc/client';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { afterEach, describe, expect, it } from '@jest/globals';
 
 import { resolveAztecNode } from './resolve_aztec_node.js';

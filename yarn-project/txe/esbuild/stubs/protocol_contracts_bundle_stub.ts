@@ -1,1 +1,1 @@
-export { LazyProtocolContractsProvider as BundledProtocolContractsProvider } from '@aztec/protocol-contracts/providers/lazy';
+export { LazyProtocolContractsProvider as BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/lazy';

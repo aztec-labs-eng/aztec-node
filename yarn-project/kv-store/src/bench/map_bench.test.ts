@@ -1,5 +1,4 @@
-import { createLogger } from '@aztec/foundation/log';
-
+import { createLogger } from '@aztec-labs/foundation/log';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 

@@ -1,9 +1,9 @@
-import type { InitialAccountData } from '@aztec/accounts/testing';
-import { Fr } from '@aztec/aztec.js/fields';
-import { getSponsoredFPCAddress } from '@aztec/cli/cli-utils';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import { getGenesisValues } from '@aztec/world-state/testing';
+import type { InitialAccountData } from '@aztec-labs/accounts/testing';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { getSponsoredFPCAddress } from '@aztec-labs/cli/cli-utils';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import { getGenesisValues } from '@aztec-labs/world-state/testing';
 
 /**
  * This test suit makes sure that the code in the monorepo is still compatible with the latest version of testnet

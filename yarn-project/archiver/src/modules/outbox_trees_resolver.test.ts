@@ -1,18 +1,17 @@
-import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec/constants';
-import type { OutboxContract } from '@aztec/ethereum/contracts';
+import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
+import type { OutboxContract } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { sha256Trunc } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { type L2ToL1MembershipWitness, computeEpochOutHash } from '@aztec/stdlib/messaging';
-import { TxHash } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/foundation/branded-types';
+import { sha256Trunc } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { type L2ToL1MembershipWitness, computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { type OutboxTreesArchiverView, OutboxTreesResolver } from './outbox_trees_resolver.js';

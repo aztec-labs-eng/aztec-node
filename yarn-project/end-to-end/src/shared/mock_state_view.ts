@@ -1,8 +1,7 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { type Logger, createLogger } from '@aztec/aztec.js/log';
-import type { EthCheatCodes } from '@aztec/aztec/testing';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
+import type { EthCheatCodes } from '@aztec-labs/aztec/testing';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { getContract } from 'viem';
 
 /**

@@ -1,12 +1,12 @@
-import { createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec/kv-store';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncMultiMap } from '@aztec-labs/kv-store';
 import {
   type Offense,
   type OffenseIdentifier,
   deserializeOffense,
   getRoundForOffense,
   serializeOffense,
-} from '@aztec/stdlib/slashing';
+} from '@aztec-labs/stdlib/slashing';
 
 export const SCHEMA_VERSION = 1;
 

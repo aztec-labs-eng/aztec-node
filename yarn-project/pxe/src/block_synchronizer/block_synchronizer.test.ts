@@ -1,9 +1,9 @@
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { L2TipsKVStore } from '@aztec/kv-store/stores';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
@@ -15,10 +15,9 @@ import {
   type L2BlockStreamEvent,
   makeL2BlockId,
   makeL2CheckpointId,
-} from '@aztec/stdlib/block';
-import type { AztecNode, BlockResponse } from '@aztec/stdlib/interfaces/client';
-import { NoteDao, NoteStatus } from '@aztec/stdlib/note';
-
+} from '@aztec-labs/stdlib/block';
+import type { AztecNode, BlockResponse } from '@aztec-labs/stdlib/interfaces/client';
+import { NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

@@ -1,5 +1,4 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
 import { jest } from '@jest/globals';
 
 import type { P2PNetworkTest } from '../p2p_network.js';

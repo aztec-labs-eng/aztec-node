@@ -1,6 +1,5 @@
-import { BufferSink } from '@aztec/foundation/serialize';
-import { Timer } from '@aztec/foundation/timer';
-
+import { BufferSink } from '@aztec-labs/foundation/serialize';
+import { Timer } from '@aztec-labs/foundation/timer';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';

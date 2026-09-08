@@ -1,6 +1,5 @@
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type Hex, type Transaction, encodeFunctionData } from 'viem';
 

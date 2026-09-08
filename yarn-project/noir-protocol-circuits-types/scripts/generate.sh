@@ -6,7 +6,7 @@ cd $(dirname $0)/..
 # Resolved rather than hardcoded to node_modules/: the linker may hoist the package to the workspace
 # root instead of installing it here. Kept above the loader export because the loader crashes node on
 # exit, which under errexit would fail this command substitution despite the path being printed.
-artifacts_pkg=$(node -p "require('path').dirname(require.resolve('@aztec/protocol-circuits-artifacts/package.json'))")
+artifacts_pkg=$(node -p "require('path').dirname(require.resolve('@aztec-foundation/protocol-circuits-artifacts/package.json'))")
 
 export SWCRC=true
 export NODE_OPTIONS="--no-warnings --loader @swc-node/register/esm"

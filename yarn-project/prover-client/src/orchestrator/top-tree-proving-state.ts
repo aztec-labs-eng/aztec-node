@@ -1,16 +1,16 @@
-import type { BatchedBlob, BatchedBlobAccumulator, FinalBlobBatchingChallenges } from '@aztec/blob-lib';
-import type { NESTED_RECURSIVE_PROOF_LENGTH, NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec/constants';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec/foundation/trees';
-import type { PublicInputsAndRecursiveProof } from '@aztec/stdlib/interfaces/server';
-import type { Proof } from '@aztec/stdlib/proofs';
+import type { BatchedBlob, BatchedBlobAccumulator, FinalBlobBatchingChallenges } from '@aztec-labs/blob-lib';
+import type { NESTED_RECURSIVE_PROOF_LENGTH, NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec-labs/constants';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec-labs/foundation/trees';
+import type { PublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import type { Proof } from '@aztec-labs/stdlib/proofs';
 import {
   CheckpointMergeRollupPrivateInputs,
   CheckpointPaddingRollupPrivateInputs,
   CheckpointRollupPublicInputs,
   RootRollupPrivateInputs,
   type RootRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
+} from '@aztec-labs/stdlib/rollup';
 
 import { toProofData } from './block-building-helpers.js';
 import type { ProofState } from './block-proving-state.js';

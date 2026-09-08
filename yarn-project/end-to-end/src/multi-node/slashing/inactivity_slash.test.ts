@@ -1,6 +1,5 @@
-import type { EthAddress } from '@aztec/aztec.js/addresses';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-
+import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 

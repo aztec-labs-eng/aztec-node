@@ -1,8 +1,8 @@
-import { sumBigint } from '@aztec/foundation/bigint';
-import { padArrayEnd } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { PartialBy } from '@aztec/foundation/types';
+import { sumBigint } from '@aztec-labs/foundation/bigint';
+import { padArrayEnd } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { PartialBy } from '@aztec-labs/foundation/types';
 
 import { getEpochForOffense } from './helpers.js';
 import type { Offense, ValidatorSlashVote } from './types.js';

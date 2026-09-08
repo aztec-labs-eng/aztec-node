@@ -1,16 +1,16 @@
-import { type Account, NO_FROM } from '@aztec/aztec.js/account';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Aliased } from '@aztec/aztec.js/wallet';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { TokenContract, type Transfer } from '@aztec/noir-contracts.js/Token';
-import { PXE, type PackedPrivateEvent } from '@aztec/pxe/server';
-import { FunctionCall, FunctionSelector, FunctionType } from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { NodeInfo } from '@aztec/stdlib/contract';
-import { Gas, GasFees, ManaUsageEstimate } from '@aztec/stdlib/gas';
-import { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
+import { type Account, NO_FROM } from '@aztec-labs/aztec.js/account';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Aliased } from '@aztec-labs/aztec.js/wallet';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { TokenContract, type Transfer } from '@aztec-labs/noir-contracts.js/Token';
+import { PXE, type PackedPrivateEvent } from '@aztec-labs/pxe/server';
+import { FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { NodeInfo } from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
+import { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import {
   BlockHeader,
   ExecutionPayload,
@@ -24,8 +24,7 @@ import {
   TxHash,
   TxProvingResult,
   TxSimulationResult,
-} from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { BaseWallet, type CompleteFeeOptionsConfig, type FeeOptions } from './base_wallet.js';

@@ -1,7 +1,6 @@
-import { sleep } from '@aztec/foundation/sleep';
-import { mockTx } from '@aztec/stdlib/testing';
-import type { Tx, TxValidationResult } from '@aztec/stdlib/tx';
-
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { mockTx } from '@aztec-labs/stdlib/testing';
+import type { Tx, TxValidationResult } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 
 import { TxValidationCache } from './tx_validation_cache.js';

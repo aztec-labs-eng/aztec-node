@@ -1,18 +1,17 @@
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { EpochProverFactory } from '@aztec/prover-client';
-import type { AvmSimulator } from '@aztec/simulator/server';
-import { L2Block, type L2BlockSource, type L2BlockStreamEvent, type L2Tips } from '@aztec/stdlib/block';
-import type { Checkpoint, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { EmptyL1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { EpochProverManager, ITxProvider, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { BlockHeader } from '@aztec/stdlib/tx';
-import { L1Metrics } from '@aztec/telemetry-client';
-
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
+import type { AvmSimulator } from '@aztec-labs/simulator/server';
+import { L2Block, type L2BlockSource, type L2BlockStreamEvent, type L2Tips } from '@aztec-labs/stdlib/block';
+import type { Checkpoint, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { EpochProverManager, ITxProvider, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { L1Metrics } from '@aztec-labs/telemetry-client';
 import { jest } from '@jest/globals';
 import { mock } from 'jest-mock-extended';
 

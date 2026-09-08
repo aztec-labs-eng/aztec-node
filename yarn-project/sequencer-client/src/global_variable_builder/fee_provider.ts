@@ -1,12 +1,12 @@
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import type { DateProvider } from '@aztec/foundation/timer';
-import { getNextL1SlotTimestamp } from '@aztec/stdlib/epoch-helpers';
-import { GasFees, ManaUsageEstimate } from '@aztec/stdlib/gas';
-import type { FeeProvider } from '@aztec/stdlib/tx';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import { getNextL1SlotTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
+import type { FeeProvider } from '@aztec-labs/stdlib/tx';
 
 import { FeePredictor } from './fee_predictor.js';
 import type { GlobalVariableBuilderConfig } from './global_builder.js';

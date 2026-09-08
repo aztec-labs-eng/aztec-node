@@ -1,4 +1,4 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { LogResult } from '../logs/log_result.js';
 import type { PrivateLogsQuery, PublicLogsQuery } from '../logs/logs_query.js';

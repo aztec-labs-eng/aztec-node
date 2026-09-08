@@ -1,12 +1,11 @@
-import type { Archiver } from '@aztec/archiver';
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { BlockNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-
+import type { Archiver } from '@aztec-labs/archiver';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

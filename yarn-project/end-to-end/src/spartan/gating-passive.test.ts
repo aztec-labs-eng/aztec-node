@@ -1,10 +1,9 @@
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { RollupCheatCodes } from '@aztec/aztec/testing';
-import { EthCheatCodesWithState } from '@aztec/ethereum/test';
-import { CheckpointNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { RollupCheatCodes } from '@aztec-labs/aztec/testing';
+import { EthCheatCodesWithState } from '@aztec-labs/ethereum/test';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import { expect, jest } from '@jest/globals';
 
 import { type AlertConfig, GrafanaClient } from '../quality_of_service/grafana_client.js';

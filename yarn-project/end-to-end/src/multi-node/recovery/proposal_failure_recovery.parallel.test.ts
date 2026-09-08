@@ -1,14 +1,13 @@
-import type { Archiver } from '@aztec/archiver';
-import type { AztecNodeService } from '@aztec/aztec-node';
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import type { Logger } from '@aztec/aztec.js/log';
-import { asyncMap } from '@aztec/foundation/async-map';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { timeoutPromise } from '@aztec/foundation/timer';
-import { type L2Block, L2BlockSourceEvents, type L2Tips } from '@aztec/stdlib/block';
-import { getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
-
+import type { Archiver } from '@aztec-labs/archiver';
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { asyncMap } from '@aztec-labs/foundation/async-map';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { timeoutPromise } from '@aztec-labs/foundation/timer';
+import { type L2Block, L2BlockSourceEvents, type L2Tips } from '@aztec-labs/stdlib/block';
+import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
 import {

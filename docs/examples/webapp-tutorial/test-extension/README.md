@@ -81,7 +81,7 @@ This compiles:
 
 ### Connect to a dApp
 
-1. Visit a dApp that uses `@aztec/wallet-sdk`
+1. Visit a dApp that uses `@aztec-labs/wallet-sdk`
 2. When the dApp calls `aztec.connect()`, a connection request appears
 3. Click the extension icon to see the pending approval
 4. Click "Connect" to approve

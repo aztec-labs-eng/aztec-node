@@ -1,7 +1,6 @@
-import { RollupContract } from '@aztec/ethereum/contracts';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jest } from '@jest/globals';
 import { createPublicClient, fallback, http } from 'viem';
 import { foundry } from 'viem/chains';

@@ -1,5 +1,5 @@
-import { EpochNumberSchema } from '@aztec/foundation/branded-types';
-import { createSafeJsonRpcClient } from '@aztec/foundation/json-rpc/client';
+import { EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
+import { createSafeJsonRpcClient } from '@aztec-labs/foundation/json-rpc/client';
 import {
   type GetProvingJobResponse,
   ProofUri,
@@ -10,12 +10,11 @@ import {
   ProvingJobId,
   type ProvingJobProducer,
   ProvingJobStatus,
-} from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
-import { type ApiSchemaFor, optional } from '@aztec/stdlib/schemas';
-import { type ComponentsVersions, getVersioningResponseHandler } from '@aztec/stdlib/versioning';
-import { makeTracedFetch } from '@aztec/telemetry-client';
-
+} from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
+import { type ApiSchemaFor, optional } from '@aztec-labs/stdlib/schemas';
+import { type ComponentsVersions, getVersioningResponseHandler } from '@aztec-labs/stdlib/versioning';
+import { makeTracedFetch } from '@aztec-labs/telemetry-client';
 import { z } from 'zod';
 
 /**

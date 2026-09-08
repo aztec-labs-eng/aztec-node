@@ -1,14 +1,14 @@
-import { getInitialTestAccountsData } from '@aztec/accounts/testing';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { WaitOpts } from '@aztec/aztec.js/contracts';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { TxStatus } from '@aztec/aztec.js/tx';
-import { AccountManager } from '@aztec/aztec.js/wallet';
-import { jsonStringify } from '@aztec/foundation/json-rpc';
-import type { LogFn } from '@aztec/foundation/log';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
-import { createFundedInitializerlessAccounts } from '@aztec/wallets/testing';
+import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { WaitOpts } from '@aztec-labs/aztec.js/contracts';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { TxStatus } from '@aztec-labs/aztec.js/tx';
+import { AccountManager } from '@aztec-labs/aztec.js/wallet';
+import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
+import { createFundedInitializerlessAccounts } from '@aztec-labs/wallets/testing';
 
 export async function setupL2Contracts(nodeUrl: string, testAccounts: boolean, json: boolean, log: LogFn) {
   const waitOpts: WaitOpts = {

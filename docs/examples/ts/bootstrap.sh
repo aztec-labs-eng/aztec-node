@@ -34,7 +34,7 @@ validate_config() {
         return 1
     fi
 
-    # Check contracts count (can be empty if using pre-built packages like @aztec/noir-contracts.js)
+    # Check contracts count (can be empty if using pre-built packages like @aztec-labs/noir-contracts.js)
     local contract_count
     contract_count="$(yq eval '.contracts | length' "$config_file")"
 
@@ -150,7 +150,7 @@ validate_project() {
         local npm_deps=("${NPM_DEPS[@]}")
 
         if [ "$PARSED_DEPS_FOUND" = true ]; then
-            # Install linked @aztec dependencies from yarn-project/
+            # Install linked @aztec-labs dependencies from yarn-project/
             if [ ${#aztec_deps[@]} -gt 0 ]; then
                 echo_stderr "Adding aztec deps: ${aztec_deps[*]}"
                 yarn add "${aztec_deps[@]}"
@@ -171,18 +171,18 @@ validate_project() {
             # Fallback to default dependencies if none specified
             echo_stderr "No dependencies in config.yaml, using defaults..."
             yarn add \
-                @aztec/aztec.js@link:$REPO_ROOT/yarn-project/aztec.js \
-                @aztec/accounts@link:$REPO_ROOT/yarn-project/accounts \
-                @aztec/wallets@link:$REPO_ROOT/yarn-project/wallets \
-                @aztec/kv-store@link:$REPO_ROOT/yarn-project/kv-store
+                @aztec-labs/aztec.js@link:$REPO_ROOT/yarn-project/aztec.js \
+                @aztec-labs/accounts@link:$REPO_ROOT/yarn-project/accounts \
+                @aztec-labs/wallets@link:$REPO_ROOT/yarn-project/wallets \
+                @aztec-labs/kv-store@link:$REPO_ROOT/yarn-project/kv-store
         fi
 
         # Verify linked packages exist and have built artifacts
         echo_stderr "Verifying linked packages..."
         for dep in "${aztec_deps[@]}"; do
-            # Extract package name from @aztec/foo@link:... format
-            local pkg_full=$(echo "$dep" | cut -d'@' -f2)  # aztec/foo
-            local pkg_name=${pkg_full#aztec/}  # foo
+            # Extract package name from @aztec-labs/foo@link:... format
+            local pkg_full=$(echo "$dep" | cut -d'@' -f2)  # aztec-labs/foo
+            local pkg_name=${pkg_full#aztec-labs/}  # foo
             local link_target="$REPO_ROOT/yarn-project/$pkg_name"
 
             if [ ! -d "$link_target" ]; then
@@ -204,12 +204,12 @@ validate_project() {
                 return 1
             fi
 
-            echo_stderr "  ✓ @aztec/$pkg_name: $dts_count .d.ts files"
+            echo_stderr "  ✓ @aztec-labs/$pkg_name: $dts_count .d.ts files"
         done
 
         # Verify explicit link packages
         for dep in "${explicit_link_deps[@]}"; do
-            # Extract path from @aztec/pkg@link:$REPO_ROOT/path format
+            # Extract path from @aztec-labs/pkg@link:$REPO_ROOT/path format
             local link_target="${dep#*@link:}"
             local pkg_name="${dep%%@link:*}"
 

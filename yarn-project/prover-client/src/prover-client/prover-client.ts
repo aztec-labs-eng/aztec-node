@@ -1,11 +1,11 @@
-import { type ACVMConfig, type BBConfig, BBNativeRollupProver, TestCircuitProver } from '@aztec/bb-prover';
-import type { EpochNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { SerialQueue } from '@aztec/foundation/queue';
-import { NativeACVMSimulator } from '@aztec/simulator/server';
+import { type ACVMConfig, type BBConfig, BBNativeRollupProver, TestCircuitProver } from '@aztec-labs/bb-prover';
+import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { NativeACVMSimulator } from '@aztec-labs/simulator/server';
 import {
   type ActualProverConfig,
   type EpochProverManager,
@@ -16,10 +16,10 @@ import {
   type ReadonlyWorldStateAccess,
   type ServerCircuitProver,
   tryStop,
-} from '@aztec/stdlib/interfaces/server';
-import type { CheckpointConstantData } from '@aztec/stdlib/rollup';
-import type { BlockHeader } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { CheckpointConstantData } from '@aztec-labs/stdlib/rollup';
+import type { BlockHeader } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import type { ProverClientConfig } from '../config.js';
 import { CheckpointSubTreeOrchestrator } from '../orchestrator/checkpoint-sub-tree-orchestrator.js';

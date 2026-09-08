@@ -3,7 +3,7 @@ import {
   getConfigFromMappings,
   numberConfigHelper,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
+} from '@aztec-labs/foundation/config';
 
 /** World State synchronizer configuration values. */
 export interface WorldStateConfig {

@@ -1,39 +1,39 @@
-import { Archiver } from '@aztec/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec/bb-prover';
-import { TestCircuitVerifier } from '@aztec/bb-prover/test';
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec/constants';
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { type L1ContractAddresses, pickL1ContractAddresses } from '@aztec/ethereum/l1-contract-addresses';
+import { Archiver } from '@aztec-labs/archiver';
+import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
+import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { type L1ContractAddresses, pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import {
   BlockNumber,
   CheckpointNumber,
   type CheckpointProposalHash,
   EpochNumber,
   SlotNumber,
-} from '@aztec/foundation/branded-types';
-import { compactArray, pick, unique } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { first } from '@aztec/foundation/iterable';
-import { BadRequestError } from '@aztec/foundation/json-rpc';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { count } from '@aztec/foundation/string';
-import { Timer } from '@aztec/foundation/timer';
-import { MembershipWitness, SiblingPath } from '@aztec/foundation/trees';
-import { KeystoreManager, loadKeystores, mergeKeystores } from '@aztec/node-keystore';
-import { uploadSnapshot } from '@aztec/node-lib/actions';
-import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getDefaultAllowedSetupFunctions } from '@aztec/p2p';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import type { ProverNode } from '@aztec/prover-node';
-import { SequencerClient } from '@aztec/sequencer-client';
-import { AutomineSequencer } from '@aztec/sequencer-client/automine';
-import type { AvmSimulator } from '@aztec/simulator/server';
-import type { SlasherClientInterface } from '@aztec/slasher';
-import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec/standard-contracts/multi-call-entrypoint';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
+} from '@aztec-labs/foundation/branded-types';
+import { compactArray, pick, unique } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { first } from '@aztec-labs/foundation/iterable';
+import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { count } from '@aztec-labs/foundation/string';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
+import { KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
+import { uploadSnapshot } from '@aztec-labs/node-lib/actions';
+import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getDefaultAllowedSetupFunctions } from '@aztec-labs/p2p';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import type { ProverNode } from '@aztec-labs/prover-node';
+import { SequencerClient } from '@aztec-labs/sequencer-client';
+import { AutomineSequencer } from '@aztec-labs/sequencer-client/automine';
+import type { AvmSimulator } from '@aztec-labs/simulator/server';
+import type { SlasherClientInterface } from '@aztec-labs/slasher';
+import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
@@ -44,16 +44,16 @@ import {
   type L2BlockTag,
   type L2Tips,
   inspectBlockParameter,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import type {
   ContractClassPublic,
   ContractDataSource,
   ContractInstanceWithAddress,
   NodeInfo,
   ProtocolContractAddresses,
-} from '@aztec/stdlib/contract';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import { GasFees, type ManaUsageEstimate, getNetworkTxGasLimits } from '@aztec/stdlib/gas';
+} from '@aztec-labs/stdlib/contract';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees, type ManaUsageEstimate, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   AztecNode,
   AztecNodeAdmin,
@@ -69,8 +69,8 @@ import type {
   GetTxByHashOptions,
   PeerInfo,
   ProposalsForSlot,
-} from '@aztec/stdlib/interfaces/client';
-import { AztecNodeAdminConfigSchema } from '@aztec/stdlib/interfaces/client';
+} from '@aztec-labs/stdlib/interfaces/client';
+import { AztecNodeAdminConfigSchema } from '@aztec-labs/stdlib/interfaces/client';
 import {
   type AllowedElement,
   type ClientProtocolCircuitVerifier,
@@ -79,13 +79,13 @@ import {
   type WorldStateSyncStatus,
   type WorldStateSynchronizer,
   tryStop,
-} from '@aztec/stdlib/interfaces/server';
-import type { DebugLogStore, LogResult, PrivateLogsQuery, PublicLogsQuery } from '@aztec/stdlib/logs';
-import { NullDebugLogStore } from '@aztec/stdlib/logs';
-import type { L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec/stdlib/messaging';
-import type { CheckpointAttestation } from '@aztec/stdlib/p2p';
-import type { Offense } from '@aztec/stdlib/slashing';
-import { MerkleTreeId, NullifierMembershipWitness, PublicDataWitness } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { DebugLogStore, LogResult, PrivateLogsQuery, PublicLogsQuery } from '@aztec-labs/stdlib/logs';
+import { NullDebugLogStore } from '@aztec-labs/stdlib/logs';
+import type { L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
+import type { CheckpointAttestation } from '@aztec-labs/stdlib/p2p';
+import type { Offense } from '@aztec-labs/stdlib/slashing';
+import { MerkleTreeId, NullifierMembershipWitness, PublicDataWitness } from '@aztec-labs/stdlib/trees';
 import {
   type FeeProvider,
   type GetTxReceiptOptions,
@@ -97,8 +97,8 @@ import {
   type TxHash,
   type TxReceipt,
   type TxValidationResult,
-} from '@aztec/stdlib/tx';
-import type { SingleValidatorStats, ValidatorsStats } from '@aztec/stdlib/validators';
+} from '@aztec-labs/stdlib/tx';
+import type { SingleValidatorStats, ValidatorsStats } from '@aztec-labs/stdlib/validators';
 import {
   Attributes,
   type TelemetryClient,
@@ -106,8 +106,8 @@ import {
   type Tracer,
   getTelemetryClient,
   trackSpan,
-} from '@aztec/telemetry-client';
-import { NodeKeystoreAdapter, ValidatorClient } from '@aztec/validator-client';
+} from '@aztec-labs/telemetry-client';
+import { NodeKeystoreAdapter, ValidatorClient } from '@aztec-labs/validator-client';
 
 import { NodeBlockProvider } from '../modules/node_block_provider.js';
 import { NodeTxReceiptBuilder } from '../modules/node_tx_receipt.js';

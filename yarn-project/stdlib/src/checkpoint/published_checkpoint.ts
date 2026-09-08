@@ -1,10 +1,9 @@
 // Ignoring import issue to fix portable inferred type issue in zod schema
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { randomBigInt } from '@aztec/foundation/crypto/random';
-import { schemas } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { randomBigInt } from '@aztec-labs/foundation/crypto/random';
+import { schemas } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { CommitteeAttestation } from '../block/proposal/committee_attestation.js';

@@ -1,11 +1,11 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { type FeePaymentMethod, PublicFeePaymentMethod } from '@aztec/aztec.js/fee';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { Logger } from '@aztec/foundation/log';
-import type { FPCContract } from '@aztec/noir-contracts.js/FPC';
-import { TokenContract as BananaCoin } from '@aztec/noir-contracts.js/Token';
-import { SequencerState } from '@aztec/sequencer-client';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { type FeePaymentMethod, PublicFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
+import { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
+import { SequencerState } from '@aztec-labs/sequencer-client';
 import {
   GAS_ESTIMATION_DA_GAS_LIMIT,
   GAS_ESTIMATION_L2_GAS_LIMIT,
@@ -15,9 +15,8 @@ import {
   GasFees,
   GasSettings,
   type GasUsed,
-} from '@aztec/stdlib/gas';
-import { getGasLimits } from '@aztec/wallet-sdk/base-wallet';
-
+} from '@aztec-labs/stdlib/gas';
+import { getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
 import { jest } from '@jest/globals';
 import { inspect } from 'util';
 

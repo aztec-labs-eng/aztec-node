@@ -1,10 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   BufferReader,
   type BufferSink,
   serializeArrayOfBufferableToVector,
   serializeArrayToSink,
-} from '@aztec/foundation/serialize';
+} from '@aztec-labs/foundation/serialize';
 
 import { schemas } from '../schemas/index.js';
 

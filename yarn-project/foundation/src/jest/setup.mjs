@@ -1,6 +1,5 @@
-import { parseBooleanEnv } from '@aztec/foundation/config';
-import { overwriteLoggingStream, pinoPrettyOpts } from '@aztec/foundation/log';
-
+import { parseBooleanEnv } from '@aztec-labs/foundation/config';
+import { overwriteLoggingStream, pinoPrettyOpts } from '@aztec-labs/foundation/log';
 import pretty from 'pino-pretty';
 
 // Overwrite logging stream with pino-pretty. We define this as a separate

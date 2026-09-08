@@ -1,10 +1,10 @@
 /**
- * The `@aztec/accounts/testing/lazy` export provides utility methods for testing, in particular in a local network environment.
+ * The `@aztec-labs/accounts/testing/lazy` export provides utility methods for testing, in particular in a local network environment.
  *
  * @packageDocumentation
  */
-import { Fr } from '@aztec/aztec.js/fields';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 
 import { getSchnorrInitializerlessAccountContractAddress } from '../schnorr/initializerless/lazy.js';
 import { getSchnorrAccountContractAddress } from '../schnorr/private_immutable/lazy.js';

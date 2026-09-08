@@ -1,11 +1,11 @@
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import {
   AztecSQLiteOPFSStore,
   SqliteCorruptionError,
   deleteStore,
   storePoolDirectory,
-} from '@aztec/kv-store/sqlite-opfs';
+} from '@aztec-labs/kv-store/sqlite-opfs';
 
 import { assertStoreIdentity, effectiveStoreName } from '../../storage/store_identity.js';
 

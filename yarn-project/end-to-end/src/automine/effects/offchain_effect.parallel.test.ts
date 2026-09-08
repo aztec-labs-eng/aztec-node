@@ -1,8 +1,7 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { OffchainEffectContract, type TestEvent } from '@aztec/noir-test-contracts.js/OffchainEffect';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { OffchainEffectContract, type TestEvent } from '@aztec-labs/noir-test-contracts.js/OffchainEffect';
 import { jest } from '@jest/globals';
 
 import type { TestWallet } from '../../test-wallet/test_wallet.js';

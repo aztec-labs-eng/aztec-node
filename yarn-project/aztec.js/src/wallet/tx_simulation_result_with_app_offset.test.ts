@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import { NestedProcessReturnValues, PrivateExecutionResult } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import { NestedProcessReturnValues, PrivateExecutionResult } from '@aztec-labs/stdlib/tx';
 
 import { TxSimulationResultWithAppOffset } from './tx_simulation_result_with_app_offset.js';
 

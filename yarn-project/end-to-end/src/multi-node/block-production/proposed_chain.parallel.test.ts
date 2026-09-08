@@ -1,7 +1,7 @@
-import { Fr } from '@aztec/aztec.js/fields';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { TxStatus } from '@aztec/stdlib/tx';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { TxStatus } from '@aztec-labs/stdlib/tx';
 
 import { proveAndSendTxs, proveInteraction } from '../../test-wallet/utils.js';
 import {

@@ -1,14 +1,14 @@
-import type { OutboxContract } from '@aztec/ethereum/contracts';
-import type { BlockNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { chunkBy } from '@aztec/foundation/collection';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { L2Block } from '@aztec/stdlib/block';
-import type { CheckpointData } from '@aztec/stdlib/checkpoint';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
-import { type L2ToL1MembershipWitness, computeL2ToL1MembershipWitness } from '@aztec/stdlib/messaging';
-import type { IndexedTxEffect, TxHash } from '@aztec/stdlib/tx';
+import type { OutboxContract } from '@aztec-labs/ethereum/contracts';
+import type { BlockNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { chunkBy } from '@aztec-labs/foundation/collection';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import type { CheckpointData } from '@aztec-labs/stdlib/checkpoint';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { type L2ToL1MembershipWitness, computeL2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
+import type { IndexedTxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 
 /**
  * Archiver-side view of the data the resolver needs to assemble a witness. The archiver implements

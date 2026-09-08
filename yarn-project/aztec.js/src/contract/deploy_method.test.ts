@@ -1,9 +1,8 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { getContractInstanceFromInstantiationParams } from '@aztec/stdlib/contract';
-import { Gas } from '@aztec/stdlib/gas';
-import { OFFCHAIN_MESSAGE_IDENTIFIER, type OffchainEffect } from '@aztec/stdlib/tx';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/stdlib/contract';
+import { Gas } from '@aztec-labs/stdlib/gas';
+import { OFFCHAIN_MESSAGE_IDENTIFIER, type OffchainEffect } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { testContractArtifact } from '../test/fixtures.js';

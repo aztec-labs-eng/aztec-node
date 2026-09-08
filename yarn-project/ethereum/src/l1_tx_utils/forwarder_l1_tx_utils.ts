@@ -1,8 +1,7 @@
-import type { BlobKzgInstance } from '@aztec/blob-lib/types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import type { DateProvider } from '@aztec/foundation/timer';
-
+import type { BlobKzgInstance } from '@aztec-labs/blob-lib/types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
 import { type Hex, encodeFunctionData } from 'viem';
 
 import { FORWARDER_ABI } from '../forwarder_proxy.js';

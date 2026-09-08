@@ -1,14 +1,13 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { MerkleTreeId } from '@aztec/aztec.js/trees';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { CheatCodes } from '@aztec/aztec/testing';
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import type { AztecNode, AztecNodeDebug } from '@aztec/stdlib/interfaces/client';
-
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { CheatCodes } from '@aztec-labs/aztec/testing';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import type { AztecNode, AztecNodeDebug } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
 
 import { AutomineTestContext } from '../automine_test_context.js';

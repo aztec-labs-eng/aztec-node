@@ -1,7 +1,7 @@
-import { Poseidon2Sponge } from '@aztec/blob-lib/types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, FieldReader, serializeToBuffer, serializeToFields } from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
+import { Poseidon2Sponge } from '@aztec-labs/blob-lib/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, FieldReader, serializeToBuffer, serializeToFields } from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 /**
  * An absorb-only Poseidon2 sponge over L1-to-L2 message leaves.

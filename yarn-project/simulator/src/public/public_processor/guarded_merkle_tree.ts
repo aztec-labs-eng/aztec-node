@@ -1,6 +1,6 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import { SerialQueue } from '@aztec/foundation/queue';
-import type { IndexedTreeLeafPreimage, SiblingPath } from '@aztec/foundation/trees';
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import type { IndexedTreeLeafPreimage, SiblingPath } from '@aztec-labs/foundation/trees';
 import type {
   BatchInsertionResult,
   IndexedTreeId,
@@ -10,9 +10,9 @@ import type {
   SequentialInsertionResult,
   TreeHeights,
   TreeInfo,
-} from '@aztec/stdlib/trees';
-import type { BlockHeader, StateReference } from '@aztec/stdlib/tx';
-import type { WorldStateRevision } from '@aztec/stdlib/world-state';
+} from '@aztec-labs/stdlib/trees';
+import type { BlockHeader, StateReference } from '@aztec-labs/stdlib/tx';
+import type { WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 
 /**
  * Wraps an instance of `MerkleTreeWriteOperations` to allow the sequencer to gate access.

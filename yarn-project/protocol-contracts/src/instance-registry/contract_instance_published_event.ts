@@ -1,9 +1,9 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader } from '@aztec/foundation/serialize';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
-import { PublicKeys } from '@aztec/stdlib/keys';
-import type { PrivateLog } from '@aztec/stdlib/logs';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader } from '@aztec-labs/foundation/serialize';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
+import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import type { PrivateLog } from '@aztec-labs/stdlib/logs';
 
 import { CONTRACT_INSTANCE_PUBLISHED_EVENT_TAG } from '../protocol_contract_data.js';
 

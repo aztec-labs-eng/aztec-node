@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/accounts",
+  "name": "@aztec-labs/accounts",
   "homepage": "https://github.com/AztecProtocol/aztec-packages/tree/master/yarn-project/accounts",
   "description": "Implementation of sample account contracts for Aztec Network",
   "version": "0.1.0",
@@ -79,10 +79,10 @@
     ]
   },
   "dependencies": {
-    "@aztec/aztec.js": "workspace:^",
-    "@aztec/entrypoints": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
+    "@aztec-labs/aztec.js": "workspace:^",
+    "@aztec-labs/entrypoints": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
     "tslib": "^2.4.0"
   },
   "devDependencies": {

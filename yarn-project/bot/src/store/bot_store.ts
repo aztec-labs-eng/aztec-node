@@ -1,9 +1,9 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { L2AmountClaim } from '@aztec/aztec.js/ethereum';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { L2AmountClaim } from '@aztec-labs/aztec.js/ethereum';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 
 export interface BridgeClaimData {
   claim: L2AmountClaim;

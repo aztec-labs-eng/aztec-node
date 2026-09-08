@@ -1,4 +1,4 @@
-import { type LoggerBindings, createLogger } from '@aztec/foundation/log';
+import { type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 
 import type { TelemetryClientConfig } from './config.js';
 import { NoopTelemetryClient } from './noop.js';

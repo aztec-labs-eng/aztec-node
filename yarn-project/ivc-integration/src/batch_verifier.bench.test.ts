@@ -4,10 +4,9 @@
  * Uses pinned IVC inputs from chonk-pinned-flows, proves a representative transaction,
  * then benchmarks batch verification throughput at various configurations.
  */
-import { BatchChonkVerifier } from '@aztec/bb-prover';
-import { createLogger } from '@aztec/foundation/log';
-import { ProtocolCircuitVks } from '@aztec/noir-protocol-circuits-types/server/vks';
-
+import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import { jest } from '@jest/globals';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';

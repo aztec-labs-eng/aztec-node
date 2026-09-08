@@ -1,16 +1,16 @@
-import { type BotConfig, BotRunner, BotStore, botConfigMappings, getBotRunnerApiHandler } from '@aztec/bot';
-import type { NamespacedApiHandlers } from '@aztec/foundation/json-rpc/server';
-import type { LogFn } from '@aztec/foundation/log';
-import { createStore, openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { type CliPXEOptions, type PXEConfig, allPxeConfigMappings } from '@aztec/pxe/config';
-import { type AztecNode, type AztecNodeAdmin, createAztecNodeClient } from '@aztec/stdlib/interfaces/client';
-import type { TelemetryClient } from '@aztec/telemetry-client';
+import { type BotConfig, BotRunner, BotStore, botConfigMappings, getBotRunnerApiHandler } from '@aztec-labs/bot';
+import type { NamespacedApiHandlers } from '@aztec-labs/foundation/json-rpc/server';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { createStore, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { type CliPXEOptions, type PXEConfig, allPxeConfigMappings } from '@aztec-labs/pxe/config';
+import { type AztecNode, type AztecNodeAdmin, createAztecNodeClient } from '@aztec-labs/stdlib/interfaces/client';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import {
   getConfigEnvVars as getTelemetryClientConfig,
   initTelemetryClient,
   makeTracedFetch,
-} from '@aztec/telemetry-client';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+} from '@aztec-labs/telemetry-client';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { extractRelevantOptions, stringifyConfig } from '../util.js';
 import { getVersions } from '../versioning.js';

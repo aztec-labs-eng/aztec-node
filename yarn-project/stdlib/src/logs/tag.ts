@@ -1,6 +1,6 @@
-import { poseidon2Hash } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ZodFor } from '@aztec/foundation/schemas';
+import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
 
 import { schemas } from '../schemas/schemas.js';
 import type { PreTag } from './pre_tag.js';

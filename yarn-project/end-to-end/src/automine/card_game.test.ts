@@ -1,13 +1,12 @@
-import { generateSchnorrAccounts } from '@aztec/accounts/testing';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { GrumpkinScalar } from '@aztec/aztec.js/fields';
-import { computeAppNullifierHidingKey, deriveMasterNullifierHidingSecretKey } from '@aztec/aztec.js/keys';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { toBufferLE } from '@aztec/foundation/bigint-buffer';
-import { sha256 } from '@aztec/foundation/crypto/sha256';
-import { CardGameContract } from '@aztec/noir-contracts.js/CardGame';
-
+import { generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { GrumpkinScalar } from '@aztec-labs/aztec.js/fields';
+import { computeAppNullifierHidingKey, deriveMasterNullifierHidingSecretKey } from '@aztec-labs/aztec.js/keys';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { toBufferLE } from '@aztec-labs/foundation/bigint-buffer';
+import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
+import { CardGameContract } from '@aztec-labs/noir-contracts.js/CardGame';
 import { jest } from '@jest/globals';
 
 import type { TestWallet } from '../test-wallet/test_wallet.js';

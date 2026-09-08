@@ -1,6 +1,5 @@
-import type { Logger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-
+import type { Logger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { ViemPublicClient } from '../types.js';

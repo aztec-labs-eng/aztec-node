@@ -1,9 +1,8 @@
-import type { BlockNumber } from '@aztec/foundation/branded-types';
-import type { L2Block } from '@aztec/stdlib/block';
-import type { ITxProvider } from '@aztec/stdlib/interfaces/server';
-import type { BlockProposal } from '@aztec/stdlib/p2p';
-import { type Tx, TxHash } from '@aztec/stdlib/tx';
-
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import type { ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
+import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
+import { type Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 /**

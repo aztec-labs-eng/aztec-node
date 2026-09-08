@@ -1,9 +1,9 @@
-import { AVM_V2_PROOF_LENGTH_IN_FIELDS, NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec/constants';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { getVkData } from '@aztec/noir-protocol-circuits-types/server/vks';
-import type { AvmCircuitInputs } from '@aztec/stdlib/avm';
-import type { PublicInputsAndRecursiveProof } from '@aztec/stdlib/interfaces/server';
-import { ProofData, ProofDataForFixedVk, RecursiveProof } from '@aztec/stdlib/proofs';
+import { AVM_V2_PROOF_LENGTH_IN_FIELDS, NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec-labs/constants';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { getVkData } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import type { AvmCircuitInputs } from '@aztec-labs/stdlib/avm';
+import type { PublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import { ProofData, ProofDataForFixedVk, RecursiveProof } from '@aztec-labs/stdlib/proofs';
 import {
   type BaseRollupHints,
   PrivateBaseRollupHints,
@@ -11,10 +11,10 @@ import {
   PublicBaseRollupHints,
   PublicChonkVerifierPublicInputs,
   PublicTxBaseRollupPrivateInputs,
-} from '@aztec/stdlib/rollup';
-import type { CircuitName } from '@aztec/stdlib/stats';
-import type { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec/stdlib/trees';
-import type { ProcessedTx } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/rollup';
+import type { CircuitName } from '@aztec-labs/stdlib/stats';
+import type { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import type { ProcessedTx } from '@aztec-labs/stdlib/tx';
 
 import {
   getChonkProofFromTx,

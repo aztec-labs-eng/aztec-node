@@ -1,4 +1,4 @@
-import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec/foundation/config';
+import { type ConfigMappingsType, booleanConfigHelper, numberConfigHelper } from '@aztec-labs/foundation/config';
 
 import { DEFAULT_MAX_DEBUG_LOG_MEMORY_READS } from '../avm/avm.js';
 

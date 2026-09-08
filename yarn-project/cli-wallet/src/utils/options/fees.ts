@@ -1,13 +1,12 @@
-import type { FeePaymentMethod } from '@aztec/aztec.js/fee';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { LogFn } from '@aztec/foundation/log';
-import type { FieldsOf } from '@aztec/foundation/types';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { Gas, GasFees, GasSettings, ManaUsageEstimate } from '@aztec/stdlib/gas';
-import type { FeeOptions } from '@aztec/wallet-sdk/base-wallet';
-
+import type { FeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Gas, GasFees, GasSettings, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
+import type { FeeOptions } from '@aztec-labs/wallet-sdk/base-wallet';
 import { Option } from 'commander';
 
 import type { WalletDB } from '../../storage/wallet_db.js';
@@ -155,7 +154,7 @@ export function parsePaymentMethod(
             ({ claimAmount, claimSecret, messageLeafIndex } = parsed);
           }
           log(`Using Fee Juice for fee payments with claim for ${claimAmount} tokens`);
-          const { FeeJuicePaymentMethodWithClaim } = await import('@aztec/aztec.js/fee');
+          const { FeeJuicePaymentMethodWithClaim } = await import('@aztec-labs/aztec.js/fee');
           return new FeeJuicePaymentMethodWithClaim(from, {
             claimAmount: (typeof claimAmount === 'string'
               ? Fr.fromString(claimAmount)
@@ -176,7 +175,7 @@ export function parsePaymentMethod(
           `WARNING: fpc-public is deprecated and will not work on mainnet alpha. Use fee_juice or fpc-sponsored instead.`,
         );
         log(`Using public fee payment with asset ${asset} via paymaster ${fpc}`);
-        const { PublicFeePaymentMethod } = await import('@aztec/aztec.js/fee');
+        const { PublicFeePaymentMethod } = await import('@aztec-labs/aztec.js/fee');
         return new PublicFeePaymentMethod(fpc, from, wallet, gasSettings);
       }
       case 'fpc-private': {
@@ -186,13 +185,13 @@ export function parsePaymentMethod(
           `WARNING: fpc-private is deprecated and will not work on mainnet alpha. Use fee_juice or fpc-sponsored instead.`,
         );
         log(`Using private fee payment with asset ${asset} via paymaster ${fpc}`);
-        const { PrivateFeePaymentMethod } = await import('@aztec/aztec.js/fee');
+        const { PrivateFeePaymentMethod } = await import('@aztec-labs/aztec.js/fee');
         return new PrivateFeePaymentMethod(fpc, from, wallet, gasSettings);
       }
       case 'fpc-sponsored': {
         const sponsor = getFpc();
         log(`Using sponsored fee payment with sponsor ${sponsor}`);
-        const { SponsoredFeePaymentMethod } = await import('@aztec/aztec.js/fee/testing');
+        const { SponsoredFeePaymentMethod } = await import('@aztec-labs/aztec.js/fee/testing');
         return new SponsoredFeePaymentMethod(sponsor);
       }
       case undefined:

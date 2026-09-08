@@ -1,4 +1,4 @@
-import type { ContractArtifact } from '@aztec/stdlib/abi';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
 
 import { ContractClassRegistryArtifact } from '../class-registry/index.js';
 import { FeeJuiceArtifact } from '../fee-juice/index.js';

@@ -1,37 +1,37 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { EpochCache } from '@aztec/epoch-cache';
-import { InboxContract, type InboxContractState, RollupContract } from '@aztec/ethereum/contracts';
-import type { L1BlockId } from '@aztec/ethereum/l1-types';
-import { getFinalizedL1Block } from '@aztec/ethereum/queries';
-import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec/ethereum/types';
-import { asyncPool } from '@aztec/foundation/async-pool';
-import { maxBigint } from '@aztec/foundation/bigint';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { compactArray, partition, pick } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { retryTimes } from '@aztec/foundation/retry';
-import { count } from '@aztec/foundation/string';
-import { DateProvider, Timer, elapsed } from '@aztec/foundation/timer';
-import { isDefined, isErrorClass } from '@aztec/foundation/types';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { InboxContract, type InboxContractState, RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { L1BlockId } from '@aztec-labs/ethereum/l1-types';
+import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
+import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
+import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { maxBigint } from '@aztec-labs/foundation/bigint';
+import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { compactArray, partition, pick } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { retryTimes } from '@aztec-labs/foundation/retry';
+import { count } from '@aztec-labs/foundation/string';
+import { DateProvider, Timer, elapsed } from '@aztec-labs/foundation/timer';
+import { isDefined, isErrorClass } from '@aztec-labs/foundation/types';
 import {
   type ArchiverEmitter,
   type L2Block,
   L2BlockSourceEvents,
   type ValidateCheckpointResult,
-} from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
   type CheckpointData,
   type CheckpointInfo,
   type L1PublishedData,
   PublishedCheckpoint,
-} from '@aztec/stdlib/checkpoint';
-import { type L1RollupConstants, getEpochAtSlot, getSlotAtNextL1Block } from '@aztec/stdlib/epoch-helpers';
-import type { CoordinationSignatureContext } from '@aztec/stdlib/p2p';
-import { type Traceable, type Tracer, execInSpan, trackSpan } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/checkpoint';
+import { type L1RollupConstants, getEpochAtSlot, getSlotAtNextL1Block } from '@aztec-labs/stdlib/epoch-helpers';
+import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import { type Traceable, type Tracer, execInSpan, trackSpan } from '@aztec-labs/telemetry-client';
 
 import { InitialCheckpointNumberNotSequentialError } from '../errors.js';
 import {

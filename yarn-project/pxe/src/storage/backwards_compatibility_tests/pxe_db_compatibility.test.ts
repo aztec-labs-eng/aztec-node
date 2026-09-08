@@ -1,11 +1,10 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { KeyStore } from '@aztec/key-store';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { GENESIS_BLOCK_HEADER_HASH } from '@aztec/stdlib/block';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { KeyStore } from '@aztec-labs/key-store';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { GENESIS_BLOCK_HEADER_HASH } from '@aztec-labs/stdlib/block';
 import { mkdtemp, rm } from 'fs/promises';
 import { toMatchFile } from 'jest-file-snapshot';
 import { tmpdir } from 'os';
@@ -93,7 +92,7 @@ function compatibilityTestGuidance(name: string): string {
       '         the new sub-store starts empty for pre-existing DBs and is populated as new events arrive):',
       '         leave PXE_DATA_SCHEMA_VERSION alone, but document the reasoning in the commit/PR description.',
       '  2. Regenerate ONLY the inventory snapshot (opened_stores.json). From the yarn-project directory, run:',
-      "         yarn workspace @aztec/pxe test src/storage/backwards_compatibility_tests/pxe_db_compatibility.test.ts -u -t 'opens the expected set of stores'",
+      "         yarn workspace @aztec-labs/pxe test src/storage/backwards_compatibility_tests/pxe_db_compatibility.test.ts -u -t 'opens the expected set of stores'",
       "     The `-u` flag is Jest's --updateSnapshot; the `-t '<pattern>'` flag scopes the update to the matching",
       '     test. Without `-t`, this command would also rewrite any per-store snapshots that happened to have drifted',
       '     in the same change, masking unrelated regressions under your intentional inventory change.',
@@ -122,7 +121,7 @@ function compatibilityTestGuidance(name: string): string {
     '     If READ-DEFAULTABLE: leave PXE_DATA_SCHEMA_VERSION alone, but document the reasoning in the',
     '     commit/PR description (which fallback applies, where, and what state pre-upgrade DBs converge to).',
     `  3. Regenerate ONLY ${name}.json. From the yarn-project directory, run:`,
-    `         yarn workspace @aztec/pxe test src/storage/backwards_compatibility_tests/pxe_db_compatibility.test.ts -u -t '${name} compatibility test'`,
+    `         yarn workspace @aztec-labs/pxe test src/storage/backwards_compatibility_tests/pxe_db_compatibility.test.ts -u -t '${name} compatibility test'`,
     "     The `-u` flag is Jest's --updateSnapshot; the `-t '<pattern>'` flag scopes the update to the matching",
     '     test. Without `-t`, the command would also rewrite any other per-store snapshots that happened to have',
     `     drifted in the same change, masking unrelated regressions under your intentional ${name} change.`,
@@ -284,7 +283,7 @@ describe('PXE storage compatibility test suite', () => {
           '     Use snapshotMap / snapshotArray / snapshotSingleton according to the sub-store',
           '     kind shown above (`map:`, `multimap:`, `array:`, `singleton:`).',
           '  3. Regenerate ONLY the affected per-store snapshot. From the yarn-project directory, run:',
-          "         yarn workspace @aztec/pxe test src/storage/backwards_compatibility_tests/pxe_db_compatibility.test.ts -u -t '<StoreName> compatibility test'",
+          "         yarn workspace @aztec-labs/pxe test src/storage/backwards_compatibility_tests/pxe_db_compatibility.test.ts -u -t '<StoreName> compatibility test'",
           '     (Replace <StoreName> with the store class name from step 1.) The newly-fingerprinted sub-store',
           "     will appear as an additional key in the regenerated <StoreName>.json. The `-t '<pattern>'` flag",
           '     keeps the update surgical so unrelated drift does not get accepted alongside your fix.',

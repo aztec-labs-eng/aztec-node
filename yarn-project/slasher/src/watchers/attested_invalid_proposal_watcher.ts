@@ -1,15 +1,14 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { merge, pick } from '@aztec/foundation/collection';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { FifoSet } from '@aztec/foundation/fifo-set';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { P2PClient, SlasherConfig } from '@aztec/stdlib/interfaces/server';
-import type { CheckpointAttestation } from '@aztec/stdlib/p2p';
-import { OffenseType, getOffenseTypeName } from '@aztec/stdlib/slashing';
-
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { merge, pick } from '@aztec-labs/foundation/collection';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { FifoSet } from '@aztec-labs/foundation/fifo-set';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { P2PClient, SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import type { CheckpointAttestation } from '@aztec-labs/stdlib/p2p';
+import { OffenseType, getOffenseTypeName } from '@aztec-labs/stdlib/slashing';
 import EventEmitter from 'node:events';
 
 import { WANT_TO_SLASH_EVENT, type WantToSlashArgs, type Watcher, type WatcherEmitter } from '../watcher.js';

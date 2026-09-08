@@ -1,17 +1,17 @@
-import type { Archiver } from '@aztec/archiver';
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import type { Delayer } from '@aztec/ethereum/l1-tx-utils';
-import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { assertRequired, compact, pick } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { memoize } from '@aztec/foundation/decorators';
-import { createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import { DateProvider, executeTimeout } from '@aztec/foundation/timer';
-import type { EpochProverFactory } from '@aztec/prover-client';
-import { getLastSiblingPath } from '@aztec/prover-client/helpers';
-import { ChonkCache } from '@aztec/prover-client/orchestrator';
-import { type AvmSimulator, PublicProcessorFactory } from '@aztec/simulator/server';
+import type { Archiver } from '@aztec-labs/archiver';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { assertRequired, compact, pick } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { memoize } from '@aztec-labs/foundation/decorators';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { DateProvider, executeTimeout } from '@aztec-labs/foundation/timer';
+import type { EpochProverFactory } from '@aztec-labs/prover-client';
+import { getLastSiblingPath } from '@aztec-labs/prover-client/helpers';
+import { ChonkCache } from '@aztec-labs/prover-client/orchestrator';
+import { type AvmSimulator, PublicProcessorFactory } from '@aztec-labs/simulator/server';
 import {
   EventDrivenL2BlockStream,
   type L2BlockId,
@@ -19,11 +19,15 @@ import {
   type L2BlockStreamEvent,
   type L2BlockStreamEventHandler,
   L2TipsMemoryStore,
-} from '@aztec/stdlib/block';
-import type { Checkpoint, PublishedCheckpoint } from '@aztec/stdlib/checkpoint';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { type L1RollupConstants, getEpochAtSlot, getProofSubmissionDeadlineEpoch } from '@aztec/stdlib/epoch-helpers';
+} from '@aztec-labs/stdlib/block';
+import type { Checkpoint, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import {
+  type L1RollupConstants,
+  getEpochAtSlot,
+  getProofSubmissionDeadlineEpoch,
+} from '@aztec-labs/stdlib/epoch-helpers';
 import {
   type EpochProverManager,
   type EpochProvingJobState,
@@ -33,17 +37,17 @@ import {
   type Service,
   type WorldStateSynchronizer,
   tryStop,
-} from '@aztec/stdlib/interfaces/server';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
-import type { L1ToL2MessageSource } from '@aztec/stdlib/messaging';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   L1Metrics,
   type TelemetryClient,
   type Traceable,
   type Tracer,
   getTelemetryClient,
-} from '@aztec/telemetry-client';
+} from '@aztec-labs/telemetry-client';
 
 import { uploadEpochProofFailure } from './actions/upload-epoch-proof-failure.js';
 import { CheckpointStore, type RegisterCheckpointData } from './checkpoint-store.js';

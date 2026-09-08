@@ -4,8 +4,7 @@ import {
   type TelemetryClient,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { formatEther } from 'viem/utils';
 
 export class SlasherMetrics {

@@ -1,9 +1,9 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { SponsoredFeePaymentMethod } from '@aztec/aztec.js/fee';
-import { Fr } from '@aztec/aztec.js/fields';
-import { SPONSORED_FPC_SALT } from '@aztec/constants';
-import type { PXE } from '@aztec/pxe/server';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
+import type { PXE } from '@aztec-labs/pxe/server';
 
 // docs:start:get-sponsored-fpc
 /**
@@ -13,7 +13,7 @@ import type { PXE } from '@aztec/pxe/server';
  */
 export async function getSponsoredFPCContract() {
   const { SponsoredFPCContractArtifact } = await import(
-    '@aztec/noir-contracts.js/SponsoredFPC'
+    '@aztec-labs/noir-contracts.js/SponsoredFPC'
   );
   const instance = await getContractInstanceFromInstantiationParams(
     SponsoredFPCContractArtifact,

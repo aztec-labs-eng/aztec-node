@@ -1,33 +1,33 @@
-import { EcdsaKAccountContract, EcdsaRAccountContract, EcdsaRSSHAccountContract } from '@aztec/accounts/ecdsa';
-import { StubEcdsaAccountContractArtifact, createStubEcdsaAccount } from '@aztec/accounts/ecdsa/stub';
-import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec/accounts/schnorr';
-import { StubSchnorrAccountContractArtifact, createStubSchnorrAccount } from '@aztec/accounts/schnorr/stub';
-import { getIdentities } from '@aztec/accounts/utils';
-import { type Account, type AccountContract, NO_FROM } from '@aztec/aztec.js/account';
+import { EcdsaKAccountContract, EcdsaRAccountContract, EcdsaRSSHAccountContract } from '@aztec-labs/accounts/ecdsa';
+import { StubEcdsaAccountContractArtifact, createStubEcdsaAccount } from '@aztec-labs/accounts/ecdsa/stub';
+import { SchnorrAccountContract, SchnorrInitializerlessAccountContract } from '@aztec-labs/accounts/schnorr';
+import { StubSchnorrAccountContractArtifact, createStubSchnorrAccount } from '@aztec-labs/accounts/schnorr/stub';
+import { getIdentities } from '@aztec-labs/accounts/utils';
+import { type Account, type AccountContract, NO_FROM } from '@aztec-labs/aztec.js/account';
 import {
   ContractFunctionInteraction,
   type InteractionFeeOptions,
   getContractClassFromArtifact,
-} from '@aztec/aztec.js/contracts';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { AccountManager, type Aliased } from '@aztec/aztec.js/wallet';
-import { TxSimulationResultWithAppOffset } from '@aztec/aztec.js/wallet';
-import type { DefaultAccountEntrypointOptions } from '@aztec/entrypoints/account';
-import { DefaultEntrypoint } from '@aztec/entrypoints/default';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import type { LogFn } from '@aztec/foundation/log';
-import type { NotesFilter } from '@aztec/pxe/client/lazy';
-import type { PXEConfig } from '@aztec/pxe/config';
-import type { PXE } from '@aztec/pxe/server';
-import { createPXE, getPXEConfig } from '@aztec/pxe/server';
-import { getStandardAuthRegistry } from '@aztec/standard-contracts/auth-registry';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { Gas, GasUsed } from '@aztec/stdlib/gas';
-import { NoteDao } from '@aztec/stdlib/note';
-import type { SimulationOverrides, TxExecutionRequest, TxProvingResult } from '@aztec/stdlib/tx';
-import { ExecutionPayload, mergeExecutionPayloads } from '@aztec/stdlib/tx';
-import { BaseWallet, type SimulateViaEntrypointOptions, getGasLimits } from '@aztec/wallet-sdk/base-wallet';
+} from '@aztec-labs/aztec.js/contracts';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { AccountManager, type Aliased } from '@aztec-labs/aztec.js/wallet';
+import { TxSimulationResultWithAppOffset } from '@aztec-labs/aztec.js/wallet';
+import type { DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
+import { DefaultEntrypoint } from '@aztec-labs/entrypoints/default';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import type { NotesFilter } from '@aztec-labs/pxe/client/lazy';
+import type { PXEConfig } from '@aztec-labs/pxe/config';
+import type { PXE } from '@aztec-labs/pxe/server';
+import { createPXE, getPXEConfig } from '@aztec-labs/pxe/server';
+import { getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { Gas, GasUsed } from '@aztec-labs/stdlib/gas';
+import { NoteDao } from '@aztec-labs/stdlib/note';
+import type { SimulationOverrides, TxExecutionRequest, TxProvingResult } from '@aztec-labs/stdlib/tx';
+import { ExecutionPayload, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
+import { BaseWallet, type SimulateViaEntrypointOptions, getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
 
 import type { WalletDB } from '../storage/wallet_db.js';
 import type { AccountType } from './constants.js';

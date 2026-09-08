@@ -1,14 +1,14 @@
-import { BBNativeRollupProver, type BBProverConfig } from '@aztec/bb-prover';
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK, PAIRING_POINTS_SIZE } from '@aztec/constants';
-import { EpochNumber } from '@aztec/foundation/branded-types';
-import { timesAsync } from '@aztec/foundation/collection';
-import { parseBooleanEnv } from '@aztec/foundation/config';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { getTestData, isGenerateTestDataEnabled } from '@aztec/foundation/testing';
-import { writeTestData } from '@aztec/foundation/testing/files';
-import { getTelemetryClient } from '@aztec/telemetry-client';
+import { BBNativeRollupProver, type BBProverConfig } from '@aztec-labs/bb-prover';
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK, PAIRING_POINTS_SIZE } from '@aztec-labs/constants';
+import { EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { timesAsync } from '@aztec-labs/foundation/collection';
+import { parseBooleanEnv } from '@aztec-labs/foundation/config';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { isGenerateTestDataEnabled } from '@aztec-labs/foundation/testing';
+import { writeTestData } from '@aztec-labs/foundation/testing/files';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from '../orchestrator/checkpoint-sub-tree-orchestrator.js';
@@ -123,19 +123,25 @@ describe('prover/bb_prover/full-rollup', () => {
           await topTree.stop();
         }
 
+        // Generate test data for the 1/1 blocks epoch scenario. This has to run before the pairing point
+        // hack below mutates numPublicInputs, since integration_proof_verification.test.ts consumes the
+        // dump with the full public input count and subtracts the pairing points itself. Only a native
+        // prover may write it: under FAKE_PROOFS, or on a machine with no bb, epochResult carries a
+        // placeholder proof that would replace the fixture with something nothing can verify.
+        if (prover && numCheckpoints === 1 && numBlockPerCheckpoint === 1 && isGenerateTestDataEnabled()) {
+          writeTestData(
+            'yarn-project/end-to-end/src/fixtures/dumps/epoch_proof_result.json',
+            JSON.stringify({
+              proof: epochResult.proof.toString(),
+              publicInputs: epochResult.publicInputs.toString(),
+            }),
+          );
+        }
+
         if (prover) {
           // TODO(https://github.com/AztecProtocol/aztec-packages/issues/13188): Handle the pairing point object without these hacks.
           epochResult.proof.numPublicInputs -= PAIRING_POINTS_SIZE;
           await expect(prover.verifyProof('RootRollupArtifact', epochResult.proof)).resolves.not.toThrow();
-        }
-
-        // Generate test data for the 1/1 blocks epoch scenario.
-        if (numCheckpoints === 1 && numBlockPerCheckpoint === 1 && isGenerateTestDataEnabled()) {
-          const epochProof = getTestData('epochProofResult').at(-1);
-          writeTestData(
-            'yarn-project/end-to-end/src/fixtures/dumps/epoch_proof_result.json',
-            JSON.stringify(epochProof!),
-          );
         }
       } finally {
         await Promise.all(subTrees.map(s => s.stop()));

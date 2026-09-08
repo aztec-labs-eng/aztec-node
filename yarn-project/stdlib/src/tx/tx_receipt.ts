@@ -5,9 +5,8 @@ import {
   EpochNumberSchema,
   SlotNumber,
   SlotNumberSchema,
-} from '@aztec/foundation/branded-types';
-import type { DefineIfFlag, FieldsOf, PickDefined } from '@aztec/foundation/types';
-
+} from '@aztec-labs/foundation/branded-types';
+import type { DefineIfFlag, FieldsOf, PickDefined } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { RevertCode } from '../avm/revert_code.js';

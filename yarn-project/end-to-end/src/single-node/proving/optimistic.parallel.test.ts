@@ -1,13 +1,12 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { TestProverNode } from '@aztec/prover-node/test';
-import { getEpochAtSlot, getSlotRangeForEpoch } from '@aztec/stdlib/epoch-helpers';
-import type { AztecNode } from '@aztec/stdlib/interfaces/server';
-import { TxExecutionResult } from '@aztec/stdlib/tx';
-
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { TestProverNode } from '@aztec-labs/prover-node/test';
+import { getEpochAtSlot, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { TxExecutionResult } from '@aztec-labs/stdlib/tx';
 import { expect, jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

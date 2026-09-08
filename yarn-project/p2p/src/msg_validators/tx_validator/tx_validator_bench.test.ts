@@ -1,23 +1,26 @@
-import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, MAX_NULLIFIERS_PER_TX, NULLIFIER_SUBTREE_HEIGHT } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { padArrayEnd, times } from '@aztec/foundation/collection';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Timer } from '@aztec/foundation/timer';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { computeFeePayerBalanceLeafSlot } from '@aztec/protocol-contracts/fee-juice';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import { LogHash } from '@aztec/stdlib/kernel';
-import { ContractClassLogFields } from '@aztec/stdlib/logs';
-import { makeSelector, mockTx, mockTxForRollup } from '@aztec/stdlib/testing';
-import { DatabasePublicStateSource, MerkleTreeId, PublicDataTreeLeaf } from '@aztec/stdlib/trees';
-import type { Tx } from '@aztec/stdlib/tx';
-import type { GenesisData } from '@aztec/stdlib/world-state';
-import { NativeWorldStateService } from '@aztec/world-state';
-
+import {
+  CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
+  MAX_NULLIFIERS_PER_TX,
+  NULLIFIER_SUBTREE_HEIGHT,
+} from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { padArrayEnd, times } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { LogHash } from '@aztec-labs/stdlib/kernel';
+import { ContractClassLogFields } from '@aztec-labs/stdlib/logs';
+import { makeSelector, mockTx, mockTxForRollup } from '@aztec-labs/stdlib/testing';
+import { DatabasePublicStateSource, MerkleTreeId, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
+import type { Tx } from '@aztec-labs/stdlib/tx';
+import type { GenesisData } from '@aztec-labs/stdlib/world-state';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock, mockFn } from 'jest-mock-extended';
 import fs from 'node:fs/promises';

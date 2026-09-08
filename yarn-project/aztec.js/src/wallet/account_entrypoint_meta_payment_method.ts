@@ -1,9 +1,9 @@
-import { AccountFeePaymentMethodOptions } from '@aztec/entrypoints/account';
-import type { ChainInfo } from '@aztec/entrypoints/interfaces';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { GasSettings } from '@aztec/stdlib/gas';
-import { ExecutionPayload } from '@aztec/stdlib/tx';
+import { AccountFeePaymentMethodOptions } from '@aztec-labs/entrypoints/account';
+import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
+import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
 
 import type { Account } from '../account/account.js';
 import type { FeePaymentMethod } from '../fee/fee_payment_method.js';

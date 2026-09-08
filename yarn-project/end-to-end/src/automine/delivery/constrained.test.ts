@@ -1,16 +1,15 @@
-import { generateSchnorrAccounts } from '@aztec/accounts/testing';
-import { NO_FROM } from '@aztec/aztec.js/account';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall } from '@aztec/aztec.js/contracts';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { type Fq, Fr } from '@aztec/foundation/curves/bn254';
-import { Point } from '@aztec/foundation/curves/grumpkin';
-import { HandshakeRegistryContract } from '@aztec/noir-contracts.js/HandshakeRegistry';
-import { OnchainDeliveryTestContract } from '@aztec/noir-test-contracts.js/OnchainDeliveryTest';
-import { UtilityExecutionOracle } from '@aztec/pxe/simulator';
-import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec/standard-contracts/handshake-registry/constants';
-import { computeAddressSecret, deriveMasterIncomingViewingSecretKey } from '@aztec/stdlib/keys';
-
+import { generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
+import { NO_FROM } from '@aztec-labs/aztec.js/account';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { type Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { HandshakeRegistryContract } from '@aztec-labs/noir-contracts.js/HandshakeRegistry';
+import { OnchainDeliveryTestContract } from '@aztec-labs/noir-test-contracts.js/OnchainDeliveryTest';
+import { UtilityExecutionOracle } from '@aztec-labs/pxe/simulator';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
+import { computeAddressSecret, deriveMasterIncomingViewingSecretKey } from '@aztec-labs/stdlib/keys';
 import { jest } from '@jest/globals';
 
 import { AUTOMINE_E2E_OPTS } from '../../fixtures/fixtures.js';

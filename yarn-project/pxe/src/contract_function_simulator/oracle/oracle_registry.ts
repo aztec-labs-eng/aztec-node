@@ -1,9 +1,9 @@
 /* eslint-disable camelcase */
-import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec/constants';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { FieldReader } from '@aztec/foundation/serialize';
-import { toACVMField } from '@aztec/simulator/client';
-import type { UnsiloedMessageNullifier } from '@aztec/stdlib/messaging';
+import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { FieldReader } from '@aztec-labs/foundation/serialize';
+import { toACVMField } from '@aztec-labs/simulator/client';
+import type { UnsiloedMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
 import {
   ARRAY,

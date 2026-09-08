@@ -1,8 +1,8 @@
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { makeBlockHeader } from '@aztec/stdlib/testing';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { makeBlockHeader } from '@aztec-labs/stdlib/testing';
 
 import { AnchorBlockStore } from './anchor_block_store.js';
 

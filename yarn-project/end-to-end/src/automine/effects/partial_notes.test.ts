@@ -1,8 +1,7 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { TestTokenContract } from '@aztec/noir-test-contracts.js/TestToken';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 import { jest } from '@jest/globals';
 
 import { deployTestToken, mintTokensToPrivate } from '../../fixtures/token_utils.js';

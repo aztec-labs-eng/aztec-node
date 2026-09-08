@@ -1,4 +1,4 @@
-import type { ContractInstanceWithAddress } from '@aztec/stdlib/contract';
+import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 
 import type { ContractFunctionInteraction } from '../contract/contract_function_interaction.js';
 import { ContractInstanceRegistryContract } from '../contract/protocol_contracts/contract-instance-registry.js';

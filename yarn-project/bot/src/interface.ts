@@ -1,6 +1,5 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { ApiSchemaFor } from '@aztec/stdlib/schemas';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { ApiSchemaFor } from '@aztec-labs/stdlib/schemas';
 import { z } from 'zod';
 
 import { type BotConfig, BotConfigSchema } from './config.js';

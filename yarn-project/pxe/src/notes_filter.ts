@@ -1,6 +1,6 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { NoteStatus } from '@aztec/stdlib/note';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { NoteStatus } from '@aztec-labs/stdlib/note';
 
 /**
  * A filter used to fetch notes.

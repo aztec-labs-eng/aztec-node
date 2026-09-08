@@ -1,4 +1,4 @@
-import { toArray } from '@aztec/foundation/iterable';
+import { toArray } from '@aztec-labs/foundation/iterable';
 
 import type { AztecArray, AztecAsyncArray } from './array.js';
 import type { AztecAsyncKVStore, AztecKVStore } from './store.js';

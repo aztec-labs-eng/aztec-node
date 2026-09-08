@@ -1,9 +1,9 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { BatchCall } from '@aztec/aztec.js/contracts';
-import type { Logger } from '@aztec/aztec.js/log';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { TestTokenContract } from '@aztec/noir-test-contracts.js/TestToken';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { BatchCall } from '@aztec-labs/aztec.js/contracts';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { TestTokenContract } from '@aztec-labs/noir-test-contracts.js/TestToken';
 
 /**
  * Either token flavour. Canonical `TokenContract` uses constrained message delivery (production / docs

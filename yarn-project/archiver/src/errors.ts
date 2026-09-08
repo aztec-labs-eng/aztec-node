@@ -1,5 +1,5 @@
-import type { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
-import type { Fr } from '@aztec/foundation/schemas';
+import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import type { Fr } from '@aztec-labs/foundation/schemas';
 
 export class NoBlobBodiesFoundError extends Error {
   constructor(l2BlockNum: number) {

@@ -1,8 +1,8 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Fr } from '@aztec/aztec.js/fields';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import type { LogFn } from '@aztec/foundation/log';
-import { getNonNullifiedL1ToL2MessageWitness } from '@aztec/stdlib/messaging';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Fr } from '@aztec-labs/aztec.js/fields';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { getNonNullifiedL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
 
 export async function getL1ToL2MessageWitness(
   nodeUrl: string,

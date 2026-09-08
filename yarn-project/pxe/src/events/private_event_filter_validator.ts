@@ -1,7 +1,7 @@
-import type { PrivateEventFilter } from '@aztec/aztec.js/wallet';
-import { INITIAL_L2_BLOCK_NUM } from '@aztec/constants';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
+import type { PrivateEventFilter } from '@aztec-labs/aztec.js/wallet';
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
 
 import type { PrivateEventStoreFilter } from '../storage/private_event_store/private_event_store.js';
 

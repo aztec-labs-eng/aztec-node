@@ -1,8 +1,8 @@
-import type { NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec/constants';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import type { L2Block } from '@aztec/stdlib/block';
-import type { PublicInputsAndRecursiveProof } from '@aztec/stdlib/interfaces/server';
-import type { PublicChonkVerifierPublicInputs } from '@aztec/stdlib/rollup';
+import type { NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH } from '@aztec-labs/constants';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import type { L2Block } from '@aztec-labs/stdlib/block';
+import type { PublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
+import type { PublicChonkVerifierPublicInputs } from '@aztec-labs/stdlib/rollup';
 
 /** Result of a chonk-verifier proof, cached by tx hash. */
 export type ChonkVerifierProofResult = PublicInputsAndRecursiveProof<

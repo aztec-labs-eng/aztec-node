@@ -13,7 +13,7 @@ const shouldRun = (import.meta as ImportMeta & { env?: { VITE_BENCH?: string } }
 
 if (shouldRun) {
   const [{ createLogger }, { mockLogger }, { AztecSQLiteOPFSStore }, { describeAztecMapBench }] = await Promise.all([
-    import('@aztec/foundation/log'),
+    import('@aztec-labs/foundation/log'),
     import('../../interfaces/utils.js'),
     import('../../sqlite-opfs/store.js'),
     import('../shared_map_bench.js'),

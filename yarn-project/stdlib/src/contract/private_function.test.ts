@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { setupCustomSnapshotSerializers } from '@aztec/foundation/testing';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
 
 import { fr, makeSelector } from '../tests/factories.js';
 import type { PrivateFunction } from './interfaces/contract_class.js';

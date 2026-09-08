@@ -1,7 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { ZodFor } from '@aztec/foundation/schemas';
-import { BufferReader, FieldReader } from '@aztec/foundation/serialize';
-
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { ZodFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, FieldReader } from '@aztec-labs/foundation/serialize';
 import { inspect } from 'util';
 import { z } from 'zod';
 

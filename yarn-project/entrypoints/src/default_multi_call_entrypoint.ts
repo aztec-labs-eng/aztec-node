@@ -1,15 +1,15 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec/standard-contracts/multi-call-entrypoint/constants';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint/constants';
 import {
   type FunctionAbi,
   FunctionCall,
   FunctionSelector,
   encodeArguments,
   getFunctionReturnType,
-} from '@aztec/stdlib/abi';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { GasSettings } from '@aztec/stdlib/gas';
-import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { GasSettings } from '@aztec-labs/stdlib/gas';
+import { ExecutionPayload, HashedValues, TxContext, TxExecutionRequest } from '@aztec-labs/stdlib/tx';
 
 import { EncodedAppEntrypointCalls } from './encoding.js';
 import type { ChainInfo, EntrypointInterface } from './interfaces.js';

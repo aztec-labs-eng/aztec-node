@@ -1,8 +1,8 @@
-import { TokenContractArtifact } from '@aztec/noir-contracts.js/Token';
-import { buildAllowedElement } from '@aztec/p2p/msg_validators';
-import type { ContractArtifact } from '@aztec/stdlib/abi';
-import { getContractClassFromArtifact } from '@aztec/stdlib/contract';
-import type { AllowedElement } from '@aztec/stdlib/interfaces/server';
+import { TokenContractArtifact } from '@aztec-labs/noir-contracts.js/Token';
+import { buildAllowedElement } from '@aztec-labs/p2p/msg_validators';
+import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
+import { getContractClassFromArtifact } from '@aztec-labs/stdlib/contract';
+import type { AllowedElement } from '@aztec-labs/stdlib/interfaces/server';
 
 /**
  * Returns the allowlist entries needed for FPC-based fee payments, keyed by the contract class of

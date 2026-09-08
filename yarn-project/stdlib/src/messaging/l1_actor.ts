@@ -1,7 +1,7 @@
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 
 /**
  * The sender of an L1 to L2 message or recipient of an L2 to L1 message.

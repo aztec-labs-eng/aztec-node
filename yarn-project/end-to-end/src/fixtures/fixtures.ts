@@ -1,6 +1,6 @@
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TEST_FEE_PADDING } from '@aztec/aztec/testing';
-import type { GasFees } from '@aztec/stdlib/gas';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TEST_FEE_PADDING } from '@aztec-labs/aztec/testing';
+import type { GasFees } from '@aztec-labs/stdlib/gas';
 
 export const METRICS_PORT = 4318;
 

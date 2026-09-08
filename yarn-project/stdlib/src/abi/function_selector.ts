@@ -1,9 +1,9 @@
-import { fromHex, toBigIntBE } from '@aztec/foundation/bigint-buffer';
-import { poseidon2HashBytes } from '@aztec/foundation/crypto/poseidon';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { type ZodFor, hexSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, FieldReader } from '@aztec/foundation/serialize';
+import { fromHex, toBigIntBE } from '@aztec-labs/foundation/bigint-buffer';
+import { poseidon2HashBytes } from '@aztec-labs/foundation/crypto/poseidon';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type ZodFor, hexSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, FieldReader } from '@aztec-labs/foundation/serialize';
 
 import type { ABIParameter } from './abi.js';
 import { decodeFunctionSignature } from './function_signature_decoder.js';

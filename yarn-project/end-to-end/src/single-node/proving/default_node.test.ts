@@ -1,7 +1,7 @@
-import type { Logger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { BlockNumber, CheckpointNumber } from '@aztec/foundation/branded-types';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { SingleNodeTestContext, WORLD_STATE_CHECKPOINT_HISTORY, jest, setupWithProver } from './setup.js';

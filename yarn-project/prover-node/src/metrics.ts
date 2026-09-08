@@ -1,7 +1,7 @@
-import type { RollupContract } from '@aztec/ethereum/contracts';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import type { L1PublishProofStats, L1PublishStats } from '@aztec/stdlib/stats';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import type { L1PublishProofStats, L1PublishStats } from '@aztec-labs/stdlib/stats';
 import {
   Attributes,
   type BatchObservableResult,
@@ -14,8 +14,7 @@ import {
   type Tracer,
   type UpDownCounter,
   createUpDownCounterWithDefault,
-} from '@aztec/telemetry-client';
-
+} from '@aztec-labs/telemetry-client';
 import { formatEther, formatUnits } from 'viem';
 
 import type { CheckpointStore } from './checkpoint-store.js';

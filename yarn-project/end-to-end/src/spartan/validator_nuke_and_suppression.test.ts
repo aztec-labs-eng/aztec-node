@@ -1,14 +1,17 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { createAztecNodeClient } from '@aztec/aztec.js/node';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import type { ViemPublicClient } from '@aztec/ethereum/types';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { type L1RollupConstants, getSlotRangeForEpoch, getStartTimestampForEpoch } from '@aztec/stdlib/epoch-helpers';
-
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { createAztecNodeClient } from '@aztec-labs/aztec.js/node';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import {
+  type L1RollupConstants,
+  getSlotRangeForEpoch,
+  getStartTimestampForEpoch,
+} from '@aztec-labs/stdlib/epoch-helpers';
 import { expect, jest } from '@jest/globals';
 import { createPublicClient, fallback, http } from 'viem';
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Authenticate docker against our internal GCP Artifact Registry, used by PRIVATE_RELEASE builds.
+# Authenticate docker against our internal GCP Artifact Registry.
 #
-# A private release publishes only the docker image, to the same Artifact Registry that GKE/staging
-# pulls from (INTERNAL_DOCKER_REGISTRY, e.g. us-west1-docker.pkg.dev/<project>/<repo>). Auth reuses
-# the CI service-account key in the environment (GCP_SA_KEY -> GOOGLE_APPLICATION_CREDENTIALS), the
-# same key .github/ci3.sh stores.
+# Currently unused, kept for an upcoming private release flow: pushing the docker image to the
+# Artifact Registry that GKE/staging pulls from (INTERNAL_DOCKER_REGISTRY, e.g.
+# us-west1-docker.pkg.dev/<project>/<repo>). Auth reuses the CI service-account key in the
+# environment (GCP_SA_KEY -> GOOGLE_APPLICATION_CREDENTIALS), the same key .github/ci3.sh stores.
 NO_CD=1 source $(git rev-parse --show-toplevel)/ci3/source
 
 : "${INTERNAL_DOCKER_REGISTRY:?INTERNAL_DOCKER_REGISTRY required for a private release}"

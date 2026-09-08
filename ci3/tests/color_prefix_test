@@ -92,10 +92,9 @@ fi
 # --- 5. No leaked processes ---
 echo "--- 4. Process Cleanup ---"
 
-"$CP" "clean" "echo done" &>/dev/null
+"$CP" "clean_$$" "echo done" &>/dev/null
 sleep 0.3
-leaked_awk=$(pgrep -f "awk.*clean.*fflush" 2>/dev/null || true)
-leaked_fifo=$(ls /tmp/tmp.* 2>/dev/null | head -5 || true)
+leaked_awk=$(pgrep -f "awk.*clean_$$.*fflush" 2>/dev/null || true)
 if [[ -z "$leaked_awk" ]]; then
   pass "no leaked awk process"
 else
@@ -104,12 +103,17 @@ else
 fi
 
 # --- 6. No leaked fifo ---
-# Run several times and check /tmp doesn't accumulate fifos.
-before=$(find /tmp -maxdepth 1 -type p 2>/dev/null | wc -l)
+# Run several times and check the fifos do not accumulate. color_prefix names its fifo with
+# mktemp, so point that at a directory only this check uses: counting /tmp instead sees the
+# dozens of fifos other jobs on a CI machine hold, and one of them appearing inside the window
+# below fails the check for reasons that have nothing to do with color_prefix.
+fifo_dir=$(mktemp -d)
+before=$(find "$fifo_dir" -maxdepth 1 -type p 2>/dev/null | wc -l)
 for i in $(seq 1 5); do
-  "$CP" "fifo$i" "echo hi" &>/dev/null
+  TMPDIR="$fifo_dir" "$CP" "fifo$i" "echo hi" &>/dev/null
 done
-after=$(find /tmp -maxdepth 1 -type p 2>/dev/null | wc -l)
+after=$(find "$fifo_dir" -maxdepth 1 -type p 2>/dev/null | wc -l)
+rm -rf "$fifo_dir"
 if [[ "$after" -le "$before" ]]; then
   pass "no leaked fifos after 5 runs"
 else
@@ -119,8 +123,10 @@ fi
 # --- 7. SIGTERM kills cleanly ---
 echo "--- 5. Signal Handling ---"
 
+# A unique sleep duration: pgrep for a bare "sleep 60" matches other jobs on a CI machine.
+sig_sleep="60.0$$"
 # Use setsid to put color_prefix in its own session so SIGTERM doesn't reach us.
-setsid "$CP" "sig" "sleep 60" &>/dev/null &
+setsid "$CP" "sig" "sleep $sig_sleep" &>/dev/null &
 cp_pid=$!
 sleep 0.5
 # Send SIGTERM to color_prefix only (not the whole group).
@@ -136,11 +142,11 @@ fi
 
 # Ensure the sleep child was also killed.
 sleep 0.5
-if ! pgrep -f "sleep 60" &>/dev/null; then
+if ! pgrep -f "sleep $sig_sleep" &>/dev/null; then
   pass "child process killed on SIGTERM"
 else
-  fail "child process killed on SIGTERM" "sleep 60 still running"
-  pkill -f "sleep 60" 2>/dev/null || true
+  fail "child process killed on SIGTERM" "sleep $sig_sleep still running"
+  pkill -f "sleep $sig_sleep" 2>/dev/null || true
 fi
 
 # --- 8. Background children don't block exit ---
@@ -148,7 +154,8 @@ echo "--- 6. Fd Leak Prevention ---"
 
 start=$SECONDS
 code=0
-timeout 10 "$CP" "bg" "echo before; sleep 999 </dev/null >/dev/null 2>&1 & disown; echo after" &>/dev/null || code=$?
+bg_sleep="999.0$$"
+timeout 10 "$CP" "bg" "echo before; sleep $bg_sleep </dev/null >/dev/null 2>&1 & disown; echo after" &>/dev/null || code=$?
 elapsed=$((SECONDS - start))
 
 if [[ "$elapsed" -lt 8 ]]; then
@@ -156,7 +163,7 @@ if [[ "$elapsed" -lt 8 ]]; then
 else
   fail "exits promptly despite background child" "took ${elapsed}s"
 fi
-pkill -f "sleep 999" 2>/dev/null || true
+pkill -f "sleep $bg_sleep" 2>/dev/null || true
 
 # --- 9. Large output is fully flushed ---
 echo "--- 7. Output Flushing ---"

@@ -1,10 +1,10 @@
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import { type AztecNode, createAztecNodeClient } from '@aztec/stdlib/interfaces/client';
-import type { Tx, TxHash, TxValidator } from '@aztec/stdlib/tx';
-import { type ComponentsVersions, getComponentsVersionsFromConfig } from '@aztec/stdlib/versioning';
-import { makeTracedFetch } from '@aztec/telemetry-client';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import { type AztecNode, createAztecNodeClient } from '@aztec-labs/stdlib/interfaces/client';
+import type { Tx, TxHash, TxValidator } from '@aztec-labs/stdlib/tx';
+import { type ComponentsVersions, getComponentsVersionsFromConfig } from '@aztec-labs/stdlib/versioning';
+import { makeTracedFetch } from '@aztec-labs/telemetry-client';
 
 export type TxSourceCollectionResult = { validTxs: Tx[]; invalidTxHashes: string[] };
 

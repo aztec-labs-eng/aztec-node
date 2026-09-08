@@ -1,5 +1,5 @@
 {
-  "name": "@aztec/blob-client",
+  "name": "@aztec-labs/blob-client",
   "version": "0.1.0",
   "type": "module",
   "bin": "./dest/client/bin/index.js",
@@ -56,11 +56,11 @@
     ]
   },
   "dependencies": {
-    "@aztec/blob-lib": "workspace:^",
-    "@aztec/ethereum": "workspace:^",
-    "@aztec/foundation": "workspace:^",
-    "@aztec/stdlib": "workspace:^",
-    "@aztec/telemetry-client": "workspace:*",
+    "@aztec-labs/blob-lib": "workspace:^",
+    "@aztec-labs/ethereum": "workspace:^",
+    "@aztec-labs/foundation": "workspace:^",
+    "@aztec-labs/stdlib": "workspace:^",
+    "@aztec-labs/telemetry-client": "workspace:*",
     "express": "^4.21.2",
     "snappy": "7.2.2",
     "source-map-support": "^0.5.21",

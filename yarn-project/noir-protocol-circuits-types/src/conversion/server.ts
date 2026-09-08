@@ -4,7 +4,7 @@ import {
   FinalBlobBatchingChallenges,
   Poseidon2Sponge,
   SpongeBlob,
-} from '@aztec/blob-lib/types';
+} from '@aztec-labs/blob-lib/types';
 import {
   AVM_V2_PROOF_LENGTH_IN_FIELDS,
   BLS12_FQ_LIMBS,
@@ -15,27 +15,27 @@ import {
   MAX_L1_TO_L2_MSGS_PER_BLOCK,
   type NULLIFIER_TREE_HEIGHT,
   ULTRA_VK_LENGTH_IN_FIELDS,
-} from '@aztec/constants';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { BLS12Fq, BLS12Fr, BLS12Point } from '@aztec/foundation/curves/bls12';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { type Bufferable, assertLength, mapTuple } from '@aztec/foundation/serialize';
-import type { MembershipWitness } from '@aztec/foundation/trees';
+} from '@aztec-labs/constants';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BLS12Fq, BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Bufferable, assertLength, mapTuple } from '@aztec-labs/foundation/serialize';
+import type { MembershipWitness } from '@aztec-labs/foundation/trees';
 import {
   type AvmAccumulatedData,
   AvmAccumulatedDataArrayLengths,
   type AvmCircuitPublicInputs,
   RevertCode,
-} from '@aztec/stdlib/avm';
+} from '@aztec-labs/stdlib/avm';
 import {
   type PrivateToAvmAccumulatedData,
   type PrivateToAvmAccumulatedDataArrayLengths,
   PrivateToPublicKernelCircuitPublicInputs,
-} from '@aztec/stdlib/kernel';
-import type { FlatPublicLogs } from '@aztec/stdlib/logs';
-import { L1ToL2MessageBundle, L1ToL2MessageSponge } from '@aztec/stdlib/messaging';
-import { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec/stdlib/parity';
-import type { ProofData, ProofDataForFixedVk, RecursiveProof } from '@aztec/stdlib/proofs';
+} from '@aztec-labs/stdlib/kernel';
+import type { FlatPublicLogs } from '@aztec-labs/stdlib/logs';
+import { L1ToL2MessageBundle, L1ToL2MessageSponge } from '@aztec-labs/stdlib/messaging';
+import { InboxParityPrivateInputs, ParityPublicInputs } from '@aztec-labs/stdlib/parity';
+import type { ProofData, ProofDataForFixedVk, RecursiveProof } from '@aztec-labs/stdlib/proofs';
 import {
   BlockConstantData,
   BlockMergeRollupPrivateInputs,
@@ -60,8 +60,8 @@ import {
   type TreeSnapshotDiffHints,
   type TxMergeRollupPrivateInputs,
   TxRollupPublicInputs,
-} from '@aztec/stdlib/rollup';
-import { TreeSnapshots } from '@aztec/stdlib/tx';
+} from '@aztec-labs/stdlib/rollup';
+import { TreeSnapshots } from '@aztec-labs/stdlib/tx';
 
 import type {
   AvmAccumulatedDataArrayLengths as AvmAccumulatedDataArrayLengthsNoir,

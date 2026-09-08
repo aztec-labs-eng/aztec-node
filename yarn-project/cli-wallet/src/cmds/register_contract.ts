@@ -1,12 +1,12 @@
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { PublicKeys } from '@aztec/aztec.js/keys';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import { getContractArtifact } from '@aztec/cli/cli-utils';
-import type { LogFn } from '@aztec/foundation/log';
-import { getAllFunctionAbis, getInitializer } from '@aztec/stdlib/abi';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { PublicKeys } from '@aztec-labs/aztec.js/keys';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { getContractArtifact } from '@aztec-labs/cli/cli-utils';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { getAllFunctionAbis, getInitializer } from '@aztec-labs/stdlib/abi';
 
 export async function registerContract(
   wallet: Wallet,

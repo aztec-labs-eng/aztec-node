@@ -1,5 +1,5 @@
-import { Blob } from '@aztec/blob-lib';
-import { bufferToHex } from '@aztec/foundation/string';
+import { Blob } from '@aztec-labs/blob-lib';
+import { bufferToHex } from '@aztec-labs/foundation/string';
 
 import type { BlobStore } from './interface.js';
 

@@ -1,9 +1,9 @@
 // Lightweight metadata leaf export for browser bundles: importing from
-// `@aztec/standard-contracts/handshake-registry/constants` avoids dragging in the
+// `@aztec-labs/standard-contracts/handshake-registry/constants` avoids dragging in the
 // `HandshakeRegistry.json` static import.
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
 import { StandardContractAddress, StandardContractClassId, StandardContractSalt } from '../standard_contract_data.js';
 

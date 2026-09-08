@@ -1,8 +1,7 @@
-import { TxHash } from '@aztec/aztec.js/tx';
-import { parseAztecAddress, parseSigningKey, parseTxHash } from '@aztec/cli/utils';
-import { AuthWitness } from '@aztec/stdlib/auth-witness';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-
+import { TxHash } from '@aztec-labs/aztec.js/tx';
+import { parseAztecAddress, parseSigningKey, parseTxHash } from '@aztec-labs/cli/utils';
+import { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Option } from 'commander';
 import { readdir, stat } from 'fs/promises';
 

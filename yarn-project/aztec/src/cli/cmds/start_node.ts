@@ -3,30 +3,30 @@ import {
   aztecNodeConfigMappings,
   getConfigEnvVars,
   registerAztecNodeRpcHandlers,
-} from '@aztec/aztec-node';
-import { Fr } from '@aztec/aztec.js/fields';
-import { getL1Config } from '@aztec/cli/config';
-import { getGenesisStateConfigEnvVars } from '@aztec/ethereum/config';
-import { type NetworkNames, SecretValue } from '@aztec/foundation/config';
-import type { NamespacedApiHandlers } from '@aztec/foundation/json-rpc/server';
-import { Agent, makeUndiciFetch } from '@aztec/foundation/json-rpc/undici';
-import type { LogFn } from '@aztec/foundation/log';
-import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types/vk-tree';
-import { protocolContractsHash } from '@aztec/protocol-contracts';
+} from '@aztec-labs/aztec-node';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { getL1Config } from '@aztec-labs/cli/config';
+import { getGenesisStateConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { type NetworkNames, SecretValue } from '@aztec-labs/foundation/config';
+import type { NamespacedApiHandlers } from '@aztec-labs/foundation/json-rpc/server';
+import { Agent, makeUndiciFetch } from '@aztec-labs/foundation/json-rpc/undici';
+import type { LogFn } from '@aztec-labs/foundation/log';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import {
   ProvingJobConsumerSchema,
   createProvingJobBrokerClient,
   proverBrokerBackoff,
-} from '@aztec/prover-client/broker';
-import { type CliPXEOptions, type PXEConfig, allPxeConfigMappings } from '@aztec/pxe/config';
-import { ProverNodeApiSchema, type ProvingJobBroker } from '@aztec/stdlib/interfaces/server';
+} from '@aztec-labs/prover-client/broker';
+import { type CliPXEOptions, type PXEConfig, allPxeConfigMappings } from '@aztec-labs/pxe/config';
+import { ProverNodeApiSchema, type ProvingJobBroker } from '@aztec-labs/stdlib/interfaces/server';
 import {
   type TelemetryClientConfig,
   initTelemetryClient,
   makeTracedFetch,
   telemetryClientConfigMappings,
-} from '@aztec/telemetry-client';
-import { EmbeddedWallet } from '@aztec/wallets/embedded';
+} from '@aztec-labs/telemetry-client';
+import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { createAztecNode } from '../../local-network/index.js';
 import { extractNamespacedOptions, extractRelevantOptions, preloadCrsDataForVerifying } from '../util.js';

@@ -1,20 +1,19 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { NoCommitteeError } from '@aztec/ethereum/contracts';
-import { EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '@aztec/stdlib/deserialization';
-import { PeerErrorSeverity } from '@aztec/stdlib/p2p';
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
+import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
   makeBlockProposal,
   makeCheckpointHeader,
   makeCheckpointProposal,
-} from '@aztec/stdlib/testing';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import { TxHash } from '@aztec/stdlib/tx';
-
+} from '@aztec-labs/stdlib/testing';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

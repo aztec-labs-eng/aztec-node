@@ -1,25 +1,25 @@
-import { DomainSeparator, MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec/constants';
-import { asyncMap } from '@aztec/foundation/async-map';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { poseidon2Hash, poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { randomInt } from '@aztec/foundation/crypto/random';
-import { sha256ToField } from '@aztec/foundation/crypto/sha256';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { GrumpkinScalar } from '@aztec/foundation/curves/grumpkin';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { FieldsOf } from '@aztec/foundation/types';
-import { KeyStore } from '@aztec/key-store';
-import { CalldataLimitTestContractArtifact } from '@aztec/noir-test-contracts.js/CalldataLimitTest';
-import { ChildContractArtifact } from '@aztec/noir-test-contracts.js/Child';
-import { ParentContractArtifact } from '@aztec/noir-test-contracts.js/Parent';
-import { PendingNoteHashesContractArtifact } from '@aztec/noir-test-contracts.js/PendingNoteHashes';
-import { StatefulTestContractArtifact } from '@aztec/noir-test-contracts.js/StatefulTest';
-import { TestContractArtifact } from '@aztec/noir-test-contracts.js/Test';
-import { WASMSimulator } from '@aztec/simulator/client';
-import { HandshakeRegistryArtifact } from '@aztec/standard-contracts/handshake-registry';
-import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec/standard-contracts/handshake-registry/constants';
+import { DomainSeparator, MAX_PROCESSABLE_L2_GAS, MAX_TX_DA_GAS } from '@aztec-labs/constants';
+import { asyncMap } from '@aztec-labs/foundation/async-map';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { poseidon2Hash, poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { randomInt } from '@aztec-labs/foundation/crypto/random';
+import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { KeyStore } from '@aztec-labs/key-store';
+import { CalldataLimitTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/CalldataLimitTest';
+import { ChildContractArtifact } from '@aztec-labs/noir-test-contracts.js/Child';
+import { ParentContractArtifact } from '@aztec-labs/noir-test-contracts.js/Parent';
+import { PendingNoteHashesContractArtifact } from '@aztec-labs/noir-test-contracts.js/PendingNoteHashes';
+import { StatefulTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
+import { TestContractArtifact } from '@aztec-labs/noir-test-contracts.js/Test';
+import { WASMSimulator } from '@aztec-labs/simulator/client';
+import { HandshakeRegistryArtifact } from '@aztec-labs/standard-contracts/handshake-registry';
+import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 import {
   type ContractArtifact,
   FunctionCall,
@@ -28,27 +28,26 @@ import {
   getFunctionArtifact,
   getFunctionArtifactByName,
   getFunctionReturnType,
-} from '@aztec/stdlib/abi';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { BlockHash, type BlockParameter, type L2TipsProvider } from '@aztec/stdlib/block';
+} from '@aztec-labs/stdlib/abi';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { BlockHash, type BlockParameter, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import {
   CompleteAddress,
   getContractClassFromArtifact,
   getContractInstanceFromInstantiationParams,
-} from '@aztec/stdlib/contract';
-import { Gas, GasFees, GasSettings } from '@aztec/stdlib/gas';
-import { computeNoteHashNonce, computeSecretHash, computeUniqueNoteHash, siloNoteHash } from '@aztec/stdlib/hash';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-import type { MerkleTreeWriteOperations } from '@aztec/stdlib/interfaces/server';
-import { KeyValidationRequest } from '@aztec/stdlib/kernel';
-import { computeAppNullifierHidingKey, deriveKeys } from '@aztec/stdlib/keys';
-import { L1Actor, L1ToL2Message, L2Actor } from '@aztec/stdlib/messaging';
-import { Note, NoteDao } from '@aztec/stdlib/note';
-import { makeBlockHeader, makeL2Tips, randomContractInstanceWithAddress } from '@aztec/stdlib/testing';
-import { MerkleTreeId } from '@aztec/stdlib/trees';
-import { BlockHeader, HashedValues, TxContext, TxExecutionRequest, TxHash } from '@aztec/stdlib/tx';
-import { NativeWorldStateService } from '@aztec/world-state';
-
+} from '@aztec-labs/stdlib/contract';
+import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
+import { computeNoteHashNonce, computeSecretHash, computeUniqueNoteHash, siloNoteHash } from '@aztec-labs/stdlib/hash';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import type { MerkleTreeWriteOperations } from '@aztec-labs/stdlib/interfaces/server';
+import { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
+import { computeAppNullifierHidingKey, deriveKeys } from '@aztec-labs/stdlib/keys';
+import { L1Actor, L1ToL2Message, L2Actor } from '@aztec-labs/stdlib/messaging';
+import { Note, NoteDao } from '@aztec-labs/stdlib/note';
+import { makeBlockHeader, makeL2Tips, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, HashedValues, TxContext, TxExecutionRequest, TxHash } from '@aztec-labs/stdlib/tx';
+import { NativeWorldStateService } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
 import { Matcher, type MatcherCreator, type MockProxy, mock } from 'jest-mock-extended';
 import { toFunctionSelector } from 'viem';

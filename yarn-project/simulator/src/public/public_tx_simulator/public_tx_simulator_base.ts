@@ -1,7 +1,7 @@
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { ProtocolContractsList } from '@aztec/protocol-contracts';
-import { PublicSimulatorConfig } from '@aztec/stdlib/avm';
-import type { GlobalVariables, ProtocolContracts, Tx } from '@aztec/stdlib/tx';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { ProtocolContractsList } from '@aztec-labs/protocol-contracts';
+import { PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
+import type { GlobalVariables, ProtocolContracts, Tx } from '@aztec-labs/stdlib/tx';
 
 import type { AvmSimulator } from '../avm_simulator.js';
 import type { PublicContractsDB } from '../public_db_sources.js';

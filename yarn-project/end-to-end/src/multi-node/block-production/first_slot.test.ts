@@ -1,14 +1,13 @@
-import type { AztecNodeService } from '@aztec/aztec-node';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getTimestampRangeForEpoch } from '@aztec/aztec.js/block';
-import type { Logger } from '@aztec/aztec.js/log';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { asyncMap } from '@aztec/foundation/async-map';
-import { EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { executeTimeout } from '@aztec/foundation/timer';
-import type { SpamContract } from '@aztec/noir-test-contracts.js/Spam';
-import { getSlotRangeForEpoch } from '@aztec/stdlib/epoch-helpers';
-
+import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { asyncMap } from '@aztec-labs/foundation/async-map';
+import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import type { SpamContract } from '@aztec-labs/noir-test-contracts.js/Spam';
+import { getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
 import type { EndToEndContext } from '../../fixtures/utils.js';

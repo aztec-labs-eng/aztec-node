@@ -1,8 +1,7 @@
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { Secp256k1Signer } from '@aztec/foundation/crypto/secp256k1-signer';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { Signature } from '@aztec/foundation/eth-signature';
-
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { jest } from '@jest/globals';
 
 import { CommitteeAttestationsAndSigners } from '../block/proposal/attestations_and_signers.js';

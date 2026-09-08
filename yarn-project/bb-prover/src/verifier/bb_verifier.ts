@@ -1,18 +1,17 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { Timer } from '@aztec/foundation/timer';
-import { ProtocolCircuitVks } from '@aztec/noir-protocol-circuits-types/server/vks';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { Timer } from '@aztec-labs/foundation/timer';
+import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import {
   type ClientProtocolArtifact,
   type ProtocolArtifact,
   type ServerProtocolArtifact,
   mapProtocolArtifactNameToCircuitName,
-} from '@aztec/noir-protocol-circuits-types/types';
-import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec/stdlib/interfaces/server';
-import type { Proof } from '@aztec/stdlib/proofs';
-import type { CircuitVerificationStats } from '@aztec/stdlib/stats';
-import { Tx } from '@aztec/stdlib/tx';
-import type { VerificationKeyData } from '@aztec/stdlib/vks';
-
+} from '@aztec-labs/noir-protocol-circuits-types/types';
+import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
+import type { Proof } from '@aztec-labs/stdlib/proofs';
+import type { CircuitVerificationStats } from '@aztec-labs/stdlib/stats';
+import { Tx } from '@aztec-labs/stdlib/tx';
+import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { promises as fs } from 'fs';
 
 import { BBJsFactory } from '../bb/bb_js_backend.js';

@@ -1,10 +1,15 @@
-import type { EpochCache } from '@aztec/epoch-cache';
-import { CheckpointNumber, CheckpointProposalHash, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { countWhile, filterAsync, fromEntries, getEntries, mapValues } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import type { P2PClient } from '@aztec/p2p';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import {
+  CheckpointNumber,
+  CheckpointProposalHash,
+  EpochNumber,
+  SlotNumber,
+} from '@aztec-labs/foundation/branded-types';
+import { countWhile, filterAsync, fromEntries, getEntries, mapValues } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import type { P2PClient } from '@aztec-labs/p2p';
 import {
   OffenseType,
   WANT_TO_SLASH_EVENT,
@@ -12,13 +17,13 @@ import {
   type Watcher,
   type WatcherEmitter,
   getOffenseTypeName,
-} from '@aztec/slasher';
-import type { SlasherConfig } from '@aztec/slasher/config';
-import { type L2BlockSource, getAttestationInfoFromPublishedCheckpoint } from '@aztec/stdlib/block';
-import type { CheckpointReexecutionTracker } from '@aztec/stdlib/checkpoint';
-import type { ChainConfig } from '@aztec/stdlib/config';
-import { getEpochAtSlot, getSlotRangeForEpoch, getTimestampForSlot } from '@aztec/stdlib/epoch-helpers';
-import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec/stdlib/p2p';
+} from '@aztec-labs/slasher';
+import type { SlasherConfig } from '@aztec-labs/slasher/config';
+import { type L2BlockSource, getAttestationInfoFromPublishedCheckpoint } from '@aztec-labs/stdlib/block';
+import type { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import type { ChainConfig } from '@aztec-labs/stdlib/config';
+import { getEpochAtSlot, getSlotRangeForEpoch, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import type {
   SingleValidatorStats,
   ValidatorStats,
@@ -27,8 +32,7 @@ import type {
   ValidatorStatusType,
   ValidatorsEpochPerformance,
   ValidatorsStats,
-} from '@aztec/stdlib/validators';
-
+} from '@aztec-labs/stdlib/validators';
 import EventEmitter from 'node:events';
 
 import type { SentinelConfig } from './config.js';

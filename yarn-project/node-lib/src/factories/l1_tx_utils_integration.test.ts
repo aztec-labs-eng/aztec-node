@@ -1,16 +1,15 @@
-import { Blob } from '@aztec/blob-lib';
-import { getAddressFromPrivateKey } from '@aztec/ethereum/account';
-import type { ViemClient } from '@aztec/ethereum/types';
-import { times } from '@aztec/foundation/collection';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { KeystoreManager } from '@aztec/node-keystore';
-import type { EthPrivateKey, KeyStore } from '@aztec/node-keystore';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { TelemetryClient } from '@aztec/telemetry-client';
-
+import { Blob } from '@aztec-labs/blob-lib';
+import { getAddressFromPrivateKey } from '@aztec-labs/ethereum/account';
+import type { ViemClient } from '@aztec-labs/ethereum/types';
+import { times } from '@aztec-labs/foundation/collection';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { KeystoreManager } from '@aztec-labs/node-keystore';
+import type { EthPrivateKey, KeyStore } from '@aztec-labs/node-keystore';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import { generatePrivateKey } from 'viem/accounts';
 
 import { createL1TxUtilsFromSigners } from './l1_tx_utils.js';

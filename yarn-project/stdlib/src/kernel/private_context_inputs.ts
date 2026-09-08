@@ -1,5 +1,5 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { serializeToFields } from '@aztec/foundation/serialize';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { serializeToFields } from '@aztec-labs/foundation/serialize';
 
 import { BlockHeader } from '../tx/block_header.js';
 import { CallContext } from '../tx/call_context.js';

@@ -1,5 +1,4 @@
-import base from '@aztec/foundation/eslint';
-
+import base from '@aztec-labs/foundation/eslint';
 import { globalIgnores } from 'eslint/config';
 import globals from 'globals';
 

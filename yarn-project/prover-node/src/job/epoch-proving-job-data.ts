@@ -1,9 +1,9 @@
-import { CheckpointNumber, EpochNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { CommitteeAttestation } from '@aztec/stdlib/block';
-import { Checkpoint } from '@aztec/stdlib/checkpoint';
-import { BlockHeader, Tx } from '@aztec/stdlib/tx';
+import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
+import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
 
 /** All data from an epoch used in proving. */
 export type EpochProvingJobData = {

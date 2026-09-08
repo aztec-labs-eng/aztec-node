@@ -1,8 +1,8 @@
-import { DomainSeparator, MAX_PROTOCOL_CONTRACTS } from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { arraySerializedSizeOfNonEmpty } from '@aztec/foundation/collection';
-import { poseidon2HashWithSeparator } from '@aztec/foundation/crypto/poseidon';
-import { Fr } from '@aztec/foundation/curves/bn254';
+import { DomainSeparator, MAX_PROTOCOL_CONTRACTS } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { arraySerializedSizeOfNonEmpty } from '@aztec-labs/foundation/collection';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   BufferReader,
   FieldReader,
@@ -10,9 +10,8 @@ import {
   assertLength,
   serializeToBuffer,
   serializeToFields,
-} from '@aztec/foundation/serialize';
-import type { FieldsOf } from '@aztec/foundation/types';
-
+} from '@aztec-labs/foundation/serialize';
+import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

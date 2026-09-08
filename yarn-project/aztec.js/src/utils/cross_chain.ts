@@ -1,7 +1,7 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { retryUntil } from '@aztec/foundation/retry';
-import type { BlockTag } from '@aztec/stdlib/block';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import type { BlockTag } from '@aztec-labs/stdlib/block';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 
 /**
  * Waits for the L1 to L2 message to be ready to be consumed.

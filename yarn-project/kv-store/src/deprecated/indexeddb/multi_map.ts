@@ -1,5 +1,4 @@
-import { first } from '@aztec/foundation/iterable';
-
+import { first } from '@aztec-labs/foundation/iterable';
 import { hash } from 'ohash';
 
 import type { Key, Value } from '../../interfaces/common.js';

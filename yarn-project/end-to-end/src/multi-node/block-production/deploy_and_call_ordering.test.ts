@@ -1,12 +1,12 @@
-import { NO_WAIT } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import { SlotNumber } from '@aztec/foundation/branded-types';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { executeTimeout } from '@aztec/foundation/timer';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { getSlotAtTimestamp } from '@aztec/stdlib/epoch-helpers';
-import { GasFees } from '@aztec/stdlib/gas';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 
 import { waitForTxs } from '../../fixtures/wait_helpers.js';
 import { proveInteraction } from '../../test-wallet/utils.js';

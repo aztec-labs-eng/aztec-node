@@ -1,4 +1,4 @@
-import { createLogger } from '@aztec/foundation/log';
+import { createLogger } from '@aztec-labs/foundation/log';
 
 import type { EvictionContext, EvictionResult, EvictionRule, PoolOperations } from './interfaces.js';
 import { EvictionEvent } from './interfaces.js';

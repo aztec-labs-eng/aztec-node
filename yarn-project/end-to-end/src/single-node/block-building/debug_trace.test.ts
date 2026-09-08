@@ -1,15 +1,14 @@
-import type { AztecNodeConfig } from '@aztec/aztec-node';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { FORWARDER_ABI, deployForwarderProxy } from '@aztec/ethereum/forwarder-proxy';
-import type { L1TxUtils } from '@aztec/ethereum/l1-tx-utils';
-import type { PublisherManager } from '@aztec/ethereum/publisher-manager';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import type { Logger } from '@aztec/foundation/log';
-import { bufferToHex } from '@aztec/foundation/string';
-import type { TestSequencerClient } from '@aztec/sequencer-client/test';
-import type { AztecNode, AztecNodeAdmin } from '@aztec/stdlib/interfaces/client';
-
+import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { FORWARDER_ABI, deployForwarderProxy } from '@aztec-labs/ethereum/forwarder-proxy';
+import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Logger } from '@aztec-labs/foundation/log';
+import { bufferToHex } from '@aztec-labs/foundation/string';
+import type { TestSequencerClient } from '@aztec-labs/sequencer-client/test';
+import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 import { type Hex, decodeFunctionData, encodeFunctionData, multicall3Abi } from 'viem';

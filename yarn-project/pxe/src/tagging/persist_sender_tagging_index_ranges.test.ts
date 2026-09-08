@@ -1,9 +1,8 @@
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import type { PrivateKernelTailCircuitPublicInputs } from '@aztec/stdlib/kernel';
-import { type AppTaggingSecret, AppTaggingSecretKind, PrivateLog, SiloedTag } from '@aztec/stdlib/logs';
-import { randomAppTaggingSecret } from '@aztec/stdlib/testing';
-import { TxHash } from '@aztec/stdlib/tx';
-
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import type { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
+import { type AppTaggingSecret, AppTaggingSecretKind, PrivateLog, SiloedTag } from '@aztec-labs/stdlib/logs';
+import { randomAppTaggingSecret } from '@aztec-labs/stdlib/testing';
+import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 

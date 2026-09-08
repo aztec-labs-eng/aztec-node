@@ -1,44 +1,48 @@
-import type { InitialAccountData } from '@aztec/accounts/testing';
-import type { Archiver } from '@aztec/archiver';
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec/aztec-node';
-import { getAccountContractAddress } from '@aztec/aztec.js/account';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
-import { getTimestampRangeForEpoch } from '@aztec/aztec.js/block';
-import { getContractInstanceFromInstantiationParams } from '@aztec/aztec.js/contracts';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { MerkleTreeId } from '@aztec/aztec.js/trees';
-import type { Wallet } from '@aztec/aztec.js/wallet';
-import type { CheatCodes } from '@aztec/aztec/testing';
-import { EpochCache } from '@aztec/epoch-cache';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { DefaultL1ContractsConfig } from '@aztec/ethereum/config';
-import { RollupContract } from '@aztec/ethereum/contracts';
-import { Delayer, createDelayer, waitUntilL1Timestamp, wrapClientWithDelayer } from '@aztec/ethereum/l1-tx-utils';
-import { ChainMonitor } from '@aztec/ethereum/test';
-import type { ExtendedViemWalletClient } from '@aztec/ethereum/types';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec/foundation/branded-types';
-import { SecretValue } from '@aztec/foundation/config';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { withLoggerBindings } from '@aztec/foundation/log/server';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { executeTimeout } from '@aztec/foundation/timer';
-import { SpamContract } from '@aztec/noir-test-contracts.js/Spam';
-import { TestContract } from '@aztec/noir-test-contracts.js/Test';
-import { getMockPubSubP2PServiceFactory } from '@aztec/p2p/test-helpers';
-import type { ProverNodeConfig, ProverNodeDeps } from '@aztec/prover-node';
-import type { PXEConfig } from '@aztec/pxe/config';
-import { type Sequencer, type SequencerClient, type SequencerEvents, SequencerState } from '@aztec/sequencer-client';
-import { type BlockParameter, EthAddress } from '@aztec/stdlib/block';
+import type { InitialAccountData } from '@aztec-labs/accounts/testing';
+import type { Archiver } from '@aztec-labs/archiver';
+import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { getAccountContractAddress } from '@aztec-labs/aztec.js/account';
+import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
+import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import type { CheatCodes } from '@aztec-labs/aztec/testing';
+import { EpochCache } from '@aztec-labs/epoch-cache';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
+import { Delayer, createDelayer, waitUntilL1Timestamp, wrapClientWithDelayer } from '@aztec-labs/ethereum/l1-tx-utils';
+import { ChainMonitor } from '@aztec-labs/ethereum/test';
+import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
+import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { executeTimeout } from '@aztec-labs/foundation/timer';
+import { SpamContract } from '@aztec-labs/noir-test-contracts.js/Spam';
+import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { getMockPubSubP2PServiceFactory } from '@aztec-labs/p2p/test-helpers';
+import type { ProverNodeConfig, ProverNodeDeps } from '@aztec-labs/prover-node';
+import type { PXEConfig } from '@aztec-labs/pxe/config';
+import {
+  type Sequencer,
+  type SequencerClient,
+  type SequencerEvents,
+  SequencerState,
+} from '@aztec-labs/sequencer-client';
+import { type BlockParameter, EthAddress } from '@aztec-labs/stdlib/block';
 import {
   type L1RollupConstants,
   getProofSubmissionDeadlineTimestamp,
   getTimestampForSlot,
-} from '@aztec/stdlib/epoch-helpers';
-import { tryStop } from '@aztec/stdlib/interfaces/server';
-import type { SlashingProtectionDatabase } from '@aztec/validator-ha-signer/types';
-
+} from '@aztec-labs/stdlib/epoch-helpers';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
 import { join } from 'path';
 import type { Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';

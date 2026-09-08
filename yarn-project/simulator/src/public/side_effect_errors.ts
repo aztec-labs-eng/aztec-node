@@ -5,7 +5,7 @@ import {
   MAX_NULLIFIERS_PER_TX,
   MAX_PUBLIC_CALLS_TO_UNIQUE_CONTRACT_CLASS_IDS,
   NOTE_HASH_TREE_LEAF_COUNT,
-} from '@aztec/constants';
+} from '@aztec-labs/constants';
 
 import { CheckedPublicExecutionError } from './public_errors.js';
 

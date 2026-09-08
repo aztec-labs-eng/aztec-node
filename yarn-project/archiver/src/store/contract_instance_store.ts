@@ -1,15 +1,15 @@
-import type { Fr } from '@aztec/foundation/curves/bn254';
-import { first } from '@aztec/foundation/iterable';
-import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec/kv-store';
-import { isProtocolContract } from '@aztec/protocol-contracts';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { first } from '@aztec-labs/foundation/iterable';
+import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { isProtocolContract } from '@aztec-labs/protocol-contracts';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type ContractInstanceUpdateWithAddress,
   type ContractInstanceWithAddress,
   SerializableContractInstance,
   SerializableContractInstanceUpdate,
-} from '@aztec/stdlib/contract';
-import type { UInt64 } from '@aztec/stdlib/types';
+} from '@aztec-labs/stdlib/contract';
+import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 type ContractInstanceUpdateKey = [string, string] | [string, string, number];
 

@@ -1,5 +1,4 @@
-import { makeRandomBlob } from '@aztec/blob-lib/testing';
-
+import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
 import type { Hex } from 'viem';
 
 import type { BlobClientInterface } from './interface.js';

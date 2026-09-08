@@ -1,5 +1,4 @@
-import type { MerkleTreeCheckpointOperations } from '@aztec/stdlib/interfaces/server';
-
+import type { MerkleTreeCheckpointOperations } from '@aztec-labs/stdlib/interfaces/server';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { ForkCheckpoint } from './fork_checkpoint.js';

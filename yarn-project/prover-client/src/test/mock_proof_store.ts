@@ -1,5 +1,5 @@
-import type { ProvingJobId } from '@aztec/stdlib/interfaces/server';
-import { ProvingRequestType } from '@aztec/stdlib/proofs';
+import type { ProvingJobId } from '@aztec-labs/stdlib/interfaces/server';
+import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
 
 // Mock ProofStore for faster benchmarks with realistic Cloud Storage URIs
 export class MockProofStore {

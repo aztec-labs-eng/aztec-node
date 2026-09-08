@@ -1,0 +1,40 @@
+# The release target: where a release reads its packages from, and where it publishes.
+#
+# Sourced by `bootstrap.sh ci-release` before the build and again by `bootstrap.sh release`, so a
+# misconfigured environment fails in seconds instead of after a full build. RELEASE_TARGET is a
+# literal in the release workflow, never a GitHub variable, so no variable edit can flip a flow;
+# everything else is either supplied by the workflow's environment or derived here.
+#
+#   public   npmjs + DockerHub, plus the aztec-up and playground assets. The URLs are defaults
+#            below rather than GitHub variables, so no variable edit can retarget a public release.
+#
+# The assertions are the backstop for the cases GitHub cannot see — a hand-run release, a mis-wired
+# workflow, a half-configured environment.
+
+export RELEASE_TARGET=${RELEASE_TARGET:-public}
+
+npmjs_registry=https://registry.npmjs.org
+
+case "$RELEASE_TARGET" in
+  public)
+    export NPM_REGISTRY=${NPM_REGISTRY:-$npmjs_registry}
+    export DOCKER_REGISTRY=${DOCKER_REGISTRY:-docker.io/azteclabs}
+    # The aztec-nr mirror goes first: a failure there aborts the whole release, since a CLI whose
+    # scaffold pins an aztec-nr tag that does not exist is worse than no release at all.
+    export RELEASE_PROJECTS="noir-projects/aztec-nr yarn-project aztec-up playground release-image"
+    if [ "$NPM_REGISTRY" != "$npmjs_registry" ]; then
+      echo_stderr "A public release must publish to $npmjs_registry, not $NPM_REGISTRY."
+      exit 1
+    fi
+    if [[ "$DOCKER_REGISTRY" != docker.io/* ]]; then
+      echo_stderr "A public release must publish under docker.io/, not $DOCKER_REGISTRY."
+      exit 1
+    fi
+    ;;
+  *)
+    echo_stderr "Unknown RELEASE_TARGET '$RELEASE_TARGET' (expected public)."
+    exit 1
+    ;;
+esac
+
+unset npmjs_registry

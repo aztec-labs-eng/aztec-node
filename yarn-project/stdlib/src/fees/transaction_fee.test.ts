@@ -1,6 +1,6 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec/foundation/testing/files';
-import type { Writeable } from '@aztec/foundation/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import type { Writeable } from '@aztec-labs/foundation/types';
 
 import { Gas } from '../gas/gas.js';
 import { GasFees } from '../gas/gas_fees.js';

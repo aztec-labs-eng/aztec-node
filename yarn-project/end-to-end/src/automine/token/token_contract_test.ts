@@ -1,10 +1,9 @@
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import { createLogger } from '@aztec/aztec.js/log';
-import type { AztecNode } from '@aztec/aztec.js/node';
-import { TokenContract } from '@aztec/noir-contracts.js/Token';
-import { GenericProxyContract } from '@aztec/noir-test-contracts.js/GenericProxy';
-import { InvalidAccountContract } from '@aztec/noir-test-contracts.js/InvalidAccount';
-
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { createLogger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
+import { GenericProxyContract } from '@aztec-labs/noir-test-contracts.js/GenericProxy';
+import { InvalidAccountContract } from '@aztec-labs/noir-test-contracts.js/InvalidAccount';
 import { jest } from '@jest/globals';
 
 import { ensureAuthRegistryPublished } from '../../fixtures/setup.js';

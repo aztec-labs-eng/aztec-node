@@ -9,8 +9,7 @@
 // differ are overwritten with the fresh content and the generator exits non-zero with a clear
 // error — so the developer gets the regeneration for free, and a second `./bootstrap.sh` pass
 // recompiles dependent Noir contracts against the now-correct values.
-import { createConsoleLogger } from '@aztec/foundation/log';
-
+import { createConsoleLogger } from '@aztec-labs/foundation/log';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -51,7 +50,7 @@ async function copyArtifact(srcName: string, destName: string) {
 
 async function generateDeclarationFile(destName: string) {
   const content = `
-    import type { NoirCompiledContract } from '@aztec/stdlib/noir';
+    import type { NoirCompiledContract } from '@aztec-labs/stdlib/noir';
     const circuit: NoirCompiledContract;
     export = circuit;
   `;

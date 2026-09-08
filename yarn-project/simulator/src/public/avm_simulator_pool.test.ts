@@ -1,5 +1,4 @@
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { mock } from 'jest-mock-extended';
 
 import type { AvmContractsDBContext } from './avm_simulator.js';

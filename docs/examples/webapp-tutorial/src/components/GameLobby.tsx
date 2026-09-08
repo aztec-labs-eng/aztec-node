@@ -1,7 +1,7 @@
 // docs:start:game-lobby-imports
 import React, { useState } from 'react';
-import { AztecAddress } from '@aztec/aztec.js/addresses';
-import type { Wallet } from '@aztec/aztec.js/wallet';
+import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import type { PodRacingContract } from '../artifacts/PodRacing';
 import { deployContract, createGame, joinGame, attachToContract } from '../contract';
 import { useTransactionLog } from './TransactionLog';

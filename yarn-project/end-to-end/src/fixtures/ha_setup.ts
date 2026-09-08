@@ -1,8 +1,7 @@
-import { EthAddress } from '@aztec/aztec.js/addresses';
-import { Fr } from '@aztec/aztec.js/fields';
-import type { Logger } from '@aztec/aztec.js/log';
-import { SecretValue } from '@aztec/foundation/config';
-
+import { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { Fr } from '@aztec-labs/aztec.js/fields';
+import type { Logger } from '@aztec-labs/aztec.js/log';
+import { SecretValue } from '@aztec-labs/foundation/config';
 import { Pool } from 'pg';
 import { privateKeyToAccount } from 'viem/accounts';
 

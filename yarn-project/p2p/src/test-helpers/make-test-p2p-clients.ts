@@ -1,13 +1,13 @@
-import { MockL2BlockSource } from '@aztec/archiver/test';
-import type { EpochCache } from '@aztec/epoch-cache';
-import { SecretValue } from '@aztec/foundation/config';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { openTmpStore } from '@aztec/kv-store/lmdb-v2';
-import { GasFees } from '@aztec/stdlib/gas';
-import type { WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { DataStoreConfig } from '@aztec/stdlib/kv-store';
+import { MockL2BlockSource } from '@aztec-labs/archiver/test';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { SecretValue } from '@aztec-labs/foundation/config';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { GasFees } from '@aztec-labs/stdlib/gas';
+import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 
 import { createP2PClient } from '../client/index.js';
 import type { P2PClient } from '../client/p2p_client.js';

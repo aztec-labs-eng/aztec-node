@@ -1,15 +1,14 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { times } from '@aztec/foundation/collection';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider, elapsed } from '@aztec/foundation/timer';
-import type { L2Block, L2BlockInfo } from '@aztec/stdlib/block';
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
-import type { BlockProposal } from '@aztec/stdlib/p2p';
-import type { Tx } from '@aztec/stdlib/tx';
-import { TxHash } from '@aztec/stdlib/tx';
-import { type TelemetryClient, getTelemetryClient } from '@aztec/telemetry-client';
-
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider, elapsed } from '@aztec-labs/foundation/timer';
+import type { L2Block, L2BlockInfo } from '@aztec-labs/stdlib/block';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
+import type { BlockProposal } from '@aztec-labs/stdlib/p2p';
+import type { Tx } from '@aztec-labs/stdlib/tx';
+import { TxHash } from '@aztec-labs/stdlib/tx';
+import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import type { PeerId } from '@libp2p/interface';
 
 import type { TxPoolV2, TxPoolV2Events } from '../../mem_pools/tx_pool_v2/interfaces.js';

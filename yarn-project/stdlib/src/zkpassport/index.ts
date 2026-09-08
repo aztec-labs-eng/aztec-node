@@ -1,8 +1,8 @@
-import { Buffer32 } from '@aztec/foundation/buffer';
-import { randomBytes } from '@aztec/foundation/crypto/random';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { withoutHexPrefix } from '@aztec/foundation/string';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { withoutHexPrefix } from '@aztec-labs/foundation/string';
 
 export type ViemZkPassportProofParams = {
   version: `0x${string}`;

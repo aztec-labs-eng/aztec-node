@@ -1,7 +1,7 @@
-import { createEthereumChain } from '@aztec/ethereum/chain';
-import { createExtendedL1Client } from '@aztec/ethereum/client';
-import { FeeJuiceContract, GovernanceContract, ProposalState, RegistryContract } from '@aztec/ethereum/contracts';
-import type { LogFn, Logger } from '@aztec/foundation/log';
+import { createEthereumChain } from '@aztec-labs/ethereum/chain';
+import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
+import { FeeJuiceContract, GovernanceContract, ProposalState, RegistryContract } from '@aztec-labs/ethereum/contracts';
+import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 
 export async function depositGovernanceTokens({
   registryAddress,

@@ -1,14 +1,11 @@
 name: Deploy to staging internal
 
 on:
-  # TODO(monorepo-split): disabled until v6 and the private flow is rebuilt.
-  # schedule:
-  #  - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to deploy (v5.0.0 or any v5.0.0 prerelease). Leave empty to use today's nightly tag."
-        required: false
+        description: "Tag to deploy (vN.0.0 or any vN.0.0 prerelease)."
+        required: true
         type: string
       deploy_contracts:
         description: "Redeploy rollup contracts before deploying infra."
@@ -46,27 +43,24 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 1
 
-      - name: Resolve nightly tag
+      - name: Resolve tag
         id: resolve
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
         run: |
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            TAG="${{ inputs.tag }}"
-            echo "Using manually specified tag: $TAG"
-          else
-            TAG="v5.0.0-nightly.$(date -u +%Y%m%d)"
-            echo "Using today's nightly tag: $TAG"
-            if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-              echo "Error: nightly tag $TAG does not exist on origin"
-              exit 1
-            fi
-            echo "Confirmed nightly tag $TAG exists on origin"
+          # Tolerate a tag pasted without the leading v.
+          TAG="v${TAG_INPUT#v}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "Error: tag $TAG does not exist on origin"
+            exit 1
           fi
+          echo "Confirmed tag $TAG exists on origin"
 
           SEMVER="${TAG#v}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "semver=$SEMVER" >> $GITHUB_OUTPUT
 
-  wait-for-ci3:
+  wait-for-release:
     needs: determine-tag
     runs-on: ubuntu-latest
     steps:
@@ -80,11 +74,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Wait for CI3
-        run: spartan/scripts/wait_for_ci3.ts "${{ needs.determine-tag.outputs.tag }}"
+      - name: Wait for release
+        run: spartan/scripts/wait_for_release.ts "${{ needs.determine-tag.outputs.tag }}"
 
   deploy:
-    needs: [determine-tag, wait-for-ci3]
+    needs: [determine-tag, wait-for-release]
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: staging-internal

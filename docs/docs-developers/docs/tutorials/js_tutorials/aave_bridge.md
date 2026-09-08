@@ -110,13 +110,13 @@ Start with the Hardhat + Aztec template. This provides a pre-configured Hardhat 
 
 This template is a community-maintained starter. If the repository is unavailable, you can set up a Hardhat project manually and add the `@aztec/*` Solidity remappings from the [cross-chain messaging docs](../../foundational-topics/ethereum-aztec-messaging/index.md).
 
-You may need to replace the `@aztec/l1-contracts` dependency in `package.json` with the `@aztec/l1-artifacts` npm package at the version matching your Aztec version, e.g.:
+You may need to replace the `@aztec/l1-contracts` dependency in `package.json` with the `@aztec-foundation/l1-artifacts` npm package at the version matching your Aztec version, e.g.:
 
 ```json
-"@aztec/l1-artifacts": "#include_version_without_prefix"
+"@aztec-foundation/l1-artifacts": "#include_version_without_prefix"
 ```
 
-The package ships the L1 contract sources under `@aztec/l1-artifacts/l1-contracts/src`; update any `@aztec/*` Solidity remappings or aliases in the project to point at `node_modules/@aztec/l1-artifacts/l1-contracts/src`.
+The package ships the L1 contract sources under `@aztec-foundation/l1-artifacts/l1-contracts/src`; update any `@aztec/*` Solidity remappings or aliases in the project to point at `node_modules/@aztec-foundation/l1-artifacts/l1-contracts/src`.
 
 :::
 
@@ -150,7 +150,7 @@ hardhat-aztec-example/
 Add the Aztec dependencies:
 
 ```bash
-yarn add @aztec/aztec.js@#include_version_without_prefix @aztec/accounts@#include_version_without_prefix @aztec/wallets@#include_version_without_prefix @aztec/stdlib@#include_version_without_prefix @aztec/foundation@#include_version_without_prefix @aztec/ethereum@#include_version_without_prefix @aztec/noir-contracts.js@#include_version_without_prefix @aztec/viem@2.38.2 tsx
+yarn add @aztec-labs/aztec.js@#include_version_without_prefix @aztec-labs/accounts@#include_version_without_prefix @aztec-labs/wallets@#include_version_without_prefix @aztec-labs/stdlib@#include_version_without_prefix @aztec-labs/foundation@#include_version_without_prefix @aztec-labs/ethereum@#include_version_without_prefix @aztec-labs/noir-contracts.js@#include_version_without_prefix @aztec/viem@2.38.2 tsx
 ```
 
 Start the local network in another terminal:
@@ -261,7 +261,7 @@ aztec codegen target --outdir ../artifacts
 ```
 
 :::note Token Contract
-The integration script imports `TokenContract` from `@aztec/noir-contracts.js`, which provides pre-built bindings for the standard Token contract. Only the custom `AaveBridge` contract needs codegen.
+The integration script imports `TokenContract` from `@aztec-labs/noir-contracts.js`, which provides pre-built bindings for the standard Token contract. Only the custom `AaveBridge` contract needs codegen.
 :::
 
 ## Part 2: The Ethereum Side
@@ -314,13 +314,13 @@ The portal is where the magic happens. It bridges Aztec's cross-chain messages w
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {IRegistry} from "@aztec/l1-artifacts/l1-contracts/src/governance/interfaces/IRegistry.sol";
-import {IInbox} from "@aztec/l1-artifacts/l1-contracts/src/core/interfaces/messagebridge/IInbox.sol";
-import {IOutbox} from "@aztec/l1-artifacts/l1-contracts/src/core/interfaces/messagebridge/IOutbox.sol";
-import {IRollup} from "@aztec/l1-artifacts/l1-contracts/src/core/interfaces/IRollup.sol";
-import {DataStructures} from "@aztec/l1-artifacts/l1-contracts/src/core/libraries/DataStructures.sol";
-import {Hash} from "@aztec/l1-artifacts/l1-contracts/src/core/libraries/crypto/Hash.sol";
-import {Epoch} from "@aztec/l1-artifacts/l1-contracts/src/core/libraries/TimeLib.sol";
+import {IRegistry} from "@aztec-foundation/l1-artifacts/l1-contracts/src/governance/interfaces/IRegistry.sol";
+import {IInbox} from "@aztec-foundation/l1-artifacts/l1-contracts/src/core/interfaces/messagebridge/IInbox.sol";
+import {IOutbox} from "@aztec-foundation/l1-artifacts/l1-contracts/src/core/interfaces/messagebridge/IOutbox.sol";
+import {IRollup} from "@aztec-foundation/l1-artifacts/l1-contracts/src/core/interfaces/IRollup.sol";
+import {DataStructures} from "@aztec-foundation/l1-artifacts/l1-contracts/src/core/libraries/DataStructures.sol";
+import {Hash} from "@aztec-foundation/l1-artifacts/l1-contracts/src/core/libraries/crypto/Hash.sol";
+import {Epoch} from "@aztec-foundation/l1-artifacts/l1-contracts/src/core/libraries/TimeLib.sol";
 
 #include_code portal_setup /docs/examples/solidity/aave_bridge/AavePortal.sol raw
 }
@@ -359,26 +359,26 @@ Create `scripts/index.ts` to run the full flow. This script deploys all contract
 ### Setup
 
 ```typescript
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
-import { AztecAddress, EthAddress } from "@aztec/aztec.js/addresses";
-import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
-import { Fr } from "@aztec/aztec.js/fields";
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
-import { deployL1Contract } from "@aztec/ethereum/deploy-l1-contract";
-import { sha256ToField } from "@aztec/foundation/crypto/sha256";
+import { getInitialTestAccountsData } from "@aztec-labs/accounts/testing";
+import { AztecAddress, EthAddress } from "@aztec-labs/aztec.js/addresses";
+import { SetPublicAuthwitContractInteraction } from "@aztec-labs/aztec.js/authorization";
+import { Fr } from "@aztec-labs/aztec.js/fields";
+import { createAztecNodeClient, waitForNode } from "@aztec-labs/aztec.js/node";
+import { createExtendedL1Client } from "@aztec-labs/ethereum/client";
+import { deployL1Contract } from "@aztec-labs/ethereum/deploy-l1-contract";
+import { sha256ToField } from "@aztec-labs/foundation/crypto/sha256";
 import {
   computeL2ToL1MessageHash,
   computeSecretHash,
-} from "@aztec/stdlib/hash";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+} from "@aztec-labs/stdlib/hash";
+import { EmbeddedWallet } from "@aztec-labs/wallets/embedded";
 import { decodeEventLog, pad, toFunctionSelector } from "@aztec/viem";
 import { foundry } from "@aztec/viem/chains";
 import AavePortal from "../artifacts/contracts/AavePortal.sol/AavePortal.json" with { type: "json" };
 import MockERC20 from "../artifacts/contracts/MockERC20.sol/MockERC20.json" with { type: "json" };
 import MockAToken from "../artifacts/contracts/MockAToken.sol/MockAToken.json" with { type: "json" };
 import MockAavePool from "../artifacts/contracts/MockAavePool.sol/MockAavePool.json" with { type: "json" };
-import { TokenContract } from "@aztec/noir-contracts.js/Token";
+import { TokenContract } from "@aztec-labs/noir-contracts.js/Token";
 import { AaveBridgeContract } from "../contracts/aztec/artifacts/AaveBridge.js";
 
 #include_code setup /docs/examples/ts/aave_bridge/index.ts raw

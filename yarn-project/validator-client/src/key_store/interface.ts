@@ -1,10 +1,9 @@
-import type { Buffer32 } from '@aztec/foundation/buffer';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import type { Signature } from '@aztec/foundation/eth-signature';
-import type { EthRemoteSignerConfig } from '@aztec/node-keystore';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { SigningContext } from '@aztec/validator-ha-signer/types';
-
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import type { EthRemoteSignerConfig } from '@aztec-labs/node-keystore';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { SigningContext } from '@aztec-labs/validator-ha-signer/types';
 import type { TypedDataDefinition } from 'viem';
 
 /** Key Store

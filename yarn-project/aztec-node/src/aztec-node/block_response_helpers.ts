@@ -1,18 +1,18 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { type BlockData, type CommitteeAttestation, L2Block } from '@aztec/stdlib/block';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { type BlockData, type CommitteeAttestation, L2Block } from '@aztec-labs/stdlib/block';
 import type {
   CheckpointData,
   L1PublishedData,
   ProposedCheckpointData,
   PublishedCheckpoint,
-} from '@aztec/stdlib/checkpoint';
+} from '@aztec-labs/stdlib/checkpoint';
 import {
   type BlockIncludeOptions,
   type BlockResponse,
   type CheckpointIncludeOptions,
   type CheckpointResponse,
   l1PublishInfoFromL1PublishedData,
-} from '@aztec/stdlib/interfaces/client';
+} from '@aztec-labs/stdlib/interfaces/client';
 
 /** Projects a full {@link L2Block} into a {@link BlockResponse}, attaching L1 / attestation context when provided. */
 export async function blockResponseFromL2Block(

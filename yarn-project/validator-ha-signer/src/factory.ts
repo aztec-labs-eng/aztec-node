@@ -1,12 +1,11 @@
 /**
  * Factory functions for creating validator HA signers
  */
-import { createLogger } from '@aztec/foundation/log';
-import { DateProvider } from '@aztec/foundation/timer';
-import { createStore } from '@aztec/kv-store/lmdb-v2';
-import type { LocalSignerConfig, ValidatorHASignerConfig } from '@aztec/stdlib/ha-signing';
-import { getTelemetryClient } from '@aztec/telemetry-client';
-
+import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import { createStore } from '@aztec-labs/kv-store/lmdb-v2';
+import type { LocalSignerConfig, ValidatorHASignerConfig } from '@aztec-labs/stdlib/ha-signing';
+import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { Pool } from 'pg';
 
 import { LmdbSlashingProtectionDatabase, migrateLmdbSlashingProtectionDatabase } from './db/lmdb.js';

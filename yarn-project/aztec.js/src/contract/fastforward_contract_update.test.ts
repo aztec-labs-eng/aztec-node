@@ -1,13 +1,12 @@
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { ProtocolContractAddress } from '@aztec/protocol-contracts';
-import { AztecAddress } from '@aztec/stdlib/aztec-address';
-import { SerializableContractInstance } from '@aztec/stdlib/contract';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
+import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { SerializableContractInstance } from '@aztec-labs/stdlib/contract';
 import {
   DELAYED_PUBLIC_MUTABLE_VALUES_LEN,
   DelayedPublicMutableValuesWithHash,
-} from '@aztec/stdlib/delayed-public-mutable';
-import type { AztecNode } from '@aztec/stdlib/interfaces/client';
-
+} from '@aztec-labs/stdlib/delayed-public-mutable';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { fastForwardContractUpdate } from './fastforward_contract_update.js';

@@ -1,11 +1,10 @@
 /* eslint-disable no-console */
-import { getL1ContractsConfigEnvVars } from '@aztec/ethereum/config';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { jsonParseWithSchema, jsonStringify } from '@aztec/foundation/json-rpc';
-import { createLogger } from '@aztec/foundation/log';
-import { downloadEpochProvingJob, getProverNodeConfigFromEnv, rerunEpochProvingJob } from '@aztec/prover-node';
-import { type UploadSnapshotMetadata, UploadSnapshotMetadataSchema } from '@aztec/stdlib/snapshots';
-
+import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { createLogger } from '@aztec-labs/foundation/log';
+import { downloadEpochProvingJob, getProverNodeConfigFromEnv, rerunEpochProvingJob } from '@aztec-labs/prover-node';
+import { type UploadSnapshotMetadata, UploadSnapshotMetadataSchema } from '@aztec-labs/stdlib/snapshots';
 import { existsSync, mkdirSync } from 'fs';
 import { readFile, writeFile } from 'fs/promises';
 import { basename, join } from 'path';

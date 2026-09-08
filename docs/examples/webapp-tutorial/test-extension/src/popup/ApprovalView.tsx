@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 
 import { MessageTypes } from '../config';
 import { getOriginHost } from '../utils';
-import { hashToEmoji } from '@aztec/wallet-sdk/crypto';
-import type { PendingDiscovery } from '@aztec/wallet-sdk/extension/handlers';
+import { hashToEmoji } from '@aztec-labs/wallet-sdk/crypto';
+import type { PendingDiscovery } from '@aztec-labs/wallet-sdk/extension/handlers';
 import type { PendingTransaction, PendingCapabilities, PendingSessionVerification } from '../shared-types';
 import { sendToBackground, truncateAddress } from './helpers';
 

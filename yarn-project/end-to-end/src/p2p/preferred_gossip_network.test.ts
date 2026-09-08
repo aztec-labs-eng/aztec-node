@@ -1,10 +1,9 @@
-import type { AztecNodeConfig, AztecNodeService } from '@aztec/aztec-node';
-import { waitForTx } from '@aztec/aztec.js/node';
-import { TxHash } from '@aztec/aztec.js/tx';
-import { retryUntil } from '@aztec/foundation/retry';
-import { sleep } from '@aztec/foundation/sleep';
-import { ENR, type P2PClient, type P2PService, type PeerId } from '@aztec/p2p';
-
+import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import { waitForTx } from '@aztec-labs/aztec.js/node';
+import { TxHash } from '@aztec-labs/aztec.js/tx';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { ENR, type P2PClient, type P2PService, type PeerId } from '@aztec-labs/p2p';
 import { jest } from '@jest/globals';
 
 import { shouldCollectMetrics } from '../fixtures/fixtures.js';

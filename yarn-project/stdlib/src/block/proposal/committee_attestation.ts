@@ -1,8 +1,7 @@
-import type { ViemCommitteeAttestation, ViemCommitteeAttestations } from '@aztec/ethereum/contracts';
-import { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-
+import type { ViemCommitteeAttestation, ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { z } from 'zod';
 
 export { EthAddress, Signature };

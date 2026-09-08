@@ -1,13 +1,12 @@
-import type { EpochCacheInterface } from '@aztec/epoch-cache';
-import { type Logger, createLogger } from '@aztec/foundation/log';
-import { sleep } from '@aztec/foundation/sleep';
-import type { AztecAsyncKVStore } from '@aztec/kv-store';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { ContractDataSource } from '@aztec/stdlib/contract';
-import type { BlockMinFeesProvider } from '@aztec/stdlib/gas';
-import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec/stdlib/interfaces/server';
-import type { TelemetryClient } from '@aztec/telemetry-client';
-
+import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import type { BlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
+import type { ClientProtocolCircuitVerifier, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import type { GossipsubEvents, GossipsubMessage } from '@chainsafe/libp2p-gossipsub';
 import type { MsgIdStr, PeerIdStr, PublishOpts, TopicStr } from '@chainsafe/libp2p-gossipsub/types';
 import {

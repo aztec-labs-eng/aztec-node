@@ -1,4 +1,4 @@
-import type { L1RollupConstants } from '@aztec/stdlib/epoch-helpers';
+import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 
 export type SequencerRollupConstants = Pick<
   L1RollupConstants,

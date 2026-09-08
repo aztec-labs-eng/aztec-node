@@ -1,5 +1,5 @@
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { TokenContract, type Transfer } from '@aztec/noir-contracts.js/Token';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { TokenContract, type Transfer } from '@aztec-labs/noir-contracts.js/Token';
 
 import { mintNotes } from '../../fixtures/token_utils.js';
 import { TokenContractTest } from './token_contract_test.js';

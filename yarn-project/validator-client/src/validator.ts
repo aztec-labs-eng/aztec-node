@@ -1,18 +1,24 @@
-import type { BlobClientInterface } from '@aztec/blob-client/client';
-import { type Blob, getBlobsPerL1Block } from '@aztec/blob-lib';
-import type { EpochCache } from '@aztec/epoch-cache';
-import { CheckpointNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import type { EthAddress } from '@aztec/foundation/eth-address';
-import { Signature } from '@aztec/foundation/eth-signature';
-import { FifoSet } from '@aztec/foundation/fifo-set';
-import { type LogData, type Logger, createLogger } from '@aztec/foundation/log';
-import { RunningPromise } from '@aztec/foundation/running-promise';
-import { sleep } from '@aztec/foundation/sleep';
-import { DateProvider } from '@aztec/foundation/timer';
-import type { KeystoreManager } from '@aztec/node-keystore';
-import type { DuplicateAttestationInfo, DuplicateProposalInfo, OversizedProposalInfo, P2P, PeerId } from '@aztec/p2p';
-import { AuthRequest, AuthResponse, ReqRespSubProtocol } from '@aztec/p2p';
+import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
+import { type Blob, getBlobsPerL1Block } from '@aztec-labs/blob-lib';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { CheckpointNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { FifoSet } from '@aztec-labs/foundation/fifo-set';
+import { type LogData, type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
+import { DateProvider } from '@aztec-labs/foundation/timer';
+import type { KeystoreManager } from '@aztec-labs/node-keystore';
+import type {
+  DuplicateAttestationInfo,
+  DuplicateProposalInfo,
+  OversizedProposalInfo,
+  P2P,
+  PeerId,
+} from '@aztec-labs/p2p';
+import { AuthRequest, AuthResponse, ReqRespSubProtocol } from '@aztec-labs/p2p';
 import {
   OffenseType,
   WANT_TO_CLEAR_SLASH_EVENT,
@@ -20,18 +26,18 @@ import {
   type Watcher,
   type WatcherEmitter,
   getOffenseTypeName,
-} from '@aztec/slasher';
-import type { AztecAddress } from '@aztec/stdlib/aztec-address';
-import type { CommitteeAttestationsAndSigners, L2BlockSink, L2BlockSource } from '@aztec/stdlib/block';
-import type { CheckpointReexecutionTracker } from '@aztec/stdlib/checkpoint';
-import { getEpochAtSlot } from '@aztec/stdlib/epoch-helpers';
+} from '@aztec-labs/slasher';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import type { CommitteeAttestationsAndSigners, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
+import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import type {
   ITxProvider,
   Validator,
   ValidatorClientFullConfig,
   WorldStateSynchronizer,
-} from '@aztec/stdlib/interfaces/server';
-import type { InboxBucketRef, L1ToL2MessageSource } from '@aztec/stdlib/messaging';
+} from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxBucketRef, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
   type BlockProposal,
   type BlockProposalOptions,
@@ -42,20 +48,19 @@ import {
   type CoordinationSignatureContext,
   type ValidatedBlockProposal,
   type ValidatedCheckpointProposalCore,
-} from '@aztec/stdlib/p2p';
-import type { CheckpointHeader } from '@aztec/stdlib/rollup';
-import { ConsensusTimetable } from '@aztec/stdlib/timetable';
-import type { BlockHeader, Tx } from '@aztec/stdlib/tx';
-import { AttestationTimeoutError } from '@aztec/stdlib/validators';
-import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec/telemetry-client';
+} from '@aztec-labs/stdlib/p2p';
+import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
+import type { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
+import { AttestationTimeoutError } from '@aztec-labs/stdlib/validators';
+import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import {
   createHASigner,
   createLocalSignerWithProtection,
   createSignerFromSharedDb,
-} from '@aztec/validator-ha-signer/factory';
-import { DutyType, type SigningContext, type SlashingProtectionDatabase } from '@aztec/validator-ha-signer/types';
-import type { ValidatorHASigner } from '@aztec/validator-ha-signer/validator-ha-signer';
-
+} from '@aztec-labs/validator-ha-signer/factory';
+import { DutyType, type SigningContext, type SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
+import type { ValidatorHASigner } from '@aztec-labs/validator-ha-signer/validator-ha-signer';
 import { EventEmitter } from 'events';
 import type { TypedDataDefinition } from 'viem';
 

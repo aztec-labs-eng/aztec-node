@@ -1,13 +1,13 @@
-import type { BatchedBlob } from '@aztec/blob-lib';
-import type { ViemCommitteeAttestation } from '@aztec/ethereum/contracts';
-import { BlockNumber, type CheckpointNumber, type EpochNumber } from '@aztec/foundation/branded-types';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec/foundation/log';
-import { promiseWithResolvers } from '@aztec/foundation/promise';
-import { SerialQueue } from '@aztec/foundation/queue';
-import type { DateProvider } from '@aztec/foundation/timer';
-import type { L2BlockSource } from '@aztec/stdlib/block';
-import type { Proof } from '@aztec/stdlib/proofs';
-import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec/stdlib/rollup';
+import type { BatchedBlob } from '@aztec-labs/blob-lib';
+import type { ViemCommitteeAttestation } from '@aztec-labs/ethereum/contracts';
+import { BlockNumber, type CheckpointNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import type { DateProvider } from '@aztec-labs/foundation/timer';
+import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { Proof } from '@aztec-labs/stdlib/proofs';
+import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 
 import type { ProverNodePublisher } from './prover-node-publisher.js';
 import type { ProverPublisherFactory } from './prover-publisher-factory.js';

@@ -1,16 +1,16 @@
-import { type BlobClientConfig, blobClientConfigMapping } from '@aztec/blob-client/client/config';
-import { type L1ContractsConfig, l1ContractsConfigMappings } from '@aztec/ethereum/config';
-import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec/ethereum/l1-reader';
+import { type BlobClientConfig, blobClientConfigMapping } from '@aztec-labs/blob-client/client/config';
+import { type L1ContractsConfig, l1ContractsConfigMappings } from '@aztec-labs/ethereum/config';
+import { type L1ReaderConfig, l1ReaderConfigMappings } from '@aztec-labs/ethereum/l1-reader';
 import {
   type ConfigMappingsType,
   booleanConfigHelper,
   getConfigFromMappings,
   numberConfigHelper,
   optionalNumberConfigHelper,
-} from '@aztec/foundation/config';
-import { type ChainConfig, type SequencerConfig, chainConfigMappings } from '@aztec/stdlib/config';
-import type { ArchiverSpecificConfig } from '@aztec/stdlib/interfaces/server';
-import { DEFAULT_ORPHAN_PRUNE_NO_PROPOSAL_TOLERANCE } from '@aztec/stdlib/timetable';
+} from '@aztec-labs/foundation/config';
+import { type ChainConfig, type SequencerConfig, chainConfigMappings } from '@aztec-labs/stdlib/config';
+import type { ArchiverSpecificConfig } from '@aztec-labs/stdlib/interfaces/server';
+import { DEFAULT_ORPHAN_PRUNE_NO_PROPOSAL_TOLERANCE } from '@aztec-labs/stdlib/timetable';
 
 /**
  * The archiver configuration.

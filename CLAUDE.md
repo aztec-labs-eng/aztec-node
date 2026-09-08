@@ -13,7 +13,7 @@ All paths below are relative to the git root. When working inside a component, a
 <build_system>
 From the git root, use `make <target>`: `make fast` builds everything needed for development, and `make yarn-project` runs the full TS build chain. For individual components, run `./bootstrap.sh` inside each directory.
 
-When a change spans multiple components, rebuild in dependency order: first `noir-projects/` to compile contracts, then `yarn-project/` with `yarn build` from inside `yarn-project/` (not the git root). Barretenberg is not built from this repo: the `bb` binaries come pre-built via `labs-aztec-toolchain`, and the `@aztec/bb.js` (and related) npm packages are consumed as published releases pinned in `yarn-project/package.json` resolutions.
+When a change spans multiple components, rebuild in dependency order: first `noir-projects/` to compile contracts, then `yarn-project/` with `yarn build` from inside `yarn-project/` (not the git root). Barretenberg is not built from this repo: the `bb` binaries come pre-built via `labs-aztec-toolchain`, and the `@aztec-foundation/bb.js` (and related) npm packages are consumed as published releases pinned in `yarn-project/package.json` resolutions.
 
 The noir-projects build scripts default `$NARGO` to `labs-aztec-toolchain/bin/nargo`, which is provisioned from the versions pinned in `labs-aztec-toolchain/bootstrap.sh`. Do not override it with a globally installed nargo — version mismatches produce opaque bytecode failures in downstream components.
 </build_system>

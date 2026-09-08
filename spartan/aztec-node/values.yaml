@@ -38,7 +38,7 @@ global:
   l1ConsensusHostApiKeyHeaders: ""
 
   aztecImage:
-    repository: aztecprotocol/aztec
+    repository: azteclabs/aztec
     tag: ""
     pullPolicy: Always
 

@@ -2,6 +2,7 @@
 title: "Verify everything works"
 description: "Confirm your sequencer is healthy and visible on the network: one container check, one explorer check, one port check."
 displayed_sidebar: operatorsSidebar
+references: ["yarn-project/stdlib/src/interfaces/aztec-node.ts", "docs/static/scripts/check-attester.sh"]
 ---
 
 # Verify everything works
@@ -24,7 +25,7 @@ Expected:
 
 ```
 NAME              IMAGE                       STATUS
-aztec-sequencer   aztecprotocol/aztec:...     Up 12 minutes (healthy)
+aztec-sequencer   azteclabs/aztec:...     Up 12 minutes (healthy)
 ```
 
 The `(healthy)` flag comes from the health check in your compose file. It probes the node's own API every 30 seconds and requires a proven L2 tip, so this one line covers sync progress, API readiness, and container stability.

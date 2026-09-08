@@ -7,10 +7,10 @@ import {
   MAX_PRIVATE_LOGS_PER_TX,
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
   PRIVATE_LOG_SIZE_IN_FIELDS,
-} from '@aztec/constants';
-import { makeTuple } from '@aztec/foundation/array';
-import { BlockNumber } from '@aztec/foundation/branded-types';
-import { Fr } from '@aztec/foundation/curves/bn254';
+} from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import type { BlockBlobData, BlockEndBlobData } from './block_blob_data.js';
 import type { BlockEndMarker } from './block_end_marker.js';

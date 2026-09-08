@@ -1,8 +1,8 @@
-import { SpongeBlob } from '@aztec/blob-lib/types';
-import { Fr } from '@aztec/foundation/curves/bn254';
-import { bufferSchemaFor } from '@aztec/foundation/schemas';
-import { BufferReader, serializeToBuffer } from '@aztec/foundation/serialize';
-import { bufferToHex, hexToBuffer } from '@aztec/foundation/string';
+import { SpongeBlob } from '@aztec-labs/blob-lib/types';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
+import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { PartialStateReference } from '../tx/partial_state_reference.js';
 import { BlockConstantData } from './block_constant_data.js';
