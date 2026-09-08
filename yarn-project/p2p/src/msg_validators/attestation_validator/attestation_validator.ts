@@ -110,7 +110,14 @@ export class CheckpointAttestationValidator implements P2PValidator<CheckpointAt
         this.logger.warn(`No committee exists for checkpoint attestation for slot ${slotNumber}`);
         return { result: 'reject', severity: PeerErrorSeverity.LowToleranceError };
       }
-      throw e;
+      // Any other committee/proposer lookup failure here is receiver-local (L1 RPC down, or this
+      // node behind) and says nothing about the relaying peer. Ignore rather than rethrow: a thrown
+      // validation defaults to reject + penalize, punishing an honest relayer for our own failure.
+      this.logger.warn(
+        `Ignoring checkpoint attestation for slot ${slotNumber} after a local committee lookup failure`,
+        { error: e instanceof Error ? e.message : String(e) },
+      );
+      return { result: 'ignore' };
     }
   }
 }
