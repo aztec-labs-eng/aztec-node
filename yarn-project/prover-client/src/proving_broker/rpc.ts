@@ -36,8 +36,12 @@ export function* proverBrokerBackoff() {
   }
 }
 
-const ProvingJobFilterSchema = z.object({
-  allowList: z.array(z.nativeEnum(ProvingRequestType)),
+// A valid allowList has at most one entry per proving-request type. Without a cap its length is bounded
+// only by the request body, so a caller could send a huge list the broker clones, sorts, and scans each poll.
+const provingRequestTypeCount = Object.values(ProvingRequestType).filter(v => typeof v === 'number').length;
+
+export const ProvingJobFilterSchema = z.object({
+  allowList: z.array(z.nativeEnum(ProvingRequestType)).max(provingRequestTypeCount),
 });
 
 const GetProvingJobResponse = z.object({
