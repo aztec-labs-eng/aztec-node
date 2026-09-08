@@ -997,9 +997,14 @@ export class ArchiverL1Synchronizer implements Traceable {
         }),
       );
 
+      const txEffectLeavesByBlockHash = new Map(
+        blobFetched.flatMap(retrieved => [...retrieved.txEffectLeavesByBlockHash]),
+      );
       // Index the built checkpoints by number so we can ingest them in calldata order, slotting in the
       // promoted checkpoint (built from a local proposed block rather than blobs).
-      const publishedByNumber = new Map(blobFetched.map(published => [published.checkpoint.number, published]));
+      const publishedByNumber = new Map(
+        blobFetched.map(({ publishedCheckpoint }) => [publishedCheckpoint.checkpoint.number, publishedCheckpoint]),
+      );
       if (checkpointToPromote) {
         publishedByNumber.set(checkpointToPromote.checkpoint.number, checkpointToPromote);
       }
@@ -1050,6 +1055,7 @@ export class ArchiverL1Synchronizer implements Traceable {
                 checkpoint: maybeValidCheckpointToPromote,
               },
               evictProposedFrom,
+              txEffectLeavesByBlockHash,
             ),
           ),
         );

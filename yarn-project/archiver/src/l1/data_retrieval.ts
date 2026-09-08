@@ -33,6 +33,7 @@ import { type Hex, decodeFunctionData, getAbiItem, hexToBytes } from 'viem';
 
 import { NoBlobBodiesFoundError } from '../errors.js';
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
+import type { BlockTxEffectLeaves } from '../store/tx_effect_leaves.js';
 import type { DataRetrieval } from '../structs/data_retrieval.js';
 import type { InboxMessage } from '../structs/inbox_message.js';
 import { CalldataRetriever } from './calldata_retriever.js';
@@ -74,7 +75,10 @@ export async function retrievedToPublishedCheckpoint({
   chainId,
   version,
   attestations,
-}: RetrievedCheckpoint): Promise<PublishedCheckpoint> {
+}: RetrievedCheckpoint): Promise<{
+  publishedCheckpoint: PublishedCheckpoint;
+  txEffectLeavesByBlockHash: BlockTxEffectLeaves;
+}> {
   const { blocks: blocksBlobData } = checkpointBlobData;
 
   // The lastArchiveRoot of a block is the new archive for the previous block.
@@ -85,6 +89,7 @@ export async function retrievedToPublishedCheckpoint({
 
   const spongeBlob = SpongeBlob.init();
   const l2Blocks: L2Block[] = [];
+  const txEffectLeavesByBlockHash = new Map<string, readonly Fr[]>();
   for (let i = 0; i < blocksBlobData.length; i++) {
     const blockBlobData = blocksBlobData[i];
     // The blob carries a per-block L1-to-L2 message tree root: any block
@@ -126,6 +131,7 @@ export async function retrievedToPublishedCheckpoint({
     });
 
     const body = Body.fromTxBlobData(blockBlobData.txs);
+    const { root: txEffectsTreeRoot, leaves } = await body.computeTxEffectsTree();
 
     const blobFields = encodeBlockBlobData(blockBlobData);
     await spongeBlob.absorb(blobFields);
@@ -137,7 +143,7 @@ export async function retrievedToPublishedCheckpoint({
       lastArchive: new AppendOnlyTreeSnapshot(lastArchiveRoot, l2BlockNumber),
       state,
       spongeBlobHash,
-      txEffectsTreeRoot: await body.computeTxEffectsTreeRoot(),
+      txEffectsTreeRoot,
       globalVariables,
       totalFees: body.txEffects.reduce((accum, txEffect) => accum.add(txEffect.transactionFee), Fr.ZERO),
       totalManaUsed: new Fr(blockEndStateField.totalManaUsed),
@@ -145,7 +151,9 @@ export async function retrievedToPublishedCheckpoint({
 
     const newArchive = new AppendOnlyTreeSnapshot(newArchiveRoots[i], l2BlockNumber + 1);
 
-    l2Blocks.push(new L2Block(newArchive, header, body, checkpointNumber, IndexWithinCheckpoint(i)));
+    const block = new L2Block(newArchive, header, body, checkpointNumber, IndexWithinCheckpoint(i));
+    l2Blocks.push(block);
+    txEffectLeavesByBlockHash.set((await block.hash()).toString(), leaves);
   }
 
   const lastBlock = l2Blocks.at(-1)!;
@@ -157,7 +165,7 @@ export async function retrievedToPublishedCheckpoint({
     feeAssetPriceModifier: feeAssetPriceModifier,
   });
 
-  return PublishedCheckpoint.from({ checkpoint, l1, attestations });
+  return { publishedCheckpoint: PublishedCheckpoint.from({ checkpoint, l1, attestations }), txEffectLeavesByBlockHash };
 }
 
 /**

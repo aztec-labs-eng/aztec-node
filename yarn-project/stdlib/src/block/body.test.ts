@@ -2,6 +2,7 @@ import { DomainSeparator } from '@aztec-labs/constants';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { jest } from '@jest/globals';
 
 import { Body } from './body.js';
 
@@ -28,6 +29,21 @@ describe('Body', () => {
     const body = await Body.random();
     const parsed = Body.schema.parse(JSON.parse(jsonStringify(body)));
     expect(parsed).toEqual(body);
+  });
+
+  describe('computeTxEffectsTree', () => {
+    it('returns an empty tree with no leaves', async () => {
+      expect(await Body.empty().computeTxEffectsTree()).toEqual({ root: Fr.ZERO, leaves: [] });
+    });
+
+    it('returns the leaves used for the root without hashing an effect twice', async () => {
+      const body = await Body.random({ txsPerBlock: 1 });
+      const leaf = new Fr(123);
+      const computeLeaf = jest.spyOn(body.txEffects[0], 'computeTxEffectsTreeLeaf').mockResolvedValue(leaf);
+
+      expect(await body.computeTxEffectsTree()).toEqual({ root: leaf, leaves: [leaf] });
+      expect(computeLeaf).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('tx effects tree root', () => {

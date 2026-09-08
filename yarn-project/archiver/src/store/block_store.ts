@@ -37,7 +37,6 @@ import {
   type IndexedTxEffect,
   TxEffect,
   TxHash,
-  computeTxEffectLeaves,
   deserializeIndexedTxEffect,
   serializeIndexedTxEffect,
 } from '@aztec-labs/stdlib/tx';
@@ -58,6 +57,7 @@ import {
   ProposedCheckpointNotSequentialError,
   ProposedCheckpointPromotionNotSequentialError,
 } from '../errors.js';
+import { type BlockTxEffectLeaves, prepareBlockTxEffectLeaves } from './tx_effect_leaves.js';
 
 export type { TxEffect, TxHash, TxReceipt } from '@aztec-labs/stdlib/tx';
 
@@ -248,7 +248,11 @@ export class BlockStore {
    * @param block - The proposed L2 block to be added to the store.
    * @returns True if the operation is successful.
    */
-  async addProposedBlock(block: L2Block, opts: { force?: boolean } = {}): Promise<boolean> {
+  async addProposedBlock(
+    block: L2Block,
+    opts: { force?: boolean; txEffectLeavesByBlockHash?: BlockTxEffectLeaves } = {},
+  ): Promise<boolean> {
+    const txEffectLeavesByBlockHash = await prepareBlockTxEffectLeaves([block], opts.txEffectLeavesByBlockHash);
     return await this.db.transactionAsync(async () => {
       const blockNumber = block.number;
       const blockCheckpointNumber = block.checkpointNumber;
@@ -311,7 +315,12 @@ export class BlockStore {
         throw new BlockIndexNotSequentialError(blockIndex, previousBlockIndex);
       }
 
-      await this.addBlockToDatabase(block, block.checkpointNumber, block.indexWithinCheckpoint);
+      await this.addBlockToDatabase(
+        block,
+        block.checkpointNumber,
+        block.indexWithinCheckpoint,
+        txEffectLeavesByBlockHash.get((await block.hash()).toString())!,
+      );
 
       return true;
     });
@@ -327,12 +336,16 @@ export class BlockStore {
    */
   async addCheckpoints(
     checkpoints: PublishedCheckpoint[],
-    opts: { force?: boolean } = {},
+    opts: { force?: boolean; txEffectLeavesByBlockHash?: BlockTxEffectLeaves } = {},
   ): Promise<PublishedCheckpoint[]> {
     if (checkpoints.length === 0) {
       return [];
     }
 
+    const txEffectLeavesByBlockHash = await prepareBlockTxEffectLeaves(
+      checkpoints.flatMap(published => published.checkpoint.blocks),
+      opts.txEffectLeavesByBlockHash,
+    );
     return await this.db.transactionAsync(async () => {
       const firstCheckpointNumber = checkpoints[0].checkpoint.number;
       const previousCheckpointNumber = await this.getLatestCheckpointNumber();
@@ -377,7 +390,13 @@ export class BlockStore {
 
         // Store every block in the database (may already exist, but L1 data is authoritative)
         for (let i = 0; i < checkpoint.checkpoint.blocks.length; i++) {
-          await this.addBlockToDatabase(checkpoint.checkpoint.blocks[i], checkpoint.checkpoint.number, i);
+          const block = checkpoint.checkpoint.blocks[i];
+          await this.addBlockToDatabase(
+            block,
+            checkpoint.checkpoint.number,
+            i,
+            txEffectLeavesByBlockHash.get((await block.hash()).toString())!,
+          );
         }
         previousBlock = checkpoint.checkpoint.blocks.at(-1);
 
@@ -520,12 +539,13 @@ export class BlockStore {
     }
   }
 
-  private async addBlockToDatabase(block: L2Block, checkpointNumber: number, indexWithinCheckpoint: number) {
+  private async addBlockToDatabase(
+    block: L2Block,
+    checkpointNumber: number,
+    indexWithinCheckpoint: number,
+    txEffectLeaves: readonly Fr[],
+  ) {
     const blockHash = await block.hash();
-
-    // Each leaf is a structured hash over a tx's full effect data, so it is computed once here, at ingestion, and read
-    // back by membership-witness requests instead of being recomputed per request.
-    const txEffectLeaves = await computeTxEffectLeaves(block.body.txEffects);
     await this.#blockTxEffectLeaves.set(
       blockHash.toString(),
       Buffer.concat(txEffectLeaves.map(leaf => leaf.toBuffer())),

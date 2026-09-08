@@ -4,6 +4,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Body, CommitteeAttestation } from '@aztec-labs/stdlib/block';
 import { L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { computeTxEffectLeaves } from '@aztec-labs/stdlib/tx';
 
 import { type RetrievedCheckpoint, retrievedToPublishedCheckpoint } from './data_retrieval.js';
 
@@ -42,7 +43,8 @@ describe('data_retrieval', () => {
         attestations: [CommitteeAttestation.empty()],
       };
 
-      const publishedCheckpoint = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
+      const { publishedCheckpoint, txEffectLeavesByBlockHash } =
+        await retrievedToPublishedCheckpoint(retrievedCheckpoint);
 
       // Verify we got 3 blocks
       expect(publishedCheckpoint.checkpoint.blocks).toHaveLength(3);
@@ -76,6 +78,9 @@ describe('data_retrieval', () => {
       for (const [i, block] of publishedCheckpoint.checkpoint.blocks.entries()) {
         const expectedRoot = await [body1, body2, body3][i].computeTxEffectsTreeRoot();
         expect(block.header.txEffectsTreeRoot).toEqual(expectedRoot);
+        expect(txEffectLeavesByBlockHash.get((await block.hash()).toString())).toEqual(
+          await computeTxEffectLeaves([body1, body2, body3][i].txEffects),
+        );
         expect(block.header.txEffectsTreeRoot).not.toEqual(Fr.ZERO);
       }
 
@@ -124,7 +129,7 @@ describe('data_retrieval', () => {
         attestations: [],
       };
 
-      const publishedCheckpoint = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
+      const { publishedCheckpoint } = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
 
       expect(publishedCheckpoint.checkpoint.blocks).toHaveLength(1);
       expect(publishedCheckpoint.checkpoint.blocks[0].body.txEffects).toHaveLength(3);

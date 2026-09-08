@@ -61,12 +61,17 @@ export class Body {
    * alone. A block with no txs has root 0, and a single-tx block's root is that tx's leaf, unhashed.
    */
   async computeTxEffectsTreeRoot(): Promise<Fr> {
+    return (await this.computeTxEffectsTree()).root;
+  }
+
+  /** Computes the root and its leaves together so callers can reuse the leaves without hashing the effects again. */
+  async computeTxEffectsTree(): Promise<{ root: Fr; leaves: Fr[] }> {
     const leaves = await computeTxEffectLeaves(this.txEffects);
     const root = await computeUnbalancedMerkleTreeRootAsync(
       leaves.map(leaf => leaf.toBuffer()),
       txEffectsTreeNodeHash,
     );
-    return Fr.fromBuffer(root);
+    return { root: Fr.fromBuffer(root), leaves };
   }
 
   /**
