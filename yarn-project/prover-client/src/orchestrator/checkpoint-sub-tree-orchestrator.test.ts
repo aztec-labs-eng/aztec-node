@@ -6,6 +6,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { L1ToL2MessageSponge, ScopedL2ToL1Message, computeBlockOutHash } from '@aztec-labs/stdlib/messaging';
 import { makeScopedL2ToL1Message } from '@aztec-labs/stdlib/testing';
+import { jest } from '@jest/globals';
 
 import { TestContext, makeTestDeferredJobQueue } from '../mocks/test_context.js';
 import { CheckpointSubTreeOrchestrator } from './checkpoint-sub-tree-orchestrator.js';
