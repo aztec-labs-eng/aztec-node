@@ -536,7 +536,10 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     this.logger.debug(`Checkpoint status for slot ${slot}: ${status}`, { ...checkpoint, slot });
 
     // Missing-attestor faults only apply when we have positive evidence the proposal was valid.
-    const attestorsExpected = status === 'checkpoint-mined' || status === 'checkpoint-valid';
+    // A local `invalid` verdict vetoes them even for a mined checkpoint: an honest validator refuses
+    // to sign what it re-executed as invalid, so it must not count as a missed attestor (inactivity slashing).
+    const attestorsExpected =
+      (status === 'checkpoint-mined' || status === 'checkpoint-valid') && reexecutionOutcome !== 'invalid';
     const missedAttestors = new Set(
       attestorsExpected
         ? committee.filter(v => !attestors.has(v.toString()) && !proposer.equals(v)).map(v => v.toString())
