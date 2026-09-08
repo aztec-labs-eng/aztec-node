@@ -62,6 +62,20 @@ The `@aztec` scope keeps the packages published for earlier versions, so an exis
 pinned to an older release continues to install unchanged. There is no `@aztec-foundation`
 release of those older versions: the scope starts at `6.0.0-nightly.20260901`.
 
+### [Aztec.nr] aztec-nr moved to `aztec-labs-eng/aztec-nr`
+
+The aztec-nr crates are now published at https://github.com/aztec-labs-eng/aztec-nr. The previous
+repository, `AztecProtocol/aztec-nr`, has no tags from v6 onwards, so a project that only bumps its
+`tag` fails to compile with `Remote branch v6.x.x not found`. Update the `git` field of every aztec-nr
+dependency in your `Nargo.toml` files as well:
+
+```diff
+-aztec = { git = "https://github.com/AztecProtocol/aztec-nr", tag = "v5.2.0", directory = "aztec" }
++aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v<version>", directory = "aztec" }
+```
+
+`aztec compile` warns when a dependency still points at the previous repository.
+
 ### [Aztec.nr] `DelayedPublicMutable` rejects delays below one hour
 
 `DelayedPublicMutable` now enforces a minimum delay of one hour (`aztec::state_vars::DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY`, 3600 seconds). Declaring a state variable with a shorter initial delay fails to compile, and `schedule_delay_change` reverts when passed a shorter delay:

@@ -92,9 +92,8 @@ function release_git_push {
   local mirrored_repo_url="https://github.com/aztec-labs-eng/aztec-nr.git"
   local mirrored_repo_push_url="git@github.com:aztec-labs-eng/aztec-nr.git"
 
-  # Tested via :+ so the value never lands on a command line that an xtrace would log.
-  if [ "${DRY_RUN:-0}" = 0 ] && [ -z "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY:+x}" ]; then
-    echo "AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY must be set to push to $mirrored_repo_push_url" >&2
+  if [ "${DRY_RUN:-0}" = 0 ] && [ ! -r "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE:-}" ]; then
+    echo "AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE must name the mirror's deploy key to push to $mirrored_repo_push_url" >&2
     exit 1
   fi
 
@@ -116,15 +115,11 @@ function release_git_push {
 
   # Pushes authenticate over ssh with the mirror's deploy key; fetches stay anonymous.
   if [ "${DRY_RUN:-0}" = 0 ]; then
-    local ssh_dir=$(mktemp -d)
-    trap "rm -rf $ssh_dir" EXIT
-    # The here-string keeps the key off the command line, so an xtrace cannot log it, and ends
-    # the file with the newline ssh insists on (a second one, if the key already has it, is fine).
-    cat <<<"$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY" > $ssh_dir/key
-    chmod 600 $ssh_dir/key
     # GitHub's ssh host key, as published at https://api.github.com/meta.
-    echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > $ssh_dir/known_hosts
-    export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes"
+    local known_hosts=$(mktemp)
+    trap "rm -f $known_hosts" EXIT
+    echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > $known_hosts
+    export GIT_SSH_COMMAND="ssh -i $AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts -o StrictHostKeyChecking=yes"
     git remote set-url --push origin "$mirrored_repo_push_url"
   fi
 

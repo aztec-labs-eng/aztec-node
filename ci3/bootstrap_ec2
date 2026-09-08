@@ -135,6 +135,7 @@ fi
 if [ -f "${NETWORK_ENV_FILE}" ]; then
   export NETWORK_ENV_FILE_B64=$(cat "${NETWORK_ENV_FILE}" | base64 -w 0)
 fi
+# The aztec-nr mirror deploy key arrives as the secret's contents and reaches the build as a file.
 if [ -n "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY:-}" ]; then
   export AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64=$(base64 -w 0 <<<"$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY")
 fi
@@ -198,12 +199,6 @@ container_script=$(
   if [ -n "\$DOCKER_PASSWORD" ]; then
     source \$ci3/source_release_target
     docker_login
-  fi
-
-  # The aztec-nr mirror deploy key is multi-line, so it travels base64-encoded; the release
-  # expects it raw.
-  if [ -n "\${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:-}" ]; then
-    export AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY=\$(base64 -d <<<"\$AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64")
   fi
 
   # Heartbeat.
@@ -335,6 +330,11 @@ if [ -n "${BUILD_INSTANCE_KEY_B64:-}" ]; then
   echo "${BUILD_INSTANCE_KEY_B64:-}" | base64 -d > \$HOME/.ssh/build_instance_key
   chmod 600 \$HOME/.ssh/build_instance_key
 fi
+if [ -n "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:-}" ]; then
+  mkdir -p \$HOME/.ssh
+  echo "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:-}" | base64 -d > \$HOME/.ssh/aztec_nr_mirror_key
+  chmod 600 \$HOME/.ssh/aztec_nr_mirror_key
+fi
 if [ -n "${BUILD_INSTANCE_SSH_CONFIG_B64:-}" ]; then
   mkdir -p \$HOME/.ssh
   echo "${BUILD_INSTANCE_SSH_CONFIG_B64:-}" | base64 -d > \$HOME/.ssh/build_instance_ssh_config
@@ -391,7 +391,7 @@ start_build() {
     -e NETLIFY_AUTH_TOKEN=${NETLIFY_AUTH_TOKEN:-} \
     -e NPM_REGISTRY=${NPM_REGISTRY:-} \
     -e NPM_TOKEN=${NPM_TOKEN:-} \
-    -e AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64=${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:-} \
+    -e AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE=${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:+/home/aztec-dev/.ssh/aztec_nr_mirror_key} \
     -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-} \
     -e AWS_TOKEN=\$aws_token \
     -e NAMESPACE=${NAMESPACE:-} \

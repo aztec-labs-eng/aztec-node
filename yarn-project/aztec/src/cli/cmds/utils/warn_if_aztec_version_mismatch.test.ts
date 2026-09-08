@@ -113,7 +113,20 @@ describe('warnIfAztecVersionMismatch', () => {
     expect(logMessages.filter(m => m.includes('WARNING'))).toHaveLength(0);
   });
 
-  it('warns when a dependency on the previous aztec-nr repository does not match the CLI version', async () => {
+  it('warns that aztec-nr moved for a dependency on the previous repository even when its tag matches', async () => {
+    await makePackage(tempDir, 'project', 'contract', {
+      aztec: '{ git = "https://github.com/AztecProtocol/aztec-nr", tag = "v1.0.0", directory = "aztec" }',
+    });
+
+    await warnIfAztecVersionMismatch(log, '1.0.0');
+
+    expect(logMessages).toHaveLength(1);
+    expect(logMessages[0]).toContain('WARNING: aztec-nr has moved');
+    expect(logMessages[0]).toContain('https://github.com/aztec-labs-eng/aztec-nr');
+    expect(logMessages[0]).toContain('"v1.0.0"');
+  });
+
+  it('reports a dependency on the previous repository as moved, not as a version mismatch', async () => {
     await makePackage(tempDir, 'project', 'contract', {
       aztec: '{ git = "https://github.com/AztecProtocol/aztec-nr", tag = "v0.99.0", directory = "aztec" }',
     });
@@ -121,8 +134,8 @@ describe('warnIfAztecVersionMismatch', () => {
     await warnIfAztecVersionMismatch(log, '1.0.0');
 
     expect(logMessages).toHaveLength(1);
-    expect(logMessages[0]).toContain('WARNING');
-    expect(logMessages[0]).toContain('v0.99.0');
+    expect(logMessages[0]).toContain('WARNING: aztec-nr has moved');
+    expect(logMessages[0]).not.toContain('version mismatch');
   });
 
   it('does not warn for unrelated third-party git dependencies', async () => {

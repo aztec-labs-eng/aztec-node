@@ -935,6 +935,11 @@ case "$cmd" in
     # Before the build, so a misconfigured release environment fails in seconds. Exported values
     # reach both children below.
     source $ci3/source_release_target
+    if [[ " $RELEASE_PROJECTS " == *" noir-projects/aztec-nr "* ]] && [ "${DRY_RUN:-0}" = 0 ] &&
+       [ ! -r "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE:-}" ]; then
+      echo "AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE must name the aztec-nr mirror deploy key to release noir-projects/aztec-nr." >&2
+      exit 1
+    fi
 
     ./bootstrap.sh build release
     ./bootstrap.sh release

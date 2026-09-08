@@ -76,7 +76,7 @@ When `aztec compile` warns that your aztec dependency tag does not match the CLI
 the `tag` field in every Aztec.nr entry in your `Nargo.toml` to match the CLI version you are
 running.
 
-For example, if your CLI is `v#include_aztec_version`, change:
+For example, if your CLI is `#include_aztec_version`, change:
 
 ```toml
 aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="v<old-version>", directory="aztec" }
@@ -85,7 +85,7 @@ aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="v<old-version>
 to:
 
 ```toml
-aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="v#include_aztec_version", directory="aztec" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="aztec" }
 ```
 
 Repeat for every other Aztec.nr dependency in your `Nargo.toml` (e.g. `address_note`,
