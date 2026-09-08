@@ -8,6 +8,7 @@ import {
   TxEffectMembershipWitnessSchema,
   computeRootFromTxEffectMembershipWitness,
   computeTxEffectMembershipWitness,
+  computeTxEffectsTreeLeaf,
   verifyTxEffectMembershipWitness,
 } from './tx_effect_membership.js';
 
@@ -18,6 +19,7 @@ describe('TxEffectMembershipWitness', () => {
     const witness = {
       blockNumber: BlockNumber(7),
       root: Fr.random(),
+      categoriesHash: Fr.random(),
       leafIndex: 3n,
       siblingPath: new SiblingPath(2, [Fr.random().toBuffer(), Fr.random().toBuffer()]),
     };
@@ -74,6 +76,23 @@ describe('TxEffectMembershipWitness', () => {
     expect(await computeRootFromTxEffectMembershipWitness(leaf, witness)).toEqual(leaf);
     expect(await verifyTxEffectMembershipWitness(leaf, witness, await body.computeTxEffectsTreeRoot())).toBe(true);
     expect(await verifyTxEffectMembershipWitness(Fr.random(), witness, witness.root)).toBe(false);
+  });
+
+  it('proves transaction inclusion from only the tx hash and witness categories hash', async () => {
+    const body = await makeBody(3);
+    const root = await body.computeTxEffectsTreeRoot();
+    for (const [index, txEffect] of body.txEffects.entries()) {
+      const witness = await computeTxEffectMembershipWitness(body.txEffects, index);
+      const leaf = await computeTxEffectsTreeLeaf(txEffect.txHash, witness.categoriesHash);
+      expect(await verifyTxEffectMembershipWitness(leaf, witness, root)).toBe(true);
+      const wrongCategoriesLeaf = await computeTxEffectsTreeLeaf(txEffect.txHash, Fr.random());
+      expect(await verifyTxEffectMembershipWitness(wrongCategoriesLeaf, witness, root)).toBe(false);
+      const wrongTxLeaf = await computeTxEffectsTreeLeaf(
+        body.txEffects[(index + 1) % 3].txHash,
+        witness.categoriesHash,
+      );
+      expect(await verifyTxEffectMembershipWitness(wrongTxLeaf, witness, root)).toBe(false);
+    }
   });
 
   it('throws for a tx index outside the block', async () => {

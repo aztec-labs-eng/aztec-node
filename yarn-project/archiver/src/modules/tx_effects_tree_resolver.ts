@@ -21,12 +21,14 @@ export interface TxEffectsTreeStoreView {
   getTxLocation(txHash: TxHash): Promise<TxLocation | undefined>;
   /** Reads the leaves belonging to the given block hash. */
   getTxEffectLeaves(blockHash: BlockHash): Promise<Fr[] | undefined>;
+  /** Reads the categories hash for the transaction in its owning block. */
+  getTxEffectCategoriesHash(blockHash: BlockHash, txIndexInBlock: number): Promise<Fr | undefined>;
 }
 
 /**
  * Builds membership witnesses against a block's tx effects tree root.
  *
- * No tree is cached: only the tx effects tree leaves are, computed once per block when the store ingests it. Per
+ * No tree is cached: only the leaves and categories hashes, computed once when the store ingests a block. Per
  * request, the internal nodes are rebuilt from those leaves (one cheap two-field hash per tx) and the rebuilt root is
  * checked against the root the block header commits to.
  */
@@ -84,7 +86,18 @@ export class TxEffectsTreeResolver {
         );
       }
 
-      return { blockNumber, root, leafIndex, siblingPath };
+      const categoriesHash = await this.blocks.getTxEffectCategoriesHash(blockHash, txIndexInBlock);
+      if (!categoriesHash) {
+        this.log.debug(`Tx effect categories hash is no longer available, retrying witness lookup`, {
+          txHash,
+          blockNumber,
+          blockHash,
+          attempt,
+        });
+        continue;
+      }
+
+      return { blockNumber, root, categoriesHash, leafIndex, siblingPath };
     }
 
     throw new Error(`Could not read consistent tx effects tree data for tx ${txHash} after 3 attempts`);

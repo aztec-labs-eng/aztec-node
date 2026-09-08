@@ -416,6 +416,7 @@ function mockTxEffectMembershipWitness(): TxEffectMembershipWitness {
   return {
     blockNumber: BlockNumber(1),
     root: new Fr(0x42),
+    categoriesHash: new Fr(0x43),
     leafIndex: 1n,
     siblingPath: new SiblingPath(path.length, path),
   };

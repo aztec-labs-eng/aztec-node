@@ -40,12 +40,21 @@ describe('TxEffectsTreeResolver', () => {
         txIndexInBlock: 0,
       });
       blocks.getBlockData.mockResolvedValue(blockData);
+      blocks.getTxEffectCategoriesHash.mockImplementation((hash, index) =>
+        Promise.resolve(hash.equals(blockData.blockHash) && index === 0 ? new Fr(456) : undefined),
+      );
       blocks.getTxEffectLeaves.mockImplementation(hash =>
         Promise.resolve(hash.equals(blockData.blockHash) ? [root] : undefined),
       );
     });
 
-    it.each(['getBlockData', 'getTxEffectLeaves'] as const)(
+    it('returns the stored categories hash for the indexed transaction', async () => {
+      blocks.getTxEffectCategoriesHash.mockResolvedValue(new Fr(456));
+      const witness = await resolver.getTxEffectMembershipWitness(txHash);
+      expect(witness?.categoriesHash).toEqual(new Fr(456));
+    });
+
+    it.each(['getBlockData', 'getTxEffectLeaves', 'getTxEffectCategoriesHash'] as const)(
       'retries when %s temporarily returns no data',
       async method => {
         blocks[method].mockResolvedValueOnce(undefined);
@@ -101,13 +110,15 @@ describe('TxEffectsTreeResolver', () => {
       expect(await resolver.getTxEffectMembershipWitness(txHash)).toBeUndefined();
     });
 
-    it.each(['missing block', 'hash mismatch', 'missing leaves'])(
+    it.each(['missing block', 'hash mismatch', 'missing leaves', 'missing categories hash'])(
       'fails after three attempts with %s',
       async condition => {
         if (condition === 'missing block') {
           blocks.getBlockData.mockResolvedValue(undefined);
         } else if (condition === 'hash mismatch') {
           blocks.getBlockData.mockResolvedValue(makeBlockData(root));
+        } else if (condition === 'missing categories hash') {
+          blocks.getTxEffectCategoriesHash.mockResolvedValue(undefined);
         } else {
           blocks.getTxEffectLeaves.mockResolvedValue(undefined);
         }
@@ -153,6 +164,7 @@ describe('TxEffectsTreeResolver', () => {
       expect(witness).toBeDefined();
       expect(witness!.blockNumber).toBe(BLOCK_NUMBER);
       expect(witness!.root).toEqual(root);
+      expect(witness!.categoriesHash).toEqual(await txEffect.computeTxEffectCategoriesHash());
       expect(await verifyTxEffectMembershipWitness(await txEffect.computeTxEffectsTreeLeaf(), witness!, root)).toBe(
         true,
       );
@@ -212,6 +224,9 @@ async function wireStore(blocks: MockProxy<TxEffectsTreeStoreView>, body: Body, 
   const blockData = makeBlockData(txEffectsTreeRoot);
   blocks.getBlockData.mockResolvedValue(blockData);
   blocks.getTxEffectLeaves.mockResolvedValue(await computeTxEffectLeaves(body.txEffects));
+  blocks.getTxEffectCategoriesHash.mockImplementation(
+    (_hash, index) => body.txEffects[index]?.computeTxEffectCategoriesHash() ?? Promise.resolve(undefined),
+  );
   blocks.getTxLocation.mockImplementation((txHash: TxHash) => {
     const txIndexInBlock = body.txEffects.findIndex(txEffect => txEffect.txHash.equals(txHash));
     if (txIndexInBlock === -1) {

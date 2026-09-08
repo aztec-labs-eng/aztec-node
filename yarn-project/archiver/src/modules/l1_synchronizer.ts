@@ -997,8 +997,8 @@ export class ArchiverL1Synchronizer implements Traceable {
         }),
       );
 
-      const txEffectLeavesByBlockHash = new Map(
-        blobFetched.flatMap(retrieved => [...retrieved.txEffectLeavesByBlockHash]),
+      const txEffectsTreeDataByBlockHash = new Map(
+        blobFetched.flatMap(retrieved => [...retrieved.txEffectsTreeDataByBlockHash]),
       );
       // Index the built checkpoints by number so we can ingest them in calldata order, slotting in the
       // promoted checkpoint (built from a local proposed block rather than blobs).
@@ -1055,7 +1055,7 @@ export class ArchiverL1Synchronizer implements Traceable {
                 checkpoint: maybeValidCheckpointToPromote,
               },
               evictProposedFrom,
-              txEffectLeavesByBlockHash,
+              txEffectsTreeDataByBlockHash,
             ),
           ),
         );

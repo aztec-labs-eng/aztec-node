@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { MAX_TX_EFFECTS_PER_BODY } from '../deserialization/index.js';
 import type { ZodFor } from '../schemas/index.js';
 import { TxEffect } from '../tx/tx_effect.js';
-import { computeTxEffectLeaves, txEffectsTreeNodeHash } from '../tx/tx_effect_membership.js';
+import { type TxEffectsTreeData, computeTxEffectsTreeData, txEffectsTreeNodeHash } from '../tx/tx_effect_membership.js';
 
 export class Body {
   constructor(public txEffects: TxEffect[]) {}
@@ -64,14 +64,14 @@ export class Body {
     return (await this.computeTxEffectsTree()).root;
   }
 
-  /** Computes the root and its leaves together so callers can reuse the leaves without hashing the effects again. */
-  async computeTxEffectsTree(): Promise<{ root: Fr; leaves: Fr[] }> {
-    const leaves = await computeTxEffectLeaves(this.txEffects);
+  /** Computes the root, leaves, and categories hashes together to avoid hashing the effects again during ingestion. */
+  async computeTxEffectsTree(): Promise<TxEffectsTreeData & { root: Fr }> {
+    const { leaves, categoriesHashes } = await computeTxEffectsTreeData(this.txEffects);
     const root = await computeUnbalancedMerkleTreeRootAsync(
       leaves.map(leaf => leaf.toBuffer()),
       txEffectsTreeNodeHash,
     );
-    return { root: Fr.fromBuffer(root), leaves };
+    return { root: Fr.fromBuffer(root), leaves, categoriesHashes };
   }
 
   /**

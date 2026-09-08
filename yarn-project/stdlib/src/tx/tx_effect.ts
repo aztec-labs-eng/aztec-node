@@ -32,6 +32,7 @@ import { RevertCode } from '../avm/revert_code.js';
 import { ContractClassLog } from '../logs/contract_class_log.js';
 import { PrivateLog } from '../logs/private_log.js';
 import { FlatPublicLogs, PublicLog } from '../logs/public_log.js';
+import { computeTxEffectsTreeLeaf } from './tx_effect_membership.js';
 import { TxHash } from './tx_hash.js';
 
 export class TxEffect {
@@ -316,10 +317,11 @@ export class TxEffect {
    * A holder of the block header can verify "tx X was included in this block and produced exactly effects E" with a
    * membership proof against `BlockHeader.txEffectsTreeRoot`. The verifier must recompute this leaf from the tx effect
    * rather than accept an untrusted leaf value, because paths have variable depth and internal nodes are valid roots.
+   *
+   * @param categoriesHash - An already computed categories hash to avoid hashing the same effects again.
    */
-  async computeTxEffectsTreeLeaf(): Promise<Fr> {
-    const categoriesHash = await this.computeTxEffectCategoriesHash();
-    return poseidon2HashWithSeparator([this.txHash.hash, categoriesHash], DomainSeparator.TX_EFFECTS_TREE_LEAF);
+  async computeTxEffectsTreeLeaf(categoriesHash?: Fr): Promise<Fr> {
+    return computeTxEffectsTreeLeaf(this.txHash, categoriesHash ?? (await this.computeTxEffectCategoriesHash()));
   }
 
   /**
