@@ -145,9 +145,10 @@ function release_git_push {
   git commit --allow-empty -m "Release $tag_name." >/dev/null
   git tag -a "$tag_name" -m "Release $tag_name."
 
-  # Canary tags cut from release PRs are published so the release can be tested end to end, but
-  # only real releases move the branch: it is what people browse, and must never show unreviewed code.
-  if [ "$(REF_NAME=$tag_name dist_tag)" != commit ]; then
+  # Every release is tagged, so nightlies and release-PR canaries can be depended on and tested, but
+  # only stable releases move the branch: it is what people see when they browse the mirror, and it
+  # should show released code, not a nightly or an unreviewed PR.
+  if [ "$(REF_NAME=$tag_name dist_tag)" = latest ]; then
     do_or_dryrun git push origin "$branch_name" --quiet
   fi
   do_or_dryrun git push origin --quiet --force "$tag_name"
