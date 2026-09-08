@@ -721,6 +721,24 @@ describe('SlasherClient', () => {
       expect(pendingOffenses).toHaveLength(1);
     });
 
+    it('applies a live-widened grace period to newly collected offenses', async () => {
+      // Widening slashGracePeriodL2Slots on a running client must reach the offenses collector,
+      // otherwise offenses the operator asked to forgive are still recorded and stay slash-eligible.
+      const validator = EthAddress.random();
+      const offense: WantToSlashArgs = {
+        validator,
+        amount: 100n,
+        offenseType: OffenseType.PROPOSED_INCORRECT_ATTESTATIONS, // Slot-based offense
+        epochOrSlot: 50n, // outside the default grace of 10, inside the widened 1000
+      };
+
+      slasherClient.updateConfig({ slashGracePeriodL2Slots: 1000 });
+      await slasherClient.handleWantToSlash([offense]);
+
+      const pendingOffenses = await offensesStore.getOffenses();
+      expect(pendingOffenses).toHaveLength(0);
+    });
+
     it('should handle multiple offenses from same validator', async () => {
       const validator = EthAddress.random();
       const offense1: WantToSlashArgs = {

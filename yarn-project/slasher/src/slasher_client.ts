@@ -169,6 +169,9 @@ export class SlasherClient implements ProposerSlashActionProvider, SlasherClient
   /** Update the config of the slasher client */
   public updateConfig(config: Partial<SlasherConfig>) {
     this.config = { ...this.config, ...config };
+    // The offenses collector is a long-lived sub-component with its own config copy; forward the
+    // update so live changes (e.g. slashGracePeriodL2Slots) reach the sole grace-period enforcer.
+    this.offensesCollector.updateConfig(config);
   }
 
   /** Triggered on a time basis when we enter a new slashing round. Clears expired offenses. */
