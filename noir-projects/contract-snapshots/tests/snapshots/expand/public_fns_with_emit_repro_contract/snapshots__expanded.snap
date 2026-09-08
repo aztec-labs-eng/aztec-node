@@ -32,7 +32,7 @@ pub contract PublicFnsWithEmitRepro {
     }
 
     impl aztec::protocol::traits::Serialize for Updated {
-        let N: u32 = 1;
+        let N: u32 = 1_u32;
 
         fn serialize(self) -> [Field; 1] {
             let mut writer: aztec::protocol::utils::writer::Writer<1> = aztec::protocol::utils::writer::Writer::<1>::new();
