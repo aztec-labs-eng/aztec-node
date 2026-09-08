@@ -27,7 +27,7 @@ import {
 } from '@aztec-labs/stdlib/rollup';
 import type { CircuitName } from '@aztec-labs/stdlib/stats';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
-import { BlockHeader, GlobalVariables, StateReference } from '@aztec-labs/stdlib/tx';
+import { BlockHeader, GlobalVariables, StateReference, txEffectsTreeNodeHash } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import { buildHeaderFromCircuitOutputs, toProofData } from './block-building-helpers.js';
@@ -390,7 +390,7 @@ export class BlockProvingState {
 
     return await buildHeaderFromCircuitOutputs(
       this.blockRootProof.provingOutput.inputs,
-      await this.#computeTxEffectsTreeRoot(),
+      await this.#getTxEffectsTreeRootFromProvingOutputs(),
     );
   }
 
@@ -432,6 +432,29 @@ export class BlockProvingState {
     return this.totalNumTxs === 1
       ? [this.baseOrMergeProofs.getNode(rootLocation)?.provingOutput]
       : this.baseOrMergeProofs.getChildren(rootLocation).map(c => c?.provingOutput);
+  }
+
+  async #getTxEffectsTreeRootFromProvingOutputs(): Promise<Fr> {
+    const provingOutputs = this.#getChildProvingOutputsForBlockRoot();
+    if (!provingOutputs.every(p => !!p)) {
+      throw new Error('At least one child is not ready for the block root rollup.');
+    }
+
+    const [left, right] = provingOutputs;
+    if (!left) {
+      return Fr.ZERO;
+    }
+    if (!right) {
+      return left.inputs.accumulatedTxEffectsTreeRoot;
+    }
+
+    // The block root consumes the two top tx proofs; there is no tx-merge proof at level zero.
+    return Fr.fromBuffer(
+      await txEffectsTreeNodeHash(
+        left.inputs.accumulatedTxEffectsTreeRoot.toBuffer(),
+        right.inputs.accumulatedTxEffectsTreeRoot.toBuffer(),
+      ),
+    );
   }
 
   #getGlobalVariables() {
