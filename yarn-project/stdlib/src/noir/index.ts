@@ -17,6 +17,8 @@ export const AZTEC_VIEW_ATTRIBUTE = 'abi_view';
 
 /** The ABI of an Aztec.nr function. */
 export interface NoirFunctionAbi {
+  /** The version of the serialized ABI schema this was emitted under. */
+  abi_version: 1;
   /** The parameters of the function. */
   parameters: ABIParameter[];
   /** The return type of the function, or null for void functions. */
