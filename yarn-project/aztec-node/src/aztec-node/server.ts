@@ -714,7 +714,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
    * node reports for it. Passthrough to the archiver — see {@link Archiver.getTxEffectMembershipWitness}.
    */
   public getTxEffectMembershipWitness(txHash: TxHash): Promise<TxEffectMembershipWitness | undefined> {
-    return this.worldStateQueries.getTxEffectMembershipWitness(txHash);
+    return this.blockSource.getTxEffectMembershipWitness(txHash);
   }
 
   public getNullifierMembershipWitness(

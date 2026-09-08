@@ -24,7 +24,7 @@ import {
   type PublicDataTreeLeafPreimage,
   PublicDataWitness,
 } from '@aztec-labs/stdlib/trees';
-import type { TxEffectMembershipWitness, TxHash } from '@aztec-labs/stdlib/tx';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 
 import { normalizeBlockParameter } from './block_parameter.js';
@@ -205,14 +205,6 @@ export class NodeWorldStateQueries {
     messageIndexInTx?: number,
   ): Promise<L2ToL1MembershipWitness | undefined> {
     return this.blockSource.getL2ToL1MembershipWitness(txHash, message, messageIndexInTx);
-  }
-
-  /**
-   * Returns a membership witness proving that `txHash` was included in its block and produced exactly the effects
-   * reported for it. Passthrough to the archiver — see {@link Archiver.getTxEffectMembershipWitness}.
-   */
-  public getTxEffectMembershipWitness(txHash: TxHash): Promise<TxEffectMembershipWitness | undefined> {
-    return this.blockSource.getTxEffectMembershipWitness(txHash);
   }
 
   public async getNullifierMembershipWitness(
