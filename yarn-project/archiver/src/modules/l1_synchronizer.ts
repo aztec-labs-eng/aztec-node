@@ -1162,7 +1162,8 @@ export class ArchiverL1Synchronizer implements Traceable {
 
     if (
       !proposed.header.equals(calldataCheckpoint.header) ||
-      !proposed.archive.root.equals(calldataCheckpoint.archiveRoot)
+      !proposed.archive.root.equals(calldataCheckpoint.archiveRoot) ||
+      proposed.feeAssetPriceModifier !== calldataCheckpoint.feeAssetPriceModifier
     ) {
       this.log.warn(
         `Local proposed checkpoint ${proposed.checkpointNumber} does not match checkpoint retrieved from L1, overriding with L1 data`,
