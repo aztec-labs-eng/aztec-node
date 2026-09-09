@@ -2,10 +2,14 @@ import {
   type TxBlobData,
   type TxStartMarker,
   decodeTxBlobData,
+  encodePrivateLogsBlobFields,
+  encodePublicDataWritesBlobFields,
   encodeTxBlobData,
+  encodeTxStartMarker,
   getNumTxBlobFields,
 } from '@aztec-labs/blob-lib/encoding';
 import {
+  DomainSeparator,
   MAX_CONTRACT_CLASS_LOGS_PER_TX,
   MAX_L2_TO_L1_MSGS_PER_TX,
   MAX_NOTE_HASHES_PER_TX,
@@ -14,6 +18,7 @@ import {
   MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
 } from '@aztec-labs/constants';
 import { type FieldsOf, makeTuple, makeTupleAsync } from '@aztec-labs/foundation/array';
+import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
@@ -27,6 +32,7 @@ import { RevertCode } from '../avm/revert_code.js';
 import { ContractClassLog } from '../logs/contract_class_log.js';
 import { PrivateLog } from '../logs/private_log.js';
 import { FlatPublicLogs, PublicLog } from '../logs/public_log.js';
+import { computeTxEffectsTreeLeaf } from './tx_effect_membership.js';
 import { TxHash } from './tx_hash.js';
 
 export class TxEffect {
@@ -121,6 +127,12 @@ export class TxEffect {
         throw new Error('Private log is empty');
       }
     });
+
+    if (contractClassLogs.length > MAX_CONTRACT_CLASS_LOGS_PER_TX) {
+      throw new Error(
+        `Too many contract class logs: ${contractClassLogs.length}, max: ${MAX_CONTRACT_CLASS_LOGS_PER_TX}`,
+      );
+    }
   }
 
   toBuffer(): Buffer {
@@ -277,6 +289,42 @@ export class TxEffect {
   }
 
   /**
+   * Hash committing to the full contents of this tx's effects.
+   *
+   * The hash is structured rather than flat: each variable-length effect category is hashed on its own first, and
+   * this hash is taken over those category hashes plus the small scalar fields inline. Proving a single field (e.g.
+   * one note hash) therefore only requires its category preimage, with the other category hashes as opaque witnesses.
+   *
+   * Must match `compute_tx_effect_categories_hash` in noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr.
+   */
+  async computeTxEffectCategoriesHash(): Promise<Fr> {
+    const txBlobData = this.toTxBlobData();
+    const contractClassLogHashFields = (
+      await Promise.all(this.contractClassLogs.map(async log => [log.contractAddress.toField(), await log.hash()]))
+    ).flat();
+    const categoryHashes = await Promise.all(
+      getTxEffectCategoryHashPreimages(txBlobData, contractClassLogHashFields).map(computeTxEffectCategoryHash),
+    );
+    return poseidon2HashWithSeparator(
+      [encodeTxStartMarker(txBlobData.txStartMarker), this.transactionFee, ...categoryHashes],
+      DomainSeparator.TX_EFFECT_CATEGORIES_HASH,
+    );
+  }
+
+  /**
+   * This tx's leaf of the block's tx effects tree: a hash binding the tx hash to the hash of the tx's effects.
+   *
+   * A holder of the block header can verify "tx X was included in this block and produced exactly effects E" with a
+   * membership proof against `BlockHeader.txEffectsTreeRoot`. The verifier must recompute this leaf from the tx effect
+   * rather than accept an untrusted leaf value, because paths have variable depth and internal nodes are valid roots.
+   *
+   * @param categoriesHash - An already computed categories hash to avoid hashing the same effects again.
+   */
+  async computeTxEffectsTreeLeaf(categoriesHash?: Fr): Promise<Fr> {
+    return computeTxEffectsTreeLeaf(this.txHash, categoriesHash ?? (await this.computeTxEffectCategoriesHash()));
+  }
+
+  /**
    * Decodes a flat packed array of fields to TxEffect.
    */
   static fromTxBlobData(txBlobData: TxBlobData) {
@@ -371,4 +419,33 @@ export class TxEffect {
   static fromString(str: string) {
     return TxEffect.fromBuffer(hexToBuffer(str));
   }
+}
+
+/**
+ * The preimages of a tx effect's variable-length category hashes, in their fixed order within the categories hash.
+ * Every preimage is its category's blob-encoding slice except the contract class log, whose preimage uses the full
+ * kernel-committed log hash to avoid hashing the same padded log fields twice in the rollup circuit.
+ */
+function getTxEffectCategoryHashPreimages(txBlobData: TxBlobData, contractClassLogHashFields: Fr[]): Fr[][] {
+  return [
+    txBlobData.noteHashes,
+    txBlobData.nullifiers,
+    txBlobData.l2ToL1Msgs,
+    encodePublicDataWritesBlobFields(txBlobData.publicDataWrites),
+    encodePrivateLogsBlobFields(txBlobData.privateLogs),
+    txBlobData.publicLogs,
+    contractClassLogHashFields,
+  ];
+}
+
+/**
+ * Hashes all fields of one tx-effect category over that category's commitment preimage.
+ *
+ * An empty category hashes to 0 rather than to a hash of nothing. This is unambiguous because every category count is
+ * bound by the tx start marker, which is hashed alongside the category hashes.
+ */
+function computeTxEffectCategoryHash(blobFields: Fr[]): Promise<Fr> {
+  return blobFields.length === 0
+    ? Promise.resolve(Fr.ZERO)
+    : poseidon2HashWithSeparator(blobFields, DomainSeparator.TX_EFFECT_CATEGORY_HASH);
 }

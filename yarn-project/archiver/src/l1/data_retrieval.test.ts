@@ -4,6 +4,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Body, CommitteeAttestation } from '@aztec-labs/stdlib/block';
 import { L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { computeTxEffectsTreeData } from '@aztec-labs/stdlib/tx';
 
 import { type RetrievedCheckpoint, retrievedToPublishedCheckpoint } from './data_retrieval.js';
 
@@ -71,6 +72,16 @@ describe('data_retrieval', () => {
       expect(reconstructedBlock3.body.txEffects.map(tx => tx.txHash.toString())).toEqual(
         body3.txEffects.map(tx => tx.txHash.toString()),
       );
+
+      // Each reconstructed header must carry the tx effects tree root of its own body
+      for (const [i, block] of publishedCheckpoint.checkpoint.blocks.entries()) {
+        const expectedRoot = await [body1, body2, body3][i].computeTxEffectsTreeRoot();
+        expect(block.header.txEffectsTreeRoot).toEqual(expectedRoot);
+        expect(await block.body.computeTxEffectsTreeData()).toEqual(
+          await computeTxEffectsTreeData([body1, body2, body3][i].txEffects),
+        );
+        expect(block.header.txEffectsTreeRoot).not.toEqual(Fr.ZERO);
+      }
 
       // Also verify blocks are distinct from each other
       expect(reconstructedBlock1.body.txEffects.map(tx => tx.txHash.toString())).not.toEqual(

@@ -126,6 +126,7 @@ export async function retrievedToPublishedCheckpoint({
     });
 
     const body = Body.fromTxBlobData(blockBlobData.txs);
+    const txEffectsTreeRoot = await body.computeTxEffectsTreeRoot();
 
     const blobFields = encodeBlockBlobData(blockBlobData);
     await spongeBlob.absorb(blobFields);
@@ -137,6 +138,7 @@ export async function retrievedToPublishedCheckpoint({
       lastArchive: new AppendOnlyTreeSnapshot(lastArchiveRoot, l2BlockNumber),
       state,
       spongeBlobHash,
+      txEffectsTreeRoot,
       globalVariables,
       totalFees: body.txEffects.reduce((accum, txEffect) => accum.add(txEffect.transactionFee), Fr.ZERO),
       totalManaUsed: new Fr(blockEndStateField.totalManaUsed),
@@ -144,7 +146,8 @@ export async function retrievedToPublishedCheckpoint({
 
     const newArchive = new AppendOnlyTreeSnapshot(newArchiveRoots[i], l2BlockNumber + 1);
 
-    l2Blocks.push(new L2Block(newArchive, header, body, checkpointNumber, IndexWithinCheckpoint(i)));
+    const block = new L2Block(newArchive, header, body, checkpointNumber, IndexWithinCheckpoint(i));
+    l2Blocks.push(block);
   }
 
   const lastBlock = l2Blocks.at(-1)!;

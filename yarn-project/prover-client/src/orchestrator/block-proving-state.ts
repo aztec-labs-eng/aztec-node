@@ -13,6 +13,7 @@ import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { Tuple } from '@aztec-labs/foundation/serialize';
 import { type TreeNodeLocation, UnbalancedTreeStore } from '@aztec-labs/foundation/trees';
+import { Body } from '@aztec-labs/stdlib/block';
 import type { PublicInputsAndRecursiveProof } from '@aztec-labs/stdlib/interfaces/server';
 import { L1ToL2MessageBundle, type L1ToL2MessageSponge, makeL1ToL2MessageBundle } from '@aztec-labs/stdlib/messaging';
 import {
@@ -26,7 +27,7 @@ import {
 } from '@aztec-labs/stdlib/rollup';
 import type { CircuitName } from '@aztec-labs/stdlib/stats';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
-import { BlockHeader, GlobalVariables, StateReference } from '@aztec-labs/stdlib/tx';
+import { BlockHeader, GlobalVariables, StateReference, txEffectsTreeNodeHash } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import { buildHeaderFromCircuitOutputs, toProofData } from './block-building-helpers.js';
@@ -62,6 +63,7 @@ export class BlockProvingState {
   private builtArchive: AppendOnlyTreeSnapshot | undefined;
   private endState: StateReference | undefined;
   private endSpongeBlob: SpongeBlob | undefined;
+  private txEffectsTreeRoot: Promise<Fr> | undefined;
   private txs: TxProvingState[] = [];
   private error: string | undefined;
 
@@ -201,6 +203,7 @@ export class BlockProvingState {
       this.lastArchiveTreeSnapshot,
       this.endState,
       endSpongeBlobHash,
+      await this.#computeTxEffectsTreeRoot(),
       this.#getGlobalVariables(),
       this.#getTotalFees(),
       new Fr(this.#getTotalManaUsed()),
@@ -385,7 +388,10 @@ export class BlockProvingState {
       throw new Error('Block root rollup is not ready.');
     }
 
-    return await buildHeaderFromCircuitOutputs(this.blockRootProof.provingOutput.inputs);
+    return await buildHeaderFromCircuitOutputs(
+      this.blockRootProof.provingOutput.inputs,
+      await this.#getTxEffectsTreeRootFromProvingOutputs(),
+    );
   }
 
   public isReadyForMergeRollup(location: TreeNodeLocation) {
@@ -428,6 +434,29 @@ export class BlockProvingState {
       : this.baseOrMergeProofs.getChildren(rootLocation).map(c => c?.provingOutput);
   }
 
+  async #getTxEffectsTreeRootFromProvingOutputs(): Promise<Fr> {
+    const provingOutputs = this.#getChildProvingOutputsForBlockRoot();
+    if (!provingOutputs.every(p => !!p)) {
+      throw new Error('At least one child is not ready for the block root rollup.');
+    }
+
+    const [left, right] = provingOutputs;
+    if (!left) {
+      return Fr.ZERO;
+    }
+    if (!right) {
+      return left.inputs.accumulatedTxEffectsTreeRoot;
+    }
+
+    // The block root consumes the two top tx proofs; there is no tx-merge proof at level zero.
+    return Fr.fromBuffer(
+      await txEffectsTreeNodeHash(
+        left.inputs.accumulatedTxEffectsTreeRoot.toBuffer(),
+        right.inputs.accumulatedTxEffectsTreeRoot.toBuffer(),
+      ),
+    );
+  }
+
   #getGlobalVariables() {
     if (this.txs.length) {
       return this.txs[0].processedTx.globalVariables;
@@ -445,6 +474,10 @@ export class BlockProvingState {
       feeRecipient: constants.feeRecipient,
       gasFees: constants.gasFees,
     });
+  }
+
+  #computeTxEffectsTreeRoot() {
+    return (this.txEffectsTreeRoot ??= new Body(this.getTxEffects()).computeTxEffectsTreeRoot());
   }
 
   #getTotalFees() {

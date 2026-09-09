@@ -44,7 +44,6 @@ import {
 import { inspect } from 'util';
 
 import {
-  buildHeaderFromCircuitOutputs,
   getFrontierSiblingPath,
   getLastSiblingPath,
   getPublicChonkVerifierPrivateInputsFromTx,
@@ -955,7 +954,7 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
       return;
     }
 
-    const header = await buildHeaderFromCircuitOutputs(output);
+    const header = await provingState.buildHeaderFromProvingOutputs();
 
     if (!(await header.hash()).equals(await builtBlockHeader.hash())) {
       this.logger.error(`Block header mismatch.\nCircuit: ${inspect(header)}\nComputed: ${inspect(builtBlockHeader)}`);
