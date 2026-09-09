@@ -1,17 +1,17 @@
 ---
 name: sync-foundation-patches
-description: Sync the foundation's labs-patches series (carried in aztec-packages on top of this repo) into aztec-node as one draft PR, a commit per patch, bumping the toolchain pins with labs-aztec-toolchain/pins.mjs where a patch needs it. Use when asked to sync or upstream the foundation patches, the labs-patches series, or the foundation patch queue.
+description: Sync the foundation's labs-patches series (carried in aztec-packages on top of this repo) into aztec-node as one draft PR, a commit per patch, bumping the toolchain pins with labs-aztec-toolchain/pins.mjs. Use when asked to sync or upstream the foundation patches, the labs-patches series, or the foundation patch queue.
 argument-hint: [patch number ...]
 ---
 
 # Sync the foundation patch queue into aztec-node
 
-`labs-patches/` in **aztec-packages** is a `git format-patch` series the foundation applies
-on top of its `labs/` submodule, which is this repo. Every patch in it is a queued
-upstream: it is re-applied on every pin bump until the same change lands here. Syncing
-replays the series onto `main` and opens the PR that drains it. Once the PR merges and the
-foundation bumps its labs pin past those commits, the patches drop out of the next export
-on their own — nothing is deleted by hand on the foundation side.
+`labs-patches/` in **AztecProtocol/aztec-packages** is a `git format-patch` series the
+foundation applies on top of its `labs/` submodule, which is this repo. Every patch in it
+is a queued upstream: it is re-applied on every pin bump until the same change lands here.
+Syncing replays the series onto `main` and opens the PR that drains it. Once the PR merges
+and the foundation bumps its labs pin past those commits, the patches drop out of the next
+export on their own — nothing is deleted by hand on the foundation side.
 
 **Default: one draft PR for the whole series, one commit per patch.** The patches are a
 dependent chain (later ones build on earlier ones), so splitting them is only worth it when
@@ -25,8 +25,7 @@ With patch numbers given as arguments, sync only those (still in series order).
 ### Step 1: Read the series from GitHub
 
 No aztec-packages checkout is needed — the series, the patch bodies and the recorded base
-all come from the API. The series lives on the default branch (`next`) of the **public**
-repo; the private fork carries the tooling but not the patches.
+all come from the contents API on the default branch (`next`):
 
 ```bash
 FND=AztecProtocol/aztec-packages
@@ -78,55 +77,55 @@ the series entries. Everything this skill adds goes in follow-up commits.
 `<prefix>` follows the repo's branch convention — the committer's initials (`fc/` in
 facundo's clones).
 
-On conflict, `am` stops on the offending patch with the markers in the tree. Resolve
-against the intent of the change (main has moved on since the recorded base), then
-`git add` and `git am --continue`. Do not abort and restart: `git am --skip` silently drops
-a patch the rest of the chain may need. Docs files that both sides append to — the
-migration notes especially — are the usual conflict, and both sides' entries normally
-belong in the result.
+**Conflicts are yours to resolve.** `am` stops on the offending patch with the markers in
+the tree; main has moved on since the recorded base, so resolve against the intent of the
+change rather than either literal side, then `git add` and `git am --continue`. Never
+`git am --skip` — it silently drops a patch the rest of the chain may need — and never
+abort and restart. Docs files that both sides append to (the migration notes especially)
+are the usual case, and both sides' entries normally belong in the result.
 
-### Step 4: Bump versions with pins.mjs
+Write down each resolution as you make it: which patch, which file, which side you kept and
+why. That list goes in the PR body (Step 6) — a reviewer must be able to check the merge
+without re-deriving it.
 
-`labs-aztec-toolchain/pins.mjs` owns every file in this repo that carries a copy of
-`BB_VERSION`/`NOIR_VERSION`. Two things a sync runs into need version changes, and both go
-through it — never hand-edit a version string, and never `yarn up` an
-`@aztec-foundation/*` resolution.
+### Step 4: Bump the pins with pins.mjs
 
-**(a) Drift the series brought with it.** After the series is applied:
+The patches were written against the foundation tree in `use-local` mode, so they can rely
+on `@aztec-foundation/*` APIs, or bb / nargo behaviour, newer than this repo's pin. The
+sync therefore carries a pin bump to the latest foundation nightly and the noir release
+that nightly was built against, as its own commit on top of the patch commits.
 
-```bash
-node labs-aztec-toolchain/pins.mjs check
-```
-
-Silence means clean. A complaint names the file, the version found and the version
-expected: a patch carries version strings that do not match this repo's pin. Usually that
-is a `use-local` rewrite (`portal:` or relative-path deps pointing into the foundation
-tree) that escaped the foundation checkout, or a resolution added at whatever version the
-author had. Realign to the branch's own pin rather than editing the files:
+Follow the **bump-toolchain** skill for the version work: it covers picking the latest
+complete nightly (they can publish partially), deriving the paired `NOIR_VERSION` from that
+release's noir submodule, and the verification. The rewrite itself is:
 
 ```bash
-./labs-aztec-toolchain/bootstrap.sh set-pins <BB_VERSION> <NOIR_VERSION>   # values from origin/main
+./labs-aztec-toolchain/bootstrap.sh set-pins <bb-version> <noir-version>
 (cd yarn-project && yarn)
-git commit -m "chore: realign the pinned versions the patches carried"
+(cd docs && yarn)
+git commit -m "chore: bump toolchain pins to <bb-version>"
 ```
 
-**(b) Foundation code the pinned release does not have.** The patches were written against
-the foundation tree in `use-local` mode, so they can use an `@aztec-foundation/*` API, or
-bb / nargo behaviour, that landed after the pinned nightly. The symptom is a build that
-fails to typecheck or compile against the pin, on code a patch touches. The PR then has to
-carry the bump too: follow the **bump-toolchain** skill for choosing a complete release and
-deriving the paired `NOIR_VERSION`, then its `set-pins` and lockfile refresh, committed
-separately as `chore: bump toolchain pins to <version>`.
+`pins.mjs` rewrites manifests only — `BB_VERSION`/`NOIR_VERSION` in
+`labs-aztec-toolchain/bootstrap.sh`, the `yarn-project/package.json` resolutions,
+`docs/package.json`, every `Nargo.toml`, and `docs/examples/ts/*/config.yaml`. It never
+runs yarn, so `yarn-project/yarn.lock` and `docs/yarn.lock` are yours to refresh with a
+plain `yarn` (targeted re-resolution of the changed entries, which is what the repo's
+lockfile discipline requires). `set-pins` re-runs the drift check itself: success is one
+update line per rewritten file and nothing after them.
 
-If no published release has the foundation change yet, the series cannot land until that
-nightly ships. Open the draft PR anyway and state what it is waiting for.
+Never hand-edit a pinned version and never `yarn up` an `@aztec-foundation/*` resolution —
+`pins.mjs` owns every copy of those versions.
+
+If the foundation change a patch needs is not in any published nightly yet, the series
+cannot land until that nightly ships. Open the draft PR anyway and state what it is waiting
+for.
 
 ### Step 5: Verify
 
-`node labs-aztec-toolchain/pins.mjs check` clean, then build in dependency order for what
-the series touches: `noir-projects/` first if contracts changed, then `yarn build` from
-inside `yarn-project/`. Compile checks only — the suite is CI's job, and CI starts when the
-PR leaves draft.
+Build in dependency order for what the series touches: `noir-projects/` first if contracts
+changed, then `yarn build` from inside `yarn-project/`. Compile checks only — the suite is
+CI's job, and CI starts when the PR leaves draft.
 
 ### Step 6: Push the draft PR
 
@@ -136,29 +135,33 @@ gh pr create --repo aztec-labs-eng/aztec-node --base main --draft \
   --title "chore: sync the foundation patch queue" --body "<body>"
 ```
 
-The body lists the patches in order with their subjects, names any that were dropped as
-already-landed or left behind as blocked, describes any pin bump the PR carries and why,
-and calls out conflicts that were resolved by hand. It also notes that these patches leave
-the foundation's series once this merges and the foundation bumps past it. One line per
-paragraph, no hard wrapping. Attribute nothing to Claude.
+The body carries, in this order: the patches in series order with their subjects; any
+dropped as already-landed or left behind as blocked, and why; **every conflict resolved,
+one line each — patch, file, what the resolution kept and why**; the pin bump and the
+release it moves to; and a note that these patches leave the foundation's series once this
+merges and the foundation bumps past it. One line per paragraph, no hard wrapping.
+Attribute nothing to Claude.
 
 ### Step 7: Report
 
-One line per patch: applied, dropped as already merged, skipped as disabled, or blocked and
-on what. Plus the pin state and the build result.
+One line per patch: applied, applied with a conflict resolved, dropped as already merged,
+skipped as disabled, or blocked and on what. Plus the pin versions and the build result.
 
 ## Key Points
 
 - **The patch commits stay as exported.** Original author, original subject, one commit per
-  patch, fixups in separate commits.
-- **`pins.mjs` owns pinned versions.** `set-pins` for both realignment and bumps;
-  `pins.mjs check` is the guard that no patch smuggled in a `use-local` rewrite.
+  patch; conflict resolutions land inside the `am` for the patch they belong to, everything
+  else in separate commits on top.
+- **Every conflict resolution is explained in the PR body.** The reviewer is checking a
+  merge they did not perform.
+- **`pins.mjs` owns pinned versions, not lockfiles.** `set-pins` rewrites the manifests;
+  refreshing `yarn-project/yarn.lock` and `docs/yarn.lock` is a separate `yarn` run.
 - **A patch that re-pins the standard contracts is not routine.** If the series moves
   `noir-projects/noir-contracts/pinned-standard-contracts.tar.gz` or
   `standard_addresses.nr`, it changes the canonical standard-contract addresses. Keep the
-  patch — it is the foundation's deliberate call, and dropping it would leave the series
-  unapplied — but flag it at the top of the PR body so the redeploy is a human decision,
-  and never run `pin-standard-build` yourself in response to fallout from it.
+  patch — it is the foundation's deliberate call, and dropping it would strand the rest of
+  the chain — but flag it at the top of the PR body so the redeploy is a human decision, and
+  never run `pin-standard-build` yourself in response to fallout from it.
 - **Never commit `use-local` state.** A `labs-aztec-toolchain/.fnd-root` in this clone means
   the local tree is in foundation mode; the branch must come from `origin/main`, not from
   that tree.
