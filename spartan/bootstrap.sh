@@ -533,9 +533,6 @@ case "$cmd" in
   "metrics-kind")
     metrics/install-kind.sh
     ;;
-  "metrics-prod")
-    metrics/install-prod.sh
-    ;;
   "network-shaping")
     namespace="$1"
     chaos_values="$2"

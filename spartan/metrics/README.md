@@ -1,10 +1,12 @@
+Production metrics deployment is maintained in the sibling `aztec-observability` repository. This chart remains here for KIND; network-specific IRM tooling also remains here.
+
 This is a chart intended to be installed once per k8s cluster, and provides monitoring for all aztec network deployments within the cluster.
 
 ## Installation
 
 ```bash
 # From the spartan/metrics directory
-./install.sh
+./install-kind.sh
 ```
 
 ## Access
