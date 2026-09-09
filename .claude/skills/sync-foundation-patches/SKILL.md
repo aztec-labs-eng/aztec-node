@@ -53,28 +53,48 @@ gh api -H "Accept: application/vnd.github.raw" \
 `head -12` on a patch gives its author, date and subject (the subject is the commit
 subject); `git apply --stat` gives the file list.
 
-### Step 2: Drop what is already here
+### Step 2: Branch off main, and drop what is already here
 
-A patch stays in the series until the foundation bumps past it, so the series routinely
-lists changes that already landed here:
+Work in an independent, clean aztec-node checkout — never in one that is a submodule of
+another repo, where the build and the pins are wired to that parent. A plain branch is
+enough; no worktree. If the tree is dirty, stop and ask rather than stashing or reverting:
+`git checkout -b` carries uncommitted changes onto the branch and into the sync.
 
 ```bash
 git fetch origin
+git checkout -b <prefix>/sync-foundation-patches origin/main
+```
+
+`<prefix>` follows the repo's branch convention — the committer's initials (`fc/` in
+facundo's clones).
+
+A patch stays in the series until the foundation bumps past it, so the series routinely
+lists changes that already landed here. Test the content, not the commit message: a patch
+whose changes are already on `main` reverse-applies cleanly to it, whatever the commit it
+arrived in was called. The tree is `main` at this point, which is what makes the test mean
+anything:
+
+```bash
+git apply --check --reverse <patch>    # exit 0 = already here, drop it
+```
+
+A subject search is a hint worth printing beside that, never the decision:
+
+```bash
 git log origin/main --oneline --fixed-strings --grep="<subject>"
 ```
 
-Drop those from the set before applying. Report them: a merged-but-still-listed patch
-means the foundation's pin is behind and a `bump` there would clear it.
+The subject cannot settle it in either direction. Sync PRs are squash-merged, so the
+individual patch subjects do not survive on `main` and a landed patch matches nothing; and
+a subject can equally match a different or partial change that shares its wording.
+
+Report every patch dropped this way: a merged-but-still-listed patch means the foundation's
+pin is behind and a `bump` there would clear it. A patch that neither reverse-applies nor
+applies forward is a genuine conflict — Step 3's problem, not a reason to drop it.
 
 ### Step 3: Apply the series onto main
 
-A plain branch in this checkout is enough; make sure the tree is clean first. If this
-checkout is in foundation mode (`labs-aztec-toolchain/.fnd-root` present, put there by
-`use-local`), its manifests are locally rewritten to consume a foundation tree — restore
-them before branching, so none of it rides along in the sync.
-
 ```bash
-git checkout -b <prefix>/sync-foundation-patches origin/main
 git am --3way "$SCRATCH"/<patch> "$SCRATCH"/<patch> ...   # the set from Step 2, in series order
 ```
 
@@ -82,9 +102,6 @@ git am --3way "$SCRATCH"/<patch> "$SCRATCH"/<patch> ...   # the set from Step 2,
 never squash them together, and never fold your own fixups into them: the foundation
 re-exports and re-applies those commits until they land, so they should stay identical to
 the series entries. Everything this skill adds goes in follow-up commits.
-
-`<prefix>` follows the repo's branch convention — the committer's initials (`fc/` in
-facundo's clones).
 
 **Conflicts are yours to resolve.** `am` stops on the offending patch with the markers in
 the tree; main has moved on since the recorded base, so resolve against the intent of the
@@ -99,10 +116,11 @@ without re-deriving it.
 
 ### Step 4: Bump the pins with pins.mjs
 
-The patches were written against the foundation tree in `use-local` mode, so they can rely
-on `@aztec-foundation/*` APIs, or bb / nargo behaviour, newer than this repo's pin. The
-sync therefore carries a pin bump to the latest foundation nightly and the noir release
-that nightly was built against, as its own commit on top of the patch commits.
+The patches were written in the foundation's own tree, against its unreleased code rather
+than a published release, so they can rely on `@aztec-foundation/*` APIs, or bb / nargo
+behaviour, newer than this repo's pin. The sync therefore carries a pin bump to the latest
+foundation nightly and the noir release that nightly was built against, as its own commit
+on top of the patch commits.
 
 Follow the **bump-toolchain** skill for the version work: it covers picking the latest
 complete nightly (they can publish partially), deriving the paired `NOIR_VERSION` from that
