@@ -36,8 +36,10 @@ describe('Body', () => {
       expect(await Body.empty().computeTxEffectsTree()).toEqual({ root: Fr.ZERO, leaves: [], categoriesHashes: [] });
     });
 
-    it('returns the leaves used for the root without hashing an effect twice', async () => {
+    it('reuses leaves and categories hashes across concurrent and repeated tree computations', async () => {
       const body = await Body.random({ txsPerBlock: 1 });
+      const buffer = body.toBuffer();
+      const json = jsonStringify(body);
       const leaf = new Fr(123);
       const categoriesHash = new Fr(456);
       const computeCategoriesHash = jest
@@ -45,11 +47,16 @@ describe('Body', () => {
         .mockResolvedValue(categoriesHash);
       const computeLeaf = jest.spyOn(body.txEffects[0], 'computeTxEffectsTreeLeaf').mockResolvedValue(leaf);
 
-      expect(await body.computeTxEffectsTree()).toEqual({
+      const [first, concurrent] = await Promise.all([body.computeTxEffectsTree(), body.computeTxEffectsTree()]);
+      expect(first).toEqual({
         root: leaf,
         leaves: [leaf],
         categoriesHashes: [categoriesHash],
       });
+      expect(body.toBuffer()).toEqual(buffer);
+      expect(jsonStringify(body)).toEqual(json);
+      expect(concurrent).toEqual(first);
+      expect(await body.computeTxEffectsTree()).toEqual(first);
       expect(computeLeaf).toHaveBeenCalledTimes(1);
       expect(computeCategoriesHash).toHaveBeenCalledTimes(1);
     });

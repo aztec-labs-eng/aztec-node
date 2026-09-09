@@ -12,6 +12,8 @@ import { TxEffect } from '../tx/tx_effect.js';
 import { type TxEffectsTreeData, computeTxEffectsTreeData, txEffectsTreeNodeHash } from '../tx/tx_effect_membership.js';
 
 export class Body {
+  #cachedTxEffectsTreeData?: Promise<TxEffectsTreeData>;
+
   constructor(public txEffects: TxEffect[]) {}
 
   equals(other: Body) {
@@ -64,9 +66,14 @@ export class Body {
     return (await this.computeTxEffectsTree()).root;
   }
 
+  /** Memoizes leaves and categories hashes. Transaction effects must not be mutated after the first call. */
+  public computeTxEffectsTreeData(): Promise<TxEffectsTreeData> {
+    return (this.#cachedTxEffectsTreeData ??= computeTxEffectsTreeData(this.txEffects));
+  }
+
   /** Computes the root, leaves, and categories hashes together to avoid hashing the effects again during ingestion. */
   async computeTxEffectsTree(): Promise<TxEffectsTreeData & { root: Fr }> {
-    const { leaves, categoriesHashes } = await computeTxEffectsTreeData(this.txEffects);
+    const { leaves, categoriesHashes } = await this.computeTxEffectsTreeData();
     const root = await computeUnbalancedMerkleTreeRootAsync(
       leaves.map(leaf => leaf.toBuffer()),
       txEffectsTreeNodeHash,

@@ -1,6 +1,7 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import type { BlockData, BlockHash } from '@aztec-labs/stdlib/block';
 import {
   type TxEffectMembershipWitness,
@@ -43,10 +44,14 @@ export class TxEffectsTreeResolver {
    * archiver stores for it. Returns `undefined` if the tx is not in a block the archiver knows about.
    *
    * Throws if the stored leaves do not hash up to the root in the block header, which would mean the stored block is
-   * corrupted. Retries inconsistent or missing block data up to three total attempts, then throws.
+   * corrupted. Retries inconsistent or missing block data up to three total attempts, 50ms apart, then throws.
    */
   public async getTxEffectMembershipWitness(txHash: TxHash): Promise<TxEffectMembershipWitness | undefined> {
     for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await sleep(50);
+      }
+
       const location = await this.blocks.getTxLocation(txHash);
       if (!location) {
         this.log.trace(`No tx effect for tx, no witness available`, { txHash });

@@ -50,8 +50,11 @@ describe('tx effect leaf ingestion', () => {
   it.each([
     'store proposed',
     'store checkpoint',
+    'store prepared proposed',
+    'store prepared checkpoint',
     'updater proposed',
     'updater checkpoint',
+    'updater prepared proposed',
     'updater prepared checkpoint',
   ])('hashes each effect once before the write transaction for %s', async route => {
     const db = await openTmpStore('tx_effect_leaf_ingestion');
@@ -83,21 +86,16 @@ describe('tx effect leaf ingestion', () => {
         return Promise.resolve(leaf);
       });
 
-      if (route === 'store proposed') {
+      if (route.includes('prepared')) {
+        await block.body.computeTxEffectsTreeRoot();
+      }
+
+      if (route === 'store proposed' || route === 'store prepared proposed') {
         await stores.blocks.addProposedBlock(block);
-      } else if (route === 'store checkpoint') {
+      } else if (route === 'store checkpoint' || route === 'store prepared checkpoint') {
         await stores.blocks.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
-      } else if (route === 'updater proposed') {
+      } else if (route === 'updater proposed' || route === 'updater prepared proposed') {
         await updater.addProposedBlock(block);
-      } else if (route === 'updater prepared checkpoint') {
-        const { root: _root, ...treeData } = await block.body.computeTxEffectsTree();
-        await updater.addCheckpoints(
-          [makePublishedCheckpoint(makeCheckpoint([block]), 10)],
-          undefined,
-          undefined,
-          undefined,
-          new Map([[blockHash.toString(), treeData]]),
-        );
       } else {
         await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
       }

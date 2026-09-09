@@ -28,18 +28,11 @@ import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/st
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
-import {
-  BlockHeader,
-  GlobalVariables,
-  PartialStateReference,
-  StateReference,
-  type TxEffectsTreeData,
-} from '@aztec-labs/stdlib/tx';
+import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
 import { type Hex, decodeFunctionData, getAbiItem, hexToBytes } from 'viem';
 
 import { NoBlobBodiesFoundError } from '../errors.js';
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
-import type { BlockTxEffectsTreeData } from '../store/tx_effect_tree_data.js';
 import type { DataRetrieval } from '../structs/data_retrieval.js';
 import type { InboxMessage } from '../structs/inbox_message.js';
 import { CalldataRetriever } from './calldata_retriever.js';
@@ -81,10 +74,7 @@ export async function retrievedToPublishedCheckpoint({
   chainId,
   version,
   attestations,
-}: RetrievedCheckpoint): Promise<{
-  publishedCheckpoint: PublishedCheckpoint;
-  txEffectsTreeDataByBlockHash: BlockTxEffectsTreeData;
-}> {
+}: RetrievedCheckpoint): Promise<PublishedCheckpoint> {
   const { blocks: blocksBlobData } = checkpointBlobData;
 
   // The lastArchiveRoot of a block is the new archive for the previous block.
@@ -95,7 +85,6 @@ export async function retrievedToPublishedCheckpoint({
 
   const spongeBlob = SpongeBlob.init();
   const l2Blocks: L2Block[] = [];
-  const txEffectsTreeDataByBlockHash = new Map<string, TxEffectsTreeData>();
   for (let i = 0; i < blocksBlobData.length; i++) {
     const blockBlobData = blocksBlobData[i];
     // The blob carries a per-block L1-to-L2 message tree root: any block
@@ -137,7 +126,7 @@ export async function retrievedToPublishedCheckpoint({
     });
 
     const body = Body.fromTxBlobData(blockBlobData.txs);
-    const { root: txEffectsTreeRoot, ...treeData } = await body.computeTxEffectsTree();
+    const txEffectsTreeRoot = await body.computeTxEffectsTreeRoot();
 
     const blobFields = encodeBlockBlobData(blockBlobData);
     await spongeBlob.absorb(blobFields);
@@ -159,7 +148,6 @@ export async function retrievedToPublishedCheckpoint({
 
     const block = new L2Block(newArchive, header, body, checkpointNumber, IndexWithinCheckpoint(i));
     l2Blocks.push(block);
-    txEffectsTreeDataByBlockHash.set((await block.hash()).toString(), treeData);
   }
 
   const lastBlock = l2Blocks.at(-1)!;
@@ -171,10 +159,7 @@ export async function retrievedToPublishedCheckpoint({
     feeAssetPriceModifier: feeAssetPriceModifier,
   });
 
-  return {
-    publishedCheckpoint: PublishedCheckpoint.from({ checkpoint, l1, attestations }),
-    txEffectsTreeDataByBlockHash,
-  };
+  return PublishedCheckpoint.from({ checkpoint, l1, attestations });
 }
 
 /**

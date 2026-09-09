@@ -43,8 +43,7 @@ describe('data_retrieval', () => {
         attestations: [CommitteeAttestation.empty()],
       };
 
-      const { publishedCheckpoint, txEffectsTreeDataByBlockHash } =
-        await retrievedToPublishedCheckpoint(retrievedCheckpoint);
+      const publishedCheckpoint = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
 
       // Verify we got 3 blocks
       expect(publishedCheckpoint.checkpoint.blocks).toHaveLength(3);
@@ -78,7 +77,7 @@ describe('data_retrieval', () => {
       for (const [i, block] of publishedCheckpoint.checkpoint.blocks.entries()) {
         const expectedRoot = await [body1, body2, body3][i].computeTxEffectsTreeRoot();
         expect(block.header.txEffectsTreeRoot).toEqual(expectedRoot);
-        expect(txEffectsTreeDataByBlockHash.get((await block.hash()).toString())).toEqual(
+        expect(await block.body.computeTxEffectsTreeData()).toEqual(
           await computeTxEffectsTreeData([body1, body2, body3][i].txEffects),
         );
         expect(block.header.txEffectsTreeRoot).not.toEqual(Fr.ZERO);
@@ -129,7 +128,7 @@ describe('data_retrieval', () => {
         attestations: [],
       };
 
-      const { publishedCheckpoint } = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
+      const publishedCheckpoint = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
 
       expect(publishedCheckpoint.checkpoint.blocks).toHaveLength(1);
       expect(publishedCheckpoint.checkpoint.blocks[0].body.txEffects).toHaveLength(3);

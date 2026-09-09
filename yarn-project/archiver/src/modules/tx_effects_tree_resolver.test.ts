@@ -5,6 +5,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type BlockData, BlockHash, Body } from '@aztec-labs/stdlib/block';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, TxHash, computeTxEffectLeaves, verifyTxEffectMembershipWitness } from '@aztec-labs/stdlib/tx';
+import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { TxEffectsTreeResolver, type TxEffectsTreeStoreView } from './tx_effects_tree_resolver.js';
@@ -66,6 +67,34 @@ describe('TxEffectsTreeResolver', () => {
         expect(witness?.siblingPath.pathSize).toBe(0);
       },
     );
+
+    it.each(['success', 'failure'])('waits 50ms between retries ending in %s', async outcome => {
+      jest.useFakeTimers();
+      try {
+        const start = Date.now();
+        const attemptTimes: number[] = [];
+        blocks.getTxLocation.mockImplementation(() => {
+          attemptTimes.push(Date.now() - start);
+          return Promise.resolve({ blockNumber: BLOCK_NUMBER, blockHash: blockData.blockHash, txIndexInBlock: 0 });
+        });
+        blocks.getTxEffectLeaves.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+        if (outcome === 'failure') {
+          blocks.getTxEffectLeaves.mockResolvedValue(undefined);
+        }
+
+        const lookup = resolver.getTxEffectMembershipWitness(txHash);
+        const result =
+          outcome === 'success'
+            ? expect(lookup).resolves.toMatchObject({ root })
+            : expect(lookup).rejects.toThrow('after 3 attempts');
+        await Promise.all([result, jest.runAllTimersAsync()]);
+
+        expect(attemptTimes).toEqual([0, 50, 100]);
+        expect(Date.now() - start).toBe(100);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
 
     it('can succeed on the third attempt', async () => {
       blocks.getTxEffectLeaves.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);

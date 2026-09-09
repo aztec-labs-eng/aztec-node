@@ -23,7 +23,7 @@ import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { ArchiverDataStores } from '../store/data_stores.js';
 import type { L2TipsCache } from '../store/l2_tips_cache.js';
-import { type BlockTxEffectsTreeData, prepareBlockTxEffectsTreeData } from '../store/tx_effect_tree_data.js';
+import { prepareBlockTxEffectsTreeData } from '../store/tx_effect_tree_data.js';
 
 /** Operation type for contract data updates. */
 enum Operation {
@@ -62,9 +62,9 @@ export class ArchiverDataStoreUpdater {
     block: L2Block,
     pendingChainValidationStatus?: ValidateCheckpointResult,
   ): Promise<boolean> {
-    const txEffectsTreeDataByBlockHash = await prepareBlockTxEffectsTreeData([block]);
+    await prepareBlockTxEffectsTreeData([block]);
     const result = await this.stores.db.transactionAsync(async () => {
-      await this.stores.blocks.addProposedBlock(block, { txEffectsTreeDataByBlockHash });
+      await this.stores.blocks.addProposedBlock(block);
 
       const opResults = await Promise.all([
         // Update the pending chain validation status if provided
@@ -93,7 +93,6 @@ export class ArchiverDataStoreUpdater {
    * @param checkpoints - The published checkpoints to add (excluding any being promoted from proposed).
    * @param pendingChainValidationStatus - Optional validation status to set.
    * @param promoteProposed - Optional promotion of the current proposed checkpoint (fast path when blocks are already local).
-   * @param precomputedTxEffectsTreeData - Leaves and categories hashes computed during checkpoint header reconstruction.
    * @returns Result with information about any pruned blocks.
    */
   public async addCheckpoints(
@@ -105,7 +104,6 @@ export class ArchiverDataStoreUpdater {
       checkpoint: PublishedCheckpoint;
     },
     evictProposedFrom?: CheckpointNumber,
-    precomputedTxEffectsTreeData?: BlockTxEffectsTreeData,
   ): Promise<ReconcileCheckpointsResult> {
     const validateOpts = { rollupManaLimit: this.opts?.rollupManaLimit };
     for (const checkpoint of checkpoints) {
@@ -115,17 +113,12 @@ export class ArchiverDataStoreUpdater {
       validateCheckpoint(promoteProposed.checkpoint.checkpoint, validateOpts);
     }
 
-    const txEffectsTreeDataByBlockHash = await prepareBlockTxEffectsTreeData(
-      checkpoints.flatMap(published => published.checkpoint.blocks),
-      precomputedTxEffectsTreeData,
-    );
+    await prepareBlockTxEffectsTreeData(checkpoints.flatMap(published => published.checkpoint.blocks));
     const result = await this.stores.db.transactionAsync(async () => {
       // Before adding checkpoints, check for conflicts with local blocks if any
       const { prunedBlocks, lastAlreadyInsertedBlockNumber } = await this.pruneMismatchingLocalBlocks(checkpoints);
 
-      const insertedCheckpoints = await this.stores.blocks.addCheckpoints(checkpoints, {
-        txEffectsTreeDataByBlockHash,
-      });
+      const insertedCheckpoints = await this.stores.blocks.addCheckpoints(checkpoints);
 
       // Skip blocks already inserted via addProposedBlock() and blocks of already-stored checkpoints
       // re-included by an L1 reorg: their logs/contract data were extracted when first inserted.
