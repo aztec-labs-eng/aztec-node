@@ -62,7 +62,10 @@ means the foundation's pin is behind and a `bump` there would clear it.
 
 ### Step 3: Apply the series onto main
 
-A plain branch in the current checkout is enough; make sure the tree is clean first.
+A plain branch in this checkout is enough; make sure the tree is clean first. If this
+checkout is in foundation mode (`labs-aztec-toolchain/.fnd-root` present, put there by
+`use-local`), its manifests are locally rewritten to consume a foundation tree — restore
+them before branching, so none of it rides along in the sync.
 
 ```bash
 git checkout -b <prefix>/sync-foundation-patches origin/main
@@ -162,8 +165,5 @@ skipped as disabled, or blocked and on what. Plus the pin versions and the build
   patch — it is the foundation's deliberate call, and dropping it would strand the rest of
   the chain — but flag it at the top of the PR body so the redeploy is a human decision, and
   never run `pin-standard-build` yourself in response to fallout from it.
-- **Never commit `use-local` state.** A `labs-aztec-toolchain/.fnd-root` in this clone means
-  the local tree is in foundation mode; the branch must come from `origin/main`, not from
-  that tree.
 - **The foundation side is not ours to edit.** Exporting, dropping and disabling patches,
   and moving the labs gitlink, all happen in aztec-packages.
