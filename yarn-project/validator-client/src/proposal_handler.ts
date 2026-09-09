@@ -269,6 +269,15 @@ export class ProposalHandler {
   /** Slots at which a proposal equivocation was observed; suppresses attested-to-invalid-proposal slashing. */
   private readonly slotsWithProposalEquivocation = FifoSet.withLimit<SlotNumber>(MAX_TRACKED_INVALID_PROPOSAL_SLOTS);
 
+  /**
+   * Signed-payload hashes of CHECKPOINT proposals validated as slashably invalid, per slot. Kept
+   * separate from slotsWithInvalidProposals (which also flags invalid BLOCK proposals) because an
+   * invalid block must not make checkpoint attesters slashable: the watcher slashes only attesters
+   * whose signed payload matches one of these hashes. Bounded like slotsWithInvalidProposals (oldest
+   * slot evicted).
+   */
+  private readonly invalidCheckpointProposalHashesBySlot = new Map<SlotNumber, Set<CheckpointProposalHash>>();
+
   constructor(
     private checkpointsBuilder: FullNodeCheckpointsBuilder,
     private worldState: WorldStateSynchronizer,
@@ -332,6 +341,31 @@ export class ProposalHandler {
   /** Records a slot as having a proposal equivocation, which suppresses attested-to-invalid-proposal slashing. */
   public markProposalEquivocation(slotNumber: SlotNumber): void {
     this.slotsWithProposalEquivocation.add(slotNumber);
+  }
+
+  /**
+   * Records an invalid CHECKPOINT proposal's signed-payload hash at a slot; see
+   * invalidCheckpointProposalHashesBySlot.
+   */
+  public markInvalidCheckpointProposal(slotNumber: SlotNumber, payloadHash: CheckpointProposalHash): void {
+    let hashes = this.invalidCheckpointProposalHashesBySlot.get(slotNumber);
+    if (!hashes) {
+      hashes = new Set<CheckpointProposalHash>();
+      this.invalidCheckpointProposalHashesBySlot.set(slotNumber, hashes);
+      while (this.invalidCheckpointProposalHashesBySlot.size > MAX_TRACKED_INVALID_PROPOSAL_SLOTS) {
+        const oldest = this.invalidCheckpointProposalHashesBySlot.keys().next().value;
+        if (oldest === undefined) {
+          break;
+        }
+        this.invalidCheckpointProposalHashesBySlot.delete(oldest);
+      }
+    }
+    hashes.add(payloadHash);
+  }
+
+  /** Signed-payload hashes of invalid checkpoint proposals observed at the slot (InvalidProposalSlotSource). */
+  public getInvalidCheckpointProposalHashes(slotNumber: SlotNumber): CheckpointProposalHash[] {
+    return [...(this.invalidCheckpointProposalHashesBySlot.get(slotNumber) ?? [])];
   }
 
   /**
@@ -453,6 +487,7 @@ export class ProposalHandler {
           // failure callback below (idempotent).
           if (SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason]) {
             this.markInvalidProposalSlot(proposal.slotNumber);
+            this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
           }
           await this.checkpointProposalValidationFailureCallback?.(proposal, result, proposalInfo);
         } else if (this.archiver) {
