@@ -58,7 +58,7 @@ export class NativeACVMSimulator implements CircuitSimulator {
     private witnessFilename?: string,
     loggerOrBindings?: Logger | LoggerBindings,
   ) {
-    this.logger = resolveLogger('simulator:noir-execute', loggerOrBindings);
+    this.logger = resolveLogger('simulator:acvm-native', loggerOrBindings);
   }
 
   async executeProtocolCircuit<ReturnType>(

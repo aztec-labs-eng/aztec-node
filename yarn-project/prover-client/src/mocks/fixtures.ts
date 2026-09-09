@@ -78,7 +78,7 @@ export async function getSimulator(
         noirExecuteBinaryPath: config.noirExecuteBinaryPath,
         noirExecuteWorkingDirectory: config.noirExecuteWorkingDirectory,
       });
-      const noirExecuteLogger = logger?.createChild('noir-execute');
+      const noirExecuteLogger = logger?.createChild('acvm-native');
       return new NativeACVMSimulator(
         config.noirExecuteWorkingDirectory,
         config.noirExecuteBinaryPath,
