@@ -97,6 +97,16 @@ function release_git_push {
     exit 1
   fi
 
+  # Every release is tagged, so nightlies and release-PR canaries can be depended on and tested,
+  # but only a stable release is based on the branch and moves it: the branch is what people see
+  # when they browse the mirror, and it should show released code, not a nightly or an unreviewed
+  # PR. Every other release is a parentless snapshot, so its history does not claim a lineage the
+  # branch never had.
+  local stable=0
+  if [ "$(REF_NAME=$tag_name dist_tag)" = latest ]; then
+    stable=1
+  fi
+
   # Clean up our release directory.
   rm -rf release-out && mkdir release-out
 
@@ -111,7 +121,6 @@ function release_git_push {
   git config user.name "Aztec Labs aztec-nr release"
   git config user.email "noreply@aztec-labs.com"
   git remote add origin "$mirrored_repo_url" &>/dev/null
-  git fetch origin --quiet
 
   # Pushes authenticate over ssh with the mirror's deploy key; fetches stay anonymous.
   if [ "${DRY_RUN:-0}" = 0 ]; then
@@ -123,8 +132,13 @@ function release_git_push {
     git remote set-url --push origin "$mirrored_repo_push_url"
   fi
 
-  # Checkout the existing branch or create it if it doesn't exist.
-  if git ls-remote --heads origin "$branch_name" | grep -q "$branch_name"; then
+  if [ -n "$(git ls-remote --tags origin "refs/tags/$tag_name")" ]; then
+    echo "Tag $tag_name already exists. Skipping release."
+    return
+  fi
+
+  if [ $stable = 1 ] && [ -n "$(git ls-remote --heads origin "refs/heads/$branch_name")" ]; then
+    git fetch origin --quiet
     # Update branch reference without checkout.
     git branch -f "$branch_name" origin/"$branch_name"
     # Point HEAD to the branch.
@@ -132,12 +146,8 @@ function release_git_push {
     # Move to latest commit, keep working tree.
     git reset --soft origin/"$branch_name"
   else
-    git checkout -b "$branch_name"
-  fi
-
-  if [ -n "$(git ls-remote --tags origin "refs/tags/$tag_name")" ]; then
-    echo "Tag $tag_name already exists. Skipping release."
-    return
+    # HEAD is unborn in the fresh repository, so the release becomes a root commit.
+    git checkout -q -b "$branch_name"
   fi
 
   git add .
@@ -145,10 +155,7 @@ function release_git_push {
   git commit --allow-empty -m "Release $tag_name." >/dev/null
   git tag -a "$tag_name" -m "Release $tag_name."
 
-  # Every release is tagged, so nightlies and release-PR canaries can be depended on and tested, but
-  # only stable releases move the branch: it is what people see when they browse the mirror, and it
-  # should show released code, not a nightly or an unreviewed PR.
-  if [ "$(REF_NAME=$tag_name dist_tag)" = latest ]; then
+  if [ $stable = 1 ]; then
     do_or_dryrun git push origin "$branch_name" --quiet
   fi
   do_or_dryrun git push origin --quiet --force "$tag_name"
