@@ -18,7 +18,9 @@ dependent chain (later ones build on earlier ones), so splitting them is only wo
 asked, or when one patch is blocked and the rest should not wait — then take the
 contiguous prefix that applies, and say which patches were left behind.
 
-With patch numbers given as arguments, sync only those (still in series order).
+With patch numbers given as arguments, sync only those, still in series order. Expect a
+non-contiguous subset to conflict or fail outright — the chain is dependent — and say so
+rather than quietly pulling in the patches it turned out to need.
 
 ## Workflow
 
@@ -36,7 +38,11 @@ gh api "repos/$FND/contents/labs?ref=next" --jq .sha        # the base gitlink
 Take the files in **name order**, not by number: the numbering has gaps where a patch was
 dropped. `*.patch.disabled` is deliberately parked — skip it, and say so in the report.
 
-Download each into a scratch directory (the raw Accept header is what returns the file
+Patch numbers given as arguments narrow the listing to those patches here, before anything
+is downloaded: the set built in this step is the set that gets applied, and it must never
+be re-widened by a wildcard later on.
+
+Download the set into a scratch directory (the raw Accept header is what returns the file
 whole; some patches are megabytes of regenerated artifacts):
 
 ```bash
@@ -69,7 +75,7 @@ them before branching, so none of it rides along in the sync.
 
 ```bash
 git checkout -b <prefix>/sync-foundation-patches origin/main
-git am --3way "$SCRATCH"/*.patch
+git am --3way "$SCRATCH"/<patch> "$SCRATCH"/<patch> ...   # the set from Step 2, in series order
 ```
 
 `am` replays each patch as its own commit under its original author. Never re-author them,
@@ -113,9 +119,13 @@ git commit -m "chore: bump toolchain pins to <bb-version>"
 `labs-aztec-toolchain/bootstrap.sh`, the `yarn-project/package.json` resolutions,
 `docs/package.json`, every `Nargo.toml`, and `docs/examples/ts/*/config.yaml`. It never
 runs yarn, so `yarn-project/yarn.lock` and `docs/yarn.lock` are yours to refresh with a
-plain `yarn` (targeted re-resolution of the changed entries, which is what the repo's
-lockfile discipline requires). `set-pins` re-runs the drift check itself: success is one
-update line per rewritten file and nothing after them.
+plain `yarn` (`yarn up` is the wrong tool: it rewrites dependency declarations, while the
+pins live in the resolutions block — a plain install after a resolutions edit re-resolves
+only the entries that changed, which is the targeted update the repo's lockfile discipline
+requires). Check that: the lockfile diff must be `@aztec-foundation/*` entries and what
+they pull in, nothing else. Anything wider means something was already stale — stop and
+find out what rather than carrying it in the sync. `set-pins` re-runs the drift check
+itself: success is one update line per rewritten file and nothing after them.
 
 Never hand-edit a pinned version and never `yarn up` an `@aztec-foundation/*` resolution —
 `pins.mjs` owns every copy of those versions.
