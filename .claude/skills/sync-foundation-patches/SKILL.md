@@ -1,176 +1,166 @@
 ---
 name: sync-foundation-patches
-description: Upstream the foundation's labs-patches series (carried in the aztec-packages checkout on top of this repo) into aztec-node as one draft PR per patch, bumping the toolchain pins with labs-aztec-toolchain/pins.mjs where a patch needs it. Use when asked to sync or upstream the foundation patches, the labs-patches series, or the foundation patch queue.
-argument-hint: [foundation checkout path] [patch number ...]
+description: Sync the foundation's labs-patches series (carried in aztec-packages on top of this repo) into aztec-node as one draft PR, a commit per patch, bumping the toolchain pins with labs-aztec-toolchain/pins.mjs where a patch needs it. Use when asked to sync or upstream the foundation patches, the labs-patches series, or the foundation patch queue.
+argument-hint: [patch number ...]
 ---
 
 # Sync the foundation patch queue into aztec-node
 
-`labs-patches/` in the foundation checkout (aztec-packages, or its private fork —
-wherever the directory exists) is a `git format-patch` series the foundation applies on
-top of its `labs/` submodule, which is this repo. Every patch in it is a queued upstream:
-it is re-applied on every pin bump until the same change lands here. Syncing turns each
-unlanded patch into its own aztec-node PR. Once a PR merges and the foundation bumps its
-labs pin past it, the patch drops out of the next export on its own — nothing has to be
-deleted by hand on the foundation side.
+`labs-patches/` in **aztec-packages** is a `git format-patch` series the foundation applies
+on top of its `labs/` submodule, which is this repo. Every patch in it is a queued
+upstream: it is re-applied on every pin bump until the same change lands here. Syncing
+replays the series onto `main` and opens the PR that drains it. Once the PR merges and the
+foundation bumps its labs pin past those commits, the patches drop out of the next export
+on their own — nothing is deleted by hand on the foundation side.
 
-With no patch numbers given, sync the whole series.
+**Default: one draft PR for the whole series, one commit per patch.** The patches are a
+dependent chain (later ones build on earlier ones), so splitting them is only worth it when
+asked, or when one patch is blocked and the rest should not wait — then take the
+contiguous prefix that applies, and say which patches were left behind.
+
+With patch numbers given as arguments, sync only those (still in series order).
 
 ## Workflow
 
-### Step 1: Locate the foundation checkout
+### Step 1: Read the series from GitHub
 
-Take the first candidate that has a `labs-patches/bootstrap.sh`:
-
-1. the path given as an argument,
-2. `cat labs-aztec-toolchain/.fnd-root` (written by `use-local`, gitignored),
-3. siblings of this repo: `../aztec-packages-private`, `../aztec-packages`.
-
-The `foundation` git remote is not a reliable candidate: it can point at a checkout that
-does not carry the series. If nothing matches, stop and ask for the path. Call it `$FND`
-below.
-
-### Step 2: Read the series
+No aztec-packages checkout is needed — the series, the patch bodies and the recorded base
+all come from the API. The series lives on the default branch (`next`) of the **public**
+repo; the private fork carries the tooling but not the patches.
 
 ```bash
-"$FND"/labs-patches/bootstrap.sh status
+FND=AztecProtocol/aztec-packages
+gh api "repos/$FND/contents/labs-patches?ref=next" --jq '.[].name' | grep '\.patch$' | sort
+gh api "repos/$FND/contents/labs?ref=next" --jq .sha        # the base gitlink
 ```
 
-This prints the base gitlink (the aztec-node commit the series applies to), the patch
-files in apply order, and any commits in `labs/` that are not exported yet.
+Take the files in **name order**, not by number: the numbering has gaps where a patch was
+dropped. `*.patch.disabled` is deliberately parked — skip it, and say so in the report.
 
-- **Unexported commits reported:** stop. The `.patch` files are not the whole truth; ask
-  the author to run `labs-patches/bootstrap.sh export` first.
-- **`*.patch.disabled`:** deliberately parked. Skip, and say so in the report.
+Download each into a scratch directory (the raw Accept header is what returns the file
+whole; some patches are megabytes of regenerated artifacts):
 
-For each patch, `head -12 <patch>` gives the author, date and subject (the subject is the
-commit subject, so it is also the PR title), and `git apply --stat <patch>` gives the file
-list.
+```bash
+gh api -H "Accept: application/vnd.github.raw" \
+  "repos/$FND/contents/labs-patches/<name>?ref=next" > "$SCRATCH/<name>"
+```
 
-### Step 3: Skip what is already synced
+`head -12` on a patch gives its author, date and subject (the subject is the commit
+subject); `git apply --stat` gives the file list.
 
-A patch stays in the series until the foundation bumps past it, so the series normally
-contains changes that already have a PR here, and sometimes ones already merged:
+### Step 2: Drop what is already here
+
+A patch stays in the series until the foundation bumps past it, so the series routinely
+lists changes that already landed here:
 
 ```bash
 git fetch origin
-git log origin/main --oneline --grep="<subject>" --fixed-strings
-gh pr list --repo aztec-labs-eng/aztec-node --state all --search "<subject>"
+git log origin/main --oneline --fixed-strings --grep="<subject>"
 ```
 
-Skip both cases. A merged-but-still-listed patch is worth reporting: it means the
-foundation's pin is behind and a `bump` there would clear it.
+Drop those from the set before applying. Report them: a merged-but-still-listed patch
+means the foundation's pin is behind and a `bump` there would clear it.
 
-### Step 4: Apply each patch to a fresh branch
+### Step 3: Apply the series onto main
 
-Work in a temporary worktree so the user's branch and working tree are untouched, and
-clean it up at the end even on failure.
+A plain branch in the current checkout is enough; make sure the tree is clean first.
 
 ```bash
-WORKTREE=$(mktemp -d)
-git worktree add -b <prefix>/<slug> "$WORKTREE" origin/main
-git -C "$WORKTREE" am --3way <patch>
+git checkout -b <prefix>/sync-foundation-patches origin/main
+git am --3way "$SCRATCH"/*.patch
 ```
 
-`<slug>` is the patch filename without its number and extension. `<prefix>` follows the
-repo's branch convention — the committer's initials (`fc/` in facundo's clones);
-`labs-patches`' own default is `fnd/<slug>`, which marks a foundation-origin branch. Use
-the same name here and on the remote.
+`am` replays each patch as its own commit under its original author. Never re-author them,
+never squash them together, and never fold your own fixups into them: the foundation
+re-exports and re-applies those commits until they land, so they should stay identical to
+the series entries. Everything this skill adds goes in follow-up commits.
 
-`am` replays the patch under its original author. Never re-author it, and never squash
-your own fixups into it: the foundation re-exports and re-applies that commit until it
-lands, so it should stay identical to the series entry. Everything this skill adds goes in
-follow-up commits.
+`<prefix>` follows the repo's branch convention — the committer's initials (`fc/` in
+facundo's clones).
 
-If the patch does not apply to current `main`, it was written against the recorded gitlink
-base and main has moved past it. Fall back to the foundation's own preparation, which
-applies at that base, and rebase from there:
+On conflict, `am` stops on the offending patch with the markers in the tree. Resolve
+against the intent of the change (main has moved on since the recorded base), then
+`git add` and `git am --continue`. Do not abort and restart: `git am --skip` silently drops
+a patch the rest of the chain may need. Docs files that both sides append to — the
+migration notes especially — are the usual conflict, and both sides' entries normally
+belong in the result.
 
-```bash
-"$FND"/labs-patches/bootstrap.sh apply                        # labs/ must be checked out
-"$FND"/labs-patches/bootstrap.sh upstream <n> <prefix>/<slug>
-git -C "$FND"/labs push origin <prefix>/<slug>
-git fetch origin <prefix>/<slug> && git -C "$WORKTREE" rebase origin/main FETCH_HEAD
-```
-
-Resolve conflicts against the intent of the change, not the literal diff — main may have
-reworked the surrounding code.
-
-**Dependent patches:** if patch N only applies on top of patch N-1, put both on one branch
-in series order, or stack the second branch on the first. Never reorder the series.
-
-### Step 5: Bump versions with pins.mjs
+### Step 4: Bump versions with pins.mjs
 
 `labs-aztec-toolchain/pins.mjs` owns every file in this repo that carries a copy of
 `BB_VERSION`/`NOIR_VERSION`. Two things a sync runs into need version changes, and both go
-through it — never hand-edit a version string, and never `yarn up` a `@aztec-foundation/*`
-resolution.
+through it — never hand-edit a version string, and never `yarn up` an
+`@aztec-foundation/*` resolution.
 
-**(a) Drift the patch brought with it.** After `am`, in the worktree:
+**(a) Drift the series brought with it.** After the series is applied:
 
 ```bash
 node labs-aztec-toolchain/pins.mjs check
 ```
 
-Silence means clean. A complaint names the file, the version it found and the one it
-expected: the patch carries version strings that do not match this repo's pin. Usually
-that is a `use-local` rewrite (`portal:` or relative-path deps pointing into the
-foundation tree) that escaped the foundation checkout, or a resolution the author added at
-whatever version they had. Realign to the pin the branch is based on:
+Silence means clean. A complaint names the file, the version found and the version
+expected: a patch carries version strings that do not match this repo's pin. Usually that
+is a `use-local` rewrite (`portal:` or relative-path deps pointing into the foundation
+tree) that escaped the foundation checkout, or a resolution added at whatever version the
+author had. Realign to the branch's own pin rather than editing the files:
 
 ```bash
 ./labs-aztec-toolchain/bootstrap.sh set-pins <BB_VERSION> <NOIR_VERSION>   # values from origin/main
 (cd yarn-project && yarn)
-git commit -m "chore: realign the pinned versions the patch carried"
+git commit -m "chore: realign the pinned versions the patches carried"
 ```
 
-**(b) Foundation code the pinned release does not have.** The patch was written against
-the foundation tree in `use-local` mode, so it can use an `@aztec-foundation/*` API, or bb
-/ nargo behaviour, that landed after the pinned nightly. The symptom is a build that fails
-to typecheck or compile against the pin, on code the patch touches. The PR then has to
+**(b) Foundation code the pinned release does not have.** The patches were written against
+the foundation tree in `use-local` mode, so they can use an `@aztec-foundation/*` API, or
+bb / nargo behaviour, that landed after the pinned nightly. The symptom is a build that
+fails to typecheck or compile against the pin, on code a patch touches. The PR then has to
 carry the bump too: follow the **bump-toolchain** skill for choosing a complete release and
 deriving the paired `NOIR_VERSION`, then its `set-pins` and lockfile refresh, committed
 separately as `chore: bump toolchain pins to <version>`.
 
-If no published release contains the foundation change yet, the patch cannot land here
-until that nightly ships. Open the draft PR anyway and state what it is waiting for.
+If no published release has the foundation change yet, the series cannot land until that
+nightly ships. Open the draft PR anyway and state what it is waiting for.
 
-### Step 6: Verify
+### Step 5: Verify
 
-`node labs-aztec-toolchain/pins.mjs check` clean, then build what the patch touches, in
-dependency order: `noir-projects/` first if it changed contracts, then `yarn build` from
+`node labs-aztec-toolchain/pins.mjs check` clean, then build in dependency order for what
+the series touches: `noir-projects/` first if contracts changed, then `yarn build` from
 inside `yarn-project/`. Compile checks only — the suite is CI's job, and CI starts when the
 PR leaves draft.
 
-### Step 7: Push a draft PR per patch
+### Step 6: Push the draft PR
 
 ```bash
-git -C "$WORKTREE" push -u origin <prefix>/<slug>
-gh pr create --repo aztec-labs-eng/aztec-node --base main --head <prefix>/<slug> --draft \
-  --title "<patch subject>" --body "<body>"
+git push -u origin <prefix>/sync-foundation-patches
+gh pr create --repo aztec-labs-eng/aztec-node --base main --draft \
+  --title "chore: sync the foundation patch queue" --body "<body>"
 ```
 
-The body says the change comes from the foundation's `labs-patches` queue, names the patch
-file, lists any pin bump the PR carries and why, and notes that the patch leaves the series
-once this merges and the foundation bumps past it. One line per paragraph, no hard
-wrapping. Attribute nothing to Claude.
+The body lists the patches in order with their subjects, names any that were dropped as
+already-landed or left behind as blocked, describes any pin bump the PR carries and why,
+and calls out conflicts that were resolved by hand. It also notes that these patches leave
+the foundation's series once this merges and the foundation bumps past it. One line per
+paragraph, no hard wrapping. Attribute nothing to Claude.
 
-### Step 8: Clean up and report
+### Step 7: Report
 
-Remove every worktree created (`git worktree remove --force` if needed), then report one
-line per patch: PR opened, skipped because already merged or already open, or blocked and
-on what.
+One line per patch: applied, dropped as already merged, skipped as disabled, or blocked and
+on what. Plus the pin state and the build result.
 
 ## Key Points
 
-- **One PR per patch.** The series is a queue to drain, not a batch to land; a stuck patch
-  must not hold up the rest.
-- **The patch commit stays as exported.** Original author, original subject, fixups in
-  separate commits.
+- **The patch commits stay as exported.** Original author, original subject, one commit per
+  patch, fixups in separate commits.
 - **`pins.mjs` owns pinned versions.** `set-pins` for both realignment and bumps;
-  `pins.mjs check` is the guard that the patch did not smuggle in a `use-local` rewrite.
-- **Never commit `use-local` state.** A `labs-aztec-toolchain/.fnd-root` in this clone
-  means the local tree is in foundation mode; the branch must be built from `origin/main`,
-  not from that tree.
+  `pins.mjs check` is the guard that no patch smuggled in a `use-local` rewrite.
+- **A patch that re-pins the standard contracts is not routine.** If the series moves
+  `noir-projects/noir-contracts/pinned-standard-contracts.tar.gz` or
+  `standard_addresses.nr`, it changes the canonical standard-contract addresses. Keep the
+  patch — it is the foundation's deliberate call, and dropping it would leave the series
+  unapplied — but flag it at the top of the PR body so the redeploy is a human decision,
+  and never run `pin-standard-build` yourself in response to fallout from it.
+- **Never commit `use-local` state.** A `labs-aztec-toolchain/.fnd-root` in this clone means
+  the local tree is in foundation mode; the branch must come from `origin/main`, not from
+  that tree.
 - **The foundation side is not ours to edit.** Exporting, dropping and disabling patches,
-  and moving the labs gitlink, all happen in the foundation repo.
+  and moving the labs gitlink, all happen in aztec-packages.
