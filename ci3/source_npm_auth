@@ -11,9 +11,11 @@
 #
 # Neither file holds a credential. Both npm and yarn expand ${VAR} when they read their config, so
 # the files carry only the variable names and the values stay in the environment — nothing to leak
-# into a cache artifact, a docker layer or a build log. npm's _password is base64-decoded before
-# use, so that one variable is derived here; yarn takes plaintext user:password and encodes it
-# itself.
+# into a cache artifact, a docker layer or a build log. They also land outside the repo — the
+# npmrc under /tmp, the yarnrc in $HOME — where the ignored-file sweeps that build the yarn-project
+# and playground cache artifacts cannot see them either way. npm's _password is base64-decoded
+# before use, so that one variable is derived here; yarn takes plaintext user:password and encodes
+# it itself.
 #
 # Scope routing is written only when NPM_REGISTRY is not npmjs. A scope registry outranks npm's
 # `registry` setting wherever that is configured, so routing the scopes unconditionally would
@@ -89,7 +91,9 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
     unset npm_auth_yarn_key npm_auth_scope
   fi
 
-  unset npm_auth_registry npm_auth_key npm_auth_npmrc npm_auth_npmjs
+  unset npm_auth_registry npm_auth_key npm_auth_npmrc
   eval "$npm_auth_xtrace"
   unset npm_auth_xtrace
 fi
+
+unset npm_auth_npmjs
