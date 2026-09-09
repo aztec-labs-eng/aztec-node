@@ -33,18 +33,27 @@ if [ "$version" == "$published_version" ]; then
   exit 0
 fi
 
-# A version older than what a shared dist-tag already points at must not take it: re-publishing
-# an old release line would repoint 'latest' (or 'prerelease') backwards for everyone. Such a
-# version goes out under its own channel instead — 'nightly', 'rc', or 'release-v<major>' for a
-# stable — so it stays installable by tag without moving the shared one.
-#
-# The 'release-' prefix is what makes that name usable: npm rejects any dist-tag that parses as a
-# semver range, and 'v5' is the range '>=5.0.0 <6.0.0-0'.
-publish_tag=$npm_tag
+# A version older than what its dist-tag already points at must not take it: publishing a patch to
+# an old release line, or re-running an old tag's workflow, would otherwise repoint 'latest' (or
+# 'prerelease', or a channel's own tag) backwards for everyone. Such a version is published with no
+# dist-tag at all, which costs nothing: an exact version and a range like '@5' both resolve against
+# the published versions and consult no tag.
+take_tag=1
 if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
-  publish_tag=${channel:-release-v$(semver major "$version")}
+  take_tag=0
   echo "Version $version is older than the published $npm_tag ($published_version);"
-  echo "publishing under dist-tag '$publish_tag' instead of moving '$npm_tag' backwards."
+  echo "publishing it without moving '$npm_tag'."
+fi
+
+# npm attaches a dist-tag to every publish, so publishing untagged means taking one nothing reads
+# and dropping it again. The name carries the version so that a retry of an attempt that died
+# between the two steps looks for the same tag, and it is not a bare 'v<major>': npm rejects any
+# dist-tag that parses as a semver range, and 'v5' is the range '>=5.0.0 <6.0.0-0'.
+tmp_tag="tmp-$version"
+if [ "$take_tag" -eq 1 ]; then
+  publish_tag=$npm_tag
+else
+  publish_tag=$tmp_tag
 fi
 
 # Create temp directory for publishing
@@ -73,11 +82,11 @@ if [ "$dry_run" -eq 1 ]; then
 else
   # Check if version exists.
   if npm view "$package_name@$version" version >/dev/null 2>&1; then
-    # Already published, so there is nothing to publish and only a dist-tag to (re)apply. Skip it
-    # when that would move the shared tag backwards: re-running an old release tag's workflow is
-    # idempotent by design.
-    if [ "$publish_tag" != "$npm_tag" ]; then
+    # Already published, so there is nothing to publish and only a dist-tag to (re)apply.
+    if [ "$take_tag" -eq 0 ]; then
       echo "$version is already published and older than $npm_tag ($published_version). Skipping."
+      # Only there if an earlier attempt died between publishing and dropping it.
+      npm dist-tag rm "$package_name" "$tmp_tag" 2>/dev/null || true
       exit 0
     fi
     # Tag the existing version.
@@ -85,5 +94,10 @@ else
   else
     # Publish new version.
     denoise "npm publish --ignore-scripts --tag $publish_tag --access public"
+    # Leaving this behind would be the public tag the publish was meant not to create, so a failure
+    # here fails the release; the removal above makes the re-run idempotent.
+    if [ "$take_tag" -eq 0 ]; then
+      npm dist-tag rm "$package_name" "$tmp_tag"
+    fi
   fi
 fi
