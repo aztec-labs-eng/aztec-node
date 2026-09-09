@@ -145,8 +145,15 @@ CI's job, and CI starts when the PR leaves draft.
 ```bash
 git push -u origin <prefix>/sync-foundation-patches
 gh pr create --repo aztec-labs-eng/aztec-node --base main --draft \
-  --title "chore: sync the foundation patch queue" --body "<body>"
+  --label ci-full --label ci-no-fail-fast \
+  --title "chore: sync the foundation patch queue" --body-file "$SCRATCH/pr-body.md"
 ```
+
+Both labels go on at creation. `ci-full` runs the extended suite and the benchmarks, which
+a default run skips; `ci-no-fail-fast` keeps the remaining jobs going past the first
+failure, so one bad patch in the chain does not hide what the others break. Neither takes
+effect while the PR is a draft — ci3.yml gates on `draft == false` or a `ci-draft` label —
+so the run starts at `gh pr ready`; add `ci-draft` too if it should start before then.
 
 The body carries, in this order: the patches in series order with their subjects; any
 dropped as already-landed or left behind as blocked, and why; **every conflict resolved,
