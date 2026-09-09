@@ -472,7 +472,14 @@ export class ReqResp implements ReqRespInterface {
         // Process only the first chunk and return, so extra frames a peer queues on the same stream cannot
         // drive further handler invocations that bypass the per-stream rate-limit check in streamHandler.
         for await (const chunk of source) {
-          const response = await handler(connection.remotePeer, chunk.subarray());
+          // yamux's maxMessageSize bounds only OUTBOUND frames, so enforce the request size on the
+          // inbound path too. Check byteLength before subarray; an over-limit first chunk is a badly-formed
+          // request, and throwing lets streamHandler penalize the sender and return the status.
+          if (chunk.byteLength > MAX_REQRESP_REQUEST_SIZE_BYTES) {
+            throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST);
+          }
+          const request = chunk.subarray();
+          const response = await handler(connection.remotePeer, request);
 
           if (protocol === ReqRespSubProtocol.GOODBYE) {
             // NOTE: The stream was already closed by Goodbye handler

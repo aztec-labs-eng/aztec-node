@@ -59,7 +59,6 @@ import { bootstrap } from '@libp2p/bootstrap';
 import { identify } from '@libp2p/identify';
 import { type Message, type MultiaddrConnection, type PeerId, TopicValidatorResult } from '@libp2p/interface';
 import type { AddressManager, ConnectionManager } from '@libp2p/interface-internal';
-import { mplex } from '@libp2p/mplex';
 import { tcp } from '@libp2p/tcp';
 import { multiaddr } from '@multiformats/multiaddr';
 import { ENR } from '@nethermindeth/enr';
@@ -463,8 +462,9 @@ export class LibP2PService extends WithTracer implements P2PService {
       ],
       datastore,
       peerDiscovery,
-      // Pin the yamux frame size: MAX_REQRESP_REQUEST_SIZE_BYTES relies on a reqresp request fitting in one frame.
-      streamMuxers: [yamux({ maxMessageSize: YAMUX_MAX_MESSAGE_SIZE_BYTES }), mplex()],
+      // yamux is the only muxer: MAX_REQRESP_REQUEST_SIZE_BYTES relies on a reqresp request fitting in
+      // one yamux frame.
+      streamMuxers: [yamux({ maxMessageSize: YAMUX_MAX_MESSAGE_SIZE_BYTES })],
       connectionEncryption: [noise()],
       connectionManager: {
         minConnections: 0, // Disable libp2p peer dialing, we do it manually
