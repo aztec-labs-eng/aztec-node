@@ -2,6 +2,7 @@ from flask import Flask, render_template_string, request, Response, redirect
 from flask_compress import Compress
 from flask_httpauth import HTTPBasicAuth
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 import gzip
 import json
@@ -23,8 +24,10 @@ from rk_core import (
 )
 S3_LOGS_BUCKET = os.getenv('S3_LOGS_BUCKET', 'aztec-ci-artifacts')
 S3_LOGS_PREFIX = os.getenv('S3_LOGS_PREFIX', 'logs')
+# Where build-cache artifacts are read from (the ci3 API redirects there); a test points it at a local bucket.
+S3_CACHE_PUBLIC_URL = os.getenv('S3_CACHE_PUBLIC_URL', 'https://aztec-ci-artifacts.s3.amazonaws.com/build-cache')
 
-_s3 = boto3.client('s3', region_name='us-east-2')
+_s3 = boto3.client('s3', region_name='us-east-2', config=Config(connect_timeout=10, read_timeout=60, retries={'max_attempts': 3}))
 DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD', '')
 CI_METRICS_PORT = int(os.getenv('CI_METRICS_PORT', '8081'))
 CI_METRICS_URL = os.getenv('CI_METRICS_URL', f'http://localhost:{CI_METRICS_PORT}')
@@ -576,7 +579,7 @@ def trigger_grind():
             return redirect(f'/{run_id}')
 
         subprocess.Popen(
-            ['bash', '-c', f'cd {repo_path} && RUN_ID={run_id} CPUS={cpus} ./ci.sh grind-test {shlex.quote(full_cmd)} {grind_time} {jobs_pct} {memsuspend_pct} {commit}'],
+            ['bash', '-c', f'cd {shlex.quote(repo_path)} && RUN_ID={shlex.quote(run_id)} CPUS={shlex.quote(cpus)} ./ci.sh grind-test {shlex.quote(full_cmd)} {shlex.quote(grind_time)} {shlex.quote(jobs_pct)} {shlex.quote(memsuspend_pct)} {shlex.quote(commit)}'],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True
@@ -638,6 +641,10 @@ def proxy_dashboard():
 @auth.login_required
 def proxy_api(path):
     return _proxy(f'/api/{path}')
+
+# The ci3 server API (ci3/CI3_SERVER_API.md in aztec-packages): what the ci3 scripts talk to.
+import ci3_api
+ci3_api.register(app, optional_auth, _s3, S3_LOGS_BUCKET, S3_LOGS_PREFIX, DASHBOARD_PASSWORD, S3_CACHE_PUBLIC_URL)
 
 @app.route('/<key>')
 @optional_auth
