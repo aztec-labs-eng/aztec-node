@@ -1171,9 +1171,11 @@ export class ArchiverL1Synchronizer implements Traceable {
           proposedCheckpointNumber: proposed.checkpointNumber,
           proposedHeader: proposed.header.toInspect(),
           proposedArchiveRoot: proposed.archive.root.toString(),
+          proposedFeeAssetPriceModifier: proposed.feeAssetPriceModifier.toString(),
           calldataCheckpointNumber: calldataCheckpoint.checkpointNumber,
           calldataHeader: calldataCheckpoint.header.toInspect(),
           calldataArchiveRoot: calldataCheckpoint.archiveRoot.toString(),
+          calldataFeeAssetPriceModifier: calldataCheckpoint.feeAssetPriceModifier.toString(),
         },
       );
       // Both the locally-proposed checkpoint and the L1-confirmed one are signed by the
