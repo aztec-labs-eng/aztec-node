@@ -281,6 +281,17 @@ export const DEFAULT_PUBLIC_IP_SERVICES: string[] = [
   'https://icanhazip.com/',
 ];
 
+// Bound pre-auth packet decode per source IP so one host cannot force unbounded decoding
+// on the discovery path. Responses to our own queries are exempt via the expected-response
+// bypass. Limits sit well above any honest unsolicited burst, since an over-limit source is
+// banned for the process lifetime.
+export const DISCV5_RATE_LIMITER_OPTS = {
+  // ~5 packets/sec steady per source IP, burst 300.
+  byIPQuota: { replenishAllEvery: 60_000, maxTokens: 300 },
+  // ~100 packets/sec steady aggregate, burst 6000; backstop against many-IP floods.
+  globalQuota: { replenishAllEvery: 60_000, maxTokens: 6_000 },
+};
+
 export const p2pConfigMappings: ConfigMappingsType<P2PConfig> = {
   validateMaxTxsPerBlock: {
     env: 'VALIDATOR_MAX_TX_PER_BLOCK',

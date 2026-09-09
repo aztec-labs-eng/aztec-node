@@ -444,6 +444,38 @@ describe('Discv5Service', () => {
   });
 
   const testPackageVersion = 'test-discv5-service';
+  it('rate-limits unsolicited discovery packets per source IP while exempting expected responses', async () => {
+    // Regression guard: without rateLimiterOpts the transport limiter is undefined and every
+    // unauthenticated packet reaches decode. Assert it is wired.
+    const node = await createNode();
+    const transport = (node as any).discv5.sessionService.transport;
+    const limiter = transport.rateLimiter;
+    expect(limiter).toBeDefined();
+
+    // A single source gets a bounded burst, then is refused.
+    const attackerIp = '203.0.113.1';
+    let allowed = 0;
+    for (let i = 0; i < 5000; i++) {
+      if (limiter.allowEncodedPacket(attackerIp)) {
+        allowed++;
+      }
+    }
+    expect(allowed).toBeGreaterThan(0);
+    expect(allowed).toBeLessThan(5000);
+    expect(limiter.allowEncodedPacket(attackerIp)).toBe(false);
+
+    // Expected responses are exempt: a queried peer's replies are never limited.
+    const honestIp = '198.51.100.7';
+    transport.addExpectedResponse(honestIp);
+    let honestAllowed = 0;
+    for (let i = 0; i < 5000; i++) {
+      if (limiter.allowEncodedPacket(honestIp)) {
+        honestAllowed++;
+      }
+    }
+    expect(honestAllowed).toBe(5000);
+  });
+
   const createNode = async (overrides: Partial<P2PConfig & IDiscv5CreateOptions> = {}, useBootnode = true) => {
     const port = ++basePort;
     const bootnodeAddr = bootNode.getENR().encodeTxt();
