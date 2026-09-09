@@ -20,8 +20,8 @@ import { TxStatus } from '@aztec-labs/stdlib/tx';
 import { getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
 import { registerInitialLocalNetworkAccountsInWallet } from '@aztec-labs/wallets/testing';
 
-import { getACVMConfig } from '../fixtures/get_acvm_config.js';
 import { getBBConfig } from '../fixtures/get_bb_config.js';
+import { getNoirExecuteConfig } from '../fixtures/get_noir_execute_config.js';
 import { getSponsoredFPCAddress, registerSponsoredFPC } from '../fixtures/utils.js';
 import { TestWallet } from '../test-wallet/test_wallet.js';
 import { proveInteraction } from '../test-wallet/utils.js';
@@ -460,12 +460,12 @@ export async function createWalletAndAztecNodeClient(
   logger: Logger,
 ): Promise<WalletWrapper> {
   const aztecNode = createAztecNodeClient(nodeUrl);
-  const [bbConfig, acvmConfig] = await Promise.all([getBBConfig(logger), getACVMConfig(logger)]);
+  const [bbConfig, noirExecuteConfig] = await Promise.all([getBBConfig(logger), getNoirExecuteConfig(logger)]);
   const pxeConfig = {
     dataDirectory: undefined,
     dataStoreMapSizeKb: 1024 * 1024,
     ...bbConfig,
-    ...acvmConfig,
+    ...noirExecuteConfig,
     proverEnabled,
   };
   const wallet = await TestWallet.create(aztecNode, pxeConfig);
@@ -478,7 +478,7 @@ export async function createWalletAndAztecNodeClient(
     async cleanup() {
       await wallet.stop();
       await bbConfig?.cleanup();
-      await acvmConfig?.cleanup();
+      await noirExecuteConfig?.cleanup();
     },
   };
 }
@@ -495,11 +495,11 @@ export async function createWorkerWalletClient(
   logger: Logger,
 ): Promise<WorkerWalletWrapper> {
   const aztecNode = createAztecNodeClient(nodeUrl);
-  const [bbConfig, acvmConfig] = await Promise.all([getBBConfig(logger), getACVMConfig(logger)]);
+  const [bbConfig, noirExecuteConfig] = await Promise.all([getBBConfig(logger), getNoirExecuteConfig(logger)]);
 
   // Strip cleanup functions — they can't be structured-cloned for worker transfer
   const { cleanup: bbCleanup, ...bbPaths } = bbConfig ?? {};
-  const { cleanup: acvmCleanup, ...acvmPaths } = acvmConfig ?? {};
+  const { cleanup: acvmCleanup, ...acvmPaths } = noirExecuteConfig ?? {};
 
   const pxeConfig = {
     dataDirectory: undefined,
