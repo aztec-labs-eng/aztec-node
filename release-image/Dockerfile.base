@@ -7,8 +7,9 @@ COPY . /usr/src
 # Explicitly specify projects that we use to keep as slim as possible.
 WORKDIR /usr/src/yarn-project
 # yarnrc carries the scope routing for a registry other than npmjs, npmauth the credential its
-# ${NPM_AUTH_VALUE} refers to. Both are BuildKit secrets, so neither reaches a layer, and both are
-# absent in a public build, where yarn's defaults are already right.
+# ${NPM_AUTH_VALUE} refers to. npmauth is a secret so it never reaches a layer; the yarnrc names
+# only that variable, and is a secret mount because it comes from outside the build context. Both
+# are absent in a public build, where yarn's defaults are already right.
 RUN --mount=type=secret,id=yarnrc,target=/root/.yarnrc.yml \
     --mount=type=secret,id=npmauth \
     NPM_AUTH_VALUE="$(cat /run/secrets/npmauth 2>/dev/null || true)" \

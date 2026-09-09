@@ -22,8 +22,8 @@
 # rc and private numbers are dotted (-rc.N, not -rcN): semver compares the
 # dotted N numerically (rc.2 < rc.10) but an undotted rcN lexically
 # (rc10 < rc2), and ci3/dist_tag takes the first dot-separated prerelease
-# identifier as the release channel — 'rc' — where rcN would mint a fresh
-# channel per candidate.
+# identifier as the release channel — 'rc' or 'private' — where rcN would mint
+# a fresh channel per candidate.
 #
 # Multi-branch model: scheduled/dispatched runs always execute THIS file from
 # the default branch, so the token-minting code is always the reviewed code on

@@ -99,10 +99,12 @@ function build {
 
   if ! cache_download release-image-base-$hash.zst; then
     # yarn resolves the production dependency tree inside this build, so a private release has to
-    # get its registry config in. Both go in as BuildKit secrets, which never land in a layer: the
-    # yarnrc from the file source_npm_auth wrote, the credential straight from the environment, so
-    # it is not written to disk at all. BUILDKIT is explicit because Dockerfile.base's RUN --mount
-    # does not parse under the legacy builder.
+    # get its registry config in. The credential is a BuildKit secret because that is the only way
+    # in that never lands in a layer, and it goes straight from the environment, so it is not
+    # written to disk at all. The yarnrc holds no credential — only the variable name — and is a
+    # secret mount for an unrelated reason: it lives in $HOME, and COPY and bind mounts can read
+    # only from the build context. BUILDKIT is explicit because Dockerfile.base's RUN --mount does
+    # not parse under the legacy builder.
     local base_secret=""
     if [ -f "$HOME/.yarnrc.yml" ]; then
       base_secret="--secret id=yarnrc,src=$HOME/.yarnrc.yml --secret id=npmauth,env=NPM_AUTH_VALUE"

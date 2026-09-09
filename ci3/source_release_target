@@ -8,9 +8,10 @@
 #   public   npmjs + DockerHub, plus the aztec-up and playground assets. The URLs are defaults
 #            below rather than GitHub variables, so no variable edit can retarget a public release.
 #   private  one GCP Artifact Registry for both the @aztec-foundation reads and the @aztec-labs
-#            writes, and nothing public. Its URLs and credentials come from the release-private
-#            environment; there are no defaults, so an unset value is a configuration error and
-#            not a silent fall back to npmjs.
+#            writes, and nothing public. Its credentials and npm URL come from the release-private
+#            environment, its docker URL from the repo-level INTERNAL_DOCKER_REGISTRY the deploy
+#            workflows also read; there are no defaults, so an unset value is a configuration
+#            error and not a silent fall back to npmjs.
 #
 # The two targets share no credential: an environment that can read private packages holds nothing
 # that can publish publicly, and vice versa. The assertions here are the backstop for the cases
@@ -37,8 +38,8 @@ case "$RELEASE_TARGET" in
     fi
     ;;
   private)
-    : "${NPM_REGISTRY:?NPM_REGISTRY is required for a private release (release-private supplies it)}"
-    : "${DOCKER_REGISTRY:?DOCKER_REGISTRY is required for a private release (release-private supplies it)}"
+    : "${NPM_REGISTRY:?NPM_REGISTRY is required for a private release (INTERNAL_NPM_REGISTRY, on release-private)}"
+    : "${DOCKER_REGISTRY:?DOCKER_REGISTRY is required for a private release (the repo variable INTERNAL_DOCKER_REGISTRY)}"
     # What gets published is code, not configuration: the projects that publish public artifacts
     # (aztec-up, playground) are not in the list, so their release functions are never invoked.
     export RELEASE_PROJECTS="yarn-project release-image"
