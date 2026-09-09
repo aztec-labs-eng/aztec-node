@@ -35,4 +35,12 @@ describe('p2p message', () => {
     expect(deserializedP2PMessage.payload.length).toEqual(proposalAsBuffer.length);
     expect(deserializedP2PMessage.payload).toEqual(proposalAsBuffer);
   });
+
+  it('rejects a message with trailing bytes after the payload', () => {
+    const tx = Tx.random({ randomProof: true });
+    const serialized = P2PMessage.fromGossipable(tx).toMessageData();
+    const tampered = Buffer.concat([serialized, Buffer.from([0xaa])]);
+    // Extra bytes after the payload decode identically but change the gossip id; must reject.
+    expect(() => P2PMessage.fromMessageData(tampered)).toThrow(/trailing bytes/);
+  });
 });

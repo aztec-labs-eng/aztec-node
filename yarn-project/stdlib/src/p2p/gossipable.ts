@@ -26,6 +26,11 @@ export class P2PMessage {
       traceContext = reader.readString();
     }
     const payload = reader.readBuffer();
+    // The gossip dedup id hashes the raw bytes, so bytes after the payload decode identically but
+    // get a fresh seen-message id and bypass dedup. Reject them so the decoded form and dedup key agree.
+    if (!reader.isEmpty()) {
+      throw new Error("P2PMessage: unexpected trailing bytes after payload");
+    }
     return new P2PMessage(payload, timestamp, traceContext);
   }
 
