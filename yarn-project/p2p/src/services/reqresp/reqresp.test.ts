@@ -101,6 +101,34 @@ describe('ReqResp', () => {
       expect(received[0][0]).toBe(ReqRespStatus.SUCCESS);
       expect(new SnappyTransform().inboundTransformData(Buffer.from(received[1])).toString('utf-8')).toEqual('pong');
     });
+
+    it('penalizes the peer for an inbound request over the size bound, before the handler runs', async () => {
+      const handler = jest.fn<ReqRespSubProtocolHandler>().mockResolvedValue(Buffer.from('pong'));
+      (req as any).subProtocolHandlers = { [ReqRespSubProtocol.PING]: handler };
+      const peerId = mock<PeerId>();
+      const oversized = Buffer.alloc(MAX_REQRESP_REQUEST_SIZE_BYTES + 1);
+      const incomingStream = {
+        connection: { remotePeer: peerId },
+        stream: {
+          metadata: {},
+          source: (async function* () {
+            yield oversized;
+          })(),
+          sink: async (source: AsyncIterable<Buffer>) => {
+            for await (const _chunk of source) {
+              // drain
+            }
+          },
+          close: async () => {},
+          abort: () => {},
+        },
+      };
+      // An over-limit first chunk throws BADLY_FORMED_REQUEST, which streamHandler maps to a
+      // LowToleranceError peer penalty; the handler is never invoked.
+      await (req as any).streamHandler(ReqRespSubProtocol.PING, incomingStream);
+      expect(handler).not.toHaveBeenCalled();
+      expect(peerScoring.penalizePeer).toHaveBeenCalledWith(peerId, PeerErrorSeverity.LowToleranceError);
+    });
   });
 
   it('should perform a ping request', async () => {

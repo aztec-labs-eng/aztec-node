@@ -15,10 +15,10 @@ export const YAMUX_MAX_MESSAGE_SIZE_BYTES = 64 * 1024;
 const YAMUX_HEADER_LENGTH_BYTES = 12;
 
 /**
- * Max size of a reqresp request payload. A request must fit in a single muxer frame: the responder never reassembles
+ * Max size of a reqresp request payload. A request must fit in a single yamux frame: the responder never reassembles
  * a request from multiple chunks (see `ReqResp.processStream`), and yamux splits writes larger than one frame into
- * multiple frames, each of which arrives as a separate chunk. mplex only splits at 1 MiB, so yamux is the binding
- * constraint.
+ * multiple frames. yamux's maxMessageSize bounds only OUTBOUND frames, so `ReqResp.processStream` enforces this bound
+ * on the inbound path.
  */
 export const MAX_REQRESP_REQUEST_SIZE_BYTES = YAMUX_MAX_MESSAGE_SIZE_BYTES - YAMUX_HEADER_LENGTH_BYTES;
 
