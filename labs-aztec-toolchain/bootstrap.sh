@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
-# Provisions the binaries the labs components build with (bb, nargo, noir-profiler, and
-# optionally bb-avm and noir-execute) into bin/, from one of two sources:
+# Provisions the binaries the labs components build with (bb, nargo, noir-execute,
+# noir-profiler, and optionally bb-avm) into bin/, from one of two sources:
 #
 # - Foundation mode (FND_ROOT non-empty): symlink the binaries built inside the checkout at
 #   FND_ROOT (barretenberg/cpp and the noir submodule), and derive the toolchain identity
@@ -46,10 +46,7 @@ BB_VERSION=6.0.0-nightly.20260910
 # examples' runtime tests).
 NOIR_VERSION=1.0.0-rc.1
 
-# The installers and sources are fetched at build time; overridable for testing/mirroring.
-# noirup versions independently of noir - we need a version that ships noir-profiler
-# (introduced in v0.1.4).
-NOIRUP_URL=${NOIRUP_URL:-https://raw.githubusercontent.com/noir-lang/noirup/v0.1.4/noirup}
+# The releases are fetched at build time; overridable for testing/mirroring.
 # bb and bb-avm come from the npm packages the foundation publishes, fetched as plain
 # tarballs over https rather than through a package manager: no node_modules tree, no
 # lockfile, and the pinned version makes the URL fully determined (see install_npm_binary).
@@ -59,12 +56,11 @@ NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org}
 # CI - where the AVM tests run - requires it, see require_optional_binaries.
 BB_PLATFORMS="linux-x64 linux-arm64 darwin-x64 darwin-arm64"
 BB_AVM_PLATFORMS="linux-x64 linux-arm64"
-# No noir release ships noir-execute (its `just package` recipe uploads only nargo, noir-profiler
-# and noir-inspector), so it is compiled from the release source tree. Noir tags releases
-# "v<semver>" and nightlies unprefixed.
+# Noir tags releases "v<semver>" and nightlies unprefixed, and publishes one archive per
+# rust target triple (see noir_target), each holding every binary the release ships.
 NOIR_TAG=$NOIR_VERSION
 [[ $NOIR_TAG == nightly-* ]] || NOIR_TAG=v$NOIR_TAG
-NOIR_SOURCE_URL=${NOIR_SOURCE_URL:-https://github.com/noir-lang/noir/archive/refs/tags/$NOIR_TAG.tar.gz}
+NOIR_RELEASE_URL=${NOIR_RELEASE_URL:-https://github.com/noir-lang/noir/releases/download}
 
 function link_tool {
   local full_path=$1
@@ -107,9 +103,9 @@ function build_fnd {
   link_tool "$nargo_full_path" "$NARGO_BINARY"
   link_tool "$noir_profiler_full_path" "$NOIR_PROFILER_BINARY"
 
-  # These may legitimately be absent: bb-avm is skipped by AVM=0 builds, and noir releases
-  # don't ship noir-execute (the noir-from-release flow). Link whatever exists; a consumer of an
-  # absent binary fails at the point of use.
+  # These may legitimately be absent: bb-avm is skipped by AVM=0 builds, and noir-execute is
+  # only there once the checkout's noir build has produced it. Link whatever exists; a
+  # consumer of an absent binary fails at the point of use.
   local optional_path
   for optional_path in \
     "$FND_ROOT/barretenberg/cpp/build/bin/$BB_AVM_BINARY" \
@@ -197,6 +193,24 @@ function npm_platform {
 }
 NPM_PLATFORM=$(npm_platform || true)
 
+# The rust target triple noir names its release archives by, spelled from uname. Linux takes
+# the gnu triple, the one noir builds for every architecture.
+function noir_target {
+  local arch os
+  case "$(uname -m)" in
+    x86_64|amd64) arch=x86_64 ;;
+    aarch64|arm64) arch=aarch64 ;;
+    *) return 1 ;;
+  esac
+  case "$(uname -s)" in
+    Linux) os=unknown-linux-gnu ;;
+    Darwin) os=apple-darwin ;;
+    *) return 1 ;;
+  esac
+  echo "$arch-$os"
+}
+NOIR_TARGET=$(noir_target || true)
+
 # Whether a binary with the given platform list is published for this machine.
 function published_here {
   [ -n "$NPM_PLATFORM" ] && [[ " $1 " == *" $NPM_PLATFORM "* ]]
@@ -228,90 +242,41 @@ function install_npm_binary {
   chmod +x "$TARGET_DIR/$binary"
 }
 
+# Installs the binaries the labs components use out of the noir release archive for this
+# machine. The archive carries the whole toolchain; noir-inspector is left in it.
 function install_noir {
   local tmp=$1
-  echo "Installing $NARGO_BINARY/$NOIR_PROFILER_BINARY $NOIR_VERSION via noirup..."
-  curl -fsSL "$NOIRUP_URL" -o "$tmp/noirup"
-  chmod +x "$tmp/noirup"
-  mkdir -p "$tmp/nargo_home/bin"
-  NARGO_HOME="$tmp/nargo_home" "$tmp/noirup" -v "$NOIR_VERSION"
-  rm -f "$TARGET_DIR/$NARGO_BINARY" "$TARGET_DIR/$NOIR_PROFILER_BINARY" # Remove the destinations first.
-  cp -f "$tmp/nargo_home/bin/$NARGO_BINARY" "$TARGET_DIR/$NARGO_BINARY"
-  cp -f "$tmp/nargo_home/bin/$NOIR_PROFILER_BINARY" "$TARGET_DIR/$NOIR_PROFILER_BINARY"
-}
-
-function install_noir_execute {
-  local tmp=$1
-  local src=$tmp/noir
-  local cargo_home=$tmp/cargo-home
-  local cargo_root=$tmp/cargo-root
-  # The key carries the platform because this is a compiled binary, and a digest of this
-  # function because the recipe below decides the output bytes (path remapping,
-  # GIT_COMMIT/SOURCE_DATE_EPOCH, --locked): a recipe change must miss the cache rather
-  # than restore a binary built the old way. declare -f prints bash's normalized form, so
-  # the digest can differ across bash versions — the cost is a spurious rebuild, never a
-  # stale hit. Keys derived from cache_content_hash get all of this for free.
-  local recipe_hash
-  recipe_hash=$(hash_str "$(declare -f install_noir_execute)")
-  local cache_key=labs-noir-execute-$NOIR_VERSION-$recipe_hash-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).zst
-
-  rm -f "$TARGET_DIR/$NOIR_EXECUTE_BINARY" # Remove the destination first.
-
-  # A build from scratch takes ~5 minutes: ~1.5 of compiling, the rest fetching the ~330
-  # dependency crates, which the isolated CARGO_HOME below means paying again every time.
-  # Nothing but the pinned noir version and the platform goes into the result (the build is
-  # byte-reproducible, see the path remapping below), so a cached binary is as good as a
-  # fresh one, down to the hash the pin records.
-  if cache_download "$cache_key"; then
-    echo "Restored $NOIR_EXECUTE_BINARY $NOIR_VERSION from the build cache."
-    return
+  if [ -z "$NOIR_TARGET" ]; then
+    echo_stderr "noir publishes no release archive for $(uname -s)/$(uname -m)."
+    exit 1
   fi
-
-  echo "Building $NOIR_EXECUTE_BINARY $NOIR_VERSION from source (no release ships it)..."
+  local url=$NOIR_RELEASE_URL/$NOIR_TAG/noir-$NOIR_TARGET.tar.gz
+  local archive=$tmp/noir.tar.gz
+  local src=$tmp/noir
+  echo "Installing $NARGO_BINARY/$NOIR_EXECUTE_BINARY/$NOIR_PROFILER_BINARY $NOIR_VERSION from $url..."
+  if ! curl -fsSL "$url" -o "$archive"; then
+    echo_stderr "Could not download $url."
+    exit 1
+  fi
+  # Unpacked whole rather than by member name: the linux archives prefix their entries with
+  # ./ and the darwin ones do not.
   mkdir -p "$src"
-  curl -fsSL "$NOIR_SOURCE_URL" | tar xz -C "$src" --strip-components=1
-
-  # Materialise the toolchain before building. rustup installs a missing channel into the
-  # shared RUSTUP_HOME, which the isolated CARGO_HOME below does not cover, and two units
-  # installing the same channel at once make one roll back the other's install, leaving a
-  # toolchain with no cargo in it. This is the lock the repo's other cargo builds take; hold
-  # it only for the install, so the compile itself still runs alongside them.
-  (
-    flock -x 200
-    cd "$src" && cargo --version >/dev/null
-  ) 200>/tmp/rustup.lock
-
-  # Every path cargo writes to lives under $tmp, so the trap that removes $tmp removes the
-  # entire build: CARGO_HOME keeps the fetched crates out of the user's registry cache,
-  # --root keeps the binary and its install manifest out of ~/.cargo/bin, and
-  # CARGO_TARGET_DIR keeps the object files out of the source tree.
-  # The paths are remapped out of the binary because the pin records noir-execute's content hash
-  # and that hash feeds downstream cache keys: left in, $tmp's random name would make
-  # every build of the same source produce different bytes.
-  # GIT_COMMIT/GIT_DIRTY are what noirc_driver's build script would otherwise read from a
-  # git checkout, which a release tarball is not.
-  # Cargo runs from inside the source tree so rustup picks up noir's rust-toolchain.toml:
-  # the workspace pins an MSRV newer than the cargo many machines have on PATH, and from
-  # anywhere else the build dies on a version mismatch instead.
-  (
-    cd "$src"
-    CARGO_HOME=$cargo_home \
-    CARGO_TARGET_DIR=$tmp/cargo-target \
-    RUSTFLAGS="--remap-path-prefix=$src=/noir --remap-path-prefix=$cargo_home=/cargo" \
-    GIT_COMMIT=$NOIR_TAG \
-    GIT_DIRTY=false \
-    SOURCE_DATE_EPOCH=0 \
-      cargo install --locked --path tooling/artifact_cli --bin noir-execute --root "$cargo_root"
-  )
-
-  cp -f "$cargo_root/bin/$NOIR_EXECUTE_BINARY" "$TARGET_DIR/$NOIR_EXECUTE_BINARY"
-  cache_upload "$cache_key" "$TARGET_DIR/$NOIR_EXECUTE_BINARY"
+  tar xzf "$archive" -C "$src"
+  local name
+  for name in "$NARGO_BINARY" "$NOIR_EXECUTE_BINARY" "$NOIR_PROFILER_BINARY"; do
+    if [ ! -f "$src/$name" ]; then
+      echo_stderr "$name is not in $url."
+      exit 1
+    fi
+    rm -f "$TARGET_DIR/$name" # Remove the destination first.
+    cp -f "$src/$name" "$TARGET_DIR/$name"
+    chmod +x "$TARGET_DIR/$name"
+  done
 }
 
-# bb-avm and noir-execute are optional on a developer machine: bb-avm is published for linux
-# only, and noir-execute needs a rust toolchain to compile. Under CI they are not optional -
-# the AVM tests and the protocol circuit execution paths need them, and a runner that
-# provisioned neither would silently take a fallback path or fail far from here.
+# bb-avm is optional on a developer machine: it is published for linux only. Under CI it is
+# not optional - the AVM tests need it, and a runner that provisioned none would silently
+# take a fallback path or fail far from here.
 function require_optional_binaries {
   [ "${CI:-0}" -eq 1 ]
 }
@@ -322,17 +287,16 @@ function build_pinned {
 
   mkdir -p "$TARGET_DIR"
 
-  # Every binary is checked on its own, but the flows that provision them are coarser:
-  # noirup installs its whole release in one shot, so a stale nargo also refetches
-  # noir-profiler, while bb and bb-avm (an npm package each) and noir-execute (a source build)
-  # are provisioned individually.
-  # The optional binaries are only swept where they can be provisioned; elsewhere they are
-  # dropped (a leftover foundation-mode symlink must not survive a pinned build) rather
-  # than marked stale, which would put the no-op early return below permanently out of
-  # reach on those machines.
-  local fetch_bb=false fetch_bb_avm=false fetch_noir=false fetch_noir_execute=false
+  # Every binary is checked on its own, but the flows that provision them are coarser: one
+  # noir archive carries nargo, noir-execute and noir-profiler, so a stale one refetches all
+  # three, while bb and bb-avm (an npm package each) are provisioned individually.
+  # bb-avm is only swept where it can be provisioned; elsewhere it is dropped (a leftover
+  # foundation-mode symlink must not survive a pinned build) rather than marked stale,
+  # which would put the no-op early return below permanently out of reach on those machines.
+  local fetch_bb=false fetch_bb_avm=false fetch_noir=false
   is_current "$BB_BINARY" bb "$BB_VERSION" || fetch_bb=true
   is_current "$NARGO_BINARY" noir "$NOIR_VERSION" || fetch_noir=true
+  is_current "$NOIR_EXECUTE_BINARY" noir "$NOIR_VERSION" || fetch_noir=true
   is_current "$NOIR_PROFILER_BINARY" noir "$NOIR_VERSION" || fetch_noir=true
   if bb_avm_published_here; then
     is_current "$BB_AVM_BINARY" bb "$BB_VERSION" || fetch_bb_avm=true
@@ -343,17 +307,8 @@ function build_pinned {
     # Absence is tolerated: its consumers (AVM proving) only run on linux anyway.
     drop_unprovisionable "$BB_AVM_BINARY"
   fi
-  if command -v cargo &>/dev/null; then
-    is_current "$NOIR_EXECUTE_BINARY" noir "$NOIR_VERSION" || fetch_noir_execute=true
-  elif require_optional_binaries; then
-    echo_stderr "$NOIR_EXECUTE_BINARY is required when CI=1, but cargo is not on PATH to build it from the noir release source."
-    exit 1
-  else
-    # Absence is tolerated: its consumers fall back to the wasm simulator without it.
-    drop_unprovisionable "$NOIR_EXECUTE_BINARY"
-  fi
 
-  if ! $fetch_bb && ! $fetch_bb_avm && ! $fetch_noir && ! $fetch_noir_execute; then
+  if ! $fetch_bb && ! $fetch_bb_avm && ! $fetch_noir; then
     echo "Toolchain matches pinned versions and hashes, nothing to download."
     return
   fi
@@ -376,22 +331,7 @@ function build_pinned {
   if $fetch_noir; then
     install_noir "$tmp"
   else
-    echo "$NARGO_BINARY/$NOIR_PROFILER_BINARY $NOIR_VERSION already provisioned."
-  fi
-
-  # The record is written before the noir-execute build, the one step that takes minutes and can
-  # fail on its own (it compiles noir), so a failure there does not cost the downloads that
-  # already succeeded. A stale binary goes first: the record hashes what is on disk, and an
-  # interrupted run must not leave it attesting contents that are about to be replaced.
-  if $fetch_noir_execute; then
-    rm -f "$TARGET_DIR/$NOIR_EXECUTE_BINARY"
-  fi
-  labs_pin_record > "$PIN_FILE"
-
-  if $fetch_noir_execute; then
-    install_noir_execute "$tmp"
-  elif command -v cargo &>/dev/null; then
-    echo "$NOIR_EXECUTE_BINARY $NOIR_VERSION already provisioned."
+    echo "$NARGO_BINARY/$NOIR_EXECUTE_BINARY/$NOIR_PROFILER_BINARY $NOIR_VERSION already provisioned."
   fi
 
   labs_pin_record > "$PIN_FILE"
@@ -470,8 +410,7 @@ function hash {
   fi
   # What the toolchain provides on this machine, including an optional binary's absence, is
   # part of its identity and is known without provisioning: the foundation records the
-  # optional binaries it built; from npm, bb-avm is published for linux only and noir-execute is
-  # compiled locally exactly where cargo exists.
+  # optional binaries it built; from npm, bb-avm is published for linux only.
   local expected=""
   if [ -n "$FND_ROOT" ]; then
     check_fnd_root
@@ -480,9 +419,6 @@ function hash {
   else
     if bb_avm_published_here; then
       expected+=" $BB_AVM_BINARY"
-    fi
-    if command -v cargo &>/dev/null; then
-      expected+=" $NOIR_EXECUTE_BINARY"
     fi
   fi
   hash_str "$content_hash" "$expected"

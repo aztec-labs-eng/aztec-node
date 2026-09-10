@@ -54,9 +54,6 @@ function check_toolchain_binaries {
     fi
     if [ ! -f "$path" ]; then
       echo "Missing labs-aztec-toolchain/bin/$binary. Run labs-aztec-toolchain/bootstrap.sh first."
-      if [ "$binary" = noir-execute ]; then
-        echo "Building noir-execute requires cargo to be installed."
-      fi
       exit 1
     fi
   done
