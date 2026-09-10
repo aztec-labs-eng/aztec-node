@@ -1,4 +1,5 @@
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import type { L1FeeAnalyzer } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -1819,7 +1820,12 @@ describe('CheckpointProposalJob', () => {
       publisher.sendRequestsAt.mockReturnValue(sendDeferred.promise);
       publisher.interrupt.mockImplementation(() => sendDeferred.resolve(undefined));
 
+      let disposed = false;
+      publisher[Symbol.dispose].mockImplementation(() => {
+        disposed = true;
+      });
       const checkpoint = await job.execute();
+      expect(disposed).toBe(false);
       expect(checkpoint).toBeDefined();
 
       const pendingSubmission = job.awaitPendingSubmission().then(() => 'stopped' as const);
@@ -1834,6 +1840,7 @@ describe('CheckpointProposalJob', () => {
           }),
         ]);
         expect(result).toBe('stopped');
+        expect(disposed).toBe(true);
       } finally {
         if (timeout) {
           clearTimeout(timeout);
@@ -1857,6 +1864,53 @@ describe('CheckpointProposalJob', () => {
       expect(validatorClient.collectAttestations).not.toHaveBeenCalled();
     });
 
+    it.each([true, false])(
+      'preserves fee comparison after disposal when fisherman builds a checkpoint: %s',
+      async builds => {
+        job.updateConfig({ fishermanMode: true, buildCheckpointIfEmpty: true, minTxsPerBlock: 0 });
+        if (builds) {
+          const { txs, block } = await setupTxsAndBlock(p2p, globalVariables, 1, chainId);
+          checkpointBuilder.seedBlocks([block], [txs]);
+        } else {
+          jest.spyOn(job.getTimetable(), 'selectNextSubslot').mockReturnValue(noSubslot());
+        }
+
+        const comparison = [
+          {
+            strategyId: 'test',
+            strategyName: 'Test strategy',
+            totalAnalyses: 1,
+            inclusionCount: 1,
+            inclusionRate: 1,
+            avgEstimatedCostEth: 0.001,
+            totalEstimatedCostEth: 0.001,
+            avgOverpaymentEth: 0,
+            totalOverpaymentEth: 0,
+            avgPriorityFeeDeltaGwei: 0,
+          },
+        ];
+        const analyzer = mock<L1FeeAnalyzer>();
+        analyzer.getStrategyComparison.mockReturnValue(comparison);
+        publisher.getL1FeeAnalyzer.mockReturnValue(analyzer);
+        let disposed = false;
+        publisher[Symbol.dispose].mockImplementation(() => {
+          disposed = true;
+          publisher.getL1FeeAnalyzer.mockImplementation(() => {
+            throw new Error('Publisher disposed');
+          });
+          analyzer.getStrategyComparison.mockImplementation(() => {
+            throw new Error('Analyzer disposed');
+          });
+        });
+
+        const checkpoint = await job.executeAndAwait();
+
+        expect(checkpoint !== undefined).toBe(builds);
+        expect(disposed).toBe(true);
+        expect(job.getFeeStrategyComparison()).toEqual(comparison);
+      },
+    );
+
     it('does not push proposed block to archiver in fisherman mode', async () => {
       job.updateConfig({ fishermanMode: true, buildCheckpointIfEmpty: true, minTxsPerBlock: 0 });
 
@@ -1864,7 +1918,12 @@ describe('CheckpointProposalJob', () => {
       checkpointBuilder.seedBlocks([emptyBlock], [[]]);
 
       // In fisherman mode execute() always returns undefined (handled internally via handleCheckpointEndAsFisherman)
-      await job.execute();
+      let disposed = false;
+      publisher[Symbol.dispose].mockImplementation(() => {
+        disposed = true;
+      });
+      await job.executeAndAwait();
+      expect(disposed).toBe(true);
 
       // Fisherman still builds the block
       expect(checkpointBuilder.buildBlockCalls).toHaveLength(1);

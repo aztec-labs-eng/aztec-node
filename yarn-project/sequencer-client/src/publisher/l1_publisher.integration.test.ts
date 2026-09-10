@@ -462,6 +462,7 @@ describe('L1Publisher integration', () => {
     // for the rest of the run, logging an error per iteration and stealing time from later tests.
     publisher?.interrupt();
     await publisher?.l1TxUtils.waitMonitoringStopped();
+    publisher?.dispose();
     await tryStop(anvil);
     await tryStop(worldStateSynchronizer);
   });
