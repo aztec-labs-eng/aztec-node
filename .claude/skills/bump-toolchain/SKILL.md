@@ -109,9 +109,12 @@ tracked generated artifacts, e.g. under `noir-contracts.js`; report those, and n
 
 - `./labs-aztec-toolchain/bootstrap.sh` — provisions the new binaries (runs the drift
   check first in pinned mode).
-- Build in dependency order: `noir-projects/` then `yarn-project/` (or `make fast` from
-  the root). The noir-projects build also proves the new `v<version>` tag is fetchable by
-  nargo for the aztec-nr git deps.
+- Build in dependency order: `./bootstrap.sh` in `noir-projects/`, then `./bootstrap.sh`
+  in `yarn-project/`. Not `yarn build`: it recompiles TypeScript without rerunning the
+  code generation, so `constants/src/constants.gen.ts` and the other generated inputs stay
+  on the old release and the bump looks like missing enum members and struct fields. The
+  noir-projects build also proves the new `v<version>` tag is fetchable by nargo for the
+  aztec-nr git deps.
 
 ### 7. Finish
 

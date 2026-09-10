@@ -23,6 +23,7 @@ import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { ArchiverDataStores } from '../store/data_stores.js';
 import type { L2TipsCache } from '../store/l2_tips_cache.js';
+import { prepareBlockTxEffectsTreeData } from '../store/tx_effect_tree_data.js';
 
 /** Operation type for contract data updates. */
 enum Operation {
@@ -61,6 +62,7 @@ export class ArchiverDataStoreUpdater {
     block: L2Block,
     pendingChainValidationStatus?: ValidateCheckpointResult,
   ): Promise<boolean> {
+    await prepareBlockTxEffectsTreeData([block]);
     const result = await this.stores.db.transactionAsync(async () => {
       await this.stores.blocks.addProposedBlock(block);
 
@@ -111,6 +113,7 @@ export class ArchiverDataStoreUpdater {
       validateCheckpoint(promoteProposed.checkpoint.checkpoint, validateOpts);
     }
 
+    await prepareBlockTxEffectsTreeData(checkpoints.flatMap(published => published.checkpoint.blocks));
     const result = await this.stores.db.transactionAsync(async () => {
       // Before adding checkpoints, check for conflicts with local blocks if any
       const { prunedBlocks, lastAlreadyInsertedBlockNumber } = await this.pruneMismatchingLocalBlocks(checkpoints);

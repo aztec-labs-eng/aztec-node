@@ -42,7 +42,7 @@ import type { L2LogsSource } from '@aztec-labs/stdlib/interfaces/server';
 import type { LogResult, PrivateLogsQuery, PublicLogsQuery } from '@aztec-labs/stdlib/logs';
 import type { InboxBucket, L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
-import type { BlockHeader, IndexedTxEffect, TxHash } from '@aztec-labs/stdlib/tx';
+import type { BlockHeader, IndexedTxEffect, TxEffectMembershipWitness, TxHash } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { ArchiverDataSource } from '../interfaces.js';
@@ -154,6 +154,8 @@ export abstract class ArchiverDataSourceBase
     message: Fr,
     messageIndexInTx?: number,
   ): Promise<L2ToL1MembershipWitness | undefined>;
+
+  abstract getTxEffectMembershipWitness(txHash: TxHash): Promise<TxEffectMembershipWitness | undefined>;
 
   public async isPruneDueAtSlot(slot: SlotNumber): Promise<boolean> {
     if (!this.l1Constants) {

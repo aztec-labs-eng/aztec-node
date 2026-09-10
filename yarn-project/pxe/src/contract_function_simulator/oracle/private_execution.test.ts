@@ -231,6 +231,7 @@ describe('Private Execution test suite', () => {
       anchorBlockHeader.lastArchive,
       state,
       anchorBlockHeader.spongeBlobHash,
+      anchorBlockHeader.txEffectsTreeRoot,
       anchorBlockHeader.globalVariables,
       anchorBlockHeader.totalFees,
       anchorBlockHeader.totalManaUsed,

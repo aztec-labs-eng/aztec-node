@@ -1,14 +1,19 @@
 import type { TxBlobData } from '@aztec-labs/blob-lib/encoding';
 import { timesParallel } from '@aztec-labs/foundation/collection';
+import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { computeUnbalancedMerkleTreeRootAsync } from '@aztec-labs/foundation/trees';
 import { inspect } from 'util';
 import { z } from 'zod';
 
 import { MAX_TX_EFFECTS_PER_BODY } from '../deserialization/index.js';
 import type { ZodFor } from '../schemas/index.js';
 import { TxEffect } from '../tx/tx_effect.js';
+import { type TxEffectsTreeData, computeTxEffectsTreeData, txEffectsTreeNodeHash } from '../tx/tx_effect_membership.js';
 
 export class Body {
+  #cachedTxEffectsTreeData?: Promise<TxEffectsTreeData>;
+
   constructor(public txEffects: TxEffect[]) {}
 
   equals(other: Body) {
@@ -48,6 +53,32 @@ export class Body {
    */
   toTxBlobData(): TxBlobData[] {
     return this.txEffects.map(txEffect => txEffect.toTxBlobData());
+  }
+
+  /**
+   * Root of the block's tx effects tree, with one leaf per tx binding the tx hash to the hash of its effects.
+   *
+   * Mirrors the accumulation performed by the rollup circuits: an unbalanced (greedily filled) tree over the leaves in
+   * tx order. Zero leaves are not skipped — there are no padding txs, so the shape is a function of the tx count
+   * alone. A block with no txs has root 0, and a single-tx block's root is that tx's leaf, unhashed.
+   */
+  async computeTxEffectsTreeRoot(): Promise<Fr> {
+    return (await this.computeTxEffectsTree()).root;
+  }
+
+  /** Memoizes leaves and categories hashes. Transaction effects must not be mutated after the first call. */
+  public computeTxEffectsTreeData(): Promise<TxEffectsTreeData> {
+    return (this.#cachedTxEffectsTreeData ??= computeTxEffectsTreeData(this.txEffects));
+  }
+
+  /** Computes the root, leaves, and categories hashes together to avoid hashing the effects again during ingestion. */
+  async computeTxEffectsTree(): Promise<TxEffectsTreeData & { root: Fr }> {
+    const { leaves, categoriesHashes } = await this.computeTxEffectsTreeData();
+    const root = await computeUnbalancedMerkleTreeRootAsync(
+      leaves.map(leaf => leaf.toBuffer()),
+      txEffectsTreeNodeHash,
+    );
+    return { root: Fr.fromBuffer(root), leaves, categoriesHashes };
   }
 
   /**

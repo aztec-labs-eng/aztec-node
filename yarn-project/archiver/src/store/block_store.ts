@@ -57,8 +57,16 @@ import {
   ProposedCheckpointNotSequentialError,
   ProposedCheckpointPromotionNotSequentialError,
 } from '../errors.js';
+import { prepareBlockTxEffectsTreeData } from './tx_effect_tree_data.js';
 
 export type { TxEffect, TxHash, TxReceipt } from '@aztec-labs/stdlib/tx';
+
+/** A transaction's position in the block that owns its indexed effects. */
+export type TxLocation = {
+  blockNumber: BlockNumber;
+  blockHash: BlockHash;
+  txIndexInBlock: number;
+};
 
 type BlockIndexValue = [blockNumber: number, index: number];
 
@@ -165,6 +173,12 @@ export class BlockStore {
   /** Tx hash to serialized IndexedTxEffect */
   #txEffects: AztecAsyncMap<string, Buffer>;
 
+  /** Map block hash to the concatenated leaves of the block's tx effects tree, in tx order */
+  #blockTxEffectLeaves: AztecAsyncMap<string, Buffer>;
+
+  /** Map block hash to the concatenated categories hashes, in tx order. */
+  #blockTxEffectCategoriesHashes: AztecAsyncMap<string, Buffer>;
+
   /** Stores L1 block number in which the last processed L2 block was included */
   #lastSynchedL1Block: AztecAsyncSingleton<bigint>;
 
@@ -198,6 +212,8 @@ export class BlockStore {
     this.#blocks = db.openMap('archiver_blocks');
     this.#blockTxs = db.openMap('archiver_block_txs');
     this.#txEffects = db.openMap('archiver_tx_effects');
+    this.#blockTxEffectLeaves = db.openMap('archiver_block_tx_effect_leaves');
+    this.#blockTxEffectCategoriesHashes = db.openMap('archiver_block_tx_effect_categories_hashes');
     this.#contractIndex = db.openMap('archiver_contract_index');
     this.#blockHashIndex = db.openMap('archiver_block_hash_index');
     this.#blockArchiveIndex = db.openMap('archiver_block_archive_index');
@@ -237,6 +253,7 @@ export class BlockStore {
    * @returns True if the operation is successful.
    */
   async addProposedBlock(block: L2Block, opts: { force?: boolean } = {}): Promise<boolean> {
+    await prepareBlockTxEffectsTreeData([block]);
     return await this.db.transactionAsync(async () => {
       const blockNumber = block.number;
       const blockCheckpointNumber = block.checkpointNumber;
@@ -321,6 +338,7 @@ export class BlockStore {
       return [];
     }
 
+    await prepareBlockTxEffectsTreeData(checkpoints.flatMap(published => published.checkpoint.blocks));
     return await this.db.transactionAsync(async () => {
       const firstCheckpointNumber = checkpoints[0].checkpoint.number;
       const previousCheckpointNumber = await this.getLatestCheckpointNumber();
@@ -365,7 +383,8 @@ export class BlockStore {
 
         // Store every block in the database (may already exist, but L1 data is authoritative)
         for (let i = 0; i < checkpoint.checkpoint.blocks.length; i++) {
-          await this.addBlockToDatabase(checkpoint.checkpoint.blocks[i], checkpoint.checkpoint.number, i);
+          const block = checkpoint.checkpoint.blocks[i];
+          await this.addBlockToDatabase(block, checkpoint.checkpoint.number, i);
         }
         previousBlock = checkpoint.checkpoint.blocks.at(-1);
 
@@ -510,6 +529,13 @@ export class BlockStore {
 
   private async addBlockToDatabase(block: L2Block, checkpointNumber: number, indexWithinCheckpoint: number) {
     const blockHash = await block.hash();
+    const { leaves, categoriesHashes } = await block.body.computeTxEffectsTreeData();
+    await this.#blockTxEffectLeaves.set(blockHash.toString(), Buffer.concat(leaves.map(leaf => leaf.toBuffer())));
+
+    await this.#blockTxEffectCategoriesHashes.set(
+      blockHash.toString(),
+      Buffer.concat(categoriesHashes.map(hash => hash.toBuffer())),
+    );
 
     await this.#blocks.set(block.number, {
       header: block.header.toBuffer(),
@@ -543,6 +569,8 @@ export class BlockStore {
     await this.#blocks.delete(blockNumber);
 
     const blockHash = bufferToHex(blockStorage.blockHash);
+    await this.#blockTxEffectLeaves.delete(blockHash);
+    await this.#blockTxEffectCategoriesHashes.delete(blockHash);
 
     // Delete the tx effects of the block's txs, skipping entries that no longer point at this block: if
     // another stored block also contains the tx, the entry points at that block, and deleting it here would
@@ -1165,11 +1193,39 @@ export class BlockStore {
   }
 
   /**
+   * Gets the leaves of a block's tx effects tree, in tx order, as computed when the block was stored.
+   * @param blockHash - The block to read the leaves of.
+   * @returns The leaves, or undefined if the block is not stored.
+   */
+  async getTxEffectLeaves(blockHash: BlockHash): Promise<Fr[] | undefined> {
+    const buffer = await this.#blockTxEffectLeaves.getAsync(blockHash.toString());
+    if (buffer === undefined) {
+      return undefined;
+    }
+    const reader = BufferReader.asReader(buffer);
+    const leaves: Fr[] = [];
+    while (!reader.isEmpty()) {
+      leaves.push(reader.readObject(Fr));
+    }
+    return leaves;
+  }
+
+  /** Gets a stored categories hash by its owning block and transaction index. */
+  async getTxEffectCategoriesHash(blockHash: BlockHash, txIndexInBlock: number): Promise<Fr | undefined> {
+    const buffer = await this.#blockTxEffectCategoriesHashes.getAsync(blockHash.toString());
+    const offset = txIndexInBlock * Fr.SIZE_IN_BYTES;
+    if (!buffer || offset < 0 || offset + Fr.SIZE_IN_BYTES > buffer.length) {
+      return undefined;
+    }
+    return Fr.fromBuffer(buffer.subarray(offset, offset + Fr.SIZE_IN_BYTES));
+  }
+
+  /**
    * Looks up which block included the requested tx effect.
    * @param txHash - The txHash of the tx.
-   * @returns The block number and index of the tx.
+   * @returns The owning block hash, block number, and index of the tx.
    */
-  public async getTxLocation(txHash: TxHash): Promise<[blockNumber: number, txIndex: number] | undefined> {
+  public async getTxLocation(txHash: TxHash): Promise<TxLocation | undefined> {
     const txEffect = await this.#txEffects.getAsync(txHash.toString());
     if (!txEffect) {
       return undefined;
@@ -1179,7 +1235,11 @@ export class BlockStore {
     const view = Buffer.from(txEffect.buffer, txEffect.byteOffset, txEffect.byteLength);
     const l2BlockNumber = view.readUInt32BE(32);
     const txIndexInBlock = view.readUInt32BE(36);
-    return [l2BlockNumber, txIndexInBlock];
+    return {
+      blockNumber: BlockNumber(l2BlockNumber),
+      blockHash: BlockHash.fromBuffer(view.subarray(0, 32)),
+      txIndexInBlock,
+    };
   }
 
   /**

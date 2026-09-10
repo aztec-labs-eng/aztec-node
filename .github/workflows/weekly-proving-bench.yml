@@ -78,8 +78,7 @@ jobs:
     with:
       network: prove-n-tps-real
       namespace: prove-n-tps-real
-      aztec_docker_image: ${{ needs.select-image.outputs.docker_image }}
-      ref: ${{ needs.select-image.outputs.source_ref }}
+      image_tag: ${{ needs.select-image.outputs.nightly_tag }}
       skip_notify_on_failure: true
     secrets: inherit
 

@@ -278,8 +278,8 @@ export function buildServerCircuitProver(
   }
 
   const logger = createLogger('prover-client:acvm-native');
-  const simulator = config.acvmBinaryPath
-    ? new NativeACVMSimulator(config.acvmWorkingDirectory, config.acvmBinaryPath, undefined, logger)
+  const simulator = config.noirExecuteBinaryPath
+    ? new NativeACVMSimulator(config.noirExecuteWorkingDirectory, config.noirExecuteBinaryPath, undefined, logger)
     : undefined;
 
   return Promise.resolve(new TestCircuitProver(simulator, config, telemetry));

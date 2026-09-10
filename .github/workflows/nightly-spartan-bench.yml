@@ -33,7 +33,6 @@ jobs:
       nightly_tag: ${{ steps.nightly-tag.outputs.nightly_tag }}
       docker_image: ${{ steps.nightly-tag.outputs.docker_image }}
       source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
-      use_internal_docker_registry: ${{ steps.nightly-tag.outputs.use_internal_docker_registry }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -43,8 +42,6 @@ jobs:
       - name: Determine nightly tag
         id: nightly-tag
         run: |
-          USE_INTERNAL_DOCKER_REGISTRY="false"
-
           if [[ -n "${{ inputs.nightly_tag }}" ]]; then
             nightly_tag="${{ inputs.nightly_tag }}"
           else
@@ -53,21 +50,13 @@ jobs:
           fi
 
           source_ref="v${nightly_tag}"
-
-          if [[ "$USE_INTERNAL_DOCKER_REGISTRY" == "true" ]]; then
-            docker_image=""
-            image_label="internal/aztec:${nightly_tag}"
-          else
-            docker_image="azteclabs/aztec:${nightly_tag}"
-            image_label="$docker_image"
-          fi
+          docker_image="azteclabs/aztec:${nightly_tag}"
 
           echo "nightly_tag=$nightly_tag" >> "$GITHUB_OUTPUT"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
           echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
-          echo "use_internal_docker_registry=$USE_INTERNAL_DOCKER_REGISTRY" >> "$GITHUB_OUTPUT"
           echo "Using nightly tag: $nightly_tag"
-          echo "Using image: $image_label"
+          echo "Using image: $docker_image"
           echo "Using source ref: $source_ref"
 
       - name: Verify source git ref
@@ -106,9 +95,7 @@ jobs:
     with:
       network: prove-n-tps-fake
       namespace: prove-n-tps-fake
-      semver: ${{ needs.select-image.outputs.nightly_tag }}
-      ref: ${{ needs.select-image.outputs.source_ref }}
-      use_internal_docker_registry: ${{ needs.select-image.outputs.use_internal_docker_registry == 'true' }}
+      image_tag: ${{ needs.select-image.outputs.nightly_tag }}
       skip_notify_on_failure: true
     secrets: inherit
 
@@ -262,9 +249,7 @@ jobs:
     with:
       network: block-capacity
       namespace: nightly-block-capacity
-      semver: ${{ needs.select-image.outputs.nightly_tag }}
-      ref: ${{ needs.select-image.outputs.source_ref }}
-      use_internal_docker_registry: ${{ needs.select-image.outputs.use_internal_docker_registry == 'true' }}
+      image_tag: ${{ needs.select-image.outputs.nightly_tag }}
       skip_notify_on_failure: true
     secrets: inherit
 

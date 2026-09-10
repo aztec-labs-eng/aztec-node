@@ -9,6 +9,61 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Node] `ACVM_*` config renamed to `NOIR_EXECUTE_*`
+
+Protocol circuits are now executed with noir's `noir-execute` rather than the `acvm` binary, so the
+configuration naming the executor follows the tool. The environment variables, the CLI flags and the
+config fields are renamed; nothing about what you point them at changes, beyond the binary itself no
+longer being called `acvm`.
+
+| Old                          | New                                  |
+| ---------------------------- | ------------------------------------ |
+| `$ACVM_BINARY_PATH`          | `$NOIR_EXECUTE_BINARY_PATH`          |
+| `$ACVM_WORKING_DIRECTORY`    | `$NOIR_EXECUTE_WORKING_DIRECTORY`    |
+| `--sequencer.acvmBinaryPath` | `--sequencer.noirExecuteBinaryPath`  |
+| `--proverNode.acvmBinaryPath`| `--proverNode.noirExecuteBinaryPath` |
+| `acvmBinaryPath`             | `noirExecuteBinaryPath`              |
+| `acvmWorkingDirectory`       | `noirExecuteWorkingDirectory`        |
+
+The same rename applies to the `acvmWorkingDirectory` flags (`--sequencer.acvmWorkingDirectory`,
+`--proverNode.acvmWorkingDirectory`). The release image sets the new variables itself, and its default
+working directory moves from `/usr/src/acvm` to `/usr/src/noir-execute`.
+
+**Migration:**
+
+```diff
+- ACVM_BINARY_PATH=/usr/src/labs-aztec-toolchain/bin/noir-execute
+- ACVM_WORKING_DIRECTORY=/usr/src/acvm
++ NOIR_EXECUTE_BINARY_PATH=/usr/src/labs-aztec-toolchain/bin/noir-execute
++ NOIR_EXECUTE_WORKING_DIRECTORY=/usr/src/noir-execute
+```
+
+There is no fallback to the old names, and a node still setting only `ACVM_BINARY_PATH` fails to start
+rather than running degraded: a prover agent exits with `Requested real proving but no path to bb or
+noir-execute binaries provided`, and a prover node or sequencer configured for real proofs throws from
+`BBNativeRollupProver.new` when it tries to stat an undefined path. Only a node running without real
+proofs falls back to WASM simulation, which is much slower.
+
+Type names keep the ACVM spelling (`NativeACVMSimulator`, `ACVMConfig`, `ACVMWitness`), since those
+describe the ACIR VM and its witness format rather than the tool that runs it.
+
+### [Protocol] Block header commits to a per-block tx effects tree
+
+The L2 block header gains a `tx_effects_tree_root` field: the root of a per-block merkle tree with one leaf per
+transaction, where each leaf binds the transaction hash to a structured hash of its effects (note hashes, nullifiers,
+L2-to-L1 messages, public data writes, and logs). Holding a block header is now enough to verify that a transaction was
+included in that block and produced exactly a given set of effects with a short membership proof, instead of replaying
+the checkpoint's full sponge blob. The root is computed by the rollup circuits and is available on `BlockHeader` as
+`txEffectsTreeRoot`; `TxEffect.computeTxEffectLeaf()` and `Body.computeTxEffectsTreeRoot()` compute the leaves and root
+from published data.
+
+This is a breaking protocol change: the block header serialization grew by one field, so every transaction hash,
+verification key, contract artifact, canonical contract address, and the genesis constants change. Contracts must be
+recompiled against the updated `aztec-nr`. The PXE oracle interface version was bumped (30 → 31), as was the TXE
+oracle interface version (8 → 9), and existing PXE databases are re-initialized on next open (data schema version
+14 → 15). Nodes resync their archiver, which now also stores the tx effects tree leaves of each block (archiver data
+schema version 9 → 10).
+
 ### [npm] Packages moved to the `@aztec-labs` scope
 
 Every package published from this repository is now scoped `@aztec-labs` instead of `@aztec`.
