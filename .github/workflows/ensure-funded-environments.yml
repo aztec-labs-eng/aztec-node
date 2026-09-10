@@ -5,8 +5,8 @@ name: Ensure Funded Environments
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Environment to fund"
+      network:
+        description: "Network to fund"
         required: false
         type: choice
         default: all
@@ -37,14 +37,16 @@ concurrency:
 
 jobs:
   fund:
-    name: ${{ matrix.environment }}
+    name: ${{ matrix.network }}
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     strategy:
       # we can only run one funding operation at a time because all jobs fund from the same address
       max-parallel: 1
       fail-fast: false
       matrix:
-        environment: ${{ fromJSON((inputs.environment == '' || inputs.environment == 'all') && '["staging-public","staging-internal","next-net","testnet"]' || format('["{0}"]', inputs.environment)) }}
+        network: ${{ fromJSON((inputs.network == '' || inputs.network == 'all') && '["staging-public","staging-internal","next-net","testnet"]' || format('["{0}"]', inputs.network)) }}
     env:
       GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
     steps:
@@ -57,8 +59,8 @@ jobs:
       - name: Validate inputs
         run: |
           # Validate environment
-          if [[ ! -f "spartan/environments/${{ matrix.environment }}.env" ]]; then
-            echo "Error: Environment file not found for environment '${{ matrix.environment }}'"
+          if [[ ! -f "spartan/environments/${{ matrix.network }}.env" ]]; then
+            echo "Error: Environment file not found for environment '${{ matrix.network }}'"
             echo "Available environments:"
             ls -1 spartan/environments/ | grep -v '\.local\.env$' || echo "No environment files found"
             exit 1
@@ -107,7 +109,7 @@ jobs:
 
           # Run the funding script (scheduled runs have no inputs and use the higher watermarks)
           ./ensure_funded_environment.sh \
-            "${{ matrix.environment }}" \
+            "${{ matrix.network }}" \
             "$FUNDING_PRIVATE_KEY" \
             "${{ inputs.low_watermark || '5.0' }}" \
             "${{ inputs.high_watermark || '10.0' }}"
@@ -117,17 +119,17 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         run: |
-          if [[ "${{ matrix.environment }}" == "tps-scenario" ]]; then
+          if [[ "${{ matrix.network }}" == "tps-scenario" ]]; then
             export ALERT_CHANNEL="#alerts-next-net"
           else
-            export ALERT_CHANNEL="#alerts-${{ matrix.environment }}"
+            export ALERT_CHANNEL="#alerts-${{ matrix.network }}"
           fi
 
           if [ -n "${SLACK_BOT_TOKEN}" ]; then
             read -r -d '' data <<EOF || true
             {
               "channel": "$ALERT_CHANNEL",
-              "text": "Ensure Funded Environments workflow FAILED for *${{ matrix.environment }}*: <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+              "text": "Ensure Funded Environments workflow FAILED for *${{ matrix.network }}*: <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
             }
           EOF
             curl -X POST https://slack.com/api/chat.postMessage \

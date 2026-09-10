@@ -106,6 +106,8 @@ jobs:
     needs: deploy-next-net
     if: always() && needs.deploy-next-net.result != 'success'
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     steps:
       # A local action needs the repo on disk. No ref: this run's own commit is enough,
       # since all the teardown reads is next-net.env and network_teardown.sh.
