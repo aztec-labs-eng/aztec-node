@@ -77,6 +77,13 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
     [ -z "${NPM_TOKEN:-}" ] || npm_auth_yarn_key=npmAuthToken
     (
       umask 077
+      # The lockfile's checksums were taken against npmjs, and a version published to both
+      # registries is not the same artifact in both — yarn hashes the package's contents, not the
+      # tarball, so a rebuild with the same version fails the check. Verification is a global
+      # setting, so this gives up content verification for every dependency, not just the routed
+      # scopes; it can go once the private registry serves the public packages as a proxy of npmjs
+      # rather than as separate publishes.
+      echo "checksumBehavior: ignore"
       echo "npmScopes:"
       for npm_auth_scope in aztec-foundation aztec-labs; do
         echo "  $npm_auth_scope:"

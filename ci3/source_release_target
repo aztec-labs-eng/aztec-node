@@ -50,8 +50,14 @@ case "$RELEASE_TARGET" in
     fi
     # The build cache is served over plain HTTP with no credentials (see ci3/cache_download), so
     # anything a private build uploads is publicly downloadable. Exported here rather than set in
-    # the workflow so it cannot be forgotten. Downloads stay on; a private-pin tree simply misses.
+    # the workflow so it cannot be forgotten.
     export NO_CACHE_UPLOAD=1
+    # Downloads are off for a different reason: no cache key mentions the registry. node_modules is
+    # keyed on yarn.lock plus package.json and the release-image base layer on the Dockerfiles plus
+    # yarn.lock, all identical between a public and a private build of the same tree, so a private
+    # run would restore a public run's entries and skip both installs — publishing artifacts built
+    # against npmjs while reporting success.
+    export NO_CACHE=1
     ;;
   *)
     echo_stderr "Unknown RELEASE_TARGET '$RELEASE_TARGET' (expected public or private)."
