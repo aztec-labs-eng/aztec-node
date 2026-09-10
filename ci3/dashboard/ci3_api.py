@@ -1,4 +1,4 @@
-"""The ci3 server API (aztec-packages ci3/CI3_SERVER_API.md) on the dashboard's redis and S3.
+"""The ci3 server API on the dashboard's redis and S3.
 
 ci3 is the foundation repo's bash CI framework; this is where it keeps everything it stores, in the
 key shapes this dashboard already renders:
