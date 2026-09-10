@@ -56,7 +56,7 @@ describe('CheckpointAttestationValidator', () => {
     expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
   });
 
-  it('returns high tolerance error if slot number is outside its receive window', async () => {
+  it('ignores a slot outside its receive window without penalty', async () => {
     // Attestation for slot 97 (target 98). Slot 97 attestation deadline = 97*72 + 48 = 7032s; set now
     // just past it so the message falls outside its liberal receive window.
     const header = CheckpointHeader.random({ slotNumber: SlotNumber(97) });
@@ -80,7 +80,7 @@ describe('CheckpointAttestationValidator', () => {
     epochCache.isInCommittee.mockResolvedValue(true);
 
     const result = await validator.validate(mockAttestation);
-    expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+    expect(result).toEqual({ result: 'ignore' });
   });
 
   it('accepts a previous-slot attestation that is still within its receive window', async () => {
@@ -166,7 +166,7 @@ describe('CheckpointAttestationValidator', () => {
     expect(result).toEqual({ result: 'accept' });
   });
 
-  it('rejects attestation for current slot past the straggler window', async () => {
+  it('ignores an attestation for the current slot past the straggler window', async () => {
     // Slot 98 attestation; now is past slot 98's attestation deadline (7104s) + disparity.
     const header = CheckpointHeader.random({ slotNumber: SlotNumber(98) });
     const mockAttestation = makeCheckpointAttestation({
@@ -190,7 +190,7 @@ describe('CheckpointAttestationValidator', () => {
     epochCache.isInCommittee.mockResolvedValue(true);
 
     const result = await validator.validate(mockAttestation);
-    expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+    expect(result).toEqual({ result: 'ignore' });
   });
 
   it('returns high tolerance error if attester is not in committee', async () => {
@@ -379,19 +379,33 @@ describe('CheckpointAttestationValidator', () => {
       expect(await validateAt(buildFrameStart - deltaSeconds)).toEqual({ result: 'accept' });
     });
 
-    it('rejects just before the build frame start minus the disparity', async () => {
-      expect(await validateAt(buildFrameStart - deltaSeconds - 0.001)).toEqual({
-        result: 'reject',
-        severity: PeerErrorSeverity.HighToleranceError,
-      });
+    it('ignores just before the build frame start minus the disparity', async () => {
+      expect(await validateAt(buildFrameStart - deltaSeconds - 0.001)).toEqual({ result: 'ignore' });
     });
 
     it('accepts at the attestation deadline plus the disparity', async () => {
       expect(await validateAt(attestationDeadline + deltaSeconds)).toEqual({ result: 'accept' });
     });
 
-    it('rejects just after the attestation deadline plus the disparity', async () => {
-      expect(await validateAt(attestationDeadline + deltaSeconds + 0.001)).toEqual({
+    it('ignores just after the attestation deadline plus the disparity', async () => {
+      expect(await validateAt(attestationDeadline + deltaSeconds + 0.001)).toEqual({ result: 'ignore' });
+    });
+
+    it('ignores an attestation just past the deadline, within the propagation grace', async () => {
+      // 300ms past the widened window, under the ignore grace: a benign just-expired forward.
+      expect(await validateAt(attestationDeadline + deltaSeconds + 0.3)).toEqual({ result: 'ignore' });
+    });
+
+    it('rejects an attestation past the deadline beyond the propagation grace', async () => {
+      // 600ms past the widened window, over the ignore grace: clearly stale, so penalize.
+      expect(await validateAt(attestationDeadline + deltaSeconds + 0.6)).toEqual({
+        result: 'reject',
+        severity: PeerErrorSeverity.HighToleranceError,
+      });
+    });
+
+    it('rejects an attestation before the window beyond the propagation grace', async () => {
+      expect(await validateAt(buildFrameStart - deltaSeconds - 0.6)).toEqual({
         result: 'reject',
         severity: PeerErrorSeverity.HighToleranceError,
       });
