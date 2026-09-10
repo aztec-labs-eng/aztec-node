@@ -22,11 +22,12 @@
 # Multi-branch model: scheduled/dispatched runs always execute THIS file from
 # the default branch, so the token-minting code is always the reviewed code on
 # main — and the environments' deployment policy stays main-only for the same
-# reason. The branch being tagged is just data: each branch's version comes
-# from its own .release-please-manifest.json, so a v5 line tags v5.x.y and
-# main tags v6.x.y with no collision. To start a new release line, add it in
-# both places below: the `branch` options for on-demand tagging and the matrix
-# list for nightlies (a one-line reviewed PR each).
+# reason.
+#
+# To start a new release line, add it in both places below: the `branch`
+# options for on-demand tagging and the matrix list for nightlies
+# (a one-line reviewed PR each).
+
 name: Release Tag
 
 on:
@@ -55,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         # TO ADD A NEW RELEASE LINE to the nightly schedule: extend the LAST
-        # list in this expression, e.g. fromJSON('["main", "v5"]'). Nothing else
+        # list in this expression, e.g. fromJSON('["main", "v6"]'). Nothing else
         # changes — no environment, ruleset, or App-installation edits (see the
         # multi-branch model in the header). The first arm of the expression is
         # not a branch list: it collapses dispatch runs to the one requested branch.
@@ -67,7 +68,9 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && 'release-approval' || 'tagger' }}
     steps:
       - name: Mint App token
-        uses: actions/create-github-app-token@v2
+        # SHA-pinned, not @v2: this is the step the private key is passed to, so a
+        # moved tag upstream would be arbitrary code beside the key.
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         id: app
         with:
           app-id: ${{ vars.RELEASE_APP_ID || secrets.RELEASE_APP_ID }}
