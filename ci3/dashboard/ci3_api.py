@@ -1,19 +1,12 @@
 """The ci3 server API on the dashboard's redis and S3.
 
-ci3 is the foundation repo's bash CI framework; this is where it keeps everything it stores, in the
-key shapes this dashboard already renders:
+The ci3 server handles the following resources:
 
-  logs       gzipped under their id (SETEX). Every denoised command, every test attempt, a run's
-             top-level log (its CI_LOG_ID), and data files with path ids: test-timings/<run>/<test
-             log> and bench/bb-breakdown/<key> (the chonk-breakdowns view reads those). A running job
-             re-puts its log every few seconds; the last write is marked final and is also copied to
-             S3 at logs/<4>/<id>.log.gz (path ids: logs/<path>.log.gz), where read_from_s3 finds it
-             once redis has expired it.
-  kv         the test cache: key = hash of the full test command line, value = the id of the log of
-             its passing run, so CI skips a test that already passed. Also hb-<run id>, the heartbeat
-             a running build refreshes every 30s (set-filter.lua marks a run inactive without it).
+  logs       gzipped under their id. E.g. the root ci log, test logs, "denoised" command results.
+             A running job re-puts its log every few seconds. Uses redis and s3.
+  kv         A key value store. Used for the test cache. Uses redis.
   lists      history_<test hash>[_<branch>] (one line per attempt of a test) and failed_tests[_<section>]
-             (every failure and flake): the /list/<name> pages.
+             (every failure and flake): the /list/<name> pages. 
   runs       ci-run-<section> sorted sets, score = the run id (CI_LOG_ID): the records the section
              pages render, written RUNNING when a run starts and PASSED/FAILED when it ends.
   artifacts  the build cache in S3: <component>-<content hash> tarballs, bench-<tree>.tar.gz,
