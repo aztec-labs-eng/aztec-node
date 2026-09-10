@@ -60,13 +60,15 @@ export class CheckpointAttestationValidator implements P2PValidator<CheckpointAt
         nowMs < startSeconds * 1000 - this.clockDisparityMs ||
         nowMs > deadlineSeconds * 1000 + this.clockDisparityMs
       ) {
+        // A receive-window miss is a benign timing divergence (propagation delay or clock skew), not
+        // sender-attributable invalid data: ignore without penalizing the relaying peer.
         this.logger.warn(`Checkpoint attestation slot ${slotNumber} is outside its receive window`, {
           slotNumber,
           nowMs,
           windowStartSeconds: startSeconds,
           windowDeadlineSeconds: deadlineSeconds,
         });
-        return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
+        return { result: 'ignore' };
       }
 
       // Verify the signature is valid
