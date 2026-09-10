@@ -83,6 +83,7 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
       # setting, so this gives up content verification for every dependency, not just the routed
       # scopes; it can go once the private registry serves the public packages as a proxy of npmjs
       # rather than as separate publishes.
+      # NOTE: Simplify this file if private releases ever go away.
       echo "checksumBehavior: ignore"
       echo "npmScopes:"
       for npm_auth_scope in aztec-foundation aztec-labs; do
