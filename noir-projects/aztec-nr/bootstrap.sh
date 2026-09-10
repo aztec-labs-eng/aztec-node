@@ -83,43 +83,62 @@ function format {
 }
 
 function release {
-  release_git_push "master" $REF_NAME
+  release_git_push "main" $REF_NAME
 }
 
 function release_git_push {
   local branch_name=$1
   local tag_name=$2
-  local mirrored_repo_url="https://github.com/AztecProtocol/aztec-nr.git"
+  local mirrored_repo_url="https://github.com/aztec-labs-eng/aztec-nr.git"
+  local mirrored_repo_push_url="git@github.com:aztec-labs-eng/aztec-nr.git"
+
+  if [ "${DRY_RUN:-0}" = 0 ] && [ ! -r "${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE:-}" ]; then
+    echo "AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE must name the mirror's deploy key to push to $mirrored_repo_push_url" >&2
+    exit 1
+  fi
+
+  # Every release is tagged, so nightlies and release-PR canaries can be depended on and tested,
+  # but only a stable release is based on the branch and moves it: the branch is what people see
+  # when they browse the mirror, and it should show released code, not a nightly or an unreviewed
+  # PR. Every other release is a parentless snapshot, so its history does not claim a lineage the
+  # branch never had.
+  local stable=0
+  if [ "$(REF_NAME=$tag_name dist_tag)" = latest ]; then
+    stable=1
+  fi
 
   # Clean up our release directory.
   rm -rf release-out && mkdir release-out
 
-  # Copy our git files to our release directory.
+  # Copy our git files to our release directory. The crates ship exactly as committed, including
+  # the protocol_types pin: it names the foundation release this tree is built and tested against,
+  # which is unrelated to this repo's own version, so it must not be rewritten to the released tag.
   git archive HEAD -- . | tar -x -C release-out
 
   cd release-out
 
-  # Find all Nargo.toml files that reference noir-protocol-circuits
-  nargo_files="$(find . -name 'Nargo.toml' | xargs grep --files-with-matches 'noir-protocol-circuits' || true)"
-
-  # Move the noir-protocol-circuits pin from whatever monorepo tag the sources track to the tag
-  # being released. Only lines mentioning noir-protocol-circuits are touched, so the other git
-  # dependencies keep their own tags.
-  for nargo_file in $nargo_files; do
-    sed --regexp-extended --in-place \
-      "/noir-protocol-circuits/ s;tag\s*=\s*\"[^\"]*\";tag = \"$tag_name\";" \
-      $nargo_file
-  done
-
-  # CI needs to authenticate from GITHUB_TOKEN.
-  gh auth setup-git &>/dev/null || true
-
   git init &>/dev/null
+  git config user.name "Aztec Labs aztec-nr release"
+  git config user.email "noreply@aztec-labs.com"
   git remote add origin "$mirrored_repo_url" &>/dev/null
-  git fetch origin --quiet
 
-  # Checkout the existing branch or create it if it doesn't exist.
-  if git ls-remote --heads origin "$branch_name" | grep -q "$branch_name"; then
+  # Pushes authenticate over ssh with the mirror's deploy key; fetches stay anonymous.
+  if [ "${DRY_RUN:-0}" = 0 ]; then
+    # GitHub's ssh host key, as published at https://api.github.com/meta.
+    local known_hosts=$(mktemp)
+    trap "rm -f $known_hosts" EXIT
+    echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > $known_hosts
+    export GIT_SSH_COMMAND="ssh -i $AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts -o StrictHostKeyChecking=yes"
+    git remote set-url --push origin "$mirrored_repo_push_url"
+  fi
+
+  if [ -n "$(git ls-remote --tags origin "refs/tags/$tag_name")" ]; then
+    echo "Tag $tag_name already exists. Skipping release."
+    return
+  fi
+
+  if [ $stable = 1 ] && [ -n "$(git ls-remote --heads origin "refs/heads/$branch_name")" ]; then
+    git fetch origin --quiet
     # Update branch reference without checkout.
     git branch -f "$branch_name" origin/"$branch_name"
     # Point HEAD to the branch.
@@ -127,25 +146,21 @@ function release_git_push {
     # Move to latest commit, keep working tree.
     git reset --soft origin/"$branch_name"
   else
-    git checkout -b "$branch_name"
+    # HEAD is unborn in the fresh repository, so the release becomes a root commit.
+    git checkout -q -b "$branch_name"
   fi
 
-  if git rev-parse "$tag_name" >/dev/null 2>&1; then
-    echo "Tag $tag_name already exists. Skipping release."
-  else
-    git add .
-    git commit -m "Release $tag_name." >/dev/null
-    git tag -a "$tag_name" -m "Release $tag_name."
+  git add .
+  # Every release gets its own commit even when the crates did not change since the last one.
+  git commit --allow-empty -m "Release $tag_name." >/dev/null
+  git tag -a "$tag_name" -m "Release $tag_name."
+
+  if [ $stable = 1 ]; then
     do_or_dryrun git push origin "$branch_name" --quiet
-    do_or_dryrun git push origin --quiet --force "$tag_name" --tags
-
-    echo "Release complete ($tag_name) on branch $branch_name."
   fi
+  do_or_dryrun git push origin --quiet --force "$tag_name"
 
-  do_or_dryrun git push origin "$branch_name" --quiet
-  do_or_dryrun git push origin --quiet --force "$tag_name" --tags
-
-  echo "Release complete ($tag_name) on branch $branch_name."
+  echo "Release complete ($tag_name)."
 }
 
 case "$cmd" in

@@ -60,6 +60,9 @@ jobs:
           # target-neutral names the build uses.
           RELEASE_TARGET: public
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Private half of the aztec-nr mirror repo's write deploy key, which github.token cannot
+          # push to.
+          AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY: ${{ secrets.AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY }}
           DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by

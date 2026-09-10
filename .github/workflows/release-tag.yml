@@ -76,8 +76,8 @@ jobs:
       - name: Create and push tag
         run: |
           set -euo pipefail
-          git config --global user.email "tech@aztecprotocol.com"
-          git config --global user.name "AztecBot"
+          git config --global user.email "noreply@aztec-labs.com"
+          git config --global user.name "Aztec Labs release"
           version=$(jq -r '."."' .release-please-manifest.json)
           kind=${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
           case "$kind" in

@@ -19,7 +19,9 @@ case "$RELEASE_TARGET" in
   public)
     export NPM_REGISTRY=${NPM_REGISTRY:-$npmjs_registry}
     export DOCKER_REGISTRY=${DOCKER_REGISTRY:-docker.io/azteclabs}
-    export RELEASE_PROJECTS="yarn-project aztec-up playground release-image"
+    # The aztec-nr mirror goes first: a failure there aborts the whole release, since a CLI whose
+    # scaffold pins an aztec-nr tag that does not exist is worse than no release at all.
+    export RELEASE_PROJECTS="noir-projects/aztec-nr yarn-project aztec-up playground release-image"
     if [ "$NPM_REGISTRY" != "$npmjs_registry" ]; then
       echo_stderr "A public release must publish to $npmjs_registry, not $NPM_REGISTRY."
       exit 1

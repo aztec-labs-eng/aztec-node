@@ -238,7 +238,7 @@ type = "contract"
 authors = ["[YOUR_NAME]"]
 
 [dependencies]
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
 bb_proof_verification = { git = "https://github.com/AztecProtocol/aztec-packages/", tag = "#include_aztec_version", directory = "barretenberg/noir/bb_proof_verification" }
 ```
 

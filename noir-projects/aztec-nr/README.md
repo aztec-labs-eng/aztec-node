@@ -8,10 +8,9 @@
   </p>
 
   <p>
-    <a href="https://github.com/AztecProtocol/aztec-nr/actions"><img alt="Build Status" src="https://github.com/AztecProtocol/aztec-nr/actions/workflows/tests.yaml/badge.svg" /></a>
     <a href="https://docs.aztec.network"><img alt="Aztec Website" src="https://img.shields.io/badge/docs-tutorials-blueviolet" /></a>
     <a href="https://discord.gg/p6BBdH9ctY"><img alt="Discord Chat" src="https://img.shields.io/discord/889577356681945098?color=blueviolet" /></a>
-    <a href="https://opensource.org/licenses/Apache-2.0"><img alt="License" src="https://img.shields.io/github/license/AztecProtocol/aztec-nr?color=blueviolet" /></a>
+    <a href="https://opensource.org/licenses/Apache-2.0"><img alt="License" src="https://img.shields.io/github/license/aztec-labs-eng/aztec-nr?color=blueviolet" /></a>
   </p>
 </div>
 
@@ -80,11 +79,14 @@ compiler_version = "<current_noir_version>"
 type = "contract"
 
 [dependencies]
-# To install the aztec framework (required to create aztec contracts).
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr", tag = "master" , directory = "aztec" }
+# To install the aztec framework (required to create aztec contracts). Pin every aztec-nr
+# dependency to the latest stable release: the newest tag in
+# https://github.com/aztec-labs-eng/aztec-nr/tags without a -nightly or -rc suffix. This is the
+# version aztec-up installs by default, and the tag must match your `aztec --version`.
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "aztec" }
 
 # Optional libraries
-field_note = { git = "https://github.com/AztecProtocol/aztec-nr", tag = "master" , directory = "field-note" }
+field_note = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v6.0.0", directory = "field-note" }
 ```
 
 ## Installation

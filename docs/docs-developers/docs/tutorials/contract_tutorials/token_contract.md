@@ -75,7 +75,7 @@ name = "bob_token_contract"
 type = "contract"
 
 [dependencies]
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
 ```
 
 Since we're here, let's import more specific stuff from this library:
@@ -281,8 +281,8 @@ For something like balances, you can use a simple library called `balance_set` w
 
 ```toml
 [dependencies]
-aztec = { git="https://github.com/AztecProtocol/aztec-nr", tag="#include_aztec_version", directory="aztec" }
-balance_set = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "#include_aztec_version", directory = "balance-set" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr", tag="#include_aztec_version", directory="aztec" }
+balance_set = { git = "https://github.com/aztec-labs-eng/aztec-nr/", tag = "#include_aztec_version", directory = "balance-set" }
 ```
 
 Then import `BalanceSet` in our contract:
