@@ -1,18 +1,18 @@
 # Creates release tags via the release GitHub App — the only identity the
 # release-tags ruleset permits to create v* tags.
 #
-#   nightly:  cron (or dispatch with kind=nightly)  -> v<ver>-nightly.<date>
-#             per branch in the nightly matrix below; unattended via the
-#             `tagger` environment.
-#   rc:       dispatch with kind=rc                 -> v<ver>-rc.<n>
-#             from any branch (input); n is derived from origin's existing
-#             rc tags for that version (max + 1, starting at 1). Gated by
-#             `release-approval` like a real release; artifacts publish to
-#             the 'rc' channel and never take 'latest'.
-#   release:  dispatch with kind=release            -> v<ver>
-#             from any branch (input), gated by the `release-approval`
-#             environment: required reviewers with self-review prevented, so
-#             cutting a release takes two distinct humans.
+#   nightly:  cron only                    -> v<ver>-nightly.<date>
+#             per branch in the nightly matrix below; the one unattended
+#             path, via the `tagger` environment.
+#   rc:       dispatch with kind=rc         -> v<ver>-rc.<n>
+#             n is derived from origin's existing rc tags for that version
+#             (max + 1, starting at 1). Gated by `release-approval` like a
+#             real release; artifacts publish to the 'rc' channel and never
+#             take 'latest'.
+#   release:  dispatch with kind=release    -> v<ver>
+#             gated by the `release-approval` environment: required reviewers
+#             with self-review prevented, so cutting a release takes two
+#             distinct humans.
 #
 # rc numbers are dotted (-rc.N, not -rcN): semver compares the dotted N
 # numerically (rc.2 < rc.10) but an undotted rcN lexically (rc10 < rc2), and
@@ -24,8 +24,9 @@
 # main — and the environments' deployment policy stays main-only for the same
 # reason. The branch being tagged is just data: each branch's version comes
 # from its own .release-please-manifest.json, so a v5 line tags v5.x.y and
-# main tags v6.x.y with no collision. To start nightlies for a new release
-# line, add it to the matrix list below (a one-line reviewed PR).
+# main tags v6.x.y with no collision. To start a new release line, add it in
+# both places below: the `branch` options for on-demand tagging and the matrix
+# list for nightlies (a one-line reviewed PR each).
 name: Release Tag
 
 on:
@@ -35,13 +36,16 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "nightly re-tag, a release candidate (requires approval), or a real release (requires approval)"
+        description: "a release candidate, or a real release"
         type: choice
-        options: [nightly, rc, release]
-        default: nightly
+        options: [rc, release]
+        default: rc
+      # A choice, not free text: this value reaches both the checkout ref and
+      # the tagging step, and git accepts shell metacharacters in a ref name.
       branch:
-        description: "branch to tag (its manifest supplies the version)"
-        type: string
+        description: "release line to tag (its manifest supplies the version)"
+        type: choice
+        options: [main]
         default: main
 
 jobs:
@@ -58,7 +62,9 @@ jobs:
         branch: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.branch)) || fromJSON('["main"]') }}
     concurrency:
       group: ${{ github.workflow }}-${{ github.repository }}-${{ matrix.branch }}
-    environment: ${{ (github.event_name == 'workflow_dispatch' && (inputs.kind == 'release' || inputs.kind == 'rc')) && 'release-approval' || 'tagger' }}
+    # Every dispatch mints a release or an rc, so every dispatch costs a second
+    # human. The nightly cron is the only path through `tagger`.
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'release-approval' || 'tagger' }}
     steps:
       - name: Mint App token
         uses: actions/create-github-app-token@v2
@@ -74,13 +80,24 @@ jobs:
           token: ${{ steps.app.outputs.token }}
 
       - name: Create and push tag
+        # Passed as env rather than interpolated with ${{ }}: an expression is
+        # substituted into the script before bash parses it, so its value would
+        # be executed as shell text.
+        env:
+          BRANCH: ${{ matrix.branch }}
+          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
         run: |
           set -euo pipefail
           git config --global user.email "noreply@aztec-labs.com"
           git config --global user.name "Aztec Labs release"
           version=$(jq -r '."."' .release-please-manifest.json)
-          kind=${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
-          case "$kind" in
+          # The whole tag name is built from this, so refuse anything that is not
+          # a plain X.Y.Z before it reaches a ref name.
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Manifest version on $BRANCH is not X.Y.Z: $version"
+            exit 1
+          fi
+          case "$KIND" in
             release)
               tag="v${version}"
               ;;
@@ -97,11 +114,11 @@ jobs:
               tag="v${version}-nightly.$(date -u +%Y%m%d)"
               ;;
           esac
-          echo "Tagging ${{ matrix.branch }} @ $(git rev-parse --short HEAD): $tag"
+          echo "Tagging $BRANCH @ $(git rev-parse --short HEAD): $tag"
           # Refuse to move an existing tag: re-dispatching a release without a
           # version-bump PR must fail loudly, not re-tag.
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on ${{ matrix.branch }} first."
+            echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on $BRANCH first."
             exit 1
           fi
           git tag -a "$tag" -m "$tag"
