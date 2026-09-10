@@ -112,6 +112,14 @@ jobs:
             exit 1
           fi
 
+          # The OCI tag grammar. Rejecting anything else keeps a newline in the tag from
+          # appending a second AZTEC_DOCKER_IMAGE= line to GITHUB_ENV, where the last
+          # assignment wins and would point a protected cluster at an arbitrary image.
+          if [[ ! "$IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "Error: '$IMAGE_TAG' is not a valid docker image tag"
+            exit 1
+          fi
+
           # Every release publishes aztec and aztec-prover-agent under the same tag to the same
           # registry (see release-image/bootstrap.sh), so both names are derivable from the tag.
           if [[ "${{ inputs.use_internal_docker_registry }}" == "true" ]]; then
