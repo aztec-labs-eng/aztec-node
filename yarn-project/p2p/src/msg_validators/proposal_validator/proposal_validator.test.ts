@@ -127,7 +127,7 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
     });
 
-    it('rejects with high tolerance error if slot is outside its receive window', async () => {
+    it('ignores a slot outside its receive window without penalty', async () => {
       // Proposal for slot 99 (previous). Past slot 99's checkpoint receive deadline (99*72 - E - D =
       // 7110s) so both block and checkpoint proposals, which share that window, are rejected.
       const proposal = await factory(previousSlot, Secp256k1Signer.random());
@@ -141,7 +141,7 @@ describe('ProposalValidator', () => {
 
       epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(EthAddress.random());
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'ignore' });
       expect(epochCache.getProposerAttesterAddressInSlot).not.toHaveBeenCalled();
     });
 
@@ -280,7 +280,7 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'accept' });
     });
 
-    it('rejects proposal for current slot past its receive window', async () => {
+    it('ignores a proposal for the current slot past its receive window', async () => {
       // Past slot 100's proposal receive deadline (100*72 - E - D = 7182s) so both block and checkpoint
       // proposals, which share that window, are rejected.
       epochCache.getTargetAndNextSlot.mockReturnValue({
@@ -302,7 +302,7 @@ describe('ProposalValidator', () => {
 
       epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'ignore' });
     });
   });
 
@@ -316,7 +316,7 @@ describe('ProposalValidator', () => {
       epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
     });
 
-    it('rejects a checkpoint proposal for the target slot arriving after the receive deadline', async () => {
+    it('ignores a checkpoint proposal for the target slot arriving after the receive deadline', async () => {
       const proposal = await makeCheckpointProposal({
         checkpointHeader: makeCheckpointHeader(0, { slotNumber: currentSlot }),
         signer,
@@ -331,7 +331,7 @@ describe('ProposalValidator', () => {
       });
 
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'ignore' });
     });
 
     it('accepts a checkpoint proposal for the target slot arriving within the receive window', async () => {
@@ -351,7 +351,7 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'accept' });
     });
 
-    it('rejects a block proposal for the target slot arriving after the checkpoint receive deadline', async () => {
+    it('ignores a block proposal for the target slot arriving after the checkpoint receive deadline', async () => {
       // Block proposals share the checkpoint proposal receive window [7116, 7182]s. Every block proposal
       // for the slot precedes the checkpoint proposal, so a block proposal arriving after the checkpoint
       // receive deadline (7182) is rejected at ingress just like the checkpoint proposal would be.
@@ -368,7 +368,7 @@ describe('ProposalValidator', () => {
       });
 
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'ignore' });
     });
   });
 
@@ -402,22 +402,16 @@ describe('ProposalValidator', () => {
       expect(await validateAt(buildFrameStart - deltaSeconds)).toEqual({ result: 'accept' });
     });
 
-    it('rejects just before the build frame start minus the disparity', async () => {
-      expect(await validateAt(buildFrameStart - deltaSeconds - 0.001)).toEqual({
-        result: 'reject',
-        severity: PeerErrorSeverity.HighToleranceError,
-      });
+    it('ignores just before the build frame start minus the disparity', async () => {
+      expect(await validateAt(buildFrameStart - deltaSeconds - 0.001)).toEqual({ result: 'ignore' });
     });
 
     it('accepts at the receive deadline plus the disparity', async () => {
       expect(await validateAt(proposalDeadline + deltaSeconds)).toEqual({ result: 'accept' });
     });
 
-    it('rejects just after the receive deadline plus the disparity', async () => {
-      expect(await validateAt(proposalDeadline + deltaSeconds + 0.001)).toEqual({
-        result: 'reject',
-        severity: PeerErrorSeverity.HighToleranceError,
-      });
+    it('ignores just after the receive deadline plus the disparity', async () => {
+      expect(await validateAt(proposalDeadline + deltaSeconds + 0.001)).toEqual({ result: 'ignore' });
     });
   });
 
