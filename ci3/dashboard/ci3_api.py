@@ -2,23 +2,45 @@
 
 The ci3 server handles the following resources:
 
-  logs       gzipped under their id. E.g. the root ci log, test logs, "denoised" command results.
-             A running job re-puts its log every few seconds. Uses redis and s3.
-  kv         A key value store. Used for the test cache. Uses redis.
-  lists      history_<test hash>[_<branch>] (one line per attempt of a test) and failed_tests[_<section>]
-             (every failure and flake): the /list/<name> pages. 
-  runs       ci-run-<section> sorted sets, score = the run id (CI_LOG_ID): the records the section
-             pages render, written RUNNING when a run starts and PASSED/FAILED when it ends.
-  artifacts  the build cache in S3: <component>-<content hash> tarballs, bench-<tree>.tar.gz,
-             npm-release-<tag>.tar.gz, the ci-success-* whole-run marker.
+  logs       Text under an id. Rewritten in place while a job runs; the write marked final is also
+             copied to S3, where reads fall back once redis has expired it. Ids can be paths, and a
+             prefix can be listed.
+  kv         One value per key, optional ttl, batch read.
+  lists      Named, newest-first lines, capped on write.
+  runs       JSON records indexed by id within a named section, replaced by id, listed newest first.
+  artifacts  Files in the build cache bucket, content-addressed by name, read through its public URL.
 
-Register with rk.py's app, auth decorator, S3 client and settings. Every route but /health takes the
-dashboard's basic auth, and the API refuses to serve at all without a password: its callers write.
+  GET  /health                          "ci3-server"; no auth.
+  PUT  /logs/<id>?ttl=&final=1          store (gzip body ok); final=1 also copies to S3.
+  GET  /logs/<id>                       the log, from redis or S3.
+  GET  /logs/<prefix>/                  ids under a prefix, one per line (S3).
+  PUT  /kv/<key>?ttl=                   set.
+  GET  /kv/<key>                        get, 404 if unset.
+  POST /kv/mget                         keys as body lines -> one value per line.
+  POST /lists/<name>?max=               prepend a line, trim to max.
+  GET  /lists/<name>                    the lines.
+  PUT  /runs/<section>/<id>             upsert a record.
+  GET  /runs/<section>/<id>             the record.
+  GET  /runs/<section>                  newest records, JSON array.
+  PUT  /artifacts/<name>?ttl=           upload.
+  GET  /artifacts/<name>                302 to the public URL.
+  HEAD /artifacts/<name>                200 or 404.
 
-Callers are trusted shared writers. What the API guards against is a mistaken or malicious caller
-taking the dashboard down with it: bodies and gzip expansion are bounded, keys cannot cross into
-the families other resources own, a redis outage does not lose a final log, and only genuine
-absence is a 404.
+Examples of how ci3 uses them:
+
+  logs       Denoised commands, test attempts, a run's top-level log (its CI_LOG_ID), and
+             data files under path ids: test-timings/<run>/<test log> and bench/bb-breakdown/<key>.
+             A running job re-puts its log every few seconds so it can be watched live; its last
+             write is marked with final=1 and written to S3 durably. The dashboard renders them at /<id>.
+  kv         The test cache: key = hash of the full test command, value = the log id of its passing
+             run, so a test that already passed is skipped. hb-<run id>: the heartbeat a running
+             build refreshes every 30s (set-filter.lua marks a run inactive without it).
+  lists      history_<test hash>[_<branch>]: one line per attempt of a test. failed_tests[_<section>]:
+             every failure and flake. The dashboard renders them at /list/<name>.
+  runs       ci-run-<section>: the records the section pages render, written RUNNING when a build
+             starts and PASSED/FAILED when it ends; the id is the run's CI_LOG_ID.
+  artifacts  <component>-<content hash>.tar.gz build outputs, bench-<tree>.tar.gz, npm-release-<tag>
+             .tar.gz, and the ci-success-* marker that lets a whole run be skipped.
 """
 import json
 import re
