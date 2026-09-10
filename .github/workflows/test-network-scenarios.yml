@@ -112,6 +112,8 @@ jobs:
     # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
     if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     strategy:
       fail-fast: false
       matrix:
@@ -200,7 +202,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-unset}, env ${{ inputs.env_file || 'next-scenario' }}, ref ${{ github.ref_name }}"
+          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-unset}, env ${{ inputs.env_file || 'next-scenario' }}, ref ${{ inputs.ref || needs.select-image.outputs.source_ref }}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
             "Scenario Tests FAILED (${CONTEXT}): <${RUN_URL}|View Run> (🤖)" \
             "Scenario tests failed (${CONTEXT}). CI run: ${RUN_URL}. Investigate the scenario test failure and identify the root cause." \

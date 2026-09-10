@@ -39,6 +39,8 @@ jobs:
   fund:
     name: ${{ matrix.environment }}
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     strategy:
       # we can only run one funding operation at a time because all jobs fund from the same address
       max-parallel: 1

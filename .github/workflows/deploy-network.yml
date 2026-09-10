@@ -79,6 +79,8 @@ permissions:
 jobs:
   deploy-network:
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     env:
       GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
     outputs:
@@ -258,7 +260,6 @@ jobs:
     needs: deploy-network
     if: inputs.network == 'testnet' || inputs.network == 'mainnet'
     uses: ./.github/workflows/deploy-irm.yml
-    secrets: inherit
     with:
       network: ${{ inputs.network }}
       l1_network: ${{ inputs.network == 'mainnet' && 'mainnet' || 'sepolia' }}

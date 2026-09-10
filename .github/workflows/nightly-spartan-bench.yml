@@ -104,6 +104,8 @@ jobs:
       - select-image
       - deploy-proving-network
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -134,6 +136,7 @@ jobs:
       - select-image
       - wait-proving-l2-block
     runs-on: ubuntu-latest
+    environment: deployment
     permissions:
       id-token: write
       contents: read
@@ -177,6 +180,7 @@ jobs:
       - wait-proving-l2-block
       - proving-benchmark
     runs-on: ubuntu-latest
+    environment: deployment
     permissions:
       id-token: write
       contents: read
@@ -258,6 +262,7 @@ jobs:
       - select-image
       - deploy-block-capacity-network
     runs-on: ubuntu-latest
+    environment: deployment
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -288,6 +293,7 @@ jobs:
       - select-image
       - wait-block-capacity-l2-block
     runs-on: ubuntu-latest
+    environment: deployment
     permissions:
       id-token: write
       contents: read
@@ -330,6 +336,7 @@ jobs:
       - wait-block-capacity-l2-block
       - block-capacity-benchmark
     runs-on: ubuntu-latest
+    environment: deployment
     permissions:
       id-token: write
       contents: read

@@ -42,9 +42,6 @@ on:
         required: false
         type: string
         default: '["U0AQPRA1FSL"]'
-    secrets:
-      GCP_SA_KEY:
-        required: true
   workflow_dispatch:
     inputs:
       cluster:
@@ -84,8 +81,10 @@ jobs:
   metrics_deployment:
     # This job will run on Ubuntu
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     concurrency:
-      group: deploy-${{ github.ref }} # Only one job per branch
+      group: deploy-${{ github.ref }} # main-only, so effectively one job at a time
       cancel-in-progress: false # Allow previous deployment to complete to avoid corruption
 
     # Set up a variable based on the branch name

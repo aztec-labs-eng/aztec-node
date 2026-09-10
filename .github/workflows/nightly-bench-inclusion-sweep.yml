@@ -115,6 +115,8 @@ jobs:
   wait:
     needs: [select-image, deploy]
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -175,6 +177,7 @@ jobs:
     if: always()
     needs: [select-image, deploy, wait, point-1tps, point-5tps, point-10tps]
     runs-on: ubuntu-latest
+    environment: deployment
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:

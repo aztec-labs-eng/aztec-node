@@ -81,6 +81,8 @@ jobs:
     # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
     if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
     runs-on: ubuntu-latest
+    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     timeout-minutes: 180 # 3 hours for KIND tests
     steps:
       - name: Checkout
