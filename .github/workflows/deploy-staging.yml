@@ -10,8 +10,8 @@ on:
         options:
           - staging-public
           - staging-internal
-      tag:
-        description: "Tag to deploy (vN.0.0 or any vN.0.0 prerelease)."
+      image_tag:
+        description: "Docker image tag to deploy (e.g., 6.0.0 or 6.0.0-rc.1)."
         required: true
         type: string
       deploy_contracts:
@@ -24,8 +24,8 @@ concurrency:
   group: deploy-${{ inputs.network }}
   cancel-in-progress: true
 
-# actions: write lets the failure paths dispatch claudebox.yml with the built-in token
-# and caps the called deploy-network.yml high enough for its failure handler.
+# actions: write caps the called deploy-network.yml high enough for its failure handler
+# to dispatch claudebox.yml with the built-in token.
 permissions:
   contents: read
   actions: write
@@ -33,63 +33,12 @@ permissions:
   # permissions are capped by the caller's, so the grant must exist here too.
   id-token: write
 
-env:
-  GITHUB_TOKEN: ${{ github.token }}
-
 jobs:
-  determine-tag:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.resolve.outputs.tag }}
-      semver: ${{ steps.resolve.outputs.semver }}
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          ref: main
-          token: ${{ github.token }}
-          fetch-depth: 1
-
-      - name: Resolve tag
-        id: resolve
-        env:
-          TAG_INPUT: ${{ inputs.tag }}
-        run: |
-          # Tolerate a tag pasted without the leading v.
-          TAG="v${TAG_INPUT#v}"
-          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
-            echo "Error: tag $TAG does not exist on origin"
-            exit 1
-          fi
-          echo "Confirmed tag $TAG exists on origin"
-
-          SEMVER="${TAG#v}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "semver=$SEMVER" >> $GITHUB_OUTPUT
-
-  wait-for-release:
-    needs: determine-tag
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          fetch-depth: 1
-
-      - name: Setup Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 22
-
-      - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.determine-tag.outputs.tag }}"
-
   deploy:
-    needs: [determine-tag, wait-for-release]
     uses: ./.github/workflows/deploy-network.yml
     with:
       network: ${{ inputs.network }}
-      image_tag: ${{ needs.determine-tag.outputs.semver }}
+      image_tag: ${{ inputs.image_tag }}
       deploy_contracts: ${{ inputs.deploy_contracts == true }}
       use_internal_docker_registry: ${{ inputs.network == 'staging-internal' }}
     secrets: inherit
