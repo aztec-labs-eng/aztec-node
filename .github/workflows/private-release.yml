@@ -35,6 +35,7 @@ jobs:
     # runner's own cache write in ci3_success.sh.
     env:
       NO_CACHE_UPLOAD: 1
+      NO_CACHE: 1
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token
