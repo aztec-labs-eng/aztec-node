@@ -9,6 +9,21 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] `OriginBlock` replaced by `BlockReference`
+
+`aztec::facts::OriginBlock` has been removed. Retractable facts now identify their origin block with `aztec::oracle::block_reference::BlockReference`, which has the same `block_number` and `block_hash` fields.
+
+**Migration:**
+
+```diff
+- use aztec::facts::{OriginBlock, record_retractable_fact};
++ use aztec::facts::record_retractable_fact;
++ use aztec::oracle::block_reference::BlockReference;
+
+- let origin_block = OriginBlock { block_number, block_hash };
++ let origin_block = BlockReference { block_number, block_hash };
+```
+
 ### [Node] `ACVM_*` config renamed to `NOIR_EXECUTE_*`
 
 Protocol circuits are now executed with noir's `noir-execute` rather than the `acvm` binary, so the
