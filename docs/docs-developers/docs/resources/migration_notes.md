@@ -9,6 +9,12 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] Batch nullifier status oracle
+
+The single-nullifier existence oracle is replaced by `aztec::oracle::nullifiers::get_nullifier_statuses`, which checks any number of nullifiers in one call and reports, for each settled one, the block it was included in. `check_nullifier_exists` is kept and now calls the new oracle.
+
+This is a breaking change to the PXE oracle interface (version 31 → 32): contracts must be recompiled against the updated `aztec-nr` to run against the new PXE.
+
 ### [Aztec.nr] `OriginBlock` replaced by `BlockReference`
 
 `aztec::facts::OriginBlock` has been removed. Retractable facts now identify their origin block with `aztec::oracle::block_reference::BlockReference`, which has the same `block_number` and `block_hash` fields.
