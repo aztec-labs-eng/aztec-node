@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Re-checks the dependency checksums the build had to skip, before anything is published.
+#
+# A private release resolves the routed scopes from a registry that serves different content under
+# the same version, so ci3/source_npm_auth turns yarn's checksum verification off. That setting is
+# global, which leaves the build verifying nothing at all — third-party dependencies included.
+# Here the checksums are recomputed from the packages the install actually cached, and every entry
+# that no longer matches the lockfile has to be one of the routed scopes. A mismatch outside them
+# is a dependency whose content changed under us, which is what the checksums exist to catch.
+#
+# A public release verifies as it installs, so there is nothing to redo.
+#
+# NOTE: This is only needed due to private releases. If private releases go away, delete this file.
+NO_CD=1 source $(git rev-parse --show-toplevel)/ci3/source
+
+[ "${RELEASE_TARGET:-public}" = private ] || exit 0
+
+echo_header "verify release"
+cd $root/yarn-project
+
+# Both scopes have to be routed for any of this to mean anything: an install that resolved them
+# from npmjs matches every checksum in the lockfile, so the comparison below would pass while the
+# release was built against the public packages.
+scopes=$(yarn config get npmScopes --json 2>/dev/null | jq -c . 2>/dev/null || echo '{}')
+for scope in aztec-foundation aztec-labs; do
+  routed_at=$(echo "$scopes" | jq -r --arg s "$scope" '.[$s].npmRegistryServer // ""')
+  if [ "$routed_at" != "${NPM_REGISTRY%/}" ]; then
+    echo_stderr "@$scope resolves from '${routed_at:-the default registry}', not $NPM_REGISTRY."
+    exit 1
+  fi
+done
+
+lock_before=$(mktemp)
+lock_after=$(mktemp)
+verify_cache=$(mktemp -d)
+cp yarn.lock $lock_before
+function restore_lockfile {
+  cp $lock_before yarn.lock
+  rm -rf $lock_before $lock_after $verify_cache
+}
+trap restore_lockfile EXIT INT TERM
+
+# Yarn recomputes a checksum only for a package it has to fetch, and it fetches nothing it already
+# has a checksum for, so the checksums have to come out of the lockfile for it to hash anything.
+# Its own cache folder for the same reason: an entry the build already downloaded is a cache hit,
+# and a cache hit is never re-read. The mirror goes too, or the build's copy of each package is
+# served from there instead. What comes back is therefore hashed from what the registries serve
+# right now, over the routing the build itself used.
+sed -i '/^  checksum: /d' yarn.lock
+# 'update' writes each computed checksum to the lockfile, and 'update-lockfile' skips the link
+# step, leaving the node_modules the build produced and the release publishes untouched. Immutable
+# installs are off because writing the lockfile is the point.
+denoise "YARN_CACHE_FOLDER=$verify_cache YARN_ENABLE_MIRROR=false YARN_CHECKSUM_BEHAVIOR=update YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install --mode=update-lockfile"
+cp yarn.lock $lock_after
+
+BEFORE=$lock_before AFTER=$lock_after python3 - <<'PY'
+import os, sys, yaml
+
+routed = ("@aztec-foundation/", "@aztec-labs/")
+
+
+def checksums(path):
+    doc = yaml.safe_load(open(path))
+    return {k: v.get("checksum") for k, v in doc.items() if k != "__metadata" and isinstance(v, dict)}
+
+
+before, after = checksums(os.environ["BEFORE"]), checksums(os.environ["AFTER"])
+
+changed, expected, recorded = [], [], 0
+for key in sorted(before.keys() & after.keys()):
+    if before[key] == after[key]:
+        continue
+    if before[key] is None:
+        # An optional dependency for a platform this machine does not install: the lockfile never
+        # carried a checksum for it, so there is nothing to contradict.
+        recorded += 1
+    elif key.startswith(routed):
+        expected.append(key)
+    else:
+        changed.append((key, before[key], after[key]))
+
+print(f"{len(before)} lockfile entries: {len(expected)} routed mismatches, {recorded} newly recorded, {len(changed)} unexpected.")
+for key in expected:
+    print(f"  routed, expected to differ: {key}")
+
+resolutions = (before.keys() ^ after.keys())
+if resolutions:
+    print(f"  note: {len(resolutions)} entries exist in only one of the two lockfiles, e.g. {sorted(resolutions)[:3]}")
+
+if changed:
+    print("\nThese are not in a routed scope, so the registry served content the lockfile does not describe:")
+    for key, was, now in changed:
+        print(f"  {key}\n    lockfile: {was}\n    installed: {now}")
+    sys.exit(1)
+PY
