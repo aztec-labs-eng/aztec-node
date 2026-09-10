@@ -532,6 +532,12 @@ describe('ProposalValidator', () => {
         const result = await validator.validateTxs(proposal);
         expect(result).toEqual({ result: 'accept' });
       });
+
+      it('ignores an oversized tx-hash list even when maxTxsPerBlock is unset', async () => {
+        const proposal = await makeBlockProposal({ txHashes: Array.from({ length: 20000 }, () => TxHash.random()) });
+        const result = await validator.validateTxs(proposal);
+        expect(result).toEqual({ result: 'ignore' });
+      });
     });
   });
 

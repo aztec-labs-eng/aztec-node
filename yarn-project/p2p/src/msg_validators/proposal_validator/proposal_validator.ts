@@ -12,6 +12,14 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
+// Always-on inbound ceiling on a block proposal's tx-hash count, independent of the operator
+// maxTxsPerBlock knob. A block's tx count is gas-bounded with no consensus per-block max to
+// check, so this is a heuristic anti-amplification guard set far above any gas-plausible block
+// (deployed producer cap is 18/block): it drops an oversized hash list before protectTxs and
+// tx-collection run over it and before re-gossip. `ignore`, not `reject` -- a heuristic ceiling
+// must not penalize the relayer.
+export const MAX_INBOUND_PROPOSAL_TX_HASHES = 8192;
+
 /** Validates header-level and tx-level fields of block and checkpoint proposals. */
 export class ProposalValidator {
   private epochCache: EpochCacheInterface;
@@ -162,6 +170,15 @@ export class ProposalValidator {
         `Penalizing peer for proposal with ${proposal.txHashes.length} transaction(s) when transactions are not permitted`,
       );
       return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
+    }
+
+    // Drop an oversized hash list before protectTxs/tx-collection run over it and before
+    // re-gossip; see MAX_INBOUND_PROPOSAL_TX_HASHES.
+    if (proposal.txHashes.length > MAX_INBOUND_PROPOSAL_TX_HASHES) {
+      this.logger.warn(
+        `Ignoring proposal with ${proposal.txHashes.length} tx hashes over the inbound ceiling ${MAX_INBOUND_PROPOSAL_TX_HASHES}`,
+      );
+      return { result: 'ignore' };
     }
 
     // Max txs per block check
