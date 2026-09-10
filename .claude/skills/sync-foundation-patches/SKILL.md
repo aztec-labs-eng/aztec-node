@@ -131,11 +131,16 @@ change rather than either literal side, then `git add` and `git am --continue`. 
 `git am --skip` merely to get past a conflict — it can silently drop a patch the rest of
 the chain needs — and never abort and restart. There is one narrow exception: later
 patches may have rewritten an earlier patch enough that its isolated reverse check failed,
-while current main already contains its final behavior. After resolving every conflict
-against that newer implementation, `git diff --cached --quiet` proves there is no residual
-delta; only then skip it and report it as dropped as already landed after dependent replay.
-Docs files that both sides append to (the migration notes especially) are the usual case,
-and both sides' entries normally belong in the result.
+while current main already contains its final behavior. Before treating it as landed,
+inspect `git am --show-current-patch=diff` and map every hunk's intended behavior to
+equivalent or superseding source on the current branch; record that evidence per file.
+Use current tests as corroboration and run a focused test for behavioral changes whose
+source equivalence is not mechanical. If any behavior is unaccounted for, merge it.
+Only after that audit, resolve the conflicts, stage the result, and require
+`git diff --cached --quiet` as the final mechanical check before skipping and reporting
+the patch as already landed after dependent replay. An empty index alone is not evidence
+that the behavior landed. Docs files that both sides append to (the migration notes
+especially) are the usual case, and both sides' entries normally belong in the result.
 
 Write down each resolution as you make it: which patch, which file, which side you kept and
 why. That list goes in the PR body (Step 6) — a reviewer must be able to check the merge
@@ -186,13 +191,22 @@ for.
 
 ### Step 5: Verify
 
-Provision the pinned toolchain with `./labs-aztec-toolchain/bootstrap.sh`, then build
-`noir-projects/` and run `./bootstrap.sh` from inside `yarn-project/` — never `yarn build`, which
-recompiles TypeScript without regenerating `constants/src/constants.gen.ts` and the other
-generated inputs, so a pin bump shows up as type errors about members the foundation
-release does have. A clean checkout needs the Noir contract targets even when the residual
-patch only changes TypeScript, because the yarn bootstrap consumes those artifacts. Compile
-checks only — the suite is CI's job, and CI starts when the PR leaves draft.
+Run the compile checks in this order:
+
+```bash
+# Working directory: repo root
+./labs-aztec-toolchain/bootstrap.sh
+# Working directory: noir-projects/
+./bootstrap.sh
+# Working directory: yarn-project/
+./bootstrap.sh
+```
+
+The final command must be the yarn bootstrap, never `yarn build`, which recompiles
+TypeScript without regenerating `constants/src/constants.gen.ts` and the other generated
+inputs. A clean checkout needs the Noir contract targets even when the residual patch only
+changes TypeScript, because the yarn bootstrap consumes those artifacts. Compile checks
+only — the suite is CI's job, and CI starts when the PR leaves draft.
 
 ### Step 6: Push the draft PR
 
