@@ -13,11 +13,17 @@
 #             from any branch (input), gated by the `release-approval`
 #             environment: required reviewers with self-review prevented, so
 #             cutting a release takes two distinct humans.
+#   private:  dispatch with kind=private            -> private/v<ver>-private.<n>
+#             from any branch (input), gated by `release-approval` like an rc.
+#             The ref carries a private/ prefix, which is what routes it to
+#             private-release.yml and the release-private environment; the
+#             version inside it is a plain semver on the 'private' channel.
 #
-# rc numbers are dotted (-rc.N, not -rcN): semver compares the dotted N
-# numerically (rc.2 < rc.10) but an undotted rcN lexically (rc10 < rc2), and
-# ci3/dist_tag takes the first dot-separated prerelease identifier as the
-# release channel — 'rc' — where rcN would mint a fresh channel per candidate.
+# rc and private numbers are dotted (-rc.N, not -rcN): semver compares the
+# dotted N numerically (rc.2 < rc.10) but an undotted rcN lexically
+# (rc10 < rc2), and ci3/dist_tag takes the first dot-separated prerelease
+# identifier as the release channel — 'rc' or 'private' — where rcN would mint
+# a fresh channel per candidate.
 #
 # Multi-branch model: scheduled/dispatched runs always execute THIS file from
 # the default branch, so the token-minting code is always the reviewed code on
@@ -35,9 +41,9 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "nightly re-tag, a release candidate (requires approval), or a real release (requires approval)"
+        description: "nightly re-tag, a release candidate, a real release, or a private release (all but nightly require approval)"
         type: choice
-        options: [nightly, rc, release]
+        options: [nightly, rc, release, private]
         default: nightly
       branch:
         description: "branch to tag (its manifest supplies the version)"
@@ -58,7 +64,7 @@ jobs:
         branch: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.branch)) || fromJSON('["main"]') }}
     concurrency:
       group: ${{ github.workflow }}-${{ github.repository }}-${{ matrix.branch }}
-    environment: ${{ (github.event_name == 'workflow_dispatch' && (inputs.kind == 'release' || inputs.kind == 'rc')) && 'release-approval' || 'tagger' }}
+    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.kind != 'nightly') && 'release-approval' || 'tagger' }}
     steps:
       - name: Mint App token
         uses: actions/create-github-app-token@v2
@@ -80,18 +86,28 @@ jobs:
           git config --global user.name "AztecBot"
           version=$(jq -r '."."' .release-please-manifest.json)
           kind=${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
+          # Next number in a numbered channel comes from origin, not the clone: list the
+          # existing tags for that version and channel and take max+1 (1 when none). The
+          # trailing anchor also drops ls-remote's peeled ^{} duplicates.
+          function next_in_channel {
+            local prefix=$1 channel=$2 last
+            last=$(git ls-remote --tags origin "refs/tags/${prefix}v${version}-${channel}.*" \
+              | sed -n "s|.*refs/tags/${prefix}v${version}-${channel}\.\([0-9][0-9]*\)$|\1|p" \
+              | sort -n | tail -1)
+            echo "${prefix}v${version}-${channel}.$(( ${last:-0} + 1 ))"
+          }
           case "$kind" in
             release)
               tag="v${version}"
               ;;
             rc)
-              # Next candidate number comes from origin, not the clone: list the
-              # existing v<ver>-rc.* tags and take max+1 (1 when none). The trailing
-              # anchor also drops ls-remote's peeled ^{} duplicates.
-              last=$(git ls-remote --tags origin "refs/tags/v${version}-rc.*" \
-                | sed -n "s|.*refs/tags/v${version}-rc\.\([0-9][0-9]*\)$|\1|p" \
-                | sort -n | tail -1)
-              tag="v${version}-rc.$(( ${last:-0} + 1 ))"
+              tag=$(next_in_channel "" rc)
+              ;;
+            private)
+              # private/ is a path segment of the ref, not part of the version: the release
+              # publishes <version>-private.<n>, and the prefix is what keeps this tag out of
+              # release.yml's tags: v* trigger and out of the `release` environment's policy.
+              tag=$(next_in_channel "private/" private)
               ;;
             *)
               tag="v${version}-nightly.$(date -u +%Y%m%d)"

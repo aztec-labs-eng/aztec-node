@@ -233,7 +233,15 @@ function install_npm_binary {
   local url=${NPM_REGISTRY%/}/@aztec-foundation/$pkg/-/$pkg-$BB_VERSION.tgz
   local archive=$tmp/$pkg.tgz
   echo "Installing $binary $BB_VERSION from @aztec-foundation/$pkg..."
-  if ! curl -fsSL "$url" -o "$archive"; then
+  # Credentials are passed whenever the environment has them, without asking what the registry is:
+  # a private registry needs them to serve the tarball at all, and npmjs ignores them.
+  local -a auth=()
+  if [ -n "${NPM_TOKEN:-}" ]; then
+    auth=(-H "Authorization: Bearer $NPM_TOKEN")
+  elif [ -n "${NPM_PASSWORD:-}" ]; then
+    auth=(-u "${NPM_USERNAME:?NPM_PASSWORD is set without NPM_USERNAME}:$NPM_PASSWORD")
+  fi
+  if ! curl -fsSL "${auth[@]}" "$url" -o "$archive"; then
     echo_stderr "Could not download $url."
     exit 1
   fi

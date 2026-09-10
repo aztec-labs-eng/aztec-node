@@ -1,22 +1,27 @@
-# Publishes a release: npm packages to npmjs, docker images to DockerHub, and the aztec-up and
-# playground assets to S3. See RELEASES.md for how a tag gets here.
+# Publishes a private release: npm packages and docker images to the Labs-owned GCP Artifact
+# Registry, and nothing public. See RELEASES.md for how a private/v* tag gets here.
 #
-# Split out from ci3.yml so that the `release` environment — which holds the only publish
-# credentials in the repo — is requested by exactly one workflow whose only trigger is a v* tag,
-# rather than by an expression inside the CI workflow. The environment's deployment policy
-# (tag: v*) is then the whole story of which refs can publish.
-name: Release
+# This is release.yml with a different target. The two workflows differ in the tag pattern, the
+# environment, the RELEASE_TARGET literal, the credentials named, and REF_NAME — everything else
+# about a release is the same code (ci.sh release), driven by ci3/source_release_target.
+#
+# The environments are what keep the two apart: release-private holds the Artifact Registry
+# credential and nothing that can publish publicly, `release` holds the npmjs and DockerHub
+# credentials and nothing that can read the private registry, and a job declares exactly one. The
+# deployment policies (tag: private/v* here, tag: v* there) cannot match each other's refs, since
+# a GitHub tag pattern's * does not match a /.
+name: Private Release
 
 on:
   workflow_dispatch: # re-run a release for an existing tag; select the tag as the ref.
   push:
     tags:
-      - "v*"
+      - "private/v*"
 
 concurrency:
   # One run per tag, never cancelled: a cancelled release can leave the version half-published
   # (some npm packages live, no multi-arch docker manifest), which no re-run undoes cleanly.
-  group: release-${{ github.ref_name }}
+  group: private-release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -24,7 +29,13 @@ jobs:
   # see ci.sh::release. Runs no tests — the tag was cut from a commit that passed CI.
   release:
     runs-on: ubuntu-latest
-    environment: release
+    environment: release-private
+    # Nothing a private build produces may reach the build cache: it is served over plain HTTP with
+    # no credentials. The build itself gets this from ci3/source_release_target; this covers the
+    # runner's own cache write in ci3_success.sh.
+    env:
+      NO_CACHE_UPLOAD: 1
+      NO_CACHE: 1
     permissions:
       id-token: write # required for OIDC assume-role with AWS
       contents: read # checkout/fetch with the default github.token
@@ -43,7 +54,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
-          role-session-name: release-${{ github.run_id }}
+          role-session-name: private-release-${{ github.run_id }}
           # 2h. ci.sh::release allows the build instances 180 min, so a release that runs past
           # 2h loses these credentials before the runner gets to terminate them.
           role-duration-seconds: 7200
@@ -53,11 +64,17 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-          NPM_REGISTRY: https://registry.npmjs.org
-          DOCKER_REGISTRY: docker.io/azteclabs
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+          # The release target, its registries and its credentials. The INTERNAL_* names exist only
+          # in this file: the public workflow names none of them, and this one names neither
+          # NPM_TOKEN nor the DockerHub secrets, so neither can pick up the other's credential
+          # whatever an environment holds.
+          RELEASE_TARGET: private
+          NPM_REGISTRY: ${{ vars.INTERNAL_NPM_REGISTRY }}
+          NPM_USERNAME: ${{ vars.INTERNAL_NPM_USERNAME }}
+          NPM_PASSWORD: ${{ secrets.INTERNAL_NPM_PASSWORD }}
+          DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
+          DOCKER_USERNAME: ${{ vars.INTERNAL_DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.INTERNAL_DOCKER_PASSWORD }}
           # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
           # yarn-project's test_cmds (release-line compatibility tests) and test timing metadata,
           # neither of which a release runs; kept so the build log names the ref.
@@ -67,12 +84,15 @@ jobs:
           CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
           CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           AWS_OIDC_ROLE_ARN: ${{ vars.AWS_OIDC_ROLE_ARN }}
-        run: ./.github/ci3.sh release
+          REF_NAME: ${{ github.ref_name }}
+        # The private/ prefix routes the ref; everything downstream (semver, dist_tag, deploy_npm,
+        # the image tags) wants the bare version, and GitHub Actions expressions have no
+        # string-replace function.
+        run: REF_NAME=${REF_NAME#private/} ./.github/ci3.sh release
 
       - name: Post-Actions
         run: ./.github/ci3_success.sh
 
-      # Covers nightly, rc and stable releases.
       - name: Notify Slack on release failure
         if: failure()
         env:
@@ -81,19 +101,7 @@ jobs:
           ACTOR: ${{ github.actor }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # The release channel, not the tag name, decides whether this is worth reporting:
-          # 'commit' is a ci-release-pr canary tag, which nobody wants alerts for.
-          channel=$(./ci3/dist_tag)
-          if [ "$channel" = "commit" ]; then
-            echo "Canary release ($TAG); not notifying."
-            exit 0
-          fi
-          case "$channel" in
-            nightly) kind="Nightly release" ;;
-            rc) kind="Release candidate" ;;
-            *) kind="Release" ;;
-          esac
-          text="$kind FAILED for *${TAG}* (${ACTOR}): <${RUN_URL}|View Run>"
+          text="Private release FAILED for *${TAG}* (${ACTOR}): <${RUN_URL}|View Run>"
           # Set by ci3/bootstrap_ec2 once the build reaches the instance; absent if we failed earlier.
           if [ -n "${CI_LOG_ID:-}" ]; then
             text="${text} | <http://ci.aztec-labs.com/${CI_LOG_ID}|Build Log>"

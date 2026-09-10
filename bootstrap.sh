@@ -932,11 +932,9 @@ case "$cmd" in
     if ! semver check $REF_NAME; then
       exit 1
     fi
-    # Before the build, so a misconfigured release environment fails in seconds. Exported values
-    # reach both children below.
-    source $ci3/source_release_target
-
+    source $ci3/source_release_target   # Source vars for public or private releases.
     ./bootstrap.sh build release
+    $ci3/verify_release                 # Needed only due to private releases.
     ./bootstrap.sh release
     ;;
 

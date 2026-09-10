@@ -1,24 +1,107 @@
-# Authenticate npm against $NPM_REGISTRY with the credential the environment set.
+# Authenticate npm and yarn against $NPM_REGISTRY with whichever credential the environment set.
 #
 # Sourced rather than run: npm is configured through NPM_CONFIG_GLOBALCONFIG, which has to be
 # exported into the caller. Idempotent, and a no-op when no credential is set — ordinary CI runs
 # and dev machines resolve everything from the default registry and publish nothing.
 #
-# The file holds no credential: npm expands ${VAR} when it reads its config, so only the variable
-# name is written and the value stays in the environment — nothing to leak into a cache artifact or
-# a build log. It also lands under /tmp rather than in the repo, where the ignored-file sweeps that
-# build the yarn-project and playground cache artifacts would pick it up.
+# Two credential shapes exist because the registries accept different ones: npmjs takes a bearer
+# token (it deprecated basic auth), while an Artifact Registry service-account key is basic auth,
+# which has the advantage of not expiring part-way through a release. Which one is used follows
+# from which variable is set, never from the registry's hostname.
+#
+# Neither file holds a credential. Both npm and yarn expand ${VAR} when they read their config, so
+# the files carry only the variable names and the values stay in the environment — nothing to leak
+# into a cache artifact, a docker layer or a build log. They also land outside the repo — the
+# npmrc under /tmp, the yarnrc in $HOME — where the ignored-file sweeps that build the yarn-project
+# and playground cache artifacts cannot see them either way. npm's _password is base64-decoded
+# before use, so that one variable is derived here; yarn takes plaintext user:password and encodes
+# it itself.
+#
+# Scope routing is written only when NPM_REGISTRY is not npmjs. A scope registry outranks npm's
+# `registry` setting wherever that is configured, so routing the scopes unconditionally would
+# hijack the flows that stand up their own registry — aztec-up's verdaccio fake-publish points
+# npm at localhost, and would find itself pointed back at npmjs.
 
-export NPM_REGISTRY=${NPM_REGISTRY:-https://registry.npmjs.org}
+npm_auth_npmjs=https://registry.npmjs.org
+export NPM_REGISTRY=${NPM_REGISTRY:-$npm_auth_npmjs}
 
-if [ -n "${NPM_TOKEN:-}" ]; then
+if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
+  # Never echo the credential, whatever the caller's xtrace setting is.
+  npm_auth_xtrace=$(shopt -po xtrace || true)
+  set +x
+  [ -n "${NPM_TOKEN:-}" ] || : "${NPM_USERNAME:?NPM_PASSWORD is set without NPM_USERNAME}"
+
   # npm keys its auth lines on the registry without a scheme and with a trailing slash.
   npm_auth_registry="${NPM_REGISTRY%/}/"
+  npm_auth_key="//${npm_auth_registry#*://}"
+
+  # Yarn's credential under one name whatever its shape, so anything that has to forward it (the
+  # Dockerfile.base install) does not have to know which shape this run uses.
+  if [ -n "${NPM_TOKEN:-}" ]; then
+    export NPM_AUTH_VALUE="$NPM_TOKEN"
+  else
+    export NPM_AUTH_VALUE="$NPM_USERNAME:$NPM_PASSWORD"
+    export NPM_PASSWORD_BASE64=$(printf '%s' "$NPM_PASSWORD" | base64 -w0)
+  fi
+
   npm_auth_npmrc=$(mktemp)
   (
     umask 077
-    echo "//${npm_auth_registry#*://}:_authToken=\${NPM_TOKEN}"
+    if [ "$NPM_REGISTRY" != "$npm_auth_npmjs" ]; then
+      # Route only the scopes we build. Everything else — the @aztec/viem fork included — resolves
+      # from the default registry, so nothing has to be mirrored into the private one.
+      echo "@aztec-foundation:registry=$npm_auth_registry"
+      echo "@aztec-labs:registry=$npm_auth_registry"
+    fi
+    if [ -n "${NPM_TOKEN:-}" ]; then
+      echo "${npm_auth_key}:_authToken=\${NPM_TOKEN}"
+    else
+      echo "${npm_auth_key}:username=\${NPM_USERNAME}"
+      echo "${npm_auth_key}:_password=\${NPM_PASSWORD_BASE64}"
+      echo "${npm_auth_key}:email=tech@aztecprotocol.com"
+      echo "${npm_auth_key}:always-auth=true"
+    fi
   ) > "$npm_auth_npmrc"
   export NPM_CONFIG_GLOBALCONFIG="$npm_auth_npmrc"
-  unset npm_auth_registry npm_auth_npmrc
+
+  # Yarn 4 does not read .npmrc, so the same routing goes into the home yarnrc, which yarn merges
+  # with the project's — leaving nodeLinker, the age gate and immutablePatterns there untouched, so
+  # no tracked file and no content hash moves. Only needed when reads have to leave the default
+  # registry: pointing the scopes at npmjs is where yarn already resolves them from. The file is
+  # written wholesale, so a release runs in its own container or on a machine that does not keep
+  # yarn settings there.
+  if [ "$NPM_REGISTRY" != "$npm_auth_npmjs" ]; then
+    # Yarn takes the auth scheme from the key: npmAuthToken sends a bearer token, npmAuthIdent
+    # base64s a user:password. The value is the same variable either way.
+    npm_auth_yarn_key=npmAuthIdent
+    [ -z "${NPM_TOKEN:-}" ] || npm_auth_yarn_key=npmAuthToken
+    (
+      umask 077
+      # The lockfile's checksums were taken against npmjs, and a version published to both
+      # registries is not the same artifact in both — yarn hashes the package's contents, not the
+      # tarball, so a rebuild with the same version fails the check. Verification is a global
+      # setting, so this gives up content verification for every dependency, not just the routed
+      # scopes; it can go once the private registry serves the public packages as a proxy of npmjs
+      # rather than as separate publishes.
+      # NOTE: Simplify this file if private releases ever go away.
+      echo "checksumBehavior: ignore"
+      echo "npmScopes:"
+      for npm_auth_scope in aztec-foundation aztec-labs; do
+        echo "  $npm_auth_scope:"
+        echo "    npmRegistryServer: \"${NPM_REGISTRY%/}\""
+        # Without this yarn sends no credentials on reads, and a private registry 404s.
+        echo "    npmAlwaysAuth: true"
+        # The :- form matters: on a bare ${VAR} yarn refuses to run *any* command while the
+        # variable is missing, and this file outlives the shell that wrote it.
+        echo "    $npm_auth_yarn_key: \"\${NPM_AUTH_VALUE:-}\""
+      done
+    ) > "$HOME/.yarnrc.yml"
+    unset npm_auth_yarn_key npm_auth_scope
+  fi
+
+  unset npm_auth_registry npm_auth_key npm_auth_npmrc
+  eval "$npm_auth_xtrace"
+  unset npm_auth_xtrace
 fi
+
+unset npm_auth_npmjs
