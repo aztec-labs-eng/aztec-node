@@ -9,27 +9,15 @@ on:
         description: "Network to deploy (e.g., staging, testnet, next-net)"
         required: true
         type: string
-      semver:
-        description: "Semver version (e.g., 2.3.4). Used to construct docker image if aztec_docker_image is not set."
-        required: false
-        type: string
-      aztec_docker_image:
-        description: "Full Aztec docker image (e.g., azteclabs/aztec:2.3.4). If not set, constructed from semver."
-        required: false
-        type: string
-      prover_docker_image:
-        description: "Full Prover docker image URL. If not set defaults to aztec_docker_image."
-        required: false
+      image_tag:
+        description: "Docker image tag to deploy (e.g., 6.0.0-nightly.20260609)"
+        required: true
         type: string
       use_internal_docker_registry:
-        description: "Construct Aztec docker images from INTERNAL_DOCKER_REGISTRY and semver."
+        description: "Pull the images from INTERNAL_DOCKER_REGISTRY instead of DockerHub."
         required: false
         type: boolean
         default: false
-      ref:
-        description: "Git ref to checkout"
-        required: false
-        type: string
       namespace:
         description: "Kubernetes namespace override (optional, defaults to env file value)"
         required: false
@@ -39,14 +27,6 @@ on:
         required: false
         type: boolean
         default: false
-      ha_docker_image:
-        description: "Full docker image for HA validator nodes (optional, defaults to aztec docker image)"
-        required: false
-        type: string
-      source_tag:
-        description: "Source tag that triggered this deploy"
-        required: false
-        type: string
       skip_notify_on_failure:
         description: "Whether this workflow should skip its own failure notification"
         required: false
@@ -64,20 +44,12 @@ on:
           - staging-internal
           - testnet
           - mainnet
-      semver:
-        description: "Semver version (e.g., 2.3.4). Used to construct docker image if aztec_docker_image is not set."
-        required: false
-        type: string
-      aztec_docker_image:
-        description: "Full Aztec docker image (e.g., azteclabs/aztec:2.3.4). If not set, constructed from semver."
-        required: false
-        type: string
-      prover_docker_image:
-        description: "Full Prover docker image URL. If not set defaults to aztec_docker_image."
-        required: false
+      image_tag:
+        description: "Docker image tag to deploy (e.g., 6.0.0-nightly.20260609)"
+        required: true
         type: string
       use_internal_docker_registry:
-        description: "Construct Aztec docker images from INTERNAL_DOCKER_REGISTRY and semver."
+        description: "Pull the images from INTERNAL_DOCKER_REGISTRY instead of DockerHub."
         required: false
         type: boolean
         default: false
@@ -90,17 +62,9 @@ on:
         required: false
         type: boolean
         default: false
-      ha_docker_image:
-        description: "Full docker image for HA validator nodes (optional, defaults to aztec docker image)"
-        required: false
-        type: string
-      source_tag:
-        description: "Source tag that triggered this deploy"
-        required: false
-        type: string
 
 concurrency:
-  group: deploy-network-${{ inputs.network }}-${{ inputs.namespace || inputs.network }}-${{ inputs.aztec_docker_image || inputs.semver }}-${{ github.ref || github.ref_name }}
+  group: deploy-network-${{ inputs.network }}-${{ inputs.namespace || inputs.network }}-${{ inputs.image_tag }}-${{ github.ref || github.ref_name }}
   cancel-in-progress: true
 
 # actions: write lets the failure handler dispatch claudebox.yml with the built-in token
@@ -120,20 +84,9 @@ jobs:
     outputs:
       cluster: ${{ steps.deploy-network.outputs.cluster }}
     steps:
-      - name: Determine checkout ref
-        id: checkout-ref
-        run: |
-          # Use inputs.ref if provided (workflow_call), otherwise use github.ref
-          if [[ -n "${{ inputs.ref }}" ]]; then
-            echo "ref=${{ inputs.ref }}" >> $GITHUB_OUTPUT
-          else
-            echo "ref=${{ github.ref }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ steps.checkout-ref.outputs.ref }}
           # Full history so recursive submodules can checkout pinned commits (not only branch tips).
           fetch-depth: 0
           lfs: true
@@ -145,11 +98,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Validate inputs
+      - name: Resolve images
         env:
           INTERNAL_DOCKER_REGISTRY: ${{ vars.INTERNAL_DOCKER_REGISTRY }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          # Validate network
+          set -euo pipefail
+
           if [[ ! -f "spartan/environments/${{ inputs.network }}.env" ]]; then
             echo "Error: Environment file not found for network '${{ inputs.network }}'"
             echo "Available networks:"
@@ -157,55 +112,25 @@ jobs:
             exit 1
           fi
 
-          # Require at least one of aztec_docker_image or semver
-          if [[ -z "${{ inputs.aztec_docker_image }}" && -z "${{ inputs.semver }}" ]]; then
-            echo "Error: Either 'aztec_docker_image' or 'semver' must be provided"
+          # The OCI tag grammar. Rejecting anything else keeps a newline in the tag from
+          # appending a second AZTEC_DOCKER_IMAGE= line to GITHUB_ENV, where the last
+          # assignment wins and would point a protected cluster at an arbitrary image.
+          if [[ ! "$IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "Error: '$IMAGE_TAG' is not a valid docker image tag"
             exit 1
           fi
 
-          # Validate semver format if provided
-          if [[ -n "${{ inputs.semver }}" ]]; then
-            if ! echo "${{ inputs.semver }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-.*)?$'; then
-              echo "Error: Invalid semver format '${{ inputs.semver }}'. Expected format: X.Y.Z or X.Y.Z-suffix"
-              exit 1
-            fi
-          fi
-
-          if [[ "${{ inputs.use_internal_docker_registry }}" == "true" && -z "${{ inputs.semver }}" ]]; then
-            echo "Error: semver must be provided when use_internal_docker_registry is true"
-            exit 1
-          fi
-
-          # Resolve the docker image
-          AZTEC_DOCKER_IMAGE="${{ inputs.aztec_docker_image }}"
-          PROVER_AGENT_DOCKER_IMAGE="${{ inputs.prover_docker_image }}"
-          INTERNAL_REGISTRY_BASE_URL=""
-
+          # Every release publishes aztec and aztec-prover-agent under the same tag to the same
+          # registry (see release-image/bootstrap.sh), so both names are derivable from the tag.
           if [[ "${{ inputs.use_internal_docker_registry }}" == "true" ]]; then
-            INTERNAL_REGISTRY_BASE_URL="${INTERNAL_DOCKER_REGISTRY%/}"
-            echo "::add-mask::$INTERNAL_REGISTRY_BASE_URL"
+            REPO="${INTERNAL_DOCKER_REGISTRY%/}"
+            echo "::add-mask::$REPO"
+          else
+            REPO="azteclabs"
           fi
 
-          if [[ -z "$AZTEC_DOCKER_IMAGE" ]]; then
-            if [[ -n "$INTERNAL_REGISTRY_BASE_URL" ]]; then
-              AZTEC_DOCKER_IMAGE="$INTERNAL_REGISTRY_BASE_URL/aztec:${{ inputs.semver }}"
-              echo "::add-mask::$AZTEC_DOCKER_IMAGE"
-            else
-              AZTEC_DOCKER_IMAGE="azteclabs/aztec:${{ inputs.semver }}"
-            fi
-          fi
-
-          if [[ -z "$PROVER_AGENT_DOCKER_IMAGE" ]]; then
-            if [[ -n "$INTERNAL_REGISTRY_BASE_URL" ]]; then
-              PROVER_AGENT_DOCKER_IMAGE="$INTERNAL_REGISTRY_BASE_URL/aztec-prover-agent:${{ inputs.semver }}"
-              echo "::add-mask::$PROVER_AGENT_DOCKER_IMAGE"
-            elif [[ -z "${{ inputs.aztec_docker_image }}" && -n "${{ inputs.semver }}" ]]; then
-              PROVER_AGENT_DOCKER_IMAGE="azteclabs/aztec-prover-agent:${{ inputs.semver }}"
-            fi
-          fi
-
-          echo "AZTEC_DOCKER_IMAGE=$AZTEC_DOCKER_IMAGE" >> $GITHUB_ENV
-          echo "PROVER_AGENT_DOCKER_IMAGE=$PROVER_AGENT_DOCKER_IMAGE" >> $GITHUB_ENV
+          echo "AZTEC_DOCKER_IMAGE=$REPO/aztec:$IMAGE_TAG" >> $GITHUB_ENV
+          echo "PROVER_AGENT_DOCKER_IMAGE=$REPO/aztec-prover-agent:$IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Store the GCP key in a file
         env:
@@ -245,16 +170,13 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
-          REF_NAME: ${{ inputs.semver && format('v{0}', inputs.semver) || '' }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           NAMESPACE: ${{ inputs.namespace }}
           AZTEC_DOCKER_IMAGE: ${{ env.AZTEC_DOCKER_IMAGE }}
           CREATE_ROLLUP_CONTRACTS: ${{ inputs.deploy_contracts == true && 'true' || '' }}
-          PROVER_AGENT_DOCKER_IMAGE: ${{ env.PROVER_AGENT_DOCKER_IMAGE || env.AZTEC_DOCKER_IMAGE }}
-          VALIDATOR_HA_DOCKER_IMAGE: ${{ inputs.ha_docker_image || '' }}
+          PROVER_AGENT_DOCKER_IMAGE: ${{ env.PROVER_AGENT_DOCKER_IMAGE }}
         run: |
           echo "Deploying network: ${{ inputs.network }}"
-          echo "Using branch/ref: ${{ steps.checkout-ref.outputs.ref }}"
 
           cd spartan
           ./scripts/install_deps.sh
@@ -278,10 +200,8 @@ jobs:
             echo "| Item | Value |"
             echo "|------|-------|"
             echo "| Network | \`${{ inputs.network }}\` |"
-            echo "| Ref | \`${{ steps.checkout-ref.outputs.ref }}\` |"
-            if [[ -n "${{ inputs.source_tag }}" ]]; then
-              echo "| Source Tag | [\`${{ inputs.source_tag }}\`](https://github.com/${{ github.repository }}/releases/tag/${{ inputs.source_tag }}) |"
-            fi
+            echo "| Image tag | \`${{ inputs.image_tag }}\` |"
+            echo "| Registry | \`${{ inputs.use_internal_docker_registry && 'internal' || 'dockerhub' }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Notify Slack and dispatch ClaudeBox on failure
@@ -323,14 +243,14 @@ jobs:
           Follow .claude/claudebox/deploy-investigation.md to investigate. \
           GitHub Actions run: ${RUN_URL}. \
           Network: ${{ inputs.network }}. \
-          Git ref: ${{ steps.checkout-ref.outputs.ref }}. \
+          Image tag: ${{ inputs.image_tag }}. \
           Namespace: ${{ inputs.namespace || inputs.network }}. \
           Deploy contracts: ${{ inputs.deploy_contracts }}."
 
           gh workflow run claudebox.yml \
             -f prompt="$PROMPT" \
             -f link="${LINK:-$RUN_URL}" \
-            -f target_ref="${{ steps.checkout-ref.outputs.ref }}" \
+            -f target_ref="${{ github.ref_name }}" \
             -f slack_channel="$CHANNEL_ID" \
             -f slack_thread_ts="$TS" || true
 

@@ -1,0 +1,44 @@
+name: Deploy to staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: "Staging network to deploy."
+        required: true
+        type: choice
+        options:
+          - staging-public
+          - staging-internal
+      image_tag:
+        description: "Docker image tag to deploy (e.g., 6.0.0 or 6.0.0-rc.1)."
+        required: true
+        type: string
+      deploy_contracts:
+        description: "Redeploy rollup contracts before deploying infra."
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-${{ inputs.network }}
+  cancel-in-progress: true
+
+# actions: write caps the called deploy-network.yml high enough for its failure handler
+# to dispatch claudebox.yml with the built-in token.
+permissions:
+  contents: read
+  actions: write
+  # deploy-network.yml (reusable) assumes the AWS role via OIDC; a called workflow's
+  # permissions are capped by the caller's, so the grant must exist here too.
+  id-token: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-network.yml
+    with:
+      network: ${{ inputs.network }}
+      image_tag: ${{ inputs.image_tag }}
+      deploy_contracts: ${{ inputs.deploy_contracts == true }}
+      use_internal_docker_registry: ${{ inputs.network == 'staging-internal' }}
+    secrets: inherit
