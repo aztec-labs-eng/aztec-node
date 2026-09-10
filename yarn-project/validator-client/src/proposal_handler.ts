@@ -133,7 +133,9 @@ export type CheckpointProposalValidationFailureReason =
   | 'out_hash_mismatch'
   // Streaming Inbox last-block censorship failure.
   | 'inbox_consumption_insufficient'
-  | 'checkpoint_validation_failed';
+  | 'checkpoint_validation_failed'
+  // Protocol-valid but over a local VALIDATOR_MAX_* size cap: a local, non-slashable decline.
+  | 'checkpoint_exceeds_local_cap';
 
 /**
  * Mapping from a checkpoint-proposal validation failure reason to the tracker outcome that
@@ -160,6 +162,7 @@ const CHECKPOINT_VALIDATION_REASON_TO_OUTCOME: Record<
   out_hash_mismatch: 'invalid',
   inbox_consumption_insufficient: 'invalid',
   checkpoint_validation_failed: 'invalid',
+  checkpoint_exceeds_local_cap: undefined,
 };
 
 export type CheckpointProposalValidationSuccessResult = {
@@ -219,6 +222,8 @@ export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   ['no_blocks_for_slot']: true,
   ['too_many_blocks_in_checkpoint']: true,
   ['checkpoint_validation_failed']: true,
+  // Local operator size cap, not consensus-uniform -> never a slash offense.
+  ['checkpoint_exceeds_local_cap']: false,
   ['last_block_archive_mismatch']: true,
 
   // disabled
@@ -1500,18 +1505,30 @@ export class ProposalHandler {
       return { isValid: false, reason: 'out_hash_mismatch', checkpointNumber };
     }
 
-    // Final round of validations on the checkpoint, just in case.
+    // Protocol-mandated validation: a failure here is a genuinely invalid checkpoint, which is slashable.
+    // The VALIDATOR_MAX_* caps are excluded because they are local operator policy, not consensus-uniform;
+    // including them would let config drift slash an honest proposer of a protocol-valid checkpoint.
     try {
       validateCheckpoint(computedCheckpoint, {
         rollupManaLimit: this.checkpointsBuilder.getConfig().rollupManaLimit,
+      });
+    } catch (err) {
+      this.log.warn(`Checkpoint validation failed: ${err}`, proposalInfo);
+      return { isValid: false, reason: 'checkpoint_validation_failed', checkpointNumber };
+    }
+
+    // Local operator size caps (VALIDATOR_MAX_*): the checkpoint is protocol-valid, so exceeding one is a
+    // non-slashable local decline -- it must not mark the slot invalid or emit a slash vote.
+    try {
+      validateCheckpoint(computedCheckpoint, {
         maxDABlockGas: this.config.validateMaxDABlockGas,
         maxL2BlockGas: this.config.validateMaxL2BlockGas,
         maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
         maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
       });
     } catch (err) {
-      this.log.warn(`Checkpoint validation failed: ${err}`, proposalInfo);
-      return { isValid: false, reason: 'checkpoint_validation_failed', checkpointNumber };
+      this.log.warn(`Checkpoint exceeds local validator size cap: ${err}`, proposalInfo);
+      return { isValid: false, reason: 'checkpoint_exceeds_local_cap', checkpointNumber };
     }
 
     this.log.verbose(`Checkpoint proposal validation successful for slot ${slot}`, proposalInfo);
