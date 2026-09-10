@@ -1,6 +1,8 @@
 import type { NoirCompiledCircuit, NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 
 import PublicChonkVerifierJson from '../../artifacts/chonk_verifier_public.json' with { type: 'json' };
+import InboxParity4Json from '../../artifacts/inbox_parity_4.json' with { type: 'json' };
+import InboxParity16Json from '../../artifacts/inbox_parity_16.json' with { type: 'json' };
 import InboxParity64Json from '../../artifacts/inbox_parity_64.json' with { type: 'json' };
 import InboxParity256Json from '../../artifacts/inbox_parity_256.json' with { type: 'json' };
 import InboxParity1024Json from '../../artifacts/inbox_parity_1024.json' with { type: 'json' };
@@ -25,6 +27,8 @@ import TxMergeRollupJson from '../../artifacts/rollup_tx_merge.json' with { type
 import type { ServerProtocolArtifact } from './types.js';
 
 export const ServerCircuitArtifacts: Record<ServerProtocolArtifact, NoirCompiledCircuit> = {
+  InboxParity4Artifact: InboxParity4Json as NoirCompiledCircuit,
+  InboxParity16Artifact: InboxParity16Json as NoirCompiledCircuit,
   InboxParity64Artifact: InboxParity64Json as NoirCompiledCircuit,
   InboxParity256Artifact: InboxParity256Json as NoirCompiledCircuit,
   InboxParity1024Artifact: InboxParity1024Json as NoirCompiledCircuit,
@@ -46,6 +50,8 @@ export const ServerCircuitArtifacts: Record<ServerProtocolArtifact, NoirCompiled
 export const SimulatedServerCircuitArtifacts: Record<ServerProtocolArtifact, NoirCompiledCircuit> = {
   // No separate simulated build for the inbox parity ladder: they verify no child proofs, so the constrained
   // artifacts are used for simulation too.
+  InboxParity4Artifact: InboxParity4Json as NoirCompiledCircuit,
+  InboxParity16Artifact: InboxParity16Json as NoirCompiledCircuit,
   InboxParity64Artifact: InboxParity64Json as NoirCompiledCircuit,
   InboxParity256Artifact: InboxParity256Json as NoirCompiledCircuit,
   InboxParity1024Artifact: InboxParity1024Json as NoirCompiledCircuit,
