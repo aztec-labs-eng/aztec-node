@@ -105,8 +105,12 @@ function build {
     # secret mount for an unrelated reason: it lives in $HOME, and COPY and bind mounts can read
     # only from the build context. BUILDKIT is explicit because Dockerfile.base's RUN --mount does
     # not parse under the legacy builder.
+    # Sourced here and not inherited: each project's bootstrap runs as its own make subprocess, so
+    # the credential yarn-project's build exported is gone by now. Writing the config again is
+    # idempotent, and a no-op when no credential is set.
+    source $ci3/source_npm_auth
     local base_secret=""
-    if [ -f "$HOME/.yarnrc.yml" ]; then
+    if [ -f "$HOME/.yarnrc.yml" ] && [ -n "${NPM_AUTH_VALUE:-}" ]; then
       base_secret="--secret id=yarnrc,src=$HOME/.yarnrc.yml --secret id=npmauth,env=NPM_AUTH_VALUE"
     fi
     denoise "cd .. && DOCKER_BUILDKIT=1 docker build $base_secret -f release-image/Dockerfile.base -t azteclabs/release-image-base ."
