@@ -5,13 +5,13 @@
 # literal in the release workflow, never a GitHub variable, so no variable edit can flip a flow;
 # everything else is either supplied by the workflow's environment or derived here.
 #
-#   public   npmjs + DockerHub, plus the aztec-up and playground assets. The URLs are defaults
-#            below rather than GitHub variables, so no variable edit can retarget a public release.
+#   public   npmjs + DockerHub, plus the aztec-up and playground assets. release.yml states both
+#            URLs as literals rather than GitHub variables, so no variable edit can retarget a
+#            public release.
 #   private  one GCP Artifact Registry for both the @aztec-foundation reads and the @aztec-labs
 #            writes, and nothing public. Its credentials and npm URL come from the release-private
 #            environment, its docker URL from the repo-level INTERNAL_DOCKER_REGISTRY the deploy
-#            workflows also read; there are no defaults, so an unset value is a configuration
-#            error and not a silent fall back to npmjs.
+#            workflows also read.
 #
 # The two targets share no credential: an environment that can read private packages holds nothing
 # that can publish publicly, and vice versa. The assertions here are the backstop for the cases
@@ -19,13 +19,18 @@
 
 export RELEASE_TARGET=${RELEASE_TARGET:-public}
 
+# Both URLs are required, whatever the target: an unset value is a configuration error, never a
+# silent fall back to a default destination. Exported so ci3/bootstrap_ec2 forwards them to the
+# build container however the caller happened to set them.
+: "${NPM_REGISTRY:?NPM_REGISTRY is required}"
+: "${DOCKER_REGISTRY:?DOCKER_REGISTRY is required}"
+export NPM_REGISTRY DOCKER_REGISTRY
+
 npmjs_registry=https://registry.npmjs.org
 forbidden=""
 
 case "$RELEASE_TARGET" in
   public)
-    export NPM_REGISTRY=${NPM_REGISTRY:-$npmjs_registry}
-    export DOCKER_REGISTRY=${DOCKER_REGISTRY:-docker.io/azteclabs}
     export RELEASE_PROJECTS="yarn-project aztec-up playground release-image"
     forbidden="NPM_USERNAME NPM_PASSWORD"
     if [ "$NPM_REGISTRY" != "$npmjs_registry" ]; then
@@ -38,14 +43,27 @@ case "$RELEASE_TARGET" in
     fi
     ;;
   private)
-    : "${NPM_REGISTRY:?NPM_REGISTRY is required for a private release (INTERNAL_NPM_REGISTRY, on release-private)}"
-    : "${DOCKER_REGISTRY:?DOCKER_REGISTRY is required for a private release (the repo variable INTERNAL_DOCKER_REGISTRY)}"
     # What gets published is code, not configuration: the projects that publish public artifacts
     # (aztec-up, playground) are not in the list, so their release functions are never invoked.
     export RELEASE_PROJECTS="yarn-project release-image"
     forbidden="NPM_TOKEN DOCKERHUB_USERNAME DOCKERHUB_PASSWORD"
     if [ "$NPM_REGISTRY" = "$npmjs_registry" ] || [[ "$DOCKER_REGISTRY" == docker.io/* ]]; then
       echo_stderr "A private release must not publish to npmjs or DockerHub ($NPM_REGISTRY, $DOCKER_REGISTRY)."
+      exit 1
+    fi
+    # The credential is required, not just the URL. ci3/source_npm_auth writes its whole
+    # configuration only when a credential is set, so a private release without one routes no
+    # scope at all: the build resolves @aztec-foundation from npmjs, succeeds, and fails at the
+    # publish. Every reader of the private arm publishes, so there is no case to be lenient for.
+    : "${NPM_USERNAME:?NPM_USERNAME is required for a private release (INTERNAL_NPM_USERNAME, on release-private)}"
+    : "${NPM_PASSWORD:?NPM_PASSWORD is required for a private release (INTERNAL_NPM_PASSWORD, on release-private)}"
+    : "${DOCKER_USERNAME:?DOCKER_USERNAME is required for a private release (INTERNAL_DOCKER_USERNAME, on release-private)}"
+    : "${DOCKER_PASSWORD:?DOCKER_PASSWORD is required for a private release (INTERNAL_DOCKER_PASSWORD, on release-private)}"
+    # A private release always comes from a private/v* tag, so the channel check below is not
+    # optional here: an absent version has nothing to publish under, and skipping the check is
+    # how a private build would end up on a public channel.
+    if ! semver check "${REF_NAME:-}" >/dev/null 2>&1; then
+      echo_stderr "A private release needs REF_NAME to be a version; got '${REF_NAME:-}'."
       exit 1
     fi
     # The build cache is served over plain HTTP with no credentials (see ci3/cache_download), so
@@ -73,8 +91,9 @@ for var in $forbidden; do
 done
 unset forbidden npmjs_registry
 
-# The private tag carries its own channel, so the version says which flow produced it. Only checked
-# for a release ref: a local `bootstrap.sh release` on a branch has no version to check.
+# The private tag carries its own channel, so the version says which flow produced it. Conditional
+# for the public target only: a local `bootstrap.sh release` on a branch has no version to check,
+# while the private arm above requires one.
 if semver check "${REF_NAME:-}" >/dev/null 2>&1; then
   release_channel=$(dist_tag)
   if [ "$RELEASE_TARGET" = private ] && [ "$release_channel" != private ]; then
