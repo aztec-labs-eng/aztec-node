@@ -201,6 +201,7 @@ export class AutomineSequencer {
     await this.mempoolPoller?.stop();
     await this.settler?.stop();
     await this.queue.end();
+    this.publisher?.dispose();
     await this.deps.stopExtras?.();
     this.log.info('AutomineSequencer stopped');
   }
