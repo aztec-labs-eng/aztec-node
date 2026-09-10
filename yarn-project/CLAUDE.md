@@ -46,24 +46,26 @@ Git commands work from any subdirectory of a repo—there is no need to `cd` to 
 
 ### When to Run Bootstrap
 
-**ALWAYS** run `./bootstrap.sh` from the git root when:
+**ALWAYS** run `./bootstrap.sh` from `yarn-project` (not the git root) when:
 
 - Pulling new changes that have modifications outside `yarn-project`
 - Switching branches with changes from outside `yarn-project`
 - Rebasing on a branch that has changes outside `yarn-project`
+- The toolchain pins moved, or anything feeding the code generation changed
 
 ```bash
-(cd $(git rev-parse --show-toplevel) && ./bootstrap.sh build yarn-project)
+./bootstrap.sh
 ```
 
 Bootstrap takes several minutes to run. Be patient.
 
 ### Compile Before Testing
 
-Always run `yarn build` from the `yarn-project` root. Never run `tsgo` directly, never build specific packages—always build the full project:
+Always build the full project from the `yarn-project` root—never run `tsgo` directly and never build specific packages. `yarn build` recompiles TypeScript only; when generated inputs may have moved (a toolchain pin bump, a `constants.nr` change), run `./bootstrap.sh` instead, or `constants/src/constants.gen.ts` stays stale and the build reports members that the current release does have:
 
 ```bash
-yarn build
+yarn build        # TypeScript only
+./bootstrap.sh    # code generation + TypeScript
 ```
 
 ### Before Committing (Quality Checklist)

@@ -38,13 +38,13 @@ FND_HASHES_FILE=fnd-hashes
 # other files throughout the repo: pins.mjs owns that list. `./bootstrap.sh set-pins`
 # bumps this file and every copy, and check_pin_drift fails the build on any mismatch.
 # BB_VERSION doubles as the version of the @aztec-foundation npm packages bb and bb-avm ship in.
-BB_VERSION=6.0.0-nightly.20260908
+BB_VERSION=6.0.0-nightly.20260910
 # NOIR_VERSION must be the noir release the $BB_VERSION aztec-packages release was built
 # against (its noir submodule): the pinned nargo's output is consumed by tools from that
 # release (bb, and the @aztec/noir-* js packages, which are that submodule republished).
 # Skew is not detected by check_pin_drift, it surfaces in other places (e.g. the docs
 # examples' runtime tests).
-NOIR_VERSION=1.0.0-beta.26
+NOIR_VERSION=1.0.0-rc.1
 
 # The installers and sources are fetched at build time; overridable for testing/mirroring.
 # noirup versions independently of noir - we need a version that ships noir-profiler

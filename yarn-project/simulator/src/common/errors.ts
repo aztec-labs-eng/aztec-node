@@ -183,7 +183,7 @@ function extractBrilligLocation(opcodeLocation: string): string | undefined {
 
 export function resolveAssertionMessage(errorPayload: RawAssertionPayload, abi: FunctionAbi): string | undefined {
   const decoded = abiDecodeError(
-    { parameters: [], error_types: abi.errorTypes, return_type: null }, // eslint-disable-line camelcase
+    { abi_version: 1, parameters: [], error_types: abi.errorTypes, return_type: null }, // eslint-disable-line camelcase
     errorPayload,
   );
 

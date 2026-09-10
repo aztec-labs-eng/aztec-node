@@ -155,8 +155,11 @@ for.
 ### Step 5: Verify
 
 Build in dependency order for what the series touches: `noir-projects/` first if contracts
-changed, then `yarn build` from inside `yarn-project/`. Compile checks only — the suite is
-CI's job, and CI starts when the PR leaves draft.
+changed, then `./bootstrap.sh` from inside `yarn-project/` — never `yarn build`, which
+recompiles TypeScript without regenerating `constants/src/constants.gen.ts` and the other
+generated inputs, so a pin bump shows up as type errors about members the foundation
+release does have. Compile checks only — the suite is CI's job, and CI starts when the PR
+leaves draft.
 
 ### Step 6: Push the draft PR
 
