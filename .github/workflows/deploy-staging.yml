@@ -1,8 +1,15 @@
-name: Deploy to staging public
+name: Deploy to staging
 
 on:
   workflow_dispatch:
     inputs:
+      network:
+        description: "Staging network to deploy."
+        required: true
+        type: choice
+        options:
+          - staging-public
+          - staging-internal
       tag:
         description: "Tag to deploy (vN.0.0 or any vN.0.0 prerelease)."
         required: true
@@ -14,7 +21,7 @@ on:
         default: false
 
 concurrency:
-  group: deploy-staging-public
+  group: deploy-${{ inputs.network }}
   cancel-in-progress: true
 
 # actions: write lets the failure paths dispatch claudebox.yml with the built-in token
@@ -81,9 +88,8 @@ jobs:
     needs: [determine-tag, wait-for-release]
     uses: ./.github/workflows/deploy-network.yml
     with:
-      network: staging-public
-      semver: ${{ needs.determine-tag.outputs.semver }}
-      source_tag: ${{ needs.determine-tag.outputs.tag }}
-      ref: main
+      network: ${{ inputs.network }}
+      image_tag: ${{ needs.determine-tag.outputs.semver }}
       deploy_contracts: ${{ inputs.deploy_contracts == true }}
+      use_internal_docker_registry: ${{ inputs.network == 'staging-internal' }}
     secrets: inherit

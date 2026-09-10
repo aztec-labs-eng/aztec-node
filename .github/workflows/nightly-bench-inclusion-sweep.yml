@@ -16,16 +16,12 @@ on:
   #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
-      docker_image:
-        description: "Full Docker image (e.g., azteclabs/aztec:my-tag). Takes precedence over nightly_tag."
-        required: false
-        type: string
-      nightly_tag:
-        description: "Nightly tag to use (e.g., 2.3.4-nightly.20251209). Ignored if docker_image is set. Leave empty to auto-detect."
+      image_tag:
+        description: "Docker image tag to deploy (e.g., 2.3.4-nightly.20251209). Leave empty to auto-detect the nightly."
         required: false
         type: string
       source_ref:
-        description: "Git ref to checkout (e.g., v5.0.0-nightly.20260529). Required when docker_image is not a standard nightly tag."
+        description: "Git ref to checkout for the bench scripts (e.g., v5.0.0-nightly.20260529). Required when image_tag is not a standard nightly tag."
         required: false
         type: string
 
@@ -46,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       docker_image: ${{ steps.docker-image.outputs.docker_image }}
-      image_label: ${{ steps.docker-image.outputs.image_label }}
+      image_tag: ${{ steps.docker-image.outputs.image_tag }}
       source_ref: ${{ steps.docker-image.outputs.source_ref }}
       sweep_id: ${{ steps.sweep.outputs.sweep_id }}
     steps:
@@ -55,37 +51,29 @@ jobs:
         with:
           ref: main
 
-      - name: Determine docker image
+      - name: Determine image tag
         id: docker-image
         run: |
-          if [[ -n "${{ inputs.docker_image }}" ]]; then
-            docker_image="${{ inputs.docker_image }}"
-            image_label="${{ inputs.docker_image }}"
-            image_tag="${docker_image##*:}"
-          elif [[ -n "${{ inputs.nightly_tag }}" ]]; then
-            nightly_tag="${{ inputs.nightly_tag }}"
-            docker_image="azteclabs/aztec:${nightly_tag}"
-            image_label="${nightly_tag}"
-            image_tag="${nightly_tag}"
+          if [[ -n "${{ inputs.image_tag }}" ]]; then
+            image_tag="${{ inputs.image_tag }}"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
-            nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
-            docker_image="azteclabs/aztec:${nightly_tag}"
-            image_label="${nightly_tag}"
-            image_tag="${nightly_tag}"
+            image_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
+
+          docker_image="azteclabs/aztec:${image_tag}"
 
           if [[ -n "${{ inputs.source_ref }}" ]]; then
             source_ref="${{ inputs.source_ref }}"
-          elif [[ "${image_tag:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}$ ]]; then
+          elif [[ "$image_tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}$ ]]; then
             source_ref="v${image_tag}"
           else
-            echo "Could not infer git ref from docker image. Pass workflow input source_ref."
+            echo "Could not infer git ref from image tag. Pass workflow input source_ref."
             exit 1
           fi
 
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
-          echo "image_label=$image_label" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
           echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
           echo "Using docker image: $docker_image"
           echo "Using source ref: $source_ref"
@@ -120,8 +108,7 @@ jobs:
     with:
       network: bench-inclusion-sweep
       namespace: bench-inclusion-sweep
-      aztec_docker_image: ${{ needs.select-image.outputs.docker_image }}
-      ref: ${{ needs.select-image.outputs.source_ref }}
+      image_tag: ${{ needs.select-image.outputs.image_tag }}
       skip_notify_on_failure: true
     secrets: inherit
 
@@ -226,7 +213,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          IMAGE="${{ needs.select-image.outputs.image_label || 'unknown' }}"
+          IMAGE="${{ needs.select-image.outputs.docker_image || 'unknown' }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
             "Nightly inclusion sweep FAILED (image ${IMAGE}): <${RUN_URL}|View Run> (🤖)" \
