@@ -182,3 +182,32 @@ describe('TxPoolIndices', () => {
     });
   });
 });
+
+describe('TxPoolIndices nullifier index ownership on eviction', () => {
+  const N1 = 'nullifier-shared';
+  const makeShared = (seed: number, priorityFee: bigint) =>
+    stubTxMetaData(new Fr(seed).toString(), { priorityFee, nullifiers: [N1] });
+
+  // Evicting a same-nullifier loser must not drop the key the survivor now owns.
+  it('keeps the survivor indexed when the loser is removed via remove()', () => {
+    const indices = new TxPoolIndices();
+    const loser = makeShared(1, 50n);
+    const survivor = makeShared(2, 100n);
+    indices.addPending(loser);
+    indices.addToPendingIndices(survivor);
+    expect(indices.getTxHashByNullifier(N1)).toEqual(survivor.txHash);
+    indices.remove(loser.txHash);
+    expect(indices.getTxHashByNullifier(N1)).toEqual(survivor.txHash);
+  });
+
+  it('keeps the survivor indexed when the loser is removed via removeFromPendingIndices()', () => {
+    const indices = new TxPoolIndices();
+    const loser = makeShared(3, 50n);
+    const survivor = makeShared(4, 100n);
+    indices.addPending(loser);
+    indices.addToPendingIndices(survivor);
+    expect(indices.getTxHashByNullifier(N1)).toEqual(survivor.txHash);
+    indices.removeFromPendingIndices(loser);
+    expect(indices.getTxHashByNullifier(N1)).toEqual(survivor.txHash);
+  });
+});

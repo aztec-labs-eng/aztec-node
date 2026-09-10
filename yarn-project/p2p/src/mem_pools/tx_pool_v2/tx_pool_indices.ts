@@ -441,9 +441,12 @@ export class TxPoolIndices {
   }
 
   #removeFromPendingIndices(meta: TxMetaData): void {
-    // Remove from nullifier index
+    // Remove from nullifier index, but only if this tx still owns the key -- a same-nullifier
+    // survivor may have been reassigned it, and an unconditional delete would drop the live entry.
     for (const nullifier of meta.nullifiers) {
-      this.#nullifierToTxHash.delete(nullifier);
+      if (this.#nullifierToTxHash.get(nullifier) === meta.txHash) {
+        this.#nullifierToTxHash.delete(nullifier);
+      }
     }
 
     // Remove from fee payer index
