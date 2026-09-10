@@ -997,7 +997,7 @@ export class SequencerPublisher implements Disposable {
     header: CheckpointHeader,
     simulationOverridesPlan?: SimulationOverridesPlan,
   ): Promise<void> {
-    const flags = { ignoreDA: true, ignoreSignatures: true };
+    const flags = { ignoreDA: true };
 
     const args = [
       header.toViem(),

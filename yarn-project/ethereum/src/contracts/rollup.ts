@@ -887,10 +887,7 @@ export class RollupContract {
       ViemSignature,
       `0x${string}`,
       `0x${string}`,
-      {
-        ignoreDA: boolean;
-        ignoreSignatures: boolean;
-      },
+      { ignoreDA: boolean },
     ],
     account: `0x${string}` | Account,
   ): Promise<void> {
