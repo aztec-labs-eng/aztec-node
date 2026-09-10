@@ -53,6 +53,28 @@ gh api -H "Accept: application/vnd.github.raw" \
 `head -12` on a patch gives its author, date and subject (the subject is the commit
 subject); `git apply --stat` gives the file list.
 
+Before replaying, make sure Git has every non-empty preimage blob named by the patches. An
+exported patch can depend on an intermediate blob created by an earlier queue commit that is
+not reachable from this repo's origin, causing `git am --3way` to stop with `invalid object` or
+`Repository lacks necessary blobs`. Missing blobs are available from the foundation's
+aztec-node fork:
+
+```bash
+sed -n 's/^index \([0-9a-f]\{40\}\)\.\.[0-9a-f]\{40\}.*/\1/p' "$SCRATCH"/*.patch | sort -u |
+  while read -r blob; do
+    [ "$blob" = 0000000000000000000000000000000000000000 ] && continue
+    git cat-file -e "$blob" 2>/dev/null && continue
+    actual=$(gh api "repos/AztecProtocol/aztec-node/git/blobs/$blob" --jq .content |
+      tr -d '\n' | base64 -d | git hash-object -w --stdin)
+    [ "$actual" = "$blob" ] || { echo "blob hash mismatch: expected $blob, wrote $actual" >&2; exit 1; }
+  done
+```
+
+Do this before `git am`, not after it stops: the stopped patch has to be applied manually
+before `git am --continue`, while preloading keeps the normal replay path intact. A 404 is
+not permission to apply without a three-way base; stop and identify which fork or commit
+holds the blob.
+
 ### Step 2: Branch off main, and drop what is already here
 
 Work in an independent, clean aztec-node checkout — never in one that is a submodule of
@@ -106,9 +128,14 @@ the series entries. Everything this skill adds goes in follow-up commits.
 **Conflicts are yours to resolve.** `am` stops on the offending patch with the markers in
 the tree; main has moved on since the recorded base, so resolve against the intent of the
 change rather than either literal side, then `git add` and `git am --continue`. Never
-`git am --skip` — it silently drops a patch the rest of the chain may need — and never
-abort and restart. Docs files that both sides append to (the migration notes especially)
-are the usual case, and both sides' entries normally belong in the result.
+`git am --skip` merely to get past a conflict — it can silently drop a patch the rest of
+the chain needs — and never abort and restart. There is one narrow exception: later
+patches may have rewritten an earlier patch enough that its isolated reverse check failed,
+while current main already contains its final behavior. After resolving every conflict
+against that newer implementation, `git diff --cached --quiet` proves there is no residual
+delta; only then skip it and report it as dropped as already landed after dependent replay.
+Docs files that both sides append to (the migration notes especially) are the usual case,
+and both sides' entries normally belong in the result.
 
 Write down each resolution as you make it: which patch, which file, which side you kept and
 why. That list goes in the PR body (Step 6) — a reviewer must be able to check the merge
@@ -133,6 +160,11 @@ release's noir submodule, and the verification. The rewrite itself is:
 git commit -m "chore: bump toolchain pins to <bb-version>"
 ```
 
+If the latest complete nightly is already `BB_VERSION`, there is no bump commit. Still
+check the paired Noir release. Before changing a local `NOIR_VERSION` that is newer than
+the nightly's submodule, inspect the commit that introduced the skew: it may be a deliberate
+compatibility choice. Report an intentional skew instead of silently downgrading it.
+
 `pins.mjs` rewrites manifests only — `BB_VERSION`/`NOIR_VERSION` in
 `labs-aztec-toolchain/bootstrap.sh`, the `yarn-project/package.json` resolutions,
 `docs/package.json`, every `Nargo.toml`, and `docs/examples/ts/*/config.yaml`. It never
@@ -154,12 +186,13 @@ for.
 
 ### Step 5: Verify
 
-Build in dependency order for what the series touches: `noir-projects/` first if contracts
-changed, then `./bootstrap.sh` from inside `yarn-project/` — never `yarn build`, which
+Provision the pinned toolchain with `./labs-aztec-toolchain/bootstrap.sh`, then build
+`noir-projects/` and run `./bootstrap.sh` from inside `yarn-project/` — never `yarn build`, which
 recompiles TypeScript without regenerating `constants/src/constants.gen.ts` and the other
 generated inputs, so a pin bump shows up as type errors about members the foundation
-release does have. Compile checks only — the suite is CI's job, and CI starts when the PR
-leaves draft.
+release does have. A clean checkout needs the Noir contract targets even when the residual
+patch only changes TypeScript, because the yarn bootstrap consumes those artifacts. Compile
+checks only — the suite is CI's job, and CI starts when the PR leaves draft.
 
 ### Step 6: Push the draft PR
 
