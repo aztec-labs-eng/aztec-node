@@ -42,7 +42,7 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { CheckpointBuilder, FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import type { ValidatorMetrics } from './metrics.js';
-import { ProposalHandler } from './proposal_handler.js';
+import { ProposalHandler, SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT } from './proposal_handler.js';
 
 /** Creates a checkpoint proposal core with the given overrides. */
 async function makeProposal(overrides: Parameters<typeof makeCheckpointProposal>[0] = {}) {
@@ -567,6 +567,55 @@ describe('ProposalHandler checkpoint validation', () => {
       const epochOutHash = accumulateCheckpointOutHashes([checkpointOutHash]);
       return makeHeader({ epochOutHash, ...overrides });
     }
+
+    // A protocol-valid single-block checkpoint (passes validateCheckpoint) that carries one tx, so a
+    // VALIDATOR_MAX_TXS_PER_BLOCK of 0 trips a local cap without any protocol invalidity.
+    function makeProtocolValidCheckpoint() {
+      const block = {
+        number: 1,
+        slot: SlotNumber(1),
+        indexWithinCheckpoint: 0,
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        header: {
+          lastArchive: { root: Fr.ZERO },
+          globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
+          totalManaUsed: new Fr(100),
+        },
+        body: { txEffects: [{}] },
+        computeDAGasUsed: () => 0,
+      } as unknown as L2Block;
+      return { blocks: [block], toBlobFields: () => [] };
+    }
+
+    it('accepts a protocol-valid checkpoint when no local cap is set (fixture is protocol-valid)', async () => {
+      const header = makeMatchingHeader();
+      setupDeepValidationMocks({ header, archive: new AppendOnlyTreeSnapshot(archiveRoot, 1), ...makeProtocolValidCheckpoint() });
+      const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+      const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+      expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
+    });
+
+    it('treats a local VALIDATOR_MAX cap exceedance as non-slashable checkpoint_exceeds_local_cap', async () => {
+      const header = makeMatchingHeader();
+      setupDeepValidationMocks({ header, archive: new AppendOnlyTreeSnapshot(archiveRoot, 1), ...makeProtocolValidCheckpoint() });
+      (config as any).validateMaxTxsPerBlock = 0;
+      const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+      const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+      expect(result).toEqual({ isValid: false, reason: 'checkpoint_exceeds_local_cap', checkpointNumber: CheckpointNumber(1) });
+      // The dispatch table that drives markInvalidProposalSlot + slash votes must not fire for a local decline.
+      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[(result as { reason: keyof typeof SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT }).reason]).toBe(false);
+    });
+
+    it('keeps a genuinely protocol-invalid checkpoint slashable even with a local cap set (control)', async () => {
+      const header = makeMatchingHeader();
+      // Empty blocks fail validateCheckpointStructure: a real protocol invalidity, not a local-cap miss.
+      setupDeepValidationMocks({ header, archive: new AppendOnlyTreeSnapshot(archiveRoot, 1), blocks: [] });
+      (config as any).validateMaxTxsPerBlock = 0;
+      const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+      const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+      expect(result).toEqual({ isValid: false, reason: 'checkpoint_validation_failed', checkpointNumber: CheckpointNumber(1) });
+      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[(result as { reason: keyof typeof SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT }).reason]).toBe(true);
+    });
 
     it('returns checkpoint_header_mismatch when headers differ', async () => {
       const proposalHeader = makeHeader();
