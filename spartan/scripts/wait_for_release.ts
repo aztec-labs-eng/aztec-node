@@ -20,7 +20,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { writeGithubOutputs } from "./devnet_utils.ts";
+import { writeGithubOutputs } from "./github_utils.ts";
 
 const positional = process.argv.slice(2);
 
