@@ -31,6 +31,28 @@ export class SQLiteOPFSAztecMap<K extends Key, V extends Value> implements Aztec
     return raw == null ? undefined : this.decodeValue(raw);
   }
 
+  /** Reads keys in bounded SQL batches, preserving input order and missing entries. */
+  async getManyAsync(keys: K[]): Promise<(V | undefined)[]> {
+    const slots = keys.map(key => this.slot(key));
+    const uniqueSlots = [...new Set(slots)];
+    const values = new Map<string, V>();
+    // Stay below SQLite's host-parameter limit, including builds with the legacy 999 limit.
+    const batchSize = 100;
+    for (let offset = 0; offset < uniqueSlots.length; offset += batchSize) {
+      const batch = uniqueSlots.slice(offset, offset + batchSize);
+      const rows = await this.store.allAsync(
+        `SELECT slot, value FROM data WHERE slot IN (${batch.map(() => '?').join(',')})`,
+        batch,
+      );
+      for (const [slot, value] of rows) {
+        if (typeof slot === 'string' && value != null) {
+          values.set(slot, this.decodeValue(value));
+        }
+      }
+    }
+    return slots.map(slot => values.get(slot));
+  }
+
   async hasAsync(key: K): Promise<boolean> {
     const rows = await this.store.allAsync('SELECT 1 FROM data WHERE slot = ? LIMIT 1', [this.slot(key)]);
     return rows.length > 0;

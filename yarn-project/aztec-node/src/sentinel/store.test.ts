@@ -108,6 +108,33 @@ describe('sentinel-store', () => {
     ]);
   });
 
+  it('bulk reads histories and epoch performance in address order', async () => {
+    const [first, second, missing] = times(3, () => EthAddress.random());
+    await store.updateValidators(SlotNumber(1), {
+      [first.toString()]: 'attestation-sent',
+      [second.toString()]: 'checkpoint-mined',
+    });
+    await store.updateEpochPerformance(EpochNumber(1), {
+      [first.toString()]: { missed: 2, total: 10 },
+      [second.toString()]: { missed: 0, total: 5 },
+    });
+    const addresses = [second, missing, first, second];
+    expect(await store.getHistoryBatch(addresses)).toEqual([
+      [{ slot: SlotNumber(1), status: 'checkpoint-mined' }],
+      undefined,
+      [{ slot: SlotNumber(1), status: 'attestation-sent' }],
+      [{ slot: SlotNumber(1), status: 'checkpoint-mined' }],
+    ]);
+    expect(await store.getEpochPerformanceBatch(addresses)).toEqual([
+      [{ epoch: EpochNumber(1), missed: 0, total: 5 }],
+      [],
+      [{ epoch: EpochNumber(1), missed: 2, total: 10 }],
+      [{ epoch: EpochNumber(1), missed: 0, total: 5 }],
+    ]);
+    expect(await store.getHistoryBatch([])).toEqual([]);
+    expect(await store.getEpochPerformanceBatch([])).toEqual([]);
+  });
+
   it('updates per-epoch performance', async () => {
     const validator = EthAddress.random();
     await store.updateEpochPerformance(EpochNumber(1), { [validator.toString()]: { missed: 2, total: 10 } });

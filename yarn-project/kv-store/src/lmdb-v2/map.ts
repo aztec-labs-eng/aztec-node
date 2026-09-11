@@ -70,6 +70,14 @@ export class LMDBMap<K extends Key, V extends Value> implements AztecAsyncMap<K,
     });
   }
 
+  /** Reads values in input order using one native database request. */
+  getManyAsync(keys: K[]): Promise<(V | undefined)[]> {
+    return execInReadTx(this.store, async tx => {
+      const values = await tx.getMany(keys.map(key => serializeKey(this.prefix, key)));
+      return values.map(value => (value ? this.encoder.unpack(value) : undefined));
+    });
+  }
+
   hasAsync(key: K): Promise<boolean> {
     return execInReadTx(this.store, async tx => !!(await tx.get(serializeKey(this.prefix, key))));
   }

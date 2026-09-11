@@ -464,6 +464,19 @@ describe('sentinel', () => {
       expect(results).toEqual(expected.map(result => result ?? null));
     });
 
+    it('reads 50 validators with two database calls', async () => {
+      const validators = times(50, () => EthAddress.random());
+      await store.updateValidators(
+        SlotNumber(1),
+        Object.fromEntries(validators.map(address => [address.toString(), 'attestation-sent'])),
+      );
+      sentinel.setLastProcessedSlot(SlotNumber(10));
+      const reads = jest.spyOn(kvStore, 'sendMessage');
+      const results = await sentinel.getValidatorStatsBatch(validators);
+      expect(results.map(result => result?.validator.address)).toEqual(validators);
+      expect(reads).toHaveBeenCalledTimes(2);
+    });
+
     it('shares the fallback slot lookup across validators', async () => {
       const validators = times(50, () => EthAddress.random());
       await store.updateValidators(
@@ -492,7 +505,7 @@ describe('sentinel', () => {
 
     it('rejects oversized ranges before reading any validator history', async () => {
       const validators = times(100, () => EthAddress.random());
-      jest.spyOn(store, 'getHistory').mockRejectedValue(new Error('History must not be read'));
+      jest.spyOn(store, 'getHistoryBatch').mockRejectedValue(new Error('History must not be read'));
       await expect(sentinel.getValidatorStatsBatch(validators, SlotNumber(0), SlotNumber(100_000))).rejects.toThrow(
         'Slot range (100000) exceeds history length (10)',
       );
@@ -532,9 +545,11 @@ describe('sentinel', () => {
     beforeEach(() => {
       validator = EthAddress.random();
       jest.spyOn(store, 'getHistoryLength').mockReturnValue(10);
-      jest.spyOn(store, 'getHistory').mockResolvedValue([
-        { slot: SlotNumber(1), status: 'checkpoint-mined' },
-        { slot: SlotNumber(2), status: 'attestation-sent' },
+      jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([
+        [
+          { slot: SlotNumber(1), status: 'checkpoint-mined' },
+          { slot: SlotNumber(2), status: 'attestation-sent' },
+        ],
       ]);
       jest.spyOn(store, 'getHistories').mockResolvedValue({
         [validator.toString()]: [
@@ -560,13 +575,13 @@ describe('sentinel', () => {
       });
 
       it('should return undefined when validator has no history', async () => {
-        jest.spyOn(store, 'getHistory').mockResolvedValue(undefined);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([undefined]);
         const result = await sentinel.getValidatorStats(validator, SlotNumber(1), SlotNumber(6));
         expect(result).toBeUndefined();
       });
 
       it('should return undefined when validator has empty history', async () => {
-        jest.spyOn(store, 'getHistory').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([[]]);
         const result = await sentinel.getValidatorStats(validator, SlotNumber(1), SlotNumber(6));
         expect(result).toBeUndefined();
       });
@@ -581,8 +596,8 @@ describe('sentinel', () => {
           { epoch: EpochNumber(2), missed: 1, total: 8 },
         ];
 
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue(mockProvenPerformance);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([mockProvenPerformance]);
         jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 2,
@@ -610,8 +625,8 @@ describe('sentinel', () => {
 
       it('should call computeStatsForValidator with correct parameters', async () => {
         const mockHistory: ValidatorStatusHistory = [{ slot: SlotNumber(5), status: 'checkpoint-mined' }];
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([[]]);
         const computeStatsSpy = jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 1,
@@ -627,8 +642,8 @@ describe('sentinel', () => {
 
       it('should use default slot range when not provided', async () => {
         const mockHistory: ValidatorStatusHistory = [{ slot: SlotNumber(5), status: 'checkpoint-mined' }];
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([[]]);
         const computeStatsSpy = jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 1,
@@ -649,8 +664,8 @@ describe('sentinel', () => {
 
       it('should not produce negative slot numbers when historyLength exceeds lastProcessedSlot', async () => {
         const mockHistory: ValidatorStatusHistory = [{ slot: SlotNumber(2), status: 'checkpoint-mined' }];
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([[]]);
         jest.spyOn(store, 'getHistoryLength').mockReturnValue(1000); // Large history length
 
         // Set lastProcessedSlot to a small value
@@ -682,10 +697,10 @@ describe('sentinel', () => {
           { epoch: EpochNumber(6), missed: 0, total: 15 },
         ];
 
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
         const getEpochPerformanceSpy = jest
-          .spyOn(store, 'getEpochPerformance')
-          .mockResolvedValue(mockProvenPerformance);
+          .spyOn(store, 'getEpochPerformanceBatch')
+          .mockResolvedValue([mockProvenPerformance]);
         jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 1,
@@ -696,7 +711,7 @@ describe('sentinel', () => {
 
         const result = await sentinel.getValidatorStats(validator);
 
-        expect(getEpochPerformanceSpy).toHaveBeenCalledWith(validator);
+        expect(getEpochPerformanceSpy).toHaveBeenCalledWith([validator]);
         expect(result?.allTimeEpochPerformance).toEqual(mockProvenPerformance);
       });
     });

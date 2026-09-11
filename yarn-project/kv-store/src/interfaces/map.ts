@@ -84,6 +84,9 @@ export interface AztecAsyncMap<K extends Key, V extends Value> extends AztecBase
    */
   getAsync(key: K): Promise<V | undefined>;
 
+  /** Returns values in input order, preserving duplicates and undefined entries for missing keys. */
+  getManyAsync(keys: K[]): Promise<(V | undefined)[]>;
+
   /**
    * Checks if a key exists in the map.
    * @param key - The key to check
