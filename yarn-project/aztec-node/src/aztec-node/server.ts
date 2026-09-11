@@ -863,6 +863,18 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return this.validatorsSentinel?.getValidatorStats(validatorAddress, fromSlot, toSlot) ?? Promise.resolve(undefined);
   }
 
+  /** Returns validator stats in input order, with null entries when statistics are unavailable. */
+  public getValidatorStatsBatch(
+    validatorAddresses: EthAddress[],
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<(SingleValidatorStats | null)[]> {
+    return (
+      this.validatorsSentinel?.getValidatorStatsBatch(validatorAddresses, fromSlot, toSlot) ??
+      Promise.resolve(validatorAddresses.map(() => null))
+    );
+  }
+
   public async startSnapshotUpload(location: string): Promise<void> {
     // Note that we are forcefully casting the blocksource as an archiver
     // We break support for archiver running remotely to the node
