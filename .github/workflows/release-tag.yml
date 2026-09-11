@@ -1,9 +1,13 @@
 # Creates release tags via the release GitHub App — the only identity the
 # release-tags ruleset permits to create v* tags.
 #
-#   nightly:  cron only                    -> v<ver>-nightly.<date>
+#   nightly:  cron                          -> v<ver>-nightly.<date>
 #             per branch in the nightly matrix below; the one unattended
-#             path, via the `tagger` environment.
+#             path, via the `tagger` environment. Also dispatchable, to cut a
+#             day the cron missed or botched. That path takes an optional
+#             suffix (-> v<ver>-nightly.<date>.<suffix>) so a re-cut does not
+#             collide with a tag the cron already pushed, and is gated by
+#             `release-approval` like every other dispatch.
 #   rc:       dispatch with kind=rc         -> v<ver>-rc.<n>
 #             n is derived from origin's existing rc tags for that version
 #             (max + 1, starting at 1). Gated by `release-approval` like a
@@ -37,9 +41,9 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "a release candidate, or a real release"
+        description: "a nightly re-cut, a release candidate, or a real release"
         type: choice
-        options: [rc, release]
+        options: [nightly, rc, release]
         default: rc
       # A choice, not free text: this value reaches both the checkout ref and
       # the tagging step, and git accepts shell metacharacters in a ref name.
@@ -48,6 +52,16 @@ on:
         type: choice
         options: [main]
         default: main
+      # Free text, unlike the two above, because it can afford to be. `branch`
+      # steers what actions/checkout puts on disk before any of this file's own
+      # code runs, so it is constrained where it is declared; this steers nothing
+      # but the name of the tag at the end, and reaches the script as an env var,
+      # which bash never parses as code. The pattern checked below is what keeps
+      # it one semver prerelease identifier and a legal ref component.
+      suffix:
+        description: "nightly only: tells a re-cut apart from the day's scheduled tag, e.g. 'hotfix' -> v<ver>-nightly.<date>.hotfix"
+        type: string
+        default: ""
 
 jobs:
   tag:
@@ -63,8 +77,9 @@ jobs:
         branch: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.branch)) || fromJSON('["main"]') }}
     concurrency:
       group: ${{ github.workflow }}-${{ github.repository }}-${{ matrix.branch }}
-    # Every dispatch mints a release or an rc, so every dispatch costs a second
-    # human. The nightly cron is the only path through `tagger`.
+    # Every dispatch costs a second human, a nightly re-cut included: the
+    # expression keys on the event, not the kind. The cron is the only path
+    # through `tagger`.
     environment: ${{ github.event_name == 'workflow_dispatch' && 'release-approval' || 'tagger' }}
     steps:
       - name: Mint App token
@@ -89,8 +104,13 @@ jobs:
         env:
           BRANCH: ${{ matrix.branch }}
           KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
+          SUFFIX: ${{ github.event_name == 'workflow_dispatch' && inputs.suffix || '' }}
         run: |
           set -euo pipefail
+          # [a-z] below is a collation range: under a UTF-8 locale it also matches
+          # accented letters, which are legal in a ref but not in a semver
+          # identifier. The runner's locale is not ours to assume, so fix it.
+          export LC_ALL=C
           git config --global user.email "noreply@aztec-labs.com"
           git config --global user.name "Aztec Labs release"
           version=$(jq -r '."."' .release-please-manifest.json)
@@ -99,6 +119,29 @@ jobs:
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Manifest version on $BRANCH is not X.Y.Z: $version"
             exit 1
+          fi
+          suffix=${SUFFIX:-}
+          if [ -n "$suffix" ]; then
+            if [ "$KIND" != nightly ]; then
+              echo "::error::suffix applies to kind=nightly only; rc and release are numbered by their own schemes."
+              exit 1
+            fi
+            # One semver prerelease identifier. Keeps the tag valid semver, keeps
+            # ci3/dist_tag reading the channel as 'nightly' (it takes the first
+            # dot-separated identifier), and admits nothing that would change the
+            # meaning of the ref name: no dot, slash, or leading hyphen.
+            #
+            # Hyphens are excluded rather than merely anchored: release-image
+            # publishes the per-architecture images as "<tag>-amd64"/"<tag>-arm64"
+            # and assembles the manifest list from them, so a suffix ending in one
+            # of those would name another release's architecture image.
+            #
+            # The rejected value is deliberately not echoed: a newline in it would
+            # close this line and let the rest forge a second ::workflow-command::.
+            if [[ ! "$suffix" =~ ^[a-z][a-z0-9]{0,19}$ ]]; then
+              echo "::error::Invalid suffix rejected: use 1-20 characters, lowercase letters and digits, starting with a letter."
+              exit 1
+            fi
           fi
           case "$KIND" in
             release)
@@ -115,13 +158,29 @@ jobs:
               ;;
             *)
               tag="v${version}-nightly.$(date -u +%Y%m%d)"
+              # A suffixed re-cut is released like any nightly, so it takes the
+              # nightly aliases from the day's scheduled build: aztec-up's
+              # v<major>-nightly on S3, and npm's dist-tag. Suffixes are words, not
+              # a sequence, so two re-cuts on one day have no meaningful order
+              # between them — the S3 alias follows whichever published last, while
+              # npm's only moves for whichever sorts higher. Neither promises a
+              # global order; pin an exact version if you need one.
+              if [ -n "$suffix" ]; then
+                tag="${tag}.${suffix}"
+              fi
               ;;
           esac
           echo "Tagging $BRANCH @ $(git rev-parse --short HEAD): $tag"
           # Refuse to move an existing tag: re-dispatching a release without a
           # version-bump PR must fail loudly, not re-tag.
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on $BRANCH first."
+            if [ "$KIND" = nightly ] && [ -n "$suffix" ]; then
+              echo "::error::Tag $tag already exists. Re-dispatch with a different suffix."
+            elif [ "$KIND" = nightly ]; then
+              echo "::error::Tag $tag already exists. Re-dispatch with a suffix to cut a distinct nightly for today, e.g. suffix=hotfix."
+            else
+              echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on $BRANCH first."
+            fi
             exit 1
           fi
           git tag -a "$tag" -m "$tag"
