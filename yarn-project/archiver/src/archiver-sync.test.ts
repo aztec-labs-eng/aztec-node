@@ -1898,6 +1898,10 @@ describe('Archiver Sync', () => {
       fake.setL1BlockNumber(115n);
       await archiver.syncImmediate();
       await addLocalBlocksConsuming([4]);
+      // addBlock triggers a sync it does not await, and that pass captures the head as it is now. Drain it before
+      // moving the head backwards: left in flight, it recovers against the pre-reorg head and can commit after the
+      // pass below, leaving 115 as the synced height.
+      await archiver.syncImmediate();
 
       // A replacement chain shorter than every stored height by more than the lookup window, carrying none of the
       // stored messages. Each candidate's window (95..105 and 105..115) starts above the new head, so bounding it by
@@ -2536,6 +2540,9 @@ describe('Archiver Sync', () => {
         fake.setL1BlockNumber(110n);
         await archiver.syncImmediate();
         await addLocalBlocksConsuming([1, 2]);
+        // Drain the sync addBlock triggers but does not await, so it cannot commit against the pre-reorg head after
+        // the pass below and leave 110 as the synced height.
+        await archiver.syncImmediate();
 
         // L1 really does drop B and shorten: the syncpoint's block is replaced, so nothing vouches for the tail.
         fake.removeMessagesAfter(1);
