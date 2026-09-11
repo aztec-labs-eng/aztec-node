@@ -163,6 +163,67 @@ describe('world-state integration', () => {
     });
   });
 
+  describe('Inbox bucket repartitioning', () => {
+    // Rebuilds the current bucket partition as a single bucket holding every message the given blocks consumed, as an
+    // L1 reorg that re-mines the same messages under merged boundaries leaves it. The indexed leaves are unchanged,
+    // but the boundary each published block consumed through is gone from the current partition.
+    const mergeInboxBuckets = (blockCount: number) => {
+      const messages = checkpoints.slice(0, blockCount).flatMap(c => c.messages);
+      archiver.replaceInboxBuckets([
+        {
+          bucket: {
+            seq: 0n,
+            inboxRollingHash: Fr.ZERO,
+            totalMsgCount: 0n,
+            timestamp: 0n,
+            msgCount: 0,
+            lastMessageIndex: 0n,
+          },
+          msgs: [],
+        },
+        {
+          bucket: {
+            seq: 1n,
+            inboxRollingHash: Fr.ZERO,
+            totalMsgCount: BigInt(messages.length),
+            timestamp: 1n,
+            msgCount: messages.length,
+            lastMessageIndex: BigInt(messages.length) - 1n,
+          },
+          msgs: messages,
+        },
+      ]);
+    };
+
+    it('replays published blocks whose consumed boundary the current partition no longer has', async () => {
+      const blockCount = 3;
+      await archiver.createBlocks(blockCount);
+      mergeInboxBuckets(blockCount);
+
+      // Driven directly rather than through the block stream, which swallows and retries the archive-root divergence
+      // a wrong message bundle causes.
+      const blocks = checkpoints.slice(0, blockCount).flatMap(c => c.checkpoint.blocks);
+      await synchronizer.handleBlockStreamEvent({ type: 'blocks-added', blocks });
+
+      for (let blockNumber = 1; blockNumber <= blockCount; blockNumber++) {
+        await expectSynchedBlockHashMatches(blockNumber);
+      }
+      const lastBlockState = blocks.at(-1)!.header.state;
+      const messageTree = await db.getCommitted().getTreeInfo(MerkleTreeId.L1_TO_L2_MESSAGE_TREE);
+      expect(messageTree.root).toEqual(lastBlockState.l1ToL2MessageTree.root.toBuffer());
+      expect(messageTree.size).toEqual(BigInt(lastBlockState.l1ToL2MessageTree.nextAvailableLeafIndex));
+    });
+
+    it('syncs the whole chain through the block stream under a merged partition', async () => {
+      const blockCount = 3;
+      await archiver.createBlocks(blockCount);
+      mergeInboxBuckets(blockCount);
+
+      await synchronizer.start();
+      await expectSynchedToBlock(blockCount);
+    });
+  });
+
   describe('reorgs', () => {
     it('prunes blocks upon a reorg and resyncs', async () => {
       await archiver.createBlocks(5);
