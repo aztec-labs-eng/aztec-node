@@ -19,7 +19,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { CommitteeAttestation, CommitteeAttestationsAndSigners, L2Block } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import { getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
-import { updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
+import { InboxMessagePrefixRef, updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
 import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-labs/stdlib/p2p';
 import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
@@ -225,12 +225,33 @@ export class FakeL1State {
   }
 
   /**
-   * Creates blocks for a checkpoint without adding them to L1 state.
+   * Creates blocks for a checkpoint without adding them to L1 state. The blocks consume no Inbox messages beyond
+   * what the fake already holds, so their L1-to-L2 leaf count is the fake's current message total.
    * Useful for creating blocks to pass to addBlock() for testing provisional block handling.
    * Returns the blocks directly.
    */
   public async makeBlocks(checkpointNumber: CheckpointNumber, options: Partial<AddCheckpointOptions>) {
-    return (await this.makeCheckpointAndMessages(checkpointNumber, options)).checkpoint.blocks;
+    return (await this.makeCheckpointAndMessages(checkpointNumber, options, BigInt(this.messages.length))).checkpoint
+      .blocks;
+  }
+
+  /** The signed Inbox prefix reference for a block: the fake's rolling hash at the block's L1-to-L2 leaf count. */
+  public getInboxPrefixRefFor(block: L2Block): InboxMessagePrefixRef {
+    return this.getInboxPrefixRefAt(BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex));
+  }
+
+  /** The signed Inbox prefix reference at a cumulative message count: the fake's rolling hash over that prefix. */
+  public getInboxPrefixRefAt(totalMessageCount: bigint): InboxMessagePrefixRef {
+    if (totalMessageCount === 0n) {
+      return InboxMessagePrefixRef.empty();
+    }
+    const message = this.messages[Number(totalMessageCount) - 1];
+    if (message === undefined) {
+      throw new Error(
+        `Fake L1 holds ${this.messages.length} messages, cannot reference a prefix of ${totalMessageCount}`,
+      );
+    }
+    return new InboxMessagePrefixRef(message.inboxRollingHash);
   }
 
   /**
@@ -245,12 +266,15 @@ export class FakeL1State {
     this.log.warn(`Adding checkpoint ${checkpointNumber}`);
 
     const { l1BlockNumber, signers = [], messagesL1BlockNumber = l1BlockNumber - 3n } = options;
+    const numL1ToL2Messages = options.numL1ToL2Messages ?? 3;
 
-    // Create the checkpoint using the stdlib helper
-    const { checkpoint, messages, lastArchive } = await this.makeCheckpointAndMessages(checkpointNumber, {
-      ...options,
-      numL1ToL2Messages: options.numL1ToL2Messages ?? 3,
-    });
+    // Create the checkpoint using the stdlib helper. Its blocks consume this checkpoint's messages, so their
+    // L1-to-L2 leaf count is the fake's message total once those messages are added.
+    const { checkpoint, messages, lastArchive } = await this.makeCheckpointAndMessages(
+      checkpointNumber,
+      { ...options, numL1ToL2Messages },
+      BigInt(this.messages.length + numL1ToL2Messages),
+    );
 
     // Store the messages internally so they match the checkpoint's inHash
     this.addMessages(checkpointNumber, messagesL1BlockNumber, messages);
@@ -282,8 +306,16 @@ export class FakeL1State {
     return { checkpoint, messages };
   }
 
-  /** Creates a checkpoint and messages without adding them to L1 state. */
-  private makeCheckpointAndMessages(checkpointNumber: CheckpointNumber, options: Partial<AddCheckpointOptions>) {
+  /**
+   * Creates a checkpoint and messages without adding them to L1 state. Blocks created here (rather than supplied
+   * through `options.blocks`) get `consumedMessageTotal` as their L1-to-L2 leaf count, so a block's committed count is
+   * consistent with the messages the fake holds and its Inbox prefix reference resolves.
+   */
+  private async makeCheckpointAndMessages(
+    checkpointNumber: CheckpointNumber,
+    options: Partial<AddCheckpointOptions>,
+    consumedMessageTotal: bigint,
+  ) {
     const {
       numBlocks = 1,
       txsPerBlock = 4,
@@ -296,7 +328,7 @@ export class FakeL1State {
       blocks,
     } = options;
 
-    return mockCheckpointAndMessages(checkpointNumber, {
+    const result = await mockCheckpointAndMessages(checkpointNumber, {
       startBlockNumber: this.getNextBlockNumber(checkpointNumber),
       numBlocks,
       blocks,
@@ -307,6 +339,12 @@ export class FakeL1State {
       timestamp: timestamp ?? (l1BlockNumber !== undefined ? this.getTimestampAtL1Block(l1BlockNumber) : undefined),
       ...(maxEffects !== undefined ? { maxEffects } : {}),
     });
+    if (blocks === undefined) {
+      for (const block of result.checkpoint.blocks) {
+        block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = Number(consumedMessageTotal);
+      }
+    }
+    return result;
   }
 
   /** Returns the L2 slot at the given L1 block (assuming all L1 blocks are mined) */
