@@ -66,7 +66,7 @@ fast: yarn-project yarn-project-tests \
 		noir-contracts \
 		aztec-up aztec-up-tests \
 		contract-snapshots-tests \
-		spartan \
+		spartan spartan-tests \
 		playground playground-tests \
 		docs docs-tests \
 		release-image release-image-tests \
@@ -181,3 +181,6 @@ aztec-up-tests: aztec-up
 
 spartan:
 	$(call build,$@,spartan)
+
+spartan-tests: spartan
+	$(call test,$@,spartan)

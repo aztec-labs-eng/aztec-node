@@ -6,7 +6,8 @@
  *   create_devnet.ts <nightly-tag> [--dry-run]
  *
  * The script:
- * 1. Validates the nightly tag format (vX.Y.Z-nightly.YYYYMMDD)
+ * 1. Validates the nightly tag format (vX.Y.Z-nightly.YYYYMMDD, optionally
+ *    followed by the suffix a manually dispatched nightly adds)
  * 2. Reads the major version from .release-please-manifest.json
  * 3. Finds the next devnet iteration number
  * 4. Creates a branch with a .devnet-version file
@@ -20,6 +21,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import {
   parseArgs,
   configureGitIdentityInCI,
+  isNightlyTag,
   writeGithubOutputs,
 } from "./devnet_utils.ts";
 
@@ -32,10 +34,13 @@ if (!nightlyTag) {
 }
 
 // 1. Validate nightly tag format
-if (!/^v\d+\.\d+\.\d+-nightly\.\d{8}$/.test(nightlyTag)) {
+if (!isNightlyTag(nightlyTag)) {
   console.error(`Error: Invalid nightly tag format '${nightlyTag}'`);
   console.error(
-    "Expected format: vX.Y.Z-nightly.YYYYMMDD (e.g., v4.0.0-nightly.20260209)",
+    "Expected format: vX.Y.Z-nightly.YYYYMMDD, or vX.Y.Z-nightly.YYYYMMDD.<suffix>",
+  );
+  console.error(
+    "(e.g., v4.0.0-nightly.20260209 or v4.0.0-nightly.20260209.hotfix)",
   );
   process.exit(1);
 }

@@ -27,3 +27,17 @@ export function writeGithubOutputs(outputs: Record<string, string>): void {
     appendFileSync(process.env.GITHUB_OUTPUT, lines);
   }
 }
+
+/**
+ * Matches the nightly tags cut by the release-tag workflow: the canonical
+ * `vX.Y.Z-nightly.YYYYMMDD` from the nightly schedule, and the extended
+ * `vX.Y.Z-nightly.YYYYMMDD.<suffix>` a manual dispatch produces when it needs a
+ * second nightly on a day that already has one. The suffix is one SemVer
+ * prerelease identifier, matching the workflow's own validation.
+ */
+export const NIGHTLY_TAG_PATTERN =
+  /^v\d+\.\d+\.\d+-nightly\.\d{8}(\.[a-z][a-z0-9-]*)?$/;
+
+export function isNightlyTag(tag: string): boolean {
+  return NIGHTLY_TAG_PATTERN.test(tag);
+}

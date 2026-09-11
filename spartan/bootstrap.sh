@@ -79,12 +79,20 @@ function gke {
   fi
 }
 
+# Unit tests for the standalone node scripts under scripts/. The network scenario
+# tests are not emitted here: they need a deployed cluster and are driven by the
+# network_tests targets below.
 function test_cmds {
-  :
+  local test_hash=$(hash)
+  for f in scripts/*.test.ts; do
+    [ -e "$f" ] || continue
+    echo "$test_hash node --experimental-strip-types --no-warnings --test spartan/$f"
+  done
 }
 
 function test {
-  :
+  echo_header "spartan test"
+  test_cmds | filter_test_cmds | parallelize
 }
 
 # Test sets for network scenario tests (split across two EC2 instances).

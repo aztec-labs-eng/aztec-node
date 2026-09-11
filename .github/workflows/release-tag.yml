@@ -3,7 +3,10 @@
 #
 #   nightly:  cron (or dispatch with kind=nightly)  -> v<ver>-nightly.<date>
 #             per branch in the nightly matrix below; unattended via the
-#             `tagger` environment.
+#             `tagger` environment. A dispatch may add a `suffix` input for a
+#             second nightly on a day that already has one:
+#             v<ver>-nightly.<date>.<suffix>. Scheduled runs never take one, so
+#             the canonical date tag is what downstream consumers keep resolving.
 #   rc:       dispatch with kind=rc                 -> v<ver>-rc.<n>
 #             from any branch (input); n is derived from origin's existing
 #             rc tags for that version (max + 1, starting at 1). Gated by
@@ -43,6 +46,10 @@ on:
         description: "branch to tag (its manifest supplies the version)"
         type: string
         default: main
+      suffix:
+        description: "nightly only: extra identifier for a same-day re-tag, e.g. 'rerun' -> v<ver>-nightly.<date>.rerun (lowercase letters/digits/hyphens, starting with a letter)"
+        type: string
+        default: ""
 
 jobs:
   tag:
@@ -74,12 +81,21 @@ jobs:
           token: ${{ steps.app.outputs.token }}
 
       - name: Create and push tag
+        # Read through the environment rather than interpolating into the script:
+        # the suffix is attacker-controllable text until the validation below runs.
+        env:
+          SUFFIX: ${{ github.event_name == 'workflow_dispatch' && inputs.suffix || '' }}
         run: |
           set -euo pipefail
           git config --global user.email "tech@aztecprotocol.com"
           git config --global user.name "AztecBot"
           version=$(jq -r '."."' .release-please-manifest.json)
           kind=${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
+          suffix=${SUFFIX:-}
+          if [ -n "$suffix" ] && [ "$kind" != nightly ]; then
+            echo "::error::suffix is only valid with kind=nightly; $kind tags are numbered by their own scheme."
+            exit 1
+          fi
           case "$kind" in
             release)
               tag="v${version}"
@@ -95,13 +111,28 @@ jobs:
               ;;
             *)
               tag="v${version}-nightly.$(date -u +%Y%m%d)"
+              if [ -n "$suffix" ]; then
+                # One SemVer prerelease identifier, so the tag stays valid semver and
+                # ci3/dist_tag still reads 'nightly' as the channel (it takes the first
+                # dot-separated identifier). The character set also keeps the value safe
+                # to interpolate into a git ref and the shell below.
+                if ! [[ $suffix =~ ^[a-z][a-z0-9-]*$ ]]; then
+                  echo "::error::Invalid suffix '$suffix': use lowercase letters, digits and hyphens, starting with a letter."
+                  exit 1
+                fi
+                tag="${tag}.${suffix}"
+              fi
               ;;
           esac
           echo "Tagging ${{ matrix.branch }} @ $(git rev-parse --short HEAD): $tag"
           # Refuse to move an existing tag: re-dispatching a release without a
           # version-bump PR must fail loudly, not re-tag.
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on ${{ matrix.branch }} first."
+            if [ "$kind" = nightly ]; then
+              echo "::error::Tag $tag already exists. Re-dispatch with a different 'suffix' input to cut another nightly today (e.g. suffix=rerun)."
+            else
+              echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on ${{ matrix.branch }} first."
+            fi
             exit 1
           fi
           git tag -a "$tag" -m "$tag"
