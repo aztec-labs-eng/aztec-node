@@ -52,11 +52,12 @@ on:
         type: choice
         options: [main]
         default: main
-      # Free text, unlike the two above, because it can afford to be: it reaches
-      # no action input and no checkout ref, only the tag name, and it arrives
-      # as an env var, which bash never parses as code. The pattern checked in
-      # the script is what keeps it one semver prerelease identifier and a legal
-      # ref component.
+      # Free text, unlike the two above, because it can afford to be. `branch`
+      # steers what actions/checkout puts on disk, which is an action input and
+      # so only a choice can constrain it; this steers nothing but the name of
+      # the tag at the end, and reaches the script as an env var, which bash
+      # never parses as code. The pattern checked below is what keeps it one
+      # semver prerelease identifier and a legal ref component.
       suffix:
         description: "nightly only: tells a re-cut apart from the day's scheduled tag, e.g. 'hotfix' -> v<ver>-nightly.<date>.hotfix"
         type: string
@@ -106,6 +107,10 @@ jobs:
           SUFFIX: ${{ github.event_name == 'workflow_dispatch' && inputs.suffix || '' }}
         run: |
           set -euo pipefail
+          # [a-z] below is a collation range: under a UTF-8 locale it also matches
+          # accented letters, which are legal in a ref but not in a semver
+          # identifier. The runner's locale is not ours to assume, so fix it.
+          export LC_ALL=C
           git config --global user.email "noreply@aztec-labs.com"
           git config --global user.name "Aztec Labs release"
           version=$(jq -r '."."' .release-please-manifest.json)
@@ -125,8 +130,16 @@ jobs:
             # ci3/dist_tag reading the channel as 'nightly' (it takes the first
             # dot-separated identifier), and admits nothing that would change the
             # meaning of the ref name: no dot, slash, or leading hyphen.
-            if [[ ! "$suffix" =~ ^[a-z][a-z0-9-]{0,19}$ ]]; then
-              echo "::error::Invalid suffix '$suffix': 1-20 characters, lowercase letters, digits and hyphens, starting with a letter."
+            #
+            # Hyphens are excluded rather than merely anchored: release-image
+            # publishes the per-architecture images as "<tag>-amd64"/"<tag>-arm64"
+            # and assembles the manifest list from them, so a suffix ending in one
+            # of those would name another release's architecture image.
+            #
+            # The rejected value is deliberately not echoed: a newline in it would
+            # close this line and let the rest forge a second ::workflow-command::.
+            if [[ ! "$suffix" =~ ^[a-z][a-z0-9]{0,19}$ ]]; then
+              echo "::error::Invalid suffix rejected: use 1-20 characters, lowercase letters and digits, starting with a letter."
               exit 1
             fi
           fi
@@ -145,6 +158,12 @@ jobs:
               ;;
             *)
               tag="v${version}-nightly.$(date -u +%Y%m%d)"
+              # A suffixed re-cut is released like any nightly, so it takes the
+              # nightly aliases (aztec-up's v<major>-nightly, the docker and S3
+              # channel) from the day's scheduled build. Suffixes are words, not a
+              # sequence, so two re-cuts on one day have no meaningful order
+              # between them: npm's dist-tag only moves for whichever sorts higher,
+              # while the S3 alias always takes the most recent publish.
               if [ -n "$suffix" ]; then
                 tag="${tag}.${suffix}"
               fi
