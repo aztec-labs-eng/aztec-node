@@ -56,27 +56,34 @@ Updates to `provingCostPerMana` are rate-limited on L1 (`FeeLib.updateProvingCos
 at most one update every 30 days, each moving the value by at most ×1.5 (or ÷1.5), with a
 floor of 2 wei per mana.
 
-### Congestion Cost
+### Protocol Fee
 
-An exponential surcharge when the network is congested (inspired by EIP-1559; the
-implementation uses the `fakeExponential` Taylor series approximation from EIP-4844):
+The markup above operator cost: the governance-set protocol fee margin (basis points, applied
+through the congestion multiplier's factor) plus an exponential congestion surcharge when the
+network is congested (inspired by EIP-1559; the implementation uses the `fakeExponential`
+Taylor series approximation from EIP-4844):
 
 ```
-baseCost       = sequencerCost + proverCost
-congestionCost = floor(baseCost * congestionMultiplier / MINIMUM_CONGESTION_MULTIPLIER) - baseCost
+baseCost    = sequencerCost + proverCost
+protocolFee = floor(baseCost * congestionMultiplier / MINIMUM_CONGESTION_MULTIPLIER) - baseCost
 ```
 
-When there is no congestion the multiplier equals `MINIMUM_CONGESTION_MULTIPLIER` (1e9)
-and congestion cost is zero.
+At a zero margin and no congestion the multiplier equals `MINIMUM_CONGESTION_MULTIPLIER` (1e9)
+and the protocol fee is zero.
 
 ### Congestion Multiplier
 
 ```
 excessMana           = max(0, prevExcessMana + prevManaUsed - manaTarget)
 denominator          = manaTarget * 854,700,854 / 1e8    ≈ 8.547 * manaTarget
-congestionMultiplier = fakeExponential(MINIMUM_CONGESTION_MULTIPLIER,
+congestionMultiplier = fakeExponential((10,000 + protocolFeeMarginBps) * 1e5,
                                        min(excessMana, 100 * denominator), denominator)
 ```
+
+The factor `(10,000 + protocolFeeMarginBps) * 1e5` equals `(1 + mu) * 1e9`, so the
+uncongested baseline is `(1 + mu) * MINIMUM_CONGESTION_MULTIPLIER` — exactly 1e9 at a zero
+margin. Only the factor scales with the margin; the divisor in the protocol fee formula stays
+`MINIMUM_CONGESTION_MULTIPLIER` (scaling both would cancel the margin).
 
 Each additional `manaTarget` of excess mana multiplies the fee by `e^(1/8.547) ≈ 1.124`,
 i.e. ~12.5%. The exponent is capped at 100 (multiplier ≤ ~2.7e43 × the minimum) to keep
@@ -85,7 +92,7 @@ the Taylor series from overflowing.
 ### Total
 
 ```
-minFeePerMana = sequencerCost + proverCost + congestionCost
+minFeePerMana = sequencerCost + proverCost + protocolFee
 ```
 
 Each component is converted from ETH to the fee asset individually (rounding up) before

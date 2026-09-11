@@ -65,12 +65,12 @@ describe('computeExcessMana', () => {
 
 describe('computeCongestionMultiplier', () => {
   it('returns MINIMUM_CONGESTION_MULTIPLIER when excess is zero', () => {
-    expect(computeCongestionMultiplier(0n, 100_000_000n)).toBe(MINIMUM_CONGESTION_MULTIPLIER);
+    expect(computeCongestionMultiplier(0n, 100_000_000n, 0n)).toBe(MINIMUM_CONGESTION_MULTIPLIER);
   });
 
   it('increases with excess mana', () => {
-    const low = computeCongestionMultiplier(100_000n, 100_000_000n);
-    const high = computeCongestionMultiplier(200_000n, 100_000_000n);
+    const low = computeCongestionMultiplier(100_000n, 100_000_000n, 0n);
+    const high = computeCongestionMultiplier(200_000n, 100_000_000n, 0n);
     expect(high).toBeGreaterThan(low);
     expect(low).toBeGreaterThan(MINIMUM_CONGESTION_MULTIPLIER);
   });
@@ -78,10 +78,15 @@ describe('computeCongestionMultiplier', () => {
   it('increases by ~12.5% per manaTarget of excess', () => {
     // When excessMana = manaTarget, multiplier ≈ 1.125 * MINIMUM_CONGESTION_MULTIPLIER
     const manaTarget = 100_000_000n;
-    const multiplier = computeCongestionMultiplier(manaTarget, manaTarget);
+    const multiplier = computeCongestionMultiplier(manaTarget, manaTarget, 0n);
     const ratio = Number(multiplier) / Number(MINIMUM_CONGESTION_MULTIPLIER);
     expect(ratio).toBeGreaterThan(1.12);
     expect(ratio).toBeLessThan(1.13);
+  });
+
+  it('scales the zero-excess baseline by exactly (10000 + bps) * 1e5', () => {
+    expect(computeCongestionMultiplier(0n, 100_000_000n, 5000n)).toBe(15_000n * 100_000n);
+    expect(computeCongestionMultiplier(0n, 100_000_000n, 65_535n)).toBe(75_535n * 100_000n);
   });
 });
 
@@ -94,6 +99,7 @@ describe('computeManaMinFee', () => {
     provingCostPerManaEth: 0n,
     excessMana: 0n,
     ethPerFeeAsset: 1_000_000_000_000n, // 1:1 ETH:FeeAsset
+    protocolFeeMarginBps: 0n,
   };
 
   it('returns zero when manaTarget is zero', () => {
@@ -123,12 +129,36 @@ describe('computeManaMinFee', () => {
     expect(high).toBeGreaterThan(low);
   });
 
-  it('has zero congestion cost when excess mana is zero', () => {
-    // With zero excess, congestionMultiplier = MINIMUM_CONGESTION_MULTIPLIER,
-    // so congestionCost = total * 1 - total = 0
+  it('has zero protocol fee when excess mana and margin are zero', () => {
+    // With zero excess and zero margin, congestionMultiplier = MINIMUM_CONGESTION_MULTIPLIER,
+    // so protocolFee = total * 1 - total = 0
     const fee = computeManaMinFee(baseParams);
     // The fee should equal just sequencer + prover costs
     const feeWithExcess = computeManaMinFee({ ...baseParams, excessMana: baseParams.manaTarget });
     expect(feeWithExcess).toBeGreaterThan(fee);
+  });
+
+  it('scales the fee by ~(1 + mu) at zero excess', () => {
+    const base = computeManaMinFee(baseParams);
+    const withMargin = computeManaMinFee({ ...baseParams, protocolFeeMarginBps: 5000n });
+    // fee = cost + (floor(cost * 3 / 2) - cost) converted per component; allow 1 wei of Ceil slack.
+    const expected = (base * 15_000n) / 10_000n;
+    expect(withMargin).toBeGreaterThanOrEqual(expected - 1n);
+    expect(withMargin).toBeLessThanOrEqual(expected + 1n);
+    expect(withMargin).toBeGreaterThan(base);
+  });
+
+  it('applies the margin on top of congestion multiplicatively', () => {
+    const congested = computeManaMinFee({ ...baseParams, excessMana: baseParams.manaTarget * 3n });
+    const congestedWithMargin = computeManaMinFee({
+      ...baseParams,
+      excessMana: baseParams.manaTarget * 3n,
+      protocolFeeMarginBps: 5000n,
+    });
+    expect(congestedWithMargin).toBeGreaterThan(congested);
+    // The margin scales the multiplier's factor, so the marked-up congested fee is ~1.5x.
+    const ratio = Number(congestedWithMargin) / Number(congested);
+    expect(ratio).toBeGreaterThan(1.49);
+    expect(ratio).toBeLessThan(1.51);
   });
 });
