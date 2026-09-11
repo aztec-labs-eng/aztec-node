@@ -53,11 +53,11 @@ on:
         options: [main]
         default: main
       # Free text, unlike the two above, because it can afford to be. `branch`
-      # steers what actions/checkout puts on disk, which is an action input and
-      # so only a choice can constrain it; this steers nothing but the name of
-      # the tag at the end, and reaches the script as an env var, which bash
-      # never parses as code. The pattern checked below is what keeps it one
-      # semver prerelease identifier and a legal ref component.
+      # steers what actions/checkout puts on disk before any of this file's own
+      # code runs, so it is constrained where it is declared; this steers nothing
+      # but the name of the tag at the end, and reaches the script as an env var,
+      # which bash never parses as code. The pattern checked below is what keeps
+      # it one semver prerelease identifier and a legal ref component.
       suffix:
         description: "nightly only: tells a re-cut apart from the day's scheduled tag, e.g. 'hotfix' -> v<ver>-nightly.<date>.hotfix"
         type: string
@@ -159,11 +159,12 @@ jobs:
             *)
               tag="v${version}-nightly.$(date -u +%Y%m%d)"
               # A suffixed re-cut is released like any nightly, so it takes the
-              # nightly aliases (aztec-up's v<major>-nightly, the docker and S3
-              # channel) from the day's scheduled build. Suffixes are words, not a
-              # sequence, so two re-cuts on one day have no meaningful order
-              # between them: npm's dist-tag only moves for whichever sorts higher,
-              # while the S3 alias always takes the most recent publish.
+              # nightly aliases from the day's scheduled build: aztec-up's
+              # v<major>-nightly on S3, and npm's dist-tag. Suffixes are words, not
+              # a sequence, so two re-cuts on one day have no meaningful order
+              # between them — the S3 alias follows whichever published last, while
+              # npm's only moves for whichever sorts higher. Neither promises a
+              # global order; pin an exact version if you need one.
               if [ -n "$suffix" ]; then
                 tag="${tag}.${suffix}"
               fi
