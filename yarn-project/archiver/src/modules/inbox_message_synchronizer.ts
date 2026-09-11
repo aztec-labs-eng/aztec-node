@@ -82,16 +82,16 @@ export type InboxMessageRecoveryProgress = {
  *
  * Recovery is conservative: it keeps what it can still authenticate on L1 and reconstructs the rest. It first finds
  * an anchor: either the canonical tip itself is a shorter prefix of the local log (checked by hash, so truncation
- * needs no event lookups), or a stored message whose event L1 still emits at the same index and hash within five L1
- * blocks of the height it was observed at, found by walking the log backwards with a bounded number of event lookups
- * per pass. A lookup that misses moves the search to an older candidate, and running out of candidates falls back to
- * the deployment block, which is itself re-read: the Inbox's first message can be emitted by a later transaction in
- * the block the contracts were deployed in, so the deployment block is the one block an exclusive cursor may not
- * skip. Once an anchor is chosen the log is rolled back to it in one store transaction: the suffix
- * rows are deleted, the proposed blocks that consumed more messages than the retained count are pruned with their
- * descendants, the scanned cursor rewinds to the block before the anchor's and the syncpoint is cleared. Nothing is
- * fetched in that pass; ordinary forward ingestion refills the log from the rewound cursor, rewriting the retained
- * rows in place and appending the canonical suffix.
+ * needs no event lookups), or a stored message whose event L1 still emits at the same index and hash within a window
+ * of a hundred L1 blocks around the height it was observed at, found by walking the log backwards with a bounded
+ * number of event lookups per pass. A lookup that misses moves the search to an older candidate, and running out of
+ * candidates falls back to the deployment block, which is itself re-read: the Inbox's first message can be emitted by
+ * a later transaction in the block the contracts were deployed in, so the deployment block is the one block an
+ * exclusive cursor may not skip. Once an anchor is chosen the log is rolled back to it in one store transaction: the
+ * suffix rows are deleted, the proposed blocks that consumed more messages than the retained count are pruned with
+ * their descendants, the scanned cursor rewinds to the block before the anchor's and the syncpoint is cleared.
+ * Nothing is fetched in that pass; ordinary forward ingestion refills the log from the rewound cursor, rewriting the
+ * retained rows in place and appending the canonical suffix.
  *
  * The accepted cost is that a message the bounded search cannot place is discarded even if its content is unchanged
  * and comes straight back: the reference case is a message re-mined far from its old height, whose lookup misses, so

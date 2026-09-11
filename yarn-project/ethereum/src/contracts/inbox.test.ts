@@ -22,7 +22,7 @@ import { EthCheatCodes } from '../test/eth_cheat_codes.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ViemClient } from '../types.js';
-import { InboxContract } from './inbox.js';
+import { InboxContract, MESSAGE_SENT_SEARCH_WINDOW_BLOCKS, messageSentSearchWindow } from './inbox.js';
 import { RollupContract } from './rollup.js';
 
 describe('InboxContract', () => {
@@ -175,5 +175,30 @@ describe('InboxContract', () => {
         /L1 RPC request failed/,
       );
     });
+  });
+});
+
+describe('messageSentSearchWindow', () => {
+  const width = ({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) => toBlock - fromBlock + 1n;
+
+  it('spans exactly one window of heights around the recorded one', () => {
+    const window = messageSentSearchWindow(1_000n)!;
+    expect(window).toEqual({ fromBlock: 951n, toBlock: 1050n });
+    expect(width(window)).toEqual(MESSAGE_SENT_SEARCH_WINDOW_BLOCKS);
+  });
+
+  it('clips to the genesis block instead of reaching below it', () => {
+    expect(messageSentSearchWindow(10n)).toEqual({ fromBlock: 1n, toBlock: 60n });
+    expect(messageSentSearchWindow(1n)).toEqual({ fromBlock: 1n, toBlock: 51n });
+  });
+
+  it('clips to the upper bound instead of sliding down to keep its width', () => {
+    const window = messageSentSearchWindow(1_000n, 1_010n)!;
+    expect(window).toEqual({ fromBlock: 951n, toBlock: 1_010n });
+    expect(width(window)).toBeLessThan(MESSAGE_SENT_SEARCH_WINDOW_BLOCKS);
+  });
+
+  it('leaves nothing to search when the upper bound is below the window', () => {
+    expect(messageSentSearchWindow(1_000n, 900n)).toBeUndefined();
   });
 });

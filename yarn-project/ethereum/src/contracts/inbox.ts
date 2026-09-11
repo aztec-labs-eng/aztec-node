@@ -11,7 +11,7 @@ import type { DeployAztecL1ContractsReturnType } from '../deploy_aztec_l1_contra
 import type { L1ReaderConfig } from '../l1_reader.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
-import type { L1EventLog } from './log.js';
+import { type L1EventLog, fetchLogsBisectingRange } from './log.js';
 import { checkBlockTag, getRevertedErrorName } from './utils.js';
 
 /** The full L1-to-L2 message emitted by the Inbox, decoded from the event. Hashing it yields `leaf`. */
@@ -38,6 +38,31 @@ export type MessageSentArgs = {
 
 /** Log type for MessageSent events. */
 export type MessageSentLog = L1EventLog<MessageSentArgs>;
+
+/** Width, in L1 blocks, of the window {@link messageSentSearchWindow} searches before it is clipped. */
+export const MESSAGE_SENT_SEARCH_WINDOW_BLOCKS = 100n;
+
+/**
+ * The inclusive L1 block range a MessageSent lookup covers around the height a message was observed at: a window of
+ * {@link MESSAGE_SENT_SEARCH_WINDOW_BLOCKS} heights centred just above that height, clipped at block 1 and at
+ * `upperBound`. Clipping shortens the window rather than sliding it, so a window near genesis or near the caller's
+ * captured head never reaches blocks outside the range it was asked for. A recorded height only says where the
+ * message was first seen, so the window has to be wide enough to still place an unchanged message that a reorg
+ * re-mined some way away from it.
+ *
+ * Returns `undefined` when the bound leaves nothing to search, which callers read as a miss: a provider rejects an
+ * inverted range rather than reporting it empty, and an exception is not a miss, so the caller would otherwise retry
+ * the same lookup forever.
+ */
+export function messageSentSearchWindow(
+  aroundL1BlockNumber: bigint,
+  upperBound?: bigint,
+): { fromBlock: bigint; toBlock: bigint } | undefined {
+  const fromBlock = maxBigint(aroundL1BlockNumber - (MESSAGE_SENT_SEARCH_WINDOW_BLOCKS / 2n - 1n), 1n);
+  const windowEnd = aroundL1BlockNumber + MESSAGE_SENT_SEARCH_WINDOW_BLOCKS / 2n;
+  const toBlock = upperBound === undefined ? windowEnd : minBigint(windowEnd, upperBound);
+  return fromBlock > toBlock ? undefined : { fromBlock, toBlock };
+}
 
 export class InboxContract {
   private readonly inbox: GetContractReturnType<typeof InboxAbi, ViemClient>;
@@ -139,6 +164,10 @@ export class InboxContract {
    * Fetches MessageSent events for a specific message hash around a specific block, never looking past `upperBound`
    * when one is given. Callers comparing the result against a state read at a captured L1 head pass that head, so an
    * event only reachable above it is not returned as evidence about the head's chain.
+   *
+   * The query spans up to {@link MESSAGE_SENT_SEARCH_WINDOW_BLOCKS} L1 blocks, which some endpoints refuse in a
+   * single `eth_getLogs`; a refused range is halved and retried rather than narrowed, so a rejection still ends as
+   * an error and never as an empty result.
    */
   async getMessageSentEventByHash(
     msgHash: Hex,
@@ -149,15 +178,13 @@ export class InboxContract {
     // due to an L1 reorg. The use case for this method is usually checking if a message still exists on the Inbox after
     // a reorg, so it's possible the message was moved one block up or down, and that the original L1 block where we
     // saw it no longer exists, rendering the block-by-hash approach invalid.
-    const fromBlock = maxBigint(aroundL1BlockNumber - 5n, 1n);
-    const windowEnd = aroundL1BlockNumber + 5n;
-    const toBlock = upperBound === undefined ? windowEnd : minBigint(windowEnd, upperBound);
-    // An upper bound below the window leaves nothing to search. A provider rejects such a range rather than
-    // reporting it empty, and an exception is not a miss, so the caller would retry the same lookup forever.
-    if (fromBlock > toBlock) {
+    const window = messageSentSearchWindow(aroundL1BlockNumber, upperBound);
+    if (window === undefined) {
       return undefined;
     }
-    const [log] = await this.inbox.getEvents.MessageSent({ hash: msgHash }, { fromBlock, toBlock });
+    const [log] = await fetchLogsBisectingRange(window.fromBlock, window.toBlock, (fromBlock, toBlock) =>
+      this.inbox.getEvents.MessageSent({ hash: msgHash }, { fromBlock, toBlock }),
+    );
     return log && this.mapMessageSentLog(log);
   }
 

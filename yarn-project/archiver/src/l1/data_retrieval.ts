@@ -8,14 +8,15 @@ import {
   decodeCheckpointBlobDataFromBlobs,
   encodeBlockBlobData,
 } from '@aztec-labs/blob-lib';
-import type {
-  CheckpointProposedLog,
-  EpochProofPublicInputArgs,
-  InboxContract,
-  MessageSentLog,
-  RollupContract,
-  ViemCommitteeAttestations,
-  ViemHeader,
+import {
+  type CheckpointProposedLog,
+  type EpochProofPublicInputArgs,
+  type InboxContract,
+  type MessageSentLog,
+  type RollupContract,
+  type ViemCommitteeAttestations,
+  type ViemHeader,
+  fetchLogsBisectingRange,
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
@@ -379,7 +380,9 @@ export async function retrieveL1ToL2Messages(
 ): Promise<InboxMessage[]> {
   const retrievedL1ToL2Messages: InboxMessage[] = [];
   while (searchStartBlock <= searchEndBlock) {
-    const messageSentLogs = await getMessageSentEventsBisecting(inbox, searchStartBlock, searchEndBlock);
+    const messageSentLogs = await fetchLogsBisectingRange(searchStartBlock, searchEndBlock, (fromBlock, toBlock) =>
+      inbox.getMessageSentEvents(fromBlock, toBlock),
+    );
 
     if (messageSentLogs.length === 0) {
       break;
@@ -390,32 +393,6 @@ export async function retrieveL1ToL2Messages(
   }
 
   return retrievedL1ToL2Messages;
-}
-
-/**
- * Fetches the Inbox's MessageSent events in an L1 block range, halving the range at complete-block boundaries when
- * the provider rejects it (typically a log-range or response-size limit). A single block the provider cannot serve
- * is a provider or history failure and is thrown as such: a range this function returns is complete, and a failure
- * is never reported as an absence of messages.
- */
-async function getMessageSentEventsBisecting(
-  inbox: InboxContract,
-  fromBlock: bigint,
-  toBlock: bigint,
-): Promise<MessageSentLog[]> {
-  try {
-    return await inbox.getMessageSentEvents(fromBlock, toBlock);
-  } catch (err) {
-    if (fromBlock >= toBlock) {
-      throw err;
-    }
-    const midBlock = fromBlock + (toBlock - fromBlock) / 2n;
-    const [lower, upper] = [
-      await getMessageSentEventsBisecting(inbox, fromBlock, midBlock),
-      await getMessageSentEventsBisecting(inbox, midBlock + 1n, toBlock),
-    ];
-    return [...lower, ...upper];
-  }
 }
 
 function mapLogInboxMessage(log: MessageSentLog): InboxMessage {

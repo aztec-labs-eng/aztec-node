@@ -1610,12 +1610,12 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       await addLocalBlocksConsuming([3]);
 
-      // The messages move 20 L1 blocks later, well past the +-5 window a lookup around their old height covers,
-      // and two new ones follow them.
-      fake.moveMessagesToL1Block(100n, 120n);
+      // The messages move 60 L1 blocks later, past the window a lookup around their old height covers, and two new
+      // ones follow them.
+      fake.moveMessagesToL1Block(100n, 160n);
       const appended = randomLeaves(2);
-      fake.addMessages(CheckpointNumber(2), 121n, appended);
-      fake.setL1BlockNumber(125n);
+      fake.addMessages(CheckpointNumber(2), 161n, appended);
+      fake.setL1BlockNumber(165n);
       await archiver.syncImmediate();
 
       expect(await getStoredLeaves()).toEqual(asHex([...msgs, ...appended]));
@@ -1623,7 +1623,7 @@ describe('Archiver Sync', () => {
       expect(eventByHashSpy).not.toHaveBeenCalled();
       expect(pruneSpy).not.toHaveBeenCalled();
       expect(await localBlockNumbers()).toEqual([1]);
-      expect(archiver.getL1BlockNumber()).toEqual(125n);
+      expect(archiver.getL1BlockNumber()).toEqual(165n);
       expect(synchronizer.isRecoveringMessages()).toBe(false);
     });
 
@@ -1635,20 +1635,21 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       const [block1] = await addLocalBlocksConsuming([2, 3]);
 
-      // A and B stay in block 100. C keeps its content but moves 29 blocks away, out of the lookup window, and D is
-      // replaced by X. The newest message a lookup can still place is B, so the log rolls back to it.
+      // A and B stay in block 100. C keeps its content but moves 59 blocks away, one block past the top of the
+      // window around its recorded height, and D is replaced by X. The newest message a lookup can still place is B,
+      // so the log rolls back to it.
       fake.removeMessagesAfter(3);
-      fake.moveMessagesToL1Block(101n, 130n);
+      fake.moveMessagesToL1Block(101n, 160n);
       const x = Fr.random();
-      fake.addMessages(CheckpointNumber(2), 131n, [x]);
-      fake.setL1BlockNumber(135n);
+      fake.addMessages(CheckpointNumber(2), 161n, [x]);
+      fake.setL1BlockNumber(165n);
       await archiver.syncImmediate();
 
       expect(await getStoredLeaves()).toEqual(asHex([a, b, c, x]));
       // Block 2 consumed C, which comes back unchanged, yet it was pruned: the rollback precedes the refetch.
       expect(await localBlockNumbers()).toEqual([block1.number]);
       expect(pruneSpy).toHaveBeenCalledTimes(1);
-      expect(archiver.getL1BlockNumber()).toEqual(135n);
+      expect(archiver.getL1BlockNumber()).toEqual(165n);
       expect(synchronizer.isRecoveringMessages()).toBe(false);
     });
 
@@ -1663,11 +1664,11 @@ describe('Archiver Sync', () => {
       // The reorg keeps the first four messages but re-mines them far from their old heights, so every lookup for
       // them misses, and replaces the last two.
       fake.removeMessagesAfter(4);
-      fake.moveMessagesToL1Block(100n, 130n);
-      fake.moveMessagesToL1Block(101n, 130n);
+      fake.moveMessagesToL1Block(100n, 160n);
+      fake.moveMessagesToL1Block(101n, 160n);
       const replacement = randomLeaves(2);
-      fake.addMessages(CheckpointNumber(2), 131n, replacement);
-      fake.setL1BlockNumber(135n);
+      fake.addMessages(CheckpointNumber(2), 161n, replacement);
+      fake.setL1BlockNumber(165n);
       await archiver.syncImmediate();
 
       // Everything comes back, four of the six messages unchanged, but the search could place none of them, so the
@@ -1684,7 +1685,7 @@ describe('Archiver Sync', () => {
           ],
         }),
       );
-      expect(archiver.getL1BlockNumber()).toEqual(135n);
+      expect(archiver.getL1BlockNumber()).toEqual(165n);
     });
 
     it('keeps the prefix through a message found inside the lookup window', async () => {
@@ -1695,20 +1696,68 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       const [block1, block2] = await addLocalBlocksConsuming([2, 3]);
 
-      // C moves only to the far edge of the +-5 window around its recorded height, so the lookup still places it and
-      // the rollback keeps it and the block that ended on it.
+      // C moves to the very top of the window around its recorded height, 50 blocks above it, so the lookup still
+      // places it and the rollback keeps it and the block that ended on it.
       fake.removeMessagesAfter(3);
-      fake.moveMessagesToL1Block(101n, 106n);
+      fake.moveMessagesToL1Block(101n, 151n);
       const x = Fr.random();
-      fake.addMessages(CheckpointNumber(2), 107n, [x]);
-      fake.setL1BlockNumber(115n);
+      fake.addMessages(CheckpointNumber(2), 152n, [x]);
+      fake.setL1BlockNumber(155n);
       await archiver.syncImmediate();
 
       expect(await getStoredLeaves()).toEqual(asHex([a, b, c, x]));
       expect(eventByHashSpy).toHaveBeenCalled();
       expect(await localBlockNumbers()).toEqual([block1.number, block2.number]);
       expect(pruneSpy).not.toHaveBeenCalled();
-      expect(archiver.getL1BlockNumber()).toEqual(115n);
+      expect(archiver.getL1BlockNumber()).toEqual(155n);
+    });
+
+    it('places a message re-mined forty blocks above its recorded height', async () => {
+      const [a, b, c, d] = randomLeaves(4);
+      fake.addMessages(CheckpointNumber(1), 100n, [a, b]);
+      fake.addMessages(CheckpointNumber(1), 101n, [c, d]);
+      fake.setL1BlockNumber(110n);
+      await archiver.syncImmediate();
+      const [block1, block2] = await addLocalBlocksConsuming([2, 3]);
+
+      // C keeps its content, index and rolling hash but is re-mined 40 L1 blocks above the height it was observed
+      // at, and D is replaced by X. A recorded height is only a hint, and the window around it is wide enough to
+      // still place C, so the rollback keeps it and the block that ended on it.
+      fake.removeMessagesAfter(3);
+      fake.moveMessagesToL1Block(101n, 141n);
+      const x = Fr.random();
+      fake.addMessages(CheckpointNumber(2), 142n, [x]);
+      fake.setL1BlockNumber(145n);
+      await archiver.syncImmediate();
+
+      expect(await getStoredLeaves()).toEqual(asHex([a, b, c, x]));
+      expect(await localBlockNumbers()).toEqual([block1.number, block2.number]);
+      expect(pruneSpy).not.toHaveBeenCalled();
+      expect(archiver.getL1BlockNumber()).toEqual(145n);
+      expect(synchronizer.isRecoveringMessages()).toBe(false);
+    });
+
+    it('searches from the genesis block for a message recorded close to it', async () => {
+      const [a, b, c, d] = randomLeaves(4);
+      fake.addMessages(CheckpointNumber(1), 3n, [a, b]);
+      fake.addMessages(CheckpointNumber(1), 4n, [c, d]);
+      fake.setL1BlockNumber(20n);
+      await archiver.syncImmediate();
+      const [block1, block2] = await addLocalBlocksConsuming([2, 3]);
+
+      // The window below a height this close to genesis is clipped at block 1 rather than reaching below it: the
+      // provider would reject such a range, and an exception is not a miss.
+      fake.removeMessagesAfter(3);
+      const x = Fr.random();
+      fake.addMessages(CheckpointNumber(2), 5n, [x]);
+      fake.setL1BlockNumber(21n);
+      await archiver.syncImmediate();
+
+      expect(await getStoredLeaves()).toEqual(asHex([a, b, c, x]));
+      expect(await localBlockNumbers()).toEqual([block1.number, block2.number]);
+      expect(pruneSpy).not.toHaveBeenCalled();
+      expect(archiver.getL1BlockNumber()).toEqual(21n);
+      expect(synchronizer.isRecoveringMessages()).toBe(false);
     });
 
     it('refetches the whole L1 block the anchor sits in, including the messages that follow it there', async () => {
@@ -1903,9 +1952,9 @@ describe('Archiver Sync', () => {
       // pass below, leaving 115 as the synced height.
       await archiver.syncImmediate();
 
-      // A replacement chain shorter than every stored height by more than the lookup window, carrying none of the
-      // stored messages. Each candidate's window (95..105 and 105..115) starts above the new head, so bounding it by
-      // the head inverts the range: no anchor is found, and the log rolls back to the deployment block.
+      // A replacement chain shorter than every stored height, carrying none of the stored messages. Each candidate's
+      // window is clipped to the new head rather than slid down to keep its width, so it cannot reach an event above
+      // the head: no anchor is found, and the log rolls back to the deployment block.
       fake.removeMessagesAfter(0);
       const replacement = randomLeaves(2);
       fake.addMessages(CheckpointNumber(1), 85n, replacement);
@@ -1980,10 +2029,10 @@ describe('Archiver Sync', () => {
       // Every surviving message moved out of the lookup window, so the rollback goes to the deployment block; the
       // provider then cannot serve the range the refetch needs.
       fake.removeMessagesAfter(2);
-      fake.moveMessagesToL1Block(100n, 130n);
+      fake.moveMessagesToL1Block(100n, 160n);
       const replacement = randomLeaves(2);
-      fake.addMessages(CheckpointNumber(2), 131n, replacement);
-      fake.setL1BlockNumber(135n);
+      fake.addMessages(CheckpointNumber(2), 161n, replacement);
+      fake.setL1BlockNumber(165n);
       fake.setMessageSentEventsFailure(from => from <= 1n);
 
       await expect(archiver.syncImmediate()).rejects.toThrow(/Cannot serve MessageSent logs/);
@@ -1999,7 +2048,7 @@ describe('Archiver Sync', () => {
       fake.setMessageSentEventsFailure(undefined);
       await archiver.syncImmediate();
       expect(await getStoredLeaves()).toEqual(asHex([...msgs.slice(0, 2), ...replacement]));
-      expect(archiver.getL1BlockNumber()).toEqual(135n);
+      expect(archiver.getL1BlockNumber()).toEqual(165n);
     });
 
     it('resumes a bounded anchor search across iterations while the head advances', async () => {
