@@ -36,7 +36,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { SlasherConfig, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
-import { type InboxBucket, InboxBucketRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { InboxMessagePrefixRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
   type BlockProposal,
   type CheckpointProposalCore,
@@ -46,11 +46,11 @@ import {
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
-  makeBlockHeader,
   makeBlockProposal,
   makeCheckpointAttestation,
   makeCheckpointHeader,
   makeCheckpointProposal,
+  makeBlockHeader as makeRandomBlockHeader,
   mockTx,
 } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
@@ -92,6 +92,16 @@ function makeKeyStore(validator: {
     ],
   };
 }
+
+/** A block header consuming no Inbox messages (leaf count zero), so the streaming checks see an empty bundle. */
+function makeBlockHeader(...args: Parameters<typeof makeRandomBlockHeader>) {
+  const header = makeRandomBlockHeader(...args);
+  header.state.l1ToL2MessageTree.nextAvailableLeafIndex = 0;
+  return header;
+}
+
+/** The empty Inbox position every chain starts from. */
+const zeroInboxPosition = () => ({ totalMessageCount: 0n, rollingHash: Fr.ZERO });
 
 describe('ValidatorClient', () => {
   let config: ValidatorClientConfig &
@@ -414,11 +424,13 @@ describe('ValidatorClient', () => {
       blockSource.getBlockData.mockImplementation(query =>
         Promise.resolve('number' in query && query.number !== blockNumber - 1 ? undefined : parentBlockData),
       );
-      // With the parent resolvable, the censorship check runs too: leave no bucket after genesis so nothing is left
-      // unconsumed and validation reaches the header comparison.
-      l1ToL2MessageSource.getInboxBucket.mockImplementation(seq =>
-        Promise.resolve(seq === 0n ? genesisInboxBucket : undefined),
-      );
+      // With the parent resolvable, the consumed range is read and its ending hash compared with the proposal
+      // header's: serve an empty range ending at that hash so validation reaches the header comparison.
+      l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue({
+        messages: [],
+        start: zeroInboxPosition(),
+        end: { totalMessageCount: 0n, rollingHash: proposalHeader.inboxRollingHash },
+      });
       checkpointsBuilder.getFork.mockResolvedValue({
         [Symbol.asyncDispose]: disposeFork,
         // Match the proposal's expected starting archive so the fork archive check passes and validation
@@ -469,22 +481,14 @@ describe('ValidatorClient', () => {
           Array.isArray(args) &&
           args[0]?.offenseType === OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
       );
-    // Streaming Inbox: an empty-consumption streaming setup. Proposals reference the genesis Inbox bucket, the
-    // parent block's L1-to-L2 leaf count equals its cumulative total (0), so the derived per-block bundle is empty.
-    const genesisInboxBucket: InboxBucket = {
-      seq: 0n,
-      inboxRollingHash: Fr.ZERO,
-      totalMsgCount: 0n,
-      timestamp: 0n,
-      msgCount: 0,
-      lastMessageIndex: 0n,
-    };
-    const genesisBucketRef = InboxBucketRef.fromBucket(genesisInboxBucket);
+    // Streaming Inbox: an empty-consumption streaming setup. Proposals reference the empty message prefix and the
+    // parent block's L1-to-L2 leaf count is 0, so the derived per-block bundle is empty.
+    const genesisPrefixRef = InboxMessagePrefixRef.empty();
 
     beforeEach(async () => {
       const blockHeader = makeBlockHeader(1, { blockNumber: BlockNumber(100), slotNumber: SlotNumber(100) });
       blockNumber = BlockNumber(blockHeader.globalVariables.blockNumber);
-      proposal = ValidatedBlockProposal(await makeBlockProposal({ blockHeader, bucketRef: genesisBucketRef }));
+      proposal = ValidatedBlockProposal(await makeBlockProposal({ blockHeader, inboxPrefixRef: genesisPrefixRef }));
       // The proposal targets slot 100, which under pipelining is built during the previous slot. Set the
       // wall clock to the start of that build slot (target_slot_start - S), matching how a pipelined
       // proposer is positioned when validating an inbound block proposal. With S - 2E = 0 in this config
@@ -558,10 +562,13 @@ describe('ValidatorClient', () => {
       blockSource.getGenesisValues.mockResolvedValue({ genesisArchiveRoot: new Fr(GENESIS_ARCHIVE_ROOT) });
       blockSource.syncImmediate.mockImplementation(() => Promise.resolve());
 
-      // Resolve every Inbox bucket query to the genesis bucket, so streaming checks accept with an empty bundle.
-      l1ToL2MessageSource.getInboxBucket.mockResolvedValue(genesisInboxBucket);
-      l1ToL2MessageSource.getInboxBucketByTotalMsgCount.mockResolvedValue(genesisInboxBucket);
-      l1ToL2MessageSource.getL1ToL2MessagesBetweenBuckets.mockResolvedValue([]);
+      // Resolve every Inbox query to the empty prefix, so streaming checks accept with an empty bundle.
+      l1ToL2MessageSource.getMessagePosition.mockResolvedValue(zeroInboxPosition());
+      l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue({
+        messages: [],
+        start: zeroInboxPosition(),
+        end: zeroInboxPosition(),
+      });
       l1ToL2MessageSource.getL1ToL2MessagesBetweenLeafCounts.mockResolvedValue([]);
 
       const clonedBlockHeader = blockHeader.clone();
@@ -720,7 +727,7 @@ describe('ValidatorClient', () => {
             blockNumber,
             slotNumber: futureSlot,
           }),
-          bucketRef: genesisBucketRef,
+          inboxPrefixRef: genesisPrefixRef,
         }),
       );
 
@@ -766,7 +773,7 @@ describe('ValidatorClient', () => {
           archiveRoot: proposal.archive,
           txHashes: proposal.txHashes,
           signer: selfSigner,
-          bucketRef: genesisBucketRef,
+          inboxPrefixRef: genesisPrefixRef,
         }),
       );
 
@@ -1470,7 +1477,7 @@ describe('ValidatorClient', () => {
       const duplicateProposal = ValidatedBlockProposal(
         await makeBlockProposal({
           blockHeader: proposal.blockHeader,
-          bucketRef: proposal.bucketRef,
+          inboxPrefixRef: proposal.inboxPrefixRef,
           txHashes: [txHash, txHash],
           signer,
         }),
