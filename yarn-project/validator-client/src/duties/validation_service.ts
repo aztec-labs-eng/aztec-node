@@ -4,7 +4,7 @@ import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Signature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
-import type { InboxBucketRef } from '@aztec-labs/stdlib/messaging';
+import type { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import {
   BlockProposal,
   type BlockProposalOptions,
@@ -52,7 +52,7 @@ export class ValidationService {
     txs: Tx[],
     proposerAttesterAddress: EthAddress | undefined,
     options: BlockProposalOptions,
-    bucketRef?: InboxBucketRef,
+    inboxPrefixRef?: InboxMessagePrefixRef,
   ): Promise<BlockProposal> {
     // For testing: change the new archive to trigger state_mismatch validation failure
     if (options.broadcastInvalidBlockProposal) {
@@ -81,7 +81,7 @@ export class ValidationService {
       this.signatureContext,
       payloadSigner,
       txsSigner,
-      bucketRef,
+      inboxPrefixRef,
     );
   }
 
