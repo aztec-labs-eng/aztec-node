@@ -12,6 +12,7 @@ terraform.tfstate*
 .tsbuildinfo
 bench-out
 dumped-avm-circuit-inputs
+tmp/
 
 # Local Netlify folder
 .netlify
