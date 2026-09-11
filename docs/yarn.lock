@@ -283,12 +283,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec-foundation/l1-artifacts@npm:6.0.0-nightly.20260910":
-  version: 6.0.0-nightly.20260910
-  resolution: "@aztec-foundation/l1-artifacts@npm:6.0.0-nightly.20260910"
+"@aztec-foundation/l1-artifacts@npm:6.0.0-nightly.20260911.a":
+  version: 6.0.0-nightly.20260911.a
+  resolution: "@aztec-foundation/l1-artifacts@npm:6.0.0-nightly.20260911.a"
   dependencies:
     tslib: "npm:^2.4.0"
-  checksum: 10c0/50f12a551b57abdd12b2b83fba731eb083eabbc35aac1ffe742ce2dc3ee9f29b2826f7b8a5330ed3512ac63a75080fb50c67e611404aaf50eb910ffbb828f6fb
+  checksum: 10c0/89d3b74f883a24ef7b3ea1171bad9e2bdfae9fbb9b19ac72563599848cb0d2d15677a2cce7b3e3557a15438bee6ad494a9c6bcd8c8c355d34aa4e495ccd08bd2
   languageName: node
   linkType: hard
 
@@ -8743,7 +8743,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "aztec-docs@workspace:."
   dependencies:
-    "@aztec-foundation/l1-artifacts": "npm:6.0.0-nightly.20260910"
+    "@aztec-foundation/l1-artifacts": "npm:6.0.0-nightly.20260911.a"
     "@docusaurus/core": "npm:3.10.1"
     "@docusaurus/faster": "npm:3.10.1"
     "@docusaurus/plugin-content-docs": "npm:3.10.1"
