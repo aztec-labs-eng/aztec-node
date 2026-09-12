@@ -1,6 +1,8 @@
 import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toArray } from '@aztec-labs/foundation/iterable';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { ContractClassPublishedEvent } from '@aztec-labs/protocol-contracts/class-registry';
@@ -20,11 +22,22 @@ import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
-import { InboxConsumptionRewindsError, InboxPrefixMismatchError, InboxPrefixNotSyncedError } from '../errors.js';
+import {
+  InboxConsumptionRewindsError,
+  InboxMessagePrefixChangedError,
+  InboxPrefixMismatchError,
+  InboxPrefixNotSyncedError,
+  NoProposedCheckpointToPromoteError,
+} from '../errors.js';
 import { registerProtocolContracts, registerStandardContracts } from '../factory.js';
 import { type ArchiverDataStores, createArchiverDataStores } from '../store/data_stores.js';
 import { L2TipsCache } from '../store/l2_tips_cache.js';
-import { makeCheckpoint, makeInboxMessages, makePublishedCheckpoint } from '../test/mock_structs.js';
+import {
+  makeCheckpoint,
+  makeInboxMessages,
+  makeL1PublishedData,
+  makePublishedCheckpoint,
+} from '../test/mock_structs.js';
 import { ArchiverDataStoreUpdater } from './data_store_updater.js';
 
 /**
@@ -633,6 +646,7 @@ describe('ArchiverDataStoreUpdater', () => {
       );
     });
   });
+
   describe('addProposedBlock Inbox prefix guard', () => {
     /** A random block consuming through `leafCount` messages, chained on `previousBlock` when given. */
     const makeConsumingBlock = async (blockNumber: number, leafCount: number, previousBlock?: L2Block) => {
@@ -654,7 +668,7 @@ describe('ArchiverDataStoreUpdater', () => {
     };
 
     beforeEach(async () => {
-      await store.messages.addL1ToL2MessageBuckets(makeInboxMessages(5));
+      await store.messages.addL1ToL2Messages(makeInboxMessages(5));
     });
 
     it('accepts a block whose signed prefix matches the local messages at its leaf count', async () => {
@@ -666,7 +680,7 @@ describe('ArchiverDataStoreUpdater', () => {
     it('accepts a prefix interior to the synced log and is unaffected by messages appended after it', async () => {
       const block = await makeConsumingBlock(1, 3);
       const ref = await refAt(3);
-      await store.messages.addL1ToL2MessageBuckets(
+      await store.messages.addL1ToL2Messages(
         makeInboxMessages(2, {
           initialIndex: 5n,
           initialInboxHash: (await store.messages.getSyncedMessagePosition()).rollingHash,
@@ -706,15 +720,165 @@ describe('ArchiverDataStoreUpdater', () => {
       // A reorg replaces the last two messages before the block is inserted.
       await store.messages.removeL1ToL2Messages(3n);
       const hashAtThree = (await store.messages.getSyncedMessagePosition()).rollingHash;
-      await store.messages.addL1ToL2MessageBuckets(
+      await store.messages.addL1ToL2Messages(
         makeInboxMessages(2, {
           initialIndex: 3n,
           initialInboxHash: hashAtThree,
-          overrideFn: m => ({ ...m, bucketSeq: 4n, bucketTimestamp: 4n }),
         }),
       );
       await expect(updater.addProposedBlock(block, staleRef)).rejects.toThrow(InboxPrefixMismatchError);
       await storeIsUntouched(block);
+    });
+  });
+
+  describe('rollbackMessagesAndPruneProposedBlocks', () => {
+    const syncState = {
+      l1Block: { l1BlockNumber: 200n, l1BlockHash: Buffer32.random() },
+      authenticated: true as const,
+    };
+    let messages: ReturnType<typeof makeInboxMessages>;
+
+    /** A block consuming through `leafCount` messages, chained on `previousBlock` when given. */
+    const makeConsumingBlock = async (blockNumber: number, leafCount: number, previousBlock?: L2Block) => {
+      const block = await randomBlock(blockNumber, {
+        checkpointNumber: CheckpointNumber(previousBlock ? previousBlock.checkpointNumber : 1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(blockNumber - 1),
+        slotNumber: SlotNumber(100),
+        ...(previousBlock ? { lastArchive: previousBlock.archive } : {}),
+      });
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = leafCount;
+      return block;
+    };
+    const positionAt = async (count: number) => (await store.messages.getMessagePosition(BigInt(count)))!;
+    const storedLeaves = async () => (await toArray(store.messages.iterateL1ToL2Messages())).map(m => m.leaf);
+
+    beforeEach(async () => {
+      messages = makeInboxMessages(6);
+      await store.messages.addL1ToL2Messages(messages);
+    });
+
+    it('rolls back to the retained prefix, moves the sync state and prunes from the first block consuming past it', async () => {
+      const block1 = await makeConsumingBlock(1, 3);
+      const block2 = await makeConsumingBlock(2, 5, block1);
+      const block3 = await makeConsumingBlock(3, 6, block2);
+      for (const [block, count] of [
+        [block1, 3],
+        [block2, 5],
+        [block3, 6],
+      ] as const) {
+        await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(count)));
+      }
+
+      const result = await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(4), syncState });
+
+      expect(await storedLeaves()).toEqual(messages.slice(0, 4).map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toEqual(syncState.l1Block);
+      // Block 1 stayed within the retained prefix; block 2 consumed past it and block 3 chains on it.
+      expect(result.prunedBlocks.map(b => b.number)).toEqual([2, 3]);
+      expect(result.checkpointedTipAffected).toBe(false);
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+      expect(await store.blocks.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+      expect(await store.blocks.getLatestL2BlockNumber()).toBe(1);
+    });
+
+    it('refuses a rollback whose retained prefix has moved and writes nothing', async () => {
+      const block = await makeConsumingBlock(1, 6);
+      await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+
+      await expect(
+        updater.rollbackMessagesAndPruneProposedBlocks({
+          keep: { totalMessageCount: 4n, rollingHash: Fr.random() },
+          syncState,
+        }),
+      ).rejects.toThrow(InboxMessagePrefixChangedError);
+
+      expect(await storedLeaves()).toEqual(messages.map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toBeUndefined();
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+    });
+
+    it('rolls the whole rollback back when the block prune fails', async () => {
+      const block = await makeConsumingBlock(1, 6);
+      await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+      const failure = new Error('prune failed');
+      jest.spyOn(store.blocks, 'removeBlocksAfter').mockRejectedValueOnce(failure);
+
+      await expect(
+        updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(4), syncState }),
+      ).rejects.toBe(failure);
+
+      expect(await storedLeaves()).toEqual(messages.map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toBeUndefined();
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+    });
+
+    it('evicts the proposed checkpoint of pruned blocks so it can no longer be promoted', async () => {
+      const block = await makeConsumingBlock(1, 6);
+      await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+      await store.blocks.addProposedCheckpoint({
+        checkpointNumber: CheckpointNumber(1),
+        header: CheckpointHeader.empty(),
+        startBlock: BlockNumber(1),
+        blockCount: 1,
+        totalManaUsed: 0n,
+        feeAssetPriceModifier: 0n,
+      });
+      const proposed = (await store.blocks.getLastProposedCheckpoint())!;
+
+      await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(5), syncState });
+
+      expect(await store.blocks.getLastProposedCheckpoint()).toBeUndefined();
+      await expect(
+        store.blocks.promoteProposedToCheckpointed(
+          CheckpointNumber(1),
+          makeL1PublishedData(10),
+          [],
+          proposed.archive.root,
+        ),
+      ).rejects.toThrow(NoProposedCheckpointToPromoteError);
+    });
+
+    it('flags a rollback below the checkpointed tip and leaves checkpointed blocks in place', async () => {
+      const block1 = await makeConsumingBlock(1, 3);
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block1]), 10)]);
+      const block2 = await makeConsumingBlock(2, 6, block1);
+      block2.checkpointNumber = CheckpointNumber(2);
+      block2.indexWithinCheckpoint = IndexWithinCheckpoint(0);
+      await updater.addProposedBlock(block2, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+
+      const result = await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(2), syncState });
+
+      expect(result.checkpointedTipAffected).toBe(true);
+      expect(result.prunedBlocks.map(b => b.number)).toEqual([2]);
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toBe(1);
+      expect(await storedLeaves()).toHaveLength(2);
+    });
+
+    it('clears the syncpoint when the rewound cursor is unauthenticated', async () => {
+      await store.messages.setMessageSyncState(syncState);
+
+      await updater.rollbackMessagesAndPruneProposedBlocks({
+        keep: await positionAt(3),
+        syncState: { l1Block: { l1BlockNumber: 99n, l1BlockHash: Buffer32.random() }, authenticated: false },
+      });
+
+      expect(await storedLeaves()).toEqual(messages.slice(0, 3).map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toBeUndefined();
+      expect((await store.messages.getScannedL1Block())?.l1BlockNumber).toEqual(99n);
+    });
+
+    it('empties the log and prunes every proposed block when nothing is retained', async () => {
+      const block1 = await makeConsumingBlock(1, 3);
+      const block2 = await makeConsumingBlock(2, 6, block1);
+      await updater.addProposedBlock(block1, InboxMessagePrefixRef.fromPosition(await positionAt(3)));
+      await updater.addProposedBlock(block2, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+
+      const result = await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(0), syncState });
+
+      expect(await storedLeaves()).toEqual([]);
+      expect(await store.messages.getTotalL1ToL2MessageCount()).toEqual(0n);
+      expect(result.prunedBlocks.map(b => b.number)).toEqual([1, 2]);
     });
   });
 });
