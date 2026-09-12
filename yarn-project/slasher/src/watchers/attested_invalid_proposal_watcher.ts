@@ -1,5 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, pick } from '@aztec-labs/foundation/collection';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { FifoSet } from '@aztec-labs/foundation/fifo-set';
@@ -34,6 +34,7 @@ type AttestedInvalidProposalWatcherOptions = {
 export type InvalidProposalSlotSource = {
   hasInvalidProposals(slot: SlotNumber): boolean;
   hasProposalEquivocation(slot: SlotNumber): boolean;
+  getInvalidCheckpointProposalHashes(slot: SlotNumber): CheckpointProposalHash[];
 };
 
 export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => WatcherEmitter) implements Watcher {
@@ -117,7 +118,15 @@ export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => W
       return;
     }
 
+    // Slash only attesters whose signed payload matches an invalid checkpoint proposal
+    // (see invalidCheckpointProposalHashesBySlot for why block-invalid slots are excluded).
+    const invalidHashes = new Set(this.invalidProposalSlotSource.getInvalidCheckpointProposalHashes(slot));
+    if (invalidHashes.size === 0) {
+      return;
+    }
+
     const slashArgs = attestations
+      .filter(attestation => invalidHashes.has(attestation.getPayloadHash()))
       .map(attestation => this.getSlashArgs(slot, attestation))
       .filter((args): args is WantToSlashArgs => args !== undefined)
       .filter(args => this.markAsNewOffense(args));
