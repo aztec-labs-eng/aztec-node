@@ -65,6 +65,7 @@ import { EventEmitter } from 'events';
 import type { TypedDataDefinition } from 'viem';
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
+import type { InboxEndpointReader } from './checkpoint_endpoint_check.js';
 import { ValidationService } from './duties/validation_service.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
 import type { ExtendedValidatorKeyStore } from './key_store/interface.js';
@@ -214,6 +215,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     p2pClient: P2P,
     blockSource: L2BlockSource & L2BlockSink,
     l1ToL2MessageSource: L1ToL2MessageSource,
+    inbox: InboxEndpointReader,
     txProvider: ITxProvider,
     keyStoreManager: KeystoreManager,
     blobClient: BlobClientInterface,
@@ -232,6 +234,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       worldState,
       blockSource,
       l1ToL2MessageSource,
+      inbox,
       txProvider,
       epochCache,
       consensusTimetable,
