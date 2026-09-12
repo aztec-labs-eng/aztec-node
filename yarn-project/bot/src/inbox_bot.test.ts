@@ -20,6 +20,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { ManualDateProvider } from '@aztec-labs/foundation/timer';
 import { SiblingPath, computeRootFromSiblingPath } from '@aztec-labs/foundation/trees';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
@@ -1530,7 +1531,9 @@ describe('InboxBot', () => {
       const { promise, resolve } = promiseWithResolvers<void>();
       consumer.gate = promise;
       await bot.consumeStep();
-      expect((await reload(message)).state).toEqual('preparing');
+      // The attempt is dispatched as un-awaited background work, so the move to preparing lands shortly after
+      // consumeStep returns rather than before it. The gate holds the attempt there once it arrives.
+      await retryUntil(async () => (await reload(message)).state === 'preparing', 'preparing', 10, 0.01);
 
       // The message ages out while the attempt is still being proved.
       dateProvider.advanceTime(120);
