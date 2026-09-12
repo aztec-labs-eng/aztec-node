@@ -58,7 +58,7 @@ describe('FishermanAttestationValidator', () => {
   });
 
   describe('base validation', () => {
-    it('returns high tolerance error if slot number is outside its receive window', async () => {
+    it('ignores an attestation outside its receive window (no relayer penalty)', async () => {
       const header = CheckpointHeader.random({ slotNumber: SlotNumber(97) });
       const mockAttestation = makeCheckpointAttestation({
         header,
@@ -80,7 +80,7 @@ describe('FishermanAttestationValidator', () => {
       epochCache.isInCommittee.mockResolvedValue(true);
 
       const result = await validator.validate(mockAttestation);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'ignore' });
 
       // Should not check attestation pool if base validation fails
       expect(attestationPool.getCheckpointProposal).not.toHaveBeenCalled();
