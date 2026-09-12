@@ -132,14 +132,9 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
       await forkCheckpoint.commit();
 
       // Add block to checkpoint, inserting this block's streaming L1-to-L2 message bundle (if any) into the fork.
-      const { block } = await this.checkpointBuilder.addBlock(
-        globalVariables,
-        processedTxs,
-        opts.l1ToL2Messages ?? [],
-        {
-          expectedEndState: opts.expectedEndState,
-        },
-      );
+      const { block } = await this.checkpointBuilder.addBlock(globalVariables, processedTxs, opts.l1ToL2Messages, {
+        expectedEndState: opts.expectedEndState,
+      });
 
       this.contractsDB.commitCheckpoint();
 
