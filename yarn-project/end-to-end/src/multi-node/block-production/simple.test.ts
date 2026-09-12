@@ -33,6 +33,10 @@ describe('multi-node/block-production/simple', () => {
     // The hardcoded account is funded via genesis without needing on-chain deployment.
     ({ test, context, logger, validators, nodes, from } = await setupSimpleBlockProduction({
       nodeCount: NODE_COUNT,
+      // The profile leaves this per-test. At the default of 2 the 24s slot derives only 3 block opportunities,
+      // under the Inbox catch-up floor, and the sequencer refuses the config at startup; 1 derives the 4 the
+      // floor wants. Gossip is mocked here, so the shorter propagation budget costs this suite nothing.
+      setupOpts: { attestationPropagationTime: 1 },
       nodeOpts: { minTxsPerBlock: 1, maxTxsPerBlock: 1 },
     }));
 
