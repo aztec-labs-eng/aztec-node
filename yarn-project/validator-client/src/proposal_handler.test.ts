@@ -1387,6 +1387,43 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
       });
 
+      // The all-nodes callback and the attestation evaluate the same proposal twice. A local inability on a later
+      // call is this node's problem, and must not retract the validation an earlier call completed.
+      it('keeps the slot recorded as valid when a later call cannot read the L1 view', async () => {
+        const { header, inboxRollingHash } = setupContentValidCheckpoint({ midLeafCount: 5, lastLeafCount: 7 });
+        inbox.setBuckets([{ seq: 4n, total: 7n, rollingHash: inboxRollingHash }]);
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+        await handler.handleCheckpointProposal(proposal, proposalInfo);
+        await handler.handleCheckpointProposal(proposal, proposalInfo);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
+
+        inbox.setUnreadable(new Error('l1 rpc request failed'));
+
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).resolves.toEqual({
+          isValid: false,
+          reason: 'inbox_endpoint_unavailable',
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
+      });
+
+      // Forgetting a determination is never the safe direction, and the tracker keys its per-slot entry by slot
+      // alone. An equivocating proposer whose second proposal this node cannot check must not thereby erase what
+      // the first one established about the slot.
+      it('keeps a slot recorded as invalid when a later proposal for it cannot be checked', async () => {
+        // A different archive at this slot was already determined invalid: an equivocating proposer's first one.
+        reexecutionTracker.recordOutcome(SlotNumber(1), Fr.random(), 'invalid', CheckpointNumber(1));
+
+        const { header } = setupContentValidCheckpoint({ midLeafCount: 5, lastLeafCount: 7 });
+        inbox.setUnreadable(new Error('l1 rpc request failed'));
+
+        await expect(validate(header)).resolves.toEqual({
+          isValid: false,
+          reason: 'inbox_endpoint_unavailable',
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('invalid');
+      });
     });
   });
 
