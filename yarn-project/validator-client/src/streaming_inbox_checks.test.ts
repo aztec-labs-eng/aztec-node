@@ -1,3 +1,4 @@
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type InboxMessagePosition,
@@ -292,6 +293,69 @@ describe('checkStreamingBlockProposal', () => {
         reason: 'inbox_prefix_unavailable',
         error: 'x'.repeat(MAX_REPORTED_ERROR_LENGTH),
       });
+    });
+  });
+});
+
+// The cap checks above run on small injected caps so the algorithm is readable. These run the same checks at the
+// generated protocol constants, so a validator wired to the wrong constant rejects blocks the protocol allows (or
+// accepts ones it does not) here rather than on a live network.
+describe('protocol cap boundaries', () => {
+  const protocolCaps = {
+    perBlockCap: MAX_L1_TO_L2_MSGS_PER_BLOCK,
+    perCheckpointCap: MAX_L1_TO_L2_MSGS_PER_CHECKPOINT,
+  };
+
+  /** Runs the metadata check over a view holding `endCount` leaves, with the proposer signing the honest prefix. */
+  const checkAt = async (opts: { endCount: number; parentCount: number; checkpointStartCount?: number }) => {
+    const view = new FakeInboxView();
+    const end = view.append(opts.endCount);
+    return await checkStreamingBlockProposalMetadata({
+      messageSource: view,
+      inboxPrefixRef: InboxMessagePrefixRef.fromPosition(end),
+      endTotalMsgCount: BigInt(opts.endCount),
+      parentTotalMsgCount: BigInt(opts.parentCount),
+      checkpointStartTotalMsgCount: BigInt(opts.checkpointStartCount ?? 0),
+      ...protocolCaps,
+    });
+  };
+
+  // 255 and 256 are the last count a block may carry and the cap itself; 257 is the first over it, which is exactly
+  // the size of a rolled-over L1 batch that a proposer must split across two blocks.
+  it.each([255, 256])('accepts a block consuming %i messages', async count => {
+    expect(await checkAt({ endCount: count, parentCount: 0 })).toMatchObject({ accepted: true });
+  });
+
+  it('rejects a block consuming 257 messages', async () => {
+    expect(await checkAt({ endCount: 257, parentCount: 0 })).toEqual({
+      accepted: false,
+      reason: 'bundle_over_block_cap',
+    });
+  });
+
+  // 1024 is a checkpoint's whole budget, which decomposes into exactly four cap-sized blocks.
+  it('accepts a checkpoint whose fourth block reaches 1024', async () => {
+    expect(await checkAt({ endCount: 1024, parentCount: 768, checkpointStartCount: 0 })).toMatchObject({
+      accepted: true,
+    });
+  });
+
+  it('rejects a checkpoint total of 1025 even when the block itself is within its cap', async () => {
+    expect(await checkAt({ endCount: 1025, parentCount: 1024, checkpointStartCount: 0 })).toEqual({
+      accepted: false,
+      reason: 'checkpoint_over_msg_cap',
+    });
+  });
+
+  // The caps are relative to the checkpoint's own start, not to absolute counts, so a checkpoint opening at a high
+  // cursor gets the same budget as one opening at zero.
+  it('measures the checkpoint cap from the checkpoint start, not from zero', async () => {
+    expect(await checkAt({ endCount: 1100, parentCount: 900, checkpointStartCount: 76 })).toMatchObject({
+      accepted: true,
+    });
+    expect(await checkAt({ endCount: 1101, parentCount: 900, checkpointStartCount: 76 })).toEqual({
+      accepted: false,
+      reason: 'checkpoint_over_msg_cap',
     });
   });
 });
