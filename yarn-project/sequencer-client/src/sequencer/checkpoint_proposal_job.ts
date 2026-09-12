@@ -1531,9 +1531,11 @@ export class CheckpointProposalJob implements Traceable {
    * L1 bucket end, or when its prospective end would pass the threshold one bucket below the cap and could leave the
    * last legal endpoint behind. The lookup is bounded by the checkpoint cap on a non-final block, so a mandatory
    * bucket beyond this block's own reach is not stranded by a nearer endpoint, and additionally by one block's
-   * capacity on the final block. The block then ends at the further of what the lookup allows and the safe local
-   * step, so consulting L1 never consumes less than staying below the threshold would have; a block that consulted
-   * L1 may legitimately end inside a bucket. Nothing is retained: the next attempt decides again.
+   * capacity on the final block. A non-final block then ends at the further of what the lookup allows and the safe
+   * local step, so consulting L1 never consumes less than staying below the threshold would have, and it may
+   * legitimately end inside a bucket. The final block instead ends exactly on the resolved boundary, so whenever the
+   * last live boundary within reach sits behind the safe local step it consumes fewer messages than the local log
+   * alone would allow. Nothing is retained: the next attempt decides again.
    *
    * An endpoint that cannot be resolved on a non-final block (local lag, no live endpoint yet) leaves the block with
    * that safe local step and is retried on the next block; on the final block it abandons the checkpoint. A local
@@ -1605,8 +1607,10 @@ export class CheckpointProposalJob implements Traceable {
       bucketSeq: resolved.bucketSeq,
       end,
     });
-    // Re-read the selected prefix so the signed hash is the one at `end`, never the farther endpoint's.
-    return this.readStreamingRange(state, end);
+    // An end short of or past the endpoint needs its own read, so the signed hash is the one at `end` and never the
+    // endpoint's; landing exactly on the endpoint reuses the snapshot the resolver already read and checked against
+    // the cursor's hash.
+    return end === endpointTotal ? { kind: 'consume', range: resolved.range } : this.readStreamingRange(state, end);
   }
 
   /**
