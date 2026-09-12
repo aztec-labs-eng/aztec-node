@@ -151,6 +151,31 @@ describe('single-node/cross-chain/streaming_inbox_buckets', () => {
     log.warn(`Bucket ${first.bucketSeq} split across L2 blocks`, { insertingFirst, insertingSecond });
     expect(insertingSecond.blockNumber).toBeGreaterThan(insertingFirst.blockNumber);
 
+    // The split is real on both sides. The first L2 block stopped at a message prefix interior to the bucket: no
+    // live L1 bucket ends at that count, so no checkpoint could have been published there and the prefix exists
+    // only as a block boundary. The second half then completes the same bucket, which is the count a checkpoint
+    // may end at.
+    const committedCount = async (blockNumber: BlockNumber) =>
+      BigInt((await aztecNode.getBlockData(blockNumber))!.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
+    const intermediateEnd = await committedCount(insertingFirst.blockNumber);
+    const completedEnd = await committedCount(insertingSecond.blockNumber);
+    expect(intermediateEnd).toEqual(first.index + 1n);
+    expect(completedEnd).toEqual(second.index + 1n);
+
+    const bucket = await t.inbox.getBucket(first.bucketSeq);
+    expect(bucket.totalMsgCount).toEqual(completedEnd);
+    // The newest live bucket end at or below the intermediate prefix is strictly behind it — or, when the split
+    // bucket is the chain's first, there is no live end at or below it at all. Either way the prefix is not one.
+    const atIntermediate = await t.inbox.getBucketAtOrBeforeTotal(intermediateEnd);
+    const nearestLiveEnd = atIntermediate?.bucket.totalMsgCount ?? 0n;
+    expect(nearestLiveEnd).toBeLessThan(intermediateEnd);
+    log.warn(`Intermediate prefix ${intermediateEnd} is interior to bucket ${first.bucketSeq}`, {
+      intermediateEnd,
+      completedEnd,
+      bucketTotal: bucket.totalMsgCount,
+      nearestLiveEnd,
+    });
+
     // The checkpoint holding the second half lands and is proven by the prover node.
     const checkpointNumber = insertingSecond.checkpointNumber;
     await waitForNodeCheckpoint(aztecNode, checkpointNumber, { timeout: t.constants.slotDuration * 3 });
