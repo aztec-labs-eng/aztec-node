@@ -114,7 +114,7 @@ describe('CheckpointBuilder', () => {
 
   /** Default opts for validator-mode tests (no redistribution). */
   function validatorOpts(overrides?: Partial<PublicProcessorLimits> & { minValidTxs?: number }): BlockBuilderOptions {
-    return { ...overrides, isBuildingProposal: false, minValidTxs: overrides?.minValidTxs ?? 0 };
+    return { ...overrides, isBuildingProposal: false, minValidTxs: overrides?.minValidTxs ?? 0, l1ToL2Messages: [] };
   }
 
   /** Default opts for proposer-mode tests (with redistribution). */
@@ -133,6 +133,7 @@ describe('CheckpointBuilder', () => {
       perBlockAllocationMultiplier: overrides?.perBlockAllocationMultiplier ?? 1.2,
       perBlockDAAllocationMultiplier: overrides?.perBlockDAAllocationMultiplier,
       minValidTxs: overrides?.minValidTxs ?? 0,
+      l1ToL2Messages: [],
     };
   }
 

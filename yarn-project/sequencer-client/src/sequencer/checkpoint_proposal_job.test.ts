@@ -2253,6 +2253,7 @@ describe('CheckpointProposalJob', () => {
         buildDeadline: undefined,
         blockTimestamp: 0n,
         txHashesAlreadyIncluded: new Set<string>(),
+        l1ToL2Messages: [],
       });
 
       expect(result).toEqual({ failure: 'insufficient-valid-txs' });
@@ -2274,6 +2275,7 @@ describe('CheckpointProposalJob', () => {
         buildDeadline: undefined,
         blockTimestamp: 0n,
         txHashesAlreadyIncluded: new Set<string>(),
+        l1ToL2Messages: [],
       });
 
       expect(result).toEqual({ failure: 'insufficient-valid-txs' });
@@ -2712,6 +2714,7 @@ class TestCheckpointProposalJob extends CheckpointProposalJob {
       indexWithinCheckpoint: IndexWithinCheckpoint;
       buildDeadline: Date | undefined;
       txHashesAlreadyIncluded: Set<string>;
+      l1ToL2Messages: Fr[];
     },
   ): Promise<
     { block: L2Block; usedTxs: Tx[] } | { failure: 'insufficient-txs' | 'insufficient-valid-txs' } | { error: Error }
