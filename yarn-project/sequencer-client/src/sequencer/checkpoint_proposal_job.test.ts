@@ -1532,6 +1532,10 @@ describe('CheckpointProposalJob', () => {
     const signedPrefixes = () =>
       validatorClient.createBlockProposal.mock.calls.map(call => call[7]?.inboxRollingHash.toString());
     const prefixAt = (count: number) => streamingInbox.positionAt(BigInt(count)).rollingHash.toString();
+    /** The `[start, end)` bounds of every local message-range read, in order. */
+    const rangeReads = () => l1ToL2MessageSource.getL1ToL2MessageRange.mock.calls.map(([start, end]) => [start, end]);
+    /** The bounds of every local message-range read taken from a cursor at `start`. */
+    const rangeReadsFrom = (start: number) => rangeReads().filter(([from]) => from === BigInt(start));
     const preflightTotals = () =>
       publisher.validateCheckpointHeaderAndInbox.mock.calls.map(call => call[1].expectedTotal);
 
@@ -1758,6 +1762,80 @@ describe('CheckpointProposalJob', () => {
       expect(bundleLengths()).toEqual([256, 44]);
       expect(signedPrefixes().at(-1)).toEqual(prefixAt(300));
       expect(preflightTotals()).toEqual([300n, 300n]);
+    });
+
+    it('reuses the endpoint snapshot on a block that ends exactly on the resolved endpoint', async () => {
+      // Same shape as above: the final block lands on 300, the endpoint the resolver read and authenticated against
+      // the cursor. That snapshot is the bundle, so the prefix [256, 300) is read once and not again.
+      mockSubslots(2);
+      job.updateConfig({ maxBlocksPerCheckpoint: 2 });
+      streamingInbox.set(leaves(500), [300n]);
+
+      const { lastBlock } = await setupMultipleBlocks(2, [1, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(bundleLengths()).toEqual([256, 44]);
+      expect(signedPrefixes().at(-1)).toEqual(prefixAt(300));
+      expect(rangeReads()).toEqual([
+        [0n, 256n],
+        [256n, 300n],
+      ]);
+    });
+
+    it('reads its own range on a block that ends short of the resolved endpoint', async () => {
+      // Block 4 crosses the threshold, resolves the endpoint at 1024 and takes a full block toward it, stopping at
+      // 956. The endpoint's range is not the bundle, so the block reads [700, 956) itself and signs the hash there.
+      mockSubslots(5);
+      job.updateConfig({ maxBlocksPerCheckpoint: 5 });
+      streamingInbox.set(leaves(700), [256n, 512n, 700n]);
+      betweenBlocks(3, () => {
+        streamingInbox.append(leaves(50, 701), { closeBucket: true });
+        streamingInbox.append(leaves(256, 751), { closeBucket: true });
+        streamingInbox.append(leaves(18, 1007), { closeBucket: true });
+      });
+
+      const { lastBlock } = await setupMultipleBlocks(5, [1, 1, 1, 1, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(bundleLengths()).toEqual([256, 256, 188, 256, 68]);
+      expect(signedPrefixes().slice(-2)).toEqual([prefixAt(956), prefixAt(1024)]);
+      expect(rangeReadsFrom(700)).toEqual([
+        [700n, 1024n],
+        [700n, 956n],
+      ]);
+    });
+
+    it('reads its own range on a block that ends past the resolved endpoint', async () => {
+      // The archiver's synced tip catches up twice, so the tip is mocked directly rather than moved between two
+      // blocks. Block 4 sees 900 messages and live ends up to 750: the safe local step (768) reaches past that
+      // endpoint, so the block takes 768 and must read [700, 768) rather than carry the hash at 750. The final
+      // block sees the whole log and finishes on the live end at 1000.
+      mockSubslots(5);
+      job.updateConfig({ maxBlocksPerCheckpoint: 5 });
+      streamingInbox.set(leaves(1000), [256n, 512n, 700n, 750n, 1000n]);
+      const syncedTips = [700n, 700n, 700n, 900n];
+      l1ToL2MessageSource.getSyncedMessagePosition.mockImplementation(() =>
+        Promise.resolve(streamingInbox.positionAt(syncedTips[checkpointBuilder.buildBlockCalls.length] ?? 1000n)),
+      );
+
+      const { lastBlock } = await setupMultipleBlocks(5, [1, 1, 1, 1, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(bundleLengths()).toEqual([256, 256, 188, 68, 232]);
+      expect(signedPrefixes().slice(-2)).toEqual([prefixAt(768), prefixAt(1000)]);
+      expect(rangeReadsFrom(700)).toEqual([
+        [700n, 750n],
+        [700n, 768n],
+      ]);
     });
 
     it('selects 800 rather than signing 956 after partial blocks reached 700 for live ends 444/700/800/1056', async () => {
