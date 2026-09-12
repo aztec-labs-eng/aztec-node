@@ -112,6 +112,13 @@ When a `CheckpointProposal` is received, before creating attestations:
 6. Verify checkpoint header fields match last block's global variables:
    - slotNumber, coinbase, feeRecipient, gasFees
 7. Verify lastArchiveRoot matches first block's lastArchive
+8. Run the streaming Inbox checkpoint content check: read the messages consumed between the parent checkpoint's
+   position and the last block's by count, and confirm they end at the header's inboxRollingHash. A range the local
+   view cannot serve yet is retried after a bounded sync and never counts against the proposer
+9. Confirm through L1 that the checkpoint's final message position ends a live Inbox bucket committing to that same
+   rolling hash, reading the L1 height once and resolving the bucket pinned to it. A view that disagrees or cannot be
+   read describes L1 at that moment, not the proposer: it is re-read for as long as the endpoint-check window and the
+   remaining attestation window allow, and a checkpoint left unconfirmed is not attested to and not slashed
 ```
 
 ### Attestation Creation
