@@ -90,11 +90,11 @@ describe('multi-node/block-production/cross_chain_messages', () => {
   // pre-proves and sends consume txs. Verifies all consume txs are mined, a MBPS checkpoint exists,
   // and that checkpoint is proven.
   it('builds multiple blocks per slot with L1 to L2 messages', async () => {
-    // L1→L2 messages only become ready once the chain advances `inboxLag` checkpoints past where they
-    // were inboxed, and a checkpoint only advances when a block is built in a new slot. With
-    // skipInitialSequencer the chain won't move on its own, and a one-shot burst of filler txs lands
-    // within a single checkpoint — so let the sequencer keep building (empty) blocks each slot to drive
-    // the chain forward until the messages are ready.
+    // An L1→L2 message becomes ready once some block has inserted it into the message tree: under the streaming
+    // Inbox a block consumes whatever prefix its proposer's archiver has observed, so readiness needs blocks to
+    // keep being built rather than a fixed number of checkpoints to elapse. With skipInitialSequencer the chain
+    // won't move on its own, and a one-shot burst of filler txs lands within a single checkpoint — so let the
+    // sequencer keep building (empty) blocks each slot to drive the chain forward until the messages are ready.
     fixture = await setupBlockProductionWithProver({
       syncChainTip: 'proposed',
       minTxsPerBlock: 0,
