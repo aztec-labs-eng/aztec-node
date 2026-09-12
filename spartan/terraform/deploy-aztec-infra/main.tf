@@ -711,6 +711,38 @@ locals {
       bootstrap_nodes_path = ""
       wait                 = false
     } : null
+
+    # Optional: inbox probe bot. Takes dedicated gas limits rather than the shared
+    # BOT_DA_GAS_LIMIT/BOT_L2_GAS_LIMIT, which are tuned for the transfer bot's circuit.
+    bot_inbox = var.BOT_INBOX_REPLICAS > 0 ? {
+      name  = "${var.RELEASE_PREFIX}-bot-inbox"
+      chart = "aztec-bot"
+      values = [
+        "common.yaml",
+        "bot-inbox.yaml",
+        "bot-resources-${var.BOT_RESOURCE_PROFILE}.yaml",
+      ]
+      custom_settings = {
+        "bot.replicaCount"                   = var.BOT_INBOX_REPLICAS
+        "bot.txIntervalSeconds"              = var.BOT_INBOX_TX_INTERVAL_SECONDS
+        "bot.followChain"                    = var.BOT_INBOX_FOLLOW_CHAIN
+        "bot.pxeSyncChainTip"                = var.BOT_INBOX_PXE_SYNC_CHAIN_TIP
+        "bot.botPrivateKey"                  = var.BOT_INBOX_L2_PRIVATE_KEY
+        "bot.nodeUrl"                        = local.internal_rpc_url
+        "bot.mnemonic"                       = var.BOT_MNEMONIC
+        "bot.mnemonicStartIndex"             = var.BOT_INBOX_MNEMONIC_START_INDEX
+        "bot.daGasLimit"                     = var.BOT_INBOX_DA_GAS_LIMIT
+        "bot.l2GasLimit"                     = var.BOT_INBOX_L2_GAS_LIMIT
+        "bot.inboxMessagesPerBatch"          = var.BOT_INBOX_MESSAGES_PER_BATCH
+        "bot.inboxConsumeMode"               = var.BOT_INBOX_CONSUME_MODE
+        "bot.inboxSaturationIntervalSeconds" = var.BOT_INBOX_SATURATION_INTERVAL_SECONDS
+        "bot.l1ToL2SeedCount"                = var.BOT_INBOX_SEED_COUNT
+        "bot.l1ToL2TimeoutSeconds"           = var.BOT_INBOX_L1_TO_L2_TIMEOUT_SECONDS
+      }
+      boot_node_host_path  = ""
+      bootstrap_nodes_path = ""
+      wait                 = false
+    } : null
   }, local.validator_releases)
 }
 
