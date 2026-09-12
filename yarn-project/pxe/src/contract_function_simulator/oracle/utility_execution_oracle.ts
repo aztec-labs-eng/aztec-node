@@ -5,7 +5,7 @@ import {
   PRIVATE_LOG_CIPHERTEXT_LEN,
 } from '@aztec-labs/constants';
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import { uniqueBy } from '@aztec-labs/foundation/collection';
+import { chunk, uniqueBy } from '@aztec-labs/foundation/collection';
 import { Aes128 } from '@aztec-labs/foundation/crypto/aes128';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
@@ -28,7 +28,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import type { CompleteAddress, ContractInstancePreimageWithAddress, PartialAddress } from '@aztec-labs/stdlib/contract';
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
-import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
+import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
 import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
@@ -58,7 +58,7 @@ import type { AddressStore } from '../../storage/address_store/address_store.js'
 import { assertAllowedScope } from '../../storage/allowed_scopes.js';
 import type { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import { FactCollectionKey, FactCollectionTypeKey, anchoredTipBlockNumbers } from '../../storage/fact_store/index.js';
-import type { FactService, OriginBlock } from '../../storage/fact_store/index.js';
+import type { BlockReference, FactService } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
@@ -79,6 +79,7 @@ import {
   type NullifierMembershipWitnessData,
   toNullifierMembershipWitnessData,
 } from '../noir-structs/nullifier_membership_witness_data.js';
+import type { NullifierStatus } from '../noir-structs/nullifier_status.js';
 import { Option } from '../noir-structs/option.js';
 import type { PendingTaggedLog } from '../noir-structs/pending_tagged_log.js';
 import type { ProvidedSecret } from '../noir-structs/provided_secret.js';
@@ -508,19 +509,38 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /**
-   * Check if a nullifier exists in the nullifier tree.
-   * @param innerNullifier - The inner nullifier.
-   * @returns A boolean indicating whether the nullifier exists in the tree or not.
+   * Returns the status of each inner nullifier: whether it exists in the nullifier tree at the anchor block and, if
+   * so, the block it was inserted in. Results are aligned with the input.
    */
-  public async doesNullifierExist(innerNullifier: Fr) {
-    const [nullifier, anchorBlockHash] = await allToCompletion([
-      siloNullifier(this.contractAddress, innerNullifier!),
-      this.anchorBlockHeader.hash(),
-    ]);
-    const [leafIndex] = await this.aztecNode.findLeavesIndexes(anchorBlockHash, MerkleTreeId.NULLIFIER_TREE, [
-      nullifier,
-    ]);
-    return leafIndex?.data !== undefined;
+  public async getNullifierStatuses(innerNullifiers: EphemeralArray<Fr>): Promise<EphemeralArray<NullifierStatus>> {
+    const siloedNullifiers = await allToCompletion(
+      innerNullifiers
+        .readAll(this.ephemeralArrayService)
+        .map(innerNullifier => siloNullifier(this.contractAddress, innerNullifier)),
+    );
+    const statuses = await this.getSiloedNullifierStatuses(siloedNullifiers);
+    return EphemeralArray.fromValues(this.ephemeralArrayService, statuses);
+  }
+
+  /** Looks up siloed nullifiers in the nullifier tree at the anchor block, returning one status per input. */
+  protected async getSiloedNullifierStatuses(siloedNullifiers: Fr[]): Promise<NullifierStatus[]> {
+    const anchorBlockHash = await this.anchorBlockHeader.hash();
+    const leaves = (
+      await allToCompletion(
+        chunk(siloedNullifiers, MAX_RPC_LEN).map(batch =>
+          this.aztecNode.findLeavesIndexes(anchorBlockHash, MerkleTreeId.NULLIFIER_TREE, batch),
+        ),
+      )
+    ).flat();
+    return leaves.map(
+      (leaf): NullifierStatus =>
+        leaf
+          ? {
+              exists: true,
+              originBlock: Option.some({ blockNumber: leaf.l2BlockNumber, blockHash: leaf.l2BlockHash.toFr() }),
+            }
+          : { exists: false, originBlock: Option.none() },
+    );
   }
 
   /**
@@ -791,7 +811,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     factCollectionId: Fr,
     factTypeId: Fr,
     payload: EphemeralArray<Fr>,
-    originBlock: Option<OriginBlock>,
+    originBlock: Option<BlockReference>,
   ): Promise<void> {
     this.#assertOwnContract(contractAddress);
     return this.factService.recordFact(
