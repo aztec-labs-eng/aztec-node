@@ -45,6 +45,7 @@ import { hashTypedData } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
 
 import { CheckpointBuilder, FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
+import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import { ValidatorClient } from './validator.js';
 
 jest.setTimeout(60_000);
@@ -72,6 +73,7 @@ describe('ValidatorClient Integration', () => {
     checkpointsBuilder: FullNodeCheckpointsBuilder;
     p2pClient: MockProxy<P2P>;
     validator: ValidatorClient;
+    inbox: FakeInbox;
     avmSimulator?: AvmSimulatorPool;
   };
 
@@ -190,6 +192,10 @@ describe('ValidatorClient Integration', () => {
     };
     keyStoreManager = new KeystoreManager(keyStore);
 
+    // Every checkpoint of these tests consumes the whole local message log, so its final position is the end
+    // of the one live bucket holding those messages; tests that seed messages set that bucket themselves.
+    const inbox = makeFakeInbox();
+
     // Create and start validator
     const validator = await ValidatorClient.new(
       {
@@ -220,6 +226,7 @@ describe('ValidatorClient Integration', () => {
       p2pClient,
       archiver,
       archiver,
+      inbox,
       txProvider,
       keyStoreManager,
       blobClient,
@@ -236,6 +243,7 @@ describe('ValidatorClient Integration', () => {
       checkpointsBuilder,
       p2pClient,
       validator,
+      inbox,
       avmSimulator,
     };
   };
@@ -500,6 +508,9 @@ describe('ValidatorClient Integration', () => {
       );
 
       await attestorValidateBlocks(blocks);
+
+      // The checkpoint consumes all four seeded messages, so the position it ends at closes the live bucket.
+      attestor.inbox.setBuckets([{ seq: 1n, total: 4n, rollingHash: proposal.checkpointHeader.inboxRollingHash }]);
 
       const attestations = await attestor.validator.attestToCheckpointProposal(
         ValidatedCheckpointProposalCore(proposal),

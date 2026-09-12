@@ -66,6 +66,7 @@ import type {
   FullNodeCheckpointsBuilder,
 } from './checkpoint_builder.js';
 import { type ValidatorClientConfig, validatorClientConfigMappings } from './config.js';
+import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
 import { type CheckpointProposalValidationFailureReason, ProposalHandler } from './proposal_handler.js';
 import { ValidatorClient } from './validator.js';
@@ -120,6 +121,7 @@ describe('ValidatorClient', () => {
   let p2pClient: MockProxy<P2P>;
   let blockSource: MockProxy<L2BlockSource & L2BlockSink>;
   let l1ToL2MessageSource: MockProxy<L1ToL2MessageSource>;
+  let inbox: FakeInbox;
   let epochCache: MockProxy<EpochCache>;
   let checkpointsBuilder: MockProxy<FullNodeCheckpointsBuilder>;
   let worldState: MockProxy<WorldStateSynchronizer>;
@@ -179,6 +181,7 @@ describe('ValidatorClient', () => {
       nowSeconds: 0n,
     });
 
+    inbox = makeFakeInbox();
     blockSource = mock<L2BlockSource & L2BlockSink>();
     blockSource.getBlocks.mockResolvedValue([]);
     blockSource.getCheckpointsData.mockResolvedValue([]);
@@ -243,6 +246,7 @@ describe('ValidatorClient', () => {
       p2pClient,
       blockSource,
       l1ToL2MessageSource,
+      inbox,
       txProvider,
       keyStoreManager,
       blobClient,
@@ -890,6 +894,9 @@ describe('ValidatorClient', () => {
 
       // Enable blob upload for this attestation
       blobClient.canUpload.mockReturnValue(true);
+
+      // The checkpoint's last block consumed nothing, and the live bucket ends where it starts.
+      inbox.setBuckets([{ seq: 0n, total: 0n, rollingHash: checkpointProposal.checkpointHeader.inboxRollingHash }]);
 
       const attestations = await validatorClient.attestToCheckpointProposal(
         ValidatedCheckpointProposalCore(checkpointProposal),
