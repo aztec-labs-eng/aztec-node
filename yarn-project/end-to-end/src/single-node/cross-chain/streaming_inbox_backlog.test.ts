@@ -5,6 +5,7 @@ import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { getSlotAtTimestamp, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
@@ -35,6 +36,11 @@ describe('single-node/cross-chain/streaming_inbox_backlog', () => {
 
   const BATCH_SIZE = 220;
   const BATCHES = 5;
+  /**
+   * One more than an L1 Inbox bucket holds, sent in a single Multicall3 transaction so the rollover happens inside
+   * one L1 block: messages 0..255 fill the open bucket and message 256 opens the next one at the same timestamp.
+   */
+  const ROLLOVER_BATCH_SIZE = MAX_L1_TO_L2_MSGS_PER_BLOCK + 1;
   /** Block sub-slot duration in seconds, matching `blockDurationMs` below. */
   const BLOCK_DURATION = 6;
   /** Sub-slots per checkpoint the 36s/6s profile yields, which is also the configured `maxBlocksPerCheckpoint`. */
@@ -82,16 +88,71 @@ describe('single-node/cross-chain/streaming_inbox_backlog', () => {
   const consumedThrough = async (blockNumber: BlockNumber) =>
     BigInt((await aztecNode.getBlock(blockNumber))!.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
 
-  /** Sends the backlog in batches (one L1 block, hence one bucket, each) and returns the Inbox total after it. */
-  const sendBacklog = async (batches = BATCHES) => {
+  /**
+   * Sends the backlog as one L1 transaction per entry of `batchSizes` and returns the Inbox total after it together
+   * with every live bucket end it created.
+   *
+   * A batch is one L1 block, but not necessarily one bucket: a batch larger than a bucket rolls over inside its own
+   * L1 block and creates two. The endpoints are therefore grouped by the `bucketSeq` each `MessageSent` event
+   * carries, one endpoint per group, rather than taking the batch's final index — which would drop the first valid
+   * endpoint of a rolled-over batch and make the checkpoint-endpoint assertions below reject a legal publication.
+   */
+  const sendBacklog = async (batchSizes: number[] = times(BATCHES, () => BATCH_SIZE)) => {
     const bucketEnds: bigint[] = [];
-    for (let i = 0; i < batches; i++) {
-      const { messages } = await sendMessageBatch(BATCH_SIZE, recipient);
-      bucketEnds.push(messages.at(-1)!.index + 1n);
+    for (const size of batchSizes) {
+      const { messages } = await sendMessageBatch(size, recipient);
+      const endByBucket = new Map<bigint, bigint>();
+      for (const message of messages) {
+        endByBucket.set(message.bucketSeq, message.index + 1n);
+      }
+      bucketEnds.push(...endByBucket.values());
     }
     const inboxTotal = (await t.inbox.getState()).totalMessagesInserted;
     expect(inboxTotal).toEqual(bucketEnds.at(-1));
     return { inboxTotal, bucketEnds };
+  };
+
+  /**
+   * Sends one {@link ROLLOVER_BATCH_SIZE}-message batch in a single L1 transaction and asserts the 256/257 rollover
+   * on L1 from the receipt it produced: dense indices across the boundary, two bucket sequences sharing the send's
+   * L1 block timestamp, and a cumulative Inbox total that advanced by exactly the number of messages sent. Returns
+   * the messages so the caller can check the node's view of the same positions once they reach L2.
+   */
+  const sendRolloverBatch = async () => {
+    const totalBefore = (await t.inbox.getState()).totalMessagesInserted;
+    const { messages, l1Timestamp } = await sendMessageBatch(ROLLOVER_BATCH_SIZE, recipient);
+    const totalAfter = (await t.inbox.getState()).totalMessagesInserted;
+
+    // Nothing is lost or duplicated across the rollover: the compact indices are dense and monotonic, and the
+    // Inbox's own cumulative total advanced by exactly the batch size.
+    const firstIndex = messages[0].index;
+    expect(messages.map(m => m.index)).toEqual(times(ROLLOVER_BATCH_SIZE, i => firstIndex + BigInt(i)));
+    expect(totalAfter - totalBefore).toEqual(BigInt(ROLLOVER_BATCH_SIZE));
+    expect(totalAfter).toEqual(messages.at(-1)!.index + 1n);
+
+    // The first MAX_L1_TO_L2_MSGS_PER_BLOCK messages fill one bucket; the one past the cap opens the next.
+    const firstSeq = messages[0].bucketSeq;
+    const rolledSeq = messages[MAX_L1_TO_L2_MSGS_PER_BLOCK].bucketSeq;
+    expect(messages.slice(0, MAX_L1_TO_L2_MSGS_PER_BLOCK).map(m => m.bucketSeq)).toEqual(
+      times(MAX_L1_TO_L2_MSGS_PER_BLOCK, () => firstSeq),
+    );
+    expect(rolledSeq).toEqual(firstSeq + 1n);
+    expect(messages.slice(MAX_L1_TO_L2_MSGS_PER_BLOCK).map(m => m.bucketSeq)).toEqual([rolledSeq]);
+
+    // Both buckets were opened by the same L1 block, so they share its timestamp: the rollover is a capacity
+    // rollover, not the ordinary one-bucket-per-L1-block boundary.
+    const [firstBucket, rolledBucket] = await Promise.all([t.inbox.getBucket(firstSeq), t.inbox.getBucket(rolledSeq)]);
+    expect(firstBucket.timestamp).toEqual(l1Timestamp);
+    expect(rolledBucket.timestamp).toEqual(l1Timestamp);
+    expect(firstBucket.totalMsgCount).toEqual(messages[MAX_L1_TO_L2_MSGS_PER_BLOCK - 1].index + 1n);
+    expect(rolledBucket.totalMsgCount).toEqual(totalAfter);
+
+    log.warn(`Sent a ${ROLLOVER_BATCH_SIZE}-message batch spanning buckets ${firstSeq} and ${rolledSeq}`, {
+      firstIndex,
+      lastIndex: messages.at(-1)!.index,
+      l1Timestamp,
+    });
+    return { messages, firstSeq, rolledSeq };
   };
 
   /** Waits until the chain has consumed every Inbox message, returning the first block past `fromBlock` that did. */
@@ -182,7 +243,7 @@ describe('single-node/cross-chain/streaming_inbox_backlog', () => {
     await sequencer.pause();
     const blockBefore = await aztecNode.getBlockNumber();
     const consumedBefore = await consumedThrough(blockBefore);
-    const { inboxTotal, bucketEnds } = await sendBacklog(opts.batches);
+    const { inboxTotal, bucketEnds } = await sendBacklog(times(opts.batches, () => BATCH_SIZE));
     await waitForArchiverToObserve(inboxTotal);
 
     const currentSlot = getSlotAtTimestamp(BigInt(await t.cheatCodes.eth.lastBlockTimestamp()), t.constants);
@@ -201,7 +262,9 @@ describe('single-node/cross-chain/streaming_inbox_backlog', () => {
   };
 
   // A backlog above the per-checkpoint cap drains over successive checkpoints, each publishing at a live bucket end
-  // within the caps, rather than one checkpoint aborting on the cap and the next one repeating the abort.
+  // within the caps, rather than one checkpoint aborting on the cap and the next one repeating the abort. Its first
+  // batch crosses an L1 bucket's capacity inside one L1 block, so the drain also carries the 256/257 rollover: live
+  // Inbox, archiver and sequencer have to agree on the same dense message sequence across the bucket boundary.
   it('keeps publishing checkpoints within the caps under a sustained message backlog', async () => {
     const sequencer = t.context.aztecNodeService.getSequencer()!;
     // Production is paused while the batches are sent, so the demand measured here is the demand the first
@@ -211,9 +274,22 @@ describe('single-node/cross-chain/streaming_inbox_backlog', () => {
     await sequencer.pause();
     const blockBefore = await aztecNode.getBlockNumber();
     const consumedBefore = await consumedThrough(blockBefore);
-    const { inboxTotal, bucketEnds } = await sendBacklog();
+    // The rollover batch is sent on its own so the Inbox totals either side of it bracket that send alone.
+    const { messages: rolledOver, firstSeq, rolledSeq } = await sendRolloverBatch();
+    // The rollover batch replaces one of the uniform ones, so the backlog still spans the same number of L1 blocks
+    // and still exceeds the per-checkpoint cap; the rollover is added without lengthening the drain.
+    const { inboxTotal, bucketEnds: laterEnds } = await sendBacklog(times(BATCHES - 1, () => BATCH_SIZE));
+    const bucketEnds = [
+      rolledOver[MAX_L1_TO_L2_MSGS_PER_BLOCK - 1].index + 1n,
+      rolledOver.at(-1)!.index + 1n,
+      ...laterEnds,
+    ];
     await waitForArchiverToObserve(inboxTotal);
     expect(inboxTotal - consumedBefore).toBeGreaterThan(BigInt(MAX_L1_TO_L2_MSGS_PER_CHECKPOINT));
+    // Both halves of the rolled-over batch are live endpoints a checkpoint may publish at, which is what the
+    // bucket-grouped endpoint list above records and a per-batch final index would have missed.
+    expect(bucketEnds).toContain(rolledOver[MAX_L1_TO_L2_MSGS_PER_BLOCK - 1].index + 1n);
+    expect(bucketEnds).toContain(rolledOver.at(-1)!.index + 1n);
 
     // Resuming at a slot boundary gives the proposer that faces the backlog its whole build frame.
     await t.monitor.waitUntilNextL2Slot();
@@ -260,6 +336,18 @@ describe('single-node/cross-chain/streaming_inbox_backlog', () => {
     const checkpointsSpanned = [...perCheckpoint.keys()];
     expect(checkpointsSpanned.length).toBeGreaterThanOrEqual(2);
     expect(Math.max(...checkpointsSpanned) - Math.min(...checkpointsSpanned) + 1).toEqual(checkpointsSpanned.length);
+
+    // The node's view of the rolled-over batch, now that every message has reached L2: the positions either side of
+    // the bucket boundary resolve to the same compact indices L1 emitted, and each has a membership witness at its
+    // own index. The two buckets are distinct, so a rollover that lost or re-indexed the 257th message fails here.
+    expect(rolledSeq).toEqual(firstSeq + 1n);
+    for (const position of [0, MAX_L1_TO_L2_MSGS_PER_BLOCK - 1, MAX_L1_TO_L2_MSGS_PER_BLOCK]) {
+      const { msgHash, index } = rolledOver[position];
+      expect(await aztecNode.getL1ToL2MessageIndex(msgHash)).toEqual(index);
+      const witness = await aztecNode.getL1ToL2MessageMembershipWitness('latest', msgHash);
+      expect(witness).toBeDefined();
+      expect(witness![0]).toEqual(index);
+    }
   });
 
   // A proposer that starts its checkpoint late has fewer sub-slots left, so its completion target has to come from

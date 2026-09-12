@@ -20,6 +20,7 @@ import { FullNodeCheckpointsBuilder, NodeKeystoreAdapter, type ValidatorClient }
 import { type SequencerClientConfig, getPublisherConfigFromSequencerConfig } from '../config.js';
 import type { GlobalVariableBuilder } from '../global_variable_builder/index.js';
 import { SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
+import type { CheckpointProposalJobTestHooks } from '../sequencer/checkpoint_proposal_job_test_hooks.js';
 import { Sequencer, type SequencerConfig } from '../sequencer/index.js';
 
 /**
@@ -66,6 +67,11 @@ export class SequencerClient {
       funderL1TxUtils?: L1TxUtils;
       nodeKeyStore: KeystoreManager;
       globalVariableBuilder: GlobalVariableBuilder;
+      /**
+       * Test-only checkpoint-build hooks. Passed straight to the sequencer as a dependency; deliberately not part of
+       * {@link SequencerClientConfig}, so no serialized configuration or RPC surface can reach them.
+       */
+      checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks;
     },
   ) {
     const {
@@ -162,6 +168,7 @@ export class SequencerClient {
       { ...config, maxL2BlockGas, maxDABlockGas, maxTxsPerBlock },
       telemetryClient,
       log,
+      deps.checkpointProposalJobTestHooks,
     );
 
     sequencer.init();

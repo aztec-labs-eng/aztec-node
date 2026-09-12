@@ -5,7 +5,8 @@ import { accumulateInboxRollingHash, updateInboxRollingHash } from './inbox_roll
 describe('inbox rolling hash', () => {
   // Shared test vectors pinned against the noir `accumulate_inbox_rolling_hash` helper (FI-02). Any divergence here
   // means the L1 / noir / TS rolling hashes would disagree.
-  const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => new Fr(from + i));
+  const range = (from: number, to: number) =>
+    Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => new Fr(from + i));
 
   it('chains a single leaf from zero', () => {
     expect(accumulateInboxRollingHash(Fr.ZERO, [new Fr(11)])).toEqual(
@@ -44,5 +45,27 @@ describe('inbox rolling hash', () => {
   it('returns the start unchanged for an empty list', () => {
     const start = new Fr(0x2a);
     expect(accumulateInboxRollingHash(start, [])).toEqual(start);
+  });
+
+  // The counts an L1 bucket rollover and a cap-sized checkpoint actually produce. The hash chains one leaf at a
+  // time, so where a prefix is cut never changes the result: a 257-message L1 batch split across two buckets and
+  // two L2 blocks ends at the same hash as one unsplit run, which is what makes a block's signed prefix reference
+  // comparable to a validator's own view however the messages were grouped.
+  it.each([0, 1, 255, 256, 257, 1024, 1025])('is split-invariant over %i leaves', count => {
+    const leaves = range(1, count);
+    const whole = accumulateInboxRollingHash(Fr.ZERO, leaves);
+
+    for (const cut of [0, 1, Math.min(256, count), count]) {
+      const prefix = accumulateInboxRollingHash(Fr.ZERO, leaves.slice(0, cut));
+      expect(accumulateInboxRollingHash(prefix, leaves.slice(cut))).toEqual(whole);
+    }
+
+    // Every prefix is distinct from the whole unless it is the whole, so a short prefix can never pass as a
+    // complete one.
+    if (count > 0) {
+      expect(accumulateInboxRollingHash(Fr.ZERO, leaves.slice(0, count - 1))).not.toEqual(whole);
+    } else {
+      expect(whole).toEqual(Fr.ZERO);
+    }
   });
 });

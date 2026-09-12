@@ -22,6 +22,7 @@ import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
+  type BlockHash,
   CommitteeAttestation,
   L2Block,
   type L2BlockSink,
@@ -78,6 +79,10 @@ import {
 } from '../test/utils.js';
 import { CheckpointProposalJob } from './checkpoint_proposal_job.js';
 import type { CheckpointProposalJobMetricsRecorder } from './checkpoint_proposal_job_metrics.js';
+import type {
+  CheckpointProposalJobTestEvent,
+  CheckpointProposalJobTestHooks,
+} from './checkpoint_proposal_job_test_hooks.js';
 import type { SequencerEvents } from './events.js';
 import type { SequencerMetrics } from './metrics.js';
 import { RequestsTracker } from './requests_tracker.js';
@@ -807,6 +812,7 @@ describe('CheckpointProposalJob', () => {
     targetSlot?: SlotNumber;
     targetEpoch?: EpochNumber;
     proposedCheckpointData?: ProposedCheckpointData;
+    testHooks?: CheckpointProposalJobTestHooks;
   }): TestCheckpointProposalJob {
     const setStateFn = jest.fn();
     const eventEmitter = new EventEmitter() as TypedEventEmitter<SequencerEvents>;
@@ -845,6 +851,7 @@ describe('CheckpointProposalJob', () => {
       getTelemetryClient().getTracer('test'),
       { actor: 'test' }, // bindings
       overrides?.proposedCheckpointData,
+      overrides?.testHooks,
     );
   }
 
@@ -2233,6 +2240,178 @@ describe('CheckpointProposalJob', () => {
         expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
         expect(metrics.recordCheckpointProposalFailed).toHaveBeenCalledWith('publication_preflight_timeout');
       });
+    });
+  });
+
+  // The injected checkpoint-phase hook is the barrier an e2e test uses to change L1 between two blocks of one
+  // checkpoint. What makes it usable is exactly where it sits: after the block is committed to the proposer's own
+  // archiver and before that block reaches the network or the next block freezes its message range.
+  describe('checkpoint phase test hooks', () => {
+    const leaves = (count: number, from = 1) => Array.from({ length: count }, (_, i) => new Fr(from + i));
+
+    /** Mocks `count` sub-slots, the last one flagged as the checkpoint's final block. */
+    const mockSubslots = (hookedJob: TestCheckpointProposalJob, count: number) => {
+      const spy = jest.spyOn(hookedJob.getTimetable(), 'selectNextSubslot');
+      for (let i = 0; i < count; i++) {
+        spy.mockReturnValueOnce(subslot(10 + 8 * i, i, i === count - 1));
+      }
+      spy.mockReturnValue(noSubslot());
+      jest.spyOn(hookedJob.getTimetable(), 'getMaxBlocksPerCheckpoint').mockReturnValue(count);
+    };
+
+    /** Creates a job whose hook records every event it receives, over a timetable that fits multiple blocks. */
+    const createHookedJob = (onCheckpointPhase: (event: CheckpointProposalJobTestEvent) => Promise<void>) => {
+      const hookedJob = createCheckpointProposalJob({ testHooks: { onCheckpointPhase } });
+      hookedJob.setTimetable(makeProposerTimetable({ l1Constants, blockDurationMs: 3000 }));
+      return hookedJob;
+    };
+
+    it('fires once for every block built, in order, with that block’s identity', async () => {
+      const events: CheckpointProposalJobTestEvent[] = [];
+      // The block the builder just returned, hashed while the hook holds it: completing the checkpoint renumbers and
+      // re-chains the seeded blocks afterwards, so their final hashes are not the ones the blocks had here.
+      const hashesWhenHeld: BlockHash[] = [];
+      const hookedJob = createHookedJob(async event => {
+        events.push(event);
+        hashesWhenHeld.push(await checkpointBuilder.getBuiltBlocks().at(-1)!.hash());
+      });
+      mockSubslots(hookedJob, 2);
+      const { blocks, lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await hookedJob.executeAndAwait();
+
+      expect(events.map(e => e.phase)).toEqual(['block-ready-to-broadcast', 'block-ready-to-broadcast']);
+      expect(events.map(e => e.blockNumber)).toEqual(blocks.map(b => b.number));
+      expect(events.map(e => e.indexWithinCheckpoint)).toEqual([0, 1]);
+      expect(events.map(e => e.slot)).toEqual([SlotNumber(newSlotNumber), SlotNumber(newSlotNumber)]);
+      expect(events.map(e => e.checkpointNumber)).toEqual([checkpointNumber, checkpointNumber]);
+      expect(events.map(e => e.blockHash)).toEqual(hashesWhenHeld);
+      // Only the checkpoint's final block travels with the checkpoint proposal rather than on its own.
+      expect(events.map(e => e.isStandalone)).toEqual([true, false]);
+      // One sub-slot is left after block zero of a two-block checkpoint, and none after the last.
+      expect(events.map(e => e.remainingBuildSubslots)).toEqual([1, 0]);
+    });
+
+    it('fires after the block is stored by the archiver and before it is gossiped', async () => {
+      const observed: { stored: boolean; broadcast: boolean }[] = [];
+      const hookedJob = createHookedJob(() => {
+        observed.push({
+          stored: blockSink.addBlock.mock.calls.length > observed.length,
+          broadcast: p2p.broadcastProposal.mock.calls.length > 0,
+        });
+        return Promise.resolve();
+      });
+      mockSubslots(hookedJob, 2);
+      const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await hookedJob.executeAndAwait();
+
+      // At block zero's hook the block is already in the archiver and nothing has been gossiped yet. The second
+      // hook sees the first block's gossip, which is what proves the first hook ran ahead of it.
+      expect(observed).toEqual([
+        { stored: true, broadcast: false },
+        { stored: true, broadcast: true },
+      ]);
+    });
+
+    it('holds the standalone gossip and the next block until the hook resolves', async () => {
+      const { promise: held, resolve: release } = promiseWithResolvers<void>();
+      const { promise: entered, resolve: markEntered } = promiseWithResolvers<void>();
+      const hookedJob = createHookedJob(async event => {
+        if (event.indexWithinCheckpoint === 0) {
+          markEntered();
+          await held;
+        }
+      });
+      mockSubslots(hookedJob, 2);
+      const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const running = hookedJob.executeAndAwait();
+      await entered;
+      // While the hook is held, block zero has not reached the network and block one has not been built.
+      expect(p2p.broadcastProposal).not.toHaveBeenCalled();
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(1);
+
+      release();
+      await running;
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(2);
+      expect(p2p.broadcastProposal).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports the message prefix the block signed, before the next block selects its range', async () => {
+      const events: CheckpointProposalJobTestEvent[] = [];
+      const hookedJob = createHookedJob(event => {
+        events.push(event);
+        // Messages arriving inside the hook belong to the next block, never to the one that just closed.
+        streamingInbox.append(leaves(2, 100 + events.length), { closeBucket: true });
+        return Promise.resolve();
+      });
+      mockSubslots(hookedJob, 2);
+      streamingInbox.set(leaves(3));
+      publisher.validateCheckpointHeaderAndInbox.mockResolvedValue(0n);
+      const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await hookedJob.executeAndAwait();
+
+      // Block zero saw three messages; the two appended from its own hook are consumed by block one.
+      expect(events.map(e => e.consumedMessageCount)).toEqual([3n, 5n]);
+      expect(events.map(e => e.inboxPrefixRef.inboxRollingHash.toString())).toEqual([
+        streamingInbox.positionAt(3n).rollingHash.toString(),
+        streamingInbox.positionAt(5n).rollingHash.toString(),
+      ]);
+      expect(checkpointBuilder.buildBlockCalls.map(call => call.opts.l1ToL2Messages?.length)).toEqual([3, 2]);
+    });
+
+    it('carries a send deadline that is still open at the first block of the checkpoint', async () => {
+      const events: CheckpointProposalJobTestEvent[] = [];
+      const hookedJob = createHookedJob(event => {
+        events.push(event);
+        return Promise.resolve();
+      });
+      mockSubslots(hookedJob, 2);
+      const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await hookedJob.executeAndAwait();
+
+      const timetable = hookedJob.getTimetable();
+      const expected = new Date(
+        (timetable.getCheckpointProposalReceiveDeadline(SlotNumber(newSlotNumber)) - timetable.p2pPropagationTime) *
+          1000,
+      );
+      expect(events.map(e => e.proposalSendDeadline)).toEqual([expected, expected]);
+      // The send deadline is downstream of block building: a hook released before it still leaves the checkpoint
+      // publishable, which is the budget an e2e gate has to reason about.
+      expect(events[0].proposalSendDeadline.getTime()).toBeGreaterThan(
+        timetable.getLastBlockBuildTime(SlotNumber(newSlotNumber)) * 1000,
+      );
+    });
+
+    it('aborts the checkpoint when the hook throws, without gossiping the block', async () => {
+      const hookedJob = createHookedJob(() => Promise.reject(new Error('hook failed')));
+      mockSubslots(hookedJob, 2);
+      const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      expect(await hookedJob.executeAndAwait()).toBeUndefined();
+      expect(p2p.broadcastProposal).not.toHaveBeenCalled();
+      expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+    });
+
+    it('builds the same checkpoint with no hooks injected', async () => {
+      const plainJob = createCheckpointProposalJob();
+      plainJob.setTimetable(makeProposerTimetable({ l1Constants, blockDurationMs: 3000 }));
+      mockSubslots(plainJob, 2);
+      const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      expect(await plainJob.executeAndAwait()).toBeDefined();
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(2);
+      expect(p2p.broadcastProposal).toHaveBeenCalledTimes(1);
     });
   });
 

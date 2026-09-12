@@ -13,7 +13,7 @@ import { jest } from '@jest/globals';
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { proveAndSendTxs } from '../../test-wallet/utils.js';
 import { setupWithProver } from '../setup.js';
-import { FAST_REORG_TIMING, SingleNodeTestContext } from '../single_node_test_context.js';
+import { FAST_REORG_TIMING, SingleNodeTestContext, type SingleNodeTestOpts } from '../single_node_test_context.js';
 
 jest.setTimeout(1000 * 60 * 20);
 
@@ -44,7 +44,7 @@ export class L1ReorgsTest {
   public L1_BLOCK_TIME_IN_S!: number;
   public L2_SLOT_DURATION_IN_S!: number;
 
-  public async setup(): Promise<void> {
+  public async setup(opts: SingleNodeTestOpts = {}): Promise<void> {
     this.test = await setupWithProver({
       ...FAST_REORG_TIMING, // ethSlot=4s, aztecSlot=24s, block=5s, epoch=4, 32 slots/epoch (mainnet)
       numberOfAccounts: 1,
@@ -55,6 +55,7 @@ export class L1ReorgsTest {
       aztecProofSubmissionEpochs: 1,
       // Pipelining + multi-blocks-per-slot: 5s blocks fit ~3 blocks per 24s slot, and TX_COUNT=8
       // ensures multiple checkpoints have multiple blocks
+      ...opts,
     });
     ({
       proverDelayer: this.proverDelayer,
