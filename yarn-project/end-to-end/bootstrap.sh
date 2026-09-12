@@ -126,6 +126,10 @@ function test_cmds {
         # (via set_dump_avm in the loop below) when DUMP_AVM_INPUTS_TO_DIR is set.
         test_prefix="$prefix:TIMEOUT=25m"
         ;;
+      single-node/cross-chain/streaming_inbox_backlog)
+        # Three backlog scenarios, each pausing production to fill the Inbox, run serially in one container.
+        test_prefix="$prefix:TIMEOUT=25m"
+        ;;
       single-node/proving/long_proving_time)
         # The long-proving-time scenario waits out a multi-epoch prover delay.
         test_prefix="$prefix:TIMEOUT=15m"
