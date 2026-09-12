@@ -1582,7 +1582,14 @@ describe('Archiver Sync', () => {
     // Local blocks are placed far ahead on L1 so their slot never expires while the tests move the L1 head.
     const LOCAL_BLOCKS_L1_BLOCK = 5000n;
 
-    /** Locally proposed blocks chained on genesis, each consuming through the given message counts. */
+    /**
+     * Locally proposed blocks chained on genesis, each consuming through the given message counts.
+     *
+     * `addBlock` resolves once the block is stored but triggers a sync it does not await, so the pass it starts
+     * outlives this helper with the head captured as it is now. Tests that then move the head backwards would race
+     * it: recovery against the stale head can commit after the pass for the new head and leave the old height as
+     * the synced one. Draining it here settles that pass before the caller changes anything.
+     */
     const addLocalBlocksConsuming = async (leafCounts: number[]) => {
       const { checkpoint } = await mockCheckpointAndMessages(CheckpointNumber(1), {
         startBlockNumber: BlockNumber(1),
@@ -1595,6 +1602,7 @@ describe('Archiver Sync', () => {
       for (const block of checkpoint.blocks) {
         await addLocalBlock(block);
       }
+      await archiver.syncImmediate();
       return checkpoint.blocks;
     };
     const localBlockNumbers = async () =>
@@ -1603,28 +1611,63 @@ describe('Archiver Sync', () => {
       );
     const randomLeaves = (count: number) => times(count, () => Fr.random());
 
-    it('re-mines the same messages beyond the lookup window and appends new ones without touching proposed blocks', async () => {
+    it('appends new messages without disturbing the stored ones or the blocks that consumed them', async () => {
       const msgs = randomLeaves(3);
       fake.addMessages(CheckpointNumber(1), 100n, msgs);
       fake.setL1BlockNumber(110n);
       await archiver.syncImmediate();
       await addLocalBlocksConsuming([3]);
 
-      // The messages move 60 L1 blocks later, past the window a lookup around their old height covers, and two new
-      // ones follow them.
-      fake.moveMessagesToL1Block(100n, 160n);
+      // The L1 blocks holding the stored messages are untouched and two new messages follow them: a plain forward
+      // append, with nothing to look up or roll back.
       const appended = randomLeaves(2);
       fake.addMessages(CheckpointNumber(2), 161n, appended);
       fake.setL1BlockNumber(165n);
       await archiver.syncImmediate();
 
       expect(await getStoredLeaves()).toEqual(asHex([...msgs, ...appended]));
-      // Unchanged content is a plain forward append; nothing needed to be looked up or pruned.
       expect(eventByHashSpy).not.toHaveBeenCalled();
       expect(pruneSpy).not.toHaveBeenCalled();
       expect(await localBlockNumbers()).toEqual([1]);
       expect(archiver.getL1BlockNumber()).toEqual(165n);
       expect(synchronizer.isRecoveringMessages()).toBe(false);
+    });
+
+    it('discards a block consuming unchanged messages that were re-mined beyond the lookup window', async () => {
+      const msgs = randomLeaves(3);
+      fake.addMessages(CheckpointNumber(1), 100n, msgs);
+      fake.setL1BlockNumber(110n);
+      await archiver.syncImmediate();
+      await addLocalBlocksConsuming([3]);
+
+      // L1 replaces every block from 100 on. The three messages survive the replacement with their content, index
+      // and rolling hash intact, but are re-mined 60 blocks later, past the top of the window a lookup around their
+      // old height covers, and two new messages follow them.
+      fake.moveMessagesToL1Block(100n, 160n);
+      const appended = randomLeaves(2);
+      fake.addMessages(CheckpointNumber(2), 161n, appended);
+      fake.reorgL1BlocksFrom(100n);
+      fake.setL1BlockNumber(165n);
+      await archiver.syncImmediate();
+
+      // Every bounded lookup misses, so the anchor falls back to the deployment block and the block that consumed
+      // the three messages is pruned even though they come straight back unchanged. That is the accepted cost of a
+      // conservative recovery, not a defect: the rollback precedes the refetch.
+      expect(eventByHashSpy).toHaveBeenCalledTimes(3);
+      expect(pruneSpy).toHaveBeenCalledTimes(1);
+      expect(pruneSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ blocks: [expect.objectContaining({ number: 1 })] }),
+      );
+      expect(await localBlockNumbers()).toEqual([]);
+      expect(await getStoredLeaves()).toEqual(asHex([...msgs, ...appended]));
+      expect(archiver.getL1BlockNumber()).toEqual(165n);
+      expect(synchronizer.isRecoveringMessages()).toBe(false);
+
+      // Syncing again at the same head refetches from L1 rather than resurrecting the pruned block.
+      await archiver.syncImmediate();
+      expect(await getStoredLeaves()).toEqual(asHex([...msgs, ...appended]));
+      expect(await localBlockNumbers()).toEqual([]);
+      expect(pruneSpy).toHaveBeenCalledTimes(1);
     });
 
     it('rolls back to the newest message still found on L1 and re-fetches the rest, dropping unchanged work', async () => {
@@ -1947,10 +1990,6 @@ describe('Archiver Sync', () => {
       fake.setL1BlockNumber(115n);
       await archiver.syncImmediate();
       await addLocalBlocksConsuming([4]);
-      // addBlock triggers a sync it does not await, and that pass captures the head as it is now. Drain it before
-      // moving the head backwards: left in flight, it recovers against the pre-reorg head and can commit after the
-      // pass below, leaving 115 as the synced height.
-      await archiver.syncImmediate();
 
       // A replacement chain shorter than every stored height, carrying none of the stored messages. Each candidate's
       // window is clipped to the new head rather than slid down to keep its width, so it cannot reach an event above
@@ -2589,9 +2628,6 @@ describe('Archiver Sync', () => {
         fake.setL1BlockNumber(110n);
         await archiver.syncImmediate();
         await addLocalBlocksConsuming([1, 2]);
-        // Drain the sync addBlock triggers but does not await, so it cannot commit against the pre-reorg head after
-        // the pass below and leave 110 as the synced height.
-        await archiver.syncImmediate();
 
         // L1 really does drop B and shorten: the syncpoint's block is replaced, so nothing vouches for the tail.
         fake.removeMessagesAfter(1);
