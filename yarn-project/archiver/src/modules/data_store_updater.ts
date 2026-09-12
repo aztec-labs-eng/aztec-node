@@ -410,7 +410,7 @@ export class ArchiverDataStoreUpdater {
     if (block === undefined || block.header.getBlockNumber() !== blockNumber) {
       throw new Error(`Block ${blockNumber} is missing from the store`);
     }
-    return BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
+    return blockLeafCount(block);
   }
 
   /**

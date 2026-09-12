@@ -37,7 +37,6 @@ type RecoveryState = {
   head: L1BlockId;
   /** The Inbox's position at `head`. */
   remote: InboxContractState;
-  finalizedL1Block: L1BlockId | undefined;
   /** The next stored message to look up on L1, or undefined once the search has run out of candidates. */
   nextCandidateIndex: bigint | undefined;
   /** Number of per-message event lookups made so far, for progress reporting. */
@@ -176,12 +175,9 @@ export class InboxMessageSynchronizer {
 
   private async syncPass(head: L1BlockId, finalizedL1Block: L1BlockId | undefined): Promise<InboxMessageSyncResult> {
     if (this.recovery !== undefined) {
-      const pinnedHead = this.recovery.head;
-      const pinnedStatus = await this.checkL1Block(pinnedHead);
+      const pinnedStatus = await this.checkL1Block(this.recovery.head);
       if (pinnedStatus === 'canonical') {
-        const result = await this.continueRecovery();
-        // Recovery is complete relative to the head it was pinned to; blocks after it still need normal ingestion.
-        return result.status === 'synced' && !sameL1Block(pinnedHead, head) ? { ...result, status: 'pending' } : result;
+        return await this.continueRecovery();
       }
       if (pinnedStatus === 'unknown') {
         // The pinned head could not be read. That is a provider problem, not evidence its chain is gone: keep the
@@ -255,14 +251,14 @@ export class InboxMessageSynchronizer {
       }
       // The head disagrees with the local log at the head's own count, so this is not a view of the same chain that
       // has yet to catch up: recovery searches L1 for a common anchor and only rolls back to one it found there.
-      return this.startRecovery(head, remote, finalizedL1Block);
+      return this.startRecovery(head, remote);
     }
 
     const ingestFrom = this.ingestionStartFor(cursor);
     if (head.l1BlockNumber < ingestFrom) {
       // A head below the first block still to be scanned, and the log does not agree with it: there is no forward
       // range to fetch, so find where the local log and the canonical one part ways.
-      return this.startRecovery(head, remote, finalizedL1Block);
+      return this.startRecovery(head, remote);
     }
 
     // Forward ingestion inherits the scanned log as canonical, and the head batch's comparison then certifies that
@@ -287,7 +283,7 @@ export class InboxMessageSynchronizer {
           syncPoint: persistedSyncPoint,
           headL1BlockNumber: head.l1BlockNumber,
         });
-        return this.startRecovery(head, remote, finalizedL1Block);
+        return this.startRecovery(head, remote);
       }
     }
 
@@ -303,7 +299,7 @@ export class InboxMessageSynchronizer {
         this.log.warn(`Fetched L1 to L2 messages do not continue the local log: ${err.message}`, {
           inboxMessage: err.inboxMessage,
         });
-        return this.startRecovery(head, remote, finalizedL1Block);
+        return this.startRecovery(head, remote);
       }
       throw err;
     }
@@ -326,13 +322,13 @@ export class InboxMessageSynchronizer {
           this.log.warn(`Head batch of L1 to L2 messages does not continue the local log: ${err.message}`, {
             inboxMessage: err.inboxMessage,
           });
-          return this.startRecovery(head, remote, finalizedL1Block);
+          return this.startRecovery(head, remote);
         }
         throw err;
       }
       return synced();
     }
-    return this.startRecovery(head, remote, finalizedL1Block);
+    return this.startRecovery(head, remote);
   }
 
   /**
@@ -447,11 +443,7 @@ export class InboxMessageSynchronizer {
     }
   }
 
-  private async startRecovery(
-    head: L1BlockId,
-    remote: InboxContractState,
-    finalizedL1Block: L1BlockId | undefined,
-  ): Promise<InboxMessageSyncResult> {
+  private async startRecovery(head: L1BlockId, remote: InboxContractState): Promise<InboxMessageSyncResult> {
     const local = await this.stores.messages.getSyncedMessagePosition();
     // Messages past the canonical count cannot be on the canonical chain at their index, so the search for a common
     // message starts at the canonical tip or the local one, whichever is lower.
@@ -459,7 +451,6 @@ export class InboxMessageSynchronizer {
     this.recovery = {
       head,
       remote,
-      finalizedL1Block,
       nextCandidateIndex: lastCandidate < 0n ? undefined : lastCandidate,
       lookups: 0,
       startedAt: new Timer(),
