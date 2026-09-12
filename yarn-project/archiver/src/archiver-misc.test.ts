@@ -20,6 +20,7 @@ import { EventEmitter } from 'events';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { Archiver, type ArchiverEmitter } from './archiver.js';
+import { InboxMessagePrefixChangedError } from './errors.js';
 import type { ArchiverInstrumentation } from './modules/instrumentation.js';
 import { ArchiverL1Synchronizer } from './modules/l1_synchronizer.js';
 import { createArchiverDataStores } from './store/data_stores.js';
@@ -288,5 +289,25 @@ describe('Archiver misc', () => {
       });
       expect(await archiver.isPruneDueAtSlot(SlotNumber(8))).toBe(true);
     });
+  });
+});
+
+describe('InboxMessagePrefixChangedError', () => {
+  it('reports the rolling hash the caller expected when it knows one for the count', () => {
+    const expected = Fr.random();
+    const actual = Fr.random();
+    const error = new InboxMessagePrefixChangedError(7n, expected, actual);
+
+    expect(error.expected).toEqual(expected);
+    expect(error.message).toContain(`from ${expected.toString()} to ${actual.toString()}`);
+  });
+
+  it('reports no expected hash when the caller does not know one for the count', () => {
+    // The anchor search hits this when the row it was walking towards is gone: nothing there knows what that row's
+    // rolling hash was, and naming the Inbox's tip hash would describe a different count entirely.
+    const error = new InboxMessagePrefixChangedError(7n, undefined, undefined);
+
+    expect(error.expected).toBeUndefined();
+    expect(error.message).toContain('at count 7 changed from unavailable to unavailable');
   });
 });
