@@ -9,9 +9,12 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   type StreamingBlockCheckInput,
+  type StreamingBlockCheckReason,
+  type StreamingBlockCountRange,
   type StreamingInboxMessageSource,
   checkStreamingBlockProposal,
   checkStreamingBlockProposalMetadata,
+  isRetryableStreamingBlockCheckReason,
   readStreamingBlockBundle,
 } from './streaming_inbox_checks.js';
 
@@ -63,6 +66,19 @@ class FakeInboxView implements StreamingInboxMessageSource {
       end: this.positionAt(end),
     });
   }
+}
+
+/** Upper bound the checks apply to the error text they attach to a result. */
+const MAX_REPORTED_ERROR_LENGTH = 200;
+
+/** A message source whose range read always fails, for exercising the failure classification. */
+function rejectingWith(err: Error): Pick<StreamingInboxMessageSource, 'getL1ToL2MessageRange'> {
+  return { getL1ToL2MessageRange: () => Promise.reject(err) };
+}
+
+/** An arbitrary count range to feed a failing read; the range itself never reaches the source's contents. */
+function failingRange(): StreamingBlockCountRange {
+  return { parentTotalMsgCount: 0n, endTotalMsgCount: 1n, inboxPrefixRef: InboxMessagePrefixRef.random() };
 }
 
 function baseInput(overrides: Partial<StreamingBlockCheckInput>): StreamingBlockCheckInput {
@@ -254,6 +270,35 @@ describe('checkStreamingBlockProposal', () => {
       view.replaceFrom(2, 0);
       const result = await readStreamingBlockBundle(view, metadata as typeof metadata & { accepted: true });
       expect(result).toEqual({ accepted: false, reason: 'inbox_prefix_unavailable' });
+    });
+
+    // The context is diagnostics only: a store fault still yields the same non-punitive verdict as sync lag, so the
+    // validator does exactly what it did with the proposal.
+    it('carries the error text of a range read that failed for an unanticipated reason', async () => {
+      const result = await readStreamingBlockBundle(rejectingWith(new Error('database is closed')), failingRange());
+      expect(result).toEqual({ accepted: false, reason: 'inbox_prefix_unavailable', error: 'database is closed' });
+      expect(isRetryableStreamingBlockCheckReason((result as { reason: StreamingBlockCheckReason }).reason)).toBe(true);
+    });
+
+    it.each(['Inbox message range [0, 1) is not fully synced: ...', 'Invalid Inbox leaf count range [1, 0)'])(
+      'attaches no context to ordinary sync lag: %s',
+      async message => {
+        const result = await readStreamingBlockBundle(rejectingWith(new Error(message)), failingRange());
+        expect(result).toEqual({ accepted: false, reason: 'inbox_prefix_unavailable' });
+        expect((result as { error?: string }).error).toBeUndefined();
+        expect(isRetryableStreamingBlockCheckReason((result as { reason: StreamingBlockCheckReason }).reason)).toBe(
+          true,
+        );
+      },
+    );
+
+    it('bounds the error text so a verbose provider failure cannot blow up a log record', async () => {
+      const result = await readStreamingBlockBundle(rejectingWith(new Error('x'.repeat(5000))), failingRange());
+      expect(result).toEqual({
+        accepted: false,
+        reason: 'inbox_prefix_unavailable',
+        error: 'x'.repeat(MAX_REPORTED_ERROR_LENGTH),
+      });
     });
   });
 });
