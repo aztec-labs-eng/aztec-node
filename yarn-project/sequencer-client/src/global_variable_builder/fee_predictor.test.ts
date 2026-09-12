@@ -389,6 +389,21 @@ describe('FeePredictor', () => {
       expect(predicted[0].feePerL2Gas).toBe(l1FeeAtStart);
     }
   }, 60_000);
+
+  it('reads the protocol fee margin at the pinned snapshot block', async () => {
+    await rollupCheatCodes.clearProvingCostCooldown();
+    await rollupCheatCodes.setProtocolFeeMargin(1000);
+    const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
+
+    await rollupCheatCodes.clearProvingCostCooldown();
+    await rollupCheatCodes.setProtocolFeeMargin(2000);
+    expect(await rollup.getProtocolFeeMargin()).toBe(2000);
+
+    const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
+    const state = await predictor.refreshState(pinnedBlock);
+
+    expect(state.protocolFeeMarginBps).toBe(1000n);
+  }, 60_000);
 });
 
 describe('FeePredictor state caching', () => {
