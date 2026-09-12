@@ -248,7 +248,9 @@ export class NodePublicCallsSimulator {
    *
    * This is a lower bound, not the sequencer's choice. Above that threshold, and on a checkpoint's final block, the
    * sequencer's end depends on a live L1 bucket end it reads from the Inbox and this node does not, so the
-   * prediction stops where the local log alone is authoritative.
+   * prediction stops where the local log alone is authoritative. Known limitation: closing that gap would mean this
+   * node running the sequencer's live endpoint selection, Inbox reads included, on every simulation, so a call
+   * consuming a message above the local estimate can simulate successfully and then fail when it runs for real.
    *
    * Best-effort. Any failure, such as messages not synced yet or a torn archiver snapshot, leaves the fork at the
    * tip state, which is what the transaction sees if the next block consumes nothing.
