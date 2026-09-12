@@ -2,6 +2,11 @@ export * from './client/index.js';
 export * from './config.js';
 export * from './publisher/index.js';
 export { Sequencer, SequencerState, type SequencerEvents } from './sequencer/index.js';
+export type {
+  CheckpointProposalJobTestEvent,
+  CheckpointProposalJobTestHooks,
+  CheckpointProposalJobTestPhase,
+} from './sequencer/checkpoint_proposal_job_test_hooks.js';
 
 // Used by the node to simulate public parts of transactions. Should these be moved to a shared library?
 // ISSUE(#9832)
