@@ -24,6 +24,11 @@ bot:
   botPrivateKey: "0xcafe"
   daGasLimit: ""
   l2GasLimit: ""
+  l1ToL2SeedCount: ""
+  l1ToL2TimeoutSeconds: ""
+  inboxMessagesPerBatch: 4
+  inboxConsumeMode: "mixed"
+  inboxSaturationIntervalSeconds: 0
 
   persistence:
     enabled: false
