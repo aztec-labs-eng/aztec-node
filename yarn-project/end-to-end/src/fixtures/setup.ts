@@ -44,7 +44,7 @@ import { MockGossipSubNetwork, getMockPubSubP2PServiceFactory } from '@aztec-lab
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { ProverNodeConfig, ProverNodeDeps } from '@aztec-labs/prover-node';
 import { type PXEConfig, type PXECreationOptions, getPXEConfig } from '@aztec-labs/pxe/server';
-import type { SequencerClient } from '@aztec-labs/sequencer-client';
+import type { CheckpointProposalJobTestHooks, SequencerClient } from '@aztec-labs/sequencer-client';
 import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
 import {
   HandshakeRegistryArtifact,
@@ -186,6 +186,11 @@ export type SetupOptions<TDeployExtraL1ContractsReturnType = unknown> = {
   l2StartTime?: number;
   /** Whether to start a prover node */
   startProverNode?: boolean;
+  /**
+   * Test-only hooks into the initial node's checkpoint building, passed to `createAztecNodeService` as a dependency
+   * rather than through the node config, so nothing serialized or exposed over RPC can reach them.
+   */
+  checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks;
   /** Manual config for the telemetry client */
   telemetryConfig?: Partial<TelemetryClientConfig> & { benchmark?: boolean };
   /** Public data that will be inserted in the tree in genesis */
@@ -649,7 +654,12 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       withLoggerBindings({ actor: 'node-0' }, () =>
         createAztecNodeService(
           initialNodeConfig,
-          { dateProvider, telemetry: telemetryClient, p2pClientDeps },
+          {
+            dateProvider,
+            telemetry: telemetryClient,
+            p2pClientDeps,
+            checkpointProposalJobTestHooks: opts.checkpointProposalJobTestHooks,
+          },
           { genesis, dontStartSequencer: opts.skipInitialSequencer },
         ),
       ),
