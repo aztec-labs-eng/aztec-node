@@ -1203,6 +1203,7 @@ __metadata:
     "@aztec-foundation/l1-artifacts": "npm:0.1.0-dummy"
     "@aztec-labs/accounts": "workspace:^"
     "@aztec-labs/aztec.js": "workspace:^"
+    "@aztec-labs/constants": "workspace:^"
     "@aztec-labs/ethereum": "workspace:^"
     "@aztec-labs/foundation": "workspace:^"
     "@aztec-labs/kv-store": "workspace:^"
