@@ -11,6 +11,7 @@ import { DEFAULT_BLOCK_DURATION_MS } from '@aztec-labs/stdlib/config';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import {
   type InboxMessagePosition,
+  InboxMessagePrefixRef,
   type InboxMessageRange,
   type L1ToL2MessageSource,
   accumulateInboxRollingHash,
@@ -143,7 +144,11 @@ function createCheckpointHeaderFromBlock(block: L2Block): CheckpointHeader {
 /**
  * Creates a block proposal from a block and signature
  */
-export function createBlockProposal(block: L2Block, signature: Signature): BlockProposal {
+export function createBlockProposal(
+  block: L2Block,
+  signature: Signature,
+  inboxPrefixRef: InboxMessagePrefixRef = InboxMessagePrefixRef.random(),
+): BlockProposal {
   const txHashes = block.body.txEffects.map(tx => tx.txHash);
   return new BlockProposal(
     block.header,
@@ -152,6 +157,7 @@ export function createBlockProposal(block: L2Block, signature: Signature): Block
     txHashes,
     signature,
     TEST_COORDINATION_SIGNATURE_CONTEXT,
+    inboxPrefixRef,
   );
 }
 
@@ -177,6 +183,7 @@ export function createCheckpointProposal(
       indexWithinCheckpoint: block.indexWithinCheckpoint,
       txHashes,
       signature: blockSignature ?? checkpointSignature, // Use checkpoint signature as block signature if not provided
+      inboxPrefixRef: new InboxMessagePrefixRef(checkpointHeader.inboxRollingHash),
     },
   );
 }

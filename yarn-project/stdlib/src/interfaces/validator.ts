@@ -5,6 +5,7 @@ import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Signature } from '@aztec-labs/foundation/eth-signature';
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import type { SequencerConfig, SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';
+import type { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import type {
   BlockProposal,
   BlockProposalOptions,
@@ -157,6 +158,7 @@ export interface Validator {
     archive: Fr,
     txs: Tx[],
     proposerAddress: EthAddress | undefined,
+    inboxPrefixRef: InboxMessagePrefixRef,
     options: BlockProposalOptions,
   ): Promise<BlockProposal | undefined>;
 
