@@ -16,7 +16,7 @@ concurrency:
 
 # actions: write lets the failure paths dispatch claudebox.yml with the built-in token
 # and caps the called deploy-network.yml high enough for its failure handler.
-# id-token: write lets this and the called workflows assume the AWS role via OIDC.
+# id-token: write lets the benchmark and cleanup jobs assume the AWS role via OIDC.
 permissions:
   contents: read
   actions: write
