@@ -19,9 +19,6 @@ concurrency:
 permissions:
   contents: read
   actions: write
-  # deploy-network.yml (reusable) assumes the AWS role via OIDC; a called workflow's
-  # permissions are capped by the caller's, so the grant must exist here too.
-  id-token: write
 
 env:
   GITHUB_TOKEN: ${{ github.token }}
@@ -182,19 +179,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: deployment
     permissions:
-      id-token: write
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ needs.select-image.outputs.source_ref }}
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
 
       - name: Cleanup network resources
         uses: ./.github/actions/network-teardown
@@ -338,19 +328,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: deployment
     permissions:
-      id-token: write
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: ${{ needs.select-image.outputs.source_ref }}
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
 
       - name: Cleanup network resources
         uses: ./.github/actions/network-teardown
