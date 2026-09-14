@@ -39,7 +39,7 @@ jobs:
   fund:
     name: ${{ matrix.network }}
     runs-on: ubuntu-latest
-    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
     strategy:
       # we can only run one funding operation at a time because all jobs fund from the same address
@@ -68,11 +68,11 @@ jobs:
 
       - name: Store the GCP key in a file
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
         run: |
           set +x
           umask 077
-          printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          printf '%s' "$GCP_HELM_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
           jq -e . "$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null
 
       - name: Setup GCP authentication

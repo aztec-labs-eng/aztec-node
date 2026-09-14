@@ -4,16 +4,16 @@
 # Currently unused, kept for an upcoming private release flow: pushing the docker image to the
 # Artifact Registry that GKE/staging pulls from (INTERNAL_DOCKER_REGISTRY, e.g.
 # us-west1-docker.pkg.dev/<project>/<repo>). Auth reuses the CI service-account key in the
-# environment (GCP_SA_KEY -> GOOGLE_APPLICATION_CREDENTIALS), the same key .github/ci3.sh stores.
+# environment (GCP_HELM_SA_KEY -> GOOGLE_APPLICATION_CREDENTIALS), the same key .github/ci3.sh stores.
 NO_CD=1 source $(git rev-parse --show-toplevel)/ci3/source
 
 : "${INTERNAL_DOCKER_REGISTRY:?INTERNAL_DOCKER_REGISTRY required for a private release}"
 
 # Ensure a service-account key is on disk, mirroring .github/ci3.sh's setup_environment.
 if [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] || [ ! -f "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
-  : "${GCP_SA_KEY:?GCP_SA_KEY or GOOGLE_APPLICATION_CREDENTIALS required for a private release}"
+  : "${GCP_HELM_SA_KEY:?GCP_HELM_SA_KEY or GOOGLE_APPLICATION_CREDENTIALS required for a private release}"
   export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp)
-  (umask 077; printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS")
+  (umask 077; printf '%s' "$GCP_HELM_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS")
 fi
 
 set +x  # Never echo the access token.
