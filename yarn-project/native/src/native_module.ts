@@ -1,4 +1,4 @@
-import { findNapiBinary } from '@aztec-foundation/bb.js';
+import { findNapiBinary } from '@aztec-foundation/kvdb';
 
 import { createRequire } from 'module';
 

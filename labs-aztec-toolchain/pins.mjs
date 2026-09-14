@@ -66,6 +66,15 @@ const LOCAL_PACKAGES = {
   "@aztec-foundation/cdb": "portal:barretenberg/ts/cdb",
   "@aztec-foundation/constants-codegen": "portal:protocol/constants-codegen",
   "@aztec-foundation/ipc-runtime": "portal:ipc-runtime/ts",
+  "@aztec-foundation/kvdb": "portal:native-packages/kvdb/ts",
+  "@aztec-foundation/kvdb-darwin-arm64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-darwin-arm64",
+  "@aztec-foundation/kvdb-darwin-x64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-darwin-x64",
+  "@aztec-foundation/kvdb-linux-arm64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-linux-arm64",
+  "@aztec-foundation/kvdb-linux-x64":
+    "portal:native-packages/kvdb/ts/packages/kvdb-linux-x64",
   "@aztec-foundation/l1-artifacts": "portal:l1-contracts/l1-artifacts",
   "@aztec-foundation/mock-protocol-circuits-artifacts":
     "portal:noir-projects/fnd/mock-protocol-circuits-artifacts/dist",
@@ -73,11 +82,15 @@ const LOCAL_PACKAGES = {
     "portal:noir-projects/fnd/protocol-circuits-artifacts/dist",
   "@aztec-foundation/protocol-contracts-artifacts":
     "portal:noir-projects/fnd/protocol-contracts-artifacts/dist",
-  "@aztec-foundation/wsdb": "portal:wsdb/ts",
-  "@aztec-foundation/wsdb-darwin-arm64": "portal:wsdb/ts/packages/wsdb-darwin-arm64",
-  "@aztec-foundation/wsdb-darwin-x64": "portal:wsdb/ts/packages/wsdb-darwin-x64",
-  "@aztec-foundation/wsdb-linux-arm64": "portal:wsdb/ts/packages/wsdb-linux-arm64",
-  "@aztec-foundation/wsdb-linux-x64": "portal:wsdb/ts/packages/wsdb-linux-x64",
+  "@aztec-foundation/wsdb": "portal:native-packages/wsdb/ts",
+  "@aztec-foundation/wsdb-darwin-arm64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-darwin-arm64",
+  "@aztec-foundation/wsdb-darwin-x64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-darwin-x64",
+  "@aztec-foundation/wsdb-linux-arm64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-linux-arm64",
+  "@aztec-foundation/wsdb-linux-x64":
+    "portal:native-packages/wsdb/ts/packages/wsdb-linux-x64",
   "@aztec-foundation/noir-acvm_js": "portal:noir/packages/acvm_js",
   "@aztec-foundation/noir-types": "portal:noir/packages/types",
   "@aztec-foundation/noir-noirc_abi": "portal:noir/packages/noirc_abi",
