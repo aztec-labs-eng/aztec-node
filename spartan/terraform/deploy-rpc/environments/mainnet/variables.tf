@@ -10,6 +10,12 @@ variable "GCP_REGION" {
   default     = "us-west1"
 }
 
+variable "CLUSTER" {
+  description = "GKE cluster name, independent of the kubeconfig context alias."
+  type        = string
+  default     = "aztec-gke-public"
+}
+
 variable "K8S_CLUSTER_CONTEXT" {
   description = "Kubernetes context for the GKE cluster."
   type        = string

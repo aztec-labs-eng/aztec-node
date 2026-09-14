@@ -42,7 +42,8 @@ provider "google" {
 locals {
   gcp_project_id      = "testnet-440309"
   gcp_region          = "us-west1"
-  k8s_cluster_context = "gke_testnet-440309_us-west1-a_aztec-gke-public"
+  k8s_cluster_name    = "aztec-gke-public"
+  k8s_cluster_context = "gke_${local.gcp_project_id}_us-west1-a_${local.k8s_cluster_name}"
 
   namespace           = "ethereum"
   release_prefix      = "ethereum"
@@ -336,8 +337,15 @@ module "ethereum_metrics_collector" {
     ])
   )
   RESOURCE_ATTRIBUTES = {
-    "network"         = local.release_prefix
-    "aztec.component" = "ethereum-metrics"
+    "project"                     = "ethereum"
+    "cloud.provider"              = "gcp"
+    "cloud.platform"              = "gcp_kubernetes_engine"
+    "cloud.account.id"            = local.gcp_project_id
+    "cloud.region"                = local.gcp_region
+    "k8s.cluster.name"            = local.k8s_cluster_name
+    "deployment.environment.name" = "production"
+    "network"                     = local.release_prefix
+    "aztec.component"             = "ethereum-metrics"
   }
   IRM_CONFIG = var.IRM_METRICS_ENABLED ? {
     alloy_release_name = "${local.release_prefix}-irm-alloy"

@@ -98,6 +98,16 @@ locals {
 }
 
 module "environment" {
+  OTEL_RESOURCE_ATTRIBUTES = {
+    "deployment.environment.name" = "production"
+    "project"                     = "rpc-legacy"
+    "cloud.provider"              = "gcp"
+    "cloud.platform"              = "gcp_kubernetes_engine"
+    "cloud.account.id"            = var.GCP_PROJECT_ID
+    "cloud.region"                = replace(var.GCP_REGION, "/-[a-z]$/", "")
+    "k8s.cluster.name"            = var.CLUSTER
+  }
+
   source = "../../modules/environment"
 
   providers = {
@@ -106,10 +116,10 @@ module "environment" {
     google     = google
   }
 
-  NAMESPACE       = "mainnet-rpc"
-  RELEASE_PREFIX  = "mainnet"
-  RPCS            = local.rpcs
-  ALLOW_ANONYMOUS = false
-  CONSUMERS = local.consumers
+  NAMESPACE           = "mainnet-rpc"
+  RELEASE_PREFIX      = "mainnet"
+  RPCS                = local.rpcs
+  ALLOW_ANONYMOUS     = false
+  CONSUMERS           = local.consumers
   IRM_METRICS_ENABLED = true
 }

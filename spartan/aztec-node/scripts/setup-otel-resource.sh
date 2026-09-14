@@ -24,6 +24,10 @@ attrs_map["k8s.pod.name"]="${K8S_POD_NAME:-}"
 attrs_map["k8s.pod.uid"]="${K8S_POD_UID:-}"
 attrs_map["k8s.namespace.name"]="${K8S_NAMESPACE_NAME:-}"
 
+if [[ -n "${NETWORK:-}" ]]; then
+  attrs_map["network"]="$NETWORK"
+fi
+
 # format the attribute map to comma-separated string
 set +x
 otel_attrs=""
