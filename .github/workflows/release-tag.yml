@@ -47,7 +47,7 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "a nightly re-cut, a release candidate, a real release, or a private release"
+        description: "a nightly re-cut, a release candidate, a real (stable) release, or a private release"
         type: choice
         options: [nightly, rc, stable, private]
         default: rc
