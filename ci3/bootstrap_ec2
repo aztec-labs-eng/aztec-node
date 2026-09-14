@@ -391,6 +391,8 @@ start_build() {
     -e NETLIFY_AUTH_TOKEN=${NETLIFY_AUTH_TOKEN:-} \
     -e NPM_REGISTRY=${NPM_REGISTRY:-} \
     -e NPM_TOKEN=${NPM_TOKEN:-} \
+    -e NPM_USERNAME=${NPM_USERNAME:-} \
+    -e NPM_PASSWORD=${NPM_PASSWORD:-} \
     -e AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_FILE=${AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY_B64:+/home/aztec-dev/.ssh/aztec_nr_mirror_key} \
     -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-} \
     -e AWS_TOKEN=\$aws_token \

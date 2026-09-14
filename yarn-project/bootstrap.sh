@@ -373,6 +373,9 @@ export -f compile_project format lint get_projects compile_all hash warm_solc_ca
 function build {
   echo_header "yarn-project build"
   denoise "./bootstrap.sh clean-lite"
+  # Yarn 4 reads no .npmrc, so it needs its own config to resolve both scopes from NPM_REGISTRY —
+  # written only when that is not npmjs, which is only ever a private release.
+  source $ci3/source_npm_auth
   npm_install_deps
   denoise "warm_solc_cache"
   denoise "compile_all"

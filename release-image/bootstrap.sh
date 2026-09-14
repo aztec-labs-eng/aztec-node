@@ -98,7 +98,22 @@ function build {
   fi
 
   if ! cache_download release-image-base-$hash.zst; then
-    denoise "cd .. && docker build -f release-image/Dockerfile.base -t azteclabs/release-image-base ."
+    # yarn resolves the production dependency tree inside this build, so a private release has to
+    # get its registry config in. The credential is a BuildKit secret because that is the only way
+    # in that never lands in a layer, and it goes straight from the environment, so it is not
+    # written to disk at all. The yarnrc holds no credential — only the variable name — and is a
+    # secret mount for an unrelated reason: it lives in $HOME, and COPY and bind mounts can read
+    # only from the build context. BUILDKIT is explicit because Dockerfile.base's RUN --mount does
+    # not parse under the legacy builder.
+    # Sourced here and not inherited: each project's bootstrap runs as its own make subprocess, so
+    # the credential yarn-project's build exported is gone by now. Writing the config again is
+    # idempotent, and a no-op when no credential is set.
+    source $ci3/source_npm_auth
+    local base_secret=""
+    if [ -f "$HOME/.yarnrc.yml" ] && [ -n "${NPM_AUTH_VALUE:-}" ]; then
+      base_secret="--secret id=yarnrc,src=$HOME/.yarnrc.yml --secret id=npmauth,env=NPM_AUTH_VALUE"
+    fi
+    denoise "cd .. && DOCKER_BUILDKIT=1 docker build $base_secret -f release-image/Dockerfile.base -t azteclabs/release-image-base ."
     docker save azteclabs/release-image-base:latest > release-image-base
     cache_upload release-image-base-$hash.zst release-image-base
   else
