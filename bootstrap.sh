@@ -934,7 +934,6 @@ case "$cmd" in
     fi
     source $ci3/source_release_target   # Source vars for public or private releases.
     ./bootstrap.sh build release
-    $ci3/verify_release                 # Needed only due to private releases.
     ./bootstrap.sh release
     ;;
 
