@@ -13,7 +13,7 @@
 #             (max + 1, starting at 1). Gated by `release-approval` like a
 #             real release; artifacts publish to the 'rc' channel and never
 #             take 'latest'.
-#   release:  dispatch with kind=release    -> v<ver>
+#   stable:   dispatch with kind=stable     -> v<ver>
 #             gated by the `release-approval` environment: required reviewers
 #             with self-review prevented, so cutting a release takes two
 #             distinct humans.
@@ -47,9 +47,9 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "a nightly re-cut, a release candidate, a real release, or a private release"
+        description: "a nightly re-cut, a release candidate, a real (stable) release, or a private release"
         type: choice
-        options: [nightly, rc, release, private]
+        options: [nightly, rc, stable, private]
         default: rc
       # A choice, not free text: this value reaches both the checkout ref and
       # the tagging step, and git accepts shell metacharacters in a ref name.
@@ -160,7 +160,7 @@ jobs:
             echo "${prefix}v${version}-${channel}.$(( ${last:-0} + 1 ))"
           }
           case "$KIND" in
-            release)
+            stable)
               tag="v${version}"
               ;;
             rc)
