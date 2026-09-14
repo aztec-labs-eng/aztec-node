@@ -62,14 +62,6 @@ locals {
         ROLLUP_VERSION = ""
       })
     })
-    v4 = merge(local.l1_secret_names, {
-      aztec_docker_image = var.V4_AZTEC_DOCKER_IMAGE
-      hosts              = ["v4.mainnet.rpc.aztec-labs.com"]
-      storage_size       = "8Gi"
-      env = merge(local.env, {
-        ROLLUP_VERSION = "2934756905"
-      })
-    })
   }
 
   consumer_secret_names = [
