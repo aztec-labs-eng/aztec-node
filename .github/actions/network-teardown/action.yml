@@ -11,8 +11,8 @@ inputs:
   namespace:
     description: "Kubernetes namespace to tear down."
     required: true
-  gcp_sa_key:
-    description: "GCP service account key JSON (secrets.GCP_SA_KEY)."
+  gcp_helm_sa_key:
+    description: "GCP service account key JSON (secrets.GCP_HELM_SA_KEY)."
     required: true
   gcp_project_id:
     description: "GCP project id (vars.GCP_PROJECT_ID)."
@@ -28,7 +28,7 @@ runs:
     - name: Tear down network
       shell: bash
       env:
-        GCP_SA_KEY: ${{ inputs.gcp_sa_key }}
+        GCP_HELM_SA_KEY: ${{ inputs.gcp_helm_sa_key }}
         GCP_PROJECT_ID: ${{ inputs.gcp_project_id }}
         NAMESPACE: ${{ inputs.namespace }}
         ENV_FILE: ${{ inputs.env_file }}
@@ -39,7 +39,7 @@ runs:
         # Store the GCP service account key for gcloud auth and the teardown.
         set +x
         umask 077
-        printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
+        printf '%s' "$GCP_HELM_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
         jq -e . "$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null
 
         cd "$(git rev-parse --show-toplevel)/spartan"

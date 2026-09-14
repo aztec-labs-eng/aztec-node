@@ -81,7 +81,7 @@ jobs:
     # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
     if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
     runs-on: ubuntu-latest
-    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
     timeout-minutes: 180 # 3 hours for KIND tests
     steps:
@@ -102,7 +102,7 @@ jobs:
       - name: Run KIND Test
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
           CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}

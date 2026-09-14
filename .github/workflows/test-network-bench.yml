@@ -94,7 +94,7 @@ jobs:
     # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
     if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
     runs-on: ubuntu-latest
-    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
     strategy:
       fail-fast: false
@@ -120,7 +120,7 @@ jobs:
         timeout-minutes: ${{ matrix.timeout }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           CI3_INSTANCE_PROFILE_NAME: ${{ vars.CI3_INSTANCE_PROFILE_NAME }}
@@ -143,7 +143,7 @@ jobs:
         with:
           env_file: ${{ matrix.scenario }}
           namespace: ${{ env.NAMESPACE }}
-          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+          gcp_helm_sa_key: ${{ secrets.GCP_HELM_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Download benchmarks

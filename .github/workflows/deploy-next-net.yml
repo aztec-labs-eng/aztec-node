@@ -103,7 +103,7 @@ jobs:
     needs: deploy-next-net
     if: always() && needs.deploy-next-net.result != 'success'
     runs-on: ubuntu-latest
-    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
     steps:
       # A local action needs the repo on disk. No ref: this run's own commit is enough,
@@ -123,7 +123,7 @@ jobs:
       - name: Capture cluster diagnostics before teardown
         continue-on-error: true
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
           CI: "1"
@@ -136,7 +136,7 @@ jobs:
           # failed before the cluster was ever reachable.
           set +x
           umask 077
-          printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          printf '%s' "$GCP_HELM_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
           cd spartan
           source ./scripts/source_env_basic.sh
           source ./scripts/gcp_auth.sh
@@ -152,5 +152,5 @@ jobs:
         with:
           env_file: next-net
           namespace: next-net
-          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+          gcp_helm_sa_key: ${{ secrets.GCP_HELM_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}

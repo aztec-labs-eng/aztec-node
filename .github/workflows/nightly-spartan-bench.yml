@@ -101,7 +101,7 @@ jobs:
       - select-image
       - deploy-proving-network
     runs-on: ubuntu-latest
-    # GCP_SA_KEY lives in the deployment environment, whose policy admits only main.
+    # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
     timeout-minutes: 120
     steps:
@@ -113,7 +113,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_HELM_SA_KEY }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
@@ -153,7 +153,7 @@ jobs:
         timeout-minutes: 180
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           RUN_ID: ${{ github.run_id }}
@@ -191,7 +191,7 @@ jobs:
         with:
           env_file: prove-n-tps-fake
           namespace: prove-n-tps-fake
-          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+          gcp_helm_sa_key: ${{ secrets.GCP_HELM_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
 
   notify-proving:
@@ -263,7 +263,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_HELM_SA_KEY }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
@@ -303,7 +303,7 @@ jobs:
         timeout-minutes: 240
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           RUN_ID: ${{ github.run_id }}
@@ -340,7 +340,7 @@ jobs:
         with:
           env_file: block-capacity
           namespace: nightly-block-capacity
-          gcp_sa_key: ${{ secrets.GCP_SA_KEY }}
+          gcp_helm_sa_key: ${{ secrets.GCP_HELM_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
 
   notify-block-capacity:
