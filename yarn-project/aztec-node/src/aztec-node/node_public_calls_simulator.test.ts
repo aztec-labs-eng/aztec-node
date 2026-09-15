@@ -7,6 +7,7 @@ import {
   IndexWithinCheckpoint,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { unfreeze } from '@aztec-labs/foundation/types';
@@ -15,6 +16,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
+  type L1SyncPoint,
   L2Block,
   type L2BlockSource,
   type L2Frontier,
@@ -79,6 +81,8 @@ describe('NodePublicCallsSimulator', () => {
     /** Omit the proposed tip's header from the snapshot, an invariant violation the simulator must reject. */
     omitLatestBlockHeader?: boolean;
     pendingChainValidationStatus?: ValidateCheckpointResult;
+    /** L1 block the archiver's snapshot reflects; the fee read must be pinned to it. */
+    l1SyncPoint?: L1SyncPoint;
   };
 
   const makeTips = (args: L2FrontierArgs): L2Tips => {
@@ -95,7 +99,7 @@ describe('NodePublicCallsSimulator', () => {
   const makeFrontier = (args: L2FrontierArgs): L2Frontier => ({
     tips: makeTips(args),
     proposedCheckpoint: args.proposedCheckpoint,
-    l1SyncPoint: undefined,
+    l1SyncPoint: args.l1SyncPoint,
     latestBlockHeader:
       args.omitLatestBlockHeader || !args.latestBlockGlobals
         ? undefined
@@ -454,6 +458,28 @@ describe('NodePublicCallsSimulator', () => {
         proposedCheckpointData.feeAssetPriceModifier,
         1000n,
       );
+    });
+
+    it('pins the fee read to the L1 block the frontier was read at', async () => {
+      const tx = await lowGasTx();
+      setupBoundary({ l1SyncPoint: { blockNumber: 4242n, blockHash: Buffer32.fromNumber(7) } });
+      mockNextL1Slot(SlotNumber(20));
+
+      await simulator.simulate(tx);
+
+      const [, , , , options] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
+      expect(options).toEqual({ blockNumber: 4242n });
+    });
+
+    it('leaves the fee read unpinned before the archiver has synced', async () => {
+      const tx = await lowGasTx();
+      setupBoundary();
+      mockNextL1Slot(SlotNumber(20));
+
+      await simulator.simulate(tx);
+
+      const [, , , , options] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
+      expect(options).toEqual({ blockNumber: undefined });
     });
 
     it('pins tips to firstInvalid - 1 when the pending chain is invalid', async () => {
