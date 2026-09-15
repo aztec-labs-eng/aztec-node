@@ -1931,7 +1931,7 @@ describe('Archiver Sync', () => {
       // resumes there. No comparison with the Inbox covered them, so they leave no syncpoint and nothing was
       // announced.
       expect(await getStoredLeaves()).toEqual(asHex(msgs.slice(0, 4)));
-      expect((await archiverStore.messages.getScannedL1Block())?.l1BlockNumber).toEqual(106n);
+      expect((await archiverStore.messages.getScannedL1Block())?.l1BlockNumber).toEqual(107n);
       expect(await archiverStore.messages.getSynchedL1Block()).toBeUndefined();
       expect(archiver.getL1BlockNumber()).toBeUndefined();
 
@@ -2190,12 +2190,12 @@ describe('Archiver Sync', () => {
       const [a] = randomLeaves(1);
       fake.addMessages(CheckpointNumber(1), 2n, [a]);
       fake.setL1BlockNumber(4n);
-      // While the first batch (blocks 1-2) is being fetched, L1 replaces block 2 with a block carrying no message and
-      // shortens to it: the batch's logs belong to the old chain, its syncpoint block to the new one.
+      // While the batch covering blocks 2-3 is being fetched, L1 replaces block 2 with a block carrying no message
+      // and shortens to it: the batch's logs belong to the old chain, its syncpoint block to the new one.
       const readLogs = inboxContract.getMessageSentEvents.getMockImplementation()!;
       inboxContract.getMessageSentEvents.mockImplementation(async (from, to) => {
         const logs = await readLogs(from, to);
-        if (to === 2n) {
+        if (to === 3n) {
           inboxContract.getMessageSentEvents.mockImplementation(readLogs);
           fake.removeMessagesAfter(0);
           fake.reorgL1BlocksFrom(2n);
@@ -2374,28 +2374,28 @@ describe('Archiver Sync', () => {
       fake.addMessages(CheckpointNumber(1), 10n, [c]);
       fake.setL1BlockNumber(10n);
 
-      // The provider answers the blocks 1-2 range without B and then stops serving logs, so the empty blocks 3-4
+      // The provider answers the blocks 2-3 range without B and then stops serving logs, so the empty blocks 4-5
       // batch is the last one to be scanned. Every block involved stays canonical: only the response was incomplete.
       const readLogs = inboxContract.getMessageSentEvents.getMockImplementation()!;
       inboxContract.getMessageSentEvents.mockImplementation(async (from, to) => {
         const logs = await readLogs(from, to);
-        return to === 2n ? logs.slice(0, 1) : logs;
+        return to === 3n ? logs.slice(0, 1) : logs;
       });
-      fake.setMessageSentEventsFailure(from => from >= 5n);
+      fake.setMessageSentEventsFailure(from => from >= 6n);
       await expect(archiver.syncImmediate()).rejects.toThrow(/Cannot serve MessageSent logs/);
 
       expect(await getStoredLeaves()).toEqual(asHex([a]));
       expect(archiver.getL1BlockNumber()).toBeUndefined();
 
-      // A later view of L1 ends exactly at block 4, the last block scanned. Nothing has compared the log with the
+      // A later view of L1 ends exactly at block 5, the last block scanned. Nothing has compared the log with the
       // Inbox there, so the head must not be answered from the scanned cursor: B is still missing.
       inboxContract.getMessageSentEvents.mockImplementation(readLogs);
       fake.setMessageSentEventsFailure(undefined);
-      fake.setL1BlockNumber(4n);
+      fake.setL1BlockNumber(5n);
       await archiver.syncImmediate();
 
       expect(await getStoredLeaves()).toEqual(asHex([a, b]));
-      expect(archiver.getL1BlockNumber()).toEqual(4n);
+      expect(archiver.getL1BlockNumber()).toEqual(5n);
 
       fake.setL1BlockNumber(10n);
       await archiver.syncImmediate();
@@ -2439,7 +2439,7 @@ describe('Archiver Sync', () => {
       const [a] = randomLeaves(1);
       fake.addMessages(CheckpointNumber(1), 2n, [a]);
       fake.setL1BlockNumber(4n);
-      fake.setMessageSentEventsFailure((_from, to) => to >= 3n);
+      fake.setMessageSentEventsFailure((_from, to) => to >= 4n);
       await expect(archiver.syncImmediate()).rejects.toThrow(/Cannot serve MessageSent logs/);
       expect(await getStoredLeaves()).toEqual(asHex([a]));
       expect(await archiverStore.messages.getSynchedL1Block()).toBeUndefined();
@@ -2539,6 +2539,124 @@ describe('Archiver Sync', () => {
         expect(await getStoredLeaves()).toEqual(asHex([a, b]));
         expect(pruneSpy).not.toHaveBeenCalled();
         expect(archiver.getL1BlockNumber()).toEqual(8n);
+      });
+    });
+
+    describe('deployment block ingestion', () => {
+      // The Inbox's first message can be sent by a later transaction inside the block the contracts were deployed
+      // in. An exclusive scanned cursor defaulting to that block would resume one block later and never read it.
+      it('fetches a message emitted in the deployment block when the head is still there', async () => {
+        const [a] = randomLeaves(1);
+        fake.addMessages(CheckpointNumber(1), 0n, [a]);
+        fake.setL1BlockNumber(0n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([a]));
+        expect(synchronizer.isRecoveringMessages()).toBe(false);
+      });
+
+      it('fetches a deployment-block message once L1 has advanced past it', async () => {
+        const [a] = randomLeaves(1);
+        fake.addMessages(CheckpointNumber(1), 0n, [a]);
+        fake.setL1BlockNumber(6n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([a]));
+        expect(archiver.getL1BlockNumber()).toEqual(6n);
+      });
+
+      it('does not lose index 0 when a later message arrives after it', async () => {
+        const [a, b] = randomLeaves(2);
+        fake.addMessages(CheckpointNumber(1), 0n, [a]);
+        fake.setL1BlockNumber(2n);
+        await archiver.syncImmediate();
+        fake.addMessages(CheckpointNumber(1), 4n, [b]);
+        fake.setL1BlockNumber(6n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([a, b]));
+        expect(synchronizer.isRecoveringMessages()).toBe(false);
+      });
+
+      it('re-reads the deployment block after a restart, one L1 block at a time', async () => {
+        await useArchiver({ batchSize: 1 });
+        const [a] = randomLeaves(1);
+        fake.addMessages(CheckpointNumber(1), 0n, [a]);
+        fake.setL1BlockNumber(4n);
+        await archiver.syncImmediate();
+        expect(await getStoredLeaves()).toEqual(asHex([a]));
+
+        // A fresh archiver over the same store resumes from the persisted cursor and must not re-read or duplicate.
+        const restarted = await buildArchiver('archiver_message_recovery', { batchSize: 1, store: archiverStore });
+        try {
+          fake.setL1BlockNumber(6n);
+          await restarted.archiver.syncImmediate();
+          expect(await getStoredLeaves()).toEqual(asHex([a]));
+          expect(restarted.synchronizer.isRecoveringMessages()).toBe(false);
+        } finally {
+          await restarted.archiver.stop();
+        }
+      });
+
+      it('unsticks a store whose cursor was already rewound onto the deployment block', async () => {
+        const [a] = randomLeaves(1);
+        fake.addMessages(CheckpointNumber(1), 0n, [a]);
+        // Reproduce what a zero-anchor recovery persists: cursor pinned at the deployment block, empty log.
+        await archiverStore.messages.setMessageSyncState({
+          l1Block: { l1BlockNumber: 0n, l1BlockHash: fake.getL1BlockHash(0n) },
+          authenticated: false,
+        });
+        fake.setL1BlockNumber(6n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([a]));
+        expect(synchronizer.isRecoveringMessages()).toBe(false);
+      });
+
+      it('refills the deployment block after a zero-anchor rollback rewinds onto it', async () => {
+        const [a, b] = randomLeaves(2);
+        // No finality marker, so the search has to look every candidate up rather than trusting a finalized height.
+        fake.setFinalizedL1BlockNumber(undefined);
+        fake.addMessages(CheckpointNumber(1), 0n, [a]);
+        fake.addMessages(CheckpointNumber(1), 100n, [b]);
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+        await addLocalBlocksConsuming([2]);
+
+        // L1 re-mines from the deployment block itself and emits a different first message there, so no lookup can
+        // place anything and recovery keeps nothing. The refill then has to read the deployment block again.
+        const [replacement] = randomLeaves(1);
+        fake.removeMessagesAfter(0);
+        fake.addMessages(CheckpointNumber(1), 0n, [replacement]);
+        fake.reorgL1BlocksFrom(0n);
+        fake.setL1BlockNumber(111n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([replacement]));
+        expect(await localBlockNumbers()).toEqual([]);
+        expect(archiver.getL1BlockNumber()).toEqual(111n);
+      });
+
+      it('stays synced when the deployment block holds no message', async () => {
+        fake.setL1BlockNumber(4n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual([]);
+        expect(archiver.getL1BlockNumber()).toEqual(4n);
+        expect(synchronizer.isRecoveringMessages()).toBe(false);
+      });
+
+      it('keeps exclusive semantics once the cursor is past the deployment block', async () => {
+        const [a, b] = randomLeaves(2);
+        fake.addMessages(CheckpointNumber(1), 2n, [a]);
+        fake.setL1BlockNumber(4n);
+        await archiver.syncImmediate();
+        fake.addMessages(CheckpointNumber(1), 6n, [b]);
+        fake.setL1BlockNumber(8n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([a, b]));
+        expect(synchronizer.isRecoveringMessages()).toBe(false);
       });
     });
 
