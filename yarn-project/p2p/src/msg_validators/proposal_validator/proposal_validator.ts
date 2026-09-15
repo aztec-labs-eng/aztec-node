@@ -95,13 +95,13 @@ export class ProposalValidator {
         return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
       }
 
-      // Proposer check
+      // Proposer check. `undefined` is the epoch cache's signal for an empty committee
+      // (target committee size zero), where anyone may propose - the producer path broadcasts in
+      // this state, so skip the proposer-equality check and keep validating rather than rejecting
+      // and penalizing an honest sender. A missing committee is different: it surfaces as a thrown
+      // NoCommitteeError, still handled as a reject below.
       const expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slotNumber);
-      if (expectedProposer === undefined) {
-        this.logger.warn(`Penalizing peer for proposal with no expected proposer for current slot ${slotNumber}`);
-        return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
-      }
-      if (!proposer.equals(expectedProposer)) {
+      if (expectedProposer !== undefined && !proposer.equals(expectedProposer)) {
         this.logger.warn(`Penalizing peer for invalid proposer for current slot ${slotNumber}`, {
           expectedProposer,
           proposer: proposer.toString(),
