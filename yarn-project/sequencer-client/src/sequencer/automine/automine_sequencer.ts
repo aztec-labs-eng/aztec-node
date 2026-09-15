@@ -481,6 +481,11 @@ export class AutomineSequencer {
     // and has to land on a live bucket end: bound the consumed total by what the archiver holds and the caps,
     // resolve the live L1 bucket end at or below it with one Inbox call, and authenticate the range to it against
     // the local log. The parent total is the fork's L1-to-L2 leaf count (compact indexing).
+    //
+    // Known limitation: a single block can insert at most the per-block cap, so once more messages than that have
+    // aged past L1's censorship deadline, no single-block checkpoint can consume all the ones `propose` demands and
+    // automine stops making progress. An ordinary sequencer spreads the backlog over several blocks of one slot;
+    // automine has no second block to spread it over.
     const parentTotalMsgCount = (await fork.getTreeInfo(MerkleTreeId.L1_TO_L2_MESSAGE_TREE)).size;
     const cursor = await this.deps.l1ToL2MessageSource.getMessagePosition(parentTotalMsgCount);
     if (cursor === undefined) {
