@@ -2,6 +2,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { existsSync } from 'fs';
+import { type AddressInfo, createServer } from 'node:net';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 
 import type { Anvil } from './start_anvil.js';
@@ -59,6 +60,18 @@ describe('start_anvil', () => {
     await anvil.stop().catch(err => createLogger('cleanup').error(err));
     expect(anvil.status).toEqual('idle');
   });
+
+  it('rejects instead of hanging when anvil cannot bind its port', async () => {
+    const blocker = createServer();
+    await new Promise<void>(resolve => blocker.listen(0, '127.0.0.1', () => resolve()));
+    const port = (blocker.address() as AddressInfo).port;
+
+    try {
+      await expect(startAnvil({ port })).rejects.toThrow(/before listening/);
+    } finally {
+      await new Promise<void>(resolve => blocker.close(() => resolve()));
+    }
+  }, 120_000);
 
   it('ignores errors uninstalling filters during teardown', async () => {
     const publicClient = createPublicClient({ transport: http(rpcUrl, { batch: false }) });
