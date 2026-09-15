@@ -441,9 +441,8 @@ export class TxPoolIndices {
   }
 
   #removeFromPendingIndices(meta: TxMetaData): void {
-    // Remove from nullifier index. Guard by ownership: after a same-nullifier
-    // conflict is resolved the key may already point at the surviving tx, so
-    // evicting the loser must not delete the winner's live entry.
+    // Ownership guard: after a same-nullifier conflict the key may point at the
+    // surviving tx, so evicting the loser must not delete the winner's entry.
     for (const nullifier of meta.nullifiers) {
       if (this.#nullifierToTxHash.get(nullifier) === meta.txHash) {
         this.#nullifierToTxHash.delete(nullifier);

@@ -91,11 +91,9 @@ describe('TxPoolIndices', () => {
       const a = stubTxMetaData(new Fr(1).toString(), { priorityFee: 50n, nullifiers: [shared] });
       const b = stubTxMetaData(new Fr(2).toString(), { priorityFee: 100n, nullifiers: [shared] });
 
-      // A is pending and owns the shared nullifier.
       indices.addPending(a);
       expect(indices.getTxHashByNullifier(shared)).toBe(a.txHash);
 
-      // A is included in a proposal, so it leaves the pending nullifier index.
       indices.updateProtection(a.txHash, SlotNumber(1));
 
       // A higher-fee tx spending the same nullifier is admitted while A is
