@@ -55,8 +55,13 @@ module "rpc" {
   RELEASE_NAME   = "${var.RELEASE_PREFIX}-rpc-${each.key}"
   RELEASE_PREFIX = var.RELEASE_PREFIX
 
-  AZTEC_DOCKER_IMAGE                            = each.value.aztec_docker_image
-  ENV                                           = each.value.env
+  AZTEC_DOCKER_IMAGE = each.value.aztec_docker_image
+  ENV = merge(each.value.env, {
+    OTEL_RESOURCE_ATTRIBUTES = join(",", compact([
+      lookup(each.value.env, "OTEL_RESOURCE_ATTRIBUTES", ""),
+      join(",", [for key, value in var.OTEL_RESOURCE_ATTRIBUTES : "${key}=${value}"]),
+    ]))
+  })
   L1_RPC_SECRET_NAME                            = each.value.l1_rpc_secret_name
   L1_CONSENSUS_HOST_URLS_SECRET_NAME            = each.value.l1_consensus_host_urls_secret_name
   L1_CONSENSUS_HOST_API_KEYS_SECRET_NAME        = each.value.l1_consensus_host_api_keys_secret_name
@@ -113,11 +118,11 @@ module "rpc_gateway_metrics_collector" {
       }
     }
   ]
-  RESOURCE_ATTRIBUTES = {
+  RESOURCE_ATTRIBUTES = merge(var.OTEL_RESOURCE_ATTRIBUTES, {
     "service.name"    = "${var.RELEASE_PREFIX}-rpc-kong"
     "network"         = var.RELEASE_PREFIX
     "aztec.component" = "kong"
-  }
+  })
   IRM_CONFIG = var.IRM_METRICS_ENABLED ? {
     alloy_release_name = local.irm_alloy_name
     job_name           = "rpc-kong"

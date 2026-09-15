@@ -109,3 +109,9 @@ variable "CONSUMERS" {
   }))
   default = {}
 }
+
+variable "OTEL_RESOURCE_ATTRIBUTES" {
+  description = "Deployment identity attached to internal OTLP metrics."
+  type        = map(string)
+  default     = {}
+}

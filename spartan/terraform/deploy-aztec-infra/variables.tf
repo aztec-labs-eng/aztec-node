@@ -75,6 +75,12 @@ variable "BB_CHONK_VERIFY_BATCH_CONCURRENCY" {
   default     = 6
 }
 
+variable "CLUSTER" {
+  description = "GKE cluster name, independent of the kubeconfig context alias."
+  type        = string
+  default     = "aztec-gke-public"
+}
+
 variable "K8S_CLUSTER_CONTEXT" {
   description = "GKE cluster context"
   type        = string

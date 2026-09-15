@@ -111,7 +111,10 @@ locals {
   max_validator_nodes = max(tonumber(var.VALIDATOR_REPLICAS), local.effective_ha_count)
 
   # Detect local kind context (e.g., "kind-kind") to gate Service types
-  is_kind = can(regex("^kind", var.K8S_CLUSTER_CONTEXT))
+  is_kind                = can(regex("^kind", var.K8S_CLUSTER_CONTEXT))
+  deployment_environment = (var.NETWORK == "mainnet" || var.NETWORK == "testnet") ? "production" : "staging"
+
+  network_attributes = var.NETWORK == null || var.NETWORK == "" ? {} : { network = var.NETWORK }
 
   kong_gateway_enabled = var.RPC_GATEWAY_ENABLED || var.PROVER_NODE_RPC_GATEWAY_ENABLED
 
@@ -191,6 +194,20 @@ locals {
 
   common_inline_values = yamlencode({
     global = merge(
+      local.is_kind ? {} : {
+        aztecEnv = {
+          OTEL_RESOURCE_ATTRIBUTES = join(",", compact([
+            "project=aztec-networks",
+            "cloud.provider=gcp",
+            "cloud.platform=gcp_kubernetes_engine",
+            "cloud.account.id=${var.GCP_PROJECT_ID}",
+            "cloud.region=${replace(var.GCP_REGION, "/-[a-z]$/", "")}",
+            can(regex("-[a-z]$", var.GCP_REGION)) ? "cloud.availability_zone=${var.GCP_REGION}" : "",
+            "k8s.cluster.name=${var.CLUSTER}",
+            "deployment.environment.name=${local.deployment_environment}",
+          ]))
+        }
+      },
       length(var.L1_CONSENSUS_HOST_API_KEYS) > 0 ? {
         l1ConsensusHostApiKeys = join(",", var.L1_CONSENSUS_HOST_API_KEYS)
       } : {},
@@ -401,7 +418,7 @@ locals {
             p2p = { publicIP = var.P2P_PUBLIC_IP }
           }
           node = {
-            logLevel = var.LOG_LEVEL
+            logLevel           = var.LOG_LEVEL
             disableAdminApiKey = true
           }
         }
@@ -879,17 +896,22 @@ module "rpc_gateway_metrics_collector" {
       scrape_interval = "15s"
       metrics_path    = "/metrics"
       targets         = ["${module.rpc_gateway[0].metrics_service_name}.${module.rpc_gateway[0].metrics_service_namespace}.svc.cluster.local:${module.rpc_gateway[0].metrics_service_port}"]
-      labels = {
-        component = "kong"
-        network   = var.RELEASE_PREFIX
-      }
+      labels          = merge({ component = "kong" }, local.network_attributes)
     }
   ]
-  RESOURCE_ATTRIBUTES = {
-    "service.name"    = "${var.RELEASE_PREFIX}-rpc-kong"
-    "network"         = var.RELEASE_PREFIX
-    "aztec.component" = "kong"
-  }
+  RESOURCE_ATTRIBUTES = merge({
+    "project"                     = "aztec-networks"
+    "cloud.provider"              = "gcp"
+    "cloud.platform"              = "gcp_kubernetes_engine"
+    "cloud.account.id"            = var.GCP_PROJECT_ID
+    "cloud.region"                = replace(var.GCP_REGION, "/-[a-z]$/", "")
+    "k8s.cluster.name"            = var.CLUSTER
+    "deployment.environment.name" = local.deployment_environment
+    "service.name"                = "${var.RELEASE_PREFIX}-rpc-kong"
+    "aztec.component"             = "kong"
+    }, can(regex("-[a-z]$", var.GCP_REGION)) ? {
+    "cloud.availability_zone" = var.GCP_REGION
+  } : {}, local.network_attributes)
   EXTERNAL_SECRET_STORE_NAME       = var.RPC_GATEWAY_EXTERNAL_SECRET_STORE_NAME
   EXTERNAL_SECRET_STORE_KIND       = var.RPC_GATEWAY_EXTERNAL_SECRET_STORE_KIND
   EXTERNAL_SECRET_REFRESH_INTERVAL = var.RPC_GATEWAY_EXTERNAL_SECRET_REFRESH_INTERVAL
