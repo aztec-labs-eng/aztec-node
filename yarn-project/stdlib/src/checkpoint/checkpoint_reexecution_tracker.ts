@@ -36,6 +36,11 @@ interface Entry {
 
   // Per block-proposal at this slot: indexWithinCheckpoint → true (collected) | false (failed to collect).
   txsCollected: Map<number, boolean>;
+
+  // Set by recordEquivocation when a proposal equivocation is seen for this slot. Consumed by the
+  // sentinel: an honest attestor may have seen an invalid version of an equivocated proposal and
+  // correctly declined, so it must not be counted as a missed attestor.
+  equivocated: boolean;
 }
 
 export class CheckpointReexecutionTracker {
@@ -66,6 +71,7 @@ export class CheckpointReexecutionTracker {
       slot,
       outcome,
       txsCollected: existing?.txsCollected ?? new Map(),
+      equivocated: existing?.equivocated ?? false,
     };
 
     if (checkpointNumber !== undefined) {
@@ -101,10 +107,37 @@ export class CheckpointReexecutionTracker {
         slot,
         outcome: undefined,
         txsCollected: new Map(),
+        equivocated: false,
       };
       this.bySlot.set(slot, entry);
     }
     entry.txsCollected.set(indexWithinCheckpoint, collected);
+  }
+
+  /**
+   * Record that a proposal equivocation was observed for a slot. The sentinel uses this to skip
+   * missed-attestor accounting: with two conflicting proposals in the slot, an honest attestor
+   * that saw an invalid one and declined must not be counted inactive.
+   */
+  public recordEquivocation(slot: SlotNumber): void {
+    const entry = this.bySlot.get(slot);
+    if (!entry) {
+      this.bySlot.set(slot, {
+        checkpointNumber: undefined,
+        archiveRoot: undefined,
+        slot,
+        outcome: undefined,
+        txsCollected: new Map(),
+        equivocated: true,
+      });
+    } else {
+      entry.equivocated = true;
+    }
+  }
+
+  /** Returns true if a proposal equivocation was recorded for the slot. */
+  public hasEquivocation(slot: SlotNumber): boolean {
+    return this.bySlot.get(slot)?.equivocated ?? false;
   }
 
   /**
