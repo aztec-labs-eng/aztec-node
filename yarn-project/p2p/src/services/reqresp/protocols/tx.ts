@@ -7,6 +7,11 @@ import type { MemPools } from '../../../mem_pools/interface.js';
 import type { ReqRespSubProtocolHandler } from '../interface.js';
 import { ReqRespStatus, ReqRespStatusError } from '../status.js';
 
+// Honest requesters chunk tx-fetch requests at 8 hashes (see chunkTxHashesRequest
+// and the batch requester default). Reject anything far above that so one peer
+// cannot ask for a huge number of txs in a single legal-size request.
+const MAX_TX_HASHES_PER_REQUEST = 100;
+
 /**
  * We want to keep the logic of the req resp handler in this file, but we do not have a reference to the mempools here
  * so we need to pass it in as a parameter.
@@ -30,9 +35,23 @@ export function reqRespTxHandler(mempools: MemPools): ReqRespSubProtocolHandler 
       throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST, { cause: err });
     }
 
+    if (txHashes.length > MAX_TX_HASHES_PER_REQUEST) {
+      throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST);
+    }
+
+    // De-duplicate before serving: without this a peer can repeat one hash many
+    // times and make the node re-read and re-serialize the same tx per copy,
+    // turning a legal-size request into a huge response.
+    const uniqueByHash = new Map<string, TxHash>();
+    for (const txHash of txHashes) {
+      uniqueByHash.set(txHash.toString(), txHash);
+    }
+
     try {
       const txs = new TxArray(
-        ...(await Promise.all(txHashes.map(txHash => mempools.txPool.getTxByHash(txHash)))).filter(t => !!t),
+        ...(await Promise.all([...uniqueByHash.values()].map(txHash => mempools.txPool.getTxByHash(txHash)))).filter(
+          t => !!t,
+        ),
       );
       return txs.toBuffer();
     } catch (err: any) {
