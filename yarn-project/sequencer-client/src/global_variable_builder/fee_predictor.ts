@@ -81,7 +81,8 @@ export class FeePredictor {
       this.rollupContract.getManaLimit(),
       this.rollupContract.getProvingCostPerMana(),
       this.rollupContract.getEpochDuration(),
-      this.rollupContract.getProtocolFeeMargin(),
+      // Not a cached constant: governance can change the margin, so pin it to the snapshot block.
+      this.rollupContract.getProtocolFeeMargin(opts),
     ]);
 
     // First, compute the earliest possible nextSlot independently of the checkpoint, so we can

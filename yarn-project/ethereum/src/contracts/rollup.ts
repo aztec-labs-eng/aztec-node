@@ -451,9 +451,10 @@ export class RollupContract {
     return this.rollup.read.getProvingCostPerManaInFeeAsset();
   }
 
-  /** Returns the current protocol fee margin in basis points. Not memoized: governance can change it. */
-  getProtocolFeeMargin(): Promise<number> {
-    return this.rollup.read.getProtocolFeeMargin();
+  /** Returns the protocol fee margin in basis points. Not memoized: governance can change it. */
+  async getProtocolFeeMargin(options?: { blockNumber?: bigint }): Promise<number> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getProtocolFeeMargin(options);
   }
 
   /** Returns the current recipient of the protocol fee tranche. Not memoized: governance can change it. */
