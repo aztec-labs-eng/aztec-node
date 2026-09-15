@@ -33,6 +33,7 @@ describe('prover-node-publisher', () => {
 
   beforeEach(() => {
     rollup = mock<RollupContract>();
+    rollup.getHasSubmittedProof.mockResolvedValue(false);
     l1Utils = mock<L1TxUtils>();
 
     config = {
@@ -101,6 +102,7 @@ describe('prover-node-publisher', () => {
 
     return {
       epochNumber: EpochNumber(2),
+      kind: 'full' as const,
       fromCheckpoint: CheckpointNumber(fromCheckpoint),
       toCheckpoint: CheckpointNumber(toCheckpoint),
       publicInputs: ourPublicInputs,
@@ -111,27 +113,60 @@ describe('prover-node-publisher', () => {
     };
   };
 
-  const testCases = [
+  const testCases: {
+    pending: number;
+    proven: number;
+    fromCheckpoint: number;
+    toCheckpoint: number;
+    kind: 'full' | 'partial';
+    expectedPublish: boolean;
+    message?: string;
+  }[] = [
     // Usual case of proving full epoch
-    { pending: 65, proven: 32, fromCheckpoint: 33, toCheckpoint: 64, expectedPublish: true, message: '' },
+    { pending: 65, proven: 32, fromCheckpoint: 33, toCheckpoint: 64, kind: 'full', expectedPublish: true, message: '' },
     // Failure case of proving beyond the pending chain
     {
       pending: 65,
       proven: 32,
       fromCheckpoint: 33,
       toCheckpoint: 66,
+      kind: 'full',
       expectedPublish: false,
       message: 'Cannot submit epoch proof for 33-66 as proposed checkpoint is 65',
     },
     // Some successful partial epochs
-    { pending: 33, proven: 32, fromCheckpoint: 33, toCheckpoint: 33, expectedPublish: true, message: '' },
-    { pending: 65, proven: 32, fromCheckpoint: 33, toCheckpoint: 38, expectedPublish: true, message: '' },
-    { pending: 40, proven: 32, fromCheckpoint: 33, toCheckpoint: 33, expectedPublish: true, message: '' },
+    {
+      pending: 33,
+      proven: 32,
+      fromCheckpoint: 33,
+      toCheckpoint: 33,
+      kind: 'partial',
+      expectedPublish: true,
+      message: '',
+    },
+    {
+      pending: 65,
+      proven: 32,
+      fromCheckpoint: 33,
+      toCheckpoint: 38,
+      kind: 'partial',
+      expectedPublish: true,
+      message: '',
+    },
+    {
+      pending: 40,
+      proven: 32,
+      fromCheckpoint: 33,
+      toCheckpoint: 33,
+      kind: 'partial',
+      expectedPublish: true,
+      message: '',
+    },
 
     // Somebody else proved the entire epoch already
 
     // We try and prove the full epoch - succeeds
-    { pending: 65, proven: 64, fromCheckpoint: 33, toCheckpoint: 64, expectedPublish: true, message: '' },
+    { pending: 65, proven: 64, fromCheckpoint: 33, toCheckpoint: 64, kind: 'full', expectedPublish: true, message: '' },
 
     // We try and prove a partial epoch that falls short of the end - fails as pointless to publish
     {
@@ -139,26 +174,82 @@ describe('prover-node-publisher', () => {
       proven: 64,
       fromCheckpoint: 33,
       toCheckpoint: 35,
+      kind: 'partial',
       expectedPublish: false,
       message: 'Cannot submit epoch proof for 33-35 as proven checkpoint is 64',
+    },
+
+    // Somebody else proved the entire epoch and then part of the next one, so the proven tip now sits
+    // beyond our epoch. Our full-epoch proof is still accepted by L1 and still registers reward shares.
+    {
+      pending: 100,
+      proven: 70,
+      fromCheckpoint: 33,
+      toCheckpoint: 64,
+      kind: 'full',
+      expectedPublish: true,
+      message: '',
+    },
+
+    // Same situation, but ours is a partial proof - it can never match the epoch's longest proven length
+    {
+      pending: 100,
+      proven: 70,
+      fromCheckpoint: 33,
+      toCheckpoint: 45,
+      kind: 'partial',
+      expectedPublish: false,
+      message: 'Cannot submit epoch proof for 33-45 as proven checkpoint is 70',
     },
 
     // Somebody else partially proved the epoch already
 
     // We try and prove the rest of the epoch - succeeds
-    { pending: 65, proven: 40, fromCheckpoint: 41, toCheckpoint: 64, expectedPublish: true, message: '' },
+    {
+      pending: 65,
+      proven: 40,
+      fromCheckpoint: 41,
+      toCheckpoint: 64,
+      kind: 'partial',
+      expectedPublish: true,
+      message: '',
+    },
 
     // We try and prove all of the epoch - succeeds
-    { pending: 65, proven: 40, fromCheckpoint: 33, toCheckpoint: 64, expectedPublish: true, message: '' },
+    { pending: 65, proven: 40, fromCheckpoint: 33, toCheckpoint: 64, kind: 'full', expectedPublish: true, message: '' },
 
     // We try and partially prove the epoch after their proof - succeeds again
-    { pending: 65, proven: 40, fromCheckpoint: 41, toCheckpoint: 45, expectedPublish: true, message: '' },
+    {
+      pending: 65,
+      proven: 40,
+      fromCheckpoint: 41,
+      toCheckpoint: 45,
+      kind: 'partial',
+      expectedPublish: true,
+      message: '',
+    },
 
     // We try and partially prove the epoch on top of their proof - succeeds again
-    { pending: 65, proven: 40, fromCheckpoint: 33, toCheckpoint: 45, expectedPublish: true, message: '' },
+    {
+      pending: 65,
+      proven: 40,
+      fromCheckpoint: 33,
+      toCheckpoint: 45,
+      kind: 'partial',
+      expectedPublish: true,
+      message: '',
+    },
 
     // We try and partially prove the epoch and partially on top of their proof - succeeds again
-    { pending: 65, proven: 40, fromCheckpoint: 35, toCheckpoint: 45, expectedPublish: true, message: '' },
+    {
+      pending: 65,
+      proven: 40,
+      fromCheckpoint: 35,
+      toCheckpoint: 45,
+      kind: 'partial',
+      expectedPublish: true,
+      message: '',
+    },
 
     // We try and partially prove the epoch but less than was already proven - fails as pointless
     {
@@ -166,6 +257,7 @@ describe('prover-node-publisher', () => {
       proven: 40,
       fromCheckpoint: 33,
       toCheckpoint: 39,
+      kind: 'partial',
       expectedPublish: false,
       message: 'Cannot submit epoch proof for 33-39 as proven checkpoint is 40',
     },
@@ -176,14 +268,15 @@ describe('prover-node-publisher', () => {
       proven: 40,
       fromCheckpoint: 33,
       toCheckpoint: 40,
+      kind: 'partial',
       expectedPublish: true,
     },
   ];
 
   test.each(testCases)(
-    'submits proof for epoch with proposed checkpoint: $pending, proven checkpoint: $proven, fromCheckpoint: $fromCheckpoint, toCheckpoint: $toCheckpoint',
-    async ({ pending, proven, fromCheckpoint, toCheckpoint, expectedPublish, message }) => {
-      const publishData = setupPublishData(pending, proven, fromCheckpoint, toCheckpoint);
+    'submits $kind proof for epoch with proposed checkpoint: $pending, proven checkpoint: $proven, fromCheckpoint: $fromCheckpoint, toCheckpoint: $toCheckpoint',
+    async ({ pending, proven, fromCheckpoint, toCheckpoint, kind, expectedPublish, message }) => {
+      const publishData = { ...setupPublishData(pending, proven, fromCheckpoint, toCheckpoint), kind };
 
       const result = await publisher
         .submitEpochProof(publishData)
@@ -199,6 +292,15 @@ describe('prover-node-publisher', () => {
       }
     },
   );
+
+  it('reports already-submitted without sending when this prover has already submitted for the epoch', async () => {
+    const args = setupPublishData(65, 32, 33, 64);
+    rollup.getHasSubmittedProof.mockResolvedValue(true);
+
+    await expect(publisher.submitEpochProof(args)).resolves.toEqual('already-submitted');
+    expect(rollup.getHasSubmittedProof).toHaveBeenCalledWith(EpochNumber(2), 32, expect.anything());
+    expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
+  });
 
   describe('compact checkpoint headers', () => {
     it.each([
@@ -301,6 +403,7 @@ describe('prover-node-publisher', () => {
     const headers = makeHeadersForRange(fromCheckpoint, toCheckpoint);
     await publisher.analyzeEpochProofSubmission({
       epochNumber: EpochNumber(2),
+      kind: 'full',
       fromCheckpoint: CheckpointNumber(fromCheckpoint),
       toCheckpoint: CheckpointNumber(toCheckpoint),
       publicInputs: ourPublicInputs,
@@ -402,6 +505,7 @@ describe('prover-node-publisher', () => {
 
     const result = await publisher.submitEpochProof({
       epochNumber: EpochNumber(2),
+      kind: 'full',
       fromCheckpoint: CheckpointNumber(2),
       toCheckpoint: CheckpointNumber(2),
       publicInputs: ourPublicInputs,
@@ -411,6 +515,6 @@ describe('prover-node-publisher', () => {
       attestations: [],
     });
 
-    expect(result).toBe(false);
+    expect(result).toBe('failed');
   });
 });
