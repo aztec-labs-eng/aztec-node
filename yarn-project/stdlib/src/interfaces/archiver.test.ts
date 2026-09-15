@@ -1,4 +1,5 @@
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -18,6 +19,7 @@ import {
   type CheckpointQuery,
   type CheckpointsQuery,
   CheckpointsQuerySchema,
+  type L2Frontier,
   type L2Tips,
   type ProposedCheckpointQuery,
 } from '../block/l2_block_source.js';
@@ -41,6 +43,8 @@ import type { InboxBucket } from '../messaging/inbox_bucket.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { getTokenContractArtifact } from '../tests/fixtures.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
+import { BlockHeader } from '../tx/block_header.js';
+import { GlobalVariables } from '../tx/global_variables.js';
 import type { IndexedTxEffect } from '../tx/indexed_tx_effect.js';
 import { TxEffect } from '../tx/tx_effect.js';
 import type { TxEffectMembershipWitness } from '../tx/tx_effect_membership.js';
@@ -288,6 +292,32 @@ describe('ArchiverApiSchema', () => {
       totalManaUsed: 1n,
       feeAssetPriceModifier: 1n,
       inboxMsgTotal: 1n,
+    });
+  });
+
+  it('getL2Frontier', async () => {
+    const result = await context.client.getL2Frontier();
+    const expectedTipId = {
+      block: { number: 1, hash: `0x01` },
+      checkpoint: { number: 1, hash: `0x01` },
+    };
+    expect(result).toEqual({
+      tips: {
+        proposed: { number: 1, hash: `0x01` },
+        checkpointed: expectedTipId,
+        proven: expectedTipId,
+        finalized: expectedTipId,
+      },
+      proposedCheckpoint: expect.objectContaining({ checkpointNumber: 1 }),
+      l1SyncPoint: { blockNumber: 42n, blockHash: Buffer32.fromField(new Fr(7)) },
+      latestBlockHeader: BlockHeader.empty({
+        globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(1) }),
+      }),
+      checkpointedCheckpoint: {
+        header: CheckpointHeader.empty({ slotNumber: SlotNumber(1) }),
+        l1: new L1PublishedData(3n, 4n, `0x05`),
+      },
+      pendingChainValidationStatus: { valid: true },
     });
   });
 
@@ -553,6 +583,21 @@ class MockArchiver implements ArchiverApi {
       proven: tipId,
       finalized: tipId,
     });
+  }
+  async getL2Frontier(): Promise<L2Frontier> {
+    return {
+      tips: await this.getL2Tips(),
+      proposedCheckpoint: await this.getProposedCheckpointData(),
+      l1SyncPoint: { blockNumber: 42n, blockHash: Buffer32.fromField(new Fr(7)) },
+      latestBlockHeader: BlockHeader.empty({
+        globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(1) }),
+      }),
+      checkpointedCheckpoint: {
+        header: CheckpointHeader.empty({ slotNumber: SlotNumber(1) }),
+        l1: new L1PublishedData(3n, 4n, `0x05`),
+      },
+      pendingChainValidationStatus: { valid: true },
+    };
   }
   getL2BlockHash(blockNumber: BlockNumber): Promise<string | undefined> {
     expect(blockNumber).toEqual(BlockNumber(1));
