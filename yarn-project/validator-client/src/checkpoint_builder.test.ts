@@ -12,7 +12,7 @@ import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundatio
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
-import type { LightweightCheckpointBuilder } from '@aztec-labs/prover-client/light';
+import { LightweightCheckpointBuilder } from '@aztec-labs/prover-client/light';
 import type { AvmSimulator, PublicContractsDB, PublicProcessor } from '@aztec-labs/simulator/server';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
@@ -27,6 +27,7 @@ import {
   type PublicProcessorValidator,
   type WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   type CheckpointGlobalVariables,
   type GlobalVariables,
@@ -35,7 +36,8 @@ import {
   TxHash,
 } from '@aztec-labs/stdlib/tx';
 import type { TelemetryClient } from '@aztec-labs/telemetry-client';
-import { describe, expect, it, jest } from '@jest/globals';
+import { NativeWorldStateService } from '@aztec-labs/world-state/native';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { CheckpointBuilder, FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
@@ -172,7 +174,7 @@ describe('CheckpointBuilder', () => {
 
     async function mockSuccessfulBlock() {
       const block = await L2Block.random(blockNumber);
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block, timings: {} });
       processor.process.mockResolvedValue([[{ hash: TxHash.random() } as ProcessedTx], [], [], [], []]);
       return block;
     }
@@ -207,7 +209,7 @@ describe('CheckpointBuilder', () => {
       lightweightCheckpointBuilder.getBlockCount.mockReturnValue(0);
 
       const expectedBlock = await L2Block.random(blockNumber);
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
 
       processor.process.mockResolvedValue([
         [{ hash: Fr.random() } as unknown as ProcessedTx],
@@ -222,12 +224,12 @@ describe('CheckpointBuilder', () => {
       expect(result.block).toBe(expectedBlock);
       expect(result.numTxs).toBe(1);
       expect(result.failedTxs).toEqual([]);
-      expect(lightweightCheckpointBuilder.addBlock).toHaveBeenCalled();
+      expect(lightweightCheckpointBuilder.sealBlock).toHaveBeenCalled();
     });
 
     it('allows building an empty block when minValidTxs is 0', async () => {
       const expectedBlock = await L2Block.random(blockNumber, { txsPerBlock: 0 });
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
 
       // No transactions processed
       processor.process.mockResolvedValue([
@@ -242,7 +244,7 @@ describe('CheckpointBuilder', () => {
 
       expect(result.block).toBe(expectedBlock);
       expect(result.numTxs).toBe(0);
-      expect(lightweightCheckpointBuilder.addBlock).toHaveBeenCalled();
+      expect(lightweightCheckpointBuilder.sealBlock).toHaveBeenCalled();
     });
 
     it('throws InsufficientValidTxsError when fewer txs than minValidTxs', async () => {
@@ -259,7 +261,7 @@ describe('CheckpointBuilder', () => {
         checkpointBuilder.buildBlock([], blockNumber, 1000n, validatorOpts({ minValidTxs: 1 })),
       ).rejects.toThrow(InsufficientValidTxsError);
 
-      expect(lightweightCheckpointBuilder.addBlock).not.toHaveBeenCalled();
+      expect(lightweightCheckpointBuilder.sealBlock).not.toHaveBeenCalled();
     });
 
     it('does not update state when some txs succeed but below minValidTxs', async () => {
@@ -281,19 +283,19 @@ describe('CheckpointBuilder', () => {
       expect(err).toBeInstanceOf(InsufficientValidTxsError);
       expect((err as InsufficientValidTxsError).processedCount).toBe(1);
       expect((err as InsufficientValidTxsError).minRequired).toBe(2);
-      expect(lightweightCheckpointBuilder.addBlock).not.toHaveBeenCalled();
+      expect(lightweightCheckpointBuilder.sealBlock).not.toHaveBeenCalled();
     });
 
     it('defaults to minValidTxs=0 when not specified, allowing empty blocks', async () => {
       const expectedBlock = await L2Block.random(blockNumber, { txsPerBlock: 0 });
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
 
       processor.process.mockResolvedValue([[], [], [], [], []]);
 
       const result = await checkpointBuilder.buildBlock([], blockNumber, 1000n, validatorOpts());
 
       expect(result.numTxs).toBe(0);
-      expect(lightweightCheckpointBuilder.addBlock).toHaveBeenCalled();
+      expect(lightweightCheckpointBuilder.sealBlock).toHaveBeenCalled();
     });
   });
 
@@ -579,7 +581,7 @@ describe('CheckpointBuilder', () => {
       ]);
 
       const expectedBlock = await L2Block.random(blockNumber);
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
       processor.process.mockResolvedValue([[{ hash: Fr.random() } as unknown as ProcessedTx], [], [], [], []]);
 
       // Build block 2
@@ -597,7 +599,7 @@ describe('CheckpointBuilder', () => {
       setupBuilder({ rollupManaLimit });
 
       const expectedBlock = await L2Block.random(blockNumber);
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
       processor.process.mockResolvedValue([[{ hash: Fr.random() } as unknown as ProcessedTx], [], [], [], []]);
 
       const capturedL2GasLimits: number[] = [];
@@ -630,7 +632,7 @@ describe('CheckpointBuilder', () => {
       setupBuilder({ rollupManaLimit });
 
       const expectedBlock = await L2Block.random(blockNumber);
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
       processor.process.mockResolvedValue([[{ hash: Fr.random() } as unknown as ProcessedTx], [], [], [], []]);
 
       const capturedL2GasLimits: number[] = [];
@@ -668,7 +670,7 @@ describe('CheckpointBuilder', () => {
       setupBuilder({ rollupManaLimit });
 
       const expectedBlock = await L2Block.random(blockNumber);
-      lightweightCheckpointBuilder.addBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
+      lightweightCheckpointBuilder.sealBlock.mockResolvedValue({ block: expectedBlock, timings: {} });
       processor.process.mockResolvedValue([[{ hash: Fr.random() } as unknown as ProcessedTx], [], [], [], []]);
 
       // Explicit per-block limit (100k) is TIGHTER than redistribution.
@@ -913,6 +915,102 @@ describe('CheckpointBuilder', () => {
 
       expect(capped.maxBlockGas!.daGas).toBeLessThan(largestDeployDaGas);
       expect(capped.maxBlobFields!).toBeLessThan(largestDeployBlobFields);
+    });
+  });
+
+  // These cases use a real world state fork and a real LightweightCheckpointBuilder, since the position of the
+  // block's L1-to-L2 messages relative to tx execution is invisible with a mocked fork.
+  describe('buildBlock with streaming L1-to-L2 messages (real world state)', () => {
+    let worldState: NativeWorldStateService;
+    let realFork: MerkleTreeWriteOperations;
+    let lightweight: LightweightCheckpointBuilder;
+    let builder: TestCheckpointBuilder;
+
+    const messages = [new Fr(0xb00), new Fr(0xb01), new Fr(0xb02)];
+    const firstBlockNumber = BlockNumber(1);
+
+    const getL1ToL2TreeSize = () => realFork.getTreeInfo(MerkleTreeId.L1_TO_L2_MESSAGE_TREE).then(info => info.size);
+
+    beforeEach(async () => {
+      worldState = await NativeWorldStateService.tmp();
+      realFork = await worldState.fork();
+      lightweight = LightweightCheckpointBuilder.startNewCheckpoint(checkpointNumber, constants, [], Fr.ZERO, realFork);
+      builder = new TestCheckpointBuilder(
+        lightweight,
+        realFork,
+        config,
+        contractDataSource,
+        dateProvider,
+        telemetryClient,
+        mock<AvmSimulator>(),
+      );
+    });
+
+    afterEach(async () => {
+      await realFork.close();
+      await worldState.close();
+    });
+
+    it("the block's messages are in the fork when the public processor runs", async () => {
+      let treeSizeDuringExecution: bigint | undefined;
+      let leafIndicesDuringExecution: (bigint | undefined)[] | undefined;
+      processor.process.mockImplementation(async () => {
+        treeSizeDuringExecution = await getL1ToL2TreeSize();
+        leafIndicesDuringExecution = await realFork.findLeafIndices(MerkleTreeId.L1_TO_L2_MESSAGE_TREE, messages);
+        return [[], [], [], [], []];
+      });
+
+      const { block } = await builder.buildBlock([], firstBlockNumber, 1000n, {
+        ...validatorOpts(),
+        l1ToL2Messages: messages,
+      });
+
+      // The AVM must read the same post-append tree the prover and the block-root circuit use.
+      expect(treeSizeDuringExecution).toBe(3n);
+      expect(leafIndicesDuringExecution).toEqual([0n, 1n, 2n]);
+      expect(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex).toBe(3);
+      // The messages are appended exactly once.
+      expect(await getL1ToL2TreeSize()).toBe(3n);
+    });
+
+    it('a failed block rolls its messages back', async () => {
+      processor.process.mockRejectedValue(new Error('processor failure'));
+
+      await expect(
+        builder.buildBlock([], firstBlockNumber, 1000n, { ...validatorOpts(), l1ToL2Messages: messages }),
+      ).rejects.toThrow('processor failure');
+
+      expect(await getL1ToL2TreeSize()).toBe(0n);
+      expect(lightweight.getBlocks()).toEqual([]);
+    });
+
+    it('a block below minValidTxs rolls its messages back', async () => {
+      processor.process.mockResolvedValue([[], [], [], [], []]);
+
+      await expect(
+        builder.buildBlock([], firstBlockNumber, 1000n, {
+          ...validatorOpts({ minValidTxs: 1 }),
+          l1ToL2Messages: messages,
+        }),
+      ).rejects.toThrow(InsufficientValidTxsError);
+
+      expect(await getL1ToL2TreeSize()).toBe(0n);
+      expect(lightweight.getBlocks()).toEqual([]);
+    });
+
+    it('an empty message list leaves the tree untouched', async () => {
+      processor.process.mockResolvedValue([[], [], [], [], []]);
+
+      const { block: block1 } = await builder.buildBlock([], firstBlockNumber, 1000n, {
+        ...validatorOpts(),
+        l1ToL2Messages: [],
+      });
+      expect(block1.header.state.l1ToL2MessageTree.nextAvailableLeafIndex).toBe(0);
+      expect(await getL1ToL2TreeSize()).toBe(0n);
+
+      const { block: block2 } = await builder.buildBlock([], BlockNumber(firstBlockNumber + 1), 1000n, validatorOpts());
+      expect(block2.header.state.l1ToL2MessageTree.nextAvailableLeafIndex).toBe(0);
+      expect(await getL1ToL2TreeSize()).toBe(0n);
     });
   });
 });
