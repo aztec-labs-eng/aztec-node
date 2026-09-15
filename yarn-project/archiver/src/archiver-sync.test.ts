@@ -1804,6 +1804,61 @@ describe('Archiver Sync', () => {
       expect(tips.checkpointed.block.number).toEqual(cp2.blocks[cp2.blocks.length - 1].number);
     }, 10_000);
 
+    it('detects equivocation when a local proposed checkpoint diverges only in the fee-asset-price modifier', async () => {
+      // feeAssetPriceModifier is signed but is not part of the header, so a checkpoint that differs only in
+      // it still matches on header and archive root. The divergence check must catch the mismatch anyway.
+      const equivocationSpy = jest.fn();
+      archiver.events.on(L2BlockSourceEvents.CheckpointEquivocationDetected, equivocationSpy);
+
+      await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 70n,
+        messagesL1BlockNumber: 60n,
+        numL1ToL2Messages: 3,
+      });
+      fake.setL1BlockNumber(100n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+
+      // Checkpoint 2 lands on L1 (this is the Y modifier + committee attestations).
+      const { checkpoint: cp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
+        l1BlockNumber: 5000n,
+        messagesL1BlockNumber: 4990n,
+        numL1ToL2Messages: 3,
+      });
+
+      // Register a local proposed checkpoint 2 with the SAME header + blocks (so header and archive root match
+      // L1) but a DIFFERENT signed modifier (X = Y + 1). Go through the store directly, as the promotion test
+      // does, to avoid background sync races.
+      for (const block of cp2.blocks) {
+        await archiverStore.blocks.addProposedBlock(block);
+      }
+      await archiverStore.blocks.addProposedCheckpoint({
+        checkpointNumber: CheckpointNumber(2),
+        header: cp2.header,
+        startBlock: cp2.blocks[0].number,
+        blockCount: cp2.blocks.length,
+        totalManaUsed: 0n,
+        feeAssetPriceModifier: cp2.feeAssetPriceModifier + 1n,
+      });
+
+      fake.setL1BlockNumber(5010n);
+      await archiver.syncImmediate();
+
+      // The modifier-only divergence is attributed as equivocation, not silently promoted.
+      expect(equivocationSpy).toHaveBeenCalledTimes(1);
+      expect(equivocationSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: L2BlockSourceEvents.CheckpointEquivocationDetected,
+          slotNumber: cp2.header.slotNumber,
+          checkpointNumber: CheckpointNumber(2),
+        }),
+      );
+      // The valid L1 checkpoint 2 is still ingested after the local proposed copy is evicted.
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+
+      archiver.events.off(L2BlockSourceEvents.CheckpointEquivocationDetected, equivocationSpy);
+    }, 15_000);
+
     it('rejects adding blocks that are already checkpointed', async () => {
       // First, sync checkpoint 1 from L1 to establish a baseline
       const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
