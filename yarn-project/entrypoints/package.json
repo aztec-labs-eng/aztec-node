@@ -72,7 +72,7 @@
     "@aztec-labs/standard-contracts": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
     "tslib": "^2.4.0",
-    "zod": "^4"
+    "zod": "~4.4.3"
   },
   "devDependencies": {
     "@jest/globals": "^30.0.0",
