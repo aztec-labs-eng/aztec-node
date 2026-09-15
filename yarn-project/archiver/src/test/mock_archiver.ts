@@ -1,7 +1,12 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
-import type { InboxBucket, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type {
+  InboxBucket,
+  InboxMessagePosition,
+  InboxMessageRange,
+  L1ToL2MessageSource,
+} from '@aztec-labs/stdlib/messaging';
 
 import { MockL1ToL2MessageSource } from './mock_l1_to_l2_message_source.js';
 import { MockL2BlockSource } from './mock_l2_block_source.js';
@@ -14,6 +19,14 @@ export class MockArchiver extends MockL2BlockSource implements L2BlockSource, L1
 
   public setInboxBucket(bucket: InboxBucket, msgs: Fr[] = []) {
     this.messageSource.setInboxBucket(bucket, msgs);
+  }
+
+  public replaceInboxBuckets(buckets: { bucket: InboxBucket; msgs: Fr[] }[]) {
+    this.messageSource.replaceInboxBuckets(buckets);
+  }
+
+  public appendL1ToL2Messages(msgs: Fr[]) {
+    this.messageSource.appendL1ToL2Messages(msgs);
   }
 
   getL1ToL2MessageIndex(_l1ToL2Message: Fr): Promise<bigint | undefined> {
@@ -38,6 +51,18 @@ export class MockArchiver extends MockL2BlockSource implements L2BlockSource, L1
 
   getL1ToL2MessagesBetweenLeafCounts(startLeafCount: bigint, endLeafCount: bigint): Promise<Fr[]> {
     return this.messageSource.getL1ToL2MessagesBetweenLeafCounts(startLeafCount, endLeafCount);
+  }
+
+  getMessagePosition(totalMessageCount: bigint): Promise<InboxMessagePosition | undefined> {
+    return this.messageSource.getMessagePosition(totalMessageCount);
+  }
+
+  getSyncedMessagePosition(): Promise<InboxMessagePosition> {
+    return this.messageSource.getSyncedMessagePosition();
+  }
+
+  getL1ToL2MessageRange(startLeafCount: bigint, endLeafCount: bigint): Promise<InboxMessageRange> {
+    return this.messageSource.getL1ToL2MessageRange(startLeafCount, endLeafCount);
   }
 }
 
