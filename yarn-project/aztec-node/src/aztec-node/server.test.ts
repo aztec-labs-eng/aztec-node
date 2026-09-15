@@ -85,6 +85,7 @@ import { join } from 'path';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 import { type AztecNodeConfig, getConfigEnvVars } from './config.js';
+import { NextBlockPredictor } from './next_block/index.js';
 import { AztecNodeService } from './server.js';
 
 // Arbitrary fixed timestamp for the mock date provider. DateProvider.now() returns milliseconds but ExpirationTimestamp
@@ -143,6 +144,7 @@ describe('aztec node', () => {
   let createNode: (configOverrides?: Partial<AztecNodeConfig>) => TestAztecNodeService;
   let feePayer: AztecAddress;
   let epochCache: EpochCache;
+  let nextBlockPredictor: NextBlockPredictor;
   let nodeConfig: AztecNodeConfig;
 
   const chainId = new Fr(12345);
@@ -275,6 +277,15 @@ describe('aztec node', () => {
       new MockDateProvider(),
     );
 
+    nextBlockPredictor = NextBlockPredictor.create({
+      blockSource: l2BlockSource,
+      globalVariableBuilder: globalVariablesBuilder,
+      rollupContract,
+      epochCache,
+      signatureContext: { chainId: 12345, rollupAddress: EthAddress.ZERO },
+      dateProvider: new MockDateProvider(),
+    });
+
     createNode = (configOverrides: Partial<AztecNodeConfig> = {}) =>
       new TestAztecNodeService({
         config: { ...nodeConfig, ...configOverrides },
@@ -294,6 +305,7 @@ describe('aztec node', () => {
         globalVariableBuilder: globalVariablesBuilder,
         rollupContract,
         feeProvider,
+        nextBlockPredictor,
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -1187,6 +1199,7 @@ describe('aztec node', () => {
           globalVariableBuilder: globalVariablesBuilder,
           rollupContract: undefined,
           feeProvider,
+          nextBlockPredictor,
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1375,6 +1388,7 @@ describe('aztec node', () => {
           globalVariableBuilder: globalVariablesBuilder,
           rollupContract: undefined,
           feeProvider,
+          nextBlockPredictor,
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1444,6 +1458,7 @@ describe('aztec node', () => {
         globalVariableBuilder: globalVariablesBuilder,
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
+        nextBlockPredictor,
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -1498,6 +1513,7 @@ describe('aztec node', () => {
         globalVariableBuilder: globalVariablesBuilder,
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
+        nextBlockPredictor,
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
