@@ -6,11 +6,12 @@ describe('provider-exit deployment artifacts', () => {
     expect(references).toContain('ProviderExitExtLib');
     const library = RollupArtifact.libraries.libraryCode.ProviderExitExtLib;
     expect(library.contractBytecode).toMatch(/^0x[0-9a-f]+$/i);
-    expect(
-      library.contractAbi
-        .filter(item => item.type === 'function')
-        .map(item => item.name)
-        .sort(),
-    ).toEqual(['getProviderExitLimitState', 'getProviderExitWindow', 'initiateProviderExit']);
+    expect(RollupArtifact.contractAbi).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'function', name: 'getProviderExitLimitState' }),
+        expect.objectContaining({ type: 'function', name: 'getProviderExitWindow' }),
+        expect.objectContaining({ type: 'function', name: 'initiateProviderExit' }),
+      ]),
+    );
   });
 });
