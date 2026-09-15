@@ -45,6 +45,23 @@ describe('CheckpointReexecutionTracker', () => {
     expect(tracker.getOutcomeForSlot(SlotNumber(99))).toBeUndefined();
   });
 
+  it('records and queries proposal equivocation by slot', () => {
+    expect(tracker.hasEquivocation(SlotNumber(7))).toBe(false);
+
+    tracker.recordEquivocation(SlotNumber(7));
+    expect(tracker.hasEquivocation(SlotNumber(7))).toBe(true);
+    // Unrelated slots are unaffected.
+    expect(tracker.hasEquivocation(SlotNumber(8))).toBe(false);
+  });
+
+  it('preserves equivocation across a later recordOutcome for the same slot', () => {
+    tracker.recordEquivocation(SlotNumber(5));
+    tracker.recordOutcome(SlotNumber(5), Fr.random(), 'valid', CheckpointNumber(1));
+
+    expect(tracker.hasEquivocation(SlotNumber(5))).toBe(true);
+    expect(tracker.getOutcomeForSlot(SlotNumber(5))).toBe('valid');
+  });
+
   it('records slot-only outcomes when checkpoint number is unknown', () => {
     const archive = Fr.random();
     tracker.recordOutcome(SlotNumber(5), archive, 'invalid');
