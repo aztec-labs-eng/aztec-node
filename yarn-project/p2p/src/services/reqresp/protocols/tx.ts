@@ -9,7 +9,7 @@ import { ReqRespStatus, ReqRespStatusError } from '../status.js';
 
 // Honest requesters chunk tx-fetch requests at 8 hashes (see chunkTxHashesRequest
 // and the batch requester default). Reject anything far above that so one peer
-// cannot ask for a huge number of txs in a single legal-size request.
+// cannot pull far more txs than an honest request needs in a single call.
 const MAX_TX_HASHES_PER_REQUEST = 100;
 
 /**
@@ -41,7 +41,7 @@ export function reqRespTxHandler(mempools: MemPools): ReqRespSubProtocolHandler 
 
     // De-duplicate before serving: without this a peer can repeat one hash many
     // times and make the node re-read and re-serialize the same tx per copy,
-    // turning a legal-size request into a huge response.
+    // turning a small request into a much larger response.
     const uniqueByHash = new Map<string, TxHash>();
     for (const txHash of txHashes) {
       uniqueByHash.set(txHash.toString(), txHash);

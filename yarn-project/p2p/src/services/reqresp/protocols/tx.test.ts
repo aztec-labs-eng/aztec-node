@@ -1,7 +1,10 @@
 import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
 import { TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it } from '@jest/globals';
+import type { PeerId } from '@libp2p/interface';
+import { mock, mockDeep } from 'jest-mock-extended';
 
+import type { MemPools } from '../../../mem_pools/interface.js';
 import { calculateTxResponseSize, reqRespTxHandler } from './tx.js';
 
 describe('calculateTxResponseSize', () => {
@@ -28,7 +31,7 @@ describe('calculateTxResponseSize', () => {
 
   it('should fall back to single tx size for a raw TxHash buffer (not TxHashArray)', () => {
     // A raw TxHash (32 bytes) is not a valid TxHashArray serialization.
-    // TxHashArray.fromBuffer silently returns empty array on parse failure.
+    // TxHashArray.fromBuffer returns an empty array (no error) on a parse failure.
     const rawHash = TxHash.random().toBuffer();
 
     expect(calculateTxResponseSize(rawHash)).toBe(MAX_TX_SIZE_KB + 1);
@@ -51,8 +54,13 @@ describe('calculateTxResponseSize', () => {
 });
 
 describe('reqRespTxHandler', () => {
-  const peerId = {} as any;
-  const makeMempools = (getTxByHash: (h: TxHash) => Promise<unknown>) => ({ txPool: { getTxByHash } }) as any;
+  const peerId = mock<PeerId>();
+
+  const makeMempools = (getTxByHash: (h: TxHash) => Promise<undefined>): MemPools => {
+    const mempools = mockDeep<MemPools>();
+    mempools.txPool.getTxByHash.mockImplementation(getTxByHash);
+    return mempools;
+  };
 
   it('serves a repeated hash only once (de-duplicates before pool reads)', async () => {
     const h = TxHash.random();
