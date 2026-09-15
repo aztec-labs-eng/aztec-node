@@ -2,7 +2,7 @@
 
 # Helper script to calculate all publisher key indices and bot account indices for a given environment
 # This is used to determine which keys need funding
-# Includes: validator publishers, prover publishers, bot transfers, and bot swaps
+# Includes: validator publishers, prover publishers, and the transfers, swaps, cross-chain and inbox bots
 
 set -euo pipefail
 
@@ -78,6 +78,15 @@ if (( BOT_CROSS_CHAIN_REPLICAS > 0 )); then
   BOT_CROSS_CHAIN_INDICES=$(seq "$BOT_CROSS_CHAIN_MNEMONIC_START_INDEX" $((BOT_CROSS_CHAIN_MNEMONIC_START_INDEX + BOT_CROSS_CHAIN_REPLICAS - 1)) | tr '\n' ',' | sed 's/,$//')
 fi
 
+# Calculate inbox bot indices
+BOT_INBOX_REPLICAS=${BOT_INBOX_REPLICAS:-0}
+BOT_INBOX_MNEMONIC_START_INDEX=${BOT_INBOX_MNEMONIC_START_INDEX:-7300}
+
+BOT_INBOX_INDICES=""
+if (( BOT_INBOX_REPLICAS > 0 )); then
+  BOT_INBOX_INDICES=$(seq "$BOT_INBOX_MNEMONIC_START_INDEX" $((BOT_INBOX_MNEMONIC_START_INDEX + BOT_INBOX_REPLICAS - 1)) | tr '\n' ',' | sed 's/,$//')
+fi
+
 # Combine all publisher indices
 ALL_PUBLISHER_INDICES=""
 if [ -n "$VALIDATOR_PUBLISHER_INDICES" ]; then
@@ -113,6 +122,14 @@ if [ -n "$BOT_CROSS_CHAIN_INDICES" ]; then
     ALL_PUBLISHER_INDICES="${ALL_PUBLISHER_INDICES},${BOT_CROSS_CHAIN_INDICES}"
   else
     ALL_PUBLISHER_INDICES="$BOT_CROSS_CHAIN_INDICES"
+  fi
+fi
+
+if [ -n "$BOT_INBOX_INDICES" ]; then
+  if [ -n "$ALL_PUBLISHER_INDICES" ]; then
+    ALL_PUBLISHER_INDICES="${ALL_PUBLISHER_INDICES},${BOT_INBOX_INDICES}"
+  else
+    ALL_PUBLISHER_INDICES="$BOT_INBOX_INDICES"
   fi
 fi
 
