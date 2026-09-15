@@ -1771,6 +1771,92 @@ describe('Archiver Sync', () => {
       expect(archiver.getL1BlockNumber()).toEqual(112n);
     });
 
+    // A head reporting fewer messages than the local log looks the same whether the chain shortened or this
+    // provider is behind. The certified syncpoint above it is the only thing that tells them apart, so a
+    // syncpoint that cannot be read leaves the question open rather than settling it destructively.
+    describe('shorter head under a syncpoint that cannot be read', () => {
+      /** Certifies five messages at L1 block 110 and adds two local blocks consuming them. */
+      const certifyThroughBlock110 = async () => {
+        const msgs = randomLeaves(5);
+        fake.addMessages(CheckpointNumber(1), 100n, msgs.slice(0, 3));
+        fake.addMessages(CheckpointNumber(1), 102n, msgs.slice(3));
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+        const blocks = await addLocalBlocksConsuming([3, 5]);
+        return { msgs, blockNumbers: blocks.map(b => b.number) };
+      };
+
+      /** Makes reads of one L1 block fail the way a provider that has not reached it does; returns the undo. */
+      const breakReadsOf = (l1BlockNumber: bigint, how: 'throws' | 'no block') => {
+        const readBlock = publicClient.getBlock.getMockImplementation()!;
+        publicClient.getBlock.mockImplementation((async (args: { blockNumber?: bigint } = {}) => {
+          if (args.blockNumber === l1BlockNumber) {
+            if (how === 'throws') {
+              throw new Error('connection reset by peer');
+            }
+            return undefined;
+          }
+          return await readBlock(args);
+        }) as any);
+        return () => publicClient.getBlock.mockImplementation(readBlock);
+      };
+
+      /** A provider that has only reached block 105, where the Inbox holds the first three messages. */
+      const showLaggedHead = () => {
+        fake.removeMessagesAfter(3);
+        fake.setL1BlockNumber(105n);
+      };
+
+      it.each(['throws', 'no block'] as const)(
+        'keeps the certified messages and their blocks when the syncpoint read %s',
+        async how => {
+          const { msgs, blockNumbers } = await certifyThroughBlock110();
+          breakReadsOf(110n, how);
+          showLaggedHead();
+
+          await archiver.syncImmediate();
+
+          expect(await getStoredLeaves()).toEqual(asHex(msgs));
+          expect(await localBlockNumbers()).toEqual(blockNumbers);
+          expect(pruneSpy).not.toHaveBeenCalled();
+          // The lower head is not advertised as a newly certified view of the log.
+          expect(archiver.getL1BlockNumber()).toEqual(110n);
+        },
+      );
+
+      it('truncates once the syncpoint reads back as a different block', async () => {
+        const { msgs } = await certifyThroughBlock110();
+        // Only block 110 is re-mined, so the head at 105 keeps its identity and is positive evidence of a shorter
+        // chain rather than of a provider that has not caught up.
+        fake.reorgL1BlocksFrom(110n);
+        showLaggedHead();
+
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex(msgs.slice(0, 3)));
+        expect(pruneSpy).toHaveBeenCalledTimes(1);
+        expect(archiver.getL1BlockNumber()).toEqual(105n);
+      });
+
+      it('resumes without deleting or refetching anything once the provider catches up', async () => {
+        const { msgs, blockNumbers } = await certifyThroughBlock110();
+        const restoreReads = breakReadsOf(110n, 'throws');
+        showLaggedHead();
+        await archiver.syncImmediate();
+
+        restoreReads();
+        fake.addMessages(CheckpointNumber(1), 102n, msgs.slice(3));
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex(msgs));
+        expect(await localBlockNumbers()).toEqual(blockNumbers);
+        expect(pruneSpy).not.toHaveBeenCalled();
+        expect(eventByHashSpy).not.toHaveBeenCalled();
+        expect(archiver.getL1BlockNumber()).toEqual(110n);
+      });
+    });
+
     it('recovers from a same-height head replacement', async () => {
       const msgs = randomLeaves(3);
       fake.addMessages(CheckpointNumber(1), 100n, msgs);
@@ -2366,6 +2452,94 @@ describe('Archiver Sync', () => {
 
       expect(await getStoredLeaves()).toEqual([]);
       expect(archiver.getL1BlockNumber()).toEqual(0n);
+    });
+
+    describe('provider uncertainty versus chain replacement', () => {
+      /** L1 block numbers the provider currently refuses to answer for, as a momentarily unavailable one would. */
+      const unreadable = new Set<bigint>();
+      const withUnreadableL1Blocks = () => {
+        const readBlock = publicClient.getBlock.getMockImplementation()!;
+        publicClient.getBlock.mockImplementation(((args: { blockNumber?: bigint } = {}) =>
+          args?.blockNumber !== undefined && unreadable.has(args.blockNumber)
+            ? Promise.reject(new Error('provider unavailable'))
+            : readBlock(args)) as any);
+      };
+
+      beforeEach(() => {
+        unreadable.clear();
+        withUnreadableL1Blocks();
+      });
+
+      it('does not delete messages when a provider reports a head behind the certified syncpoint', async () => {
+        const [a, b] = randomLeaves(2);
+        fake.addMessages(CheckpointNumber(1), 100n, [a]);
+        fake.addMessages(CheckpointNumber(1), 106n, [b]);
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+        const [block1, block2] = await addLocalBlocksConsuming([1, 2]);
+        expect(await getStoredLeaves()).toEqual(asHex([a, b]));
+
+        // A lagged provider answers at block 105, before B was mined. Block 110 is still canonical, so the log and
+        // the block that consumed B must survive.
+        fake.setL1BlockNumber(105n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([a, b]));
+        expect(await localBlockNumbers()).toEqual([block1.number, block2.number]);
+        expect(pruneSpy).not.toHaveBeenCalled();
+        expect(archiver.getL1BlockNumber()).toEqual(110n);
+
+        // The provider catches up and nothing had to be refetched.
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+        expect(await getStoredLeaves()).toEqual(asHex([a, b]));
+        expect(await localBlockNumbers()).toEqual([block1.number, block2.number]);
+      });
+
+      it('truncates to a genuinely shorter chain once the syncpoint block is positively replaced', async () => {
+        const [a, b] = randomLeaves(2);
+        fake.addMessages(CheckpointNumber(1), 100n, [a]);
+        fake.addMessages(CheckpointNumber(1), 106n, [b]);
+        fake.setL1BlockNumber(110n);
+        await archiver.syncImmediate();
+        await addLocalBlocksConsuming([1, 2]);
+
+        // L1 really does drop B and shorten: the syncpoint's block is replaced, so nothing vouches for the tail.
+        fake.removeMessagesAfter(1);
+        fake.reorgL1BlocksFrom(106n);
+        fake.setL1BlockNumber(105n);
+        await archiver.syncImmediate();
+
+        expect(await getStoredLeaves()).toEqual(asHex([a]));
+        expect(archiver.getL1BlockNumber()).toEqual(105n);
+      });
+
+      it('does not start recovery when the scanned cursor block cannot be read', async () => {
+        await useArchiver({ batchSize: 1 });
+        const [a, b] = randomLeaves(2);
+        fake.addMessages(CheckpointNumber(1), 2n, [a]);
+        fake.setL1BlockNumber(4n);
+        await archiver.syncImmediate();
+        const [block1] = await addLocalBlocksConsuming([1]);
+
+        fake.addMessages(CheckpointNumber(1), 6n, [b]);
+        fake.setL1BlockNumber(8n);
+        unreadable.add(4n);
+        await archiver.syncImmediate();
+
+        // The cursor's block was unreadable, so the pass waited rather than rolling the log back.
+        expect(await getStoredLeaves()).toEqual(asHex([a]));
+        expect(await localBlockNumbers()).toEqual([block1.number]);
+        expect(pruneSpy).not.toHaveBeenCalled();
+        expect(synchronizer.isRecoveringMessages()).toBe(false);
+
+        // Once the provider answers for it again, the same forward ingestion continues; nothing had to be refetched.
+        unreadable.clear();
+        await archiver.syncImmediate();
+        expect(await getStoredLeaves()).toEqual(asHex([a, b]));
+        expect(pruneSpy).not.toHaveBeenCalled();
+        expect(archiver.getL1BlockNumber()).toEqual(8n);
+      });
     });
 
     it('leaves the batch that refills the log after a rollback uncommitted when it disagrees with the Inbox', async () => {
