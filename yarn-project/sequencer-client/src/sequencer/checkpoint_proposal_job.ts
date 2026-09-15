@@ -82,6 +82,7 @@ import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/val
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import type { CheckpointProposalJobMetricsRecorder } from './checkpoint_proposal_job_metrics.js';
+import type { CheckpointProposalJobTestHooks } from './checkpoint_proposal_job_test_hooks.js';
 import { CheckpointVoter } from './checkpoint_voter.js';
 import { SequencerInterruptedError } from './errors.js';
 import type { SequencerEvents } from './events.js';
@@ -246,6 +247,7 @@ export class CheckpointProposalJob implements Traceable {
     public readonly tracer: Tracer,
     bindings?: LoggerBindings,
     private readonly proposedCheckpointData?: ProposedCheckpointData,
+    private readonly testHooks?: CheckpointProposalJobTestHooks,
   ) {
     this.log = createLogger('sequencer:checkpoint-proposal', {
       ...bindings,
@@ -1316,6 +1318,16 @@ export class CheckpointProposalJob implements Traceable {
       // If this throws, we abort the entire checkpoint.
       await this.syncProposedBlockToArchiver(block, blockPrefixRef);
 
+      await this.notifyBlockReadyToBroadcast({
+        block,
+        blockNumber,
+        indexWithinCheckpoint,
+        inboxPrefixRef: blockPrefixRef,
+        consumedMessageCount: streamingState.cursor.totalMessageCount,
+        isStandalone: !timingInfo.isLastBlock,
+        remainingBuildSubslots: Math.max(0, maxBlocks - (timingInfo.index + 1)),
+      });
+
       // If this is the last block, do not broadcast it, since it will be included in the checkpoint proposal.
       if (timingInfo.isLastBlock) {
         this.log.verbose(`Completed final block ${blockNumber} for slot ${this.targetSlot}`, {
@@ -1371,6 +1383,45 @@ export class CheckpointProposalJob implements Traceable {
     });
 
     return { aborted: false, blocksInCheckpoint, blockPendingBroadcast, streamingState };
+  }
+
+  /**
+   * Awaits the injected test hook, if any, at the instant a block is signed and stored locally but not yet on the
+   * wire. Absent hooks cost one undefined check, and a hook that throws fails the checkpoint the same way the
+   * archiver sync above it does, so a test cannot leave the job blocked by a broken hook.
+   *
+   * `remainingBuildSubslots` is a snapshot taken here: a hook that holds the job spends the slot's real budget, so a
+   * caller that needs to know whether another block can still be built has to re-check `proposalSendDeadline`
+   * against the clock before it releases.
+   */
+  private async notifyBlockReadyToBroadcast(opts: {
+    block: L2Block;
+    blockNumber: BlockNumber;
+    indexWithinCheckpoint: IndexWithinCheckpoint;
+    inboxPrefixRef: InboxMessagePrefixRef;
+    consumedMessageCount: bigint;
+    isStandalone: boolean;
+    remainingBuildSubslots: number;
+  }): Promise<void> {
+    const onCheckpointPhase = this.testHooks?.onCheckpointPhase;
+    if (onCheckpointPhase === undefined) {
+      return;
+    }
+    const sendDeadline =
+      this.timetable.getCheckpointProposalReceiveDeadline(this.targetSlot) - this.timetable.p2pPropagationTime;
+    await onCheckpointPhase({
+      phase: 'block-ready-to-broadcast',
+      slot: this.targetSlot,
+      checkpointNumber: this.checkpointNumber,
+      blockNumber: opts.blockNumber,
+      indexWithinCheckpoint: opts.indexWithinCheckpoint,
+      blockHash: await opts.block.hash(),
+      isStandalone: opts.isStandalone,
+      remainingBuildSubslots: opts.remainingBuildSubslots,
+      proposalSendDeadline: new Date(sendDeadline * 1000),
+      consumedMessageCount: opts.consumedMessageCount,
+      inboxPrefixRef: opts.inboxPrefixRef,
+    });
   }
 
   /**

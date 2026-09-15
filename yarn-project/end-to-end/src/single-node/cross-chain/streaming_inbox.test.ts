@@ -1,21 +1,26 @@
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
+import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
 import { Fr } from '@aztec-labs/aztec.js/fields';
-import type { Logger } from '@aztec-labs/aztec.js/log';
-import type { AztecNode } from '@aztec-labs/aztec.js/node';
+import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
+import { isL1ToL2MessageReady, waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
+import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
-import type { Wallet } from '@aztec-labs/aztec.js/wallet';
-import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
-import { getSlotAtTimestamp, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
+import { CheckpointProposalJobTestGate } from '../../fixtures/checkpoint_proposal_job_test_gate.js';
 import { L1_DIRECT_WRITE_ACCOUNT_INDEX, PIPELINING_SETUP_OPTS } from '../../fixtures/fixtures.js';
+import type { TestWallet } from '../../test-wallet/test_wallet.js';
+import { proveInteraction } from '../../test-wallet/utils.js';
 import { CrossChainMessagingTest } from './cross_chain_messaging_test.js';
 import { createL1ToL2MessageHelpers } from './message_test_helpers.js';
 
-jest.setTimeout(600_000);
+// The suite runs a real (simulated-proof) prover node, so every case that waits for a checkpoint to be proven pays
+// an epoch of block production before the proof lands. Matches the sibling prover-enabled bucket suite.
+jest.setTimeout(900_000);
 
 // Streaming Inbox e2e coverage the legacy per-checkpoint suite could not express: when every L1->L2 message
 // entered at the first block of the *next* checkpoint, mid-checkpoint inclusion, message-only blocks, and
@@ -31,24 +36,35 @@ describe('single-node/cross-chain/streaming_inbox', () => {
 
   let log: Logger;
   let aztecNode: AztecNode;
-  let wallet: Wallet;
+  let wallet: TestWallet;
   let user1Address: AztecAddress;
   let testContract: TestContract;
+  let gate: CheckpointProposalJobTestGate;
 
   let sendMessageToL2: ReturnType<typeof createL1ToL2MessageHelpers>['sendMessageToL2'];
   let advanceBlock: ReturnType<typeof createL1ToL2MessageHelpers>['advanceBlock'];
-  let waitForMessageReady: ReturnType<typeof createL1ToL2MessageHelpers>['waitForMessageReady'];
 
-  const markAsProven = () => t.cheatCodes.rollup.markAsProven();
+  /** Block sub-slot duration in milliseconds, matching `blockDurationMs` below. */
+  const BLOCK_DURATION_MS = 6000;
 
   beforeAll(async () => {
+    gate = new CheckpointProposalJobTestGate(createLogger('e2e:streaming_inbox:gate'), 240_000);
     t = new CrossChainMessagingTest(
       'streaming_inbox',
       // A 36s slot with 6s blocks yields up to ~4 blocks per checkpoint (the pipelining timing model gives
       // maxBlocks = floor((36 - 0.5 - (0.5 + D)) / D) = 4 for D=6), which is what lets a message observed
       // mid-checkpoint land in a non-first block of the same checkpoint. minTxsPerBlock=0 permits
-      // a zero-tx message-only block (the FI-05 relaxation).
-      { ...PIPELINING_SETUP_OPTS, aztecSlotDuration: 36, blockDurationMs: 6000, minTxsPerBlock: 0 },
+      // a zero-tx message-only block (the FI-05 relaxation). The prover node turns every proof claim in this
+      // suite into a real wait on the production prover-node orchestration and the simulated protocol circuits,
+      // so nothing here marks a tip proven by hand.
+      {
+        ...PIPELINING_SETUP_OPTS,
+        aztecSlotDuration: 36,
+        blockDurationMs: BLOCK_DURATION_MS,
+        minTxsPerBlock: 0,
+        startProverNode: true,
+        checkpointProposalJobTestHooks: gate.hooks,
+      },
       { aztecProofSubmissionEpochs: 2, aztecEpochDuration: 4 },
       { syncChainTip: 'checkpointed' },
       // Pass arbitrary L1->L2 messages straight to a TestContract; no token bridge needed.
@@ -59,13 +75,15 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     ({ logger: log, wallet, user1Address, aztecNode } = t);
     ({ contract: testContract } = await TestContract.deploy(wallet).send({ from: user1Address }));
 
-    ({ sendMessageToL2, advanceBlock, waitForMessageReady } = createL1ToL2MessageHelpers({
+    ({ sendMessageToL2, advanceBlock } = createL1ToL2MessageHelpers({
       t,
       aztecNode,
       wallet,
       user1Address,
       log,
-      markAsProven,
+      // The prover node proves epochs; nothing is marked proven by hand in this suite, so a paused proof window
+      // is a real failure rather than something the helpers paper over.
+      markAsProven: () => Promise.resolve(),
     }));
   }, 600_000);
 
@@ -162,6 +180,29 @@ describe('single-node/cross-chain/streaming_inbox', () => {
   };
 
   /**
+   * A read-only node view pinned to one concrete block: every message-tree question is answered at that block,
+   * whatever the chain does afterwards. Readiness is a property of a block, and `latest`, `checkpointed` and
+   * `proven` all move between two consecutive API calls, so an unpinned pair of assertions could pass or fail on
+   * the tip advancing rather than on the block under test. The compact index is delegated to the real node, which
+   * is chain-wide and not a property of any one block.
+   */
+  const pinnedTo = (blockNumber: BlockNumber) => ({
+    getL1ToL2MessageIndex: (msgHash: Fr) => aztecNode.getL1ToL2MessageIndex(msgHash),
+    getBlockData: () => aztecNode.getBlockData(blockNumber),
+  });
+
+  /** Waits until the prover node has proven through `blockNumber`. */
+  const waitForProvenThrough = async (blockNumber: BlockNumber) => {
+    await retryUntil(
+      async () => (await aztecNode.getBlockNumber('proven')) >= blockNumber,
+      `proven tip reaches block ${blockNumber}`,
+      Number(t.constants.slotDuration) * t.epochDuration * 4,
+      1,
+    );
+    expect(await aztecNode.getBlockNumber('proven')).toBeGreaterThanOrEqual(blockNumber);
+  };
+
+  /**
    * Runs `fn` while a background loop feeds empty txs, so checkpoints build multiple blocks promptly rather
    * than stalling on an empty pool. advanceBlock also refreshes the L1 proof window, keeping the chain from
    * pruning mid-test. Callers must pass a no-op `onNotReady` to any readiness wait so it does not send its own
@@ -186,74 +227,143 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     }
   };
 
-  // Test 1 (mid-checkpoint inclusion): a message sent mid-checkpoint becomes available in a *later* block of
-  // the same checkpoint (indexWithinCheckpoint > 0), which the legacy first-block-of-next-checkpoint flow
-  // could never produce. Feeds a steady tx stream so checkpoints fill to multiple blocks, times the send so
-  // the message is observed partway through a checkpoint's build, then locates the inserting
-  // block. Retries with fresh messages so a message that happens to age exactly at a checkpoint boundary (and
-  // lands at index 0) does not fail the run.
-  it('includes a message in a non-first block of a checkpoint (mid-checkpoint streaming)', async () => {
-    const { slotDuration } = t.constants;
+  // Test 1 (mid-checkpoint streaming, end to end): one checkpoint carries the whole streaming story. The test gate
+  // holds the checkpoint's block zero after the proposer's archiver stored it and before the network or block one
+  // sees it, which is the only barrier from which "the message did not exist for the parent and does for the
+  // inserting block" is a statement about committed state rather than about when the test happened to look.
+  //
+  // While held the test sends the L1 message, watches the node index it without that making it ready, starts a
+  // readiness wait against the proven tip that is demonstrably behind, and queues a public consume. Releasing lets
+  // block one insert the message and execute the consume against its own post-bundle message root, so the same
+  // block both inserts and spends it. The pending proven-tip wait then has to resolve on its own once the prover
+  // node proves the covering checkpoint.
+  it('streams a message into a non-first block, consumes it there, and proves the checkpoint', async () => {
+    const l1Account = t.ethAccount;
+    const [secret, secretHash] = await generateClaimSecret();
 
-    await withBackgroundFeeder(async () => {
-      let inserting: { blockNumber: BlockNumber; checkpointNumber: number; index: number } | undefined;
-      let insertedMsgHash: Fr | undefined;
+    // Readiness for a hash the chain has never seen is false before anything is sent, so the true answers below
+    // are not an artifact of the helper answering true for everything.
+    expect(await isL1ToL2MessageReady(aztecNode, Fr.random())).toBe(false);
 
-      for (let attempt = 0; attempt < 4 && inserting === undefined; attempt++) {
-        // Aim the send so the message ages past the lag partway through a checkpoint's build window. The
-        // eligibility instant is T + ethereumSlotDuration; targeting it a few seconds into an upcoming build
-        // window lands it on a non-first block across the ~4-block checkpoint. The eligible window is wide
-        // (any block after the first whose build time exceeds T + lag), so exact timing is not required.
-        const nowTs = BigInt(await t.cheatCodes.eth.lastBlockTimestamp());
-        const currentSlot = getSlotAtTimestamp(nowTs, t.constants);
-        const targetSlot = SlotNumber(Number(currentSlot) + 3);
-        const sendTargetTs =
-          getTimestampForSlot(targetSlot, t.constants) - BigInt(t.constants.ethereumSlotDuration) + 4n;
-        log.warn(`Attempt ${attempt}: waiting for L1 to reach ${sendTargetTs} before sending message`, {
-          currentSlot,
-          targetSlot,
-        });
-        await retryUntil(
-          async () => BigInt(await t.cheatCodes.eth.lastBlockTimestamp()) >= sendTargetTs,
-          `L1 reaches ${sendTargetTs}`,
-          Number(slotDuration) * 6,
-          0.2,
-        );
+    // Hold the first block of a checkpoint that still has sub-slots left to build the message into.
+    const armed = gate.arm(
+      event => event.phase === 'block-ready-to-broadcast' && event.indexWithinCheckpoint === 0 && event.isStandalone,
+    );
+    let consumeTxHash;
+    let msgHash: Fr;
+    let messageContent: Fr;
+    let globalLeafIndex: bigint;
+    let provenReady: Promise<boolean>;
+    let held;
+    try {
+      held = await Promise.race([armed.matched, armed.failed]);
+      log.warn(`Holding block ${held.blockNumber} of checkpoint ${held.checkpointNumber}`, {
+        slot: held.slot,
+        remainingBuildSubslots: held.remainingBuildSubslots,
+        consumedMessageCount: held.consumedMessageCount,
+      });
+      // The checkpoint has room for the block that will carry the message.
+      expect(held.remainingBuildSubslots).toBeGreaterThanOrEqual(1);
 
-        const blockAtSend = await aztecNode.getBlockNumber();
-        const [, secretHash] = await generateClaimSecret();
-        const message = { recipient: testContract.address, content: Fr.random(), secretHash };
-        const { msgHash } = await sendMessageToL2(message);
-        log.warn(`Sent message ${msgHash.toString()} at block ${blockAtSend}`);
+      const message = { recipient: testContract.address, content: Fr.random(), secretHash };
+      messageContent = message.content;
+      const sent = await sendMessageToL2(message);
+      msgHash = sent.msgHash;
+      globalLeafIndex = sent.globalLeafIndex.toBigInt();
 
-        // The background feeder drives block production; findInsertingBlock polls the committed tree without
-        // sending its own wallet txs (which would race the feeder on the nonce).
-        const found = await findInsertingBlock(msgHash);
-        log.warn(`Message ${msgHash.toString()} inserted at block ${found.blockNumber}`, {
-          checkpointNumber: found.checkpointNumber,
-          index: found.index,
-        });
-
-        if (found.index > 0) {
-          inserting = found;
-          insertedMsgHash = msgHash;
-        } else {
-          log.warn(`Message landed at index 0 (checkpoint boundary); retrying with a fresh message`);
-        }
-      }
-
-      expect(inserting).toBeDefined();
-      // A non-first block of its checkpoint carried the message: streaming placed it mid-checkpoint, which the
-      // legacy path (all messages at the first block of the next checkpoint) could never do.
-      expect(inserting!.index).toBeGreaterThan(0);
-      // The immediately preceding block did not yet have the message, confirming this block is the one that
-      // inserted it (rather than the message having been present since an earlier block of the checkpoint).
-      const priorWitness = await aztecNode.getL1ToL2MessageMembershipWitness(
-        BlockNumber(inserting!.blockNumber - 1),
-        insertedMsgHash!,
+      // The node indexes the message while production is held: observing and indexing a message is not the same
+      // as a block having inserted it, and readiness has to report the latter.
+      await retryUntil(
+        async () => {
+          const index = await aztecNode.getL1ToL2MessageIndex(msgHash);
+          return index === undefined ? undefined : { index };
+        },
+        `node assigns a compact index to message ${msgHash.toString()}`,
+        Number(t.constants.ethereumSlotDuration) * 6,
+        0.2,
       );
-      expect(priorWitness).toBeUndefined();
+      expect(await aztecNode.getL1ToL2MessageIndex(msgHash)).toEqual(globalLeafIndex);
+      expect(await isL1ToL2MessageReady(aztecNode, msgHash, 'latest')).toBe(false);
+
+      // Started here, while the proven tip is demonstrably behind the message: the helper has to poll to a true
+      // answer rather than being called once readiness is already established.
+      expect(await isL1ToL2MessageReady(aztecNode, msgHash, 'proven')).toBe(false);
+      provenReady = waitForL1ToL2MessageReady(aztecNode, msgHash, {
+        timeoutSeconds: Number(t.constants.slotDuration) * t.epochDuration * 4,
+        chainTip: 'proven',
+      });
+
+      // Queue the consume while the checkpoint is held, so the block that inserts the message can also spend it.
+      const consume = await proveInteraction(
+        wallet,
+        testContract.methods.consume_message_from_arbitrary_sender_public(
+          message.content,
+          secret,
+          l1Account,
+          globalLeafIndex,
+        ),
+        { from: user1Address },
+      );
+      consumeTxHash = await consume.send({ wait: NO_WAIT });
+      log.warn(`Queued consume tx ${consumeTxHash.toString()} while checkpoint ${held.checkpointNumber} is held`);
+
+      // The hold spends the proposer's real budget. Releasing into a spent deadline would abandon the slot and
+      // make every assertion below fail for the wrong reason, so the budget is checked rather than assumed.
+      const remaining = gate.remainingHoldBudgetMs()!;
+      log.warn(`Releasing with ${remaining}ms of proposal budget left`);
+      expect(remaining).toBeGreaterThan(BLOCK_DURATION_MS * 2);
+    } finally {
+      gate.release();
+    }
+    await armed.completed;
+
+    // The message entered the tree at a block of the held checkpoint, past its first.
+    const inserting = await findInsertingBlock(msgHash!);
+    log.warn(`Message ${msgHash!.toString()} inserted at block ${inserting.blockNumber}`, {
+      checkpointNumber: inserting.checkpointNumber,
+      index: inserting.index,
+      heldCheckpoint: held!.checkpointNumber,
     });
+    expect(inserting.checkpointNumber).toEqual(held!.checkpointNumber);
+    expect(inserting.index).toBeGreaterThan(0);
+    expect(inserting.blockNumber).toBeGreaterThan(held!.blockNumber);
+
+    // The parent did not hold the message and the inserting block does, at the compact index L1 assigned.
+    const parent = BlockNumber(inserting.blockNumber - 1);
+    expect(await aztecNode.getL1ToL2MessageMembershipWitness(parent, msgHash!)).toBeUndefined();
+    const witness = await aztecNode.getL1ToL2MessageMembershipWitness(inserting.blockNumber, msgHash!);
+    expect(witness).toBeDefined();
+    expect(witness![0]).toEqual(globalLeafIndex!);
+
+    // Readiness pinned to those two blocks: false at the parent, true at the inserting block. Pinning is what
+    // makes this a statement about the two blocks rather than about the tip moving between the two calls.
+    expect(await isL1ToL2MessageReady(pinnedTo(parent), msgHash!)).toBe(false);
+    expect(await isL1ToL2MessageReady(pinnedTo(inserting.blockNumber), msgHash!)).toBe(true);
+
+    // Same-block consumption: the block's constant data pins the message root to its own post-bundle value, so the
+    // public call sees the message the same block just inserted.
+    const consumeReceipt = await waitForTx(aztecNode, consumeTxHash!, {
+      timeout: Number(t.constants.slotDuration) * 4,
+    });
+    expect(consumeReceipt.executionResult).toBe(TxExecutionResult.SUCCESS);
+    expect(consumeReceipt.blockNumber).toEqual(Number(inserting.blockNumber));
+
+    // The leaf is nullified, so a second consume of the same message reverts.
+    const { receipt: doubleSpend } = await testContract.methods
+      .consume_message_from_arbitrary_sender_public(messageContent!, secret, l1Account, globalLeafIndex!)
+      .send({ from: user1Address, wait: { dontThrowOnRevert: true } });
+    expect(doubleSpend.executionResult).toBe(TxExecutionResult.REVERTED);
+
+    // The prover node proves the covering checkpoint, and the readiness wait started against the proven tip while
+    // the checkpoint was still being built resolves on its own once it does.
+    await waitForProvenThrough(inserting.blockNumber);
+    expect(await provenReady!).toBe(true);
+    expect(await isL1ToL2MessageReady(aztecNode, msgHash!, 'proven')).toBe(true);
+
+    // The proven chain holds both the insertion and the successful consume.
+    const provenBlock = (await aztecNode.getBlock(inserting.blockNumber, { includeTransactions: true }))!;
+    expect(await aztecNode.getL1ToL2MessageMembershipWitness(inserting.blockNumber, msgHash!)).toBeDefined();
+    expect(provenBlock.body.txEffects.map(effect => effect.txHash.toString())).toContain(consumeTxHash!.toString());
   });
 
   // Test 2 (latency bound): the delay between a message's L1 inclusion and the L2 block that makes it
@@ -328,54 +438,19 @@ describe('single-node/cross-chain/streaming_inbox', () => {
 
     // The inserting block carried the message with no txs: a message-only block.
     expect(insertingBlock.body.txEffects.length).toBe(0);
-    // The membership witness resolving proves the block's bundle was non-empty (it inserted the message).
-    expect(await aztecNode.getL1ToL2MessageMembershipWitness('latest', msgHash)).toBeDefined();
+    // Its bundle was non-empty, shown by the leaf-count delta against its parent and by the witness the block
+    // resolves at the message's own compact index. A witness alone would only say the tree holds the message.
+    const parentCount = (await committedMessageCount(inserting.blockNumber - 1))!;
+    const insertedCount = (await committedMessageCount(inserting.blockNumber))!;
+    expect(insertedCount).toBeGreaterThan(parentCount);
+    const witness = await aztecNode.getL1ToL2MessageMembershipWitness(inserting.blockNumber, msgHash);
+    expect(witness).toBeDefined();
 
-    // The chain keeps proving past the message-only block.
-    await markAsProven();
-    await retryUntil(
-      async () => (await aztecNode.getBlockNumber('proven')) >= inserting.blockNumber,
-      `proven tip reaches block ${inserting.blockNumber}`,
-      Number(t.constants.slotDuration) * t.epochDuration * 3,
-      1,
-    );
-    expect(await aztecNode.getBlockNumber('proven')).toBeGreaterThanOrEqual(inserting.blockNumber);
-  });
-
-  // Test 4 (send-then-consume on the streaming path): a message inserted by the streaming Inbox is consumed by
-  // a public L2 tx, passing the compact leaf index, and cannot be consumed twice. Same-block consumption is
-  // available (a block's BlockConstantData.l1_to_l2_tree_snapshot pins to that block's post-bundle
-  // root, so the public/AVM read sees the just-inserted message), but which block consumes the message relative
-  // to its insertion depends on sequencer timing under the production sequencer; the block relationship is
-  // logged for visibility while the robust invariants asserted are the successful compact-index consume and the
-  // double-spend revert. Mirrors cross_chain_public_message.test.ts.
-  it('consumes a streaming-inserted message by compact index and rejects double-spend', async () => {
-    const l1Account = t.ethAccount;
-    const [secret, secretHash] = await generateClaimSecret();
-    const message = { recipient: testContract.address, content: Fr.random(), secretHash };
-    const { msgHash, globalLeafIndex } = await sendMessageToL2(message);
-    log.warn(`Sent message ${msgHash.toString()} with compact index ${globalLeafIndex}`);
-
-    await waitForMessageReady(msgHash, 'public');
-    const inserting = await findInsertingBlock(msgHash);
-
-    const { receipt: txReceipt } = await testContract.methods
-      .consume_message_from_arbitrary_sender_public(message.content, secret, l1Account, globalLeafIndex.toBigInt())
-      .send({ from: user1Address });
-    expect(txReceipt.blockNumber).toBeGreaterThan(0);
-    // The compact leaf index from the Inbox event resolves to the same message the node inserted.
-    const [resolvedIndex] = (await aztecNode.getL1ToL2MessageMembershipWitness('latest', msgHash))!;
-    expect(resolvedIndex).toBe(globalLeafIndex.toBigInt());
-    log.warn(`Consumed message ${msgHash.toString()} in block ${txReceipt.blockNumber}`, {
-      insertingBlock: inserting.blockNumber,
-      consumeBlock: txReceipt.blockNumber,
-      sameBlock: Number(txReceipt.blockNumber) === Number(inserting.blockNumber),
-    });
-
-    // The message was inserted and consumed; a second consume must revert (the leaf is nullified).
-    const { receipt: failedReceipt } = await testContract.methods
-      .consume_message_from_arbitrary_sender_public(message.content, secret, l1Account, globalLeafIndex.toBigInt())
-      .send({ from: user1Address, wait: { dontThrowOnRevert: true } });
-    expect(failedReceipt.executionResult).toBe(TxExecutionResult.REVERTED);
+    // The prover node proves the checkpoint that holds the zero-tx block: the no-tx block-root circuit variant
+    // has to pass the real prover-node orchestration, not a hand-marked proven tip.
+    await waitForProvenThrough(inserting.blockNumber);
+    const provenCheckpoint = (await aztecNode.getBlockData(inserting.blockNumber))!.checkpointNumber;
+    expect(provenCheckpoint).toEqual(inserting.checkpointNumber);
+    expect(await aztecNode.getCheckpointNumber('proven')).toBeGreaterThanOrEqual(inserting.checkpointNumber);
   });
 });

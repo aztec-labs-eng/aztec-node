@@ -19,6 +19,7 @@ import { type P2PClientDeps, createP2PClient } from '@aztec-labs/p2p';
 import { type ProverNode, type ProverNodeDeps, createProverNode } from '@aztec-labs/prover-node';
 import { createKeyStoreForProver } from '@aztec-labs/prover-node/config';
 import {
+  type CheckpointProposalJobTestHooks,
   FeeProviderImpl,
   GlobalVariableBuilder,
   SequencerClient,
@@ -68,6 +69,11 @@ export interface CreateAztecNodeDeps {
   p2pClientDeps?: P2PClientDeps;
   proverNodeDeps?: Partial<ProverNodeDeps>;
   slashingProtectionDb?: SlashingProtectionDatabase;
+  /**
+   * Test-only hooks into checkpoint building, threaded to the sequencer as a dependency. Kept off
+   * {@link AztecNodeConfig} so nothing serialized or exposed over RPC can reach them.
+   */
+  checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks;
 }
 
 /** Options controlling which subsystems are started when creating a node. */
