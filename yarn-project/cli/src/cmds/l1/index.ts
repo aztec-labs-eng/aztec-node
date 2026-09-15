@@ -338,6 +338,29 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
     });
 
   program
+    .command('initiate-provider-exit')
+    .description("Initiates a staking-provider exit, signed by the position's attester.")
+    .addOption(l1RpcUrlsOption)
+    .addOption(l1ChainIdOption)
+    .option('-pk, --private-key <string>', 'The attester private key', PRIVATE_KEY)
+    .option('-m, --mnemonic <string>', 'Mnemonic for the attester account', MNEMONIC)
+    .requiredOption('--attester <address>', 'Attester address of the position to exit', parseEthereumAddress)
+    .requiredOption('--rollup <address>', 'Rollup holding the position', parseEthereumAddress)
+    .action(async options => {
+      const { initiateProviderExit } = await import('./update_l1_validators.js');
+      await initiateProviderExit({
+        rpcUrls: options.l1RpcUrls,
+        chainId: options.l1ChainId,
+        privateKey: options.privateKey,
+        mnemonic: options.mnemonic,
+        attesterAddress: options.attester,
+        rollupAddress: options.rollup,
+        log,
+        debugLogger,
+      });
+    });
+
+  program
     .command('remove-l1-validator')
     .description('Removes a validator to the L1 rollup contract.')
     .addOption(l1RpcUrlsOption)
