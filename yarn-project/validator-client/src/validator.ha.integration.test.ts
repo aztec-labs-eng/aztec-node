@@ -45,6 +45,7 @@ import { type PrivateKeyAccount, generatePrivateKey, privateKeyToAccount } from 
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import type { ValidatorClientConfig } from './config.js';
+import { makeFakeInbox } from './fake_inbox_test_helper.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
 import type { ExtendedValidatorKeyStore } from './key_store/interface.js';
 import { NodeKeystoreAdapter } from './key_store/node_keystore_adapter.js';
@@ -228,6 +229,7 @@ describe('ValidatorClient HA Integration', () => {
       worldState,
       blockSource,
       l1ToL2MessageSource,
+      makeFakeInbox(),
       txProvider,
       epochCache,
       consensusTimetable,

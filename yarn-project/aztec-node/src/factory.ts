@@ -6,7 +6,7 @@ import { Blob, getKzg } from '@aztec-labs/blob-lib';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { getPublicClient, makeL1HttpTransport } from '@aztec-labs/ethereum/client';
-import { RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { compactArray } from '@aztec-labs/foundation/collection';
@@ -167,6 +167,9 @@ export async function createAztecNodeService(
   Object.assign(config, l1ContractsAddresses);
 
   const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
+  // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
+  // bucket ring before accepting it, so every node needs one, validator or not.
+  const inboxContract = new InboxContract(publicClient, config.inboxAddress);
   const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup, rollupManaLimit] = await Promise.all([
     rollupContract.getL1GenesisTime(),
     rollupContract.getSlotDuration(),
@@ -340,6 +343,7 @@ export async function createAztecNodeService(
         epochCache,
         blockSource: archiver,
         l1ToL2MessageSource: archiver,
+        inbox: inboxContract,
         keyStoreManager,
         blobClient,
         reexecutionTracker,
@@ -376,6 +380,7 @@ export async function createAztecNodeService(
         epochCache,
         blockSource: archiver,
         l1ToL2MessageSource: archiver,
+        inbox: inboxContract,
         p2pClient,
         blobClient,
         dateProvider,
