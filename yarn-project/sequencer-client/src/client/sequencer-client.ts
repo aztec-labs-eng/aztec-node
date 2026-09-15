@@ -2,7 +2,7 @@ import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { getPublicClient } from '@aztec-labs/ethereum/client';
-import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { GovernanceProposerContract, InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { type Delayer, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -92,6 +92,7 @@ export class SequencerClient {
       funder: deps.funderL1TxUtils,
     });
     const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
+    const inboxContract = new InboxContract(publicClient, config.inboxAddress);
     const [l1GenesisTime, slotDuration, rollupManaLimit] = await Promise.all([
       rollupContract.getL1GenesisTime(),
       rollupContract.getSlotDuration(),
@@ -157,6 +158,7 @@ export class SequencerClient {
       deps.dateProvider,
       epochCache,
       rollupContract,
+      inboxContract,
       { ...config, maxL2BlockGas, maxDABlockGas, maxTxsPerBlock },
       telemetryClient,
       log,
