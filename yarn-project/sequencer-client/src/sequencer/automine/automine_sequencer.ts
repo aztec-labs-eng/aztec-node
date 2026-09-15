@@ -480,7 +480,8 @@ export class AutomineSequencer {
     // Streaming Inbox: automine builds a single-block checkpoint, so its one block is the checkpoint's final block
     // and has to land on a live bucket end: bound the consumed total by what the archiver holds and the caps,
     // resolve the live L1 bucket end at or below it with one Inbox call, and authenticate the range to it against
-    // the local log. The parent total is the fork's L1-to-L2 leaf count (compact indexing).
+    // the local log. Landing on that boundary can leave observed messages behind, so the block may consume fewer
+    // than the caps allow. The parent total is the fork's L1-to-L2 leaf count (compact indexing).
     //
     // Known limitation: a single block can insert at most the per-block cap, so once more messages than that have
     // aged past L1's censorship deadline, no single-block checkpoint can consume all the ones `propose` demands and
