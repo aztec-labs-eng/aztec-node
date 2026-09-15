@@ -210,6 +210,18 @@ export type RewardConfig = {
   checkpointReward: bigint;
 };
 
+/** Current provider-exit capacity. All durations are in seconds and counts are positions, not token amounts. */
+export type ProviderExitLimitState = {
+  window: bigint;
+  validatorCount: bigint;
+  committeeSize: bigint;
+  used: bigint;
+  /** Limit after one proposed removal; allowance minus used is not a guaranteed batch size. */
+  allowance: bigint;
+  /** Rollup-wide capacity only; the transaction still checks the caller and position. */
+  canExit: boolean;
+};
+
 /**
  * Exit information for a validator
  */
@@ -1366,6 +1378,30 @@ export class RollupContract {
 
   async getCurrentBlobCommitmentsHash(): Promise<Buffer32> {
     return Buffer32.fromString(await this.rollup.read.getCurrentBlobCommitmentsHash());
+  }
+
+  public getProviderExitWindow(): Promise<bigint> {
+    return this.rollup.read.getProviderExitWindow();
+  }
+
+  public getProviderExitLimitState(): Promise<ProviderExitLimitState> {
+    return this.rollup.read.getProviderExitLimitState();
+  }
+
+  /** Initiates a provider exit. The transaction signer must be the position's attester. */
+  public initiateProviderExit(
+    l1TxUtils: L1TxUtils,
+    attester: EthAddress,
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateProviderExit',
+        args: [attester.toString()],
+      }),
+    });
   }
 
   async getStakingAsset(): Promise<EthAddress> {

@@ -27,6 +27,8 @@ import {
   MultiAdderBytecode,
   OutboxAbi,
   OutboxBytecode,
+  ProviderExitExtLibAbi,
+  ProviderExitExtLibBytecode,
   RegisterNewRollupVersionPayloadAbi,
   RegisterNewRollupVersionPayloadBytecode,
   RegistryAbi,
@@ -102,6 +104,11 @@ export const RollupArtifact = {
         name: 'ValidatorOperationsExtLib',
         contractAbi: ValidatorOperationsExtLibAbi,
         contractBytecode: ValidatorOperationsExtLibBytecode as Hex,
+      },
+      ProviderExitExtLib: {
+        name: 'ProviderExitExtLib',
+        contractAbi: ProviderExitExtLibAbi,
+        contractBytecode: ProviderExitExtLibBytecode as Hex,
       },
       RewardExtLib: {
         name: 'RewardExtLib',

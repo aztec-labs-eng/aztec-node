@@ -254,6 +254,39 @@ export async function removeL1Validator({
   dualLog(`Transaction hash: ${receipt.transactionHash}`);
 }
 
+/** Initiates a provider exit without changing the registered withdrawer's control over the payout. */
+export async function initiateProviderExit({
+  rpcUrls,
+  chainId,
+  privateKey,
+  mnemonic,
+  attesterAddress,
+  rollupAddress,
+  log,
+  debugLogger,
+}: Omit<RollupCommandArgs, 'withdrawerAddress'> & LoggerArgs & { attesterAddress: EthAddress }) {
+  const account = getAccount(privateKey, mnemonic);
+  if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
+    throw new Error('The transaction signer must match the attester address');
+  }
+  const chain = createEthereumChain(rpcUrls, chainId);
+  const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
+  const rollup = new RollupContract(client, rollupAddress);
+  const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
+  const { receipt } = await rollup.initiateProviderExit(l1TxUtils, attesterAddress);
+  if (receipt.status !== 'success') {
+    throw new Error(`Provider exit reverted: ${receipt.transactionHash}`);
+  }
+  log(`Provider exit initiated for ${attesterAddress}. Transaction hash: ${receipt.transactionHash}`);
+  log('The registered withdrawer must select a recipient using initiateWithdraw before finalization.');
+  debugLogger.info('Provider exit initiated', {
+    attester: attesterAddress.toString(),
+    rollup: rollupAddress.toString(),
+    transactionHash: receipt.transactionHash,
+  });
+  return receipt;
+}
+
 export async function pruneRollup({
   rpcUrls,
   chainId,
