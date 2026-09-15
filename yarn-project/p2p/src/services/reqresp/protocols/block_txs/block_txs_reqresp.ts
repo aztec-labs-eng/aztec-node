@@ -153,6 +153,12 @@ export class BlockTxsResponse {
   }
 }
 
+// A BLOCK_TXS request must not name more txs than a single response should carry.
+// Honest requesters chunk missing txs at the batch-tx-requester batch size, which is
+// clamped to this bound, so a peer naming more (e.g. many explicit hashes with an empty
+// bit list) is rejected before the pool lookup rather than forcing an oversized response.
+export const MAX_BLOCK_TXS_PER_REQUEST = 128;
+
 /**
  * Calculate the expected response size for a BLOCK_TXS request.
  * @param requestBuffer - The serialized request buffer containing BlockTxsRequest
@@ -161,7 +167,9 @@ export class BlockTxsResponse {
 export function calculateBlockTxsResponseSize(requestBuffer: Buffer): number {
   try {
     const request = BlockTxsRequest.fromBuffer(requestBuffer);
-    const requestedTxCount = request.txIndices.getTrueIndices().length;
+    // Both the bit-list positions and the explicit hashes each cause a full tx to be
+    // served, so the estimate must include the explicit-hash fallback, not just the bits.
+    const requestedTxCount = request.txIndices.getTrueIndices().length + request.txHashes.length;
     return requestedTxCount * MAX_TX_SIZE_KB + 1; // +1 KB overhead for serialization
   } catch {
     // If we can't parse the request, fall back to allowing a single transaction response
