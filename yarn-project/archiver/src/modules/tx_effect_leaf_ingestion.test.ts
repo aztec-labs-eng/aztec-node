@@ -2,6 +2,7 @@ import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-lab
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
+import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { jest } from '@jest/globals';
 
 import { createArchiverDataStores } from '../store/data_stores.js';
@@ -67,6 +68,8 @@ describe('tx effect leaf ingestion', () => {
         txsPerBlock: 1,
         txOptions: { maxEffects: 0, numPublicCallsPerTx: 0 },
       });
+      // No Inbox messages are consumed, so the proposed-block insertion guard checks the empty prefix.
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = 0;
       const blockHash = BlockHash.random();
       block.header.setHash(blockHash);
       const leaf = new Fr(123);
@@ -95,7 +98,7 @@ describe('tx effect leaf ingestion', () => {
       } else if (route === 'store checkpoint' || route === 'store prepared checkpoint') {
         await stores.blocks.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
       } else if (route === 'updater proposed' || route === 'updater prepared proposed') {
-        await updater.addProposedBlock(block);
+        await updater.addProposedBlock(block, InboxMessagePrefixRef.empty());
       } else {
         await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
       }
