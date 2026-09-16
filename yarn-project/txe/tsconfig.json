@@ -16,9 +16,6 @@
       "path": "../aztec-node"
     },
     {
-      "path": "../bb-prover"
-    },
-    {
       "path": "../constants"
     },
     {

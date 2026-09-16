@@ -76,6 +76,7 @@ import {
 } from '@aztec-labs/stdlib/epoch-helpers';
 import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import { selectInboxBucketForBlock } from '@aztec-labs/stdlib/messaging';
 import {
   CheckpointProposal,
   ConsensusPayload,
@@ -100,7 +101,6 @@ import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { type SequencerClientConfig, getConfigEnvVars } from '../config.js';
-import { selectInboxBucketForBlock } from '../sequencer/inbox_bucket_selector.js';
 import { sendL1ToL2Message } from './l1_to_l2_messaging.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
 import { SequencerPublisher } from './sequencer-publisher.js';

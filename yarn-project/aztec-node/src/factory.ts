@@ -13,9 +13,15 @@ import { compactArray } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type KeyStore, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
-import { trySnapshotSync } from '@aztec-labs/node-lib/actions';
+import { trySnapshotSync, uploadSnapshot } from '@aztec-labs/node-lib/actions';
 import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec-labs/node-lib/factories';
-import { type P2P, type P2PClientDeps, createP2PClient } from '@aztec-labs/p2p';
+import {
+  type P2P,
+  type P2PClientDeps,
+  createP2PClient,
+  createTxValidatorForAcceptingTxsOverRPC,
+  getDefaultAllowedSetupFunctions,
+} from '@aztec-labs/p2p';
 import { type ProverNode, type ProverNodeDeps, createProverNode } from '@aztec-labs/prover-node';
 import { createKeyStoreForProver } from '@aztec-labs/prover-node/config';
 import {
@@ -37,7 +43,7 @@ import {
   createSlasher,
 } from '@aztec-labs/slasher';
 import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
-import { type ClientProtocolCircuitVerifier, tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { type DebugLogStore, InMemoryDebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
 import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import type { GenesisData } from '@aztec-labs/stdlib/world-state';
@@ -57,7 +63,12 @@ import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
 import { NextBlockPredictor } from './aztec-node/next_block/index.js';
-import { AztecNodeService, type AztecNodeServiceDeps } from './aztec-node/server.js';
+import {
+  AztecNodeService,
+  type AztecNodeServiceDeps,
+  type ProofVerifiers,
+  type RpcTxAdmission,
+} from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
 
 /** Dependencies that can be injected when creating a node, mostly to override defaults in tests. */
@@ -267,18 +278,29 @@ export async function createAztecNodeService(
     // The synchronizer takes ownership of the native world-state from here
     const worldStateSynchronizer = await createWorldStateSynchronizer(config, archiver, nativeWs, telemetry);
     started.push(worldStateSynchronizer);
-    const useRealVerifiers = config.realProofs || config.debugForceTxProofVerification;
-    let peerProofVerifier: ClientProtocolCircuitVerifier;
-    let rpcProofVerifier: ClientProtocolCircuitVerifier;
-    if (useRealVerifiers) {
-      peerProofVerifier = await BatchChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer');
+    // Also what the node calls when `setConfig` flips `realProofs`, so a runtime switch builds the same verifiers.
+    const createProofVerifiers = async (realProofs: boolean): Promise<ProofVerifiers> => {
+      if (!realProofs) {
+        return {
+          peer: new TestCircuitVerifier(config.proverTestVerificationDelayMs),
+          rpc: new TestCircuitVerifier(config.proverTestVerificationDelayMs),
+        };
+      }
       const rpcVerifier = await BBCircuitVerifier.new(config);
-      rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, config.numConcurrentIVCVerifiers);
-    } else {
-      peerProofVerifier = new TestCircuitVerifier(config.proverTestVerificationDelayMs);
-      rpcProofVerifier = new TestCircuitVerifier(config.proverTestVerificationDelayMs);
-    }
+      return {
+        peer: await BatchChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer'),
+        rpc: new QueuedIVCVerifier(rpcVerifier, config.numConcurrentIVCVerifiers),
+      };
+    };
+    const { peer: peerProofVerifier, rpc: rpcProofVerifier } = await createProofVerifiers(
+      config.realProofs || config.debugForceTxProofVerification,
+    );
     started.push(peerProofVerifier, rpcProofVerifier);
+
+    const rpcTxAdmission: RpcTxAdmission = {
+      getDefaultAllowedSetupFunctions,
+      createTxValidator: createTxValidatorForAcceptingTxsOverRPC,
+    };
 
     let debugLogStore: DebugLogStore;
     if (!config.realProofs) {
@@ -719,6 +741,9 @@ export async function createAztecNodeService(
       debugLogStore,
       automineSequencer,
       avmSimulator,
+      rpcTxAdmission,
+      createProofVerifiers,
+      uploadSnapshot: location => uploadSnapshot(location, archiver, worldStateSynchronizer, config, log),
     });
 
     return node;

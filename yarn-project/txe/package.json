@@ -73,7 +73,6 @@
     "@aztec-labs/accounts": "workspace:^",
     "@aztec-labs/archiver": "workspace:^",
     "@aztec-labs/aztec-node": "workspace:^",
-    "@aztec-labs/bb-prover": "workspace:^",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/key-store": "workspace:^",

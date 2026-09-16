@@ -1,11 +1,8 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import {
-  type InboxBucket,
-  MIN_BLOCKS_FOR_INBOX_CATCHUP,
-  isInboxConsumptionSufficient,
-} from '@aztec-labs/stdlib/messaging';
 
+import type { InboxBucket } from './inbox_bucket.js';
 import { type InboxBucketSource, selectInboxBucketForBlock } from './inbox_bucket_selector.js';
+import { MIN_BLOCKS_FOR_INBOX_CATCHUP, isInboxConsumptionSufficient } from './inbox_consumption.js';
 
 /** A test bucket: its cumulative totals and leaves are derived from a running message count. */
 type TestBucketSpec = { seq: bigint; timestamp: bigint; msgCount: number };

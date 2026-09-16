@@ -1,6 +1,4 @@
 import { Archiver } from '@aztec-labs/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
-import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
@@ -18,14 +16,13 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { first } from '@aztec-labs/foundation/iterable';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
-import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { count } from '@aztec-labs/foundation/string';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
 import { KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
-import { uploadSnapshot } from '@aztec-labs/node-lib/actions';
-import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getDefaultAllowedSetupFunctions } from '@aztec-labs/p2p';
+import type { P2P } from '@aztec-labs/p2p';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import type { ProverNode } from '@aztec-labs/prover-node';
 import { SequencerClient } from '@aztec-labs/sequencer-client';
@@ -75,6 +72,7 @@ import {
   type AllowedElement,
   type ClientProtocolCircuitVerifier,
   type L2LogsSource,
+  type MerkleTreeReadOperations,
   type Service,
   type WorldStateSyncStatus,
   type WorldStateSynchronizer,
@@ -92,12 +90,14 @@ import {
   type GlobalVariableBuilder as GlobalVariableBuilderInterface,
   type IndexedTxEffect,
   PublicSimulationOutput,
+  type RpcTxValidationOptions,
   type SimulationOverrides,
   Tx,
   type TxEffectMembershipWitness,
   type TxHash,
   type TxReceipt,
   type TxValidationResult,
+  type TxValidator,
 } from '@aztec-labs/stdlib/tx';
 import type { SingleValidatorStats, ValidatorsStats } from '@aztec-labs/stdlib/validators';
 import {
@@ -119,6 +119,29 @@ import type { AztecNodeConfig } from './config.js';
 import { type NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block/index.js';
 import { NodeMetrics } from './node_metrics.js';
 import { NodePublicCallsSimulator } from './node_public_calls_simulator.js';
+
+/** The verifiers a node runs against incoming tx proofs: one for gossiped txs, one for txs received over RPC. */
+export interface ProofVerifiers {
+  peer: ClientProtocolCircuitVerifier;
+  rpc: ClientProtocolCircuitVerifier;
+}
+
+/**
+ * Admission checks for txs the node receives over RPC. Production wires the p2p package's validators in
+ * `factory.ts`; the node only needs these two entry points and stays clear of the p2p stack behind them.
+ */
+export interface RpcTxAdmission {
+  /** Setup-phase functions every tx may call, ahead of this node's configured extensions. */
+  getDefaultAllowedSetupFunctions(): Promise<AllowedElement[]>;
+  /** Builds the validator run against one tx submitted over RPC. */
+  createTxValidator(
+    db: MerkleTreeReadOperations,
+    contractDataSource: ContractDataSource,
+    verifier: ClientProtocolCircuitVerifier | undefined,
+    options: RpcTxValidationOptions,
+    bindings?: LoggerBindings,
+  ): TxValidator<Tx>;
+}
 
 /**
  * Fully-constructed collaborators and settings an {@link AztecNodeService} owns. Built by `createAztecNodeService`
@@ -159,6 +182,18 @@ export interface AztecNodeServiceDeps {
   // that don't drive public execution, hence optional and asserted at the simulation call site. Owned by the
   // node (disposed on stop), so it must be disposable — a spawned process pool + CDB IPC server.
   avmSimulator?: AvmSimulator & AsyncDisposable;
+  /**
+   * Admission checks for txs received over RPC. Absent on nodes that never take txs over RPC (the TXE), which
+   * then reject `sendTx` and `isValidTx`.
+   */
+  rpcTxAdmission?: RpcTxAdmission;
+  /**
+   * Builds fresh proof verifiers for a `realProofs` setting, so `setConfig` can switch verification at runtime.
+   * Absent on nodes that never switch (the TXE), which reject a `realProofs` change.
+   */
+  createProofVerifiers?: (realProofs: boolean) => Promise<ProofVerifiers>;
+  /** Uploads a snapshot of the archiver and world state to `location`. Absent on nodes that cannot snapshot. */
+  uploadSnapshot?: (location: string) => Promise<void>;
 }
 
 /**
@@ -208,6 +243,9 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   private debugLogStore: DebugLogStore;
   protected readonly automineSequencer: AutomineSequencer | undefined;
   private readonly avmSimulator?: AvmSimulator & AsyncDisposable;
+  private readonly rpcTxAdmission?: RpcTxAdmission;
+  private readonly createProofVerifiers?: (realProofs: boolean) => Promise<ProofVerifiers>;
+  private readonly uploadSnapshot?: (location: string) => Promise<void>;
 
   constructor(deps: AztecNodeServiceDeps) {
     this.config = deps.config;
@@ -240,6 +278,9 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     this.debugLogStore = deps.debugLogStore ?? new NullDebugLogStore();
     this.automineSequencer = deps.automineSequencer;
     this.avmSimulator = deps.avmSimulator;
+    this.rpcTxAdmission = deps.rpcTxAdmission;
+    this.createProofVerifiers = deps.createProofVerifiers;
+    this.uploadSnapshot = deps.uploadSnapshot;
 
     this.metrics = new NodeMetrics(this.telemetry, 'AztecNodeService');
     this.tracer = this.telemetry.getTracer('AztecNodeService');
@@ -425,7 +466,17 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   }
 
   public async getAllowedPublicSetup(): Promise<AllowedElement[]> {
-    return [...(await getDefaultAllowedSetupFunctions()), ...(this.config.txPublicSetupAllowListExtend ?? [])];
+    return [
+      ...(await this.#requireRpcTxAdmission().getDefaultAllowedSetupFunctions()),
+      ...(this.config.txPublicSetupAllowListExtend ?? []),
+    ];
+  }
+
+  #requireRpcTxAdmission(): RpcTxAdmission {
+    if (!this.rpcTxAdmission) {
+      throw new Error('This node was built without RPC tx admission checks and does not accept txs over RPC');
+    }
+    return this.rpcTxAdmission;
   }
 
   /**
@@ -822,7 +873,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     // Enforce the same network admission limit the node advertises in getNodeInfo (network-wide, not this
     // node's local caps), so a tx the wallet sized against txsLimits is not rejected here.
     const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants);
-    const validator = createTxValidatorForAcceptingTxsOverRPC(
+    const validator = this.#requireRpcTxAdmission().createTxValidator(
       db,
       this.contractDataSource,
       verifier,
@@ -831,10 +882,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
         blockNumber,
         l1ChainId: this.l1ChainId,
         rollupVersion: this.version,
-        setupAllowList: [
-          ...(await getDefaultAllowedSetupFunctions()),
-          ...(this.config.txPublicSetupAllowListExtend ?? []),
-        ],
+        setupAllowList: await this.getAllowedPublicSetup(),
         gasFees: await this.getCurrentMinFees(),
         skipFeeEnforcement,
         isSimulation,
@@ -856,6 +904,10 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
 
   public async setConfig(config: Partial<AztecNodeAdminConfig>): Promise<void> {
     const newConfig = { ...this.config, ...config };
+    const switchingProofVerification = newConfig.realProofs !== this.config.realProofs;
+    if (switchingProofVerification && !this.createProofVerifiers) {
+      throw new BadRequestError('This node cannot switch proof verification at runtime');
+    }
     // If the sequencer is currently paused via pauseSequencer(), record the caller's desired
     // minTxsPerBlock as the restore value (so resumeSequencer applies it) and keep the freeze
     // (MAX_SAFE_INTEGER) applied to the underlying sequencer. Without this guard, forwarding
@@ -875,16 +927,11 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     if ('updateConfig' in archiver) {
       archiver.updateConfig(config);
     }
-    if (newConfig.realProofs !== this.config.realProofs) {
+    if (switchingProofVerification && this.createProofVerifiers) {
       await Promise.all([tryStop(this.peerProofVerifier), tryStop(this.rpcProofVerifier)]);
-      if (newConfig.realProofs) {
-        this.peerProofVerifier = await BatchChonkVerifier.new(newConfig, newConfig.bbChonkVerifyMaxBatch, 'peer');
-        const rpcVerifier = await BBCircuitVerifier.new(newConfig);
-        this.rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, newConfig.numConcurrentIVCVerifiers);
-      } else {
-        this.peerProofVerifier = new TestCircuitVerifier();
-        this.rpcProofVerifier = new TestCircuitVerifier();
-      }
+      const verifiers = await this.createProofVerifiers(newConfig.realProofs);
+      this.peerProofVerifier = verifiers.peer;
+      this.rpcProofVerifier = verifiers.rpc;
     }
 
     this.config = newConfig;
@@ -928,6 +975,12 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   }
 
   public async startSnapshotUpload(location: string): Promise<void> {
+    const uploadSnapshot = this.uploadSnapshot;
+    if (!uploadSnapshot) {
+      this.metrics.recordSnapshotError();
+      throw new Error('Snapshot upload is not configured on this node.');
+    }
+
     // Note that we are forcefully casting the blocksource as an archiver
     // We break support for archiver running remotely to the node
     const archiver = this.blockSource as Archiver;
@@ -957,7 +1010,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     // Do not wait for the upload to be complete to return to the caller, but flag that an operation is in progress
     this.isUploadingSnapshot = true;
     const timer = new Timer();
-    void uploadSnapshot(location, this.blockSource as Archiver, this.worldStateSynchronizer, this.config, this.log)
+    void uploadSnapshot(location)
       .then(() => {
         this.isUploadingSnapshot = false;
         this.metrics.recordSnapshot(timer.ms());
