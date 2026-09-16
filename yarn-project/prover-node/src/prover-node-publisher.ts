@@ -21,6 +21,13 @@ import { type Hex, type TransactionReceipt, encodeFunctionData, formatEther, for
 
 import { type EstimatedSubmitProofStats, ProverNodePublisherMetrics } from './metrics.js';
 
+/**
+ * Total confirmations the epoch proof tx must reach before it counts as published: its inclusion block plus two
+ * successors. A proof reported as published on its inclusion receipt alone can be undone by a shallow L1 reorg
+ * while the checkpoints it proves stay canonical, leaving the epoch unproven with the prover no longer retrying.
+ */
+const EPOCH_PROOF_REQUIRED_CONFIRMATIONS = 3;
+
 /** Arguments to the submitEpochProof method of the rollup contract */
 export type L1SubmitEpochProofArgs = {
   epochSize: number;
@@ -333,7 +340,7 @@ export class ProverNodePublisher {
     try {
       const { receipt } = await this.l1TxUtils.sendAndMonitorTransaction(
         { to: this.proofSubmissionTarget, data },
-        { txTimeoutAt: args.deadline },
+        { txTimeoutAt: args.deadline, requiredConfirmations: EPOCH_PROOF_REQUIRED_CONFIRMATIONS },
       );
       if (receipt.status !== 'success') {
         const errorMsg = await this.l1TxUtils.tryGetErrorFromRevertedTx(

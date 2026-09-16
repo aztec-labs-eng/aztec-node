@@ -474,9 +474,18 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
             (await this.tryGetTxReceipt(state.txHashes, nonce, false));
 
           if (receipt) {
-            state.receipt = receipt;
+            // Cancellations always settle on their inclusion receipt; only the original tx can ask for depth.
+            const requiredConfirmations = isCancelTx ? 1 : (gasConfig.requiredConfirmations ?? 1);
+            const confirmed = await this.awaitConfirmations(state, txHashes, receipt, requiredConfirmations, gasConfig);
+            if (!confirmed) {
+              // The receipt left the canonical chain while we were waiting. Fall back to ordinary
+              // monitoring: the tx is either back in the mempool or will be re-included elsewhere.
+              await sleep(gasConfig.checkIntervalMs!);
+              continue;
+            }
+            state.receipt = confirmed;
             await this.updateState(state, TxUtilsState.MINED, l1Timestamp);
-            return receipt;
+            return confirmed;
           }
 
           // If we get here then we have checked all of our tx versions and not found anything.
@@ -615,6 +624,95 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     });
 
     throw new TimeoutError(`L1 transaction ${initialTxHash} timed out`);
+  }
+
+  /**
+   * Holds a mined receipt nonterminal until it reaches `requiredConfirmations` total confirmations — the
+   * inclusion block plus `requiredConfirmations - 1` successors — re-reading it each round so a reorg that
+   * moves or drops it is noticed. Returns the confirmed receipt, or undefined if it left the canonical chain,
+   * in which case the caller resumes ordinary monitoring. The tx's mining deadline is deliberately not checked
+   * here: it is already included, so expiring or cancelling it now would be wrong.
+   */
+  private async awaitConfirmations(
+    state: L1TxState,
+    txHashes: Hex[],
+    receipt: TransactionReceipt,
+    requiredConfirmations: number,
+    gasConfig: Required<L1TxUtilsConfig>,
+  ): Promise<TransactionReceipt | undefined> {
+    const account = this.getSenderAddress().toString();
+    const { nonce } = state;
+    let current = receipt;
+
+    while (true) {
+      const blockNumber = await this.client.getBlockNumber();
+      const confirmations = Number(blockNumber - current.blockNumber) + 1;
+      if (confirmations >= requiredConfirmations) {
+        return current;
+      }
+
+      if (this.interrupted) {
+        // Shutting down. The tx is mined, so report it as such rather than stranding it nonterminal or
+        // claiming it was dropped; a restart re-checks it against the chain anyway.
+        this.logger.warn(
+          `Stopped waiting for confirmations on tx ${current.transactionHash} with nonce ${nonce} as interrupted`,
+          { nonce, account, confirmations, requiredConfirmations },
+        );
+        return current;
+      }
+
+      this.logger.debug(
+        `Tx ${current.transactionHash} with nonce ${nonce} has ${confirmations}/${requiredConfirmations} confirmations`,
+        { nonce, account, confirmations, requiredConfirmations, blockNumber },
+      );
+      await sleep(gasConfig.checkIntervalMs!);
+
+      const refreshed = await this.getCanonicalReceipt(txHashes);
+      if (!refreshed) {
+        this.logger.warn(
+          `Receipt for tx ${current.transactionHash} with nonce ${nonce} is no longer on the canonical chain`,
+          { nonce, account, blockNumber: current.blockNumber },
+        );
+        return undefined;
+      }
+      if (refreshed.blockHash !== current.blockHash) {
+        // A reorg re-included the tx elsewhere: restart the count from its new block.
+        this.logger.warn(`Tx ${current.transactionHash} with nonce ${nonce} was re-included in another block`, {
+          nonce,
+          account,
+          previousBlockNumber: current.blockNumber,
+          blockNumber: refreshed.blockNumber,
+        });
+      }
+      current = refreshed;
+    }
+  }
+
+  /**
+   * Re-reads the receipt for the first of `txHashes` that is still mined, and checks its block is the one the
+   * chain currently holds at that height. Returns undefined when no receipt is found or its block has been
+   * reorged out.
+   */
+  private async getCanonicalReceipt(txHashes: Hex[]): Promise<TransactionReceipt | undefined> {
+    for (const hash of txHashes) {
+      let receipt: TransactionReceipt | undefined;
+      try {
+        receipt = await this.client.getTransactionReceipt({ hash });
+      } catch (err) {
+        if (err instanceof Error && err.name === 'TransactionReceiptNotFoundError') {
+          continue;
+        }
+        throw err;
+      }
+      if (!receipt) {
+        continue;
+      }
+      const block = await this.client
+        .getBlock({ blockNumber: receipt.blockNumber, includeTransactions: false })
+        .catch(() => undefined);
+      return block?.hash === receipt.blockHash ? receipt : undefined;
+    }
+    return undefined;
   }
 
   /**

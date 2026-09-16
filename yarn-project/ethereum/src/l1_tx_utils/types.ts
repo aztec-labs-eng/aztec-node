@@ -13,7 +13,16 @@ export interface L1TxRequest {
   abi?: Abi;
 }
 
-export type L1TxConfig = Partial<L1TxUtilsConfig> & { gasLimit?: bigint; txTimeoutAt?: Date };
+export type L1TxConfig = Partial<L1TxUtilsConfig> & {
+  gasLimit?: bigint;
+  txTimeoutAt?: Date;
+  /**
+   * Total confirmations a receipt must reach before the tx is considered mined: the inclusion block plus
+   * `requiredConfirmations - 1` successors. Defaults to 1, meaning the inclusion receipt alone settles the tx.
+   * Raise it for txs whose effect must survive a shallow L1 reorg. Ignored for cancellation txs.
+   */
+  requiredConfirmations?: number;
+};
 
 export interface L1BlobInputs {
   blobs: Uint8Array[];

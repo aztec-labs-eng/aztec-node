@@ -450,6 +450,7 @@ describe('L1TxStore', () => {
           txUnseenConsideredDroppedMs: 10000,
           priorityFeeRetryBumpPercentage: 25,
           txTimeoutAt: new Date('2024-12-31T23:59:59Z'),
+          requiredConfirmations: 3,
         },
         request: {
           to: '0x1234567890123456789012345678901234567890' as `0x${string}`,

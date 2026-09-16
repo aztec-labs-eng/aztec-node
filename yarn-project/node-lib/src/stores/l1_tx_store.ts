@@ -37,6 +37,7 @@ interface SerializableL1TxConfig {
   cancelTxOnTimeout?: boolean;
   txCancellationFinalTimeoutMs?: number;
   txUnseenConsideredDroppedMs?: number;
+  requiredConfirmations?: number;
 }
 
 /**

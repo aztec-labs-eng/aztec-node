@@ -268,6 +268,28 @@ describe('EpochSession', () => {
       await startResult;
     });
 
+    it('does not cancel a proof already handed to the publishing service', async () => {
+      // Once submit() is pending, the L1 tx may be included and only waiting on confirmation depth.
+      // The session's own timer must not turn that into 'timed-out' — the publishing service and
+      // L1TxUtils own the post-submit deadline.
+      const publishGate = promiseWithResolvers<PublishOutcome>();
+      const submitted = promiseWithResolvers<void>();
+      publishingService.submit.mockImplementation(() => {
+        submitted.resolve();
+        return publishGate.promise;
+      });
+      const session = makeSession({ deadline: new Date(dateProvider.now() + 60_000) });
+      const startResult = session.start();
+      await submitted.promise;
+
+      await session.triggerDeadline();
+      expect(session.getState()).toBe('publishing-proof');
+      expect(publishingService.withdraw).not.toHaveBeenCalled();
+
+      publishGate.resolve('published');
+      await expect(startResult).resolves.toBe('completed');
+    });
+
     it('does not fire when the session completes before its deadline', async () => {
       publishingService.submit.mockResolvedValue('published');
       const deadline = new Date(dateProvider.now() + 60_000); // far enough out

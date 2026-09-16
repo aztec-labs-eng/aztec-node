@@ -1887,6 +1887,181 @@ describe('L1TxUtils', () => {
       await store.close();
       await kvStore.close();
     }, 15_000);
+
+    describe('required confirmations', () => {
+      /** Overrides that keep the monitor loop from speeding up or timing out while a test drives blocks by hand. */
+      const steadyOverrides = { checkIntervalMs: 50, stallTimeMs: 600_000, txTimeoutMs: 600_000 };
+
+      beforeEach(async () => {
+        await cheatCodes.setAutomine(false);
+        await cheatCodes.setIntervalMining(0);
+        await cheatCodes.setBlockInterval(1);
+      });
+
+      /** Number of blocks mined since the tx was included, as seen by the chain. */
+      const blocksSinceInclusion = async (state: L1TxState) => {
+        const receipt = await l1Client.getTransactionReceipt({ hash: state.txHashes[0] });
+        return Number((await l1Client.getBlockNumber()) - receipt.blockNumber);
+      };
+
+      it('completes on the inclusion receipt by default', async () => {
+        const { state } = await gasUtils.sendTransaction(request, steadyOverrides);
+        const monitorPromise = gasUtils.monitorTransaction(state);
+
+        await cheatCodes.evmMine();
+
+        const receipt = await monitorPromise;
+        expect(receipt.status).toBe('success');
+        expect(gasUtils.state).toBe(TxUtilsState.MINED);
+        // No successor block was needed: the inclusion block is the tip.
+        expect(await blocksSinceInclusion(state)).toBe(0);
+      }, 20_000);
+
+      it('stays pending until the requested confirmation depth is reached', async () => {
+        const { state } = await gasUtils.sendTransaction(request, { ...steadyOverrides, requiredConfirmations: 3 });
+        let settled = false;
+        const monitorPromise = gasUtils.monitorTransaction(state).finally(() => (settled = true));
+
+        // Confirmation 1: the inclusion block.
+        await cheatCodes.evmMine();
+        await retryUntil(() => blocksSinceInclusion(state).then(n => n === 0), 'tx included', 10, 0.05);
+        await sleep(300);
+        expect(settled).toBe(false);
+
+        // Confirmation 2: the first successor block.
+        await cheatCodes.mineEmptyBlock();
+        await sleep(300);
+        expect(settled).toBe(false);
+
+        // Confirmation 3: the second successor block.
+        await cheatCodes.mineEmptyBlock();
+        const receipt = await monitorPromise;
+        expect(receipt.status).toBe('success');
+      }, 20_000);
+
+      it('withholds MINED, persistence and mined metrics until the third confirmation', async () => {
+        const store = mock<IL1TxStore>();
+        store.consumeNextStateId.mockResolvedValue(1);
+        store.saveState.mockImplementation((_account, s) => Promise.resolve(s));
+        store.saveBlobs.mockResolvedValue(undefined);
+        gasUtils.setStore(store);
+
+        const { state } = await gasUtils.sendTransaction(request, { ...steadyOverrides, requiredConfirmations: 3 });
+        const monitorPromise = gasUtils.monitorTransaction(state);
+
+        await cheatCodes.evmMine();
+        await cheatCodes.mineEmptyBlock();
+        await sleep(300);
+
+        expect(gasUtils.state).toBe(TxUtilsState.SENT);
+        expect(state.receipt).toBeUndefined();
+        expect(metrics.recordMinedTx).not.toHaveBeenCalled();
+        expect(store.saveState.mock.calls.map(([, s]) => s.status)).not.toContain(TxUtilsState.MINED);
+
+        await cheatCodes.mineEmptyBlock();
+        await monitorPromise;
+
+        expect(gasUtils.state).toBe(TxUtilsState.MINED);
+        expect(state.receipt).toBeDefined();
+        expect(metrics.recordMinedTx).toHaveBeenCalledTimes(1);
+        expect(store.saveState.mock.calls.map(([, s]) => s.status)).toContain(TxUtilsState.MINED);
+      }, 20_000);
+
+      it('does not complete on a receipt whose block left the canonical chain, and resumes monitoring', async () => {
+        const { state } = await gasUtils.sendTransaction(request, { ...steadyOverrides, requiredConfirmations: 3 });
+        let settled = false;
+        const monitorPromise = gasUtils.monitorTransaction(state).finally(() => (settled = true));
+
+        await cheatCodes.evmMine();
+        await retryUntil(() => blocksSinceInclusion(state).then(n => n === 0), 'tx included', 10, 0.05);
+        const inclusionBlock = (await l1Client.getTransactionReceipt({ hash: state.txHashes[0] })).blockNumber;
+
+        // Report a different block at the inclusion height: the receipt we hold is no longer canonical.
+        const originalGetBlock = l1Client.getBlock.bind(l1Client);
+        const getBlockSpy = jest
+          .spyOn(l1Client, 'getBlock')
+          .mockImplementation(async (args: any) =>
+            args?.blockNumber === inclusionBlock
+              ? { ...(await originalGetBlock(args)), hash: `0x${'11'.repeat(32)}` }
+              : await originalGetBlock(args),
+          );
+
+        await cheatCodes.mineEmptyBlock(4);
+        await sleep(400);
+        expect(settled).toBe(false);
+        expect(gasUtils.state).toBe(TxUtilsState.SENT);
+        expect(metrics.recordMinedTx).not.toHaveBeenCalled();
+
+        // Monitoring resumes once the receipt is canonical again.
+        getBlockSpy.mockRestore();
+        const receipt = await monitorPromise;
+        expect(receipt.status).toBe('success');
+        expect(gasUtils.state).toBe(TxUtilsState.MINED);
+      }, 20_000);
+
+      it('does not time out or cancel a tx included before its deadline while confirmations accumulate', async () => {
+        const txTimeoutAt = new Date((await cheatCodes.lastBlockTimestamp()) * 1000 + 2_000);
+        const { state } = await gasUtils.sendTransaction(request, {
+          ...steadyOverrides,
+          txTimeoutMs: undefined,
+          txTimeoutAt,
+          requiredConfirmations: 3,
+        });
+        const monitorPromise = gasUtils.monitorTransaction(state);
+
+        // Include the tx while it is still within its deadline.
+        await cheatCodes.evmMine();
+        await retryUntil(() => blocksSinceInclusion(state).then(n => n === 0), 'tx included', 10, 0.05);
+
+        // Push L1 time past the deadline, then supply the remaining confirmations.
+        await cheatCodes.setBlockInterval(10);
+        await cheatCodes.mineEmptyBlock(2);
+        expect((await cheatCodes.lastBlockTimestamp()) * 1000).toBeGreaterThan(txTimeoutAt.getTime());
+
+        const receipt = await monitorPromise;
+        expect(receipt.status).toBe('success');
+        expect(gasUtils.state).toBe(TxUtilsState.MINED);
+        expect(state.cancelTxHashes).toHaveLength(0);
+      }, 20_000);
+
+      it('settles as mined rather than hanging when interrupted while awaiting confirmations', async () => {
+        const { state } = await gasUtils.sendTransaction(request, { ...steadyOverrides, requiredConfirmations: 3 });
+        const monitorPromise = gasUtils.monitorTransaction(state);
+
+        await cheatCodes.evmMine();
+        await retryUntil(() => blocksSinceInclusion(state).then(n => n === 0), 'tx included', 10, 0.05);
+        await sleep(200);
+        expect(gasUtils.state).toBe(TxUtilsState.SENT);
+
+        gasUtils.interrupt();
+
+        const receipt = await monitorPromise;
+        expect(receipt.status).toBe('success');
+        expect(state.status).toBe(TxUtilsState.MINED);
+        expect(state.cancelTxHashes).toHaveLength(0);
+        await gasUtils.waitMonitoringStopped(2);
+      }, 20_000);
+
+      it('keeps cancellation txs at a single confirmation', async () => {
+        const { state } = await gasUtils.sendTransaction(request, {
+          checkIntervalMs: 50,
+          stallTimeMs: 600_000,
+          txTimeoutMs: 1,
+          requiredConfirmations: 3,
+        });
+        const monitorPromise = gasUtils.monitorTransaction(state).catch(err => err);
+
+        // Push L1 time forward so the original tx times out and a cancellation is fired.
+        await cheatCodes.mineEmptyBlock();
+        await expect(monitorPromise).resolves.toBeInstanceOf(TimeoutError);
+        await retryUntil(() => state.cancelTxHashes.length > 0, 'cancel sent', 20, 0.1);
+
+        // A single block confirming the cancellation is enough — it does not wait for three.
+        await cheatCodes.evmMine();
+        await retryUntil(() => gasUtils.state === TxUtilsState.MINED, 'cancel mined', 20, 0.1);
+        expect(state.receipt!.transactionHash).toBe(state.cancelTxHashes.at(-1));
+      }, 20_000);
+    });
   });
 
   describe('L1TxUtils vs ReadOnlyL1TxUtils', () => {

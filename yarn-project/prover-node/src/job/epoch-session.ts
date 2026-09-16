@@ -119,6 +119,11 @@ export class EpochSession implements Traceable {
   private readonly log: Logger;
   private state: EpochProvingJobState = 'initialized';
   private deadlineTimeoutHandler: NodeJS.Timeout | undefined;
+  /**
+   * Set once the proof has been handed to the publishing service. From then on the deadline belongs to the
+   * publishing service (which expires queued candidates) and to `L1TxUtils` (which owns the L1 tx deadline).
+   */
+  private handedToPublisher = false;
 
   private topTreeJob: TopTreeJob | undefined;
   /** Cancelled top-tree jobs whose teardown is still in flight. Awaited at session stop. */
@@ -356,6 +361,13 @@ export class EpochSession implements Traceable {
       this.state = 'publishing-proof';
     }
 
+    // Stand the session's own deadline timer down before handing the proof over. Past this point the L1 tx
+    // may already be included and only waiting on confirmation depth, and cancelling it would report an epoch
+    // as timed out that is in fact proven.
+    this.handedToPublisher = true;
+    clearTimeout(this.deadlineTimeoutHandler);
+    this.deadlineTimeoutHandler = undefined;
+
     const outcome = await this.deps.publishingService.submit({
       id: this.uuid,
       epoch: this.spec.epochNumber,
@@ -445,7 +457,7 @@ export class EpochSession implements Traceable {
    * deadline path without waiting on the real `setTimeout` to fire.
    */
   protected async handleDeadline(): Promise<void> {
-    if (this.isTerminal()) {
+    if (this.isTerminal() || this.handedToPublisher) {
       return;
     }
     this.log.warn(`EpochSession ${this.uuid} hit deadline`, { uuid: this.uuid, ...this.spec });

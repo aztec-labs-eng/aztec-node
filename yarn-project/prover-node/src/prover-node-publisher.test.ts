@@ -356,6 +356,15 @@ describe('prover-node-publisher', () => {
     });
   });
 
+  it('waits for three confirmations on the epoch proof tx', async () => {
+    const deadline = new Date('2030-01-01T00:00:00Z');
+    await publisher.submitEpochProof({ ...setupPublishData(65, 32, 33, 64), deadline });
+    expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledWith(expect.anything(), {
+      txTimeoutAt: deadline,
+      requiredConfirmations: 3,
+    });
+  });
+
   it.each([32, 40, 64])('estimates compact calldata without sending when proven is %i', async proven => {
     const fromCheckpoint = 33;
     const toCheckpoint = 64;
