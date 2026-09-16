@@ -566,7 +566,12 @@ export class ArchiverDataStoreUpdater {
       await Promise.all([
         this.updatePublishedContractClasses(contractClassLogs, block.number, operation),
         this.updateDeployedContractInstances(privateLogs, block.number, operation),
-        this.updateUpdatedContractInstances(publicLogs, block.header.globalVariables.timestamp, operation),
+        this.updateUpdatedContractInstances(
+          publicLogs,
+          block.header.globalVariables.timestamp,
+          block.number,
+          operation,
+        ),
       ])
     ).every(Boolean);
   }
@@ -666,6 +671,7 @@ export class ArchiverDataStoreUpdater {
   private async updateUpdatedContractInstances(
     allLogs: PublicLog[],
     timestamp: UInt64,
+    blockNum: BlockNumber,
     operation: Operation,
   ): Promise<boolean> {
     const contractUpdates = allLogs
@@ -678,9 +684,9 @@ export class ArchiverDataStoreUpdater {
         this.log.verbose(`${Operation[operation]} contract instance update at ${c.address.toString()}`),
       );
       if (operation == Operation.Store) {
-        return await this.stores.contractInstances.addContractInstanceUpdates(contractUpdates, timestamp);
+        return await this.stores.contractInstances.addContractInstanceUpdates(contractUpdates, timestamp, blockNum);
       } else if (operation == Operation.Delete) {
-        return await this.stores.contractInstances.deleteContractInstanceUpdates(contractUpdates, timestamp);
+        return await this.stores.contractInstances.deleteContractInstanceUpdates(contractUpdates, timestamp, blockNum);
       }
     }
     return true;

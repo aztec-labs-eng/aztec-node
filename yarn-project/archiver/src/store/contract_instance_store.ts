@@ -1,3 +1,4 @@
+import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { first } from '@aztec-labs/foundation/iterable';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
@@ -11,7 +12,20 @@ import {
 } from '@aztec-labs/stdlib/contract';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
-type ContractInstanceUpdateKey = [string, string] | [string, string, number];
+/** Boundary key used to bracket the updates of a single contract; never stored. */
+type ContractInstanceUpdateRangeKey = [string, string];
+/** Stored key: contract address, scheduling timestamp, block number, and index within the block. */
+type ContractInstanceUpdateKey = [string, string, BlockNumber, number];
+type ContractInstanceUpdateMapKey = ContractInstanceUpdateRangeKey | ContractInstanceUpdateKey;
+
+/**
+ * Renders a timestamp so that lexicographic ordering of the encoded strings matches numeric ordering,
+ * which the key comparison relies on. Twenty digits cover the whole uint64 range plus the exclusive
+ * upper boundary a lookup builds from it.
+ */
+function encodeTimestamp(timestamp: bigint): string {
+  return timestamp.toString().padStart(20, '0');
+}
 
 /**
  * LMDB-based contract instance storage for the archiver.
@@ -19,7 +33,7 @@ type ContractInstanceUpdateKey = [string, string] | [string, string, number];
 export class ContractInstanceStore {
   #contractInstances: AztecAsyncMap<string, Buffer>;
   #contractInstancePublishedAt: AztecAsyncMap<string, number>;
-  #contractInstanceUpdates: AztecAsyncMap<ContractInstanceUpdateKey, Buffer>;
+  #contractInstanceUpdates: AztecAsyncMap<ContractInstanceUpdateMapKey, Buffer>;
 
   constructor(private db: AztecAsyncKVStore) {
     this.#contractInstances = db.openMap('archiver_contract_instances');
@@ -50,11 +64,18 @@ export class ContractInstanceStore {
    * Adds multiple contract instance updates to the store.
    * @param data - Contract instance updates to add.
    * @param timestamp - Timestamp at which the updates were scheduled.
+   * @param blockNumber - L2 block that carried the updates.
    * @returns True if every insert succeeded.
    */
-  async addContractInstanceUpdates(data: ContractInstanceUpdateWithAddress[], timestamp: UInt64): Promise<boolean> {
+  async addContractInstanceUpdates(
+    data: ContractInstanceUpdateWithAddress[],
+    timestamp: UInt64,
+    blockNumber: BlockNumber,
+  ): Promise<boolean> {
     return (
-      await Promise.all(data.map((update, logIndex) => this.addContractInstanceUpdate(update, timestamp, logIndex)))
+      await Promise.all(
+        data.map((update, logIndex) => this.addContractInstanceUpdate(update, timestamp, blockNumber, logIndex)),
+      )
     ).every(Boolean);
   }
 
@@ -62,11 +83,18 @@ export class ContractInstanceStore {
    * Removes multiple contract instance updates from the store.
    * @param data - Contract instance updates to delete.
    * @param timestamp - Timestamp at which the updates were scheduled.
+   * @param blockNumber - L2 block that carried the updates.
    * @returns True if every delete succeeded.
    */
-  async deleteContractInstanceUpdates(data: ContractInstanceUpdateWithAddress[], timestamp: UInt64): Promise<boolean> {
+  async deleteContractInstanceUpdates(
+    data: ContractInstanceUpdateWithAddress[],
+    timestamp: UInt64,
+    blockNumber: BlockNumber,
+  ): Promise<boolean> {
     return (
-      await Promise.all(data.map((update, logIndex) => this.deleteContractInstanceUpdate(update, timestamp, logIndex)))
+      await Promise.all(
+        data.map((update, logIndex) => this.deleteContractInstanceUpdate(update, timestamp, blockNumber, logIndex)),
+      )
     ).every(Boolean);
   }
 
@@ -106,21 +134,27 @@ export class ContractInstanceStore {
     });
   }
 
-  getUpdateKey(contractAddress: AztecAddress, timestamp: UInt64, logIndex?: number): ContractInstanceUpdateKey {
-    if (logIndex === undefined) {
-      return [contractAddress.toString(), timestamp.toString()];
-    } else {
-      return [contractAddress.toString(), timestamp.toString(), logIndex];
-    }
+  getUpdateRangeKey(contractAddress: AztecAddress, timestamp: bigint): ContractInstanceUpdateRangeKey {
+    return [contractAddress.toString(), encodeTimestamp(timestamp)];
+  }
+
+  getUpdateKey(
+    contractAddress: AztecAddress,
+    timestamp: UInt64,
+    blockNumber: BlockNumber,
+    logIndex: number,
+  ): ContractInstanceUpdateKey {
+    return [contractAddress.toString(), encodeTimestamp(timestamp), blockNumber, logIndex];
   }
 
   addContractInstanceUpdate(
     contractInstanceUpdate: ContractInstanceUpdateWithAddress,
     timestamp: UInt64,
+    blockNumber: BlockNumber,
     logIndex: number,
   ): Promise<void> {
     return this.#contractInstanceUpdates.set(
-      this.getUpdateKey(contractInstanceUpdate.address, timestamp, logIndex),
+      this.getUpdateKey(contractInstanceUpdate.address, timestamp, blockNumber, logIndex),
       new SerializableContractInstanceUpdate(contractInstanceUpdate).toBuffer(),
     );
   }
@@ -128,9 +162,12 @@ export class ContractInstanceStore {
   deleteContractInstanceUpdate(
     contractInstanceUpdate: ContractInstanceUpdateWithAddress,
     timestamp: UInt64,
+    blockNumber: BlockNumber,
     logIndex: number,
   ): Promise<void> {
-    return this.#contractInstanceUpdates.delete(this.getUpdateKey(contractInstanceUpdate.address, timestamp, logIndex));
+    return this.#contractInstanceUpdates.delete(
+      this.getUpdateKey(contractInstanceUpdate.address, timestamp, blockNumber, logIndex),
+    );
   }
 
   async getCurrentContractInstanceClassId(address: AztecAddress, timestamp: UInt64, originalClassId: Fr): Promise<Fr> {
@@ -138,8 +175,8 @@ export class ContractInstanceStore {
     const serializedUpdate = await first(
       this.#contractInstanceUpdates.valuesAsync({
         reverse: true,
-        start: this.getUpdateKey(address, 0n), // Make sure we only look at updates for this contract
-        end: this.getUpdateKey(address, timestamp + 1n), // No update can match this key since it doesn't have a log index. We want the highest key <= timestamp
+        start: this.getUpdateRangeKey(address, 0n), // Make sure we only look at updates for this contract
+        end: this.getUpdateRangeKey(address, timestamp + 1n), // No update can match this key since it carries no block or log index. We want the highest key <= timestamp
         limit: 1,
       }),
     );

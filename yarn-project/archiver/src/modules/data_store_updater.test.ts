@@ -1,4 +1,8 @@
-import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE } from '@aztec-labs/constants';
+import {
+  CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
+  CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE,
+  CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE,
+} from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -13,7 +17,7 @@ import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts'
 import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
-import { ContractClassLog, ContractClassLogFields, PrivateLog } from '@aztec-labs/stdlib/logs';
+import { ContractClassLog, ContractClassLogFields, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import '@aztec-labs/stdlib/testing/jest';
@@ -85,6 +89,22 @@ function getSampleContractInstancePublishedEventPayload(): Buffer {
     '../../../protocol-contracts/fixtures/ContractInstancePublishedEventData.hex',
   );
   return Buffer.from(readFileSync(fixturePath).toString(), 'hex');
+}
+
+/** Builds a ContractInstanceUpdated public log as emitted by the contract instance registry. */
+function buildContractInstanceUpdatedLog(
+  address: AztecAddress,
+  previousClassId: Fr,
+  newClassId: Fr,
+  timestampOfChange: bigint,
+): PublicLog {
+  return new PublicLog(ProtocolContractAddress.ContractInstanceRegistry, [
+    new Fr(CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE),
+    address.toField(),
+    previousClassId,
+    newClassId,
+    new Fr(timestampOfChange),
+  ]);
 }
 
 /** The reference every block consuming no Inbox messages carries. */
@@ -452,6 +472,92 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
       const timestamp = block2.header.globalVariables.timestamp + 1n;
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
+    });
+  });
+
+  describe('contract instance updates', () => {
+    let updatedAddress: AztecAddress;
+    let otherAddress: AztecAddress;
+    let originalClassId: Fr;
+
+    beforeEach(async () => {
+      updatedAddress = await AztecAddress.random();
+      otherAddress = await AztecAddress.random();
+      originalClassId = Fr.random();
+    });
+
+    /** Builds two consecutive blocks that share a timestamp, the second chaining off the first. */
+    async function makeSameTimestampBlockPair(timestamp: bigint) {
+      const block1 = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+        timestamp,
+      });
+      const block2 = await randomBlock(2, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(1),
+        slotNumber: SlotNumber(100),
+        timestamp,
+        lastArchive: block1.archive,
+      });
+      return { block1, block2 };
+    }
+
+    it('resolves the later block when two blocks in the same slot update the same contract', async () => {
+      const timestamp = 5000n;
+      const timestampOfChange = timestamp + 10n;
+      const classIdX = Fr.random();
+      const classIdY = Fr.random();
+
+      const { block1, block2 } = await makeSameTimestampBlockPair(timestamp);
+      // The first block also updates an unrelated contract, so the update that targets `updatedAddress`
+      // does not sit at in-block index 0.
+      block1.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(otherAddress, Fr.random(), Fr.random(), timestampOfChange),
+        buildContractInstanceUpdatedLog(updatedAddress, originalClassId, classIdX, timestampOfChange),
+      ];
+      block2.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(updatedAddress, classIdX, classIdY, timestampOfChange),
+      ];
+
+      await updater.addProposedBlock(block1, emptyPrefix);
+      await updater.addProposedBlock(block2, emptyPrefix);
+
+      await expect(
+        store.contractInstances.getCurrentContractInstanceClassId(
+          updatedAddress,
+          timestampOfChange + 1n,
+          originalClassId,
+        ),
+      ).resolves.toEqual(classIdY);
+    });
+
+    it('restores the earlier block update when a later block in the same slot is pruned', async () => {
+      const timestamp = 5000n;
+      const timestampOfChange = timestamp + 10n;
+      const classIdX = Fr.random();
+      const classIdY = Fr.random();
+
+      const { block1, block2 } = await makeSameTimestampBlockPair(timestamp);
+      block1.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(updatedAddress, originalClassId, classIdX, timestampOfChange),
+      ];
+      block2.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(updatedAddress, classIdX, classIdY, timestampOfChange),
+      ];
+
+      await updater.addProposedBlock(block1, emptyPrefix);
+      await updater.addProposedBlock(block2, emptyPrefix);
+      await updater.removeUncheckpointedBlocksAfter(BlockNumber(1));
+
+      await expect(
+        store.contractInstances.getCurrentContractInstanceClassId(
+          updatedAddress,
+          timestampOfChange + 1n,
+          originalClassId,
+        ),
+      ).resolves.toEqual(classIdX);
     });
   });
 
