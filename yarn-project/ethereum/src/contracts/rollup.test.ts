@@ -515,7 +515,7 @@ describe('Rollup', () => {
         });
 
       const stateOverrides = await overridesFor(parentBucket.totalMsgCount);
-      const minFee = await rollup.getManaMinFeeAt(time, true, stateOverrides);
+      const minFee = await rollup.getManaMinFeeAt(time, true, { stateOverride: stateOverrides });
       const header = {
         ...args.header,
         lastArchiveRoot: parentArchive.toString(),
