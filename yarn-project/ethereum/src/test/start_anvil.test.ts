@@ -1,31 +1,114 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
-import { existsSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { type AddressInfo, createServer } from 'node:net';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
+
+/** Stands in for an anvil that announces itself and then refuses to die on SIGTERM. */
+const UNKILLABLE_ANVIL = `#!/usr/bin/env bash
+trap '' TERM INT
+port=8545
+while [ $# -gt 0 ]; do
+  [ "$1" = '--port' ] && port=$2
+  shift
+done
+echo $$ > "$ANVIL_STUB_PIDFILE"
+echo "Listening on 127.0.0.1:$port"
+while true; do sleep 1 & wait $!; done
+`;
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function withAnvilBin<T>(bin: string, fn: () => Promise<T>): Promise<T> {
+  const prev = process.env.ANVIL_BIN;
+  process.env.ANVIL_BIN = bin;
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) {
+      delete process.env.ANVIL_BIN;
+    } else {
+      process.env.ANVIL_BIN = prev;
+    }
+  }
+}
+
+describe('startAnvil teardown', () => {
+  it('leaves nothing running when anvil ignores SIGTERM', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'anvil-stub-'));
+    const stub = join(dir, 'anvil');
+    const pidFile = join(dir, 'pid');
+    writeFileSync(stub, UNKILLABLE_ANVIL, { mode: 0o755 });
+    process.env.ANVIL_STUB_PIDFILE = pidFile;
+
+    try {
+      // A concrete port, not 0: the stand-in echoes back whatever it is given, and real anvil is what
+      // turns a requested 0 into the actual port in that line. It binds nothing, so the value is free.
+      const { anvil } = await withAnvilBin(stub, () => startAnvil({ port: 39544 }));
+      const pid = parseInt(readFileSync(pidFile, 'utf8').trim());
+      expect(isAlive(pid)).toBe(true);
+
+      const start = Date.now();
+      await anvil.stop();
+      // Must not hang: the SIGTERM the watchdog sends is ignored here, so only the kill escalation
+      // can end this, and that escalation has to both fire and be waited for.
+      expect(Date.now() - start).toBeLessThan(15_000);
+      expect(anvil.status).toEqual('idle');
+
+      // The stand-in is not our child, so it is reaped by init rather than by us and can linger as a
+      // zombie for a moment after the group kill; what matters is that it goes, not that it has gone
+      // by the exact instant stop() returns. Without the escalation it never goes at all.
+      for (let i = 0; i < 50 && isAlive(pid); i++) {
+        await sleep(100);
+      }
+      expect(isAlive(pid)).toBe(false);
+    } finally {
+      delete process.env.ANVIL_STUB_PIDFILE;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('frees the port before stop resolves', async () => {
+    const { anvil, rpcUrl } = await startAnvil({ port: 0 });
+    const port = parseInt(new URL(rpcUrl).port);
+
+    await anvil.stop();
+
+    // Rebinding immediately is the caller-visible form of "anvil is really gone": suites reuse ports
+    // across cases, so a stop() that returns early hands the next startAnvil a port still in use.
+    const rebound = createServer();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        rebound.once('error', reject);
+        rebound.listen(port, '127.0.0.1', () => resolve());
+      });
+    } finally {
+      await new Promise<void>(resolve => rebound.close(() => resolve()));
+    }
+  }, 60_000);
+});
 
 describe('startAnvil with a binary that exits before listening', () => {
   it('rejects instead of hanging', async () => {
     // `false` lives at /bin/false on Linux but /usr/bin/false on macOS; resolveFoundryBinary
     // requires $ANVIL_BIN to be an existing executable, so pick whichever is present.
     const falseBin = ['/bin/false', '/usr/bin/false'].find(p => existsSync(p)) ?? '/bin/false';
-    const prev = process.env.ANVIL_BIN;
-    process.env.ANVIL_BIN = falseBin;
-    try {
-      // Must settle (via the retry loop, ~15s of backoff) rather than await a "Listening on" line
-      // that never comes.
-      await expect(startAnvil({ port: 0 })).rejects.toThrow(/before listening/);
-    } finally {
-      if (prev === undefined) {
-        delete process.env.ANVIL_BIN;
-      } else {
-        process.env.ANVIL_BIN = prev;
-      }
-    }
+    // Must settle (via the retry loop, ~15s of backoff) rather than await a "Listening on" line
+    // that never comes.
+    await withAnvilBin(falseBin, () => expect(startAnvil({ port: 0 })).rejects.toThrow(/before listening/));
   }, 30_000);
 });
 

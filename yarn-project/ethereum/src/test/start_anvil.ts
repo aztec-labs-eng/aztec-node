@@ -22,11 +22,16 @@ export interface Anvil {
 //
 // `$@` is the anvil argv; `bash -c <script> bash <...args>` puts the args in `$@` and `$0` = 'bash'.
 //
-// The EXIT trap reaps anvil; INT/TERM just `exit` (which fires the EXIT trap) so a signal terminates
-// the supervisor promptly instead of being swallowed — a trapped TERM does NOT terminate the shell,
-// so trapping the kill directly on TERM would leave the poll loop running and the caller's teardown
-// hanging until its SIGKILL escalation. `sleep & wait` makes the poll interruptible, so INT/TERM are
-// handled immediately rather than after the current `sleep` returns.
+// The EXIT trap reaps anvil and then waits for it, so the supervisor outlives anvil and its own exit
+// is proof that anvil is gone — which is what lets teardown treat the supervisor exiting as the whole
+// spawn being gone. An anvil that does not honour the SIGTERM holds the supervisor in that `wait`
+// until teardown's escalation kills the group.
+//
+// INT/TERM just `exit` (which fires the EXIT trap) so a signal terminates the supervisor promptly
+// instead of being swallowed — a trapped TERM does NOT terminate the shell, so trapping the kill
+// directly on TERM would leave the poll loop running and the caller's teardown hanging until its
+// SIGKILL escalation. `sleep & wait` makes the poll interruptible, so INT/TERM are handled
+// immediately rather than after the current `sleep` returns.
 //
 // The poll loop also exits when ANVIL itself dies: startAnvil detects a failed start via the
 // supervisor's 'close' event, so a supervisor that outlived a dead anvil (e.g. port already in use,
@@ -37,7 +42,7 @@ set -u
 parent=$PPID
 "$ANVIL_BIN" "$@" &
 anvil_pid=$!
-trap 'kill "$anvil_pid" 2>/dev/null' EXIT
+trap 'kill "$anvil_pid" 2>/dev/null; wait "$anvil_pid" 2>/dev/null' EXIT
 trap 'exit 0' INT TERM
 while kill -0 "$parent" 2>/dev/null && kill -0 "$anvil_pid" 2>/dev/null; do sleep 1 & wait $!; done
 `;
@@ -268,7 +273,8 @@ function killChild(child: ChildProcess): Promise<void> {
     // inherits those pipes from the watchdog: if the watchdog dies without reaping anvil — which is
     // what SIGKILL below does, since a killed shell runs no EXIT trap — anvil holds the write ends
     // open and 'close' never fires, so the escalation meant to bound this wait would instead hang it
-    // forever.
+    // forever. 'exit' is still only reached once anvil is gone: the watchdog waits for it (see
+    // ANVIL_WATCHDOG), and the escalation below kills the group, not just the watchdog.
     const onExit = () => {
       if (killTimer !== undefined) {
         clearTimeout(killTimer);
