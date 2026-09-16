@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./dest/index.js",
+    "./server": "./dest/server.js",
     "./config": "./dest/aztec-node/config.js",
     "./sentinel": "./dest/aztec-node/sentinel.js",
     "./test": "./dest/test/index.js"

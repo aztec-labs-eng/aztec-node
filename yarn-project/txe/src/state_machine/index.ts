@@ -1,4 +1,4 @@
-import { type AztecNodeConfig, AztecNodeService, NextBlockPredictor } from '@aztec-labs/aztec-node';
+import { type AztecNodeConfig, AztecNodeService, NextBlockPredictor } from '@aztec-labs/aztec-node/server';
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
