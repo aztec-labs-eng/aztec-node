@@ -17,26 +17,20 @@ import { redirectsPlugin } from './esbuild/plugins/redirects.mjs';
 import { enforceSizeLimits } from './esbuild/plugins/size_guard.mjs';
 import { stripArtifactDebugPlugin } from './esbuild/plugins/strip_artifact_debug.mjs';
 
-// `@aztec-labs/*` packages that AztecNodeService imports transitively but the TXE worker never
-// actually constructs or executes — sequencer/validator/prover/etc. are passed in as `undefined`,
-// so the imported symbols are only used inside AztecNodeService methods TXE never calls. The
-// Proxy-based `empty_stub.cjs` throws on access, surfacing any false assumption loudly.
+// `@aztec-labs/*` packages that AztecNodeService still imports but the TXE never constructs or executes:
+// the keystore adapter and node-keystore are only reached from `reloadKeystore`, and epoch-cache and
+// blob-client only through wiring TXE leaves undefined. The Proxy-based `empty_stub.cjs` throws on
+// access, surfacing any false assumption loudly.
 //
 // NOTE: `@aztec-labs/archiver` is intentionally NOT stubbed — TXEArchiver extends ArchiverDataSourceBase
 //       and uses createArchiverDataStores at runtime.
 // NOTE: `@aztec-labs/blob-lib` is NOT stubbed — stdlib's tx_effect calls getNumTxBlobFields at runtime
 //       when serializing transactions.
 const fullyStubbedAztecPackages = [
-  '@aztec-labs/p2p',
-  '@aztec-labs/sequencer-client',
   '@aztec-labs/validator-client',
-  '@aztec-labs/prover-client',
-  '@aztec-labs/prover-node',
-  '@aztec-labs/slasher',
   '@aztec-labs/epoch-cache',
   '@aztec-labs/blob-client',
   '@aztec-labs/node-keystore',
-  '@aztec-labs/node-lib',
 ];
 
 // Each row redirects a specifier match to a stub file under `esbuild/stubs/`. The local stub
@@ -60,7 +54,6 @@ const redirects = [
   { filter: /^@aztec-labs\/protocol-contracts\/providers\/bundle$/, stub: 'protocol_contracts_bundle_stub.ts' },
   { filter: /^@aztec-labs\/archiver$/, stub: 'archiver_stub.ts' },
   { filter: /^@aztec-labs\/bb-prover$/, stub: 'bb_prover_stub.ts' },
-  { filter: /^@aztec-labs\/bb-prover\/test$/, stub: 'bb_prover_test_stub.ts' },
   { filter: /^@aztec-labs\/world-state$/, stub: 'world_state_stub.ts' },
   { filter: /^@noble\/curves\/secp256k1$/, stub: 'noble_secp256k1_stub.ts' },
   { filter: /^@noble\/curves\/bls12-381$/, stub: 'noble_bls12_stub.ts' },
