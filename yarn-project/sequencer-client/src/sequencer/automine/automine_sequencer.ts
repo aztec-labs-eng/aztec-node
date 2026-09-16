@@ -72,7 +72,14 @@ export type AutomineSequencerDeps = {
    */
   archiver: Pick<
     Archiver,
-    'rollbackTo' | 'addBlock' | 'addProposedCheckpoint' | 'syncImmediate' | 'removeUncheckpointedBlocksAfter'
+    | 'rollbackTo'
+    | 'addBlock'
+    | 'addProposedCheckpoint'
+    | 'syncImmediate'
+    | 'removeUncheckpointedBlocksAfter'
+    | 'isSyncing'
+    | 'stop'
+    | 'resume'
   >;
   /** L1 tx utils whose cached nonces must be reset after an L1 reorg. */
   l1TxUtils: Pick<L1TxUtils, 'resetNonce'>[];
@@ -659,35 +666,48 @@ export class AutomineSequencer {
       checkpointSlot: checkpointData.header.slotNumber,
     });
 
-    // Roll the archiver back to the last block of targetCheckpoint before the L1 reorg,
-    // since the archiver needs to fetch the target checkpoint's L1 block hash during rollback.
-    const lastBlockInCheckpoint = BlockNumber(checkpointData.startBlock + checkpointData.blockCount - 1);
-    await this.deps.archiver.rollbackTo(lastBlockInCheckpoint);
+    // Suspend the archiver's L1 sync loop for the whole rollback. `rollbackTo` moves the archiver's L1
+    // syncpoint back to targetL1Block while the propose txs for the later checkpoints are still on L1,
+    // so any sync pass that runs before the reorg below re-downloads exactly the checkpoints we just
+    // removed, and the node (and the PXE behind it) climbs back to the pre-revert tip. Resume only what
+    // this call suspended, so a revert requested while the archiver is already stopped leaves it stopped.
+    const wasSyncing = this.deps.archiver.isSyncing();
+    await this.deps.archiver.stop();
+    try {
+      // Roll the archiver back to the last block of targetCheckpoint before the L1 reorg,
+      // since the archiver needs to fetch the target checkpoint's L1 block hash during rollback.
+      const lastBlockInCheckpoint = BlockNumber(checkpointData.startBlock + checkpointData.blockCount - 1);
+      await this.deps.archiver.rollbackTo(lastBlockInCheckpoint);
 
-    // Force the P2P block stream to run one cycle immediately so it processes the
-    // chain-pruned event triggered by the archiver rollback above. Without this, the
-    // P2P pool may not have restored rolled-back txs to pending by the time the next
-    // build runs.
-    await this.deps.p2pClient.sync();
+      // Force the P2P block stream to run one cycle immediately so it processes the
+      // chain-pruned event triggered by the archiver rollback above. Without this, the
+      // P2P pool may not have restored rolled-back txs to pending by the time the next
+      // build runs.
+      await this.deps.p2pClient.sync();
 
-    // Force world-state to process the archiver's prune event immediately, so the next build
-    // doesn't try to insert nullifiers that were already in the pruned checkpoints.
-    await this.deps.worldState.syncImmediate();
+      // Force world-state to process the archiver's prune event immediately, so the next build
+      // doesn't try to insert nullifiers that were already in the pruned checkpoints.
+      await this.deps.worldState.syncImmediate();
 
-    // Remove all L1 blocks strictly after the target checkpoint's publish block so that
-    // the propose txs for later checkpoints are gone from L1. We use reorg(depth) directly
-    // to keep targetL1Block itself as the new chain tip.
-    const currentL1Block = await this.deps.ethCheatCodes.publicClient.getBlockNumber();
-    const depth = Number(currentL1Block) - targetL1Block;
-    if (depth > 0) {
-      await this.deps.ethCheatCodes.reorg(depth);
+      // Remove all L1 blocks strictly after the target checkpoint's publish block so that
+      // the propose txs for later checkpoints are gone from L1. We use reorg(depth) directly
+      // to keep targetL1Block itself as the new chain tip.
+      const currentL1Block = await this.deps.ethCheatCodes.publicClient.getBlockNumber();
+      const depth = Number(currentL1Block) - targetL1Block;
+      if (depth > 0) {
+        await this.deps.ethCheatCodes.reorg(depth);
+      }
+
+      // anvil_rollback re-queues the rolled-back txs into the mempool. Clear them so they
+      // don't get re-mined, then reset the publisher nonce tracker so the next propose tx
+      // uses the correct nonce for the post-reorg chain state.
+      await this.deps.ethCheatCodes.rpcCall('anvil_dropAllTransactions', []);
+      this.deps.l1TxUtils.forEach(utils => utils.resetNonce());
+    } finally {
+      if (wasSyncing) {
+        this.deps.archiver.resume();
+      }
     }
-
-    // anvil_rollback re-queues the rolled-back txs into the mempool. Clear them so they
-    // don't get re-mined, then reset the publisher nonce tracker so the next propose tx
-    // uses the correct nonce for the post-reorg chain state.
-    await this.deps.ethCheatCodes.rpcCall('anvil_dropAllTransactions', []);
-    this.deps.l1TxUtils.forEach(utils => utils.resetNonce());
 
     // Reset slot bookkeeping so the next build picks up at the correct slot.
     this.lastBuiltSlot = Number(checkpointData.header.slotNumber);

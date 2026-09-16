@@ -46,7 +46,14 @@ export type CreateAutomineSequencerArgs = {
     L1ToL2MessageSource &
     Pick<
       Archiver,
-      'rollbackTo' | 'addBlock' | 'addProposedCheckpoint' | 'syncImmediate' | 'removeUncheckpointedBlocksAfter'
+      | 'rollbackTo'
+      | 'addBlock'
+      | 'addProposedCheckpoint'
+      | 'syncImmediate'
+      | 'removeUncheckpointedBlocksAfter'
+      | 'isSyncing'
+      | 'stop'
+      | 'resume'
     >;
   p2pClient: P2P & Pick<ConcreteP2PClient, 'sync'>;
   l1Constants: { l1GenesisTime: bigint; slotDuration: number; ethereumSlotDuration: number; rollupManaLimit: number };
