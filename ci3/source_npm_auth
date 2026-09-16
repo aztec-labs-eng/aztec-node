@@ -35,19 +35,23 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
   npm_auth_registry="${NPM_REGISTRY%/}/"
   npm_auth_key="//${npm_auth_registry#*://}"
 
-  # Yarn's credential under one name whatever its shape, so anything that has to forward it (the
-  # Dockerfile.base install) does not have to know which shape this run uses.
+  # Yarn takes the auth scheme from the key: npmAuthToken sends a bearer token, npmAuthIdent
+  # base64s a user:password. The value names the credential variables rather than holding them, and
+  # ci3/bootstrap_ec2 passes those to every process in the build, so the yarnrc works for any
+  # project's install and not only the one whose shell ran this.
   if [ -n "${NPM_TOKEN:-}" ]; then
-    export NPM_AUTH_VALUE="$NPM_TOKEN"
+    npm_auth_yarn_key=npmAuthToken
+    npm_auth_yarn_value='${NPM_TOKEN:-}'
   else
-    export NPM_AUTH_VALUE="$NPM_USERNAME:$NPM_PASSWORD"
+    npm_auth_yarn_key=npmAuthIdent
+    npm_auth_yarn_value='${NPM_USERNAME:-}:${NPM_PASSWORD:-}'
     export NPM_PASSWORD_BASE64=$(printf '%s' "$NPM_PASSWORD" | base64 -w0)
   fi
 
   npm_auth_npmrc=$(mktemp)
   (
     umask 077
-    if [ "$NPM_REGISTRY" != "$npm_auth_npmjs" ]; then
+    if ! is_npmjs "$NPM_REGISTRY"; then
       # Route only the scopes we build. Everything else — the @aztec/viem fork included — resolves
       # from the default registry, so nothing has to be mirrored into the private one.
       echo "@aztec-foundation:registry=$npm_auth_registry"
@@ -70,11 +74,7 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
   # registry: pointing the scopes at npmjs is where yarn already resolves them from. The file is
   # written wholesale, so a release runs in its own container or on a machine that does not keep
   # yarn settings there.
-  if [ "$NPM_REGISTRY" != "$npm_auth_npmjs" ]; then
-    # Yarn takes the auth scheme from the key: npmAuthToken sends a bearer token, npmAuthIdent
-    # base64s a user:password. The value is the same variable either way.
-    npm_auth_yarn_key=npmAuthIdent
-    [ -z "${NPM_TOKEN:-}" ] || npm_auth_yarn_key=npmAuthToken
+  if ! is_npmjs "$NPM_REGISTRY"; then
     (
       umask 077
       # The lockfile's checksums were taken against npmjs, and a version published to both
@@ -93,11 +93,16 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
         echo "    npmAlwaysAuth: true"
         # The :- form matters: on a bare ${VAR} yarn refuses to run *any* command while the
         # variable is missing, and this file outlives the shell that wrote it.
-        echo "    $npm_auth_yarn_key: \"\${NPM_AUTH_VALUE:-}\""
+        echo "    $npm_auth_yarn_key: \"$npm_auth_yarn_value\""
       done
     ) > "$HOME/.yarnrc.yml"
-    unset npm_auth_yarn_key npm_auth_scope
+    # Named so a caller that has to forward this file (the Dockerfile.base install) mounts the one
+    # written here and never a yarnrc the machine already had, which would carry variables that
+    # exist only on the host and make yarn refuse to run inside the build.
+    export NPM_AUTH_YARNRC="$HOME/.yarnrc.yml"
+    unset npm_auth_scope
   fi
+  unset npm_auth_yarn_key npm_auth_yarn_value
 
   unset npm_auth_registry npm_auth_key npm_auth_npmrc
   eval "$npm_auth_xtrace"

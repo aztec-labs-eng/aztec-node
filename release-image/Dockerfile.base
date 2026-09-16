@@ -6,13 +6,18 @@ COPY . /usr/src
 # Install yarn-project production dependencies.
 # Explicitly specify projects that we use to keep as slim as possible.
 WORKDIR /usr/src/yarn-project
-# yarnrc carries the scope routing for a registry other than npmjs, npmauth the credential its
-# ${NPM_AUTH_VALUE} refers to. npmauth is a secret so it never reaches a layer; the yarnrc names
-# only that variable, and is a secret mount because it comes from outside the build context. Both
-# are absent in a public build, where yarn's defaults are already right.
+# yarnrc carries the scope routing for a registry other than npmjs and names the credential
+# variables it needs; the rest supply them. The credentials are secrets so they never reach a
+# layer, and the yarnrc is one for a different reason: it lives in $HOME, and COPY and bind mounts
+# read only from the build context. A run has one credential shape, so the other shape's secrets
+# are simply absent, as all of them are in a public build where yarn's defaults are already right.
 RUN --mount=type=secret,id=yarnrc,target=/root/.yarnrc.yml \
-    --mount=type=secret,id=npmauth \
-    NPM_AUTH_VALUE="$(cat /run/secrets/npmauth 2>/dev/null || true)" \
+    --mount=type=secret,id=npmtoken \
+    --mount=type=secret,id=npmuser \
+    --mount=type=secret,id=npmpass \
+    NPM_TOKEN="$(cat /run/secrets/npmtoken 2>/dev/null || true)" \
+    NPM_USERNAME="$(cat /run/secrets/npmuser 2>/dev/null || true)" \
+    NPM_PASSWORD="$(cat /run/secrets/npmpass 2>/dev/null || true)" \
     yarn workspaces focus @aztec-labs/aztec --production
 
 # Create base of our final slim image.

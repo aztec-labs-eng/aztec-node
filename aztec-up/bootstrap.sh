@@ -116,9 +116,15 @@ EOF
     # "already published" check skip packages that were never published.
     export npm_config_cache=$(mktemp -d)
     export npm_config_userconfig=$(mktemp)
+    # The scopes are pinned as well as the default registry: ci3/source_npm_auth writes
+    # "@aztec-labs:registry" into the global config when a release targets a private registry, and
+    # a scope registry outranks "registry", so without these the publishes below would leave for
+    # that registry instead of verdaccio. Same key in the user config, which npm ranks higher.
     cat > "$npm_config_userconfig" <<'EOF'
 max_body_size=1000mb
 registry=http://localhost:4873/
+@aztec-labs:registry=http://localhost:4873/
+@aztec-foundation:registry=http://localhost:4873/
 //localhost:4873/:username=testuser
 //localhost:4873/:_password=dGVzdHBhc3M=
 //localhost:4873/:email=test@example.com
