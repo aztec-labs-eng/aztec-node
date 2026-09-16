@@ -15,7 +15,7 @@ import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type KeyStore, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
 import { trySnapshotSync } from '@aztec-labs/node-lib/actions';
 import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec-labs/node-lib/factories';
-import { type P2PClientDeps, createP2PClient } from '@aztec-labs/p2p';
+import { type P2P, type P2PClientDeps, createP2PClient } from '@aztec-labs/p2p';
 import { type ProverNode, type ProverNodeDeps, createProverNode } from '@aztec-labs/prover-node';
 import { createKeyStoreForProver } from '@aztec-labs/prover-node/config';
 import {
@@ -57,7 +57,7 @@ import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
 import { NextBlockPredictor } from './aztec-node/next_block/index.js';
-import { AztecNodeService } from './aztec-node/server.js';
+import { AztecNodeService, type AztecNodeServiceDeps } from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
 
 /** Dependencies that can be injected when creating a node, mostly to override defaults in tests. */
@@ -79,6 +79,46 @@ export interface CreateAztecNodeOptions {
 }
 
 /**
+ * The subsystems {@link createAztecNodeService} assembles, with their concrete types. {@link AztecNodeServiceDeps}
+ * describes each collaborator by what the service calls on it; tests and tooling that drive a subsystem directly
+ * reach it through a {@link FullAztecNodeService}.
+ */
+export interface FullAztecNodeServiceDeps extends AztecNodeServiceDeps {
+  p2pClient: P2P;
+  sequencer: SequencerClient | undefined;
+  proverNode: ProverNode | undefined;
+  automineSequencer: AutomineSequencer | undefined;
+}
+
+/** A node assembled by {@link createAztecNodeService}, exposing its subsystems with their concrete types. */
+export class FullAztecNodeService extends AztecNodeService {
+  declare protected readonly p2pClient: P2P;
+  declare protected readonly sequencer: SequencerClient | undefined;
+  declare protected readonly proverNode: ProverNode | undefined;
+  declare protected readonly automineSequencer: AutomineSequencer | undefined;
+
+  constructor(deps: FullAztecNodeServiceDeps) {
+    super(deps);
+  }
+
+  public override getP2P(): P2P {
+    return this.p2pClient;
+  }
+
+  public override getSequencer(): SequencerClient | undefined {
+    return this.sequencer;
+  }
+
+  public override getAutomineSequencer(): AutomineSequencer | undefined {
+    return this.automineSequencer;
+  }
+
+  public override getProverNode(): ProverNode | undefined {
+    return this.proverNode;
+  }
+}
+
+/**
  * Initializes the Aztec Node, waiting for its components to sync.
  * @param inputConfig - The configuration to be used by the aztec node.
  * @returns A fully synced Aztec Node for use in development/testing.
@@ -87,7 +127,7 @@ export async function createAztecNodeService(
   inputConfig: AztecNodeConfig,
   deps: CreateAztecNodeDeps = {},
   options: CreateAztecNodeOptions = {},
-): Promise<AztecNodeService> {
+): Promise<FullAztecNodeService> {
   const config = { ...inputConfig }; // Copy the config so we dont mutate the input object
   const log = deps.logger ?? createLogger('node');
 
@@ -648,7 +688,7 @@ export async function createAztecNodeService(
       }
     }
 
-    const node = new AztecNodeService({
+    const node = new FullAztecNodeService({
       config,
       p2pClient,
       blockSource: archiver,

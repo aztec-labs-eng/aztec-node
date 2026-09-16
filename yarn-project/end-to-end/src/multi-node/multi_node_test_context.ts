@@ -1,6 +1,6 @@
 import { SlasherAbi } from '@aztec-foundation/l1-artifacts';
 
-import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecNodeConfig, FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
@@ -146,7 +146,7 @@ export function withOnlyOffense(offense: keyof SlashingPenalties, unit: bigint =
 
 /** One HA pair: its two member nodes, the two shared validator keys, and the per-node coinbases. */
 export type HaPairNodes = {
-  nodes: [AztecNodeService, AztecNodeService];
+  nodes: [FullAztecNodeService, FullAztecNodeService];
   privateKeys: [`0x${string}`, `0x${string}`];
   coinbases: [EthAddress, EthAddress];
 };
@@ -163,7 +163,7 @@ export async function setupHaPairs(
   test: MultiNodeTestContext,
   validators: RegisteredValidator[],
   opts: { baseOpts?: Partial<AztecNodeConfig> & { dontStartSequencer?: boolean }; coinbases?: EthAddress[] } = {},
-): Promise<{ nodes: AztecNodeService[]; pairs: [HaPairNodes, HaPairNodes] }> {
+): Promise<{ nodes: FullAztecNodeService[]; pairs: [HaPairNodes, HaPairNodes] }> {
   const baseOpts = opts.baseOpts ?? {};
   const coinbases = opts.coinbases ?? [1, 2, 3, 4].map(n => EthAddress.fromNumber(n));
   const [pk1, pk2, pk3, pk4] = validators.map(v => v.privateKey);
@@ -255,7 +255,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
   public createValidatorNodeAt(
     index: number,
     opts: Partial<AztecNodeConfig> & { dontStartSequencer?: boolean } = {},
-  ): Promise<AztecNodeService> {
+  ): Promise<FullAztecNodeService> {
     return this.createValidatorNode([this.privateKeyAt(index)], opts);
   }
 
@@ -409,7 +409,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
    * their nodes differently (e.g. `['A','B','C'][i]`).
    */
   public watchNodeSequencerEvents(
-    nodes: AztecNodeService[],
+    nodes: FullAztecNodeService[],
     getMetadata: (i: number) => Record<string, any> = i => ({ validator: this.validators[i].attester }),
   ): { failEvents: TrackedSequencerEvent[]; stateChanges: TrackedSequencerEvent[] } {
     return this.watchSequencerEvents(this.getSequencers(nodes), getMetadata);
@@ -421,7 +421,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
    * a single node suffices. Resolves with all matching offenses collected across the polled nodes.
    */
   public waitForOffenseOnNodes(
-    nodes: AztecNodeService[],
+    nodes: FullAztecNodeService[],
     match: (offense: Offense) => boolean,
     opts: { mode?: 'all' | 'any'; timeout?: number; interval?: number } = {},
   ): Promise<Offense[]> {

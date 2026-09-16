@@ -206,7 +206,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   private validatorClient?: ValidatorClient;
   private keyStoreManager?: KeystoreManager;
   private debugLogStore: DebugLogStore;
-  private readonly automineSequencer?: AutomineSequencer;
+  protected readonly automineSequencer: AutomineSequencer | undefined;
   private readonly avmSimulator?: AvmSimulator & AsyncDisposable;
 
   constructor(deps: AztecNodeServiceDeps) {

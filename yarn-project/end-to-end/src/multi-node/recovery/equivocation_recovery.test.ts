@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
@@ -41,7 +41,7 @@ const NODE_COUNT = 4;
 describe('multi-node/recovery/equivocation_recovery', () => {
   let logger: Logger;
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
 
   afterEach(async () => {
     jest.restoreAllMocks();

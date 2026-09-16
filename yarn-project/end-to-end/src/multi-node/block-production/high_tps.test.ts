@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
@@ -65,7 +65,7 @@ describe('multi-node/block-production/high_tps', () => {
 
   let test: MultiNodeTestContext;
   let validators: RegisteredValidator[];
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
   let contract: SpamContract;
   let from: AztecAddress;
 

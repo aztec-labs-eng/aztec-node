@@ -1,7 +1,7 @@
 import { RollupAbi, SlasherAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
-import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecNodeConfig, FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { getAccountContractAddress } from '@aztec-labs/aztec.js/account';
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
@@ -320,7 +320,7 @@ export class P2PNetworkTest {
   }
 
   /** Points the wallet to a P2P-enabled node so transactions can propagate through the network. */
-  setupWalletOnNode(node: AztecNodeService) {
+  setupWalletOnNode(node: FullAztecNodeService) {
     this.logger.info('Pointing wallet to a P2P-enabled node');
     this.context.wallet.updateNode(node);
   }
@@ -425,7 +425,7 @@ export class P2PNetworkTest {
     this.monitor.on('l1-block', ({ timestamp }) => this.context.dateProvider.setTime(Number(timestamp) * 1000));
   }
 
-  async stopNodes(nodes: AztecNodeService[]) {
+  async stopNodes(nodes: FullAztecNodeService[]) {
     this.logger.info('Stopping nodes');
 
     if (!nodes || !nodes.length) {
@@ -449,7 +449,7 @@ export class P2PNetworkTest {
    * @param checkIntervalSeconds - How often to check connectivity (default: 0.1 seconds)
    */
   async waitForP2PMeshConnectivity(
-    nodes: AztecNodeService[],
+    nodes: FullAztecNodeService[],
     expectedNodeCount?: number,
     timeoutSeconds = 30,
     checkIntervalSeconds = 0.1,

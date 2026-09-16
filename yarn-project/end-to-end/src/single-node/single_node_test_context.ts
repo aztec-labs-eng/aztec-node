@@ -1,6 +1,6 @@
 import type { InitialAccountData } from '@aztec-labs/accounts/testing';
 import type { Archiver } from '@aztec-labs/archiver';
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { type AztecNodeConfig, FullAztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
 import { getAccountContractAddress } from '@aztec-labs/aztec.js/account';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
@@ -201,8 +201,8 @@ export class SingleNodeTestContext {
   public proverDelayer!: Delayer;
   public sequencerDelayer!: Delayer;
 
-  public proverNodes: AztecNodeService[] = [];
-  public nodes: AztecNodeService[] = [];
+  public proverNodes: FullAztecNodeService[] = [];
+  public nodes: FullAztecNodeService[] = [];
 
   public epochDuration!: number;
 
@@ -304,7 +304,7 @@ export class SingleNodeTestContext {
     this.L2_SLOT_DURATION_IN_S = aztecSlotDuration;
 
     this.proverNodes = context.proverNode ? [context.proverNode] : [];
-    this.nodes = context.aztecNode ? [context.aztecNode as AztecNodeService] : [];
+    this.nodes = context.aztecNode ? [context.aztecNode as FullAztecNodeService] : [];
     this.logger = context.logger;
     this.l1Client = context.deployL1ContractsValues.l1Client;
     this.rollup = RollupContract.getFromConfig(context.config);
@@ -759,7 +759,7 @@ export class SingleNodeTestContext {
     targetBlockCount: number,
     opts: { wait?: boolean; targetBlock?: BlockNumber; archiver?: Archiver; timeout?: number } = {},
   ): Promise<CheckpointNumber> {
-    const archiver = opts.archiver ?? ((this.context.aztecNode as AztecNodeService).getBlockSource() as Archiver);
+    const archiver = opts.archiver ?? ((this.context.aztecNode as FullAztecNodeService).getBlockSource() as Archiver);
     const waitTimeout = opts.timeout ?? this.L2_SLOT_DURATION_IN_S * 3;
 
     if (opts.targetBlock !== undefined) {
@@ -975,7 +975,7 @@ export class SingleNodeTestContext {
   }
 
   /** Returns the {@link SequencerClient} of each given node, throwing if any node has no sequencer. */
-  public getSequencers(nodes: AztecNodeService[]): SequencerClient[] {
+  public getSequencers(nodes: FullAztecNodeService[]): SequencerClient[] {
     return nodes.map(node => {
       const sequencer = node.getSequencer();
       if (!sequencer) {
@@ -986,7 +986,7 @@ export class SingleNodeTestContext {
   }
 
   /** Starts the sequencer on each given node in parallel. */
-  public async startSequencers(nodes: AztecNodeService[]): Promise<void> {
+  public async startSequencers(nodes: FullAztecNodeService[]): Promise<void> {
     await Promise.all(this.getSequencers(nodes).map(sequencer => sequencer.start()));
   }
 
@@ -1033,7 +1033,7 @@ export class SingleNodeTestContext {
    * warping there would throw "timestamp in the past".
    */
   public async warpWithSequencersPaused(
-    nodes: AztecNodeService[],
+    nodes: FullAztecNodeService[],
     cheatCodes: CheatCodes,
     target: bigint,
     opts: { restart?: boolean } = {},

@@ -519,7 +519,7 @@ describe('single-node/sync/synching', () => {
   // Skipped in CI. Replays pre-generated fixture checkpoints via SequencerPublisher.enqueueProposeCheckpoint,
   // then syncs a brand-new node and records the sync time.
   describe.skip('replay history and then do a fresh sync', () => {
-    // Replays all fixture checkpoints then creates a fresh AztecNodeService and times how long it takes
+    // Replays all fixture checkpoints then creates a fresh FullAztecNodeService and times how long it takes
     // to sync to the replayed chain tip; logs the result.
     it.each(variants)(
       'vanilla - %s',

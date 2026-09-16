@@ -1,5 +1,5 @@
 import type { Archiver } from '@aztec-labs/archiver';
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
@@ -35,7 +35,7 @@ describe('multi-node/recovery/proposal_failure_recovery', () => {
   let logger: Logger;
   let test: MultiNodeTestContext;
   let validators: RegisteredValidator[];
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
 
   beforeEach(async () => {
     // Build 4 distinct validators (V1..V4). One key per node, no overlap.

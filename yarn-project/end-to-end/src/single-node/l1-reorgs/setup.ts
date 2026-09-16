@@ -1,5 +1,5 @@
 import type { Archiver } from '@aztec-labs/archiver';
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
@@ -66,7 +66,7 @@ export class L1ReorgsTest {
       L2_SLOT_DURATION_IN_S: this.L2_SLOT_DURATION_IN_S,
     } = this.test);
     this.node = this.context.aztecNode;
-    this.archiver = (this.node as AztecNodeService).getBlockSource() as Archiver;
+    this.archiver = (this.node as FullAztecNodeService).getBlockSource() as Archiver;
     this.from = this.context.accounts[0];
     this.contract = await this.test.registerTestContract(this.context.wallet);
   }

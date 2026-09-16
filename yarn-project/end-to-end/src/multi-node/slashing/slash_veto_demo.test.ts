@@ -1,7 +1,7 @@
 import { GSEAbi } from '@aztec-foundation/l1-artifacts/GSEAbi';
 import { SlasherAbi } from '@aztec-foundation/l1-artifacts/SlasherAbi';
 
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
@@ -57,9 +57,9 @@ const SLASH_OFFSET_IN_ROUNDS = 2;
 // slashingVetoer=VETOER_ADDRESS (derived deterministically). Tests vetoPayload on the Slasher contract.
 describe('veto slash', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
   let slashingAmount: bigint;
-  let additionalNode: AztecNodeService | undefined;
+  let additionalNode: FullAztecNodeService | undefined;
   let rollup: RollupContract;
   let vetoerL1TxUtils: L1TxUtils;
   let vetoerL1Client: ExtendedViemWalletClient;

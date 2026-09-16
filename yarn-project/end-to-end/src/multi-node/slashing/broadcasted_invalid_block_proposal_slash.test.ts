@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
@@ -37,7 +37,7 @@ const slashingRoundSize = 4;
  */
 describe('multi-node/slashing/broadcasted_invalid_block_proposal_slash', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
 
   // Slashing amount should be enough to kick validators out.
   const slashingAmount = slashingUnit * 3n;

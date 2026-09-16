@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import type { CheatCodes } from '@aztec-labs/aztec/testing';
@@ -20,7 +20,7 @@ describe('automine/smoke', () => {
 
   let teardown: () => Promise<void>;
   let aztecNode: AztecNode & AztecNodeDebug;
-  let aztecNodeService: AztecNodeService;
+  let aztecNodeService: FullAztecNodeService;
   let wallet: Wallet;
   let owner: AztecAddress;
   let cheatCodes: CheatCodes;

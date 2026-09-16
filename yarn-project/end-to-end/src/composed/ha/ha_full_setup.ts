@@ -3,7 +3,7 @@
  *
  * Stands up the complete HA cluster used by `e2e_ha_full.parallel.test.ts` and
  * `e2e_ha_distribute_work.test.ts`: a bootstrap RPC/P2P node plus NODE_COUNT in-proc
- * `AztecNodeService` HA peers that share one PostgreSQL slashing-protection DB and a Web3Signer keystore.
+ * `FullAztecNodeService` HA peers that share one PostgreSQL slashing-protection DB and a Web3Signer keystore.
  * Requires the docker-compose HA suite (run_test.sh ha): live Postgres (DATABASE_URL) and Web3Signer
  * sidecar.
  *
@@ -11,7 +11,7 @@
  * the cluster unusable; giving it its own file (its own cluster) removes the previous "must run last"
  * ordering contract without changing what any test asserts.
  */
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { type AztecNodeConfig, FullAztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
 import { Fr } from '@aztec-labs/aztec.js/fields';
@@ -110,7 +110,7 @@ export class HaFullTestContext {
   genesis: GenesisData | undefined;
 
   haNodePools!: Pool[]; // Database pools for HA nodes (for cleanup)
-  haNodeServices!: AztecNodeService[]; // All N HA peer nodes
+  haNodeServices!: FullAztecNodeService[]; // All N HA peer nodes
   haKeystoreDirs!: string[];
   mainPool!: Pool;
   databaseConfig!: HADatabaseConfig;

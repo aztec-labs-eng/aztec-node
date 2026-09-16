@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { BatchCall, NO_WAIT, type WaitOpts } from '@aztec-labs/aztec.js/contracts';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
@@ -68,7 +68,7 @@ export async function benchmarkSetup(
 }
 
 function getSequencerClient(context: EndToEndContext) {
-  const sequencer = (context.aztecNode as AztecNodeService).getSequencer();
+  const sequencer = (context.aztecNode as FullAztecNodeService).getSequencer();
   if (!sequencer) {
     throw new Error('Benchmark setup requires a local sequencer');
   }

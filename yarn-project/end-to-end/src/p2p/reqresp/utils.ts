@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { createLogger } from '@aztec-labs/aztec.js/log';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { Tx } from '@aztec-labs/aztec.js/tx';
@@ -49,7 +49,7 @@ export async function createReqrespTest(options: ReqrespOptions = {}): Promise<P
   return t;
 }
 
-export async function cleanupReqrespTest(params: { t: P2PNetworkTest; nodes?: AztecNodeService[] }) {
+export async function cleanupReqrespTest(params: { t: P2PNetworkTest; nodes?: FullAztecNodeService[] }) {
   const { t, nodes } = params;
   if (nodes) {
     await t.stopNodes(nodes);
@@ -62,7 +62,7 @@ const getNodePort = (nodeIndex: number) => BOOT_NODE_UDP_PORT + 1 + nodeIndex;
 export async function runReqrespTxTest(params: {
   t: P2PNetworkTest;
   disableStatusHandshake?: boolean;
-}): Promise<AztecNodeService[]> {
+}): Promise<FullAztecNodeService[]> {
   const { t, disableStatusHandshake = false } = params;
 
   if (!t.bootstrapNodeEnr) {

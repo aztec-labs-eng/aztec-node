@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
 import type { Logger } from '@aztec-labs/aztec.js/log';
@@ -39,7 +39,7 @@ describe('multi-node/block-production/first_slot', () => {
 
   let test: MultiNodeTestContext;
   let validators: RegisteredValidator[];
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
   let contract: SpamContract;
   let from: AztecAddress;
 

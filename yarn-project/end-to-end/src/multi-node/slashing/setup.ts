@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
@@ -77,8 +77,8 @@ export const SENTINEL_TIMING = {
   sentinelEnabled: true,
 } as const;
 
-/** A single detected slash offense as returned by {@link AztecNodeService.getSlashOffenses}. */
-export type SlashOffense = Awaited<ReturnType<AztecNodeService['getSlashOffenses']>>[number];
+/** A single detected slash offense as returned by {@link FullAztecNodeService.getSlashOffenses}. */
+export type SlashOffense = Awaited<ReturnType<FullAztecNodeService['getSlashOffenses']>>[number];
 
 /** Looks up the offense recorded for `validator` of `offenseType` at `slot`, if any. */
 export function findSlashOffense(
@@ -401,7 +401,7 @@ export async function awaitCommitteeKicked({
 }
 
 /** Resolves the slot at which `node` includes `txHash`, by reading the tx receipt and block header. */
-export async function getMinedSlot(node: AztecNodeService, txHash: { toString(): string }): Promise<number> {
+export async function getMinedSlot(node: FullAztecNodeService, txHash: { toString(): string }): Promise<number> {
   const receipt = await node.getTxReceipt(txHash as any);
   if (!receipt.blockNumber) {
     throw new Error(`Tx ${txHash} has no block number on receipt`);
@@ -421,7 +421,7 @@ export async function getMinedSlot(node: AztecNodeService, txHash: { toString():
  */
 export function submitTxsThroughNode(
   test: MultiNodeTestContext,
-  node: AztecNodeService,
+  node: FullAztecNodeService,
   numTxs: number,
 ): Promise<TxHash[]> {
   const wallet = test.context.wallet as TestWallet;

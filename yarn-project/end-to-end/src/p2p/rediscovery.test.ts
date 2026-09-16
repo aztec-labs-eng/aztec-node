@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { TxHash } from '@aztec-labs/aztec.js/tx';
 
@@ -18,7 +18,7 @@ const BLOCK_DURATION_MS = 10_000;
 // (ethSlot=4s, aztecSlot=24s, proofSubEpochs=640), 4 validators, inboxLag=2.
 describe('e2e_p2p_rediscovery', () => {
   let t: P2PNetworkTest;
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
 
   beforeEach(async () => {
     t = await P2PNetworkTest.create({
@@ -83,7 +83,7 @@ describe('e2e_p2p_rediscovery', () => {
     }
 
     // recreate all nodes from their data dirs, without a bootstrap node
-    const newNodes: AztecNodeService[] = [];
+    const newNodes: FullAztecNodeService[] = [];
     for (let i = 0; i < NUM_VALIDATORS; i++) {
       const newNode = await createNode(
         t.ctx.aztecNodeConfig,

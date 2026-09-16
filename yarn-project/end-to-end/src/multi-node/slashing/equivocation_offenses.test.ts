@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
@@ -56,10 +56,10 @@ async function runEquivocationScenario(
     waitUntilOffenseCount,
   }: { attestToEquivocatedProposals: boolean; waitUntilOffenseCount: number },
 ): Promise<{
-  nodes: AztecNodeService[];
+  nodes: FullAztecNodeService[];
   epochCache: EpochCacheInterface;
   maliciousAddress: EthAddress;
-  honestNode: AztecNodeService;
+  honestNode: FullAztecNodeService;
 }> {
   const cheatCodes = test.context.cheatCodes.rollup;
   const { rollup } = await test.getSlashingContracts();

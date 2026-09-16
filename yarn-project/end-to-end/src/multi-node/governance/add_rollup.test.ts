@@ -7,7 +7,7 @@ import {
 } from '@aztec-foundation/l1-artifacts';
 
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { waitForProven } from '@aztec-labs/aztec.js/contracts';
 import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
@@ -72,8 +72,8 @@ jest.setTimeout(1000 * 60 * 20);
  */
 describe('multi-node/governance/add_rollup', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[];
-  let proverAztecNode: AztecNodeService;
+  let nodes: FullAztecNodeService[];
+  let proverAztecNode: FullAztecNodeService;
   let l1TxUtils: L1TxUtils;
   let fundedAccounts: InitialAccountData[];
   // Anvil index-1 account, funded out of the box, used to deploy the new rollup.
@@ -224,7 +224,7 @@ describe('multi-node/governance/add_rollup', () => {
     logger.info(`Quorum size: ${quorumSize}, round size: ${driver.roundSize}`);
 
     const bridging = async (
-      node: AztecNodeService,
+      node: FullAztecNodeService,
       aliceAccount: InitialAccountData,
       l1Client: ExtendedViemWalletClient,
       l1ContractAddresses: L1ContractAddresses,

@@ -1,7 +1,7 @@
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import type { Archiver } from '@aztec-labs/archiver';
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { ContractDeployer } from '@aztec-labs/aztec.js/deployment';
 import { Fr } from '@aztec-labs/aztec.js/fields';
@@ -25,7 +25,7 @@ import {
 const VALIDATOR_COUNT = 5;
 const COMMITTEE_SIZE = VALIDATOR_COUNT - 2;
 
-// Tests that a single AztecNodeService hosting multiple validator keys correctly signs attestations
+// Tests that a single FullAztecNodeService hosting multiple validator keys correctly signs attestations
 // and filters signing to only active committee members. One node, 5 validators staked, committee
 // size 3. Uses MultiNodeTestContext on the mock-gossip bus: all 5 validators on a single physical
 // node, ethSlot=8s, aztecSlot=16s, epoch=2, proofSubEpochs=NO_REORG_SUBMISSION_EPOCHS. Each it is an isolated CI job
@@ -34,7 +34,7 @@ describe('multi-node/block-production/multi_validator_node', () => {
   jest.setTimeout(15 * 60 * 1000);
 
   let test: MultiNodeTestContext;
-  let validatorNode: AztecNodeService;
+  let validatorNode: FullAztecNodeService;
   let ownerAddress: AztecAddress;
   let wallet: TestWallet;
 

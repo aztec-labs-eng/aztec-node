@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -58,7 +58,7 @@ const TOLERANCE_SLOTS = 3;
  */
 describe('multi-node/slashing/data_withholding_slash', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[] = [];
+  let nodes: FullAztecNodeService[] = [];
 
   const slashingUnit = BigInt(1e18);
   const slashingQuorum = 3;

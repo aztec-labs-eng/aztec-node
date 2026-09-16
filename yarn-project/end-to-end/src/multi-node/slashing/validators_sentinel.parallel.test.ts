@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -27,8 +27,8 @@ jest.setTimeout(1000 * 60 * 10);
 // #13142).
 describe('multi-node/slashing/validators_sentinel', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[];
-  let additionalNode: AztecNodeService | undefined;
+  let nodes: FullAztecNodeService[];
+  let additionalNode: FullAztecNodeService | undefined;
   let offlineValidator: EthAddress;
 
   beforeAll(async () => {

@@ -1,5 +1,5 @@
 /* eslint-disable camelcase */
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { extractOffchainOutput } from '@aztec-labs/aztec.js/contracts';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
@@ -20,7 +20,7 @@ const TIMEOUT = 300_000;
 describe('automine/effects/offchain_payment', () => {
   let contract: OffchainPaymentContract;
   let aztecNode: AztecNode;
-  let aztecNodeService: AztecNodeService;
+  let aztecNodeService: FullAztecNodeService;
   let wallet: TestWallet;
   let accounts: AztecAddress[];
   let teardown: () => Promise<void>;
