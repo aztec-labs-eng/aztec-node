@@ -110,10 +110,10 @@ function build {
     # idempotent, and a no-op when no credential is set.
     source $ci3/source_npm_auth
     local base_secret=""
-    if [ -f "$HOME/.yarnrc.yml" ]; then
+    if [ -n "${NPM_AUTH_YARNRC:-}" ]; then
       # The yarnrc names the credential variables it needs, and a BuildKit RUN sees only what is
       # mounted into it, so each one this run might have goes in as its own secret.
-      base_secret="--secret id=yarnrc,src=$HOME/.yarnrc.yml"
+      base_secret="--secret id=yarnrc,src=$NPM_AUTH_YARNRC"
       [ -z "${NPM_TOKEN:-}" ] || base_secret+=" --secret id=npmtoken,env=NPM_TOKEN"
       [ -z "${NPM_USERNAME:-}" ] || base_secret+=" --secret id=npmuser,env=NPM_USERNAME"
       [ -z "${NPM_PASSWORD:-}" ] || base_secret+=" --secret id=npmpass,env=NPM_PASSWORD"

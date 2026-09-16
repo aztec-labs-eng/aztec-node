@@ -96,6 +96,10 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
         echo "    $npm_auth_yarn_key: \"$npm_auth_yarn_value\""
       done
     ) > "$HOME/.yarnrc.yml"
+    # Named so a caller that has to forward this file (the Dockerfile.base install) mounts the one
+    # written here and never a yarnrc the machine already had, which would carry variables that
+    # exist only on the host and make yarn refuse to run inside the build.
+    export NPM_AUTH_YARNRC="$HOME/.yarnrc.yml"
     unset npm_auth_scope
   fi
   unset npm_auth_yarn_key npm_auth_yarn_value
