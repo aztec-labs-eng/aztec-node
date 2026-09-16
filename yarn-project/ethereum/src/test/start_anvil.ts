@@ -108,8 +108,11 @@ export async function startAnvil(
 
       // Spawn the watchdog (see ANVIL_WATCHDOG). It launches anvil with these args and reaps it if we
       // die; `$0` is 'bash' and `$@` is the anvil argv.
+      // `detached` puts the watchdog and anvil in their own process group so teardown can signal both
+      // at once; the streams are not unref'd, so this does not let the pair outlive us.
       const child = spawn('bash', ['-c', ANVIL_WATCHDOG, 'bash', ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
         env: { ...process.env, ANVIL_BIN: anvilBinary, RAYON_NUM_THREADS: '1' },
       });
 
@@ -206,7 +209,9 @@ export async function startAnvil(
   const port = detectedPort;
   let status: 'listening' | 'idle' = 'listening';
 
-  anvil.once('close', () => {
+  // 'exit', not 'close', so this agrees with what killChild waits for: the process being gone is what
+  // makes the instance idle, and the pipes can outlive it.
+  anvil.once('exit', () => {
     status = 'idle';
   });
 
@@ -243,8 +248,10 @@ function syncDateProviderFromAnvilOutput(text: string, dateProvider: TestDatePro
 }
 
 /**
- * Send SIGTERM to the watchdog, wait up to 5 s, then SIGKILL. The watchdog's trap forwards the
- * signal to anvil, so terminating it tears down anvil too. All timers are always cleared.
+ * Send SIGTERM to the watchdog, wait up to 5 s, then SIGKILL the whole process group. The watchdog's
+ * trap forwards the signal to anvil, so terminating it tears down anvil too. All timers are always
+ * cleared. Callers must budget more than the 5 s escalation: a teardown that needs it takes at least
+ * that long, so a 5 s hook timeout expires exactly when the escalation is due and never survives it.
  */
 function killChild(child: ChildProcess): Promise<void> {
   return new Promise<void>(resolve => {
@@ -257,7 +264,12 @@ function killChild(child: ChildProcess): Promise<void> {
 
     let killTimer: NodeJS.Timeout | undefined;
 
-    const onClose = () => {
+    // Settle on 'exit', not 'close'. 'close' additionally waits for the stdio pipes to end, and anvil
+    // inherits those pipes from the watchdog: if the watchdog dies without reaping anvil — which is
+    // what SIGKILL below does, since a killed shell runs no EXIT trap — anvil holds the write ends
+    // open and 'close' never fires, so the escalation meant to bound this wait would instead hang it
+    // forever.
+    const onExit = () => {
       if (killTimer !== undefined) {
         clearTimeout(killTimer);
       }
@@ -267,12 +279,18 @@ function killChild(child: ChildProcess): Promise<void> {
       resolve();
     };
 
-    child.once('close', onClose);
+    child.once('exit', onExit);
     child.kill('SIGTERM');
 
     killTimer = setTimeout(() => {
       killTimer = undefined;
-      child.kill('SIGKILL');
+      // Signal the whole group: SIGKILL leaves the watchdog no chance to run its EXIT trap, so
+      // killing it alone would strand anvil holding the port for the rest of the run.
+      try {
+        process.kill(-child.pid!, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
     }, 5000);
 
     // Ensure the timer does not prevent Node from exiting.
