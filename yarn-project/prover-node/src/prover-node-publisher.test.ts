@@ -3,7 +3,7 @@ import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 import { BatchedBlob } from '@aztec-labs/blob-lib/types';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { L1TxState, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { SecretValue } from '@aztec-labs/foundation/config';
@@ -15,7 +15,7 @@ import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import { decodeFunctionData, getAddress } from 'viem';
+import { type TransactionReceipt, decodeFunctionData, getAddress } from 'viem';
 
 import { ProverNodePublisher } from './prover-node-publisher.js';
 
@@ -356,9 +356,36 @@ describe('prover-node-publisher', () => {
     });
   });
 
-  it('waits for three confirmations on the epoch proof tx', async () => {
+  it('reports an epoch proof as published only once its tx reaches three confirmations', async () => {
+    // The publisher's whole contribution to confirmation depth is the config it hands L1TxUtils, so the
+    // stub honours that config: it produces a receipt for a caller that asked for three confirmations and
+    // refuses one for a caller that did not. 'published' therefore only comes back on the confirmed path.
     const deadline = new Date('2030-01-01T00:00:00Z');
-    await publisher.submitEpochProof({ ...setupPublishData(65, 32, 33, 64), deadline });
+    l1Utils.getSenderBalance.mockResolvedValue(42n);
+    l1Utils.getTransactionStats.mockResolvedValue({
+      sender: EthAddress.random().toString(),
+      transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      calldataSize: 100,
+      calldataGas: 100,
+    });
+    l1Utils.sendAndMonitorTransaction.mockImplementation((_request, config) => {
+      if ((config?.requiredConfirmations ?? 1) < 3) {
+        return Promise.reject(new Error('tx was never confirmed to the required depth'));
+      }
+      return Promise.resolve({
+        state: { feesPerGas: {} } as unknown as L1TxState,
+        receipt: {
+          status: 'success',
+          effectiveGasPrice: 1n,
+          gasUsed: 1n,
+          transactionHash: `0x${randomBytes(32).toString('hex')}`,
+        } as TransactionReceipt,
+      });
+    });
+
+    await expect(publisher.submitEpochProof({ ...setupPublishData(65, 32, 33, 64), deadline })).resolves.toBe(
+      'published',
+    );
     expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledWith(expect.anything(), {
       txTimeoutAt: deadline,
       requiredConfirmations: 3,

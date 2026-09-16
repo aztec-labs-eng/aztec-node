@@ -1,6 +1,6 @@
 import { Blob } from '@aztec-labs/blob-lib';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
-import { TimeoutError } from '@aztec-labs/foundation/error';
+import { InterruptError, TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -1980,11 +1980,10 @@ describe('L1TxUtils', () => {
         const originalGetBlock = l1Client.getBlock.bind(l1Client);
         const getBlockSpy = jest
           .spyOn(l1Client, 'getBlock')
-          .mockImplementation(async (args: any) =>
-            args?.blockNumber === inclusionBlock
-              ? { ...(await originalGetBlock(args)), hash: `0x${'11'.repeat(32)}` }
-              : await originalGetBlock(args),
-          );
+          .mockImplementation(async (...args: Parameters<typeof originalGetBlock>) => {
+            const block = await originalGetBlock(...args);
+            return args[0]?.blockNumber === inclusionBlock ? { ...block, hash: `0x${'11'.repeat(32)}` as Hex } : block;
+          });
 
         await cheatCodes.mineEmptyBlock(4);
         await sleep(400);
@@ -2024,9 +2023,18 @@ describe('L1TxUtils', () => {
         expect(state.cancelTxHashes).toHaveLength(0);
       }, 20_000);
 
-      it('settles as mined rather than hanging when interrupted while awaiting confirmations', async () => {
+      it('leaves an unconfirmed tx nonterminal when interrupted, and resumes it after a restart', async () => {
+        // We need dynamic imports here since we do NOT depend on this projects
+        // and we need to mark them as non-const so ts does not try to look for them
+        // @dependency ../../../kv-store/src/lmdb-v2/index.ts, ../../../node-lib/src/stores/index.ts
+        const { openTmpStore } = await import('@aztec-labs/kv-store/lmdb-v2' as string);
+        const { L1TxStore } = await import('@aztec-labs/node-lib/stores' as string);
+        const kvStore = await openTmpStore('l1-tx-utils-confirmation-interrupt-test', true);
+        const store = new L1TxStore(kvStore);
+        gasUtils.setStore(store);
+
         const { state } = await gasUtils.sendTransaction(request, { ...steadyOverrides, requiredConfirmations: 3 });
-        const monitorPromise = gasUtils.monitorTransaction(state);
+        const monitorPromise = gasUtils.monitorTransaction(state).catch(err => err);
 
         await cheatCodes.evmMine();
         await retryUntil(() => blocksSinceInclusion(state).then(n => n === 0), 'tx included', 10, 0.05);
@@ -2035,11 +2043,62 @@ describe('L1TxUtils', () => {
 
         gasUtils.interrupt();
 
-        const receipt = await monitorPromise;
-        expect(receipt.status).toBe('success');
-        expect(state.status).toBe(TxUtilsState.MINED);
+        // Recording an unconfirmed tx as MINED would make it terminal, and terminal txs are never
+        // re-monitored — a reorg after the restart would then go unnoticed.
+        await expect(monitorPromise).resolves.toBeInstanceOf(InterruptError);
+        expect(state.status).toBe(TxUtilsState.SENT);
+        expect(state.receipt).toBeUndefined();
+        expect(metrics.recordMinedTx).not.toHaveBeenCalled();
         expect(state.cancelTxHashes).toHaveLength(0);
+        // The loop is gone even though its tx is nonterminal, so shutdown is not held up.
         await gasUtils.waitMonitoringStopped(2);
+
+        // A restart picks the tx back up and confirms it against the chain.
+        const recreatedUtils = createL1TxUtils();
+        recreatedUtils.setStore(store);
+        await recreatedUtils.loadStateAndResumeMonitoring();
+        expect(recreatedUtils.state).toBe(TxUtilsState.SENT);
+        expect(recreatedUtils.txs[0].txConfigOverrides.requiredConfirmations).toBe(3);
+
+        await cheatCodes.mineEmptyBlock(2);
+        await retryUntil(() => recreatedUtils.state === TxUtilsState.MINED, 'confirmed after restart', 30, 0.1);
+
+        recreatedUtils.interrupt();
+        await recreatedUtils.waitMonitoringStopped(2);
+        await store.close();
+        await kvStore.close();
+      }, 30_000);
+
+      it('checks canonicality even when the depth is already met on the first look', async () => {
+        // The tx is buried well past the required depth before monitoring starts — the case a restart hits.
+        // The threshold must not be taken on a receipt that has never been checked against the chain.
+        const { state } = await gasUtils.sendTransaction(request, { ...steadyOverrides, requiredConfirmations: 3 });
+        await cheatCodes.evmMine();
+        await cheatCodes.mineEmptyBlock(4);
+        const inclusionBlock = (await l1Client.getTransactionReceipt({ hash: state.txHashes[0] })).blockNumber;
+        expect(Number((await l1Client.getBlockNumber()) - inclusionBlock) + 1).toBeGreaterThan(3);
+
+        const originalGetBlock = l1Client.getBlock.bind(l1Client);
+        const getBlockSpy = jest
+          .spyOn(l1Client, 'getBlock')
+          .mockImplementation(async (...args: Parameters<typeof originalGetBlock>) => {
+            const block = await originalGetBlock(...args);
+            return args[0]?.blockNumber === inclusionBlock ? { ...block, hash: `0x${'22'.repeat(32)}` as Hex } : block;
+          });
+
+        let settled = false;
+        const monitorPromise = gasUtils.monitorTransaction(state).finally(() => (settled = true));
+        await sleep(400);
+
+        expect(settled).toBe(false);
+        expect(gasUtils.state).toBe(TxUtilsState.SENT);
+        expect(state.receipt).toBeUndefined();
+        expect(metrics.recordMinedTx).not.toHaveBeenCalled();
+
+        getBlockSpy.mockRestore();
+        const receipt = await monitorPromise;
+        expect(receipt.blockNumber).toBe(inclusionBlock);
+        expect(gasUtils.state).toBe(TxUtilsState.MINED);
       }, 20_000);
 
       it('keeps cancellation txs at a single confirmation', async () => {

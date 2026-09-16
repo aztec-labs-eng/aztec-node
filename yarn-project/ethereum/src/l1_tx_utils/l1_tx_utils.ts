@@ -56,6 +56,12 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   private lastSentNonce: number | undefined;
   /** Mutex to prevent concurrent sendTransaction calls from racing on the same nonce. */
   private readonly sendMutex = new Semaphore(1);
+  /**
+   * Monitor loops (and the cancellations that hand off to them) currently running. Counted rather than
+   * inferred from tx status, since a loop can exit leaving its tx nonterminal — an interrupt part-way
+   * through a confirmation wait does exactly that.
+   */
+  private activeMonitors = 0;
   /** Tx delayer for testing. Only set when enableDelayer config is true. */
   public delayer?: Delayer;
   /** KZG instance for blob operations. */
@@ -428,6 +434,15 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
    * Monitors a transaction until completion, handling speed-ups if needed
    */
   protected async monitorTransaction(state: L1TxState): Promise<TransactionReceipt> {
+    this.activeMonitors++;
+    try {
+      return await this.runMonitorLoop(state);
+    } finally {
+      this.activeMonitors--;
+    }
+  }
+
+  private async runMonitorLoop(state: L1TxState): Promise<TransactionReceipt> {
     const { nonce, gasLimit, blobInputs, txConfigOverrides: gasConfigOverrides } = state;
     const gasConfig = merge(this.config, gasConfigOverrides);
     const { maxSpeedUpAttempts, stallTimeMs } = gasConfig;
@@ -476,12 +491,15 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
           if (receipt) {
             // Cancellations always settle on their inclusion receipt; only the original tx can ask for depth.
             const requiredConfirmations = isCancelTx ? 1 : (gasConfig.requiredConfirmations ?? 1);
-            const confirmed = await this.awaitConfirmations(state, txHashes, receipt, requiredConfirmations, gasConfig);
-            if (!confirmed) {
-              // The receipt left the canonical chain while we were waiting. Fall back to ordinary
-              // monitoring: the tx is either back in the mempool or will be re-included elsewhere.
-              await sleep(gasConfig.checkIntervalMs!);
-              continue;
+            let confirmed: TransactionReceipt | undefined = receipt;
+            if (requiredConfirmations > 1) {
+              confirmed = await this.awaitConfirmations(state, txHashes, requiredConfirmations, gasConfig);
+              if (!confirmed) {
+                // The receipt left the canonical chain while we were waiting. Fall back to ordinary
+                // monitoring: the tx is either back in the mempool or will be re-included elsewhere.
+                await sleep(gasConfig.checkIntervalMs!);
+                continue;
+              }
             }
             state.receipt = confirmed;
             await this.updateState(state, TxUtilsState.MINED, l1Timestamp);
@@ -582,7 +600,11 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
         await sleep(gasConfig.checkIntervalMs!);
       } catch (err: any) {
-        if (err instanceof DroppedTransactionError || err instanceof UnknownMinedTxError) {
+        if (
+          err instanceof DroppedTransactionError ||
+          err instanceof UnknownMinedTxError ||
+          err instanceof InterruptError
+        ) {
           throw err;
         }
 
@@ -627,64 +649,70 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   }
 
   /**
-   * Holds a mined receipt nonterminal until it reaches `requiredConfirmations` total confirmations — the
-   * inclusion block plus `requiredConfirmations - 1` successors — re-reading it each round so a reorg that
-   * moves or drops it is noticed. Returns the confirmed receipt, or undefined if it left the canonical chain,
-   * in which case the caller resumes ordinary monitoring. The tx's mining deadline is deliberately not checked
-   * here: it is already included, so expiring or cancelling it now would be wrong.
+   * Holds a mined tx nonterminal until its receipt reaches `requiredConfirmations` total confirmations — the
+   * inclusion block plus `requiredConfirmations - 1` successors. The receipt is re-read and re-checked against
+   * the canonical chain on every round, including the one that satisfies the threshold, so a reorg that moves
+   * or drops it is never mistaken for a confirmed tx. Returns the confirmed receipt, or undefined if it left
+   * the canonical chain, in which case the caller resumes ordinary monitoring.
+   *
+   * The tx's mining deadline is deliberately not consulted here: the tx is already included, so expiring or
+   * cancelling it now would be wrong. An interrupt throws instead of resolving, leaving the state nonterminal
+   * so a restart resumes monitoring rather than recording an unconfirmed tx as mined.
    */
   private async awaitConfirmations(
     state: L1TxState,
     txHashes: Hex[],
-    receipt: TransactionReceipt,
     requiredConfirmations: number,
     gasConfig: Required<L1TxUtilsConfig>,
   ): Promise<TransactionReceipt | undefined> {
     const account = this.getSenderAddress().toString();
     const { nonce } = state;
-    let current = receipt;
+    let previousBlockHash: Hex | undefined;
 
     while (true) {
+      // Read the tip first so the confirmation count can only ever under-estimate: the receipt is checked
+      // against a chain that has already advanced at least this far.
       const blockNumber = await this.client.getBlockNumber();
-      const confirmations = Number(blockNumber - current.blockNumber) + 1;
+      const receipt = await this.getCanonicalReceipt(txHashes);
+      if (!receipt) {
+        this.logger.warn(`Tx with nonce ${nonce} for account ${account} is no longer on the canonical chain`, {
+          nonce,
+          account,
+          txHashes,
+        });
+        return undefined;
+      }
+      if (previousBlockHash !== undefined && receipt.blockHash !== previousBlockHash) {
+        // A reorg re-included the tx elsewhere: the count restarts from its new block.
+        this.logger.warn(`Tx ${receipt.transactionHash} with nonce ${nonce} was re-included in another block`, {
+          nonce,
+          account,
+          previousBlockHash,
+          blockNumber: receipt.blockNumber,
+        });
+      }
+      previousBlockHash = receipt.blockHash;
+
+      const confirmations = Number(blockNumber - receipt.blockNumber) + 1;
       if (confirmations >= requiredConfirmations) {
-        return current;
+        return receipt;
       }
 
       if (this.interrupted) {
-        // Shutting down. The tx is mined, so report it as such rather than stranding it nonterminal or
-        // claiming it was dropped; a restart re-checks it against the chain anyway.
-        this.logger.warn(
-          `Stopped waiting for confirmations on tx ${current.transactionHash} with nonce ${nonce} as interrupted`,
-          { nonce, account, confirmations, requiredConfirmations },
+        // The tx is mined but not confirmed to the requested depth, and that is what has to be recorded:
+        // resolving here would persist it as MINED, which is terminal and never re-monitored, so a reorg
+        // after the restart would go unnoticed. Throwing leaves the state nonterminal for the restart.
+        throw new InterruptError(
+          `Interrupted waiting for ${requiredConfirmations} confirmations on tx ${receipt.transactionHash} ` +
+            `with nonce ${nonce} (has ${confirmations})`,
         );
-        return current;
       }
 
       this.logger.debug(
-        `Tx ${current.transactionHash} with nonce ${nonce} has ${confirmations}/${requiredConfirmations} confirmations`,
+        `Tx ${receipt.transactionHash} with nonce ${nonce} has ${confirmations}/${requiredConfirmations} confirmations`,
         { nonce, account, confirmations, requiredConfirmations, blockNumber },
       );
       await sleep(gasConfig.checkIntervalMs!);
-
-      const refreshed = await this.getCanonicalReceipt(txHashes);
-      if (!refreshed) {
-        this.logger.warn(
-          `Receipt for tx ${current.transactionHash} with nonce ${nonce} is no longer on the canonical chain`,
-          { nonce, account, blockNumber: current.blockNumber },
-        );
-        return undefined;
-      }
-      if (refreshed.blockHash !== current.blockHash) {
-        // A reorg re-included the tx elsewhere: restart the count from its new block.
-        this.logger.warn(`Tx ${current.transactionHash} with nonce ${nonce} was re-included in another block`, {
-          nonce,
-          account,
-          previousBlockNumber: current.blockNumber,
-          blockNumber: refreshed.blockNumber,
-        });
-      }
-      current = refreshed;
     }
   }
 
@@ -750,15 +778,16 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     return blobInputs ? { ...baseTxData, ...blobInputs, maxFeePerBlobGas: feesPerGas.maxFeePerBlobGas! } : baseTxData;
   }
 
-  /** Returns when all monitor loops have stopped. */
+  /**
+   * Returns when all monitor loops have stopped. Tracks the running loops directly rather than waiting for
+   * every tx to reach a terminal status: a loop interrupted part-way through a confirmation wait exits with
+   * its tx still nonterminal, on purpose, so the restart resumes monitoring it.
+   */
   public async waitMonitoringStopped(timeoutSeconds = 10) {
     const account = this.getSenderAddress().toString();
-    await retryUntil(
-      () => this.txs.every(tx => TerminalTxUtilsState.includes(tx.status)),
-      `monitoring stopped for ${account}`,
-      timeoutSeconds,
-      0.1,
-    ).catch(() => this.logger.warn(`Timeout waiting for monitoring loops to stop for ${account}`));
+    await retryUntil(() => this.activeMonitors === 0, `monitoring stopped for ${account}`, timeoutSeconds, 0.1).catch(
+      () => this.logger.warn(`Timeout waiting for monitoring loops to stop for ${account}`),
+    );
   }
 
   /**
@@ -825,6 +854,15 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
    * @returns The hash of the cancellation transaction
    */
   protected async attemptTxCancellation(state: L1TxState): Promise<void> {
+    this.activeMonitors++;
+    try {
+      await this.runTxCancellation(state);
+    } finally {
+      this.activeMonitors--;
+    }
+  }
+
+  private async runTxCancellation(state: L1TxState): Promise<void> {
     const isBlobTx = state.blobInputs !== undefined;
     const { nonce, feesPerGas: previousFeesPerGas } = state;
     const account = this.getSenderAddress().toString();
