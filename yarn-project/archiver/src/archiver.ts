@@ -578,6 +578,11 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
     return blocksAdded;
   }
 
+  /** Returns whether the archiver's L1 sync loop is currently running. */
+  public isSyncing(): boolean {
+    return this.runningPromise.isRunning();
+  }
+
   /** Resumes the archiver after a stop. */
   public resume() {
     if (this.runningPromise.isRunning()) {

@@ -77,6 +77,7 @@ export type AutomineSequencerDeps = {
     | 'addProposedCheckpoint'
     | 'syncImmediate'
     | 'removeUncheckpointedBlocksAfter'
+    | 'isSyncing'
     | 'stop'
     | 'resume'
   >;
@@ -668,7 +669,9 @@ export class AutomineSequencer {
     // Suspend the archiver's L1 sync loop for the whole rollback. `rollbackTo` moves the archiver's L1
     // syncpoint back to targetL1Block while the propose txs for the later checkpoints are still on L1,
     // so any sync pass that runs before the reorg below re-downloads exactly the checkpoints we just
-    // removed, and the node (and the PXE behind it) climbs back to the pre-revert tip.
+    // removed, and the node (and the PXE behind it) climbs back to the pre-revert tip. Resume only what
+    // this call suspended, so a revert requested while the archiver is already stopped leaves it stopped.
+    const wasSyncing = this.deps.archiver.isSyncing();
     await this.deps.archiver.stop();
     try {
       // Roll the archiver back to the last block of targetCheckpoint before the L1 reorg,
@@ -701,7 +704,9 @@ export class AutomineSequencer {
       await this.deps.ethCheatCodes.rpcCall('anvil_dropAllTransactions', []);
       this.deps.l1TxUtils.forEach(utils => utils.resetNonce());
     } finally {
-      this.deps.archiver.resume();
+      if (wasSyncing) {
+        this.deps.archiver.resume();
+      }
     }
 
     // Reset slot bookkeeping so the next build picks up at the correct slot.

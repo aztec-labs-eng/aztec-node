@@ -51,6 +51,7 @@ export type CreateAutomineSequencerArgs = {
       | 'addProposedCheckpoint'
       | 'syncImmediate'
       | 'removeUncheckpointedBlocksAfter'
+      | 'isSyncing'
       | 'stop'
       | 'resume'
     >;
