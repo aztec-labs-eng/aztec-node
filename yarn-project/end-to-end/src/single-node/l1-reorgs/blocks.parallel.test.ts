@@ -83,8 +83,12 @@ describe('single-node/l1-reorgs/blocks', () => {
       });
     };
 
-    // Send txs to trigger multi-block checkpoints
+    // Send txs to trigger multi-block checkpoints, and wait until one is on chain before going on.
+    // Everything below is driven by the first proof, and the first provable checkpoint is the empty
+    // one built before these txs, so the whole flow can complete while they are still uncheckpointed.
+    // The prune further down then rolls back whichever checkpoints did hold them.
     await sendTransactions(TX_COUNT);
+    await test.assertMultipleBlocksPerSlot(2, { wait: true, timeout: L2_SLOT_DURATION_IN_S * 6 });
 
     // Capture initial chain state
     const initialProvenCheckpoint = (await monitor.run(true)).provenCheckpointNumber;
@@ -169,9 +173,6 @@ describe('single-node/l1-reorgs/blocks', () => {
       monitor.checkpointNumber + 1,
     );
 
-    // Verify multi-block checkpoints were built
-    await test.assertMultipleBlocksPerSlot(2);
-
     logger.warn(`Test succeeded`);
     await newNode.stop();
   });
@@ -180,8 +181,11 @@ describe('single-node/l1-reorgs/blocks', () => {
   // count), starts a fresh prover node, and verifies a new proof lands and the node re-syncs to
   // the proven state without having pruned.
   it('does not prune if a second proof lands within the submission window after the first one is reorged out', async () => {
-    // Send txs to trigger multi-block checkpoints
+    // Send txs to trigger multi-block checkpoints, and wait until one is on chain before going on.
+    // Everything below is driven by proofs, and the first provable checkpoint is the empty one built
+    // before these txs, so the whole flow can complete while they are still uncheckpointed.
     await sendTransactions(TX_COUNT);
+    await test.assertMultipleBlocksPerSlot(2, { wait: true, timeout: L2_SLOT_DURATION_IN_S * 6 });
 
     // Capture initial chain state
     const initialProvenCheckpoint = (await monitor.run(true)).provenCheckpointNumber;
