@@ -1,5 +1,5 @@
 import type { Archiver } from '@aztec-labs/archiver';
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
@@ -70,7 +70,7 @@ describe('multi-node/high-availability/ha_checkpoint_handoff', () => {
 
   let test: MultiNodeTestContext;
   let validators: RegisteredValidator[];
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
 
   /**
    * Describes one HA pair: its two member nodes, their two attester addresses (lowercased, for
@@ -78,7 +78,7 @@ describe('multi-node/high-availability/ha_checkpoint_handoff', () => {
    * nominates one member as the builder and the other as the peer.
    */
   type HaPair = {
-    nodes: [AztecNodeService, AztecNodeService];
+    nodes: [FullAztecNodeService, FullAztecNodeService];
     addresses: string[];
     coinbases: [EthAddress, EthAddress];
   };
@@ -131,8 +131,8 @@ describe('multi-node/high-availability/ha_checkpoint_handoff', () => {
   type MatchedPairSlots = {
     slotS1: SlotNumber;
     slotS2: SlotNumber;
-    builder: AztecNodeService;
-    peer: AztecNodeService;
+    builder: FullAztecNodeService;
+    peer: FullAztecNodeService;
     peerCoinbase: EthAddress;
     builderArchiver: Archiver;
     peerArchiver: Archiver;

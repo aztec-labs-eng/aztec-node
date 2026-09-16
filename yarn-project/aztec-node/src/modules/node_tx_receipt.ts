@@ -1,7 +1,7 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
-import type { P2P } from '@aztec-labs/p2p';
 import type { L2BlockSource, L2Tips } from '@aztec-labs/stdlib/block';
 import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import type { P2PClient } from '@aztec-labs/stdlib/interfaces/server';
 import type { DebugLogStore } from '@aztec-labs/stdlib/logs';
 import {
   DroppedTxReceipt,
@@ -18,7 +18,7 @@ import {
 
 /** Dependencies required to build a {@link NodeTxReceiptBuilder}. */
 export interface NodeTxReceiptBuilderDeps {
-  p2pClient: P2P;
+  p2pClient: P2PClient;
   blockSource: L2BlockSource;
   debugLogStore: DebugLogStore;
 }
@@ -29,7 +29,7 @@ export interface NodeTxReceiptBuilderDeps {
  * `server.ts` smaller.
  */
 export class NodeTxReceiptBuilder {
-  private readonly p2pClient: P2P;
+  private readonly p2pClient: P2PClient;
   private readonly blockSource: L2BlockSource;
   private readonly debugLogStore: DebugLogStore;
 

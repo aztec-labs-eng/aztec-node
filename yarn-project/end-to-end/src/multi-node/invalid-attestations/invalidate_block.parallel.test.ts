@@ -1,5 +1,5 @@
 import { type Archiver, CalldataRetriever } from '@aztec-labs/archiver';
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import type { Logger } from '@aztec-labs/aztec.js/log';
@@ -54,7 +54,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
 
   let test: MultiNodeTestContext;
   let validators: RegisteredValidator[];
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
   let testContract: TestContract;
   let from: AztecAddress;
 

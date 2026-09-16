@@ -21,7 +21,7 @@ import {
   type SequencerTxSenderConfig,
   sequencerClientConfigMappings,
 } from '@aztec-labs/sequencer-client/config';
-import { slasherConfigMappings } from '@aztec-labs/slasher';
+import { slasherConfigMappings } from '@aztec-labs/slasher/config';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { type NodeRPCConfig, nodeRpcConfigMappings } from '@aztec-labs/stdlib/config';
 import type { SlasherConfig } from '@aztec-labs/stdlib/interfaces/server';

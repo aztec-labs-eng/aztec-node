@@ -5,16 +5,17 @@ import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { isErrorClass } from '@aztec-labs/foundation/types';
-import { type InboxBucketSource, selectInboxBucketForBlock } from '@aztec-labs/sequencer-client';
 import { type AvmSimulator, PublicContractsDB, PublicProcessorFactory } from '@aztec-labs/simulator/server';
 import { CollectionLimitsConfig, PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
 import { BlockHash, type L2BlockSource, type L2Frontier } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import type { MerkleTreeWriteOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import {
+  type InboxBucketSource,
   type L1ToL2MessageSource,
   appendL1ToL2MessagesToTree,
   getInboxCutoffTimestamp,
+  selectInboxBucketForBlock,
 } from '@aztec-labs/stdlib/messaging';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { type GlobalVariables, PublicSimulationOutput, type SimulationOverrides, type Tx } from '@aztec-labs/stdlib/tx';

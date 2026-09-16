@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 
@@ -25,9 +25,9 @@ const SETUP_EPOCH_DURATION = 8;
 /** Stateful fixture for the inactivity-slash suites: a slasher-enabled committee on the mock-gossip bus. */
 export class InactivityTest {
   public test!: MultiNodeTestContext;
-  public nodes!: AztecNodeService[];
-  public activeNodes!: AztecNodeService[];
-  public inactiveNodes!: AztecNodeService[];
+  public nodes!: FullAztecNodeService[];
+  public activeNodes!: FullAztecNodeService[];
+  public inactiveNodes!: FullAztecNodeService[];
   public offlineValidators!: EthAddress[];
 
   private inactiveNodeCount: number;

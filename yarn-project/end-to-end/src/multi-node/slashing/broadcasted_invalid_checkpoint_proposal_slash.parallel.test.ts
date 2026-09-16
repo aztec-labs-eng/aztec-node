@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
@@ -64,7 +64,7 @@ async function awaitBroadcastedInvalidCheckpointOffense({
   validator,
   slot,
 }: {
-  node: AztecNodeService;
+  node: FullAztecNodeService;
   validator: EthAddress;
   slot: SlotNumber;
 }) {
@@ -83,7 +83,7 @@ async function awaitAnyBroadcastedInvalidCheckpointOffense({
   nodes,
   validator,
 }: {
-  nodes: AztecNodeService[];
+  nodes: FullAztecNodeService[];
   validator: EthAddress;
 }) {
   return await retryUntil(
@@ -107,7 +107,7 @@ async function expectNoBroadcastedInvalidCheckpointOffense({
   validator,
   slot,
 }: {
-  node: AztecNodeService;
+  node: FullAztecNodeService;
   validator: EthAddress;
   slot: SlotNumber;
 }) {
@@ -124,7 +124,7 @@ async function awaitRetainedProposalsForSlot({
   blockCount,
   checkpointCount,
 }: {
-  node: AztecNodeService;
+  node: FullAztecNodeService;
   slot: SlotNumber;
   blockCount: number;
   checkpointCount: number;
@@ -226,7 +226,7 @@ async function makeInvalidCheckpointProposals({
 // block.
 describe('multi-node/slashing/broadcasted_invalid_checkpoint_proposal_slash', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[] = [];
+  let nodes: FullAztecNodeService[] = [];
 
   const slashingUnit = BigInt(1e14);
 

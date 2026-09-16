@@ -1,7 +1,7 @@
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
 import {
   type AztecNodeConfig,
-  AztecNodeService,
+  FullAztecNodeService,
   createAztecNodeService,
   getConfigEnvVars,
 } from '@aztec-labs/aztec-node';
@@ -260,11 +260,11 @@ export type EndToEndContext<TDeployExtraL1ContractsReturnType = unknown> = {
   /** The Aztec Node service or client a connected to it. */
   aztecNode: AztecNode & AztecNodeDebug;
   /** The Aztec Node as a service. */
-  aztecNodeService: AztecNodeService;
+  aztecNodeService: FullAztecNodeService;
   /** Client to the Aztec Node admin interface. */
   aztecNodeAdmin: AztecNodeAdmin;
   /** The aztec node running the prover node subsystem (only set if startProverNode is true). */
-  proverNode: AztecNodeService | undefined;
+  proverNode: FullAztecNodeService | undefined;
   /** A client to the sequencer service. */
   sequencer: SequencerClient | undefined;
   /** Return values from deployAztecL1Contracts function. */
@@ -657,7 +657,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
     const sequencerClient = aztecNodeService.getSequencer();
     logger.trace('Created and synced aztec node');
 
-    let proverNode: AztecNodeService | undefined = undefined;
+    let proverNode: FullAztecNodeService | undefined = undefined;
     if (opts.startProverNode) {
       logger.verbose('Creating and syncing a simulated prover node...');
       const proverNodePrivateKey = getPrivateKeyFromIndex(2);
@@ -871,7 +871,7 @@ export async function waitForProvenChain(
 }
 
 /**
- * Creates an AztecNodeService with the prover node enabled as a subsystem.
+ * Creates an FullAztecNodeService with the prover node enabled as a subsystem.
  * Returns both the aztec node service (for lifecycle management) and the prover node (for test internals access).
  */
 export function createAndSyncProverNode(
@@ -885,7 +885,7 @@ export function createAndSyncProverNode(
     proverNodeDeps?: Partial<ProverNodeDeps>;
   },
   options: { genesis?: GenesisData; dontStart?: boolean },
-): Promise<{ proverNode: AztecNodeService }> {
+): Promise<{ proverNode: FullAztecNodeService }> {
   return withLoggerBindings({ actor: 'prover-0' }, async () => {
     const proverNode = await createAztecNodeService(
       {

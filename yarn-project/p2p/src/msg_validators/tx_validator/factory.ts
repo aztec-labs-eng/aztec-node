@@ -46,7 +46,13 @@ import type {
 } from '@aztec-labs/stdlib/interfaces/server';
 import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import { DatabasePublicStateSource, MerkleTreeId, type PublicStateSource } from '@aztec-labs/stdlib/trees';
-import type { GlobalVariables, Tx, TxValidationResult, TxValidator } from '@aztec-labs/stdlib/tx';
+import type {
+  GlobalVariables,
+  RpcTxValidationOptions,
+  Tx,
+  TxValidationResult,
+  TxValidator,
+} from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
 import type { TxMetaData } from '../../mem_pools/tx_pool_v2/tx_metadata.js';
@@ -307,19 +313,7 @@ export function createTxValidatorForAcceptingTxsOverRPC(
     txsPermitted,
     maxTxL2Gas,
     maxTxDAGas,
-  }: {
-    l1ChainId: number;
-    rollupVersion: number;
-    setupAllowList: AllowedElement[];
-    gasFees: GasFees;
-    skipFeeEnforcement?: boolean;
-    isSimulation?: boolean;
-    timestamp: UInt64;
-    blockNumber: BlockNumber;
-    txsPermitted: boolean;
-    maxTxL2Gas?: number;
-    maxTxDAGas?: number;
-  },
+  }: RpcTxValidationOptions,
   bindings?: LoggerBindings,
 ): TxValidator<Tx> {
   const validators: TxValidator<Tx>[] = [

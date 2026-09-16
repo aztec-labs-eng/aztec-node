@@ -6,7 +6,8 @@
   "exports": {
     ".": "./dest/index.js",
     "./config": "./dest/config.js",
-    "./errors": "./dest/errors/index.js"
+    "./errors": "./dest/errors/index.js",
+    "./keystore": "./dest/key_store/node_keystore_adapter.js"
   },
   "bin": "./dest/bin/index.js",
   "typedocOptions": {

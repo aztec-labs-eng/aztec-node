@@ -1,5 +1,5 @@
 import type { Archiver } from '@aztec-labs/archiver';
-import { type AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { type FullAztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
@@ -29,7 +29,7 @@ describe('automine/unseen_anchor_hold_off', () => {
   let test: AutomineTestContext;
   let logger: Logger;
   let node: AztecNode & AztecNodeDebug;
-  let follower: AztecNodeService;
+  let follower: FullAztecNodeService;
 
   beforeAll(async () => {
     test = await AutomineTestContext.setup({ numberOfAccounts: 0 });

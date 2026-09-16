@@ -1,5 +1,5 @@
 import type { Archiver } from '@aztec-labs/archiver';
-import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecNodeConfig, FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import { generateClaimSecret } from '@aztec-labs/aztec.js/ethereum';
@@ -57,7 +57,7 @@ export type SimpleBlockProductionFixture = {
   context: EndToEndContext;
   logger: Logger;
   validators: RegisteredValidator[];
-  nodes: AztecNodeService[];
+  nodes: FullAztecNodeService[];
   from: AztecAddress;
 };
 
@@ -69,7 +69,7 @@ export type BlockProductionWithProverFixture = {
   rollup: RollupContract;
   archiver: Archiver;
   validators: RegisteredValidator[];
-  nodes: AztecNodeService[];
+  nodes: FullAztecNodeService[];
   contract: TestContract;
   wallet: TestWallet;
   from: AztecAddress;
@@ -228,7 +228,7 @@ export async function waitForProvenCheckpoint(
 export {
   type Archiver,
   type AztecNodeConfig,
-  type AztecNodeService,
+  type FullAztecNodeService,
   AztecAddress,
   EthAddress,
   NO_WAIT,

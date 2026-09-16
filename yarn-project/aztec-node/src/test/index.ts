@@ -9,10 +9,10 @@ import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import type { GlobalVariableBuilder as GlobalVariableBuilderInterface } from '@aztec-labs/stdlib/tx';
 
 import type { AztecNodeConfig } from '../aztec-node/config.js';
-import { AztecNodeService } from '../aztec-node/server.js';
+import { FullAztecNodeService } from '../factory.js';
 import { Sentinel } from '../sentinel/sentinel.js';
 
-export declare class TestAztecNodeService extends AztecNodeService {
+export declare class TestAztecNodeService extends FullAztecNodeService {
   declare public config: AztecNodeConfig;
   declare public p2pClient: P2P;
   declare public blockSource: L2BlockSource & Partial<Service>;

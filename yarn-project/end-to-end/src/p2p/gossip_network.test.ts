@@ -1,7 +1,7 @@
 import { MockZKPassportVerifierAbi } from '@aztec-foundation/l1-artifacts/MockZKPassportVerifierAbi';
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
-import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecNodeConfig, FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { addL1Validator } from '@aztec-labs/cli/l1/validators';
@@ -45,9 +45,9 @@ describe('e2e_p2p_network', () => {
   // validator set, and the prover eventually produces a proven block by collecting txs from p2p.
   describe('cheat-registered validators', () => {
     let t: P2PNetworkTest;
-    let nodes: AztecNodeService[];
-    let proverAztecNode: AztecNodeService;
-    let monitoringNode: AztecNodeService;
+    let nodes: FullAztecNodeService[];
+    let proverAztecNode: FullAztecNodeService;
+    let monitoringNode: FullAztecNodeService;
 
     beforeEach(async () => {
       t = await P2PNetworkTest.create({
@@ -141,7 +141,7 @@ describe('e2e_p2p_network', () => {
   // on-chain, all txs mine, and attestation signers match the registered validator set.
   describe('on-chain-registered validators (no cheats)', () => {
     let t: P2PNetworkTest;
-    let nodes: AztecNodeService[];
+    let nodes: FullAztecNodeService[];
 
     beforeEach(async () => {
       t = await P2PNetworkTest.create({

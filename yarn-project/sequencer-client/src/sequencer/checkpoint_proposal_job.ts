@@ -55,11 +55,14 @@ import {
   type WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
 import {
+  type ConsumedBucketCursor,
   type InboxBucket,
   InboxBucketRef,
+  type InboxBucketSelection,
   type L1ToL2MessageSource,
   getInboxCutoffTimestamp,
   isInboxConsumptionSufficient,
+  selectInboxBucketForBlock,
 } from '@aztec-labs/stdlib/messaging';
 import type {
   BlockProposal,
@@ -85,11 +88,6 @@ import type { CheckpointProposalJobMetricsRecorder } from './checkpoint_proposal
 import { CheckpointVoter } from './checkpoint_voter.js';
 import { SequencerInterruptedError } from './errors.js';
 import type { SequencerEvents } from './events.js';
-import {
-  type ConsumedBucketCursor,
-  type InboxBucketSelection,
-  selectInboxBucketForBlock,
-} from './inbox_bucket_selector.js';
 import type { SequencerMetrics } from './metrics.js';
 import type { RequestsTracker } from './requests_tracker.js';
 import type { SequencerRollupConstants } from './types.js';

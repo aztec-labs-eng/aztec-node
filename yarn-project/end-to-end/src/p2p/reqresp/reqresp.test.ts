@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { jest } from '@jest/globals';
 
 import type { P2PNetworkTest } from '../p2p_network.js';
@@ -14,7 +14,7 @@ jest.setTimeout(15 * 60 * 1000);
 // Also verifies multi-blocks-per-slot (mbps) checkpoint is produced. jest.setTimeout=15m.
 describe('e2e_p2p_reqresp_tx', () => {
   let t: P2PNetworkTest;
-  let nodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
 
   beforeEach(async () => {
     t = await createReqrespTest();

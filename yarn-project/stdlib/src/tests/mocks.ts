@@ -40,6 +40,7 @@ import { GasFees } from '../gas/gas_fees.js';
 import { GasSettings } from '../gas/gas_settings.js';
 import type { GasUsed } from '../gas/gas_used.js';
 import type { MerkleTreeReadOperations } from '../interfaces/merkle_tree_operations.js';
+import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '../interfaces/server_circuit_prover.js';
 import { Nullifier } from '../kernel/nullifier.js';
 import { PrivateCircuitPublicInputs } from '../kernel/private_circuit_public_inputs.js';
 import {
@@ -750,3 +751,22 @@ export const makeCheckpointAttestationFromBlock = (
 
   return makeCheckpointAttestation({ header, archive, attesterSigner, proposerSigner });
 };
+
+/** A proof verifier that accepts every proof, after an optional fixed delay standing in for verification time. */
+export class TestCircuitVerifier implements ClientProtocolCircuitVerifier {
+  constructor(private verificationDelayMs?: number) {}
+  verifyProof(_tx: Tx): Promise<IVCProofVerificationResult> {
+    if (this.verificationDelayMs !== undefined && this.verificationDelayMs > 0) {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve({ valid: true, durationMs: this.verificationDelayMs!, totalDurationMs: this.verificationDelayMs! });
+        }, this.verificationDelayMs);
+      });
+    }
+    return Promise.resolve({ valid: true, durationMs: 0, totalDurationMs: 0 });
+  }
+
+  public stop(): Promise<void> {
+    return Promise.resolve();
+  }
+}

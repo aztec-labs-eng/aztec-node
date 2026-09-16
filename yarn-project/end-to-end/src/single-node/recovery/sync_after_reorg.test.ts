@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
@@ -45,7 +45,7 @@ describe('single-node/recovery/sync_after_reorg', () => {
 
     // Stop the node generating blocks
     logger.warn(`Stopping the main node`);
-    await (context.aztecNode as AztecNodeService).stop();
+    await (context.aztecNode as FullAztecNodeService).stop();
 
     // Wait until the unproven checkpoints become prunable, so a fresh node will reorg them out on
     // sync. We poll the rollup's own prune predicate rather than hardcoding an epoch boundary: the

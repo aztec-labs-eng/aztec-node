@@ -1,6 +1,6 @@
 import type { InitialAccountData } from '@aztec-labs/accounts/testing';
 import type { Archiver } from '@aztec-labs/archiver';
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT, getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
 import { Fr } from '@aztec-labs/aztec.js/fields';
@@ -54,7 +54,7 @@ export const submitComplexTxsTo = async (
 // creates a wallet and submit a given number of transactions through it.
 export const submitTransactions = async (
   logger: Logger,
-  node: AztecNodeService,
+  node: FullAztecNodeService,
   numTxs: number,
   fundedAccount: InitialAccountData,
 ): Promise<TxHash[]> => {
@@ -78,7 +78,7 @@ export const submitTransactions = async (
 
 export async function prepareTransactions(
   logger: Logger,
-  node: AztecNodeService,
+  node: FullAztecNodeService,
   numTxs: number,
   fundedAccount: InitialAccountData,
 ): Promise<ProvenTx[]> {
@@ -133,7 +133,7 @@ export async function maybeCheckQosAlerts(logger: Logger): Promise<void> {
 }
 
 /** Waits until every node's synced block number reaches the initial node's current tip. */
-export async function waitForNodesToSync(t: P2PNetworkTest, nodes: AztecNodeService[]): Promise<void> {
+export async function waitForNodesToSync(t: P2PNetworkTest, nodes: FullAztecNodeService[]): Promise<void> {
   const targetBlock = await t.ctx.aztecNode.getBlockNumber();
   t.logger.warn(`Waiting for all nodes to sync to block number ${targetBlock}`);
   await retryUntil(
@@ -151,7 +151,7 @@ export async function waitForNodesToSync(t: P2PNetworkTest, nodes: AztecNodeServ
 
 /** Reads the published checkpoint containing the block that mined the given tx. */
 export async function getPublishedCheckpointForTx(
-  node: AztecNodeService,
+  node: FullAztecNodeService,
   txHash: TxHash,
 ): Promise<PublishedCheckpoint> {
   const receipt = await node.getTxReceipt(txHash);
@@ -165,7 +165,7 @@ export async function getPublishedCheckpointForTx(
 /** Polls until the archiver has indexed the first published checkpoint, then returns it. */
 export async function waitForFirstPublishedCheckpoint(
   t: P2PNetworkTest,
-  nodes: AztecNodeService[],
+  nodes: FullAztecNodeService[],
   timeoutSeconds = 120,
 ): Promise<PublishedCheckpoint> {
   const dataStore = nodes[0].getBlockSource() as Archiver;
@@ -191,7 +191,7 @@ export async function waitForFirstPublishedCheckpoint(
  */
 export async function verifyAttestationSigners(
   t: P2PNetworkTest,
-  nodes: AztecNodeService[],
+  nodes: FullAztecNodeService[],
   publishedCheckpoint: PublishedCheckpoint,
 ): Promise<string[]> {
   const signatureContext = {
@@ -241,11 +241,11 @@ export interface GossipScenarioOptions {
   /** Runs after validator registration but before the validator nodes are created. */
   beforeCreateNodes?: () => Promise<void>;
   /** Creates extra non-validator nodes (prover/monitor) once the validator nodes exist. */
-  createExtraNodes?: (nodes: AztecNodeService[]) => Promise<void>;
+  createExtraNodes?: (nodes: FullAztecNodeService[]) => Promise<void>;
   /** Runs after the account is registered but before txs are submitted (sync waits, checkpoint waits, sleeps). */
-  beforeSubmit?: (nodes: AztecNodeService[]) => Promise<void>;
+  beforeSubmit?: (nodes: FullAztecNodeService[]) => Promise<void>;
   /** Scenario-specific verification run after attestation-signer verification (proven block, price convergence). */
-  afterVerify?: (nodes: AztecNodeService[]) => Promise<void>;
+  afterVerify?: (nodes: FullAztecNodeService[]) => Promise<void>;
 }
 
 /**
@@ -255,7 +255,7 @@ export interface GossipScenarioOptions {
  * waits, scenario-specific verification) is supplied via the callbacks in {@link GossipScenarioOptions}.
  * Returns the validator nodes so the caller can track them for teardown.
  */
-export async function runGossipScenario(opts: GossipScenarioOptions): Promise<AztecNodeService[]> {
+export async function runGossipScenario(opts: GossipScenarioOptions): Promise<FullAztecNodeService[]> {
   const { t, numValidators, bootNodePort, txsPerNode } = opts;
 
   if (!t.bootstrapNodeEnr) {
@@ -297,7 +297,7 @@ export async function runGossipScenario(opts: GossipScenarioOptions): Promise<Az
   let firstTxHash: TxHash | undefined;
   if (txsPerNode > 0) {
     t.logger.info('Submitting transactions');
-    const submitOne = (node: AztecNodeService) => submitTransactions(t.logger, node, txsPerNode, t.fundedAccount);
+    const submitOne = (node: FullAztecNodeService) => submitTransactions(t.logger, node, txsPerNode, t.fundedAccount);
     // Each submitTransactions call builds its own wallet/PXE, so submissions are independent. When run
     // concurrently, Promise.all preserves node order so submitted[i] stays aligned with nodes[i].
     const submitted: TxHash[][] = [];

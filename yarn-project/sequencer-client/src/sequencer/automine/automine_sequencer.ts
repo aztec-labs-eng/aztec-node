@@ -24,7 +24,11 @@ import {
   getTimestampForSlot,
 } from '@aztec-labs/stdlib/epoch-helpers';
 import { InsufficientValidTxsError, type WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
-import { type L1ToL2MessageSource, getInboxCutoffTimestamp } from '@aztec-labs/stdlib/messaging';
+import {
+  type L1ToL2MessageSource,
+  getInboxCutoffTimestamp,
+  selectInboxBucketForBlock,
+} from '@aztec-labs/stdlib/messaging';
 import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { FailedTx, Tx } from '@aztec-labs/stdlib/tx';
@@ -38,7 +42,6 @@ import type { GlobalVariableBuilder } from '../../global_variable_builder/global
 import type { SequencerPublisherFactory } from '../../publisher/sequencer-publisher-factory.js';
 import type { SequencerPublisher } from '../../publisher/sequencer-publisher.js';
 import type { SequencerConfig } from '../config.js';
-import { selectInboxBucketForBlock } from '../inbox_bucket_selector.js';
 
 /**
  * L1 rollup constants needed by the AutomineSequencer. Same as SequencerRollupConstants

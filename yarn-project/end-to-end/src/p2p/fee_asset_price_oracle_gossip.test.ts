@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { RollupContract, STATE_VIEW_ADDRESS } from '@aztec-labs/ethereum/contracts';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -27,8 +27,8 @@ jest.setTimeout(1000 * 60 * 10);
 // real prover node. CHECK_ALERTS env var gates optional Grafana alert validation.
 describe('e2e_p2p_network', () => {
   let t: P2PNetworkTest;
-  let nodes: AztecNodeService[];
-  let proverNode: AztecNodeService;
+  let nodes: FullAztecNodeService[];
+  let proverNode: FullAztecNodeService;
 
   beforeEach(async () => {
     t = await P2PNetworkTest.create({

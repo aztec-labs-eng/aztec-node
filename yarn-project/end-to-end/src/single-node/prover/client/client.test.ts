@@ -21,7 +21,7 @@ jest.setTimeout(15 * 60 * 1000);
 // Tests client-side proof generation and verification for private and public transfers.
 // FullProverTest sets up a single node with a real prover node (real BB when FAKE_PROOFS=0,
 // fake proofs otherwise) via PIPELINING_SETUP_OPTS (ethSlot=4s, aztecSlot=12s). The prover
-// node is a second AztecNodeService with enableProverNode. No on-chain proof submission — only
+// node is a second FullAztecNodeService with enableProverNode. No on-chain proof submission — only
 // client-side circuit proof generation and circuitProofVerifier.verifyProof() are tested.
 describe('single-node/prover/client', () => {
   const REAL_PROOFS = !parseBooleanEnv(process.env.FAKE_PROOFS);

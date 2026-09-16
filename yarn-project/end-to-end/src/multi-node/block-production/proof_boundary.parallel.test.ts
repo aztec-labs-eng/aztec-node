@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
@@ -37,8 +37,8 @@ describe('multi-node/block-production/proof_boundary', () => {
 
   let test: MultiNodeTestContext;
   let validators: RegisteredValidator[];
-  let nodes: AztecNodeService[];
-  let proverNode: AztecNodeService;
+  let nodes: FullAztecNodeService[];
+  let proverNode: FullAztecNodeService;
 
   const setupTest = async (
     overrides: Partial<MultiNodeTestOpts> = {},

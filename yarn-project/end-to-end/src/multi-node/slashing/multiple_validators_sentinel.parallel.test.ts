@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -32,8 +32,8 @@ jest.setTimeout(1000 * 60 * 10);
 // CI job (parallel convention).
 describe('multi-node/slashing/multiple_validators_sentinel', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[];
-  let sentinel: AztecNodeService;
+  let nodes: FullAztecNodeService[];
+  let sentinel: FullAztecNodeService;
   let rollup: RollupContract;
 
   beforeAll(async () => {

@@ -1,4 +1,4 @@
-import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecNodeConfig, FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
@@ -61,7 +61,7 @@ const SLASHING_ROUND_SIZE_IN_EPOCHS = 2;
 
 describe('multi-node/slashing/sentinel_status_slash', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[] = [];
+  let nodes: FullAztecNodeService[] = [];
   let rollup: RollupContract;
 
   beforeEach(async () => {
@@ -252,7 +252,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
    * failure to detect the malicious proposal is still caught.
    */
   async function findObservedStatusSlot(
-    observerNodes: AztecNodeService[],
+    observerNodes: FullAztecNodeService[],
     targetAddress: EthAddress,
     expectedStatus: ValidatorStatusInSlot,
   ): Promise<SlotNumber> {
@@ -283,7 +283,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
    * target at the given slot. Asserts the recorded status matches exactly on every observer.
    */
   async function assertAllObserversSentinelStatus(
-    observerNodes: AztecNodeService[],
+    observerNodes: FullAztecNodeService[],
     targetAddress: EthAddress,
     slot: SlotNumber,
     expectedStatus: ValidatorStatusInSlot,
@@ -312,7 +312,7 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
    * non-deterministic.
    */
   async function assertAllObserversObservedAttestationMissed(
-    observerNodes: AztecNodeService[],
+    observerNodes: FullAztecNodeService[],
     targetAddress: EthAddress,
   ): Promise<void> {
     for (const observerNode of observerNodes) {
@@ -332,7 +332,10 @@ describe('multi-node/slashing/sentinel_status_slash', () => {
   }
 
   /** Polls the given honest observer node until an INACTIVITY offense for the target appears. */
-  async function assertInactivityOffenseFor(targetAddress: EthAddress, observerNode: AztecNodeService): Promise<void> {
+  async function assertInactivityOffenseFor(
+    targetAddress: EthAddress,
+    observerNode: FullAztecNodeService,
+  ): Promise<void> {
     const offenses = await retryUntil(
       async () => {
         const collected = await observerNode.getSlashOffenses('all');

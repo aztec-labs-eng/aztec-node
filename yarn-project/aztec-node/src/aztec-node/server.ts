@@ -1,6 +1,4 @@
 import { Archiver } from '@aztec-labs/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
-import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
@@ -18,20 +16,14 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { first } from '@aztec-labs/foundation/iterable';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
-import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { count } from '@aztec-labs/foundation/string';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
-import { KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
-import { uploadSnapshot } from '@aztec-labs/node-lib/actions';
-import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getDefaultAllowedSetupFunctions } from '@aztec-labs/p2p';
+import { type KeyStoreConfig, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
-import type { ProverNode } from '@aztec-labs/prover-node';
-import { SequencerClient } from '@aztec-labs/sequencer-client';
-import { AutomineSequencer } from '@aztec-labs/sequencer-client/automine';
 import type { AvmSimulator } from '@aztec-labs/simulator/server';
-import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
@@ -40,11 +32,13 @@ import {
   type BlockParameter,
   type CheckpointsQuery,
   type DataInBlock,
+  type L2Block,
   type L2BlockSource,
   type L2BlockTag,
   type L2Tips,
   inspectBlockParameter,
 } from '@aztec-labs/stdlib/block';
+import type { NodeRPCConfig } from '@aztec-labs/stdlib/config';
 import type {
   ContractClassPublic,
   ContractDataSource,
@@ -75,7 +69,13 @@ import {
   type AllowedElement,
   type ClientProtocolCircuitVerifier,
   type L2LogsSource,
+  type MerkleTreeReadOperations,
+  type P2PClient,
+  type ProverNodeApi,
+  type SequencerConfig,
   type Service,
+  type SlasherClientInterface,
+  type SlasherConfig,
   type WorldStateSyncStatus,
   type WorldStateSynchronizer,
   tryStop,
@@ -85,6 +85,7 @@ import { NullDebugLogStore } from '@aztec-labs/stdlib/logs';
 import type { L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
 import type { CheckpointAttestation } from '@aztec-labs/stdlib/p2p';
 import type { Offense } from '@aztec-labs/stdlib/slashing';
+import type { ProposerTimetableConfig } from '@aztec-labs/stdlib/timetable';
 import { MerkleTreeId, NullifierMembershipWitness, PublicDataWitness } from '@aztec-labs/stdlib/trees';
 import {
   type FeeProvider,
@@ -92,12 +93,14 @@ import {
   type GlobalVariableBuilder as GlobalVariableBuilderInterface,
   type IndexedTxEffect,
   PublicSimulationOutput,
+  type RpcTxValidationOptions,
   type SimulationOverrides,
   Tx,
   type TxEffectMembershipWitness,
   type TxHash,
   type TxReceipt,
   type TxValidationResult,
+  type TxValidator,
 } from '@aztec-labs/stdlib/tx';
 import type { SingleValidatorStats, ValidatorsStats } from '@aztec-labs/stdlib/validators';
 import {
@@ -108,17 +111,110 @@ import {
   getTelemetryClient,
   trackSpan,
 } from '@aztec-labs/telemetry-client';
-import { NodeKeystoreAdapter, ValidatorClient } from '@aztec-labs/validator-client';
+import { NodeKeystoreAdapter, validateKeyStoreConfiguration } from '@aztec-labs/validator-client/keystore';
 
 import { NodeBlockProvider } from '../modules/node_block_provider.js';
 import { NodeTxReceiptBuilder } from '../modules/node_tx_receipt.js';
 import { NodeWorldStateQueries } from '../modules/node_world_state_queries.js';
 import { UnseenBlockHoldOff } from '../modules/unseen_block_hold_off.js';
-import { Sentinel } from '../sentinel/sentinel.js';
-import type { AztecNodeConfig } from './config.js';
 import { type NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block/index.js';
 import { NodeMetrics } from './node_metrics.js';
-import { NodePublicCallsSimulator } from './node_public_calls_simulator.js';
+import { NodePublicCallsSimulator, type NodePublicCallsSimulatorConfig } from './node_public_calls_simulator.js';
+
+/**
+ * The configuration the node service itself reads: the admin-updatable settings it serves through `getConfig`, plus
+ * the L1 addresses, RPC limits, timetable and keystore location its own methods consult. `AztecNodeConfig` satisfies
+ * it; a node wired by hand (the TXE) provides only this much.
+ */
+export type AztecNodeServiceConfig = AztecNodeAdminConfig &
+  L1ContractAddresses &
+  ProposerTimetableConfig &
+  KeyStoreConfig &
+  NodePublicCallsSimulatorConfig &
+  Pick<NodeRPCConfig, 'rpcUnseenBlockByNumberWaitMs' | 'rpcUnseenBlockByHashWaitMs'>;
+
+/** What the node drives on its sequencer: runtime config, publisher keys and a nudge to build a block. */
+export interface NodeSequencerClient {
+  /** Applies a runtime config change. */
+  updateConfig(config: Partial<AztecNodeAdminConfig>): void;
+  /** Swaps the keystore the publisher signs with after a keystore reload. */
+  updatePublisherNodeKeyStore(adapter: NodeKeystoreAdapter): void;
+  /** Asks the sequencer to attempt a block right away. */
+  trigger(): void | Promise<void>;
+  /** The running sequencer, read for the effective config when pausing and resuming block production. */
+  getSequencer(): { getConfig(): Pick<SequencerConfig, 'minTxsPerBlock'> };
+}
+
+/** What the node drives on the test-only automine sequencer. */
+export interface NodeAutomineSequencer {
+  /** Applies a runtime config change. */
+  updateConfig(config: Partial<SequencerConfig>): void;
+  /** Stops building blocks until resumed. */
+  pause(): void;
+  /** Resumes building blocks. */
+  resume(): void;
+  /** Builds and publishes an empty block. */
+  buildEmptyBlock(): Promise<L2Block>;
+  /** Advances L2 time to at least `targetTimestampSec`. */
+  warpTo(targetTimestampSec: number): Promise<void>;
+  /** Advances L2 time by at least `deltaSec`. */
+  warpBy(deltaSec: number): Promise<void>;
+  /** Proves checkpoints up to `upToCheckpoint`, or every checkpoint so far, returning the last one proven. */
+  prove(upToCheckpoint?: CheckpointNumber): Promise<CheckpointNumber>;
+}
+
+/** What the node reads from the validator sentinel: per-validator performance stats, plus a config update hook. */
+export interface NodeSentinel {
+  /** Applies a runtime config change. */
+  updateConfig(config: Partial<SlasherConfig>): void;
+  /** Stats over a slot window for every tracked validator, or only for `validators` when given. */
+  computeStats(opts?: {
+    fromSlot?: SlotNumber;
+    toSlot?: SlotNumber;
+    validators?: EthAddress[];
+  }): Promise<ValidatorsStats>;
+  /** Stats for one validator over a slot window; `undefined` when it has no history. */
+  getValidatorStats(
+    validatorAddress: EthAddress,
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<SingleValidatorStats | undefined>;
+  /** Stats for several validators in input order, `null` where unavailable. */
+  getValidatorStatsBatch(
+    validatorAddresses: EthAddress[],
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<(SingleValidatorStats | null)[]>;
+}
+
+/** What the node drives on its validator client: swapping the keystore after a reload. */
+export interface NodeValidatorClient {
+  /** Replaces the keystore the validator signs with. */
+  reloadKeystore(keyStore: KeystoreManager): void;
+}
+
+/** The verifiers a node runs against incoming tx proofs: one for gossiped txs, one for txs received over RPC. */
+export interface ProofVerifiers {
+  peer: ClientProtocolCircuitVerifier;
+  rpc: ClientProtocolCircuitVerifier;
+}
+
+/**
+ * Admission checks for txs the node receives over RPC. Production wires the p2p package's validators in
+ * `factory.ts`; the node only needs these two entry points and stays clear of the p2p stack behind them.
+ */
+export interface RpcTxAdmission {
+  /** Setup-phase functions every tx may call, ahead of this node's configured extensions. */
+  getDefaultAllowedSetupFunctions(): Promise<AllowedElement[]>;
+  /** Builds the validator run against one tx submitted over RPC. */
+  createTxValidator(
+    db: MerkleTreeReadOperations,
+    contractDataSource: ContractDataSource,
+    verifier: ClientProtocolCircuitVerifier | undefined,
+    options: RpcTxValidationOptions,
+    bindings?: LoggerBindings,
+  ): TxValidator<Tx>;
+}
 
 /**
  * Fully-constructed collaborators and settings an {@link AztecNodeService} owns. Built by `createAztecNodeService`
@@ -126,17 +222,17 @@ import { NodePublicCallsSimulator } from './node_public_calls_simulator.js';
  * positional order.
  */
 export interface AztecNodeServiceDeps {
-  config: AztecNodeConfig;
-  p2pClient: P2P;
+  config: AztecNodeServiceConfig;
+  p2pClient: P2PClient;
   blockSource: L2BlockSource & Partial<Service>;
   logsSource: L2LogsSource;
   contractDataSource: ContractDataSource;
   l1ToL2MessageSource: L1ToL2MessageSource;
   worldStateSynchronizer: WorldStateSynchronizer;
-  sequencer: SequencerClient | undefined;
-  proverNode: ProverNode | undefined;
+  sequencer: NodeSequencerClient | undefined;
+  proverNode: ProverNodeApi | undefined;
   slasherClient: SlasherClientInterface | undefined;
-  validatorsSentinel: Sentinel | undefined;
+  validatorsSentinel: NodeSentinel | undefined;
   stopStartedWatchers: () => Promise<void>;
   l1ChainId: number;
   version: number;
@@ -151,14 +247,26 @@ export interface AztecNodeServiceDeps {
   telemetry?: TelemetryClient;
   log?: Logger;
   blobClient?: BlobClientInterface;
-  validatorClient?: ValidatorClient;
+  validatorClient?: NodeValidatorClient;
   keyStoreManager?: KeystoreManager;
   debugLogStore?: DebugLogStore;
-  automineSequencer?: AutomineSequencer;
+  automineSequencer?: NodeAutomineSequencer;
   // AVM execution backend for public simulation. Wired in production (factory.ts); absent in unit/TXE nodes
   // that don't drive public execution, hence optional and asserted at the simulation call site. Owned by the
   // node (disposed on stop), so it must be disposable — a spawned process pool + CDB IPC server.
   avmSimulator?: AvmSimulator & AsyncDisposable;
+  /**
+   * Admission checks for txs received over RPC. Absent on nodes that never take txs over RPC (the TXE), which
+   * then reject `sendTx` and `isValidTx`.
+   */
+  rpcTxAdmission?: RpcTxAdmission;
+  /**
+   * Builds fresh proof verifiers for a `realProofs` setting, so `setConfig` can switch verification at runtime.
+   * Absent on nodes that never switch (the TXE), which reject a `realProofs` change.
+   */
+  createProofVerifiers?: (realProofs: boolean) => Promise<ProofVerifiers>;
+  /** Uploads a snapshot of the archiver and world state to `location`. Absent on nodes that cannot snapshot. */
+  uploadSnapshot?: (location: string) => Promise<void>;
 }
 
 /**
@@ -178,17 +286,17 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
 
   public readonly tracer: Tracer;
 
-  protected config: AztecNodeConfig;
-  protected readonly p2pClient: P2P;
+  protected config: AztecNodeServiceConfig;
+  protected readonly p2pClient: P2PClient;
   protected readonly blockSource: L2BlockSource & Partial<Service>;
   protected readonly logsSource: L2LogsSource;
   protected readonly contractDataSource: ContractDataSource;
   protected readonly l1ToL2MessageSource: L1ToL2MessageSource;
   protected readonly worldStateSynchronizer: WorldStateSynchronizer;
-  protected readonly sequencer: SequencerClient | undefined;
-  protected readonly proverNode: ProverNode | undefined;
+  protected readonly sequencer: NodeSequencerClient | undefined;
+  protected readonly proverNode: ProverNodeApi | undefined;
   protected readonly slasherClient: SlasherClientInterface | undefined;
-  protected readonly validatorsSentinel: Sentinel | undefined;
+  protected readonly validatorsSentinel: NodeSentinel | undefined;
   private readonly stopStartedWatchers: () => Promise<void>;
   protected readonly l1ChainId: number;
   protected readonly version: number;
@@ -203,11 +311,14 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   private telemetry: TelemetryClient;
   private log: Logger;
   private blobClient?: BlobClientInterface;
-  private validatorClient?: ValidatorClient;
+  private validatorClient?: NodeValidatorClient;
   private keyStoreManager?: KeystoreManager;
   private debugLogStore: DebugLogStore;
-  private readonly automineSequencer?: AutomineSequencer;
+  protected readonly automineSequencer: NodeAutomineSequencer | undefined;
   private readonly avmSimulator?: AvmSimulator & AsyncDisposable;
+  private readonly rpcTxAdmission?: RpcTxAdmission;
+  private readonly createProofVerifiers?: (realProofs: boolean) => Promise<ProofVerifiers>;
+  private readonly uploadSnapshot?: (location: string) => Promise<void>;
 
   constructor(deps: AztecNodeServiceDeps) {
     this.config = deps.config;
@@ -240,6 +351,9 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     this.debugLogStore = deps.debugLogStore ?? new NullDebugLogStore();
     this.automineSequencer = deps.automineSequencer;
     this.avmSimulator = deps.avmSimulator;
+    this.rpcTxAdmission = deps.rpcTxAdmission;
+    this.createProofVerifiers = deps.createProofVerifiers;
+    this.uploadSnapshot = deps.uploadSnapshot;
 
     this.metrics = new NodeMetrics(this.telemetry, 'AztecNodeService');
     this.tracer = this.telemetry.getTracer('AztecNodeService');
@@ -386,17 +500,17 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
    * Returns the sequencer client instance.
    * @returns The sequencer client instance.
    */
-  public getSequencer(): SequencerClient | undefined {
+  public getSequencer(): NodeSequencerClient | undefined {
     return this.sequencer;
   }
 
   /** Test-only: returns the AutomineSequencer when wired via `useAutomineSequencer`. */
-  public getAutomineSequencer(): AutomineSequencer | undefined {
+  public getAutomineSequencer(): NodeAutomineSequencer | undefined {
     return this.automineSequencer;
   }
 
   /** Returns the prover node subsystem, if enabled. */
-  public getProverNode(): ProverNode | undefined {
+  public getProverNode(): ProverNodeApi | undefined {
     return this.proverNode;
   }
 
@@ -408,7 +522,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return this.contractDataSource;
   }
 
-  public getP2P(): P2P {
+  public getP2P(): P2PClient {
     return this.p2pClient;
   }
 
@@ -421,11 +535,21 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   }
 
   public getEncodedEnr(): Promise<string | undefined> {
-    return Promise.resolve(this.p2pClient.getEnr()?.encodeTxt());
+    return this.p2pClient.getEncodedEnr();
   }
 
   public async getAllowedPublicSetup(): Promise<AllowedElement[]> {
-    return [...(await getDefaultAllowedSetupFunctions()), ...(this.config.txPublicSetupAllowListExtend ?? [])];
+    return [
+      ...(await this.#requireRpcTxAdmission().getDefaultAllowedSetupFunctions()),
+      ...(this.config.txPublicSetupAllowListExtend ?? []),
+    ];
+  }
+
+  #requireRpcTxAdmission(): RpcTxAdmission {
+    if (!this.rpcTxAdmission) {
+      throw new Error('This node was built without RPC tx admission checks and does not accept txs over RPC');
+    }
+    return this.rpcTxAdmission;
   }
 
   /**
@@ -822,7 +946,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     // Enforce the same network admission limit the node advertises in getNodeInfo (network-wide, not this
     // node's local caps), so a tx the wallet sized against txsLimits is not rejected here.
     const networkTxGasLimits = getNetworkTxGasLimits(this.config, l1Constants);
-    const validator = createTxValidatorForAcceptingTxsOverRPC(
+    const validator = this.#requireRpcTxAdmission().createTxValidator(
       db,
       this.contractDataSource,
       verifier,
@@ -831,10 +955,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
         blockNumber,
         l1ChainId: this.l1ChainId,
         rollupVersion: this.version,
-        setupAllowList: [
-          ...(await getDefaultAllowedSetupFunctions()),
-          ...(this.config.txPublicSetupAllowListExtend ?? []),
-        ],
+        setupAllowList: await this.getAllowedPublicSetup(),
         gasFees: await this.getCurrentMinFees(),
         skipFeeEnforcement,
         isSimulation,
@@ -856,6 +977,10 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
 
   public async setConfig(config: Partial<AztecNodeAdminConfig>): Promise<void> {
     const newConfig = { ...this.config, ...config };
+    const switchingProofVerification = newConfig.realProofs !== this.config.realProofs;
+    if (switchingProofVerification && !this.createProofVerifiers) {
+      throw new BadRequestError('This node cannot switch proof verification at runtime');
+    }
     // If the sequencer is currently paused via pauseSequencer(), record the caller's desired
     // minTxsPerBlock as the restore value (so resumeSequencer applies it) and keep the freeze
     // (MAX_SAFE_INTEGER) applied to the underlying sequencer. Without this guard, forwarding
@@ -875,16 +1000,11 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     if ('updateConfig' in archiver) {
       archiver.updateConfig(config);
     }
-    if (newConfig.realProofs !== this.config.realProofs) {
+    if (switchingProofVerification && this.createProofVerifiers) {
       await Promise.all([tryStop(this.peerProofVerifier), tryStop(this.rpcProofVerifier)]);
-      if (newConfig.realProofs) {
-        this.peerProofVerifier = await BatchChonkVerifier.new(newConfig, newConfig.bbChonkVerifyMaxBatch, 'peer');
-        const rpcVerifier = await BBCircuitVerifier.new(newConfig);
-        this.rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, newConfig.numConcurrentIVCVerifiers);
-      } else {
-        this.peerProofVerifier = new TestCircuitVerifier();
-        this.rpcProofVerifier = new TestCircuitVerifier();
-      }
+      const verifiers = await this.createProofVerifiers(newConfig.realProofs);
+      this.peerProofVerifier = verifiers.peer;
+      this.rpcProofVerifier = verifiers.rpc;
     }
 
     this.config = newConfig;
@@ -928,6 +1048,12 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   }
 
   public async startSnapshotUpload(location: string): Promise<void> {
+    const uploadSnapshot = this.uploadSnapshot;
+    if (!uploadSnapshot) {
+      this.metrics.recordSnapshotError();
+      throw new Error('Snapshot upload is not configured on this node.');
+    }
+
     // Note that we are forcefully casting the blocksource as an archiver
     // We break support for archiver running remotely to the node
     const archiver = this.blockSource as Archiver;
@@ -957,7 +1083,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     // Do not wait for the upload to be complete to return to the caller, but flag that an operation is in progress
     this.isUploadingSnapshot = true;
     const timer = new Timer();
-    void uploadSnapshot(location, this.blockSource as Archiver, this.worldStateSynchronizer, this.config, this.log)
+    void uploadSnapshot(location)
       .then(() => {
         this.isUploadingSnapshot = false;
         this.metrics.recordSnapshot(timer.ms());
@@ -1087,7 +1213,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     const keyStores = loadKeystores(this.config.keyStoreDirectory);
     const newManager = new KeystoreManager(mergeKeystores(keyStores));
     await newManager.validateSigners();
-    ValidatorClient.validateKeyStoreConfiguration(newManager, this.log);
+    validateKeyStoreConfiguration(newManager, this.log);
 
     // Validate that every validator's publisher keys overlap with the L1 signers
     // that were initialized at startup. Publishers cannot be hot-reloaded, so a

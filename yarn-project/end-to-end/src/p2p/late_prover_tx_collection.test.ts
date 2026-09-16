@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -32,8 +32,8 @@ jest.setTimeout(1000 * 60 * 10);
 // minTxsPerBlock=1, inboxLag=2. Late prover node created after transactions are already mined.
 describe('e2e_p2p_late_prover_tx_collection', () => {
   let t: P2PNetworkTest;
-  let nodes: AztecNodeService[] = [];
-  let proverNode: AztecNodeService | undefined;
+  let nodes: FullAztecNodeService[] = [];
+  let proverNode: FullAztecNodeService | undefined;
 
   beforeEach(async () => {
     t = await P2PNetworkTest.create({

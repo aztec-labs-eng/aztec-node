@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { TestAztecNodeService } from '@aztec-labs/aztec-node/test';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
@@ -79,7 +79,11 @@ async function makeEquivocatedBlockProposal({
 // Deploys `numTxs` fresh schnorr accounts (one per block of the checkpoint) through the bad proposer node,
 // paying with the funded hardcoded account. The wallet is repointed at `node` so the txs land in that
 // node's mempool.
-async function submitDeploymentTxsWithoutWaiting(test: MultiNodeTestContext, node: AztecNodeService, numTxs: number) {
+async function submitDeploymentTxsWithoutWaiting(
+  test: MultiNodeTestContext,
+  node: FullAztecNodeService,
+  numTxs: number,
+) {
   const wallet = test.context.wallet as TestWallet;
   wallet.updateNode(node);
   const from = test.context.accounts[0];
@@ -94,7 +98,7 @@ async function submitDeploymentTxsWithoutWaiting(test: MultiNodeTestContext, nod
   return txHashes;
 }
 
-async function getBlockHash(node: AztecNodeService, blockNumber: number) {
+async function getBlockHash(node: FullAztecNodeService, blockNumber: number) {
   const block = await node.getBlockData(BlockNumber(blockNumber));
   return block ? (await block.header.hash()).toString() : undefined;
 }
@@ -145,7 +149,7 @@ async function advanceToEpochBeforePipelinedTargetSlot({
 // progress; retryUntil waits for attestations and offenses.
 describe('multi-node/slashing/attested_invalid_proposal', () => {
   let test: MultiNodeTestContext;
-  let nodes: AztecNodeService[] = [];
+  let nodes: FullAztecNodeService[] = [];
 
   beforeEach(async () => {
     test = await MultiNodeTestContext.setup({

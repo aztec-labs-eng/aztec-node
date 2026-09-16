@@ -1,4 +1,4 @@
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import type { AztecNodeConfig } from '@aztec-labs/aztec-node/config';
 import type { Fr } from '@aztec-labs/aztec.js/fields';
 import { startAnvil } from '@aztec-labs/ethereum/test';
@@ -10,7 +10,7 @@ import { createLocalNetwork } from '../local-network/local-network.js';
 /** A running in-process local network: an inline Aztec node backed by its own anvil L1. */
 export interface LocalNetwork extends AsyncDisposable {
   /** Fully-synced Aztec node, ready to serve client requests. */
-  node: AztecNodeService;
+  node: FullAztecNodeService;
   /** RPC URL of the spawned anvil instance. */
   l1RpcUrl: string;
   /** Chain id used on L1 (foundry's default 31337). */

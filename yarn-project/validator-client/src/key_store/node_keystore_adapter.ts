@@ -2,6 +2,7 @@ import type { EthSigner } from '@aztec-labs/ethereum/eth-signer';
 import type { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Signature } from '@aztec-labs/foundation/eth-signature';
+import type { Logger } from '@aztec-labs/foundation/log';
 import { KeystoreManager, loadKeystoreFile } from '@aztec-labs/node-keystore';
 import type { EthRemoteSignerConfig } from '@aztec-labs/node-keystore';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -393,5 +394,34 @@ export class NodeKeystoreAdapter implements ExtendedValidatorKeyStore {
    */
   stop(): Promise<void> {
     return Promise.resolve();
+  }
+}
+
+/**
+ * Checks that every validator in the keystore carries what signing for it needs: a coinbase, a fee recipient and at
+ * least one publisher key. Throws on the first validator that does not.
+ */
+export function validateKeyStoreConfiguration(keyStoreManager: KeystoreManager, logger?: Logger) {
+  const validatorKeyStore = NodeKeystoreAdapter.fromKeyStoreManager(keyStoreManager);
+  const validatorAddresses = validatorKeyStore.getAddresses();
+  // Verify that we can retrieve all required data from the key store
+  for (const address of validatorAddresses) {
+    // Functions throw if required data is not available
+    let coinbase: EthAddress;
+    let feeRecipient: AztecAddress;
+    try {
+      coinbase = validatorKeyStore.getCoinbaseAddress(address);
+      feeRecipient = validatorKeyStore.getFeeRecipient(address);
+    } catch (error) {
+      throw new Error(`Failed to retrieve required data for validator address ${address}, error: ${error}`);
+    }
+
+    const publisherAddresses = validatorKeyStore.getPublisherAddresses(address);
+    if (!publisherAddresses.length) {
+      throw new Error(`No publisher addresses found for validator address ${address}`);
+    }
+    logger?.debug(
+      `Validator ${address.toString()} configured with coinbase ${coinbase.toString()}, feeRecipient ${feeRecipient.toString()} and publishers ${publisherAddresses.map(x => x.toString()).join()}`,
+    );
   }
 }

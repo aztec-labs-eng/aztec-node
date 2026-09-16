@@ -1,4 +1,4 @@
-import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import type { AztecNodeConfig, FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import { TxHash } from '@aztec-labs/aztec.js/tx';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -48,12 +48,12 @@ jest.setTimeout(1000 * 180 * 10);
 // traffic flows only through expected peers. Verifies txs mine and attestation signers match validators.
 describe('e2e_p2p_preferred_network', () => {
   let t: P2PNetworkTest;
-  let nodes: AztecNodeService[];
-  let validators: AztecNodeService[];
-  let preferredNodes: AztecNodeService[];
+  let nodes: FullAztecNodeService[];
+  let validators: FullAztecNodeService[];
+  let preferredNodes: FullAztecNodeService[];
 
   const waitForNodeToAcquirePeers = async (
-    node: AztecNodeService,
+    node: FullAztecNodeService,
     numRequiredPeers: number,
     timeout: number,
     identifier: string,
@@ -74,7 +74,7 @@ describe('e2e_p2p_preferred_network', () => {
   };
 
   // Intercepts all P2P gossip and verifies that it is received from one of a set of expect peers
-  const monitorP2PTraffic = (node: AztecNodeService, expectedPeers: string[]) => {
+  const monitorP2PTraffic = (node: FullAztecNodeService, expectedPeers: string[]) => {
     const p2pService = (node.getP2P() as any).p2pService as P2PService;
 
     // @ts-expect-error - we want to spy on received tx handler
@@ -110,7 +110,7 @@ describe('e2e_p2p_preferred_network', () => {
     p2pService.processCheckpointAttestationFromPeer = handleGossipedAttestationSpy;
   };
 
-  const mockFailedAuthHandler = (node: AztecNodeService) => {
+  const mockFailedAuthHandler = (node: FullAztecNodeService) => {
     const p2pService = (node.getP2P() as any).p2pService as P2PService;
     const peerManager = (p2pService as any).peerManager;
 

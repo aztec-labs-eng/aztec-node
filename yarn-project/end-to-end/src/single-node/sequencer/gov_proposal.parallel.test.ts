@@ -1,7 +1,7 @@
 import { NewGovernanceProposerPayloadAbi } from '@aztec-foundation/l1-artifacts/NewGovernanceProposerPayloadAbi';
 import { NewGovernanceProposerPayloadBytecode } from '@aztec-foundation/l1-artifacts/NewGovernanceProposerPayloadBytecode';
 
-import type { AztecNodeService } from '@aztec-labs/aztec-node';
+import type { FullAztecNodeService } from '@aztec-labs/aztec-node';
 import { NO_WAIT } from '@aztec-labs/aztec.js/contracts';
 import { waitForTx } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
@@ -221,7 +221,7 @@ describe('single-node/sequencer/gov_proposal', () => {
     // tx would still be observed as `checkpointed` regardless of the disabled blob client. With
     // all three shortcuts off the node has no choice but to rely on the blob client for sync.
     await aztecNodeAdmin!.setConfig({ skipPushProposedBlocksToArchiver: true });
-    ((aztecNodeAdmin as AztecNodeService).getBlobClient() as HttpBlobClient).setDisabled(true);
+    ((aztecNodeAdmin as FullAztecNodeService).getBlobClient() as HttpBlobClient).setDisabled(true);
     await sleep(1000);
     const lastBlockSynced = await aztecNode!.getBlockNumber();
     const lastCheckpointOnL1 = await rollup.getCheckpointNumber();

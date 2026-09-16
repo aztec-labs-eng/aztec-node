@@ -2,7 +2,7 @@ import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 import { FeeAssetHandlerAbi } from '@aztec-foundation/l1-artifacts';
 
 import { type InitialAccountData, generateSchnorrAccounts } from '@aztec-labs/accounts/testing';
-import { AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { FullAztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
 import { AztecAddress, EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { createLogger } from '@aztec-labs/aztec.js/log';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
@@ -65,8 +65,8 @@ export class FullProverTest extends SingleNodeTestContext {
     return this.proverAztecNode?.getProofVerifier();
   }
   provenAsset!: TokenContract;
-  private proverAztecNode!: AztecNodeService;
-  private simulatedProverAztecNode!: AztecNodeService;
+  private proverAztecNode!: FullAztecNodeService;
+  private simulatedProverAztecNode!: FullAztecNodeService;
   public l1Contracts!: DeployAztecL1ContractsReturnType;
   public proverAddress!: EthAddress;
   private testName: string;

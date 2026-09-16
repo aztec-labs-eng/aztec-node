@@ -1,7 +1,7 @@
 /**
  * Test fixtures and utilities to set up and run a test using multiple validators
  */
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import { type AztecNodeConfig, FullAztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
 import { range } from '@aztec-labs/foundation/array';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { withLoggerBindings } from '@aztec-labs/foundation/log/server';
@@ -44,8 +44,8 @@ export async function createNodes(
   metricsPort?: number,
   indexOffset = 0,
   validatorsPerNode = 1,
-): Promise<AztecNodeService[]> {
-  const nodePromises: Promise<AztecNodeService>[] = [];
+): Promise<FullAztecNodeService[]> {
+  const nodePromises: Promise<FullAztecNodeService>[] = [];
 
   for (let i = 0; i < numNodes; i++) {
     const index = indexOffset + i;
@@ -149,7 +149,7 @@ export async function createProverNode(
   genesis?: GenesisData,
   dataDirectory?: string,
   metricsPort?: number,
-): Promise<{ proverNode: AztecNodeService }> {
+): Promise<{ proverNode: FullAztecNodeService }> {
   const actorIndex = proverCounter++;
   return await withLoggerBindings({ actor: `prover-${actorIndex}` }, async () => {
     const proverNodePrivateKey = getPrivateKeyFromIndex(ATTESTER_PRIVATE_KEYS_START_INDEX + addressIndex)!;

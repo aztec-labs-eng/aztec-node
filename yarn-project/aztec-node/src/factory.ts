@@ -13,9 +13,15 @@ import { compactArray } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type KeyStore, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
-import { trySnapshotSync } from '@aztec-labs/node-lib/actions';
+import { trySnapshotSync, uploadSnapshot } from '@aztec-labs/node-lib/actions';
 import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec-labs/node-lib/factories';
-import { type P2PClientDeps, createP2PClient } from '@aztec-labs/p2p';
+import {
+  type P2P,
+  type P2PClientDeps,
+  createP2PClient,
+  createTxValidatorForAcceptingTxsOverRPC,
+  getDefaultAllowedSetupFunctions,
+} from '@aztec-labs/p2p';
 import { type ProverNode, type ProverNodeDeps, createProverNode } from '@aztec-labs/prover-node';
 import { createKeyStoreForProver } from '@aztec-labs/prover-node/config';
 import {
@@ -37,7 +43,7 @@ import {
   createSlasher,
 } from '@aztec-labs/slasher';
 import { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
-import { type ClientProtocolCircuitVerifier, tryStop } from '@aztec-labs/stdlib/interfaces/server';
+import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
 import { type DebugLogStore, InMemoryDebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
 import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import type { GenesisData } from '@aztec-labs/stdlib/world-state';
@@ -50,6 +56,7 @@ import {
   ValidatorClient,
   createProposalHandler,
   createValidatorClient,
+  validateKeyStoreConfiguration,
 } from '@aztec-labs/validator-client';
 import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
 import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/world-state';
@@ -57,7 +64,12 @@ import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
 import { NextBlockPredictor } from './aztec-node/next_block/index.js';
-import { AztecNodeService } from './aztec-node/server.js';
+import {
+  AztecNodeService,
+  type AztecNodeServiceDeps,
+  type ProofVerifiers,
+  type RpcTxAdmission,
+} from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
 
 /** Dependencies that can be injected when creating a node, mostly to override defaults in tests. */
@@ -79,6 +91,46 @@ export interface CreateAztecNodeOptions {
 }
 
 /**
+ * The subsystems {@link createAztecNodeService} assembles, with their concrete types. {@link AztecNodeServiceDeps}
+ * describes each collaborator by what the service calls on it; tests and tooling that drive a subsystem directly
+ * reach it through a {@link FullAztecNodeService}.
+ */
+export interface FullAztecNodeServiceDeps extends AztecNodeServiceDeps {
+  p2pClient: P2P;
+  sequencer: SequencerClient | undefined;
+  proverNode: ProverNode | undefined;
+  automineSequencer: AutomineSequencer | undefined;
+}
+
+/** A node assembled by {@link createAztecNodeService}, exposing its subsystems with their concrete types. */
+export class FullAztecNodeService extends AztecNodeService {
+  declare protected readonly p2pClient: P2P;
+  declare protected readonly sequencer: SequencerClient | undefined;
+  declare protected readonly proverNode: ProverNode | undefined;
+  declare protected readonly automineSequencer: AutomineSequencer | undefined;
+
+  constructor(deps: FullAztecNodeServiceDeps) {
+    super(deps);
+  }
+
+  public override getP2P(): P2P {
+    return this.p2pClient;
+  }
+
+  public override getSequencer(): SequencerClient | undefined {
+    return this.sequencer;
+  }
+
+  public override getAutomineSequencer(): AutomineSequencer | undefined {
+    return this.automineSequencer;
+  }
+
+  public override getProverNode(): ProverNode | undefined {
+    return this.proverNode;
+  }
+}
+
+/**
  * Initializes the Aztec Node, waiting for its components to sync.
  * @param inputConfig - The configuration to be used by the aztec node.
  * @returns A fully synced Aztec Node for use in development/testing.
@@ -87,7 +139,7 @@ export async function createAztecNodeService(
   inputConfig: AztecNodeConfig,
   deps: CreateAztecNodeDeps = {},
   options: CreateAztecNodeOptions = {},
-): Promise<AztecNodeService> {
+): Promise<FullAztecNodeService> {
   const config = { ...inputConfig }; // Copy the config so we dont mutate the input object
   const log = deps.logger ?? createLogger('node');
 
@@ -143,7 +195,7 @@ export async function createAztecNodeService(
     if (!keyStoreProvided && process.env.NODE_ENV !== 'test') {
       log.warn("Keystore created from env: it's recommended to use a file-based key store for production");
     }
-    ValidatorClient.validateKeyStoreConfiguration(keyStoreManager, log);
+    validateKeyStoreConfiguration(keyStoreManager, log);
   }
 
   // validate that the actual chain id matches that specified in configuration
@@ -227,18 +279,29 @@ export async function createAztecNodeService(
     // The synchronizer takes ownership of the native world-state from here
     const worldStateSynchronizer = await createWorldStateSynchronizer(config, archiver, nativeWs, telemetry);
     started.push(worldStateSynchronizer);
-    const useRealVerifiers = config.realProofs || config.debugForceTxProofVerification;
-    let peerProofVerifier: ClientProtocolCircuitVerifier;
-    let rpcProofVerifier: ClientProtocolCircuitVerifier;
-    if (useRealVerifiers) {
-      peerProofVerifier = await BatchChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer');
+    // Also what the node calls when `setConfig` flips `realProofs`, so a runtime switch builds the same verifiers.
+    const createProofVerifiers = async (realProofs: boolean): Promise<ProofVerifiers> => {
+      if (!realProofs) {
+        return {
+          peer: new TestCircuitVerifier(config.proverTestVerificationDelayMs),
+          rpc: new TestCircuitVerifier(config.proverTestVerificationDelayMs),
+        };
+      }
       const rpcVerifier = await BBCircuitVerifier.new(config);
-      rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, config.numConcurrentIVCVerifiers);
-    } else {
-      peerProofVerifier = new TestCircuitVerifier(config.proverTestVerificationDelayMs);
-      rpcProofVerifier = new TestCircuitVerifier(config.proverTestVerificationDelayMs);
-    }
+      return {
+        peer: await BatchChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer'),
+        rpc: new QueuedIVCVerifier(rpcVerifier, config.numConcurrentIVCVerifiers),
+      };
+    };
+    const { peer: peerProofVerifier, rpc: rpcProofVerifier } = await createProofVerifiers(
+      config.realProofs || config.debugForceTxProofVerification,
+    );
     started.push(peerProofVerifier, rpcProofVerifier);
+
+    const rpcTxAdmission: RpcTxAdmission = {
+      getDefaultAllowedSetupFunctions,
+      createTxValidator: createTxValidatorForAcceptingTxsOverRPC,
+    };
 
     let debugLogStore: DebugLogStore;
     if (!config.realProofs) {
@@ -648,7 +711,7 @@ export async function createAztecNodeService(
       }
     }
 
-    const node = new AztecNodeService({
+    const node = new FullAztecNodeService({
       config,
       p2pClient,
       blockSource: archiver,
@@ -679,6 +742,9 @@ export async function createAztecNodeService(
       debugLogStore,
       automineSequencer,
       avmSimulator,
+      rpcTxAdmission,
+      createProofVerifiers,
+      uploadSnapshot: location => uploadSnapshot(location, archiver, worldStateSynchronizer, config, log),
     });
 
     return node;

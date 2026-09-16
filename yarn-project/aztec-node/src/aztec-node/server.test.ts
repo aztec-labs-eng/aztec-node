@@ -17,7 +17,7 @@ import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { unfreeze } from '@aztec-labs/foundation/types';
 import { type KeyStore, KeystoreManager, RemoteSigner, type ValidatorKeyStore } from '@aztec-labs/node-keystore';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
-import type { P2P } from '@aztec-labs/p2p';
+import { type P2P, createTxValidatorForAcceptingTxsOverRPC, getDefaultAllowedSetupFunctions } from '@aztec-labs/p2p';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
 import type { GlobalVariableBuilder, Sequencer, SequencerClient } from '@aztec-labs/sequencer-client';
@@ -312,6 +312,7 @@ describe('aztec node', () => {
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
         rpcProofVerifier: new TestCircuitVerifier(),
+        rpcTxAdmission: { getDefaultAllowedSetupFunctions, createTxValidator: createTxValidatorForAcceptingTxsOverRPC },
       });
 
     node = createNode();
