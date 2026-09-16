@@ -9,6 +9,7 @@ import { type ApiSchemaFor, optional, schemas } from '../schemas/index.js';
 import { Tx } from '../tx/tx.js';
 import { TxHash } from '../tx/tx_hash.js';
 import { MAX_RPC_TXS_LEN } from './api_limit.js';
+import type { AztecNodeAdminConfig } from './aztec-node-admin.js';
 import { type GetTxByHashOptions, GetTxByHashOptionsSchema } from './get_tx_by_hash_options.js';
 
 export type PeerInfo =
@@ -94,6 +95,7 @@ export type ProposalsForSlot = {
   checkpointProposals: CheckpointProposalCore[];
 };
 
+/** The p2p client as the node and the components running alongside it see it. */
 export interface P2PClient extends P2PApi {
   /** Manually adds checkpoint attestations to the p2p client attestation pool. */
   addOwnCheckpointAttestations(attestations: CheckpointAttestation[]): Promise<void>;
@@ -103,6 +105,30 @@ export interface P2PClient extends P2PApi {
 
   /** Returns whether a checkpoint proposal was retained for a slot. */
   hasCheckpointProposalForSlot(slot: SlotNumber): Promise<boolean>;
+
+  /** Verifies `tx` and, if valid, adds it to the local tx pool and forwards it to peers. */
+  sendTx(tx: Tx): Promise<void>;
+
+  /** Returns a tx from the pool by hash; `includeProof: false` skips loading its proof from the DB. */
+  getTxByHashFromPool(txHash: TxHash, opts?: { includeProof?: boolean }): Promise<Tx | undefined>;
+
+  /** Returns txs from the pool by hash, `undefined` for those not in the pool. */
+  getTxsByHashFromPool(txHashes: TxHash[], opts?: { includeProof?: boolean }): Promise<(Tx | undefined)[]>;
+
+  /** Returns whether the pool flags `txHash` as pending, mined or deleted, or `undefined` if it is unknown. */
+  getTxStatus(txHash: TxHash): Promise<'pending' | 'mined' | 'deleted' | undefined>;
+
+  /** Iterates the pending txs in the pool; `includeProof: false` skips loading their proofs from the DB. */
+  iteratePendingTxs(opts?: { includeProof?: boolean }): AsyncIterableIterator<Tx>;
+
+  /** Whether the client is ready to accept txs. */
+  isReady(): boolean;
+
+  /** Applies the p2p-relevant part of a node config change made at runtime. */
+  updateP2PConfig(config: Partial<AztecNodeAdminConfig>): Promise<void>;
+
+  /** Clears the client's db. */
+  clear(): Promise<void>;
 }
 
 const MAX_PROPOSALS_FOR_SLOT_RPC_LEN = 256;

@@ -1,6 +1,37 @@
+import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
+
+import type { Offense, ProposerSlashAction } from '../slashing/index.js';
+
+/** Common interface for slasher clients used by the Aztec node. */
+export interface SlasherClientInterface {
+  /** Start the slasher client */
+  start(): Promise<void>;
+
+  /** Stop the slasher client */
+  stop(): Promise<void>;
+
+  /** Gather offenses for a given round, defaults to current. */
+  gatherOffensesForRound(round?: bigint): Promise<Offense[]>;
+
+  /** Returns all offenses */
+  getOffenses(): Promise<Offense[]>;
+
+  /** Update the configuration. */
+  updateConfig(config: Partial<SlasherConfig>): void;
+
+  /**
+   * Get the actions the proposer should take for slashing.
+   * @param slotNumber - The current slot number
+   * @returns The actions to take
+   */
+  getProposerActions(slotNumber: SlotNumber): Promise<ProposerSlashAction[]>;
+
+  /** Returns the current config */
+  getConfig(): SlasherConfig;
+}
 
 export interface SlasherConfig {
   slashOverridePayload?: EthAddress;

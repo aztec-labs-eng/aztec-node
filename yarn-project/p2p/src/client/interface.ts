@@ -118,32 +118,10 @@ export type P2P = P2PClient & {
   registerCheckpointAttestationCallback(callback: P2PCheckpointAttestationCallback): void;
 
   /**
-   * Verifies the 'tx' and, if valid, adds it to local tx pool and forwards it to other peers.
-   * @param tx - The transaction.
-   **/
-  sendTx(tx: Tx): Promise<void>;
-
-  /**
    * Handles failed transaction execution by removing txs from the pool.
    * @param txHashes - Hashes of the transactions that failed execution.
    **/
   handleFailedExecution(txHashes: TxHash[]): Promise<void>;
-
-  /**
-   * Returns a transaction in the transaction pool by its hash.
-   * @param txHash  - Hash of tx to return.
-   * @param opts - Set `includeProof: false` to skip loading the tx proof from the DB.
-   * @returns A single tx or undefined.
-   */
-  getTxByHashFromPool(txHash: TxHash, opts?: { includeProof?: boolean }): Promise<Tx | undefined>;
-
-  /**
-   * Returns transactions in the transaction pool by hash.
-   * @param txHashes  - Hashes of txs to return.
-   * @param opts - Set `includeProof: false` to skip loading tx proofs from the DB.
-   * @returns An array of txs or undefined.
-   */
-  getTxsByHashFromPool(txHashes: TxHash[], opts?: { includeProof?: boolean }): Promise<(Tx | undefined)[]>;
 
   /**
    * Checks if transactions exist in the pool
@@ -160,26 +138,10 @@ export type P2P = P2PClient & {
   getArchivedTxByHash(txHash: TxHash): Promise<Tx | undefined>;
 
   /**
-   * Returns whether the given tx hash is flagged as pending, mined, or deleted.
-   * @param txHash - Hash of the tx to query.
-   * @returns Pending, mined, or deleted depending on its status, or undefined if not found.
-   */
-  getTxStatus(txHash: TxHash): Promise<'pending' | 'mined' | 'deleted' | undefined>;
-
-  /**
-   * Returns an iterator over pending txs on the mempool.
-   * Set `includeProof: false` to skip loading tx proofs from the DB.
-   */
-  iteratePendingTxs(opts?: { includeProof?: boolean }): AsyncIterableIterator<Tx>;
-
-  /**
    * Returns an iterator over pending txs that have been in the pool long enough to be eligible for block building.
    * Set `includeProof: false` to skip loading tx proofs from the DB.
    */
   iterateEligiblePendingTxs(opts?: { includeProof?: boolean }): AsyncIterableIterator<Tx>;
-
-  /** Returns the number of pending txs in the mempool. */
-  getPendingTxCount(): Promise<number>;
 
   /**
    * Returns whether at least `minCount` pending txs have been in the pool long enough to be eligible for block
@@ -217,12 +179,6 @@ export type P2P = P2PClient & {
   stop(): Promise<void>;
 
   /**
-   * Indicates if the p2p client is ready for transaction submission.
-   * @returns A boolean flag indicating readiness.
-   */
-  isReady(): boolean;
-
-  /**
    * Returns the current status of the p2p client.
    */
   getStatus(): Promise<P2PSyncState>;
@@ -245,9 +201,6 @@ export type P2P = P2PClient & {
    * @throws InvalidBlockProposalTxsError - If any tx fails minimum integrity validation.
    */
   validateTxsReceivedInBlockProposal(txs: Tx[]): Promise<void>;
-
-  /** Clears the db. */
-  clear(): Promise<void>;
 
   addReqRespSubProtocol(subProtocol: ReqRespSubProtocol, handler: ReqRespSubProtocolHandler): Promise<void>;
 

@@ -56,6 +56,7 @@ import {
   ValidatorClient,
   createProposalHandler,
   createValidatorClient,
+  validateKeyStoreConfiguration,
 } from '@aztec-labs/validator-client';
 import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
 import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/world-state';
@@ -194,7 +195,7 @@ export async function createAztecNodeService(
     if (!keyStoreProvided && process.env.NODE_ENV !== 'test') {
       log.warn("Keystore created from env: it's recommended to use a file-based key store for production");
     }
-    ValidatorClient.validateKeyStoreConfiguration(keyStoreManager, log);
+    validateKeyStoreConfiguration(keyStoreManager, log);
   }
 
   // validate that the actual chain id matches that specified in configuration

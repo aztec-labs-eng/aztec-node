@@ -1,4 +1,4 @@
-import { type AztecNodeConfig, AztecNodeService, NextBlockPredictor } from '@aztec-labs/aztec-node/server';
+import { AztecNodeService, type AztecNodeServiceConfig, NextBlockPredictor } from '@aztec-labs/aztec-node/server';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -48,7 +48,7 @@ export class TXEStateMachine {
     noteStore: NoteStore,
   ) {
     const synchronizer = await TXESynchronizer.create();
-    const aztecNodeConfig = {} as AztecNodeConfig;
+    const aztecNodeConfig = {} as AztecNodeServiceConfig;
 
     const log = createLogger('txe_node');
     const globalVariableBuilder = new TXEGlobalVariablesBuilder();

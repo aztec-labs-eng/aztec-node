@@ -3,4 +3,3 @@
 // the service instead of reaching every subsystem `createAztecNodeService` knows how to build.
 export * from './aztec-node/server.js';
 export { NextBlockPredictor } from './aztec-node/next_block/index.js';
-export type { AztecNodeConfig } from './aztec-node/config.js';
