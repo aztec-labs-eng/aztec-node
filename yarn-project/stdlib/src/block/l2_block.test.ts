@@ -43,4 +43,16 @@ describe('L2Block', () => {
     const emptyBlockHash = await emptyBlock.hash();
     expect(emptyBlockHash.equals(GENESIS_BLOCK_HEADER_HASH)).toBeTruthy();
   });
+
+  it.each([2 ** 32, 2 ** 42])('round trips a block whose tree indices are %p', async index => {
+    const block = await L2Block.random(BlockNumber(42));
+    block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = index;
+    block.header.state.partial.noteHashTree.nextAvailableLeafIndex = index;
+    block.header.state.partial.nullifierTree.nextAvailableLeafIndex = index;
+    block.header.state.partial.publicDataTree.nextAvailableLeafIndex = index;
+
+    expect(L2Block.fromBuffer(block.toBuffer())).toEqual(block);
+    expect(L2Block.schema.parse(JSON.parse(jsonStringify(block)))).toEqual(block);
+    expect(block.toBlockBlobData().blockEndStateField.noteHashNextAvailableLeafIndex).toBe(index);
+  });
 });

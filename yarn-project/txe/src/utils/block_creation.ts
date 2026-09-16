@@ -3,7 +3,12 @@ import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-lab
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Body, L2Block } from '@aztec-labs/stdlib/block';
-import { AppendOnlyTreeSnapshot, MerkleTreeId, type MerkleTreeWriteOperations } from '@aztec-labs/stdlib/trees';
+import {
+  AppendOnlyTreeSnapshot,
+  MerkleTreeId,
+  type MerkleTreeWriteOperations,
+  TreeLeafIndex,
+} from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, TxEffect } from '@aztec-labs/stdlib/tx';
 
 /**
@@ -46,7 +51,10 @@ export async function makeTXEBlockHeader(
   const archiveInfo = await worldTrees.getTreeInfo(MerkleTreeId.ARCHIVE);
 
   return BlockHeader.from({
-    lastArchive: new AppendOnlyTreeSnapshot(new Fr(archiveInfo.root), Number(archiveInfo.size)),
+    lastArchive: new AppendOnlyTreeSnapshot(
+      new Fr(archiveInfo.root),
+      TreeLeafIndex.fromBigInt(BigInt(archiveInfo.size)),
+    ),
     spongeBlobHash: Fr.ZERO,
     txEffectsTreeRoot: await new Body(txEffects).computeTxEffectsTreeRoot(),
     state: stateReference,
@@ -81,7 +89,10 @@ export async function makeTXEBlock(
 
   // Get the new archive state after updating
   const newArchiveInfo = await worldTrees.getTreeInfo(MerkleTreeId.ARCHIVE);
-  const newArchive = new AppendOnlyTreeSnapshot(new Fr(newArchiveInfo.root), Number(newArchiveInfo.size));
+  const newArchive = new AppendOnlyTreeSnapshot(
+    new Fr(newArchiveInfo.root),
+    TreeLeafIndex.fromBigInt(BigInt(newArchiveInfo.size)),
+  );
 
   // L2Block requires checkpointNumber and indexWithinCheckpoint.
   // TXE uses 1-block-per-checkpoint for testing simplicity, so we can use block number as checkpoint number.

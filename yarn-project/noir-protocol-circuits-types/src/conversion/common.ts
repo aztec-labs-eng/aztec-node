@@ -42,6 +42,7 @@ import {
   AppendOnlyTreeSnapshot,
   type NullifierLeafPreimage,
   type PublicDataTreeLeafPreimage,
+  TreeLeafIndex,
 } from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,
@@ -364,7 +365,7 @@ export function mapClaimedLengthArrayToNoir<T extends Serializable, N extends nu
 export function mapAppendOnlyTreeSnapshotFromNoir(snapshot: AppendOnlyTreeSnapshotNoir): AppendOnlyTreeSnapshot {
   return new AppendOnlyTreeSnapshot(
     mapFieldFromNoir(snapshot.root),
-    mapNumberFromNoir(snapshot.next_available_leaf_index),
+    TreeLeafIndex.fromField(mapFieldFromNoir(snapshot.next_available_leaf_index)),
   );
 }
 

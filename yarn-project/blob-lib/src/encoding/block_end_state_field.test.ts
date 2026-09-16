@@ -54,4 +54,16 @@ describe('block end state field', () => {
       encoded.toString(),
     );
   });
+
+  it.each([2 ** 32, 2 ** 42])('encodes and decodes leaf index %p exactly', index => {
+    const blockEndStateField = {
+      l1ToL2MessageNextAvailableLeafIndex: Math.min(index, 2 ** L1_TO_L2_MSG_TREE_HEIGHT - 1),
+      noteHashNextAvailableLeafIndex: Math.min(index, 2 ** NOTE_HASH_TREE_HEIGHT - 1),
+      nullifierNextAvailableLeafIndex: Math.min(index, 2 ** NULLIFIER_TREE_HEIGHT - 1),
+      publicDataNextAvailableLeafIndex: Math.min(index, 2 ** PUBLIC_DATA_TREE_HEIGHT - 1),
+      totalManaUsed: 0n,
+    };
+
+    expect(decodeBlockEndStateField(encodeBlockEndStateField(blockEndStateField))).toEqual(blockEndStateField);
+  });
 });

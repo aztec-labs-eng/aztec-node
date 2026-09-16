@@ -26,7 +26,9 @@ import type { ProverBrokerConfig } from '../config.js';
 import type { ProvingBrokerDatabase } from '../proving_broker_database.js';
 
 class SingleEpochDatabase {
-  public static readonly SCHEMA_VERSION = 2;
+  // Version 3: proof inputs saved through the file store hold tree snapshots whose next-available leaf index is now
+  // a uint64, so proof inputs written by an earlier node no longer decode.
+  public static readonly SCHEMA_VERSION = 3;
 
   private jobs: AztecAsyncMap<ProvingJobId, string>;
   private jobResults: AztecAsyncMap<ProvingJobId, string>;

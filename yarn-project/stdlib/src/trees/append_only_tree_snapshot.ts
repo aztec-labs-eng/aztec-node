@@ -1,11 +1,11 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { schemas } from '@aztec-labs/foundation/schemas';
-import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec-labs/foundation/serialize';
+import { BufferReader, BufferSink, FieldReader } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { inspect } from 'util';
 import { z } from 'zod';
 
-import type { UInt32 } from '../types/shared.js';
+import { TreeLeafIndex, TreeLeafIndexSchema } from './tree_leaf_index.js';
 
 /**
  * Snapshot of an append only tree.
@@ -27,20 +27,22 @@ export class AppendOnlyTreeSnapshot {
      *       TLDR: We need to store the next available leaf index to ensure that the "append only" property was
      *             preserved when verifying state transitions.
      */
-    public nextAvailableLeafIndex: UInt32,
-  ) {}
+    public nextAvailableLeafIndex: TreeLeafIndex,
+  ) {
+    TreeLeafIndex(nextAvailableLeafIndex);
+  }
 
   static get schema() {
     return z
       .object({
         root: schemas.Fr,
-        nextAvailableLeafIndex: schemas.UInt32,
+        nextAvailableLeafIndex: TreeLeafIndexSchema,
       })
       .transform(({ root, nextAvailableLeafIndex }) => new AppendOnlyTreeSnapshot(root, nextAvailableLeafIndex));
   }
 
   getSize() {
-    return this.root.size + 4;
+    return this.root.size + 8;
   }
 
   toBuffer(): Buffer;
@@ -49,7 +51,8 @@ export class AppendOnlyTreeSnapshot {
     if (!sink) {
       return BufferSink.serialize(this);
     }
-    serializeToSink(sink, this.root, this.nextAvailableLeafIndex);
+    this.root.toBuffer(sink);
+    sink.writeUInt64(BigInt(this.nextAvailableLeafIndex));
   }
 
   toFields(): Fr[] {
@@ -62,7 +65,7 @@ export class AppendOnlyTreeSnapshot {
 
   static fromBuffer(buffer: Buffer | BufferReader): AppendOnlyTreeSnapshot {
     const reader = BufferReader.asReader(buffer);
-    return new AppendOnlyTreeSnapshot(Fr.fromBuffer(reader), reader.readNumber());
+    return new AppendOnlyTreeSnapshot(Fr.fromBuffer(reader), TreeLeafIndex.fromBigInt(reader.readUInt64()));
   }
 
   static fromString(str: string): AppendOnlyTreeSnapshot {
@@ -72,7 +75,7 @@ export class AppendOnlyTreeSnapshot {
   static fromFields(fields: Fr[] | FieldReader): AppendOnlyTreeSnapshot {
     const reader = FieldReader.asReader(fields);
 
-    return new AppendOnlyTreeSnapshot(reader.readField(), Number(reader.readField().toBigInt()));
+    return new AppendOnlyTreeSnapshot(reader.readField(), TreeLeafIndex.fromField(reader.readField()));
   }
 
   toAbi(): [`0x${string}`, number] {
@@ -84,14 +87,15 @@ export class AppendOnlyTreeSnapshot {
   }
 
   /**
-   * Creates an AppendOnlyTreeSnapshot instance from a plain object without Zod validation.
-   * This method is optimized for performance and skips validation, making it suitable
-   * for deserializing trusted data (e.g., from C++ via MessagePack).
+   * Creates an AppendOnlyTreeSnapshot instance from a plain object without Zod parsing.
+   * This method is optimized for performance and skips coercion, making it suitable
+   * for deserializing trusted data (e.g., from C++ via MessagePack). The leaf index is still
+   * range-checked, since a value outside the safe integer range cannot be represented.
    * @param obj - Plain object containing AppendOnlyTreeSnapshot fields
    * @returns An AppendOnlyTreeSnapshot instance
    */
   static fromPlainObject(obj: any): AppendOnlyTreeSnapshot {
-    return new AppendOnlyTreeSnapshot(Fr.fromPlainObject(obj.root), obj.nextAvailableLeafIndex);
+    return new AppendOnlyTreeSnapshot(Fr.fromPlainObject(obj.root), TreeLeafIndex(obj.nextAvailableLeafIndex));
   }
 
   isEmpty(): boolean {

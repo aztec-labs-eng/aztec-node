@@ -685,8 +685,8 @@ function makeFeeRecipient(seed = 1) {
  * @returns An append only tree snapshot.
  */
 export function makeAppendOnlyTreeSnapshot(seed = 1): AppendOnlyTreeSnapshot {
-  // Constrain nextAvailableLeafIndex to u32 range
-  const nextAvailableLeafIndex = seed % 2 ** 32;
+  // Constrain nextAvailableLeafIndex to the range a 42-level tree can produce
+  const nextAvailableLeafIndex = seed % 2 ** 43;
   return new AppendOnlyTreeSnapshot(fr(seed), nextAvailableLeafIndex);
 }
 

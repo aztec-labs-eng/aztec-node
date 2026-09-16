@@ -31,7 +31,7 @@ describe('BlockHeader', () => {
     const header = makeBlockHeader(seed);
     const hash = await header.hash();
     expect(hash.toString()).toMatchInlineSnapshot(
-      `"0x2bc57f4ce71a821fbe04fe627cd6b17ef566160f8f25b4f6a10cc961bcaba18b"`,
+      `"0x1e79dab28d2f5be3414dcb6f177bffd2e61f258f85761cceb34eab5dbf205e1e"`,
     );
   });
 

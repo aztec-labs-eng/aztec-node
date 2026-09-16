@@ -45,6 +45,7 @@ import {
   MerkleTreeId,
   NullifierLeafPreimage,
   PublicDataTreeLeafPreimage,
+  TreeLeafIndex,
   getTreeHeight,
 } from '@aztec-labs/stdlib/trees';
 import {
@@ -380,7 +381,7 @@ export async function getRootTreeSiblingPath<TID extends MerkleTreeId>(treeId: T
 
 export async function getTreeSnapshot(id: MerkleTreeId, db: MerkleTreeReadOperations): Promise<AppendOnlyTreeSnapshot> {
   const treeInfo = await db.getTreeInfo(id);
-  return new AppendOnlyTreeSnapshot(Fr.fromBuffer(treeInfo.root), Number(treeInfo.size));
+  return new AppendOnlyTreeSnapshot(Fr.fromBuffer(treeInfo.root), TreeLeafIndex.fromBigInt(BigInt(treeInfo.size)));
 }
 
 export function makeEmptyMembershipWitness<N extends number>(height: N) {
