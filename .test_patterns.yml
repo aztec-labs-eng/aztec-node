@@ -43,42 +43,10 @@ flake_groups:
     flake_error_threshold: 5
 
 tests:
-  - regex: "aztec-nr noir_aztec test::helpers::test_environment::test::events::"
-    error_regex: "Failed to solve brillig function"
-    owners:
-      - *nico
-
   # Nightly GKE tests
   - regex: "spartan/bootstrap.sh"
     owners:
       - *alex
-
-  # aztec-up
-  - regex: "aztec-up/scripts/run_test.sh"
-    error_regex: "Is the docker daemon running"
-    owners:
-      - *charlie
-  - regex: "aztec-up/scripts/run_test.sh amm_flow"
-    error_regex: "code: 124"
-    owners:
-      - *esau
-  - regex: "aztec-up/scripts/run_test.sh amm_flow"
-    error_regex: "Sumcheck failed"
-    owners:
-      - *luke
-  - regex: "aztec-up/scripts/run_test.sh bridge_and_claim"
-    error_regex: "Cannot satisfy constraint"
-    owners:
-      - *adam
-
-  - regex: "tests/browser.spec.ts"
-    error_regex: "Error: locator\\.click: Test timeout of"
-    owners:
-      - *saleel
-
-  - regex: "amm_flow.sh"
-    owners:
-      - *grego
 
   # Slack testing.
   - regex: "nonsense to match"
