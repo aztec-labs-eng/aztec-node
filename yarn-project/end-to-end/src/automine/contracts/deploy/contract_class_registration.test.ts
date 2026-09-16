@@ -16,6 +16,7 @@ import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { writeTestData } from '@aztec-labs/foundation/testing/files';
 import { StatefulTestContract } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
+import { BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts/providers/bundle';
 import type { ContractClassIdPreimage } from '@aztec-labs/stdlib/contract';
 import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import { jest } from '@jest/globals';
@@ -79,6 +80,21 @@ describe('automine/contracts/deploy/contract_class_registration', () => {
       expect(registeredClass!.artifactHash.toString()).toEqual(contractClass.artifactHash.toString());
       expect(registeredClass!.privateFunctionsRoot.toString()).toEqual(contractClass.privateFunctionsRoot.toString());
       expect(registeredClass!.packedBytecode.toString('hex')).toEqual(contractClass.packedBytecode.toString('hex'));
+    });
+
+    it('rejects re-publishing a bundled protocol contract class as a duplicate nullifier', async () => {
+      // The genesis nullifier tree seeds the class-registration nullifier of every bundled protocol contract, so
+      // publishing one through the normal path recomputes the same class id and pushes a nullifier that already
+      // exists. Without that seeding the publish succeeds and the node ends up with a second registration of a class
+      // it already preloaded at block 0.
+      const provider = new BundledProtocolContractsProvider();
+      const { artifact: feeJuiceArtifact } = await provider.getProtocolContractArtifact('FeeJuice');
+      const feeJuiceClass = await getContractClassFromArtifact(feeJuiceArtifact);
+      expect(await aztecNode.getContractClass(feeJuiceClass.id)).toBeDefined();
+
+      logger.info(`Attempting to re-publish bundled protocol class ${feeJuiceClass.id.toString()}`);
+      const interaction = await publishContractClass(wallet, feeJuiceArtifact);
+      await expect(interaction.send({ from: defaultAccountAddress })).rejects.toThrow(DUPLICATE_NULLIFIER_ERROR);
     });
   });
 

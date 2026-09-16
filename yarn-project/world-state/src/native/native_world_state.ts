@@ -4,6 +4,7 @@ import { fromEntries, padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { DEFAULT_GENESIS_DATA } from '@aztec-labs/protocol-contracts';
 import type { L2Block } from '@aztec-labs/stdlib/block';
 import { DatabaseVersionManager } from '@aztec-labs/stdlib/database-version/manager';
 import type {
@@ -14,7 +15,7 @@ import type {
 import type { SnapshotDataKeys } from '@aztec-labs/stdlib/snapshots';
 import { MerkleTreeId, NullifierLeaf, type NullifierLeafPreimage, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
-import { EMPTY_GENESIS_DATA, type GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
+import { type GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import assert from 'assert/strict';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
@@ -51,7 +52,7 @@ export class NativeWorldStateService implements MerkleTreeDatabase {
     protected instance: NativeWorldStateInstance,
     protected readonly worldStateInstrumentation: WorldStateInstrumentation,
     protected readonly log: Logger,
-    private readonly genesis: GenesisData = EMPTY_GENESIS_DATA,
+    private readonly genesis: GenesisData = DEFAULT_GENESIS_DATA,
     private readonly cleanup = () => Promise.resolve(),
     /** Factory to recreate a fresh IpcWorldState after clear(). */
     private readonly recreateInstance?: () => Promise<NativeWorldStateInstance>,
@@ -61,7 +62,7 @@ export class NativeWorldStateService implements MerkleTreeDatabase {
     rollupAddress: EthAddress,
     dataDir: string,
     wsTreeMapSizes: WorldStateTreeMapSizes,
-    genesis: GenesisData = EMPTY_GENESIS_DATA,
+    genesis: GenesisData = DEFAULT_GENESIS_DATA,
     instrumentation = new WorldStateInstrumentation(getTelemetryClient()),
     bindings?: LoggerBindings,
     cleanup = () => Promise.resolve(),
@@ -103,7 +104,7 @@ export class NativeWorldStateService implements MerkleTreeDatabase {
 
   static async tmp(
     cleanupTmpDir = true,
-    genesis: GenesisData = EMPTY_GENESIS_DATA,
+    genesis: GenesisData = DEFAULT_GENESIS_DATA,
     instrumentation = new WorldStateInstrumentation(getTelemetryClient()),
     bindings?: LoggerBindings,
     threads?: number,
@@ -159,7 +160,7 @@ export class NativeWorldStateService implements MerkleTreeDatabase {
   }
 
   static ephemeral(
-    genesis: GenesisData = EMPTY_GENESIS_DATA,
+    genesis: GenesisData = DEFAULT_GENESIS_DATA,
     instrumentation = new WorldStateInstrumentation(getTelemetryClient()),
     bindings?: LoggerBindings,
   ): Promise<NativeWorldStateService> {
@@ -174,7 +175,7 @@ export class NativeWorldStateService implements MerkleTreeDatabase {
     wsdbBackend: ConstructorParameters<typeof IpcWorldState>[0],
     instrumentation = new WorldStateInstrumentation(getTelemetryClient()),
     bindings?: LoggerBindings,
-    genesis: GenesisData = EMPTY_GENESIS_DATA,
+    genesis: GenesisData = DEFAULT_GENESIS_DATA,
     cleanup = () => Promise.resolve(),
     recreateInstance?: () => Promise<NativeWorldStateInstance>,
   ): Promise<NativeWorldStateService> {

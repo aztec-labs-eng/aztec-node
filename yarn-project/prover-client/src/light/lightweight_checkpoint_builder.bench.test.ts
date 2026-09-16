@@ -4,7 +4,7 @@ import { timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
-import { ProtocolContractsList } from '@aztec-labs/protocol-contracts';
+import { DEFAULT_GENESIS_DATA, ProtocolContractsList } from '@aztec-labs/protocol-contracts';
 import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
 import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -44,6 +44,7 @@ describe('LightweightCheckpointBuilder benchmarks', () => {
     feePayerBalance = new Fr(10n ** 20n);
     const feePayerSlot = await computeFeePayerBalanceLeafSlot(feePayer);
     const genesis: GenesisData = {
+      ...DEFAULT_GENESIS_DATA,
       prefilledPublicData: [new PublicDataTreeLeaf(feePayerSlot, feePayerBalance)],
       genesisTimestamp: 0n,
     };

@@ -64,6 +64,16 @@ export function updateProtocolCircuitSampleInputs(circuitName: string, value: st
   logger(`Updated test data in ${targetFile} for ${circuitName}`);
 }
 
+/**
+ * Resolves the output path for an l1-contracts test fixture. The `l1-contracts` project lives in the foundation
+ * repository, which is not an ancestor of this checkout, so regenerating fixtures from here requires pointing
+ * `AZTEC_L1_FIXTURES_DIR` at `l1-contracts/test/fixtures` in the foundation tree. The fallback is the historical path
+ * relative to the running package's working directory.
+ */
+export function getL1FixturePath(fileName: string) {
+  return join(process.env.AZTEC_L1_FIXTURES_DIR ?? '../../l1-contracts/test/fixtures', fileName);
+}
+
 export function getPathToFile(targetFileFromRepoRoot: string) {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../');
   if (!existsSync(join(repoRoot, 'CODEOWNERS'))) {
