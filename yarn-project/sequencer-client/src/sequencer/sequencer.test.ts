@@ -347,6 +347,17 @@ describe('sequencer', () => {
       getProposedCheckpointData: mockFn().mockResolvedValue(undefined),
     });
 
+    // Composed from the two halves so tests can keep steering them independently; the archiver serves
+    // this from one atomic read.
+    l2BlockSource.getL2Frontier.mockImplementation(async () => ({
+      tips: await l2BlockSource.getL2Tips(),
+      proposedCheckpoint: await l2BlockSource.getProposedCheckpointData(),
+      l1SyncPoint: undefined,
+      latestBlockHeader: undefined,
+      checkpointedCheckpoint: undefined,
+      pendingChainValidationStatus: await l2BlockSource.getPendingChainValidationStatus(),
+    }));
+
     l1ToL2MessageSource = mock<L1ToL2MessageSource>({
       getL2Tips: mockFn().mockResolvedValue({
         proposed: { number: lastBlockNumber, hash },
