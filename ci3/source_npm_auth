@@ -47,7 +47,7 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
   npm_auth_npmrc=$(mktemp)
   (
     umask 077
-    if [ "$NPM_REGISTRY" != "$npm_auth_npmjs" ]; then
+    if ! is_npmjs "$NPM_REGISTRY"; then
       # Route only the scopes we build. Everything else — the @aztec/viem fork included — resolves
       # from the default registry, so nothing has to be mirrored into the private one.
       echo "@aztec-foundation:registry=$npm_auth_registry"
@@ -70,7 +70,7 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
   # registry: pointing the scopes at npmjs is where yarn already resolves them from. The file is
   # written wholesale, so a release runs in its own container or on a machine that does not keep
   # yarn settings there.
-  if [ "$NPM_REGISTRY" != "$npm_auth_npmjs" ]; then
+  if ! is_npmjs "$NPM_REGISTRY"; then
     # Yarn takes the auth scheme from the key: npmAuthToken sends a bearer token, npmAuthIdent
     # base64s a user:password. The value is the same variable either way.
     npm_auth_yarn_key=npmAuthIdent
