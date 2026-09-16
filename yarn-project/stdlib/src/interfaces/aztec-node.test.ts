@@ -213,6 +213,24 @@ describe('AztecNodeApiSchema', () => {
   it('getBlock', async () => {
     const response = await context.client.getBlock(BlockNumber(1));
     expect(response).toBeUndefined();
+
+    // A client built against a later version of the API sends fields this one has never heard of, in the selector
+    // and in the options alike. The handler is served the request without them rather than the call being refused.
+    await context.client.getBlock(
+      { number: BlockNumber(1), futureOption: true } as unknown as BlockParameter,
+      {
+        includeTransactions: true,
+        futureOption: true,
+      } as BlockIncludeOptions,
+    );
+    expect(handler.lastGetBlockArgs).toEqual([{ number: BlockNumber(1) }, { includeTransactions: true }]);
+
+    // An invalid value for a key it does know still fails, whatever else rides along.
+    await expect(
+      context.client.getBlock({ number: -1, futureOption: true } as unknown as BlockParameter),
+    ).rejects.toThrow();
+    // So does an object left naming no block at all.
+    await expect(context.client.getBlock({ futureOption: true } as unknown as BlockParameter)).rejects.toThrow();
   });
 
   it('getBlockData', async () => {
@@ -677,6 +695,9 @@ function mockTxEffectMembershipWitness(): TxEffectMembershipWitness {
 }
 
 class MockAztecNode implements AztecNode {
+  /** What the last `getBlock` call was handed after the schema parsed it. */
+  public lastGetBlockArgs?: [BlockParameter, BlockIncludeOptions | undefined];
+
   public validatorStats: ValidatorsStats | undefined;
   public singleValidatorStats: SingleValidatorStats | undefined;
   public lastReferenceBlock: BlockParameter | undefined;
@@ -724,9 +745,10 @@ class MockAztecNode implements AztecNode {
   }
 
   getBlock<Opts extends BlockIncludeOptions = {}>(
-    _param: BlockParameter,
-    _options?: Opts,
+    param: BlockParameter,
+    options?: Opts,
   ): Promise<BlockResponse<Opts> | undefined> {
+    this.lastGetBlockArgs = [param, options];
     return Promise.resolve(undefined);
   }
 

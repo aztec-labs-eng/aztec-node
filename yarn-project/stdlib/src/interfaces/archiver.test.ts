@@ -405,6 +405,18 @@ describe('BlockQuerySchema', () => {
     expect(BlockQuerySchema.safeParse({ number: 1, onlyCheckpointed: true }).success).toBe(false);
     expect(BlockQuerySchema.safeParse({ tag: 'checkpointed', onlyCheckpointed: true }).success).toBe(false);
   });
+
+  it('rejects an anchor: this API names a block one way', () => {
+    // The node RPC accepts `{ number, hash }` and reduces it to a hash before the archiver is read, so an anchor
+    // reaching here would be resolved by height and lose the fork its hash pins.
+    const hash = BlockHash.fromBuffer(Buffer.alloc(32, 1)).toString();
+    expect(BlockQuerySchema.safeParse({ number: 1, hash }).success).toBe(false);
+  });
+
+  it('drops a key it does not know', () => {
+    expect(BlockQuerySchema.parse({ number: 1, futureOption: true })).toEqual({ number: BlockNumber(1) });
+    expect(BlockQuerySchema.safeParse({ futureOption: true }).success).toBe(false);
+  });
 });
 
 describe('BlocksQuerySchema', () => {
@@ -451,6 +463,19 @@ describe('CheckpointsQuerySchema', () => {
     const limit = MAX_RPC_CHECKPOINTS_DATA_LEN + 1;
     expect(CheckpointsQuerySchema.safeParse({ from: 1, limit }).success).toBe(false);
     expect(CheckpointsQuerySchema.safeParse({ fromSlot: 1, limit }).success).toBe(false);
+  });
+
+  it('drops a key it does not know while still requiring the ones it does', () => {
+    expect(CheckpointsQuerySchema.parse({ from: 1, limit: 10, futureOption: true })).toEqual({
+      from: CheckpointNumber(1),
+      limit: 10,
+    });
+    expect(CheckpointsQuerySchema.safeParse({ from: 1, futureOption: true }).success).toBe(false);
+  });
+
+  it('rejects a range named two ways at once', () => {
+    expect(CheckpointsQuerySchema.safeParse({ from: 1, limit: 10, epoch: 5 }).success).toBe(false);
+    expect(CheckpointsQuerySchema.safeParse({ from: 1, fromSlot: 1, limit: 10 }).success).toBe(false);
   });
 });
 
