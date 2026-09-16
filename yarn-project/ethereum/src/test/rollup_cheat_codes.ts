@@ -1,6 +1,6 @@
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
-import { OutboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { type FeeHeader, OutboxContract, RollupContract, TempCheckpointLogField } from '@aztec-labs/ethereum/contracts';
 import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
@@ -329,6 +329,38 @@ export class RollupCheatCodes {
       await this.client.waitForTransactionReceipt({ hash });
       this.logger.warn(`Setup epoch`);
     });
+  }
+
+  /**
+   * Rewrites the pending chain tip directly in storage: stores the given slot number and fee header in the
+   * checkpoint's `tempCheckpointLogs` entry and points the pending tip at it, leaving the proven tip alone.
+   * Lets tests place the chain at an arbitrary checkpoint and slot without proposing anything.
+   * @param checkpointNumber - Checkpoint to become the pending tip.
+   * @param slotNumber - Slot the checkpoint claims to have been proposed at.
+   * @param feeHeader - Fee header to store for the checkpoint.
+   */
+  public async setPendingCheckpoint(
+    checkpointNumber: CheckpointNumber,
+    slotNumber: SlotNumber,
+    feeHeader: FeeHeader,
+  ): Promise<void> {
+    const rollup = new RollupContract(this.client, this.rollup.address);
+    const rollupAddress = EthAddress.fromString(this.rollup.address);
+    const [feeHeaderSlot, slotNumberSlot] = await Promise.all([
+      rollup.getTempCheckpointLogStorageSlot(checkpointNumber, TempCheckpointLogField.FeeHeader),
+      rollup.getTempCheckpointLogStorageSlot(checkpointNumber, TempCheckpointLogField.SlotNumber),
+    ]);
+
+    await this.ethCheatCodes.store(rollupAddress, feeHeaderSlot, RollupContract.compressFeeHeader(feeHeader));
+    await this.ethCheatCodes.store(rollupAddress, slotNumberSlot, BigInt(slotNumber));
+
+    const { proven } = await this.getTips();
+    await this.ethCheatCodes.store(
+      rollupAddress,
+      RollupContract.chainTipsStorageSlot,
+      RollupContract.packChainTips(BigInt(checkpointNumber), BigInt(proven)),
+    );
+    this.logger.warn(`Set pending checkpoint ${checkpointNumber} at slot ${slotNumber}`);
   }
 
   /** Directly calls the L1 gas fee oracle. */
