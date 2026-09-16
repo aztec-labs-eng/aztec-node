@@ -110,8 +110,13 @@ function build {
     # idempotent, and a no-op when no credential is set.
     source $ci3/source_npm_auth
     local base_secret=""
-    if [ -f "$HOME/.yarnrc.yml" ] && [ -n "${NPM_AUTH_VALUE:-}" ]; then
-      base_secret="--secret id=yarnrc,src=$HOME/.yarnrc.yml --secret id=npmauth,env=NPM_AUTH_VALUE"
+    if [ -f "$HOME/.yarnrc.yml" ]; then
+      # The yarnrc names the credential variables it needs, and a BuildKit RUN sees only what is
+      # mounted into it, so each one this run might have goes in as its own secret.
+      base_secret="--secret id=yarnrc,src=$HOME/.yarnrc.yml"
+      [ -z "${NPM_TOKEN:-}" ] || base_secret+=" --secret id=npmtoken,env=NPM_TOKEN"
+      [ -z "${NPM_USERNAME:-}" ] || base_secret+=" --secret id=npmuser,env=NPM_USERNAME"
+      [ -z "${NPM_PASSWORD:-}" ] || base_secret+=" --secret id=npmpass,env=NPM_PASSWORD"
     fi
     denoise "cd .. && DOCKER_BUILDKIT=1 docker build $base_secret -f release-image/Dockerfile.base -t azteclabs/release-image-base ."
     docker save azteclabs/release-image-base:latest > release-image-base
