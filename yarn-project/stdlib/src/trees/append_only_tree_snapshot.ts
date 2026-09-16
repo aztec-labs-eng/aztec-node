@@ -89,13 +89,14 @@ export class AppendOnlyTreeSnapshot {
   /**
    * Creates an AppendOnlyTreeSnapshot instance from a plain object without Zod parsing.
    * This method is optimized for performance and skips coercion, making it suitable
-   * for deserializing trusted data (e.g., from C++ via MessagePack). The leaf index is still
-   * range-checked, since a value outside the safe integer range cannot be represented.
+   * for deserializing trusted data (e.g., from C++ via MessagePack), which hands over a uint64 leaf index as a
+   * bigint. The leaf index is still range-checked, since a value outside the safe integer range cannot be
+   * represented.
    * @param obj - Plain object containing AppendOnlyTreeSnapshot fields
    * @returns An AppendOnlyTreeSnapshot instance
    */
   static fromPlainObject(obj: any): AppendOnlyTreeSnapshot {
-    return new AppendOnlyTreeSnapshot(Fr.fromPlainObject(obj.root), TreeLeafIndex(obj.nextAvailableLeafIndex));
+    return new AppendOnlyTreeSnapshot(Fr.fromPlainObject(obj.root), TreeLeafIndex.coerce(obj.nextAvailableLeafIndex));
   }
 
   isEmpty(): boolean {

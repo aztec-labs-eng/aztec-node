@@ -38,6 +38,17 @@ TreeLeafIndex.fromBigInt = function (value: bigint): TreeLeafIndex {
 };
 
 /**
+ * Converts a number or bigint to a tree leaf index. Use this at boundaries that may hand over either, such as
+ * msgpack, which decodes a uint64 as a bigint but anything narrower as a number.
+ * @param value - The candidate index.
+ * @returns The index as a number.
+ * @throws If the value is negative, fractional, or outside the safe integer range.
+ */
+TreeLeafIndex.coerce = function (value: number | bigint): TreeLeafIndex {
+  return typeof value === 'bigint' ? TreeLeafIndex.fromBigInt(value) : TreeLeafIndex(value);
+};
+
+/**
  * Converts a field to a tree leaf index.
  * @param value - The candidate index.
  * @returns The index as a number.
@@ -62,7 +73,7 @@ export const TreeLeafIndexSchema = z
   ])
   .transform((value, ctx) => {
     try {
-      return typeof value === 'bigint' ? TreeLeafIndex.fromBigInt(value) : TreeLeafIndex(value);
+      return TreeLeafIndex.coerce(value);
     } catch (err) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: (err as Error).message });
       return z.NEVER;

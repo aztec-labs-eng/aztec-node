@@ -15,7 +15,7 @@ import type {
   MerkleTreeWriteOperations,
 } from '@aztec-labs/stdlib/interfaces/server';
 import { mockCheckpointAndMessages, mockL1ToL2Messages } from '@aztec-labs/stdlib/testing';
-import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { AppendOnlyTreeSnapshot, MerkleTreeId, TreeLeafIndex } from '@aztec-labs/stdlib/trees';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { NativeWorldStateService } from '../native/native_world_state.js';
@@ -64,13 +64,19 @@ export async function updateBlockState(block: L2Block, l1ToL2Messages: Fr[], for
   block.header = BlockHeader.from({
     ...block.header,
     state,
-    lastArchive: new AppendOnlyTreeSnapshot(Fr.fromBuffer(previousArchive.root), Number(previousArchive.size)),
+    lastArchive: new AppendOnlyTreeSnapshot(
+      Fr.fromBuffer(previousArchive.root),
+      TreeLeafIndex.fromBigInt(BigInt(previousArchive.size)),
+    ),
   });
   await fork.updateArchive(block.header);
 
   const archiveState = await fork.getTreeInfo(MerkleTreeId.ARCHIVE);
 
-  block.archive = new AppendOnlyTreeSnapshot(Fr.fromBuffer(archiveState.root), Number(archiveState.size));
+  block.archive = new AppendOnlyTreeSnapshot(
+    Fr.fromBuffer(archiveState.root),
+    TreeLeafIndex.fromBigInt(BigInt(archiveState.size)),
+  );
 }
 
 export function mockBlock(

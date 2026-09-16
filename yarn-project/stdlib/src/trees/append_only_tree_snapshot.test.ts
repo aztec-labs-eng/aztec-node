@@ -61,4 +61,14 @@ describe('AppendOnlyTreeSnapshot', () => {
   it('rejects a field holding an index above the safe integer range', () => {
     expect(() => AppendOnlyTreeSnapshot.fromFields([root, new Fr(2n ** 64n)])).toThrow();
   });
+
+  // msgpack decodes a uint64 from the C++ AVM as a bigint, so the plain-object path must accept one.
+  it.each(indices)('round trips index %p supplied as a bigint plain object', index => {
+    const snapshot = new AppendOnlyTreeSnapshot(root, index);
+    expect(AppendOnlyTreeSnapshot.fromPlainObject({ root, nextAvailableLeafIndex: BigInt(index) })).toEqual(snapshot);
+  });
+
+  it('rejects a bigint plain object above the safe integer range', () => {
+    expect(() => AppendOnlyTreeSnapshot.fromPlainObject({ root, nextAvailableLeafIndex: 2n ** 64n })).toThrow();
+  });
 });
