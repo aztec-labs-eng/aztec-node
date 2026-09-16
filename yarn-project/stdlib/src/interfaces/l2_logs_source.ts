@@ -1,7 +1,7 @@
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
 
 import type { LogResult } from '../logs/log_result.js';
-import type { PrivateLogsQuery, PublicLogsQuery } from '../logs/logs_query.js';
+import type { PrivateLogsQuery, PublicLogsQuery, ResolvedLogsQuery } from '../logs/logs_query.js';
 
 /**
  * Interface of classes allowing for the retrieval of logs.
@@ -10,19 +10,22 @@ import type { PrivateLogsQuery, PublicLogsQuery } from '../logs/logs_query.js';
  * narrow at the call site after passing `includeEffects: true`, use the typed wrapper functions in
  * `pxe/src/tagging/get_all_logs_by_tags.ts` (or cast — the wire payload is the widest shape, so a
  * stricter generic on this interface would not survive the JSON-RPC boundary anyway).
+ *
+ * Queries arrive with their reorg-safety anchor already reduced to a block hash (see {@link ResolvedLogsQuery}): the
+ * node RPC layer resolves and validates the anchored `{ number, hash }` form before a query reaches a logs source.
  */
 export interface L2LogsSource {
   /**
    * Gets private logs matching the given tags. Returns one inner array per element of `query.tags`, in
    * input order. An empty inner array means no logs matched that tag.
    */
-  getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]>;
+  getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]>;
 
   /**
    * Gets public logs matching the given tags for the given contract. Returns one inner array per element
    * of `query.tags`, in input order. An empty inner array means no logs matched that tag.
    */
-  getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]>;
+  getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]>;
 
   /**
    * Gets the number of the latest L2 block processed by the implementation.

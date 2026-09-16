@@ -32,7 +32,6 @@ import {
   type LogQueryAnchor,
   getAllPrivateLogsByTags,
   getAllPublicLogsByTagsFromContract,
-  logQueryAnchorOf,
   syncTaggedPrivateLogs,
 } from '../tagging/index.js';
 
@@ -73,7 +72,7 @@ export class LogService {
       return [];
     }
 
-    const anchor = await logQueryAnchorOf(this.anchorBlockHeader);
+    const anchor = await this.anchorBlockHeader.toBlockParameter();
 
     const [publicLogsPerRequest, privateLogsPerRequest] = await allToCompletion([
       this.#fetchPublicLogs(contractAddress, logRetrievalRequests, anchor),

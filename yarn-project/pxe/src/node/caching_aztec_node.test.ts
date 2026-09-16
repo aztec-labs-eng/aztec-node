@@ -4,7 +4,13 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { BlockHash, type BlockParameter, randomInBlock } from '@aztec-labs/stdlib/block';
+import {
+  type AnchoredBlockParameter,
+  BlockHash,
+  type BlockParameter,
+  isAnchoredBlockParameter,
+  randomInBlock,
+} from '@aztec-labs/stdlib/block';
 import type { BlockResponse } from '@aztec-labs/stdlib/interfaces/client';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { LogCursor, type PrivateLogsQuery, SiloedTag, Tag, randomLogResult } from '@aztec-labs/stdlib/logs';
@@ -396,6 +402,25 @@ describe('withCache', () => {
       expect(aztecNode.findLeavesIndexes).toHaveBeenCalledTimes(4);
     });
 
+    it('keys each leaf on both halves of an anchor, so a wrong height is still rejected', async () => {
+      const hash = BlockHash.random();
+      const leaf = Fr.random();
+      const index = { data: 7n, ...randomInBlock() };
+      aztecNode.findLeavesIndexes.mockImplementation(block =>
+        isAnchoredBlockParameter(block) && block.number !== BlockNumber(7)
+          ? Promise.reject(new Error('Anchor block is block 7, not the requested block 8'))
+          : Promise.resolve([index]),
+      );
+
+      await cachedNode.findLeavesIndexes({ number: BlockNumber(7), hash }, MerkleTreeId.NULLIFIER_TREE, [leaf]);
+      await cachedNode.findLeavesIndexes({ number: BlockNumber(7), hash }, MerkleTreeId.NULLIFIER_TREE, [leaf]);
+      await expect(
+        cachedNode.findLeavesIndexes({ number: BlockNumber(8), hash }, MerkleTreeId.NULLIFIER_TREE, [leaf]),
+      ).rejects.toThrow('not the requested block 8');
+
+      expect(aztecNode.findLeavesIndexes).toHaveBeenCalledTimes(2);
+    });
+
     it('rejects and evicts a batch whose response is shorter than the request', async () => {
       const blockHash = BlockHash.random();
       const leafA = Fr.random();
@@ -509,6 +534,26 @@ describe('withCache', () => {
         logs,
         [],
       ]);
+
+      expect(aztecNode.getPrivateLogsByTags).toHaveBeenCalledTimes(2);
+    });
+
+    it('keys a tag query on both halves of an anchor, so a wrong height is still rejected', async () => {
+      const hash = BlockHash.random();
+      const tags = [new SiloedTag(Fr.random())];
+      const anchored = { tags, referenceBlock: { number: BlockNumber(100), hash }, toBlock: BlockNumber(101) };
+      aztecNode.getPrivateLogsByTags.mockImplementation(query =>
+        isAnchoredBlockParameter(query.referenceBlock!) &&
+        (query.referenceBlock as AnchoredBlockParameter).number !== BlockNumber(100)
+          ? Promise.reject(new Error('Anchor block is block 100, not the requested block 99'))
+          : Promise.resolve([[]]),
+      );
+
+      await cachedNode.getPrivateLogsByTags(anchored);
+      await cachedNode.getPrivateLogsByTags(anchored);
+      await expect(
+        cachedNode.getPrivateLogsByTags({ ...anchored, referenceBlock: { number: BlockNumber(99), hash } }),
+      ).rejects.toThrow('not the requested block 99');
 
       expect(aztecNode.getPrivateLogsByTags).toHaveBeenCalledTimes(2);
     });
@@ -670,6 +715,30 @@ function buildPinnedReadTests(opts: {
       await read({ archive });
 
       expect(node).toHaveBeenCalledTimes(6);
+    });
+
+    it('caches an anchored read under both halves of the anchor', async () => {
+      const { node, read } = opts.setup();
+      const hash = BlockHash.random();
+
+      await read({ number: BlockNumber(7), hash });
+      await read({ number: BlockNumber(7), hash });
+      // The bare hash is its own request, since it asks the node for less than the anchor does.
+      await read(hash);
+
+      expect(node).toHaveBeenCalledTimes(2);
+    });
+
+    it('still rejects a wrong claimed height after caching an answer for the same hash', async () => {
+      const { node, read } = opts.setup();
+      const hash = BlockHash.random();
+      // The node refuses an anchor whose height does not match the block its hash names. That refusal has to reach
+      // the caller rather than being answered out of the entry the right height filled.
+      node.mockResolvedValueOnce(undefined);
+      node.mockRejectedValueOnce(new Error('Anchor block is block 7, not the requested block 8'));
+
+      await expect(read({ number: BlockNumber(7), hash })).resolves.toBeUndefined();
+      await expect(read({ number: BlockNumber(8), hash })).rejects.toThrow('not the requested block 8');
     });
 
     opts.extraTests?.();

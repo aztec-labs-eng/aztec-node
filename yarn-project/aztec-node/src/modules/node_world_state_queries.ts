@@ -11,7 +11,6 @@ import {
   type BlockParameter,
   type DataInBlock,
   type L2BlockSource,
-  type NormalizedBlockParameter,
   inspectBlockParameter,
 } from '@aztec-labs/stdlib/block';
 import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
@@ -28,7 +27,7 @@ import type { TxHash } from '@aztec-labs/stdlib/tx';
 import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 
 import { normalizeBlockParameter } from './block_parameter.js';
-import type { UnseenBlockHoldOff, UnseenBlockHoldOffOptions } from './unseen_block_hold_off.js';
+import type { HoldOffBlockQuery, UnseenBlockHoldOff, UnseenBlockHoldOffOptions } from './unseen_block_hold_off.js';
 
 /** Attempts at resolving a query and syncing world state to it before giving up (see {@link NodeWorldStateQueries.getWorldState}). */
 const WORLD_STATE_SYNC_ATTEMPTS = 3;
@@ -346,7 +345,7 @@ export class NodeWorldStateQueries {
    * briefly (unless the caller opts out) when it references a block the node is about to see.
    */
   async #resolveBlockNumberAndHash(
-    query: NormalizedBlockParameter,
+    query: HoldOffBlockQuery,
     opts: UnseenBlockHoldOffOptions = {},
   ): Promise<{ blockNumber: BlockNumber; blockHash: BlockHash }> {
     const blockData = await this.holdOff.getBlockData(query, opts);
@@ -361,7 +360,7 @@ export class NodeWorldStateQueries {
    * condition — the block may have been pruned, or may simply not have arrived yet — and are distinguished to the
    * caller as a {@link WorldStateSynchronizerError}.
    */
-  #throwOnUndefinedBlockData(query: NormalizedBlockParameter): never {
+  #throwOnUndefinedBlockData(query: HoldOffBlockQuery): never {
     if ('hash' in query) {
       throw new Error(
         `Block hash ${query.hash.toString()} not found when resolving query. If the node API has been queried with anchor block hash possibly a reorg has occurred.`,

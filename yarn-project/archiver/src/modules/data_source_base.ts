@@ -41,7 +41,7 @@ import {
   getSlotRangeForEpoch,
 } from '@aztec-labs/stdlib/epoch-helpers';
 import type { L2LogsSource } from '@aztec-labs/stdlib/interfaces/server';
-import type { LogResult, PrivateLogsQuery, PublicLogsQuery } from '@aztec-labs/stdlib/logs';
+import type { LogResult, PrivateLogsQuery, PublicLogsQuery, ResolvedLogsQuery } from '@aztec-labs/stdlib/logs';
 import type { InboxBucket, L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import type { BlockHeader, IndexedTxEffect, TxEffectMembershipWitness, TxHash } from '@aztec-labs/stdlib/tx';
@@ -290,11 +290,11 @@ export abstract class ArchiverDataSourceBase
     return (await this.stores.blocks.getPendingChainValidationStatus()) ?? { valid: true };
   }
 
-  public getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
+  public getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]> {
     return this.stores.logs.getPrivateLogsByTags(query);
   }
 
-  public getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {
+  public getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]> {
     return this.stores.logs.getPublicLogsByTags(query);
   }
 

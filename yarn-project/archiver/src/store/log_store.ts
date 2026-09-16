@@ -9,6 +9,7 @@ import type {
   LogResult,
   PrivateLogsQuery,
   PublicLogsQuery,
+  ResolvedLogsQuery,
   SiloedTag,
   Tag,
   TagQuery,
@@ -187,13 +188,13 @@ export class LogStore {
   }
 
   /** Returns one inner array per element of `query.tags`, in input order. */
-  getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
+  getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]> {
     LogStore.#validateQuery(query);
     return this.db.transactionAsync(() => this.#runQuery(query, /* contractHex */ undefined));
   }
 
   /** Returns one inner array per element of `query.tags`, in input order. */
-  getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {
+  getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]> {
     LogStore.#validateQuery(query);
     return this.db.transactionAsync(() => this.#runQuery(query, fieldHex(query.contractAddress)));
   }
@@ -204,7 +205,10 @@ export class LogStore {
     }
   }
 
-  async #runQuery(query: PrivateLogsQuery | PublicLogsQuery, contractHex: string | undefined): Promise<LogResult[][]> {
+  async #runQuery(
+    query: ResolvedLogsQuery<PrivateLogsQuery> | ResolvedLogsQuery<PublicLogsQuery>,
+    contractHex: string | undefined,
+  ): Promise<LogResult[][]> {
     const isPublic = contractHex !== undefined;
     const tags = (query.tags as ReadonlyArray<TagQuery<Tag | SiloedTag>>) ?? [];
     const primaryMap = isPublic ? this.#publicLogs : this.#privateLogs;

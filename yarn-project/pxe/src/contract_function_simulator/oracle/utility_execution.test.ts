@@ -1,4 +1,4 @@
-import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { ARCHIVE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -704,6 +704,30 @@ describe('Utility Execution test suite', () => {
         );
 
         expect(result.readAll(service)).toEqual([true, false, true]);
+      });
+    });
+
+    describe('naming the reference block of a node query', () => {
+      it('names the anchor by number and hash, and any other block by hash alone', async () => {
+        const anchorHash = await anchorBlockHeader.hash();
+        const olderHash = BlockHash.random();
+        const olderHeader = BlockHeader.empty({
+          globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(anchorBlockHeader.getBlockNumber() - 1) }),
+        });
+        aztecNode.getBlock.mockResolvedValue({ header: olderHeader } as Awaited<ReturnType<AztecNode['getBlock']>>);
+        aztecNode.getNoteHashMembershipWitness.mockResolvedValue(MembershipWitness.empty(NOTE_HASH_TREE_HEIGHT));
+
+        await utilityExecutionOracle.getNoteHashMembershipWitness(anchorHash, Fr.random());
+        await utilityExecutionOracle.getNoteHashMembershipWitness(olderHash, Fr.random());
+
+        // The anchor's height is known here, so it travels with the hash and a node one block behind can tell a
+        // client that raced ahead from one naming a block it will never have. A historical hash has no such height.
+        expect(aztecNode.getNoteHashMembershipWitness).toHaveBeenNthCalledWith(
+          1,
+          { number: anchorBlockHeader.getBlockNumber(), hash: anchorHash },
+          expect.anything(),
+        );
+        expect(aztecNode.getNoteHashMembershipWitness).toHaveBeenNthCalledWith(2, olderHash, expect.anything());
       });
     });
 

@@ -1191,8 +1191,147 @@ describe('aztec node', () => {
     it('does not hold a query for a block further ahead than the next one', async () => {
       expect(await node.getBlock(BlockNumber(unseenBlockNumber + 1))).toBeUndefined();
 
-      // A single block-source read proves the query was never held: holding always issues further reads.
-      expect(l2BlockSource.getBlockData).toHaveBeenCalledTimes(1);
+      // A query naming a height reads once more before a miss is final, to catch a block that landed while the tip
+      // was being read. Two reads is that pair, not a hold: holding always issues further reads.
+      expect(l2BlockSource.getBlockData).toHaveBeenCalledTimes(2);
+    });
+
+    describe('anchors naming a block by number and hash', () => {
+      /** The anchor a client that has synced one block past this node sends. */
+      const unseenAnchor = () => ({ number: unseenBlockNumber, hash: unseenBlockHash });
+
+      it('serves findLeavesIndexes anchored on a block that arrives while the query is held', async () => {
+        merkleTreeOps.findLeafIndices.mockResolvedValue([10n]);
+        merkleTreeOps.getBlockNumbersForLeafIndices.mockResolvedValue([unseenBlockNumber]);
+        merkleTreeOps.getLeafValue.mockResolvedValue(unseenBlockHash);
+        scheduleUnseenBlockArrival();
+
+        const result = await node.findLeavesIndexes(unseenAnchor(), MerkleTreeId.NOTE_HASH_TREE, [Fr.random()]);
+
+        expect(result).toEqual([{ l2BlockNumber: unseenBlockNumber, l2BlockHash: unseenBlockHash, data: 10n }]);
+      });
+
+      it('serves getContract anchored on a block that arrives while the query is held', async () => {
+        const instance = await randomContractInstanceWithAddress();
+        contractSource.getContract.mockResolvedValue(instance);
+        scheduleUnseenBlockArrival();
+
+        expect(await node.getContract(instance.address, unseenAnchor())).toEqual(instance);
+      });
+
+      it('serves getBlock anchored on a block that arrives while the query is held', async () => {
+        scheduleUnseenBlockArrival();
+
+        const block = await node.getBlock(unseenAnchor());
+
+        expect(block?.number).toEqual(unseenBlockNumber);
+        expect(block?.hash).toEqual(unseenBlockHash);
+      });
+
+      it('never reads the block source with both selectors at once', async () => {
+        scheduleUnseenBlockArrival();
+
+        await node.getBlock(unseenAnchor());
+
+        for (const [query] of l2BlockSource.getBlockData.mock.calls) {
+          expect(Object.keys(query ?? {})).toHaveLength(1);
+        }
+      });
+
+      it('rejects an anchor whose hash names a block at another height', async () => {
+        lastBlockNumber = unseenBlockNumber;
+
+        // The hash resolves, so the claimed height is one the node can disprove rather than one it might yet see.
+        await expect(
+          node.getBlock({ number: BlockNumber(unseenBlockNumber + 1), hash: unseenBlockHash }),
+        ).rejects.toThrow(BadRequestError);
+      });
+
+      it('holds a private logs query and hands the logs source the bare hash', async () => {
+        l2LogsSource.getPrivateLogsByTags.mockImplementation(query =>
+          query.referenceBlock !== undefined && lastBlockNumber < unseenBlockNumber
+            ? Promise.reject(new Error(`Block ${query.referenceBlock} is not present`))
+            : Promise.resolve([[]]),
+        );
+        scheduleUnseenBlockArrival();
+
+        const result = await node.getPrivateLogsByTags({ tags: [SiloedTag.random()], referenceBlock: unseenAnchor() });
+
+        expect(result).toEqual([[]]);
+        expect(l2LogsSource.getPrivateLogsByTags).toHaveBeenCalledWith(
+          expect.objectContaining({ referenceBlock: unseenBlockHash }),
+        );
+      });
+
+      it('holds a public logs query and hands the logs source the bare hash', async () => {
+        l2LogsSource.getPublicLogsByTags.mockImplementation(query =>
+          query.referenceBlock !== undefined && lastBlockNumber < unseenBlockNumber
+            ? Promise.reject(new Error(`Block ${query.referenceBlock} is not present`))
+            : Promise.resolve([[]]),
+        );
+        scheduleUnseenBlockArrival();
+
+        const result = await node.getPublicLogsByTags({
+          contractAddress: await AztecAddress.random(),
+          tags: [Tag.random()],
+          referenceBlock: unseenAnchor(),
+        });
+
+        expect(result).toEqual([[]]);
+        expect(l2LogsSource.getPublicLogsByTags).toHaveBeenCalledWith(
+          expect.objectContaining({ referenceBlock: unseenBlockHash }),
+        );
+      });
+
+      it('surfaces a prune landing between the anchor resolving and the logs being read', async () => {
+        lastBlockNumber = unseenBlockNumber;
+        // The logs source checks the anchor inside its own transaction, which is the authoritative check: a prune
+        // after the provider resolved the anchor still fails the query rather than answering off the wrong chain.
+        l2LogsSource.getPrivateLogsByTags.mockImplementation(() => {
+          lastBlockNumber = BlockNumber(unseenBlockNumber - 1);
+          return Promise.reject(new Error(`Reference block ${unseenBlockHash} not found in the node.`));
+        });
+
+        await expect(
+          node.getPrivateLogsByTags({ tags: [SiloedTag.random()], referenceBlock: unseenAnchor() }),
+        ).rejects.toThrow(/not found in the node/);
+        expect(l2LogsSource.getPrivateLogsByTags).toHaveBeenCalledTimes(1);
+      });
+
+      it('holds a world-state query for a single budget and then fails', async () => {
+        const timer = new Timer();
+
+        await expect(node.getWorldState(unseenAnchor())).rejects.toThrow(/not found when resolving query/);
+
+        expect(timer.ms()).toBeGreaterThanOrEqual(byNumberWaitMs);
+        expect(timer.ms()).toBeLessThan(2 * byNumberWaitMs);
+      });
+
+      it('does not hold off again when a sync retry re-resolves the anchor', async () => {
+        lastBlockNumber = unseenBlockNumber;
+        worldState.syncImmediate.mockImplementation(() => {
+          lastBlockNumber = BlockNumber(unseenBlockNumber - 1);
+          return Promise.reject(
+            new WorldStateSynchronizerError(`Unable to sync to block number ${unseenBlockNumber} (last synced is 5)`),
+          );
+        });
+        const timer = new Timer();
+
+        await expect(node.getWorldState(unseenAnchor())).rejects.toThrow(/not found when resolving query/);
+
+        expect(timer.ms()).toBeLessThan(byNumberWaitMs);
+      });
+
+      it('fails a logs query whose anchor never arrives rather than reaching the logs source', async () => {
+        const result = node.getPublicLogsByTags({
+          contractAddress: await AztecAddress.random(),
+          tags: [Tag.random()],
+          referenceBlock: unseenAnchor(),
+        });
+
+        await expect(result).rejects.toThrow(/not found in the node/);
+        expect(l2LogsSource.getPublicLogsByTags).not.toHaveBeenCalled();
+      });
     });
   });
 

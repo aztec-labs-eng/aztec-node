@@ -40,6 +40,10 @@ describe('BlockHeader', () => {
     expect(fields.length).toBe(BLOCK_HEADER_LENGTH);
   });
 
+  it('names itself as an anchor carrying both its height and its hash', async () => {
+    expect(await header.toBlockParameter()).toEqual({ number: header.getBlockNumber(), hash: await header.hash() });
+  });
+
   it('computes empty hash', async () => {
     const header = BlockHeader.empty();
     const hash = await header.hash();
