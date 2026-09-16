@@ -196,7 +196,7 @@ This command automatically:
 The public keystore file (`keyN_staker_output.json`) contains the data you'll use for provider registration.
 
 :::warning Key security
-The private keystore (`keyN.json`) and the mnemonic that generated it must stay secret. Anyone holding them can commit slashable offenses and redirect block rewards; they cannot steal the delegated stake itself. If you lose them, the keys cannot be rotated: the sequencer stays offline and is slashed for inactivity until it is ejected. At most 5% of the delegated stake can be slashed before ejection, but ejection permanently ends the delegation (see [Slashing](../concepts/slashing.md)).
+The private keystore (`keyN.json`) and the mnemonic that generated it must stay secret. Anyone holding them can commit slashable offenses and redirect block rewards; they cannot steal the delegated stake itself. If you lose them, the keys cannot be rotated: the sequencer stays offline and is slashed for inactivity until it is ejected. Slashing can reduce the delegated stake below the ejection threshold, ending the delegation. Further slashes can still apply during the withdrawal delay. See [Slashing](../concepts/slashing.md) for penalty amounts and the activation and ejection thresholds.
 :::
 
 For more details on keystore creation, see the [Sequencer Setup Guide](./sequencer-setup.md#generating-keys).
