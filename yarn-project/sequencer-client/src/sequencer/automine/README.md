@@ -33,7 +33,7 @@ Public entry points:
 | `buildEmptyBlock()` | Enqueues a forced empty-block build. |
 | `warpTo(ts)` / `warpBy(delta)` | Advances L1 time to a slot boundary. |
 | `prove(upToCheckpoint?)` | Synthetically proves epochs up to a checkpoint (default: the latest checkpointed): writes the epoch out hashes into the L1 Outbox so L2-to-L1 messages become consumable, then advances the proven tip. No real proof. Clamps to the checkpointed tip and no-ops when already proven. |
-| `revertToCheckpoint(n)` | Rolls L1 back to the block that published checkpoint `n`, then resets archiver, world-state, and P2P pool. |
+| `revertToCheckpoint(n)` | Rolls L1 back to the block that published checkpoint `n`, then resets archiver, world-state, and P2P pool. The archiver's L1 sync loop is stopped for the whole operation and resumed at the end, so no sync pass can re-download the checkpoints being removed while they are still on L1. |
 | `syncPoint()` | Awaits the queue reaching idle. |
 
 ## Time control
