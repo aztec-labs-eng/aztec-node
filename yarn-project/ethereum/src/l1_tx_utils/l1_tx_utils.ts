@@ -45,6 +45,22 @@ import {
 
 const MAX_L1_TX_STATES = 32;
 
+/**
+ * Reads the caller's requested confirmation depth, falling back to 1 for anything that is not a positive
+ * integer. A bad value here would otherwise either skip the wait entirely or hold the tx forever.
+ */
+function normalizeRequiredConfirmations(config: { requiredConfirmations?: number }, logger: Logger): number {
+  const requested = config.requiredConfirmations;
+  if (requested === undefined) {
+    return 1;
+  }
+  if (!Number.isInteger(requested) || requested < 1) {
+    logger.warn(`Ignoring invalid requiredConfirmations ${requested}; using 1`, { requiredConfirmations: requested });
+    return 1;
+  }
+  return requested;
+}
+
 // Backoff (in seconds) for retrying the read-only RPC calls that prepare a tx cancellation. A
 // cancellation is fired in the background after a tx times out and is important (it frees the stuck
 // nonce), so a transient RPC failure while reading the pending nonce or gas price must not abandon it.
@@ -490,7 +506,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
           if (receipt) {
             // Cancellations always settle on their inclusion receipt; only the original tx can ask for depth.
-            const requiredConfirmations = isCancelTx ? 1 : (gasConfig.requiredConfirmations ?? 1);
+            const requiredConfirmations = isCancelTx ? 1 : normalizeRequiredConfirmations(gasConfig, this.logger);
             let confirmed: TransactionReceipt | undefined = receipt;
             if (requiredConfirmations > 1) {
               confirmed = await this.awaitConfirmations(state, txHashes, requiredConfirmations, gasConfig);
@@ -620,14 +636,19 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     } else {
       // Otherwise we fire the cancellation without awaiting to avoid blocking the caller,
       // and monitor it in the background so we can speed it up as needed.
-      void this.attemptTxCancellation(state).catch(async err => {
-        await this.updateState(state, TxUtilsState.NOT_MINED);
-        this.logger.error(`Failed to send cancellation for timed out tx ${initialTxHash} with nonce ${nonce}`, err, {
-          account,
-          nonce,
-          initialTxHash,
-        });
-      });
+      // Counted for the whole of the rejection handler too, not just the cancellation: waitMonitoringStopped
+      // must not report the loops stopped while this is still persisting the tx's final state.
+      this.activeMonitors++;
+      void this.attemptTxCancellation(state)
+        .catch(async err => {
+          await this.updateState(state, TxUtilsState.NOT_MINED);
+          this.logger.error(`Failed to send cancellation for timed out tx ${initialTxHash} with nonce ${nonce}`, err, {
+            account,
+            nonce,
+            initialTxHash,
+          });
+        })
+        .finally(() => this.activeMonitors--);
     }
 
     const what = isCancelTx ? 'Cancellation L1' : 'L1';
@@ -670,9 +691,6 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     let previousBlockHash: Hex | undefined;
 
     while (true) {
-      // Read the tip first so the confirmation count can only ever under-estimate: the receipt is checked
-      // against a chain that has already advanced at least this far.
-      const blockNumber = await this.client.getBlockNumber();
       const receipt = await this.getCanonicalReceipt(txHashes);
       if (!receipt) {
         this.logger.warn(`Tx with nonce ${nonce} for account ${account} is no longer on the canonical chain`, {
@@ -693,8 +711,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
       }
       previousBlockHash = receipt.blockHash;
 
-      const confirmations = Number(blockNumber - receipt.blockNumber) + 1;
-      if (confirmations >= requiredConfirmations) {
+      if (await this.hasConfirmationDepth(receipt, requiredConfirmations)) {
         return receipt;
       }
 
@@ -704,16 +721,50 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
         // after the restart would go unnoticed. Throwing leaves the state nonterminal for the restart.
         throw new InterruptError(
           `Interrupted waiting for ${requiredConfirmations} confirmations on tx ${receipt.transactionHash} ` +
-            `with nonce ${nonce} (has ${confirmations})`,
+            `with nonce ${nonce}`,
         );
       }
 
       this.logger.debug(
-        `Tx ${receipt.transactionHash} with nonce ${nonce} has ${confirmations}/${requiredConfirmations} confirmations`,
-        { nonce, account, confirmations, requiredConfirmations, blockNumber },
+        `Tx ${receipt.transactionHash} with nonce ${nonce} is not yet ${requiredConfirmations} blocks deep`,
+        { nonce, account, requiredConfirmations, blockNumber: receipt.blockNumber },
       );
       await sleep(gasConfig.checkIntervalMs!);
     }
+  }
+
+  /**
+   * Returns whether `receipt`'s block is buried at least `requiredConfirmations` deep under the current chain
+   * head, by walking the head's `parentHash` links rather than comparing block numbers against a separately
+   * read tip. The two reads must be on one chain for the count to mean anything: a reorg landing between them,
+   * or a split view across fallback RPC backends, can otherwise pair a tip from one fork with a receipt from
+   * another and inflate the count to the exact depth we are trying to prove.
+   *
+   * The walk is capped at `requiredConfirmations` steps. Reaching the cap without meeting the receipt's height
+   * means the head is buried deeper than asked, which `getCanonicalReceipt` has already tied to the receipt's
+   * own block in the same round; being wrong then would need a reorg deeper than `requiredConfirmations`,
+   * which is beyond what any confirmation depth can defend against.
+   */
+  private async hasConfirmationDepth(receipt: TransactionReceipt, requiredConfirmations: number): Promise<boolean> {
+    let block = await this.client.getBlock({ blockTag: 'latest', includeTransactions: false });
+    for (let depth = 1; depth <= requiredConfirmations; depth++) {
+      if (block.hash === receipt.blockHash) {
+        return depth >= requiredConfirmations;
+      }
+      if (block.number <= receipt.blockNumber) {
+        // The head's chain has already diverged at or below the receipt's height, so the receipt is not
+        // an ancestor of it however deep the chain runs.
+        return false;
+      }
+      const parent = await this.client
+        .getBlock({ blockHash: block.parentHash, includeTransactions: false })
+        .catch(() => undefined);
+      if (!parent) {
+        return false;
+      }
+      block = parent;
+    }
+    return true;
   }
 
   /**

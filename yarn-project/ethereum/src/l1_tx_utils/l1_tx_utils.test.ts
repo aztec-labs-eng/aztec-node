@@ -2101,6 +2101,81 @@ describe('L1TxUtils', () => {
         expect(gasUtils.state).toBe(TxUtilsState.MINED);
       }, 20_000);
 
+      it("does not count confirmations from a tip that is not on the receipt's chain", async () => {
+        // A reorg landing between the two reads — or a fallback RPC backend answering from a different fork —
+        // can pair a tip well above the receipt with a receipt that is only one block deep. Counting by
+        // subtraction would read that as the requested depth.
+        const { state } = await gasUtils.sendTransaction(request, { ...steadyOverrides, requiredConfirmations: 3 });
+        await cheatCodes.evmMine();
+        const receipt = await l1Client.getTransactionReceipt({ hash: state.txHashes[0] });
+
+        // The head stays the receipt's own block (one confirmation), but any height query reports a chain
+        // two blocks longer.
+        const originalGetBlock = l1Client.getBlock.bind(l1Client);
+        const getBlockSpy = jest
+          .spyOn(l1Client, 'getBlock')
+          .mockImplementation(async (...args: Parameters<typeof originalGetBlock>) => {
+            const block = await originalGetBlock(...args);
+            return { ...block, number: block.number === null ? null : block.number + 2n };
+          });
+        using _numberSpy = jest.spyOn(l1Client, 'getBlockNumber').mockResolvedValue(receipt.blockNumber + 2n);
+
+        let settled = false;
+        const monitorPromise = gasUtils.monitorTransaction(state).finally(() => (settled = true));
+        await sleep(400);
+
+        expect(settled).toBe(false);
+        expect(gasUtils.state).toBe(TxUtilsState.SENT);
+        expect(metrics.recordMinedTx).not.toHaveBeenCalled();
+
+        getBlockSpy.mockRestore();
+        await cheatCodes.mineEmptyBlock(2);
+        await monitorPromise;
+        expect(gasUtils.state).toBe(TxUtilsState.MINED);
+      }, 20_000);
+
+      it('re-attempts a tx whose inclusion block is reorged away before it is confirmed', async () => {
+        // anvil_reorg drops the tx without returning it to the mempool, which is the hostile shape: the
+        // receipt is gone, the nonce is free again, and nothing will re-send the tx but us.
+        await cheatCodes.mineEmptyBlock(5);
+        const { state } = await gasUtils.sendTransaction(request, {
+          checkIntervalMs: 50,
+          stallTimeMs: 1,
+          txTimeoutMs: 600_000,
+          requiredConfirmations: 3,
+        });
+        const monitorPromise = gasUtils.monitorTransaction(state);
+
+        await cheatCodes.evmMine();
+        await retryUntil(() => blocksSinceInclusion(state).then(n => n === 0), 'tx included', 10, 0.05);
+        const firstInclusion = (await l1Client.getTransactionReceipt({ hash: state.txHashes[0] })).blockNumber;
+        const attemptsBeforeReorg = state.txHashes.length;
+
+        // Drop the inclusion block before the tx ever reaches three confirmations.
+        await cheatCodes.reorgWithReplacement(2);
+        await retryUntil(
+          () =>
+            l1Client.getTransactionReceipt({ hash: state.txHashes[0] }).then(
+              () => false,
+              () => true,
+            ),
+          'inclusion receipt gone',
+          10,
+          0.1,
+        );
+        expect(gasUtils.state).not.toBe(TxUtilsState.MINED);
+
+        // Ordinary monitoring resumes and re-broadcasts the tx rather than stalling on the lost receipt.
+        await retryUntil(() => state.txHashes.length > attemptsBeforeReorg, 're-broadcast after reorg', 20, 0.1);
+        await cheatCodes.evmMine();
+        await cheatCodes.mineEmptyBlock(3);
+
+        const receipt = await monitorPromise;
+        expect(gasUtils.state).toBe(TxUtilsState.MINED);
+        expect(receipt.blockNumber).toBeGreaterThan(firstInclusion - 1n);
+        expect(state.cancelTxHashes).toHaveLength(0);
+      }, 30_000);
+
       it('keeps cancellation txs at a single confirmation', async () => {
         const { state } = await gasUtils.sendTransaction(request, {
           checkIntervalMs: 50,
