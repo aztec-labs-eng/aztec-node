@@ -254,8 +254,8 @@ export async function removeL1Validator({
   dualLog(`Transaction hash: ${receipt.transactionHash}`);
 }
 
-/** Initiates a provider exit without changing the registered withdrawer's control over the payout. */
-export async function initiateProviderExit({
+/** Initiates a attester exit without changing the registered withdrawer's control over the payout. */
+export async function initiateWithdrawByAttester({
   rpcUrls,
   chainId,
   privateKey,
@@ -273,13 +273,13 @@ export async function initiateProviderExit({
   const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
   const rollup = new RollupContract(client, rollupAddress);
   const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
-  const { receipt } = await rollup.initiateProviderExit(l1TxUtils, attesterAddress);
+  const { receipt } = await rollup.initiateWithdrawByAttester(l1TxUtils, attesterAddress);
   if (receipt.status !== 'success') {
-    throw new Error(`Provider exit reverted: ${receipt.transactionHash}`);
+    throw new Error(`Attester exit reverted: ${receipt.transactionHash}`);
   }
-  log(`Provider exit initiated for ${attesterAddress}. Transaction hash: ${receipt.transactionHash}`);
+  log(`Attester exit initiated for ${attesterAddress}. Transaction hash: ${receipt.transactionHash}`);
   log('The registered withdrawer must select a recipient using initiateWithdraw before finalization.');
-  debugLogger.info('Provider exit initiated', {
+  debugLogger.info('Attester exit initiated', {
     attester: attesterAddress.toString(),
     rollup: rollupAddress.toString(),
     transactionHash: receipt.transactionHash,

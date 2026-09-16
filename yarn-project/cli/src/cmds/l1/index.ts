@@ -338,8 +338,8 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
     });
 
   program
-    .command('initiate-provider-exit')
-    .description("Initiates a staking-provider exit, signed by the position's attester.")
+    .command('initiate-withdraw-by-attester')
+    .description("Initiates a withdrawal signed by the position's attester.")
     .addOption(l1RpcUrlsOption)
     .addOption(l1ChainIdOption)
     .option('-pk, --private-key <string>', 'The attester private key', PRIVATE_KEY)
@@ -347,8 +347,8 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
     .requiredOption('--attester <address>', 'Attester address of the position to exit', parseEthereumAddress)
     .requiredOption('--rollup <address>', 'Rollup holding the position', parseEthereumAddress)
     .action(async options => {
-      const { initiateProviderExit } = await import('./update_l1_validators.js');
-      await initiateProviderExit({
+      const { initiateWithdrawByAttester } = await import('./update_l1_validators.js');
+      await initiateWithdrawByAttester({
         rpcUrls: options.l1RpcUrls,
         chainId: options.l1ChainId,
         privateKey: options.privateKey,

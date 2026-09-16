@@ -16,18 +16,18 @@ import { mnemonicToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { injectCommands } from './index.js';
-import { initiateProviderExit } from './update_l1_validators.js';
+import { initiateWithdrawByAttester } from './update_l1_validators.js';
 
 const mnemonic = 'test test test test test test test test test test test junk';
 const attester = mnemonicToAccount(mnemonic);
 const withdrawer = mnemonicToAccount(mnemonic, { addressIndex: 1 });
-const logger = createLogger('cli:test:provider-exit');
+const logger = createLogger('cli:test:attester-exit');
 
-describe('initiate-provider-exit command', () => {
+describe('initiate-withdraw-by-attester command', () => {
   it('requires a rollup and attester and accepts no recipient', () => {
     const program = new Command();
     injectCommands(program, () => {}, logger);
-    const command = program.commands.find(command => command.name() === 'initiate-provider-exit');
+    const command = program.commands.find(command => command.name() === 'initiate-withdraw-by-attester');
     expect(command).toBeDefined();
     expect(command?.options.find(option => option.long === '--rollup')?.mandatory).toBe(true);
     expect(command?.options.find(option => option.long === '--attester')?.mandatory).toBe(true);
@@ -36,7 +36,7 @@ describe('initiate-provider-exit command', () => {
 
   it('rejects a signer that does not match the attester before contacting L1', async () => {
     await expect(
-      initiateProviderExit({
+      initiateWithdrawByAttester({
         rpcUrls: ['http://127.0.0.1:1'],
         chainId: foundry.id,
         mnemonic,
@@ -49,7 +49,7 @@ describe('initiate-provider-exit command', () => {
   });
 });
 
-describe('provider exit through the client and CLI', () => {
+describe('attester exit through the client and CLI', () => {
   let anvil: Anvil;
   let rpcUrl: string;
 
@@ -102,11 +102,11 @@ describe('provider exit through the client and CLI', () => {
     const original = await rollup.getAttesterView(target);
     const recipientBalance = await token.read.balanceOf([recipient]);
 
-    const before = await rollup.getProviderExitLimitState();
+    const before = await rollup.getAttesterExitLimitState();
     expect(before).toMatchObject({ validatorCount: 21n, committeeSize: 4n, used: 0n, allowance: 1n, canExit: true });
-    expect(await rollup.getProviderExitWindow()).toBe(before.window);
+    expect(await rollup.getAttesterExitWindow()).toBe(before.window);
 
-    const receipt = await initiateProviderExit({
+    const receipt = await initiateWithdrawByAttester({
       rpcUrls: [rpcUrl],
       chainId: foundry.id,
       mnemonic,
@@ -123,7 +123,7 @@ describe('provider exit through the client and CLI', () => {
     expect(pending.exit.recipientOrWithdrawer).toEqual(EthAddress.fromString(withdrawer.address));
     expect(pending.exit.amount).toBe(original.effectiveBalance);
     expect(await token.read.balanceOf([recipient])).toBe(recipientBalance);
-    expect(await rollup.getProviderExitLimitState()).toMatchObject({
+    expect(await rollup.getAttesterExitLimitState()).toMatchObject({
       validatorCount: 20n,
       used: 1n,
       allowance: 0n,

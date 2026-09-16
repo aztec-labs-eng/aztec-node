@@ -210,8 +210,8 @@ export type RewardConfig = {
   checkpointReward: bigint;
 };
 
-/** Current provider-exit capacity. All durations are in seconds and counts are positions, not token amounts. */
-export type ProviderExitLimitState = {
+/** Current attester-exit capacity. All durations are in seconds and counts are positions, not token amounts. */
+export type AttesterExitLimitState = {
   window: bigint;
   validatorCount: bigint;
   committeeSize: bigint;
@@ -1380,16 +1380,16 @@ export class RollupContract {
     return Buffer32.fromString(await this.rollup.read.getCurrentBlobCommitmentsHash());
   }
 
-  public getProviderExitWindow(): Promise<bigint> {
-    return this.rollup.read.getProviderExitWindow();
+  public getAttesterExitWindow(): Promise<bigint> {
+    return this.rollup.read.getAttesterExitWindow();
   }
 
-  public getProviderExitLimitState(): Promise<ProviderExitLimitState> {
-    return this.rollup.read.getProviderExitLimitState();
+  public getAttesterExitLimitState(): Promise<AttesterExitLimitState> {
+    return this.rollup.read.getAttesterExitLimitState();
   }
 
-  /** Initiates a provider exit. The transaction signer must be the position's attester. */
-  public initiateProviderExit(
+  /** Initiates a attester exit. The transaction signer must be the position's attester. */
+  public initiateWithdrawByAttester(
     l1TxUtils: L1TxUtils,
     attester: EthAddress,
   ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
@@ -1398,7 +1398,7 @@ export class RollupContract {
       abi: RollupAbi,
       data: encodeFunctionData({
         abi: RollupAbi,
-        functionName: 'initiateProviderExit',
+        functionName: 'initiateWithdrawByAttester',
         args: [attester.toString()],
       }),
     });
