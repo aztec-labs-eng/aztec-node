@@ -20,21 +20,21 @@ export const StandardContractSalt: Record<StandardContractName, Fr> = {
 };
 
 export const StandardContractAddress: Record<StandardContractName, AztecAddress> = {
-  AuthRegistry: AztecAddress.fromStringUnsafe('0x1ec33912c9f14470513e0eb23db81ddb2aa1ae3395e6ab4d3cba383f68dec3c5'),
+  AuthRegistry: AztecAddress.fromStringUnsafe('0x2e05e8fbfb2ce9a31e4b4ae5097c01b79d9b3529b1e861016c9c9a5d62fdf7c9'),
   MultiCallEntrypoint: AztecAddress.fromStringUnsafe(
-    '0x2b48f1a970a1411924daef8cf51cd86ee7e79615b9240cdc40853bb5a90b83b6',
+    '0x15ef6dafc2ff68c67578fb3d178c02c1504607f8ce57964c99d57cc5c7374a02',
   ),
   PublicChecks: AztecAddress.fromStringUnsafe('0x0468c918e7d7e077f4fa75e275891db9bee8faaeafab83e870eeb39dbfaddbbe'),
   HandshakeRegistry: AztecAddress.fromStringUnsafe(
-    '0x06196e77f13813a124c9049d41540b6d61c010a9dea5270fbd59d1f01225bff7',
+    '0x1e944d9800cd5f0790e00fd9f0f96458f79a668e24fca035fbc11fef5e70be4e',
   ),
 };
 
 export const StandardContractClassId: Record<StandardContractName, Fr> = {
-  AuthRegistry: Fr.fromString('0x1eeae0dee2a555972083ba73eff19dc5e85e09723b814d27913efdca795f62f7'),
-  MultiCallEntrypoint: Fr.fromString('0x1fe189791d144080d3127ee78ce115ac04bee1bebf16030a9a2ef78f806524f8'),
+  AuthRegistry: Fr.fromString('0x16642823e2b239fb721c3a031dc77df96b4487a68fed26488f90f5f53904e6ca'),
+  MultiCallEntrypoint: Fr.fromString('0x2bb08118caa81e0889c7032516c0456703a53ad3266293a50172b626eb6d532a'),
   PublicChecks: Fr.fromString('0x2d1b988184cea812710fbb2726e1dbead57de3c8d5408bef8df83e7173ce81ef'),
-  HandshakeRegistry: Fr.fromString('0x17765d1c52082bca9af7e69fd48b63693764fa4d7266bc16c4e72e82a502a981'),
+  HandshakeRegistry: Fr.fromString('0x2ade07aa78933cb7a7ffb9eba74a3655b160ede159594141af22612efa98ff16'),
 };
 
 export const StandardContractClassIdPreimage: Record<
@@ -42,13 +42,13 @@ export const StandardContractClassIdPreimage: Record<
   { artifactHash: Fr; privateFunctionsRoot: Fr; publicBytecodeCommitment: Fr }
 > = {
   AuthRegistry: {
-    artifactHash: Fr.fromString('0x1e83aa07b1de2241e53ee64576e9f38aa9c70583e005852d5434d8288fa400f5'),
+    artifactHash: Fr.fromString('0x067c81251320c4f11ad1ef1012b25008c12687ea074feb8eaa891f9047699480'),
     privateFunctionsRoot: Fr.fromString('0x28b6c90e1c15060b3110a384b1a44abbae0b1a6e3a924e0e902a614c2e3e6340'),
     publicBytecodeCommitment: Fr.fromString('0x27a30af260dec2e28b9bd38cd5d5096b6acdd6724cc481df0a62fa2a3b18b543'),
   },
   MultiCallEntrypoint: {
-    artifactHash: Fr.fromString('0x1bc895ec5ebf6d2f91c10839036d915a2fd17256dfb3af0d1a06ca71dafeadc7'),
-    privateFunctionsRoot: Fr.fromString('0x151b2265c67dec2eef5d34f2cff47a662f2d54e181a3bf174cec6eedd7fe69c5'),
+    artifactHash: Fr.fromString('0x1331d0a194e9fb7cf819cd4535975c5acf38d736d07778630d3762cdab844f10'),
+    privateFunctionsRoot: Fr.fromString('0x241bdfca6b4a61f1bb835faea6be98736c3d95a4bc97e624324737baf3f1f150'),
     publicBytecodeCommitment: Fr.fromString('0x0ce4c618c3ed7f3a20410e618c06bb701e150af7fe28a3e92f68e7733809f33e'),
   },
   PublicChecks: {
@@ -57,7 +57,7 @@ export const StandardContractClassIdPreimage: Record<
     publicBytecodeCommitment: Fr.fromString('0x24b3208d20769dfffffa03aa7c5a8d0def7cb568c70a36c6cdc41a09a5766dec'),
   },
   HandshakeRegistry: {
-    artifactHash: Fr.fromString('0x29add3bc2df7a9b3b76da4bc17ee44753d302f68f5e38cd5d92309015cfc7521'),
+    artifactHash: Fr.fromString('0x2636ee5eede85cfb603ddd7847e5421bccae58ceeb7b0ed9af606b2069026171'),
     privateFunctionsRoot: Fr.fromString('0x13f84114d068de845da34722a59365859300e9a510efa20c7bc2d75f18fb9b3d'),
     publicBytecodeCommitment: Fr.fromString('0x0ce4c618c3ed7f3a20410e618c06bb701e150af7fe28a3e92f68e7733809f33e'),
   },
@@ -87,7 +87,7 @@ export const StandardContractPrivateFunctions: Record<
       selector: FunctionSelector.fromField(
         Fr.fromString('0x00000000000000000000000000000000000000000000000000000000f04908a9'),
       ),
-      vkHash: Fr.fromString('0x01704e5003c702468ecbfbca6d990f41aefc9cf835d66594009c3eeaf20ff66d'),
+      vkHash: Fr.fromString('0x0c04c4044098bea91ee0c96e9be57bdf70c2aa534b103442b1b387a64d50d51f'),
     },
   ],
   PublicChecks: [],
