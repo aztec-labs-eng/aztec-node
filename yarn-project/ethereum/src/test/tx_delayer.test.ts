@@ -69,30 +69,68 @@ describe('tx_delayer', () => {
   }, 20000);
 
   it('delays a transaction until a given L1 timestamp', async () => {
-    const block = await client.getBlock({ includeTransactions: false });
-    const timestamp = block.timestamp;
-    const targetTimestamp = timestamp + BigInt(ETHEREUM_SLOT_DURATION) * 3n;
-    delayer.pauseNextTxUntilTimestamp(targetTimestamp);
-    logger.info(`Pausing next tx until timestamp ${targetTimestamp}`);
+    // Explicit timestamp advances must not affect the suite's wall-clock-based slot tests.
+    const isolated = await startAnvil({ port: 0 });
+    try {
+      const cheatCodes = new EthCheatCodes([isolated.rpcUrl], new DateProvider());
+      await cheatCodes.setAutomine(false);
+      const rawClient = createWalletClient({
+        transport: fallback([http(isolated.rpcUrl, { batch: false })]),
+        chain: foundry,
+        account,
+      }).extend(publicActions);
+      const initial = await rawClient.getBlock({ includeTransactions: false });
+      const targetTimestamp = initial.timestamp + BigInt(ETHEREUM_SLOT_DURATION) * 3n;
+      const releaseTimestamp = targetTimestamp - BigInt(ETHEREUM_SLOT_DURATION);
+      await cheatCodes.setNextBlockTimestamp(Number(releaseTimestamp - 1n));
+      await cheatCodes.evmMine();
 
-    const delayedTxHash = await client.sendTransaction({ to: account.address });
-    await expect(client.getTransactionReceipt({ hash: delayedTxHash })).rejects.toThrow(receiptNotFound);
+      let polls = 0;
+      const client = wrapClientWithDelayer(
+        rawClient.extend(base => ({
+          async getBlockNumber(...args: Parameters<typeof base.getBlockNumber>) {
+            const number = await base.getBlockNumber(...args);
+            polls++;
+            return number;
+          },
+        })),
+        delayer,
+      );
+      delayer.pauseNextTxUntilTimestamp(targetTimestamp, 20);
+      const delayedTxHash = await client.sendTransaction({ to: account.address });
+      polls = 0;
 
-    logger.info(`Delayed tx sent. Awaiting receipt.`);
-    const delayedTxReceipt = await client.waitForTransactionReceipt({ hash: delayedTxHash });
+      // A second poll proves the delayer processed the pre-release block and kept waiting. Include
+      // early broadcast in the condition so an incorrectly released tx fails the assertions below.
+      await retryUntil(
+        () => polls >= 2 || delayer.getSentTxHashes().includes(delayedTxHash),
+        'delayer to observe the pre-release block',
+        10,
+        0.1,
+      );
+      expect(delayer.getSentTxHashes()).not.toContain(delayedTxHash);
+      expect((await cheatCodes.getTxPoolContents()).map(tx => tx.hash)).not.toContain(delayedTxHash);
+      await expect(client.getTransactionReceipt({ hash: delayedTxHash })).rejects.toThrow(receiptNotFound);
 
-    // Anvil stamps each block with the wall clock at mining time, so block timestamps are not exactly
-    // ETHEREUM_SLOT_DURATION apart and a target timestamp does not map to a fixed block number: a mining
-    // tick that runs late rounds its block's timestamp up, leaving the following ones a second short.
-    // The delayer releases the tx as soon as it sees a block within a slot of the target, so assert the
-    // tx landed on the block right after the first such block.
-    const releaseTimestamp = targetTimestamp - BigInt(ETHEREUM_SLOT_DURATION);
-    const [releaseBlock, blockBeforeRelease] = await Promise.all([
-      client.getBlock({ blockNumber: delayedTxReceipt.blockNumber - 1n }),
-      client.getBlock({ blockNumber: delayedTxReceipt.blockNumber - 2n }),
-    ]);
-    expect(releaseBlock.timestamp).toBeGreaterThanOrEqual(releaseTimestamp);
-    expect(blockBeforeRelease.timestamp).toBeLessThan(releaseTimestamp);
+      await cheatCodes.setNextBlockTimestamp(Number(releaseTimestamp));
+      await cheatCodes.evmMine();
+      await retryUntil(
+        async () => (await cheatCodes.getTxPoolContents()).some(tx => tx.hash === delayedTxHash),
+        'delayed transaction to enter the pool',
+        10,
+        0.1,
+      );
+
+      // Mining is paused until broadcast completes, so inclusion cannot race the sender's poll/RPC.
+      await cheatCodes.setNextBlockTimestamp(Number(targetTimestamp));
+      await cheatCodes.evmMine();
+      const receipt = await client.getTransactionReceipt({ hash: delayedTxHash });
+      expect(receipt.blockNumber).toEqual(initial.number + 3n);
+      const inclusionBlock = await client.getBlock({ blockNumber: receipt.blockNumber });
+      expect(inclusionBlock.timestamp).toEqual(targetTimestamp);
+    } finally {
+      await isolated.stop();
+    }
   }, 30000);
 
   it('delays a tx sent through a contract', async () => {
