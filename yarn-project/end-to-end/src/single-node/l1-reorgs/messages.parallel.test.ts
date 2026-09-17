@@ -8,7 +8,7 @@ import { InboxContract, MULTI_CALL_3_ADDRESS, RollupContract } from '@aztec-labs
 import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { ChainMonitor } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
-import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import {
   type L2Block,
@@ -16,6 +16,7 @@ import {
   type L2PruneUncheckpointedEvent,
   type L2PruneUnprovenEvent,
 } from '@aztec-labs/stdlib/block';
+import { getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
 import 'jest-extended';
 import type { Hex } from 'viem';
 
@@ -189,6 +190,13 @@ describe('single-node/l1-reorgs/messages', () => {
     const stateBefore = await inbox.getState();
     expect(stateBefore.totalMessagesInserted).toEqual(secondEnd);
 
+    // Production resumes at the start of a build frame rather than wherever the sends happened to leave the clock.
+    // Resuming late leaves one sub-slot, so the block that first consumes the messages is the checkpoint's *final*
+    // block: not standalone, skipped by the gate, and published without ever being held. The reorg then lands on a
+    // checkpoint nobody held, whose publication it invalidates, taking the held block down with it.
+    const currentSlot = getSlotAtTimestamp(BigInt(await t.context.cheatCodes.eth.lastBlockTimestamp()), test.constants);
+    await test.waitForBuildWindowForSlot(SlotNumber(Number(currentSlot) + 2));
+
     // Blocks pruned from anywhere in the chain while the reorg is in flight. Registered before L1 is touched: a
     // prune of the held block or of its ancestors is exactly what this scenario says must not happen, and a
     // post-hoc read of the chain cannot tell "never pruned" from "pruned and rebuilt to the same shape".
@@ -227,10 +235,17 @@ describe('single-node/l1-reorgs/messages', () => {
           // The reorg window: from the L1 block that carried the first message up to the current head. Its lower
           // bound is strictly above the last observed checkpoint publication, so no published checkpoint is inside
           // it, and production was stopped for the whole window until the gate was armed.
-          const head = BigInt((await monitor.run(true)).l1BlockNumber);
+          const published = await monitor.run(true);
+          const head = BigInt(published.l1BlockNumber);
           const reorgFrom = first.txReceipt.blockNumber;
           expect(reorgFrom).toBeGreaterThan(BigInt(l1BlockBeforeMessages));
           const depth = Number(head - reorgFrom + 1n);
+
+          // The held block belongs to the first checkpoint built since production resumed, so no other checkpoint
+          // reached L1 in between. A publication enqueued into this window would still be pending, invisible to
+          // the transaction scan below, and would lose the Inbox endpoint it signed when the suffix is replaced.
+          expect(published.checkpointNumber).toEqual(publishedBefore.checkpointNumber);
+          expect(event.checkpointNumber).toEqual(publishedBefore.checkpointNumber + 1);
 
           // Nothing else in the window may be dropped by the replacement: a checkpoint publication or a proof
           // inside it would be a different scenario entirely. Both are sent through Multicall3 rather than
