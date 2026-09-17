@@ -66,9 +66,9 @@ describe('reqRespTxHandler', () => {
   it('serves a repeated hash only once (de-duplicates before pool reads)', async () => {
     const h = TxHash.random();
     const lookups: string[] = [];
-    const mempools = makeMempools(async (x: TxHash) => {
+    const mempools = makeMempools((x: TxHash) => {
       lookups.push(x.toString());
-      return undefined;
+      return Promise.resolve(undefined);
     });
     const request = new TxHashArray(h, h, h, h, h).toBuffer();
 
@@ -81,9 +81,9 @@ describe('reqRespTxHandler', () => {
   it('still serves each distinct hash in a normal batch', async () => {
     const hashes = Array.from({ length: 3 }, () => TxHash.random());
     const lookups: string[] = [];
-    const mempools = makeMempools(async (x: TxHash) => {
+    const mempools = makeMempools((x: TxHash) => {
       lookups.push(x.toString());
-      return undefined;
+      return Promise.resolve(undefined);
     });
     const request = new TxHashArray(...hashes).toBuffer();
 
@@ -94,9 +94,9 @@ describe('reqRespTxHandler', () => {
 
   it('rejects a request with too many hashes', async () => {
     const lookups: string[] = [];
-    const mempools = makeMempools(async (x: TxHash) => {
+    const mempools = makeMempools((x: TxHash) => {
       lookups.push(x.toString());
-      return undefined;
+      return Promise.resolve(undefined);
     });
     const request = new TxHashArray(...Array.from({ length: 101 }, () => TxHash.random())).toBuffer();
 
