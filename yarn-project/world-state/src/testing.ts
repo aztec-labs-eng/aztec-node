@@ -22,6 +22,30 @@ async function generateGenesisValues(genesis: GenesisData) {
   }
 }
 
+/**
+ * Measures every value the canonical genesis pins, from one world state.
+ *
+ * Canonical means {@link DEFAULT_GENESIS_DATA} exactly: the protocol contracts' registration nullifiers, no prefunded
+ * public data and timestamp 0. That is what `GENESIS_NULLIFIER_TREE_ROOT`, `GENESIS_BLOCK_HEADER_HASH` and
+ * `GENESIS_ARCHIVE_ROOT` in `constants.nr` record, so this is the measurement
+ * `noir-projects/fnd/scripts/regenerate_genesis_constants.sh` writes back into them. A deployment that prefunds
+ * accounts gets a different archive root and must use {@link getGenesisValues} instead.
+ */
+export async function measureCanonicalGenesis() {
+  const ws = await NativeWorldStateService.ephemeral(DEFAULT_GENESIS_DATA);
+  try {
+    const committed = ws.getCommitted();
+    return {
+      prefilledNullifiers: DEFAULT_GENESIS_DATA.prefilledNullifiers,
+      nullifierTreeRoot: new Fr((await committed.getTreeInfo(MerkleTreeId.NULLIFIER_TREE)).root),
+      blockHeaderHash: await ws.getInitialHeader().hash(),
+      archiveRoot: new Fr((await committed.getTreeInfo(MerkleTreeId.ARCHIVE)).root),
+    };
+  } finally {
+    await ws.close();
+  }
+}
+
 export const defaultInitialAccountFeeJuice = new Fr(10n ** 22n);
 
 /**
