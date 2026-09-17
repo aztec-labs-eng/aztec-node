@@ -79,18 +79,9 @@ export async function createP2PClient(
   }
 
   const bindings = logger.getBindings();
-  // Schema version 4: L2 tips store resolves checkpoint tips from per-tip ids in l2_tip_checkpoints; the
-  // block->checkpoint mapping and checkpoint maps were dropped. Bumped to wipe stores whose tips predate
-  // per-tip ids, which would otherwise make getL2Tips throw on every read.
-  // Schema version 5: AppendOnlyTreeSnapshot encodes its next-available leaf index as a uint64, so the historical
-  // header carried by every persisted tx no longer decodes from pre-existing bytes.
   const store = deps.store ?? (await createStore(P2P_STORE_NAME, 5, config, bindings));
-  // Archive store version 2: archived txs embed the same historical header, see the note on the pool store above.
   const archive = await createStore(P2P_ARCHIVE_STORE_NAME, 2, config, bindings);
   const peerStore = await createStore(P2P_PEER_STORE_NAME, 1, config, bindings);
-  // Attestation store version 4: persisted proposal/attestation buffers embed block headers, whose tree snapshots
-  // now encode the next-available leaf index as a uint64, so pre-existing bytes no longer decode. Bumped to wipe
-  // stale pools; same no-migration policy as the archiver store.
   const attestationStore = await createStore(P2P_ATTESTATION_STORE_NAME, 4, config, bindings);
   const l1Constants = await archiver.getL1Constants();
 
