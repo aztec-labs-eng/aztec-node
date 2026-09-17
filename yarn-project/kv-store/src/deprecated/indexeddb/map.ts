@@ -137,7 +137,7 @@ export class IndexedDBAztecMap<K extends Key, V extends Value> implements AztecA
     return (key.length > 1 ? key : key[0]) as K;
   }
 
-  protected normalizeKey(key: K): (string | number | Uint8Array)[] {
+  protected normalizeKey(key: Key): (string | number | Uint8Array)[] {
     return Array.isArray(key) ? key : [key];
   }
 
