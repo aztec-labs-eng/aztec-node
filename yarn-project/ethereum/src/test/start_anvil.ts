@@ -22,10 +22,9 @@ export interface Anvil {
 //
 // `$@` is the anvil argv; `bash -c <script> bash <...args>` puts the args in `$@` and `$0` = 'bash'.
 //
-// The EXIT trap reaps anvil and then waits for it, so the supervisor outlives anvil and its own exit
-// is proof that anvil is gone — which is what lets teardown treat the supervisor exiting as the whole
-// spawn being gone. An anvil that does not honour the SIGTERM holds the supervisor in that `wait`
-// until teardown's escalation kills the group.
+// The EXIT trap reaps anvil and then waits for it on graceful shutdown. An anvil that does not honour
+// SIGTERM holds the supervisor in that `wait` until teardown's escalation kills the group. In that
+// case the supervisor can exit first, so teardown also waits for the inherited stdio pipes to close.
 //
 // INT/TERM just `exit` (which fires the EXIT trap) so a signal terminates the supervisor promptly
 // instead of being swallowed — a trapped TERM does NOT terminate the shell, so trapping the kill
@@ -214,17 +213,16 @@ export async function startAnvil(
   const port = detectedPort;
   let status: 'listening' | 'idle' = 'listening';
 
-  // 'exit', not 'close', so this agrees with what killChild waits for: the process being gone is what
-  // makes the instance idle, and the pipes can outlive it.
-  anvil.once('exit', () => {
+  anvil.once('close', () => {
     status = 'idle';
   });
 
+  let stopping: Promise<void> | undefined;
   const stop = async () => {
     if (status === 'idle') {
       return;
     }
-    await killChild(anvil);
+    await (stopping ??= killChild(anvil));
   };
 
   const anvilObj: Anvil = {
@@ -260,32 +258,27 @@ function syncDateProviderFromAnvilOutput(text: string, dateProvider: TestDatePro
  */
 function killChild(child: ChildProcess): Promise<void> {
   return new Promise<void>(resolve => {
-    if (child.exitCode !== null || child.killed) {
-      child.stdout?.destroy();
-      child.stderr?.destroy();
+    if (
+      (child.exitCode !== null || child.signalCode !== null) &&
+      (!child.stdout || child.stdout.closed) &&
+      (!child.stderr || child.stderr.closed)
+    ) {
       resolve();
       return;
     }
 
     let killTimer: NodeJS.Timeout | undefined;
 
-    // Settle on 'exit', not 'close'. 'close' additionally waits for the stdio pipes to end, and anvil
-    // inherits those pipes from the watchdog: if the watchdog dies without reaping anvil — which is
-    // what SIGKILL below does, since a killed shell runs no EXIT trap — anvil holds the write ends
-    // open and 'close' never fires, so the escalation meant to bound this wait would instead hang it
-    // forever. 'exit' is still only reached once anvil is gone: the watchdog waits for it (see
-    // ANVIL_WATCHDOG), and the escalation below kills the group, not just the watchdog.
-    const onExit = () => {
+    // Group termination can exit the watchdog before anvil. Keep draining the inherited pipes until
+    // all writers close them; destroying them on watchdog exit would bypass that cleanup barrier.
+    const onClose = () => {
       if (killTimer !== undefined) {
         clearTimeout(killTimer);
       }
-      // Destroy stdio streams so their PipeWrap handles don't keep the event loop alive.
-      child.stdout?.destroy();
-      child.stderr?.destroy();
       resolve();
     };
 
-    child.once('exit', onExit);
+    child.once('close', onClose);
     child.kill('SIGTERM');
 
     killTimer = setTimeout(() => {

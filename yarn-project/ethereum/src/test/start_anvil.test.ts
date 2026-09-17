@@ -1,12 +1,13 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { type AddressInfo, createServer } from 'node:net';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 
+import { resolveFoundryBinary } from '../foundry_binary.js';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
 
@@ -56,14 +57,9 @@ async function probePort(port: number): Promise<{ free: boolean; error?: string 
   }
 }
 
-/** Fails unless the port is free, allowing `within` ms for a process that has been signalled to go. */
-async function expectPortFree(port: number, within = 0): Promise<void> {
-  const deadline = Date.now() + within;
-  let probed = await probePort(port);
-  while (!probed.free && Date.now() < deadline) {
-    await sleep(100);
-    probed = await probePort(port);
-  }
+/** Fails unless the port can be rebound immediately. */
+async function expectPortFree(port: number): Promise<void> {
+  const probed = await probePort(port);
   // Assert on the bind error rather than a bare boolean: it names what is still holding the port, which
   // is the whole diagnostic value of these two tests.
   expect(probed.error ?? 'port is free').toEqual('port is free');
@@ -98,17 +94,15 @@ describe('startAnvil teardown', () => {
       expect((await probePort(port)).free).toBe(false);
 
       const start = Date.now();
+      const stopping = anvil.stop();
       await anvil.stop();
       // Must not hang: the SIGTERM the watchdog sends is ignored here, so only the kill escalation can
       // end this, and that escalation has to both fire and be waited for.
       expect(Date.now() - start).toBeLessThan(15_000);
       expect(anvil.status).toEqual('idle');
 
-      // And the stand-in must actually be gone, not merely abandoned — without the escalation it outlives
-      // teardown holding this port for the rest of the run. The grace is for the kill itself: both
-      // processes are signalled at once here, so nothing orders the stand-in's fds closing before the
-      // watchdog's exit is observed.
-      await expectPortFree(port, 10_000);
+      await expectPortFree(port);
+      await stopping;
     } finally {
       // An assertion failing before `stop()` would otherwise strand a listener that ignores SIGTERM and
       // that nothing else ever signals; the stand-in's own self-destruct is only the backstop for a
@@ -125,10 +119,34 @@ describe('startAnvil teardown', () => {
     await anvil.stop();
 
     // Rebinding immediately is the caller-visible form of "anvil is really gone": suites reuse ports
-    // across cases, so a stop() that returns early hands the next startAnvil a port still in use. No
-    // grace, because anvil honours the SIGTERM here and the watchdog waits for it before exiting — if
-    // anvil ever stopped honouring it this would escalate like the test above and need one too.
+    // across cases, so a stop() that returns early hands the next startAnvil a port still in use.
     await expectPortFree(port);
+  }, 60_000);
+
+  it('frees the port before forced shutdown of real anvil resolves', async () => {
+    const binary = resolveFoundryBinary('anvil');
+    const dir = mkdtempSync(join(tmpdir(), 'anvil-stopped-'));
+    const launcher = join(dir, 'anvil');
+    writeFileSync(join(dir, 'binary'), binary);
+    writeFileSync(
+      launcher,
+      '#!/bin/sh\necho $$ > "$(dirname "$0")/pid"\nexec "$(cat "$(dirname "$0")/binary")" "$@"\n',
+      { mode: 0o755 },
+    );
+
+    let anvil: Anvil | undefined;
+    try {
+      ({ anvil } = await withAnvilBin(launcher, () => startAnvil({ port: 0 })));
+      const pid = Number(readFileSync(join(dir, 'pid'), 'utf8').trim());
+      expect(pid).toBeGreaterThan(0);
+      process.kill(pid, 'SIGSTOP');
+      await anvil.stop();
+      expect(anvil.status).toEqual('idle');
+      await expectPortFree(anvil.port);
+    } finally {
+      await anvil?.stop();
+      rmSync(dir, { recursive: true, force: true });
+    }
   }, 60_000);
 });
 
