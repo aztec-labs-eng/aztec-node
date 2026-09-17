@@ -8,7 +8,7 @@ import { jest } from '@jest/globals';
 import { testSpan } from '../../fixtures/timing.js';
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { PROVING_SLOT_TIMING, setupWithProver } from '../setup.js';
-import { ARCHIVER_POLL_INTERVAL, SingleNodeTestContext } from '../single_node_test_context.js';
+import { SingleNodeTestContext } from '../single_node_test_context.js';
 
 jest.setTimeout(1000 * 60 * 10);
 
@@ -150,21 +150,16 @@ describe('single-node/proving/multi_proof', () => {
     await test.waitForAllProversToSubmit(epoch, epochCheckpointCount);
 
     // The prover checks poll L1; the node must also index the proof. Later epochs can be proven while
-    // it catches up, so node progress is monotonic. The per-prover checks above enforce submission for
-    // the anchored epoch. Box the result because retryUntil treats block number 0 as falsy.
-    const { proven: provenBlockNumber } = await testSpan('wait:proof-indexed', () =>
+    // it catches up, so the node's proven tip only has to reach this epoch's last block, not equal it.
+    // The per-prover checks above enforce submission for the anchored epoch.
+    await testSpan('wait:proof-indexed', () =>
       retryUntil(
-        async () => {
-          const proven = await context.aztecNode.getBlockNumber('proven');
-          return proven >= epochLastBlockNum ? { proven } : undefined;
-        },
+        async () => (await context.aztecNode.getBlockNumber('proven')) >= epochLastBlockNum,
         `node indexes the proof for epoch ${epoch} up to block ${epochLastBlockNum}`,
-        (ARCHIVER_POLL_INTERVAL * 200) / 1000,
+        test.L2_SLOT_DURATION_IN_S,
         0.5,
       ),
     );
-
-    expect(provenBlockNumber).toBeGreaterThanOrEqual(epochLastBlockNum);
 
     logger.info(`Test succeeded`);
   });

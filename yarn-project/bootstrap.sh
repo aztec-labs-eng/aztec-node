@@ -402,7 +402,7 @@ function test_cmds {
     fi
 
     # Boost some tests resources.
-    if [[ "$test" =~ testbench ]]; then
+    if [[ "$test" =~ (port_change|proving_broker_testbench)\.test\.ts$ ]]; then
       prefix+=":CPUS=10:MEM=16g"
     elif [[ "$test" =~ avm_proving_tests || "$test" =~ rollup_ivc_integration || "$test" =~ avm_integration ]]; then
       prefix+=":CPUS=16:MEM=16g"

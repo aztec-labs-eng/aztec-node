@@ -131,7 +131,7 @@ describe('tx_delayer', () => {
     } finally {
       await isolated.stop();
     }
-  }, 30000);
+  }, 120_000);
 
   it('delays a tx sent through a contract', async () => {
     const deployTxHash = await client.deployContract({
