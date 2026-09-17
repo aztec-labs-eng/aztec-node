@@ -7,7 +7,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { createLogger } from '@aztec-labs/aztec.js/log';
 import { isL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
 import { InboxContract, MULTI_CALL_3_ADDRESS, RollupContract } from '@aztec-labs/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { executeTimeout } from '@aztec-labs/foundation/timer';
@@ -21,6 +21,7 @@ import {
   type L2PruneUncheckpointedEvent,
   type L2PruneUnprovenEvent,
 } from '@aztec-labs/stdlib/block';
+import { getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
 import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import type { BlockProposalObservers } from '@aztec-labs/validator-client';
 import { type Hex, encodeFunctionData, parseEventLogs } from 'viem';
@@ -349,6 +350,10 @@ describe('multi-node/block-production/cross_chain_messages', () => {
         l1BlockNumber: originalSend.txReceipt.blockNumber,
       });
 
+      // Resume at the start of a build frame. Resuming late leaves one sub-slot, so the block that first crosses
+      // the replaced index is the checkpoint's final block rather than a standalone one, and the gate never sees it.
+      const resumeAt = getSlotAtTimestamp(BigInt(await context.cheatCodes.eth.lastBlockTimestamp()), test.constants);
+      await test.waitForBuildWindowForSlot(SlotNumber(Number(resumeAt) + 2));
       await test.startSequencers(nodes);
 
       const held = await Promise.race(armings.map(arming => arming.matched));
