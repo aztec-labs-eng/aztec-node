@@ -157,6 +157,15 @@ export class CheckpointProposalJobTestGate {
   }
 
   /**
+   * The live budgets and end-of-hold guard for the phase held right now, if any. The same context {@link withHold}
+   * hands its body, for a test that armed several gates and only learns which one matched afterwards.
+   */
+  public heldContext(): HoldContext | undefined {
+    const held = this.arming?.held;
+    return held === undefined ? undefined : this.makeHoldContext(held);
+  }
+
+  /**
    * Holds the first phase matching `predicate`, runs `body` against it, and releases unconditionally.
    *
    * The failure channel is raced against the match *and* against the whole body, so a watchdog that fires halfway

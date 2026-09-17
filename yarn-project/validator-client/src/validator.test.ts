@@ -68,7 +68,11 @@ import type {
 import { type ValidatorClientConfig, validatorClientConfigMappings } from './config.js';
 import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
-import { type CheckpointProposalValidationFailureReason, ProposalHandler } from './proposal_handler.js';
+import {
+  type BlockProposalObservers,
+  type CheckpointProposalValidationFailureReason,
+  ProposalHandler,
+} from './proposal_handler.js';
 import { ValidatorClient } from './validator.js';
 
 function makeKeyStore(validator: {
@@ -121,6 +125,8 @@ describe('ValidatorClient', () => {
   let p2pClient: MockProxy<P2P>;
   let blockSource: MockProxy<L2BlockSource & L2BlockSink>;
   let l1ToL2MessageSource: MockProxy<L1ToL2MessageSource>;
+  let observedFirstChecks: Parameters<NonNullable<BlockProposalObservers['onFirstInboxMetadataCheck']>>[0][] = [];
+  let observedDecisions: Parameters<NonNullable<BlockProposalObservers['onBlockProposalDecision']>>[0][] = [];
   let inbox: FakeInbox;
   let epochCache: MockProxy<EpochCache>;
   let checkpointsBuilder: MockProxy<FullNodeCheckpointsBuilder>;
@@ -238,6 +244,9 @@ describe('ValidatorClient', () => {
 
     keyStoreManager = new KeystoreManager(makeKeyStore({ attester: validatorPrivateKeys.map(key => key as Hex<32>) }));
 
+    observedFirstChecks = [];
+    observedDecisions = [];
+
     validatorClient = (await ValidatorClient.new(
       config,
       checkpointsBuilder,
@@ -252,6 +261,12 @@ describe('ValidatorClient', () => {
       blobClient,
       new CheckpointReexecutionTracker(),
       dateProvider,
+      undefined,
+      undefined,
+      {
+        onFirstInboxMetadataCheck: event => observedFirstChecks.push(event),
+        onBlockProposalDecision: event => observedDecisions.push(event),
+      },
     )) as ValidatorClient;
   });
 
@@ -995,6 +1010,87 @@ describe('ValidatorClient', () => {
           offenseType: OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL,
           epochOrSlot: expect.any(BigInt),
         },
+      ]);
+    });
+
+    // The multi-node reorg test reads its verdict off these two observations, so they have to describe what the
+    // validator actually did — including the offense it did or did not raise — rather than what a direct call to
+    // the notifier would report.
+    it('reports a persistent Inbox prefix mismatch as a non-slashable rejection and raises no offense', async () => {
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+      // Every attempt sees a prefix that is present but not the one the proposal signed, so the bounded retries
+      // are spent and the rejection stands.
+      l1ToL2MessageSource.getMessagePosition.mockResolvedValue({
+        totalMessageCount: 0n,
+        rollingHash: new Fr(0xdead),
+      });
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      const decision = observedDecisions.find(event => event.slot === proposal.slotNumber);
+      expect(decision).toMatchObject({
+        accepted: false,
+        reason: 'inbox_prefix_mismatch',
+        slashable: false,
+        escapeHatchOpen: false,
+        proposer: proposal.getSender(),
+      });
+      expect(decision!.blockHash.equals(await proposal.blockHeader.hash())).toBe(true);
+      expect(observedFirstChecks).toEqual([
+        expect.objectContaining({ accepted: false, reason: 'inbox_prefix_mismatch', slot: proposal.slotNumber }),
+      ]);
+      expect(
+        emitSpy.mock.calls.filter(
+          ([event, args]) =>
+            event === WANT_TO_SLASH_EVENT &&
+            (args as { offenseType: OffenseType }[]).some(
+              arg => arg.offenseType === OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL,
+            ),
+        ),
+      ).toEqual([]);
+    });
+
+    it('reports a genuinely invalid proposal as slashable, after the offense has been raised', async () => {
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+      blockBuildResult.block.archive.root = Fr.random();
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: false, reason: 'state_mismatch', slashable: true }),
+      ]);
+      // The observation describes a decision this node had already acted on: the offense was raised first.
+      expect(emitSpy).toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, [
+        {
+          validator: proposal.getSender()!,
+          amount: config.slashBroadcastedInvalidBlockPenalty,
+          offenseType: OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL,
+          epochOrSlot: expect.any(BigInt),
+        },
+      ]);
+    });
+
+    it('reports an accepted proposal with no reason and no offense', async () => {
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(true);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: true, reason: undefined, slashable: false, escapeHatchOpen: false }),
+      ]);
+    });
+
+    // An open escape hatch rejects a proposal that validated, so the observation has to report the node's answer
+    // rather than the validation verdict it was derived from.
+    it('reports a proposal the escape hatch rejects as not accepted', async () => {
+      epochCache.isEscapeHatchOpenAtSlot.mockResolvedValue(true);
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: false, reason: undefined, escapeHatchOpen: true }),
       ]);
     });
 
