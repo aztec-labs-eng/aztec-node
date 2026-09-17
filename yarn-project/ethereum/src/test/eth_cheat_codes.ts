@@ -5,7 +5,16 @@ import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { pluralize } from '@aztec-labs/foundation/string';
 import type { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
-import { type Chain, type Hex, type Transaction, createPublicClient, fallback, hexToNumber, http } from 'viem';
+import {
+  type Chain,
+  type Hex,
+  type Transaction,
+  createPublicClient,
+  fallback,
+  hexToNumber,
+  http,
+  numberToHex,
+} from 'viem';
 import { foundry } from 'viem/chains';
 
 import type { ViemPublicClient } from '../types.js';
@@ -460,17 +469,30 @@ export class EthCheatCodes {
    * Triggers a reorg of the given depth, optionally replacing it with new blocks.
    * The resulting block height will be the same as the original chain.
    * @param depth - The depth of the reorg
-   * @param newBlocks - The blocks to replace the old ones with, each represented as a list of txs.
+   * @param newBlocks - The blocks to replace the old ones with, each represented as a list of txs. An unsigned
+   * request without `gas` has its gas limit estimated by anvil against the chain *before* the rollback, so a call
+   * that costs more once the rolled-back state is restored (a storage slot that goes back to zero, say) is mined
+   * out of gas. Set `gas` explicitly whenever the replacement re-executes work the reorg undid.
    */
   public async reorgWithReplacement(
     depth: number,
-    newBlocks: (Hex | { to: EthAddress | Hex; input?: Hex; from?: EthAddress | Hex; value?: number | bigint })[][] = [],
+    newBlocks: (
+      | Hex
+      | { to: EthAddress | Hex; input?: Hex; from?: EthAddress | Hex; value?: number | bigint; gas?: bigint }
+    )[][] = [],
   ): Promise<void> {
     this.logger.verbose(`Preparing L1 reorg with depth ${depth}`);
     try {
       await this.rpcCall('anvil_reorg', [
         depth,
-        newBlocks.flatMap((txs, index) => txs.map(tx => [typeof tx === 'string' ? tx : { value: 0, ...tx }, index])),
+        newBlocks.flatMap((txs, index) =>
+          txs.map(tx => [
+            typeof tx === 'string'
+              ? tx
+              : { value: 0, ...tx, ...(tx.gas === undefined ? {} : { gas: numberToHex(tx.gas) }) },
+            index,
+          ]),
+        ),
       ]);
     } catch (err) {
       throw new Error(`Error reorging: ${err}`);

@@ -93,6 +93,10 @@ describe('single-node/l1-reorgs/messages', () => {
         functionName: 'sendL2Message',
         args: [{ actor: recipient.toString(), version }, content.toString(), secretHash.toString()],
       }),
+      // Anvil estimates a replacement transaction against the chain before the rollback, where this send's bucket
+      // already exists and the append is warm. Replayed after the rollback the same call opens the bucket cold and
+      // costs far more, so an estimated limit runs out of gas and the message is never emitted.
+      gas: 1_000_000n,
     };
     return { ...sent, index: sent.globalLeafIndex.toBigInt(), call };
   };
