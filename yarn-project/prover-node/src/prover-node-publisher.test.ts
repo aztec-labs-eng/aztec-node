@@ -371,10 +371,30 @@ describe('prover-node-publisher', () => {
       expect(verbatimAttestations.getVerbatimAttestations).toHaveBeenCalledWith(CheckpointNumber(64));
     });
 
-    it('fails the submission when the posted tuple cannot be recovered', async () => {
+    it('retries a transient read failure rather than discarding the proof', async () => {
+      verbatimAttestations.getVerbatimAttestations
+        .mockRejectedValueOnce(new Error('429 too many requests'))
+        .mockResolvedValueOnce(postedAttestations);
+
+      await publisher.submitEpochProof({
+        ...setupPublishData(65, 32, 33, 64),
+        deadline: new Date(Date.now() + 400),
+      });
+
+      expect(verbatimAttestations.getVerbatimAttestations).toHaveBeenCalledTimes(2);
+      expect(submittedAttestations()).toEqual(postedAttestations);
+    });
+
+    it('fails the submission once the deadline leaves no room to retry', async () => {
       verbatimAttestations.getVerbatimAttestations.mockRejectedValue(new Error('pruned logs'));
 
-      await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).rejects.toThrow('pruned logs');
+      await expect(
+        publisher.submitEpochProof({
+          ...setupPublishData(65, 32, 33, 64),
+          deadline: new Date(Date.now() - 1),
+        }),
+      ).rejects.toThrow('pruned logs');
+      expect(verbatimAttestations.getVerbatimAttestations).toHaveBeenCalledTimes(1);
       expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
     });
 

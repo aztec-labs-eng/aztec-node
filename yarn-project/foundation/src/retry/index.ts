@@ -34,6 +34,32 @@ export function* makeBackoff(retries: number[]) {
 }
 
 /**
+ * Generates a backoff sequence for {@link retry} that doubles from one second up to `maxIntervalSeconds` and
+ * ends once `deadline` has passed, making the total retry window a wall-clock budget rather than a fixed number
+ * of attempts. Each interval is trimmed to the time left so a retry never sleeps past the deadline, and a
+ * deadline already in the past ends the sequence immediately, leaving `retry` with a single attempt.
+ *
+ * @param deadline - Point in time after which no further retry is started.
+ * @param dateProvider - Clock to read the current time from. Defaults to `Date`.
+ * @param maxIntervalSeconds - Cap on a single interval.
+ * @returns A generator that yields the next backoff value in seconds.
+ */
+export function* backoffUntil(
+  deadline: Date,
+  { dateProvider, maxIntervalSeconds = 16 }: { dateProvider?: DateProvider; maxIntervalSeconds?: number } = {},
+) {
+  let interval = 1;
+  while (true) {
+    const remainingSeconds = (deadline.getTime() - (dateProvider?.now() ?? Date.now())) / 1000;
+    if (remainingSeconds <= 0) {
+      return;
+    }
+    yield Math.min(interval, maxIntervalSeconds, remainingSeconds);
+    interval *= 2;
+  }
+}
+
+/**
  * Retry a given asynchronous function with a specific backoff strategy, until it succeeds or backoff generator ends.
  * It logs the error and retry interval in case an error is caught. The function can be named for better log output.
  *

@@ -13,6 +13,7 @@ import { areArraysEqual } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { backoffUntil, retry } from '@aztec-labs/foundation/retry';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
@@ -42,6 +43,14 @@ export type L1SubmitEpochProofArgs = {
  * the same length for the epoch on L1, so nothing was sent; it is not a failure.
  */
 export type SubmitEpochProofResult = 'published' | 'already-submitted' | 'failed';
+
+/**
+ * Cap on how long to keep re-reading the attestations posted for a checkpoint before giving up. The proof is
+ * already computed by then, so it is worth riding out a rate-limited or briefly unavailable L1 RPC — but the
+ * publishing service publishes one candidate at a time, so an unbounded wait would stall every other epoch.
+ * The submission deadline cuts the window short whenever it lands first.
+ */
+const ATTESTATIONS_FETCH_BUDGET_MS = 120_000;
 
 export class ProverNodePublisher {
   private metrics: ProverNodePublisherMetrics;
@@ -86,6 +95,30 @@ export class ProverNodePublisher {
     return this.l1TxUtils.getSenderAddress();
   }
 
+  /**
+   * Recovers the attestations tuple a checkpoint was proposed with, retrying with exponential backoff until
+   * {@link ATTESTATIONS_FETCH_BUDGET_MS} or the submission deadline runs out, whichever comes first.
+   *
+   * Every failure is treated as retryable and every attempt re-reads L1 from scratch, because each one of them
+   * — an RPC error, an archiver still catching up, a node serving pruned logs — can clear on the next attempt
+   * against a different RPC in the fallback set. Nothing here can succeed with the wrong bytes: the retriever
+   * verifies what it decodes against the hash the rollup stored. Once the budget is spent the submission fails;
+   * rebuilding the tuple from decoded attestations instead would only burn gas on a revert.
+   */
+  private fetchVerbatimAttestations(
+    checkpointNumber: CheckpointNumber,
+    deadline: Date | undefined,
+  ): Promise<ViemCommitteeAttestations> {
+    const budgetEnd = new Date(Date.now() + ATTESTATIONS_FETCH_BUDGET_MS);
+    const until = deadline && deadline < budgetEnd ? deadline : budgetEnd;
+    return retry(
+      () => this.verbatimAttestations.getVerbatimAttestations(checkpointNumber),
+      `read of the attestations posted for checkpoint ${checkpointNumber}`,
+      backoffUntil(until),
+      this.log,
+    );
+  }
+
   public async submitEpochProof(args: {
     epochNumber: EpochNumber;
     fromCheckpoint: CheckpointNumber;
@@ -120,10 +153,8 @@ export class ProverNodePublisher {
 
     // Re-read the attestations tuple from the propose calldata rather than re-deriving it from the decoded
     // attestations: the rollup checks the submission against the `attestationsHash` it stored at propose time,
-    // which covers bytes (spare bitmap bits, recovery-byte form) that no decoder round-trips faithfully. A
-    // failure to recover them fails the submission — rebuilding the tuple instead would just burn gas on a
-    // revert.
-    const attestations = await this.verbatimAttestations.getVerbatimAttestations(toCheckpoint);
+    // which covers bytes (spare bitmap bits, recovery-byte form) that no decoder round-trips faithfully.
+    const attestations = await this.fetchVerbatimAttestations(toCheckpoint, args.deadline);
     const submitArgs = { ...args, attestations };
 
     // Validate epoch proof range and hashes are correct before submitting
@@ -274,7 +305,7 @@ export class ProverNodePublisher {
   }): Promise<void> {
     const { epochNumber, fromCheckpoint, toCheckpoint } = args;
 
-    const attestations = await this.verbatimAttestations.getVerbatimAttestations(toCheckpoint);
+    const attestations = await this.fetchVerbatimAttestations(toCheckpoint, /*deadline*/ undefined);
     const analyzeArgs = { ...args, attestations };
     const provenPrefixLength = await this.validateEpochProofSubmission(analyzeArgs);
 

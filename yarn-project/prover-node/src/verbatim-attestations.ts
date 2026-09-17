@@ -13,7 +13,11 @@ import type { L2BlockSource } from '@aztec-labs/stdlib/block';
  * round trip.
  */
 export interface VerbatimAttestationsSource {
-  /** Returns the packed tuple the given checkpoint was proposed with. Throws if it cannot be recovered. */
+  /**
+   * Returns the packed tuple the given checkpoint was proposed with, reading L1 afresh on every call. A single
+   * attempt: it throws on any read or decode failure and leaves retrying to the caller, which knows the budget
+   * it has for the submission.
+   */
   getVerbatimAttestations(checkpointNumber: CheckpointNumber): Promise<ViemCommitteeAttestations>;
 }
 
@@ -62,39 +66,55 @@ export class L1VerbatimAttestationsSource implements VerbatimAttestationsSource 
     // rather than a range sweep.
     const l1BlockNumber = published.l1.blockNumber;
     const events = await this.deps.rollupContract.getCheckpointProposedEvents(l1BlockNumber, l1BlockNumber);
-    const event = events.find(
-      e => e.args.checkpointNumber === checkpointNumber && e.args.attestationsHash.equals(attestationsHash),
+    // An invalidated checkpoint can be re-proposed in the same L1 block, so the block can carry several events
+    // for this checkpoint number. Both hashes have to match the checkpoint the rollup currently holds, and every
+    // event that matches is tried: a propose tx that fails to decode does not rule out a later one.
+    const candidates = events.filter(
+      event =>
+        event.args.checkpointNumber === checkpointNumber &&
+        event.args.attestationsHash.equals(attestationsHash) &&
+        event.args.payloadDigest.equals(payloadDigest),
     );
-    if (!event) {
+    if (candidates.length === 0) {
       throw new VerbatimAttestationsUnavailableError(
         checkpointNumber,
-        `no CheckpointProposed event matching attestations hash ${attestationsHash.toString()} on L1 block ${l1BlockNumber}`,
+        `no CheckpointProposed event matching attestations hash ${attestationsHash.toString()} and payload digest ` +
+          `${payloadDigest.toString()} on L1 block ${l1BlockNumber}`,
       );
     }
 
-    let verbatimAttestations: ViemCommitteeAttestations;
-    try {
-      ({ verbatimAttestations } = await this.deps.calldataRetriever.getCheckpointFromRollupTx(
-        event.l1TransactionHash,
-        event.args.versionedBlobHashes,
-        checkpointNumber,
-        { attestationsHash: attestationsHash.toString(), payloadDigest: payloadDigest.toString() },
-      ));
-    } catch (err) {
-      throw new VerbatimAttestationsUnavailableError(
-        checkpointNumber,
-        `failed to decode the propose calldata of ${event.l1TransactionHash}`,
-        { cause: err },
-      );
+    const failures: unknown[] = [];
+    for (const event of candidates) {
+      try {
+        const { verbatimAttestations } = await this.deps.calldataRetriever.getCheckpointFromRollupTx(
+          event.l1TransactionHash,
+          event.args.versionedBlobHashes,
+          checkpointNumber,
+          { attestationsHash: attestationsHash.toString(), payloadDigest: payloadDigest.toString() },
+        );
+        this.log.debug(`Recovered verbatim attestations for checkpoint ${checkpointNumber}`, {
+          checkpointNumber,
+          l1BlockNumber,
+          l1TransactionHash: event.l1TransactionHash,
+          attestationsHash: attestationsHash.toString(),
+        });
+        return verbatimAttestations;
+      } catch (err) {
+        failures.push(err);
+        this.log.warn(`Could not decode propose calldata of ${event.l1TransactionHash}`, {
+          checkpointNumber,
+          l1BlockNumber,
+          l1TransactionHash: event.l1TransactionHash,
+          err,
+        });
+      }
     }
 
-    this.log.debug(`Recovered verbatim attestations for checkpoint ${checkpointNumber}`, {
+    const txHashes = candidates.map(event => event.l1TransactionHash).join(', ');
+    throw new VerbatimAttestationsUnavailableError(
       checkpointNumber,
-      l1BlockNumber,
-      l1TransactionHash: event.l1TransactionHash,
-      attestationsHash: attestationsHash.toString(),
-    });
-
-    return verbatimAttestations;
+      `failed to decode the propose calldata of ${txHashes}`,
+      { cause: failures[0] },
+    );
   }
 }

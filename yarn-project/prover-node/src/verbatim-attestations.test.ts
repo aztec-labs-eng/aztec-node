@@ -22,10 +22,13 @@ describe('L1VerbatimAttestationsSource', () => {
   let calldataRetriever: MockProxy<Pick<CalldataRetriever, 'getCheckpointFromRollupTx'>>;
   let source: L1VerbatimAttestationsSource;
 
-  const makeEvent = (overrides: Partial<CheckpointProposedLog['args']> = {}): CheckpointProposedLog => ({
+  const makeEvent = (
+    overrides: Partial<CheckpointProposedLog['args']> = {},
+    txHash = l1TransactionHash,
+  ): CheckpointProposedLog => ({
     l1BlockNumber,
     l1BlockHash: Buffer32.random(),
-    l1TransactionHash,
+    l1TransactionHash: txHash,
     args: {
       checkpointNumber,
       archive: Fr.random(),
@@ -89,6 +92,31 @@ describe('L1VerbatimAttestationsSource', () => {
     await expect(source.getVerbatimAttestations(checkpointNumber)).rejects.toThrow(
       VerbatimAttestationsUnavailableError,
     );
+  });
+
+  it('skips a propose event whose payload digest is not the one the rollup holds', async () => {
+    const stale = makeEvent({ payloadDigest: Buffer32.random() }, Buffer32.random().toString());
+    rollupContract.getCheckpointProposedEvents.mockResolvedValue([stale, makeEvent()]);
+
+    await expect(source.getVerbatimAttestations(checkpointNumber)).resolves.toEqual(posted);
+    expect(calldataRetriever.getCheckpointFromRollupTx).toHaveBeenCalledTimes(1);
+    expect(calldataRetriever.getCheckpointFromRollupTx).not.toHaveBeenCalledWith(
+      stale.l1TransactionHash,
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('tries every matching event when an earlier propose tx does not decode', async () => {
+    // A checkpoint invalidated and re-proposed in the same L1 block leaves two events the hashes cannot tell
+    // apart; giving up on the first one that fails to decode would strand a provable checkpoint.
+    const undecodable = makeEvent({}, Buffer32.random().toString());
+    rollupContract.getCheckpointProposedEvents.mockResolvedValue([undecodable, makeEvent()]);
+    calldataRetriever.getCheckpointFromRollupTx.mockRejectedValueOnce(new Error('hash mismatch for traced propose'));
+
+    await expect(source.getVerbatimAttestations(checkpointNumber)).resolves.toEqual(posted);
+    expect(calldataRetriever.getCheckpointFromRollupTx).toHaveBeenCalledTimes(2);
   });
 
   it('throws when the propose calldata cannot be decoded', async () => {
