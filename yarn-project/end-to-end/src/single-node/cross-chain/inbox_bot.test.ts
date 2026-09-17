@@ -308,6 +308,15 @@ describe('single-node/cross-chain/inbox_bot', () => {
         unknown: resolved.filter(message => message.blockRelation === 'unknown').length,
       });
 
+      // A run only closes once its replay probe has a verdict, and the probe starts on the consumption clock only
+      // after every message has resolved, so it is still outstanding at this point.
+      await retryUntil(
+        async () => (await store.inbox.getBatch(batchId))!.replayProbedAt !== undefined,
+        'saturation batch replay probe resolved',
+        180,
+        2,
+      );
+
       // The run is closed out on the production clock, which this suite has set to an hour; drive one more step
       // rather than wait for it. The same step also produces an ordinary batch, which the test leaves behind.
       await bot.produceStep();
