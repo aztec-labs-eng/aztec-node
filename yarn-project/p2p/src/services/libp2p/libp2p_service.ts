@@ -1380,9 +1380,11 @@ export class LibP2PService extends WithTracer implements P2PService {
       return { result: TopicValidatorResult.Ignore, obj: block, metadata: { isEquivocated, isOversized } };
     }
 
-    // Too many blocks received for this slot and index, penalize peer and do not re-broadcast
+    // Local per-position retention cap is full. That is receiver-local state, not evidence the
+    // sender forwarded invalid data (it could not know our cache was full), so drop the extra
+    // payload without penalizing the peer. Do not re-broadcast.
     if (!added) {
-      this.logger.warn(`Penalizing peer for block proposal exceeding per-position cap`, {
+      this.logger.debug(`Ignoring block proposal exceeding per-position cap`, {
         ...block.toBlockInfo(),
         indexWithinCheckpoint: block.indexWithinCheckpoint,
         count,
@@ -1390,9 +1392,9 @@ export class LibP2PService extends WithTracer implements P2PService {
         source: peerId.toString(),
       });
       return {
-        result: TopicValidatorResult.Reject,
+        result: TopicValidatorResult.Ignore,
+        obj: block,
         metadata: { isEquivocated, isOversized },
-        severity: PeerErrorSeverity.HighToleranceError,
       };
     }
 
@@ -1602,19 +1604,19 @@ export class LibP2PService extends WithTracer implements P2PService {
       };
     }
 
-    // Too many checkpoint proposals received for this slot, penalize peer and do not re-broadcast.
-    // Note: We still return the checkpoint obj so the lastBlock can be processed if valid
+    // Local per-slot retention cap is full. That is receiver-local state, not evidence the sender
+    // forwarded invalid data, so drop the extra payload without penalizing the peer. Do not
+    // re-broadcast. We still return the checkpoint obj so the lastBlock can be processed if valid.
     if (!added) {
-      this.logger.warn(`Penalizing peer for checkpoint proposal exceeding per-slot cap`, {
+      this.logger.debug(`Ignoring checkpoint proposal exceeding per-slot cap`, {
         ...checkpoint.toCheckpointInfo(),
         count,
         source: peerId.toString(),
       });
       return {
-        result: TopicValidatorResult.Reject,
+        result: TopicValidatorResult.Ignore,
         obj: checkpoint,
         metadata: { isEquivocated, processBlock, isOversized },
-        severity: PeerErrorSeverity.HighToleranceError,
       };
     }
 
