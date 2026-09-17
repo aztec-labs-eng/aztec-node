@@ -76,23 +76,47 @@ export async function findMessageInsertionBlock(
   upperBound: BlockNumber,
   maxLookback: number,
 ): Promise<BlockNumber | undefined> {
+  const cached = new Map<number, boolean | undefined>();
   const covers = async (blockNumber: number): Promise<boolean | undefined> => {
+    if (cached.has(blockNumber)) {
+      return cached.get(blockNumber);
+    }
     const block = await node.getBlockData({ number: BlockNumber(blockNumber) });
-    return block === undefined
-      ? undefined
-      : BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex) > leafIndex;
+    const result =
+      block === undefined ? undefined : BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex) > leafIndex;
+    cached.set(blockNumber, result);
+    return result;
   };
 
   if ((await covers(upperBound)) !== true) {
     return undefined;
   }
 
-  let low = Math.max(1, upperBound - maxLookback);
-  if (low > 1 && (await covers(low - 1)) !== false) {
+  const lowerBound = Math.max(1, upperBound - maxLookback);
+  const adjacentLowerBound = Math.max(lowerBound, upperBound - 4);
+  for (let blockNumber = upperBound - 1; blockNumber >= adjacentLowerBound; blockNumber--) {
+    const covered = await covers(blockNumber);
+    if (covered === undefined) {
+      return undefined;
+    }
+    if (!covered) {
+      return BlockNumber(blockNumber + 1);
+    }
+  }
+
+  if (adjacentLowerBound === lowerBound) {
+    if (lowerBound === 1) {
+      return BlockNumber(1);
+    }
+    return (await covers(lowerBound - 1)) === false ? BlockNumber(lowerBound) : undefined;
+  }
+
+  if (lowerBound > 1 && (await covers(lowerBound - 1)) !== false) {
     return undefined;
   }
 
-  let high: number = upperBound;
+  let low = lowerBound;
+  let high = adjacentLowerBound;
   while (low < high) {
     const middle = low + Math.floor((high - low) / 2);
     const covered = await covers(middle);

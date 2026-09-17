@@ -402,6 +402,12 @@ variable "P2P_MAX_PENDING_TX_COUNT" {
   default     = null
 }
 
+variable "P2P_MIN_TX_POOL_AGE_MS" {
+  description = "Minimum age of pending transactions before they are eligible for block building"
+  type        = string
+  default     = null
+}
+
 variable "SEQ_SKIP_CHECKPOINT_PUBLISH_PERCENT" {
   description = "Percentage probability of skipping checkpoint publishing"
   type        = string
