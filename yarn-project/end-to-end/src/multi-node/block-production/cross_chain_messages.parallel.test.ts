@@ -704,7 +704,15 @@ describe('multi-node/block-production/cross_chain_messages', () => {
       // scenario itself produced is in this snapshot, and only the abandoned slot's own abort is allowed through.
       const failuresDuringScenario = [...failEvents];
       expect(failuresDuringScenario.filter(event => !expectedFailure(event))).toEqual([]);
-      expect(failuresDuringScenario.filter(expectedFailure)).toHaveLength(1);
+      expect(
+        aborts.filter(
+          event =>
+            event.slot === heldSlot &&
+            event.checkpointNumber === held.checkpointNumber &&
+            event.sequencerIndex === proposerIndex &&
+            event.reason === 'inbox_prefix_reorged',
+        ),
+      ).toHaveLength(1);
       await waitForProvenCheckpoint(fixture, replacementCheckpoint, { expectedFailure });
 
       // The same block identity is still canonical once proven, so the convergence above was not undone by the
