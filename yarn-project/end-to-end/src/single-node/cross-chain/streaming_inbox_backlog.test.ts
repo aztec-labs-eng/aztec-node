@@ -348,6 +348,15 @@ describe('single-node/cross-chain/streaming_inbox_backlog', () => {
       expect(witness).toBeDefined();
       expect(witness![0]).toEqual(index);
     }
+
+    // Three sampled positions cannot show that nothing in between moved. The archiver's whole ordered range across
+    // the rollover is compared against the receipt's own order instead, which is one read rather than 257 witness
+    // lookups and is the stronger claim: every leaf, in order, unchanged across the bucket boundary.
+    const firstIndex = rolledOver[0].index;
+    const storedRange = await archiver.getL1ToL2MessageRange(firstIndex, rolledOver.at(-1)!.index + 1n);
+    expect(storedRange.messages.map(message => message.toString())).toEqual(
+      rolledOver.map(message => message.msgHash.toString()),
+    );
   });
 
   // A proposer that starts its checkpoint late has fewer sub-slots left, so its completion target has to come from

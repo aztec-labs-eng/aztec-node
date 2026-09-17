@@ -23,7 +23,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import type { BlockProposalObservers } from '@aztec-labs/validator-client';
-import { type Hex, encodeFunctionData } from 'viem';
+import { type Hex, encodeFunctionData, parseEventLogs } from 'viem';
 
 import {
   type CheckpointPhasePredicate,
@@ -44,12 +44,6 @@ import {
 
 const TX_COUNT = 10;
 
-/**
- * L1 blocks the content-changing reorg reserves for itself: the replaced message send plus the hold. The window is
- * asserted to have stayed inside it, so "nothing else was replaced away" is a bound set in advance.
- */
-const REORG_WINDOW_L1_BLOCKS = 24;
-
 /** One collection per validator node, indexed the same way the fixture indexes its nodes. */
 type PerNode<T> = T[][];
 
@@ -64,6 +58,12 @@ type ObservedAbort = Parameters<SequencerEvents['checkpoint-build-aborted']>[0] 
 
 /** The slot a tracked sequencer failure is about, when it has one. */
 const failedSlot = (event: TrackedSequencerEvent): SlotNumber | undefined => ('slot' in event ? event.slot : undefined);
+
+/**
+ * L1 blocks the reorg phase reserves before it opens its window: the message send plus the hold. The prover's next
+ * submission is deferred past it before anything is sent, and the window is asserted to have stayed inside it.
+ */
+const PROVER_DEFERRAL_L1_BLOCKS = 24;
 
 // Cross-chain payloads survive multi-block production: L2→L1 message effects are present across the
 // produced blocks, and L1→L2 messages become ready after inbox lag and their consume txs mine. Both
@@ -247,123 +247,153 @@ describe('multi-node/block-production/cross_chain_messages', () => {
 
     await fixture.test.assertMultipleBlocksPerSlot(2, { wait: true, archiver: fixture.archiver });
 
-    // ---------------------------------------------------------------------------------------------------------
-    // Content-changing L1 reorg while a checkpoint is in flight.
-    //
-    // A changed message prefix is where multi-node behaviour adds information a single node cannot: the proposer
-    // and the validators observe the reorg at different moments, a validator must read its own prefix mismatch as
-    // local-view state rather than proposer misconduct, and the committee has to recover quorum on a replacement
-    // built from the canonical prefix. The stale block is gossiped from the gate after L1 has already changed, so
-    // the validator's mismatch is against a parent that is still available to re-execute against, not against a
-    // block it simply never received.
-    // ---------------------------------------------------------------------------------------------------------
+    // Content-changing L1 reorg while a checkpoint is in flight. A changed message prefix is where multi-node
+    // behaviour adds information a single node cannot: the proposer and the validators observe the reorg at
+    // different moments, a validator must read its own prefix mismatch as local-view state rather than proposer
+    // misconduct, and the committee has to recover quorum on a replacement built from the canonical prefix. The
+    // stale block is signed and stored before L1 changes and gossiped after, so the validator's mismatch is against
+    // a parent it still holds rather than a block it never received.
     const { l1Client, l1ContractAddresses } = context.deployL1ContractsValues;
     const inbox = new InboxContract(l1Client, l1ContractAddresses.inboxAddress.toString());
     const rollup = new RollupContract(l1Client, l1ContractAddresses.rollupAddress.toString());
     const archivers = nodes.map(node => node.getBlockSource() as Archiver);
+    const inboxAddress = l1ContractAddresses.inboxAddress.toString();
 
-    /** An Inbox send together with the exact call that produced it, so a reorg can replay or replace it verbatim. */
-    const prepareMessage = async (content: Fr) => {
+    /** The `sendL2Message` call for one message, so a reorg can insert it without a live sender. */
+    const prepareMessage = async () => {
       const recipient = await AztecAddress.random();
+      const content = Fr.random();
       const secretHash = Fr.random();
       const version = BigInt(await rollup.getVersion());
       return {
+        recipient,
         content,
+        secretHash,
         call: {
-          to: l1ContractAddresses.inboxAddress.toString() as Hex,
-          from: l1Client.account.address,
+          to: inboxAddress as Hex,
+          from: messageSender.account.address,
           input: encodeFunctionData({
             abi: InboxAbi,
             functionName: 'sendL2Message',
             args: [{ actor: recipient.toString(), version }, content.toString(), secretHash.toString()],
           }),
-          // Estimated against the pre-reorg chain the bucket is warm; replayed after the rollback it is opened cold
+          // Estimated against the pre-reorg chain the bucket is warm; inserted after the rollback it is opened cold
           // and costs far more, so an estimated limit runs out of gas and the message is never emitted.
           gas: 1_000_000n,
         },
-        send: () => sendL1ToL2Message({ recipient, content, secretHash }, { l1Client, l1ContractAddresses }),
       };
     };
 
-    // The parent checkpoint stays strictly outside the reorg range, so the window can never drop a publication.
+    /** The single `MessageSent` event the Inbox emitted in `l1BlockNumber`: the real leaf hash and compact index. */
+    const messageSentIn = async (l1BlockNumber: bigint) => {
+      const logs = await l1Client.getLogs({
+        address: inboxAddress as Hex,
+        fromBlock: l1BlockNumber,
+        toBlock: l1BlockNumber,
+      });
+      const [event, ...rest] = parseEventLogs({ abi: InboxAbi, eventName: 'MessageSent', logs });
+      if (event === undefined || rest.length > 0) {
+        throw new Error(`Expected exactly one MessageSent event in L1 block ${l1BlockNumber}, got ${rest.length + 1}`);
+      }
+      return { msgHash: Fr.fromHexString(event.args.hash), index: event.args.message.index };
+    };
+
+    // A dedicated L1 sender, so the messages this phase sends cannot collide on nonce with the publisher or the
+    // prover, whose transactions are the ones the reorg must not replace away.
+    const { client: messageSender } = await test.createL1Client();
+
+    // Production is stopped between checkpoints before anything is sent: pausing drains the in-flight checkpoint and
+    // its pending L1 submission, so the window the reorg replaces cannot contain a publication, and no proposer can
+    // consume the message before the gates exist. The prover's next submission is deferred past the window for the
+    // same reason — a proof inside it would be replaced away — and restored in the `finally`.
+    await Promise.all(nodes.map(node => node.getSequencer()!.pause()));
     const publishedParent = await test.monitor.run(true);
     const l1BlockBeforeReorgWindow = BigInt(publishedParent.l1BlockNumber);
+    const parentCheckpointNumber = publishedParent.checkpointNumber;
+    test.proverDelayer.pauseNextTxUntilBlock(
+      l1BlockBeforeReorgWindow + BigInt(PROVER_DEFERRAL_L1_BLOCKS),
+      test.L1_BLOCK_TIME_IN_S * (PROVER_DEFERRAL_L1_BLOCKS + 8),
+    );
+
     const replacedIndex = (await inbox.getState()).totalMessagesInserted;
-
-    const original = await prepareMessage(Fr.random());
-    const replacement = await prepareMessage(Fr.random());
-
-    // Armed before the message exists, so no proposer can consume it before there is anything to hold.
-    const crossesReplacement: CheckpointPhasePredicate = event =>
-      event.phase === 'block-ready-to-broadcast' && event.isStandalone && event.consumedMessageCount > replacedIndex;
-    const armings = gates.map(gate => gate.arm(crossesReplacement));
-    armings.forEach(arming => {
-      // Only the proposing node matches; the others are released untouched at the end of the case, and their
-      // watchdogs must not surface as unhandled rejections in the meantime.
-      arming.matched.catch(() => {});
-      arming.completed.catch(() => {});
-      arming.failed.catch(() => {});
-    });
-
-    const originalSend = await original.send();
-    logger.warn(`Sent the message the reorg will replace`, {
-      msgHash: originalSend.msgHash.toString(),
-      index: originalSend.globalLeafIndex.toBigInt(),
-      l1BlockNumber: originalSend.txReceipt.blockNumber,
-    });
-    expect(originalSend.globalLeafIndex.toBigInt()).toEqual(replacedIndex);
+    const original = await prepareMessage();
+    const replacement = await prepareMessage();
 
     const prunes: PerNode<L2Block> = times(NODE_COUNT, () => []);
     const slashRequests: PerNode<WantToSlashArgs> = times(NODE_COUNT, () => []);
     const aborts: ObservedAbort[] = [];
     const cleanups: (() => void)[] = [];
 
+    // Armed before production resumes and before the message exists, so nothing can cross the replaced index
+    // before there is a gate to hold it. Only the node that happens to be proposing matches.
+    const crossesReplacement: CheckpointPhasePredicate = event =>
+      event.phase === 'block-ready-to-broadcast' && event.isStandalone && event.consumedMessageCount > replacedIndex;
+    const armings = gates.map(gate => gate.arm(crossesReplacement));
+    // The three non-proposers never match and are released at the end; their watchdogs must not surface as
+    // unhandled rejections in the meantime.
+    armings.forEach(arming => {
+      arming.matched.catch(() => {});
+      arming.completed.catch(() => {});
+      arming.failed.catch(() => {});
+    });
+
     try {
+      const originalSend = await sendL1ToL2Message(
+        { recipient: original.recipient, content: original.content, secretHash: original.secretHash },
+        { l1Client: messageSender, l1ContractAddresses },
+      );
+      expect(originalSend.globalLeafIndex.toBigInt()).toEqual(replacedIndex);
+      logger.warn(`Sent the message the reorg will replace`, {
+        msgHash: originalSend.msgHash.toString(),
+        index: replacedIndex,
+        l1BlockNumber: originalSend.txReceipt.blockNumber,
+      });
+
+      await test.startSequencers(nodes);
+
       const held = await Promise.race(armings.map(arming => arming.matched));
       const proposerIndex = gates.findIndex(gate => gate.heldEvent?.blockHash.equals(held.blockHash));
       expect(proposerIndex).toBeGreaterThanOrEqual(0);
-      // Every other node is released immediately: one arming holds one block, and a gate left armed on a
-      // non-proposer would hold a later, unrelated checkpoint.
+      // One arming holds one block, so the gates that did not match are released immediately rather than left to
+      // hold a later, unrelated checkpoint.
       gates.forEach((gate, index) => index !== proposerIndex && gate.release());
 
-      // The named validator is any committee member that is not the proposer, so its prefix mismatch is a peer's
+      const holder = gates[proposerIndex];
+      const holderArming = armings[proposerIndex];
+      const heldSlot: SlotNumber = held.slot;
+      const heldBlockHash: BlockHash = held.blockHash;
+      const heldProposer = fixture.validators[proposerIndex].attester;
+      // The named validator is a committee member that is not the proposer, so its prefix mismatch is a peer's
       // verdict on someone else's block rather than a node disagreeing with itself.
       const validatorIndex = (proposerIndex + 1) % NODE_COUNT;
       const namedValidator = fixture.validators[validatorIndex].attester;
-      logger.warn(`Holding block ${held.blockNumber} of checkpoint ${held.checkpointNumber} at slot ${held.slot}`, {
+      logger.warn(`Holding block ${held.blockNumber} of checkpoint ${held.checkpointNumber} at slot ${heldSlot}`, {
         proposerIndex,
         validatorIndex,
         namedValidator: namedValidator.toString(),
         consumedMessageCount: held.consumedMessageCount,
       });
 
-      const holder = gates[proposerIndex];
-      const holderArming = armings[proposerIndex];
-      const heldSlot: SlotNumber = held.slot;
-      const heldBlockHash: BlockHash = held.blockHash;
-
-      const reorged = await Promise.race([
+      const replacementAnchor = await Promise.race([
         (async () => {
+          const ctx = holder.heldContext()!;
+
           // The held block crosses the replacement index and its parent does not, which is what makes the stale
           // block's prefix the one the reorg invalidates.
-          const parentCount = BigInt(
-            (await archivers[proposerIndex].getBlockData({ number: BlockNumber(held.blockNumber - 1) }))!.header.state
-              .l1ToL2MessageTree.nextAvailableLeafIndex,
-          );
+          const parentNumber = BlockNumber(held.blockNumber - 1);
+          const parentOnProposer = (await archivers[proposerIndex].getBlockData({ number: parentNumber }))!;
+          const parentCount = BigInt(parentOnProposer.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
           expect(parentCount).toBeLessThanOrEqual(replacedIndex);
           expect(held.consumedMessageCount).toBeGreaterThan(replacedIndex);
 
           // The named validator can re-execute against the stale block's parent, so its rejection below is about
           // the Inbox prefix and not about a parent it never had.
           const parentOnValidator = await retryUntil(
-            () => archivers[validatorIndex].getBlockData({ number: BlockNumber(held.blockNumber - 1) }),
+            () => archivers[validatorIndex].getBlockData({ number: parentNumber }),
             `validator ${validatorIndex} holds the stale block's parent`,
             test.L2_SLOT_DURATION_IN_S,
             0.2,
           );
-          const parentOnProposer = (await archivers[proposerIndex].getBlockData({
-            number: BlockNumber(held.blockNumber - 1),
-          }))!;
           expect(parentOnValidator.archive.root.toString()).toEqual(parentOnProposer.archive.root.toString());
 
           // Every observer is attached before L1 changes and before the stale block is gossiped, so nothing the
@@ -392,11 +422,12 @@ describe('multi-node/block-production/cross_chain_messages', () => {
 
           // The reorg window: from the L1 block carrying the replaced message to the head, strictly above the
           // parent checkpoint's publication. Publications and proofs both go through the Multicall3 forwarder, so
-          // the scan looks for that as well as for direct rollup calls.
+          // the scan looks for that as well as for direct rollup calls — it confirms the controls above held,
+          // rather than standing in for them.
           const head = BigInt((await test.monitor.run(true)).l1BlockNumber);
           const reorgFrom = originalSend.txReceipt.blockNumber;
           expect(reorgFrom).toBeGreaterThan(l1BlockBeforeReorgWindow);
-          expect(head - reorgFrom).toBeLessThan(BigInt(REORG_WINDOW_L1_BLOCKS));
+          expect(head - l1BlockBeforeReorgWindow).toBeLessThan(BigInt(PROVER_DEFERRAL_L1_BLOCKS));
           const rollupSenders = [l1ContractAddresses.rollupAddress.toString(), MULTI_CALL_3_ADDRESS].map(address =>
             address.toLowerCase(),
           );
@@ -405,13 +436,13 @@ describe('multi-node/block-production/cross_chain_messages', () => {
             expect(block.transactions.filter(tx => rollupSenders.includes(tx.to?.toLowerCase() ?? ''))).toHaveLength(0);
           }
 
-          // The suffix is swapped atomically for one that carries a *different* message at the same index: same
-          // count, changed leaf and rolling hash. Mining is paused across the swap so the height and hash
-          // comparisons read a chain that is not moving underneath them.
+          // The suffix is swapped atomically for one carrying a different message at the same index: same count,
+          // changed leaf and rolling hash. `anvil_reorg` re-mines the whole depth, so the height is preserved;
+          // mining is paused across the swap so the comparisons read a chain that is not moving underneath them.
           const anchorBefore = await l1Client.getBlock({ blockNumber: reorgFrom });
           const headBefore = await l1Client.getBlock({ blockNumber: head });
           const stateBefore = await inbox.getState();
-          holderArming.matched.catch(() => {});
+          ctx.assertStillHeld('replace the L1 suffix');
           await context.cheatCodes.eth.execWithPausedAnvil(async () => {
             await context.cheatCodes.eth.reorgWithReplacement(Number(head - reorgFrom + 1n), [[replacement.call]]);
             const [anchorAfter, headAfter] = await Promise.all([
@@ -421,6 +452,11 @@ describe('multi-node/block-production/cross_chain_messages', () => {
             expect(headAfter.number).toEqual(headBefore.number);
             expect(anchorAfter.hash).not.toEqual(anchorBefore.hash);
           });
+
+          // The replacement's own leaf hash, read from the event it emitted rather than derived from its payload.
+          const inserted = await messageSentIn(reorgFrom);
+          expect(inserted.index).toEqual(replacedIndex);
+          expect(inserted.msgHash.toString()).not.toEqual(originalSend.msgHash.toString());
 
           const stateAfter = await retryUntil(
             async () => {
@@ -438,6 +474,7 @@ describe('multi-node/block-production/cross_chain_messages', () => {
           // Both the proposer and the named validator have re-read the replaced suffix and certified their message
           // logs against the canonical chain, so the mismatch below is a real disagreement about content.
           for (const index of [proposerIndex, validatorIndex]) {
+            ctx.assertStillHeld(`wait for node ${index} to reconcile`);
             await waitForCanonicalMessageSyncpoint(
               archivers[index],
               {
@@ -458,29 +495,44 @@ describe('multi-node/block-production/cross_chain_messages', () => {
 
           // The proposer's own held block is gone with the prefix it consumed; the validator keeps the parent.
           await retryUntil(
-            async () =>
-              (await archivers[proposerIndex].getBlockData({ number: BlockNumber(held.blockNumber) })) === undefined,
+            async () => (await archivers[proposerIndex].getBlockData({ number: held.blockNumber })) === undefined,
             'the proposer prunes the block built on the replaced prefix',
             test.L2_SLOT_DURATION_IN_S * 2,
             0.5,
           );
+          expect(prunes[proposerIndex].map(block => block.number)).toContain(Number(held.blockNumber));
           expect(
-            (await archivers[validatorIndex].getBlockData({
-              number: BlockNumber(held.blockNumber - 1),
-            }))!.archive.root.toString(),
+            (await archivers[validatorIndex].getBlockData({ number: parentNumber }))!.archive.root.toString(),
           ).toEqual(parentOnProposer.archive.root.toString());
 
-          return { reorgFrom, head };
+          // The release has to land inside the window peers accept a proposal in, and leave the proposer a real
+          // next sub-slot: both are asked of the job's own schedule at this instant, not of the event's snapshot.
+          const ingressBudgetMs = ctx.remainingIngressBudgetMs();
+          logger.warn(`Releasing the stale block`, {
+            ingressBudgetMs,
+            holdBudgetMs: ctx.remainingHoldBudgetMs(),
+            nextSubslot: ctx.nextSubslot().index,
+          });
+          expect(ingressBudgetMs).toBeGreaterThan(0);
+          expect(ctx.canStartAnotherBlock()).toBe(true);
+          ctx.assertStillHeld('release the stale block');
+          return { reorgFrom, head, replacementMsgHash: inserted.msgHash };
         })(),
         holderArming.failed,
       ]);
-      logger.warn(`Replaced the L1 suffix`, reorged);
+      logger.warn(`Replaced the L1 suffix`, {
+        reorgFrom: replacementAnchor.reorgFrom,
+        head: replacementAnchor.head,
+        replacementMsgHash: replacementAnchor.replacementMsgHash.toString(),
+      });
+      const replacementMsgHash = replacementAnchor.replacementMsgHash;
 
       // Releasing gossips the already-signed stale block: its parent is available, and its prefix no longer is.
+      // The completion is awaited rather than swallowed, so a watchdog that fired mid-hold still fails here.
       holder.release();
-      await holderArming.completed.catch(() => {});
+      await holderArming.completed;
 
-      // The named validator's *first* Inbox metadata comparison for this exact block is the mismatch. The final
+      // The named validator's first Inbox metadata comparison for this exact block is the mismatch. The final
       // decision alone could not show it: the metadata helper retries until its deadline.
       const firstMismatch = await retryUntil(
         () =>
@@ -493,8 +545,10 @@ describe('multi-node/block-production/cross_chain_messages', () => {
       );
       expect(firstMismatch.accepted).toBe(false);
       expect(firstMismatch.reason).toEqual('inbox_prefix_mismatch');
+      expect(firstMismatch.proposer.toString()).toEqual(heldProposer.toString());
 
-      // And its completed decision, once the bounded retries are spent, is a non-punitive rejection.
+      // And its completed decision, once the bounded retries are spent, is a non-punitive rejection of the same
+      // block by the same proposer.
       const finalDecision = await retryUntil(
         () =>
           Promise.resolve(
@@ -504,15 +558,131 @@ describe('multi-node/block-production/cross_chain_messages', () => {
         test.L2_SLOT_DURATION_IN_S * 3,
         0.2,
       );
-      expect(finalDecision.slashable).toBe(false);
       expect(finalDecision.reason).toEqual('inbox_prefix_mismatch');
+      expect(finalDecision.slashable).toBe(false);
+      expect(finalDecision.slot).toEqual(heldSlot);
+      expect(finalDecision.proposer.toString()).toEqual(heldProposer.toString());
       logger.warn(`Named validator rejected the stale block non-punitively`, {
         namedValidator: namedValidator.toString(),
         reason: finalDecision.reason,
       });
 
-      // No node treated the stale proposal as proposer misconduct, observed through the whole decision rather than
-      // only at the first check.
+      // The proposer continues from a stale checkpoint cursor against its reconciled message source and gives up
+      // the slot, reporting the reorg rather than a generic timeout.
+      const abort = await retryUntil(
+        () => Promise.resolve(aborts.find(event => event.slot === heldSlot)),
+        `the proposer abandons slot ${heldSlot}`,
+        test.L2_SLOT_DURATION_IN_S * 3,
+        0.2,
+      );
+      expect(abort.reason).toEqual('inbox_prefix_reorged');
+      expect(abort.sequencerIndex).toEqual(proposerIndex);
+
+      // The replacement reaches L2 at the index the removed message used to hold, and the removed one is gone.
+      await retryUntil(
+        async () => (await context.aztecNode.getL1ToL2MessageIndex(replacementMsgHash)) !== undefined,
+        'the replacement message reaches L2',
+        test.L2_SLOT_DURATION_IN_S * 4,
+        0.5,
+      );
+      expect(await context.aztecNode.getL1ToL2MessageIndex(replacementMsgHash)).toEqual(replacedIndex);
+      expect(await context.aztecNode.getL1ToL2MessageIndex(originalSend.msgHash)).toBeUndefined();
+
+      // The replacement checkpoint is the first published one past the parent whose blocks actually insert the
+      // replacement. Picked by that property rather than by "some multi-block checkpoint", which could select an
+      // older happy-path one.
+      const published = await retryUntil(
+        async () => {
+          const candidates = await fixture.archiver.getCheckpoints({
+            from: CheckpointNumber(parentCheckpointNumber + 1),
+            limit: 20,
+          });
+          return candidates.find(candidate =>
+            candidate.checkpoint.blocks.some(
+              block => BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex) > replacedIndex,
+            ),
+          );
+        },
+        `a checkpoint past ${parentCheckpointNumber} publishes the replacement message`,
+        test.L2_SLOT_DURATION_IN_S * 6,
+        0.5,
+      );
+      const replacementCheckpoint = published.checkpoint.number;
+      const replacementSlot = published.checkpoint.header.slotNumber;
+      expect(replacementSlot).not.toEqual(heldSlot);
+
+      // Nothing was published for the abandoned slot, checked across every checkpoint from the parent onwards.
+      const sinceParent = await fixture.archiver.getCheckpoints({
+        from: CheckpointNumber(parentCheckpointNumber + 1),
+        limit: 20,
+      });
+      expect(sinceParent.map(candidate => candidate.checkpoint.header.slotNumber)).not.toContain(heldSlot);
+
+      // Quorum recovered, and the named validator's signature over this exact archive recovers to its address.
+      // Address metadata on the published attestation says who was asked, not who signed.
+      const attestations = await retryUntil(
+        async () => {
+          const forSlot = await nodes[validatorIndex].getP2P().getCheckpointAttestationsForSlot(replacementSlot);
+          const matching = forSlot.filter(
+            attestation => attestation.archive.equals(published.checkpoint.archive.root) && attestation.getSender(),
+          );
+          return matching.length > 0 ? matching : undefined;
+        },
+        `attestations for the replacement checkpoint at slot ${replacementSlot}`,
+        test.L2_SLOT_DURATION_IN_S * 3,
+        0.5,
+      );
+      const recoveredSigners = attestations.map(attestation => attestation.getSender()!.toString());
+      const publishedSigners = published.attestations
+        .filter(attestation => !attestation.signature.isEmpty())
+        .map(attestation => attestation.address.toString());
+      logger.warn(`Replacement checkpoint ${replacementCheckpoint} published`, {
+        slot: replacementSlot,
+        publishedSigners,
+        recoveredSigners,
+      });
+      expect(publishedSigners.length).toBeGreaterThan(NODE_COUNT / 2);
+      expect(recoveredSigners).toContain(namedValidator.toString());
+
+      // Every node converged on the same replacement chain, the removed message has no witness on it, and the
+      // replacement has one at the index the removed message used to hold.
+      const lastBlock = published.checkpoint.blocks.at(-1)!;
+      const lastBlockNumber = BlockNumber(lastBlock.number);
+      const lastBlockHash = await lastBlock.hash();
+      for (const node of nodes) {
+        await waitForBlockNumber(node, lastBlockNumber, {
+          tag: 'checkpointed',
+          timeout: test.L2_SLOT_DURATION_IN_S * 4,
+        });
+        const blockData = (await node.getBlockData(lastBlockNumber))!;
+        expect(blockData.blockHash.toString()).toEqual(lastBlockHash.toString());
+        expect(blockData.checkpointNumber).toEqual(replacementCheckpoint);
+        expect(await node.getL1ToL2MessageMembershipWitness(lastBlockNumber, originalSend.msgHash)).toBeUndefined();
+        const witness = await node.getL1ToL2MessageMembershipWitness(lastBlockNumber, replacementMsgHash);
+        expect(witness).toBeDefined();
+        expect(witness![0]).toEqual(replacedIndex);
+      }
+
+      // Proven through the existing test prover. The only sequencer failure allowed through is the abandoned
+      // slot's own streaming abort, by exact type and reason; every other failure, including a different one at
+      // that same slot, still has to be absent.
+      const expectedFailure = (event: TrackedSequencerEvent) =>
+        event.type === 'checkpoint-build-aborted' &&
+        failedSlot(event) === heldSlot &&
+        'reason' in event &&
+        event.reason === 'inbox_prefix_reorged';
+      await waitForProvenCheckpoint(fixture, replacementCheckpoint, { expectedFailure });
+      expect(failEvents.filter(event => !expectedFailure(event))).toEqual([]);
+
+      // The same block identity is still canonical once proven, so the convergence above was not undone by the
+      // proof advancing the chain.
+      for (const node of nodes) {
+        expect((await node.getBlockData(lastBlockNumber))!.blockHash.toString()).toEqual(lastBlockHash.toString());
+      }
+      expect(await context.aztecNode.getCheckpointNumber('proven')).toBeGreaterThanOrEqual(replacementCheckpoint);
+
+      // No node treated the stale proposal as proposer misconduct at any point. Asserted last, so the window it
+      // covers runs from before the reorg through recovery and proving rather than stopping at the release.
       for (const index of times(NODE_COUNT, i => i)) {
         expect(
           slashRequests[index].filter(
@@ -525,83 +695,10 @@ describe('multi-node/block-production/cross_chain_messages', () => {
           decisions[index].filter(decision => decision.blockHash.equals(heldBlockHash) && decision.slashable),
         ).toEqual([]);
       }
-
-      // The proposer continues from a stale checkpoint cursor against its reconciled message source and gives up
-      // the slot, reporting the reorg rather than a generic timeout.
-      const abort = await retryUntil(
-        () => Promise.resolve(aborts.find(event => event.slot === heldSlot)),
-        `the proposer abandons slot ${heldSlot}`,
-        test.L2_SLOT_DURATION_IN_S * 3,
-        0.2,
-      );
-      expect(abort.reason).toEqual('inbox_prefix_reorged');
-
-      // Nothing was published for the abandoned slot, and the removed message is not on the canonical chain.
-      const replacementReady = await retryUntil(
-        async () => (await context.aztecNode.getL1ToL2MessageIndex(replacement.content)) !== undefined,
-        'the replacement message reaches L2',
-        test.L2_SLOT_DURATION_IN_S * 4,
-        0.5,
-      );
-      expect(replacementReady).toBe(true);
-      const replacementIndex = await context.aztecNode.getL1ToL2MessageIndex(replacement.content);
-      expect(replacementIndex).toEqual(replacedIndex);
-      expect(await context.aztecNode.getL1ToL2MessageIndex(originalSend.msgHash)).toBeUndefined();
-
-      const replacementCheckpoint = await fixture.test.assertMultipleBlocksPerSlot(1, {
-        wait: true,
-        archiver: fixture.archiver,
-      });
-      // Read from the archiver rather than the node RPC, because the attestations the committee signed only exist
-      // on the published checkpoint.
-      const published = await retryUntil(
-        async () => {
-          const [checkpoint] = await fixture.archiver.getCheckpoints({ from: replacementCheckpoint, limit: 1 });
-          return checkpoint;
-        },
-        `checkpoint ${replacementCheckpoint} publishes`,
-        test.L2_SLOT_DURATION_IN_S * 4,
-        0.5,
-      );
-      expect(published.checkpoint.header.slotNumber).not.toEqual(heldSlot);
-
-      // Quorum recovered, and the named validator actually signed it: a quorum alone would let the
-      // validator-specific claim pass vacuously.
-      const signers = published.attestations.filter(attestation => !attestation.signature.isEmpty());
-      logger.warn(`Replacement checkpoint ${replacementCheckpoint} published`, {
-        slot: published.checkpoint.header.slotNumber,
-        signers: signers.map(attestation => attestation.address.toString()),
-      });
-      expect(signers.length).toBeGreaterThan(NODE_COUNT / 2);
-      expect(signers.map(attestation => attestation.address.toString())).toContain(namedValidator.toString());
-
-      // Every node converged on the same replacement chain, and the removed message has no witness on it while
-      // the replacement does, at the index the removed one used to hold.
-      const lastBlock = published.checkpoint.blocks.at(-1)!;
-      const lastBlockNumber = BlockNumber(lastBlock.number);
-      const lastBlockHash = await lastBlock.hash();
-      for (const node of nodes) {
-        await waitForBlockNumber(node, lastBlockNumber, {
-          tag: 'checkpointed',
-          timeout: test.L2_SLOT_DURATION_IN_S * 4,
-        });
-        const blockData = (await node.getBlockData(lastBlockNumber))!;
-        expect(blockData.blockHash.toString()).toEqual(lastBlockHash.toString());
-        expect(await node.getL1ToL2MessageMembershipWitness(lastBlockNumber, originalSend.msgHash)).toBeUndefined();
-        const witness = await node.getL1ToL2MessageMembershipWitness(lastBlockNumber, replacement.content);
-        expect(witness).toBeDefined();
-        expect(witness![0]).toEqual(replacedIndex);
-      }
-
-      // Proven through the existing test prover. The one expected sequencer failure is the abandoned slot, which
-      // was verified above by exact slot and reason; everything else still has to be absent.
-      await waitForProvenCheckpoint(fixture, replacementCheckpoint, {
-        expectedFailure: event => failedSlot(event) === heldSlot,
-      });
-      expect(failEvents.filter(event => failedSlot(event) !== heldSlot)).toEqual([]);
     } finally {
       cleanups.forEach(cleanup => cleanup());
       gates.forEach(gate => gate.release());
+      test.proverDelayer.nextWait = undefined;
     }
   });
 });

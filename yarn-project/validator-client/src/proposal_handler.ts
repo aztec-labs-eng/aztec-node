@@ -317,14 +317,17 @@ export type BlockProposalObservers = {
   ) => void;
   /**
    * A node's completed decision on a block proposal, after classification and any slashing side effect has run.
-   * `slashable` is the production classification ({@link SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT}), not a second
-   * table maintained for tests.
+   *
+   * `accepted` is the node's real answer, not just the validation verdict: an open escape hatch rejects a proposal
+   * that validated, and `escapeHatchOpen` says which of the two happened. `slashable` is the production
+   * classification ({@link SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT}), not a second table kept for tests.
    */
   onBlockProposalDecision?: (
     event: ObservedBlockProposal & {
       accepted: boolean;
       reason?: BlockProposalValidationFailureReason;
       slashable: boolean;
+      escapeHatchOpen: boolean;
     },
   ) => void;
 };
@@ -488,16 +491,19 @@ export class ProposalHandler {
   public async notifyBlockProposalDecision(
     proposal: BlockProposal,
     result: BlockProposalValidationResult,
+    opts: { escapeHatchOpen?: boolean } = {},
   ): Promise<void> {
     const observer = this.observers.onBlockProposalDecision;
     if (observer === undefined) {
       return;
     }
+    const escapeHatchOpen = opts.escapeHatchOpen ?? false;
     observer({
       ...(await this.observedProposal(proposal)),
-      accepted: result.isValid,
+      accepted: result.isValid && !escapeHatchOpen,
       reason: result.isValid ? undefined : result.reason,
       slashable: !result.isValid && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason),
+      escapeHatchOpen,
     });
   }
 

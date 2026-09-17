@@ -505,7 +505,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       }
       // Reported after the classification and the slashing side effect above have run, so an observer never sees a
       // rejection whose offense this node has not finished deciding on.
-      await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult);
+      await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult, { escapeHatchOpen });
       return false;
     }
 
@@ -516,7 +516,9 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       escapeHatchOpen,
     });
 
-    await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult);
+    // The escape hatch rejects a proposal this node just validated, so it is reported alongside the result rather
+    // than after it: an observer that read `accepted` alone would have the opposite of the node's actual answer.
+    await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult, { escapeHatchOpen });
 
     if (escapeHatchOpen) {
       this.log.warn(`Escape hatch open for slot ${slotNumber}, rejecting block proposal`, proposalInfo);
