@@ -1156,12 +1156,14 @@ describe('LibP2PService', () => {
 
       await service.handleGossipedCheckpointProposal(extraProposal.toBuffer(), 'msg-extra', mockPeerId);
 
-      // Verify checkpoint was rejected
+      // The checkpoint cap is full: ignore without penalizing the relaying peer (a full local cache is
+      // receiver-local state), but still process the valid lastBlock below.
       expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
         'msg-extra',
         MOCK_PEER_ID,
-        TopicValidatorResult.Reject,
+        TopicValidatorResult.Ignore,
       );
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
 
       // Verify checkpoint callback was NOT invoked
       expect(allNodesCheckpointReceivedCallback).not.toHaveBeenCalled();
@@ -1560,6 +1562,39 @@ describe('LibP2PService', () => {
       );
       expect(storedBlock).toBeDefined();
       expect(oversizedProposalCallback).toHaveBeenCalledWith({ slot: targetSlot, proposer: signer.address });
+    });
+
+    it('checkpoint whose terminal block hits the per-position block cap: does not penalize the relaying peer', async () => {
+      // Fill the terminal block's (slot, index) position cap directly in the pool.
+      const idx = IndexWithinCheckpoint(0);
+      for (let i = 0; i < MAX_BLOCK_PROPOSALS_PER_POSITION; i++) {
+        const existing = await makeBlockProposal({
+          signer,
+          blockHeader: makeBlockHeader(1, { slotNumber: targetSlot }),
+          indexWithinCheckpoint: idx,
+          archiveRoot: Fr.random(),
+        });
+        const { added } = await attestationPool.tryAddBlockProposal(existing);
+        expect(added).toBe(true);
+      }
+
+      // A checkpoint whose terminal block is another distinct proposal at that already-full position.
+      const checkpoint = await makeCheckpointProposal({
+        signer,
+        checkpointHeader: makeCheckpointHeader(1, { slotNumber: targetSlot }),
+        lastBlock: { blockHeader: makeBlockHeader(1, { slotNumber: targetSlot }), indexWithinCheckpoint: idx },
+        archiveRoot: Fr.random(),
+      });
+      await service.handleGossipedCheckpointProposal(checkpoint.toBuffer(), 'msg-1', mockPeerId);
+
+      // The terminal block cap-fulls; a full local cache must not become a peer penalty via the
+      // checkpoint path, and the checkpoint is not rejected on it.
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+      expect(reportMessageValidationResultSpy).not.toHaveBeenCalledWith(
+        'msg-1',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Reject,
+      );
     });
   });
 

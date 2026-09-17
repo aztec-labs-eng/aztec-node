@@ -1392,9 +1392,13 @@ export class LibP2PService extends WithTracer implements P2PService {
         source: peerId.toString(),
       });
       return {
+        // isEquivocated is false here even when count > 1: a full cache is a receiver-local drop, not
+        // a fresh equivocation by this block. Genuine equivocation is already captured on the add
+        // (duplicateProposalCallback below). Reporting it here would make the checkpoint path, whose
+        // terminal block this may be, reject and penalize the relayer for our full cache.
         result: TopicValidatorResult.Ignore,
         obj: block,
-        metadata: { isEquivocated, isOversized },
+        metadata: { isEquivocated: false, isOversized },
       };
     }
 
