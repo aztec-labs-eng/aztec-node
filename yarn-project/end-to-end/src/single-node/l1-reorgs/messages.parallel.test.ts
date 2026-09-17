@@ -141,9 +141,8 @@ describe('single-node/l1-reorgs/messages', () => {
   //
   // The reorg happens while a non-final block of the current checkpoint is held at the checkpoint test gate, after
   // that block was stored by the proposer's own archiver and before the next block freezes its message range. The
-  // replacement is a single atomic same-height `reorgWithReplacement` over pre-built calls: an
-  // intermediate shorter message prefix would be a legal reason for the archiver to prune the held block, so one is
-  // never exposed.
+  // replacement is a single atomic same-height `reorgWithReplacement` over pre-built calls: an intermediate shorter
+  // message prefix would be a legal reason for the archiver to prune the held block, so one is never exposed.
   it('preserves the built block and its checkpoint across a placement-only L1 reorg', async () => {
     // Send L2 txs to trigger multi-block checkpoints and wait for them to land in a checkpoint
     await sendTransactions(TX_COUNT, 300);
