@@ -297,12 +297,6 @@ The `GasPrice` interface exported from `@aztec-labs/ethereum/l1-tx-utils` is now
 - The node's L1 transaction state store writes the new key but still reads states written under the old one, so a node restarting on this version keeps monitoring transactions it sent before the upgrade.
 - Failed-L1-transaction debug records (written when `L1_TX_FAILED_STORE` is set) now use `sentFeesPerGas` and `sentFeesPerGasLadder` instead of `sentGasPrice` and `sentGasPriceLadder`. Records written before the upgrade keep the old keys, and parsing one through `FailedL1TxSchema` returns it without those fields, though the values are still present in the stored JSON under the old names.
 
-### [Aztec Node] Archiver database version bumped, forcing a resync on upgrade
-
-The archiver's contract-instance update index now keys each scheduled class change by the block that carried it, so that two blocks sharing a timestamp resolve in block order rather than colliding. The old and new key layouts cannot coexist in the same map, and the entries an upgrade would inherit cannot be rebuilt from the index itself, so `ARCHIVER_DB_VERSION` moves from `10` to `11`.
-
-**Impact**: On first start under this version the node discards its archiver database and re-synchronizes from L1. No configuration changes, and no action beyond allowing for the resync: expect the usual full-sync time and bandwidth for your network before the node serves queries again. Nothing outside the archiver's own store is affected, and the world state, p2p and key stores are untouched.
-
 ## 5.2.0
 
 ### [Aztec.nr] Note types declared inside a contract must be `pub`
