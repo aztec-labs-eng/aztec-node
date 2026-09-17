@@ -19,8 +19,8 @@ import { startAnvil } from './start_anvil.js';
  * ask for an ephemeral one rather than racing to reserve a number in advance.
  *
  * It is `.cjs` so that `require` works wherever the temp directory happens to sit, and it is launched
- * through the shell wrapper below rather than a `#!${'$'}{process.execPath}` shebang, which would break on
- * a node path containing a space or exceeding the kernel's shebang limit.
+ * through a shell wrapper rather than a `#!${'$'}{process.execPath}` shebang, which would break on a
+ * node path containing a space or exceeding the kernel's shebang limit.
  */
 const UNKILLABLE_ANVIL = `
 const net = require('node:net');
@@ -36,10 +36,30 @@ net.createServer().listen(requested, '127.0.0.1', function () {
 });
 `;
 
-/** Runs the stand-in under the node running this suite, quoted so a path with spaces survives. */
-const UNKILLABLE_ANVIL_LAUNCHER = `#!/bin/sh
-exec "${process.execPath}" "$(dirname "$0")/stub.cjs" "$@"
-`;
+/**
+ * Writes the executable startAnvil will spawn as `anvil`. It records the pid of the process that goes
+ * on to become anvil — `$$` survives the `exec` — so a test can signal the spawn itself rather than the
+ * watchdog wrapping it.
+ */
+function writeLauncher(dir: string, execLine: string): string {
+  const launcher = join(dir, 'anvil');
+  writeFileSync(launcher, `#!/bin/sh\necho $$ > "$(dirname "$0")/pid"\n${execLine}\n`, { mode: 0o755 });
+  return launcher;
+}
+
+async function withAnvilBin<T>(bin: string, fn: () => Promise<T>): Promise<T> {
+  const prev = process.env.ANVIL_BIN;
+  process.env.ANVIL_BIN = bin;
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) {
+      delete process.env.ANVIL_BIN;
+    } else {
+      process.env.ANVIL_BIN = prev;
+    }
+  }
+}
 
 /** Attempts to bind the port, reporting what stopped it when it could not. */
 async function probePort(port: number): Promise<{ free: boolean; error?: string }> {
@@ -61,93 +81,160 @@ async function probePort(port: number): Promise<{ free: boolean; error?: string 
 async function expectPortFree(port: number): Promise<void> {
   const probed = await probePort(port);
   // Assert on the bind error rather than a bare boolean: it names what is still holding the port, which
-  // is the whole diagnostic value of these two tests.
+  // is the whole diagnostic value of the teardown cells.
   expect(probed.error ?? 'port is free').toEqual('port is free');
 }
 
-async function withAnvilBin<T>(bin: string, fn: () => Promise<T>): Promise<T> {
-  const prev = process.env.ANVIL_BIN;
-  process.env.ANVIL_BIN = bin;
+/** The escalation fires at 5s; anything past this is the hang the escalation exists to prevent. */
+const SETTLE_BOUND_MS = 15_000;
+
+/** How the spawn reacts to the SIGTERM teardown sends first. */
+type Behaviour =
+  /** Real anvil, which honours SIGTERM, so the watchdog reaps it and no escalation is needed. */
+  | 'honours'
+  /** A stand-in that ignores SIGTERM: only the group SIGKILL can end it. */
+  | 'ignores'
+  /** Real anvil under SIGSTOP, which cannot run a handler at all, so the escalation must do it. */
+  | 'stopped';
+
+/** How the caller drives `stop()`. */
+type Pattern =
+  /** One call. */
+  | 'single'
+  /** Two calls in flight before either resolves; they must share one shutdown. */
+  | 'concurrent'
+  /** A second call after the first resolved; it must be a no-op, not a second kill. */
+  | 'sequential'
+  /** The spawn is already gone before `stop()` is called at all. */
+  | 'after-exit';
+
+const BEHAVIOURS: Behaviour[] = ['honours', 'ignores', 'stopped'];
+const PATTERNS: Pattern[] = ['single', 'concurrent', 'sequential', 'after-exit'];
+
+/** Handle kinds startAnvil creates; a leak here is what keeps a suite's event loop alive after it. */
+function spawnHandleCount(): number {
+  const info = (process as NodeJS.Process & { getActiveResourcesInfo?: () => string[] }).getActiveResourcesInfo;
+  return info ? info.call(process).filter(r => r === 'Pipe' || r === 'ChildProcess').length : 0;
+}
+
+interface Spawn {
+  anvil: Anvil;
+  port: number;
+  /** The pid of anvil (or the stand-in) itself, not the watchdog wrapping it. */
+  pid: number;
+  dispose: () => Promise<void>;
+}
+
+async function spawnFor(behaviour: Behaviour): Promise<Spawn> {
+  const dir = mkdtempSync(join(tmpdir(), `anvil-${behaviour}-`));
+  let execLine: string;
+  if (behaviour === 'ignores') {
+    writeFileSync(join(dir, 'stub.cjs'), UNKILLABLE_ANVIL);
+    execLine = `exec "${process.execPath}" "$(dirname "$0")/stub.cjs" "$@"`;
+  } else {
+    execLine = `exec "${resolveFoundryBinary('anvil')}" "$@"`;
+  }
+  const launcher = writeLauncher(dir, execLine);
+
+  let anvil: Anvil | undefined;
   try {
-    return await fn();
-  } finally {
-    if (prev === undefined) {
-      delete process.env.ANVIL_BIN;
-    } else {
-      process.env.ANVIL_BIN = prev;
+    ({ anvil } = await withAnvilBin(launcher, () => startAnvil({ port: 0 })));
+    const pid = Number(readFileSync(join(dir, 'pid'), 'utf8').trim());
+    expect(pid).toBeGreaterThan(0);
+    if (behaviour === 'stopped') {
+      process.kill(pid, 'SIGSTOP');
     }
+    return {
+      anvil,
+      port: anvil.port,
+      pid,
+      dispose: async () => {
+        // SIGKILL first: a cell that failed mid-teardown may have left a spawn that ignores SIGTERM,
+        // and stop() would then spend its whole escalation before this could remove the temp dir.
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Already gone, which is the normal case once the cell's own stop() has run.
+        }
+        await anvil?.stop().catch(() => {});
+        rmSync(dir, { recursive: true, force: true });
+      },
+    };
+  } catch (err) {
+    await anvil?.stop().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+    throw err;
   }
 }
 
-describe('startAnvil teardown', () => {
-  it('releases the port when anvil ignores SIGTERM', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'anvil-stub-'));
-    const stub = join(dir, 'anvil');
-    writeFileSync(join(dir, 'stub.cjs'), UNKILLABLE_ANVIL);
-    writeFileSync(stub, UNKILLABLE_ANVIL_LAUNCHER, { mode: 0o755 });
+/** Kills the spawn out from under the caller and waits for startAnvil to notice. */
+async function killAndAwaitExit(spawn: Spawn): Promise<void> {
+  process.kill(spawn.pid, 'SIGKILL');
+  const deadline = Date.now() + SETTLE_BOUND_MS;
+  while (spawn.anvil.status !== 'idle' && Date.now() < deadline) {
+    await sleep(50);
+  }
+  expect(spawn.anvil.status).toEqual('idle');
+}
 
-    let anvil: Anvil | undefined;
-    try {
-      const started = await withAnvilBin(stub, () => startAnvil({ port: 0 }));
-      anvil = started.anvil;
-      const port = parseInt(new URL(started.rpcUrl).port);
-      expect((await probePort(port)).free).toBe(false);
-
-      const start = Date.now();
-      const stopping = anvil.stop();
-      await anvil.stop();
-      // Must not hang: the SIGTERM the watchdog sends is ignored here, so only the kill escalation can
-      // end this, and that escalation has to both fire and be waited for.
-      expect(Date.now() - start).toBeLessThan(15_000);
-      expect(anvil.status).toEqual('idle');
-
-      await expectPortFree(port);
-      await stopping;
-    } finally {
-      // An assertion failing before `stop()` would otherwise strand a listener that ignores SIGTERM and
-      // that nothing else ever signals; the stand-in's own self-destruct is only the backstop for a
-      // failure that stops even this from running.
-      await anvil?.stop().catch(() => {});
-      rmSync(dir, { recursive: true, force: true });
+async function drive(anvil: Anvil, pattern: Pattern): Promise<void> {
+  switch (pattern) {
+    case 'concurrent': {
+      // Both started before either is awaited: the second must join the first shutdown rather than
+      // starting its own or returning before the first has finished.
+      const [first, second] = [anvil.stop(), anvil.stop()];
+      await Promise.all([first, second]);
+      return;
     }
-  }, 60_000);
-
-  it('frees the port before stop resolves', async () => {
-    const { anvil, rpcUrl } = await startAnvil({ port: 0 });
-    const port = parseInt(new URL(rpcUrl).port);
-
-    await anvil.stop();
-
-    // Rebinding immediately is the caller-visible form of "anvil is really gone": suites reuse ports
-    // across cases, so a stop() that returns early hands the next startAnvil a port still in use.
-    await expectPortFree(port);
-  }, 60_000);
-
-  it('frees the port before forced shutdown of real anvil resolves', async () => {
-    const binary = resolveFoundryBinary('anvil');
-    const dir = mkdtempSync(join(tmpdir(), 'anvil-stopped-'));
-    const launcher = join(dir, 'anvil');
-    writeFileSync(join(dir, 'binary'), binary);
-    writeFileSync(
-      launcher,
-      '#!/bin/sh\necho $$ > "$(dirname "$0")/pid"\nexec "$(cat "$(dirname "$0")/binary")" "$@"\n',
-      { mode: 0o755 },
-    );
-
-    let anvil: Anvil | undefined;
-    try {
-      ({ anvil } = await withAnvilBin(launcher, () => startAnvil({ port: 0 })));
-      const pid = Number(readFileSync(join(dir, 'pid'), 'utf8').trim());
-      expect(pid).toBeGreaterThan(0);
-      process.kill(pid, 'SIGSTOP');
+    case 'sequential':
       await anvil.stop();
-      expect(anvil.status).toEqual('idle');
-      await expectPortFree(anvil.port);
-    } finally {
-      await anvil?.stop();
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }, 60_000);
+      await anvil.stop();
+      return;
+    case 'single':
+    case 'after-exit':
+      await anvil.stop();
+      return;
+  }
+}
+
+// How the spawn responds to teardown, crossed with how the caller drives `stop()`. Every cell asserts
+// the same four invariants, so a change that satisfies one cell by breaking another fails here.
+describe.each(BEHAVIOURS)('startAnvil teardown when anvil %s SIGTERM', behaviour => {
+  it.each(PATTERNS)(
+    'frees the port and settles (%s)',
+    async pattern => {
+      const baselineHandles = spawnHandleCount();
+      const spawn = await spawnFor(behaviour);
+      try {
+        if (pattern === 'after-exit') {
+          await killAndAwaitExit(spawn);
+        } else {
+          expect((await probePort(spawn.port)).free).toBe(false);
+        }
+
+        const start = Date.now();
+        await drive(spawn.anvil, pattern);
+        const elapsed = Date.now() - start;
+
+        // 1. Settles, and within the escalation's budget rather than merely before jest's timeout.
+        expect(elapsed).toBeLessThan(SETTLE_BOUND_MS);
+
+        // 2. Rebinding immediately is the caller-visible form of "anvil is really gone": suites reuse
+        //    ports across cases, so a stop() that returns early hands the next startAnvil a port still
+        //    in use.
+        await expectPortFree(spawn.port);
+
+        // 3. The instance agrees it is down.
+        expect(spawn.anvil.status).toEqual('idle');
+
+        // 4. Nothing is left holding the event loop open.
+        expect(spawnHandleCount()).toEqual(baselineHandles);
+      } finally {
+        await spawn.dispose();
+      }
+    },
+    90_000,
+  );
 });
 
 describe('startAnvil with a binary that exits before listening', () => {
