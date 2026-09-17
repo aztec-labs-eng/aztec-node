@@ -1,4 +1,11 @@
-import { type BotConfig, BotRunner, BotStore, botConfigMappings, getBotRunnerApiHandler } from '@aztec-labs/bot';
+import {
+  type BotConfig,
+  BotRunner,
+  BotStore,
+  type InboxBotWallets,
+  botConfigMappings,
+  getBotRunnerApiHandler,
+} from '@aztec-labs/bot';
 import type { NamespacedApiHandlers } from '@aztec-labs/foundation/json-rpc/server';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { createStore, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
@@ -11,6 +18,7 @@ import {
   makeTracedFetch,
 } from '@aztec-labs/telemetry-client';
 import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
+import { join } from 'node:path';
 
 import { extractRelevantOptions, stringifyConfig } from '../util.js';
 import { getVersions } from '../versioning.js';
@@ -59,7 +67,23 @@ export async function addBot(
   // The bot wallet's embedded PXE syncs to this tip (see start_bot.ts/start_node.ts which build the wallet from the
   // same options). L1-to-L2 readiness checks must be evaluated at this tip rather than at 'latest', or the bot can
   // consider a message ready while the PXE simulation anchors to an older block that cannot prove its membership yet.
-  const { syncChainTip } = extractRelevantOptions<PXEConfig & CliPXEOptions>(options, allPxeConfigMappings, 'pxe');
+  const pxeConfig = extractRelevantOptions<PXEConfig & CliPXEOptions>(options, allPxeConfigMappings, 'pxe');
+  const { syncChainTip } = pxeConfig;
+  const inboxWallets: InboxBotWallets =
+    config.botMode === 'inbox'
+      ? {
+          public: wallet,
+          private: await EmbeddedWallet.create(aztecNode, {
+            pxeConfig: {
+              ...pxeConfig,
+              dataDirectory: pxeConfig.dataDirectory
+                ? join(pxeConfig.dataDirectory, 'inbox-private')
+                : pxeConfig.dataDirectory,
+            },
+            pxeOptions: { loggerActorLabel: 'inbox-private' },
+          }),
+        }
+      : { public: wallet, private: wallet };
 
   const db = await (config.dataDirectory
     ? createStore('bot', BotStore.SCHEMA_VERSION, config)
@@ -68,11 +92,20 @@ export async function addBot(
   const store = new BotStore(db);
   await store.cleanupOldClaims();
 
-  const botRunner = new BotRunner(config, wallet, aztecNode, telemetry, aztecNodeAdmin, store, syncChainTip);
+  const botRunner = new BotRunner(
+    config,
+    wallet,
+    inboxWallets,
+    aztecNode,
+    telemetry,
+    aztecNodeAdmin,
+    store,
+    syncChainTip,
+  );
   if (!config.noStart) {
     void botRunner.start(); // Do not block since bot setup takes time
   }
   services.bot = getBotRunnerApiHandler(botRunner);
-  signalHandlers.push(botRunner.stop);
+  signalHandlers.push(() => botRunner.stop());
   return Promise.resolve();
 }

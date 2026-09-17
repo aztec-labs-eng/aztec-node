@@ -742,8 +742,8 @@ locals {
       chart = "aztec-bot"
       values = [
         "common.yaml",
-        "bot-inbox.yaml",
         "bot-resources-${var.BOT_RESOURCE_PROFILE}.yaml",
+        "bot-inbox.yaml",
       ]
       custom_settings = {
         "bot.replicaCount"                   = var.BOT_INBOX_REPLICAS
