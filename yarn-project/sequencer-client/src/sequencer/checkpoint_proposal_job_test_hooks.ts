@@ -20,14 +20,27 @@ import type { SubslotSelection } from '@aztec-labs/stdlib/timetable';
 export type CheckpointProposalJobTestPhase = 'block-ready-to-broadcast';
 
 /**
- * The scheduling view of the checkpoint being built, so a hook that holds the job can ask the proposer's own
- * timetable what is still possible at the moment it wants to release, rather than re-deriving sub-slot arithmetic
- * from the deadlines in the event. Every method takes wall-clock seconds, matching {@link ProposerTimetable}.
+ * The scheduling view of the checkpoint being built, so a hook that holds the job can ask what the build loop would
+ * actually do next rather than re-deriving sub-slot arithmetic from the deadlines in the event. Every method takes
+ * wall-clock seconds, matching {@link ProposerTimetable}.
+ *
+ * The two build queries model the loop's own next iteration, which does not happen at `nowSeconds`: the loop first
+ * waits out the sub-slot that produced this event, so the selection it will make happens no earlier than that
+ * sub-slot's deadline. They are therefore not the same as calling `ProposerTimetable.selectNextSubslot(now)`, which
+ * can validly still return the sub-slot this block was built in when the block finished early.
  */
 export type CheckpointProposalJobSchedule = {
-  /** The sub-slot the proposer would start next at `nowSeconds`, or `canStart: false` when none is left. */
-  selectNextSubslot(nowSeconds: number): SubslotSelection;
-  /** Hard consensus deadline by which a proposal for this slot must have arrived at a validator. */
+  /** The sub-slot the build loop would select on its next iteration, were it asked at `nowSeconds`. */
+  selectNextBuildSubslot(nowSeconds: number): SubslotSelection;
+  /**
+   * Whether the loop would go on to build another ordinary block after the one this event reports: a later sub-slot
+   * is startable on the next iteration, and the checkpoint's block-count cap is not already reached.
+   */
+  canBuildAnotherBlock(nowSeconds: number): boolean;
+  /**
+   * Hard consensus deadline by which a proposal for this slot must have arrived at a validator. p2p ingress applies
+   * the same window to a standalone block proposal as to the checkpoint proposal.
+   */
   getProposalReceiveDeadlineSeconds(): number;
   /** Earliest instant at which a proposal for this slot is acceptable on ingress. */
   getProposalReceiveStartSeconds(): number;
@@ -52,6 +65,12 @@ export type CheckpointProposalJobTestEvent = {
    * deciding whether another block can still be built after a hold.
    */
   remainingBuildSubslots: number;
+  /**
+   * The timetable sub-slot index this block was built in. Not the same as `indexWithinCheckpoint`: a sub-slot whose
+   * build failed, or one that had already passed when the checkpoint started, advances the sub-slot index without
+   * producing a block.
+   */
+  subslotIndex: number;
   /** Wall-clock instant by which the checkpoint proposal has to be on the wire for validators to receive it in time. */
   proposalSendDeadline: Date;
   /** Cumulative Inbox message count the chain has consumed through this block. */

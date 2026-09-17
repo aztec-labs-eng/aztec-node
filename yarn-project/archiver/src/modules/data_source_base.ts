@@ -1,4 +1,5 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import type { L1BlockId } from '@aztec-labs/ethereum/l1-types';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -343,6 +344,18 @@ export abstract class ArchiverDataSourceBase
 
   public getSyncedMessagePosition(): Promise<InboxMessagePosition> {
     return this.stores.messages.getSyncedMessagePosition();
+  }
+
+  /**
+   * The L1 block the stored message log was last certified against: the block at which the log was found equal to
+   * the Inbox's own position. Undefined while the log holds messages no such comparison has covered.
+   *
+   * Count and rolling hash alone cannot say which L1 chain a log belongs to — a placement-only reorg leaves both
+   * unchanged — so this is the only thing that identifies the reconciled chain. Kept off the RPC surface: it is an
+   * internal syncpoint, not a protocol query.
+   */
+  public getSyncedMessageL1Block(): Promise<L1BlockId | undefined> {
+    return this.stores.messages.getSynchedL1Block();
   }
 
   public getL1ToL2MessageRange(startLeafCount: bigint, endLeafCount: bigint): Promise<InboxMessageRange> {
