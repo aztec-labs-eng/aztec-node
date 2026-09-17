@@ -699,8 +699,13 @@ describe('multi-node/block-production/cross_chain_messages', () => {
         failedSlot(event) === heldSlot &&
         'reason' in event &&
         event.reason === 'inbox_prefix_reorged';
+      // Snapshotted before the proof helper stops the sequencers: stopping a proposer mid-build makes it report
+      // `Sequencer was interrupted`, which is teardown noise rather than a scenario failure. Everything the
+      // scenario itself produced is in this snapshot, and only the abandoned slot's own abort is allowed through.
+      const failuresDuringScenario = [...failEvents];
+      expect(failuresDuringScenario.filter(event => !expectedFailure(event))).toEqual([]);
+      expect(failuresDuringScenario.filter(expectedFailure)).toHaveLength(1);
       await waitForProvenCheckpoint(fixture, replacementCheckpoint, { expectedFailure });
-      expect(failEvents.filter(event => !expectedFailure(event))).toEqual([]);
 
       // The same block identity is still canonical once proven, so the convergence above was not undone by the
       // proof advancing the chain.
