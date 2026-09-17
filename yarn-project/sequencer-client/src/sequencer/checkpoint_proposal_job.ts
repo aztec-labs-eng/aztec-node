@@ -1448,6 +1448,7 @@ export class CheckpointProposalJob implements Traceable {
       consumedMessageCount: opts.consumedMessageCount,
       inboxPrefixRef: opts.inboxPrefixRef,
       schedule: {
+        nowMs: () => this.dateProvider.now(),
         selectNextBuildSubslot: nowSeconds => this.selectNextBuildSubslot(nowSeconds, opts.subslotDeadline),
         canBuildAnotherBlock: nowSeconds => {
           if (opts.blocksBuiltIncludingThis >= opts.maxBlocksInCheckpoint) {
