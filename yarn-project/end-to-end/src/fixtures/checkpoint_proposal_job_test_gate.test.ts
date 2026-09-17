@@ -37,17 +37,36 @@ describe('CheckpointProposalJobTestGate', () => {
     blockHash: BlockHash.random(),
     isStandalone: true,
     remainingBuildSubslots: 2,
+    subslotIndex: 0,
     proposalSendDeadline: new Date(Date.now() + 30_000),
     consumedMessageCount: 5n,
     inboxPrefixRef: InboxMessagePrefixRef.random(),
-    schedule: {
-      selectNextSubslot: nowSeconds => timetable.selectNextSubslot(slot, nowSeconds),
+    schedule: makeSchedule(0, 4),
+    ...overrides,
+  });
+
+  /**
+   * The scheduling view the job hands the hook, for a block built in `subslotIndex` of a checkpoint capped at
+   * `maxBlocks`. Mirrors the job: the loop waits out the sub-slot before re-selecting, so the next selection never
+   * happens earlier than that sub-slot's deadline. The job's own unit tests pin that this is what it passes.
+   */
+  const makeSchedule = (subslotIndex: number, maxBlocks: number): CheckpointProposalJobTestEvent['schedule'] => {
+    const deadline = timetable.getBlockBuildDeadline(slot, subslotIndex);
+    const next = (nowSeconds: number) => timetable.selectNextSubslot(slot, Math.max(nowSeconds, deadline));
+    return {
+      selectNextBuildSubslot: next,
+      canBuildAnotherBlock: nowSeconds => {
+        if (subslotIndex + 1 >= maxBlocks) {
+          return false;
+        }
+        const selection = next(nowSeconds);
+        return selection.canStart && selection.index > subslotIndex;
+      },
       getProposalReceiveDeadlineSeconds: () => timetable.getCheckpointProposalReceiveDeadline(slot),
       getProposalReceiveStartSeconds: () => timetable.getCheckpointProposalReceiveStart(slot),
       getAttestationDeadlineSeconds: () => timetable.getAttestationDeadline(slot),
-    },
-    ...overrides,
-  });
+    };
+  };
 
   /** A gate with a watchdog long enough that only the tests that want it will see it fire. */
   const makeGate = (watchdogMs = 60_000) => new CheckpointProposalJobTestGate(log, watchdogMs);
@@ -262,17 +281,20 @@ describe('CheckpointProposalJobTestGate', () => {
 
   // The body has to be able to tell "another ordinary block can still be built" from "the final send deadline is
   // open", which are different questions: the send deadline stays open for a whole block sub-slot after the last
-  // startable one. The answer comes from the proposer's own timetable, not from the snapshot in the event.
-  it('answers sub-slot startability from the proposer timetable rather than the event snapshot', async () => {
+  // startable one. Both answers come from the job's scheduling view, not from the snapshot in the event, and a
+  // block that finished early must not be told the sub-slot it was built in is the next one available.
+  it('answers sub-slot startability from the job schedule rather than the event snapshot', async () => {
     const gate = makeGate();
     const checked = gate.withHold(
       () => true,
       ctx => {
-        // A hold that has spent sub-slot zero lands the release in sub-slot one, which is a later index than the
-        // held block's, so another ordinary block is still startable.
-        const subslotOneStart = timetable.getBlockBuildDeadline(slot, 0) + 1;
-        expect(ctx.nextSubslot(subslotOneStart * 1000).index).toBe(1);
-        expect(ctx.canStartAnotherBlock(subslotOneStart * 1000)).toBe(true);
+        // The last instant at which the timetable still offers the sub-slot the held block was built in. The
+        // proposer waits that sub-slot out before selecting again, so another ordinary block is still ahead even
+        // though the timetable asked now would hand back the one already built.
+        const early = (timetable.getBlockBuildDeadline(slot, 0) - timetable.minBlockDuration) * 1000;
+        expect(timetable.selectNextSubslot(slot, early / 1000).index).toBe(0);
+        expect(ctx.nextSubslot(early).index).toBe(1);
+        expect(ctx.canStartAnotherBlock(early)).toBe(true);
 
         // Past the last sub-slot's build deadline no ordinary block is left, even though the snapshot still
         // claimed three and the proposal send deadline has not passed yet.
@@ -288,6 +310,19 @@ describe('CheckpointProposalJobTestGate', () => {
     );
     await checked;
     await holding;
+  });
+
+  // A `withHold` body released from outside — a suite-level `afterEach` that blindly releases, say — must settle
+  // rather than wait for a phase the gate has stopped listening for.
+  it('settles a hold whose gate is released before anything matched', async () => {
+    const gate = makeGate();
+    const held = gate.withHold(
+      () => false,
+      () => Promise.resolve('unreachable'),
+    );
+
+    gate.release();
+    await expect(held).rejects.toThrow('released before any checkpoint phase matched');
   });
 
   // The stale-block scenarios release a signed block that peers still have to accept on ingress, which the

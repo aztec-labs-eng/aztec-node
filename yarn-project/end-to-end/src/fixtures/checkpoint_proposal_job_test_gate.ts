@@ -48,14 +48,12 @@ export type HoldContext = {
    * validators enforce on ingress. The bound that matters when the released block has to be accepted by peers.
    */
   remainingIngressBudgetMs(now?: number): number;
-  /**
-   * The sub-slot this proposer's own timetable would start next, evaluated now. Asked of the timetable rather than
-   * derived from the event's snapshot, because the hold has been spending the slot's budget all along.
-   */
+  /** The sub-slot the proposer's build loop would select on its next iteration, evaluated now. */
   nextSubslot(now?: number): SubslotSelection;
   /**
-   * Whether an ordinary build sub-slot after the held block is still startable: the timetable can start one, and
-   * it is a later index than the one the held block occupied. False once the hold has eaten the build frame.
+   * Whether the proposer would go on to build another ordinary block after the held one, evaluated now. The hold
+   * has been spending the slot's budget all along, so this is asked of the job rather than read off the snapshot
+   * in the event.
    */
   canStartAnotherBlock(now?: number): boolean;
 };
@@ -99,6 +97,7 @@ export type ArmedCheckpointPhase = {
  * - one-shot: a matched arming stops holding, so later blocks of the same or a later checkpoint run through;
  * - a second concurrent {@link arm} is rejected rather than silently replacing the first;
  * - {@link release} is idempotent and safe to call when nothing is held, so a test's `finally` can call it blindly;
+ * - releasing before anything matched settles the match as a cancellation rather than leaving it pending;
  * - a watchdog before anything matched rejects both `matched` and `completed`, so no consumer waits on a match that
  *   can no longer happen;
  * - a watchdog during a hold rejects `failed` and `completed` and unblocks the job, so a forgotten release cannot
@@ -222,7 +221,10 @@ export class CheckpointProposalJobTestGate {
     }
     this.disarm('released');
     if (arming.releaseHold === undefined) {
-      // Armed but never matched: nothing is holding, so there is nothing to resume and no failure to report.
+      // Armed but never matched: nothing is holding, so there is nothing to resume. The completion resolves, but
+      // the match has to be settled too — a `withHold` body released from elsewhere would otherwise wait for a
+      // phase this gate is no longer listening for.
+      arming.matchedReject(new Error('CheckpointProposalJobTestGate was released before any checkpoint phase matched'));
       arming.completedResolve();
       return;
     }
@@ -250,11 +252,8 @@ export class CheckpointProposalJobTestGate {
       },
       remainingHoldBudgetMs: (now = Date.now()) => event.proposalSendDeadline.getTime() - now,
       remainingIngressBudgetMs: (now = Date.now()) => event.schedule.getProposalReceiveDeadlineSeconds() * 1000 - now,
-      nextSubslot: (now = Date.now()) => event.schedule.selectNextSubslot(now / 1000),
-      canStartAnotherBlock: (now = Date.now()) => {
-        const next = event.schedule.selectNextSubslot(now / 1000);
-        return next.canStart && next.index > event.indexWithinCheckpoint;
-      },
+      nextSubslot: (now = Date.now()) => event.schedule.selectNextBuildSubslot(now / 1000),
+      canStartAnotherBlock: (now = Date.now()) => event.schedule.canBuildAnotherBlock(now / 1000),
     };
   }
 
