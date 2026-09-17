@@ -12,11 +12,8 @@ import {
 } from '@aztec-labs/stdlib/contract';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
-/** Boundary key used to bracket the updates of a single contract; never stored. */
-type ContractInstanceUpdateRangeKey = [string, string];
 /** Stored key: contract address, scheduling timestamp, block number, and index within the block. */
 type ContractInstanceUpdateKey = [string, string, BlockNumber, number];
-type ContractInstanceUpdateMapKey = ContractInstanceUpdateRangeKey | ContractInstanceUpdateKey;
 
 /**
  * Renders a timestamp so that lexicographic ordering of the encoded strings matches numeric ordering,
@@ -33,7 +30,7 @@ function encodeTimestamp(timestamp: bigint): string {
 export class ContractInstanceStore {
   #contractInstances: AztecAsyncMap<string, Buffer>;
   #contractInstancePublishedAt: AztecAsyncMap<string, number>;
-  #contractInstanceUpdates: AztecAsyncMap<ContractInstanceUpdateMapKey, Buffer>;
+  #contractInstanceUpdates: AztecAsyncMap<ContractInstanceUpdateKey, Buffer>;
 
   constructor(private db: AztecAsyncKVStore) {
     this.#contractInstances = db.openMap('archiver_contract_instances');
@@ -134,11 +131,11 @@ export class ContractInstanceStore {
     });
   }
 
-  getUpdateRangeKey(contractAddress: AztecAddress, timestamp: bigint): ContractInstanceUpdateRangeKey {
+  private getUpdateRangeKey(contractAddress: AztecAddress, timestamp: bigint): [string, string] {
     return [contractAddress.toString(), encodeTimestamp(timestamp)];
   }
 
-  getUpdateKey(
+  private getUpdateKey(
     contractAddress: AztecAddress,
     timestamp: UInt64,
     blockNumber: BlockNumber,

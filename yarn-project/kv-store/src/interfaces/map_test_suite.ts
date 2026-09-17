@@ -95,6 +95,12 @@ export function describeAztecMap(
         : await toArray((map as AztecAsyncMap<any, any>).valuesAsync());
     }
 
+    async function valuesIn(range?: Range<Key>, sut: AztecAsyncMap<any, any> | AztecMap<any, any> = map) {
+      return isSyncStore(store) && !forceAsync
+        ? await toArray((sut as AztecMap<any, any>).values(range))
+        : await toArray((sut as AztecAsyncMap<any, any>).valuesAsync(range));
+    }
+
     async function keys(range?: Range<Key>, sut: AztecAsyncMap<any, any> | AztecMap<any, any> = map) {
       return isSyncStore(store) && !forceAsync
         ? await toArray((sut as AztecMap<any, any>).keys(range))
@@ -242,5 +248,21 @@ export function describeAztecMap(
         expect(await keys({ end: b, reverse: true })).toEqual([b, a]);
       });
     }
+
+    it('bounds a range over tuple keys by a prefix of them', async () => {
+      await map.set(['a', 1, 0], 'a-1-0');
+      await map.set(['a', 1, 1], 'a-1-1');
+      await map.set(['a', 2, 0], 'a-2-0');
+      await map.set(['b', 1, 0], 'b-1-0');
+
+      // A prefix sorts immediately before every key extending it, so it brackets a whole group.
+      expect(await valuesIn({ start: ['a'], end: ['b'] })).toEqual(['a-1-0', 'a-1-1', 'a-2-0']);
+      expect(await valuesIn({ start: ['a', 1], end: ['a', 2] })).toEqual(['a-1-0', 'a-1-1']);
+      expect(await valuesIn({ start: ['a', 2] })).toEqual(['a-2-0', 'b-1-0']);
+
+      // Sorting before its extensions also means a prefix does not include them as a reverse start.
+      // The boundary for "everything at or below group N" is therefore the prefix of group N + 1.
+      expect(await valuesIn({ start: ['a'], end: ['a', 3], reverse: true, limit: 1 })).toEqual(['a-2-0']);
+    });
   });
 }
