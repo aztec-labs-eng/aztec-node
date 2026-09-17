@@ -5,6 +5,7 @@ import {
   type BotConfig,
   BotStore,
   InboxBot,
+  type InboxBotWallets,
   type InboxMessageRecord,
   MAX_INBOX_MESSAGES_PER_BATCH,
   MAX_INBOX_MESSAGES_PER_BUCKET,
@@ -39,12 +40,12 @@ jest.setTimeout(600_000);
 // clock and follows every message through to consumption on L2, checking the node's messaging API as it goes. Runs
 // over CrossChainMessagingTest without the token bridge — the bot brings its own account, TestContract and L1
 // client — on the pipelining sequencer, so readiness and block relations reflect production block building rather
-// than automine. Each case builds its own bot over a fresh store, sharing the node, the wallet and the contract.
+// than automine. Each case builds its own bot over a fresh store, sharing the node, lane wallets and the contract.
 describe('single-node/cross-chain/inbox_bot', () => {
   let t: CrossChainMessagingTest;
   let log: Logger;
   let aztecNode: AztecNode;
-  let wallet: EmbeddedWallet;
+  let wallets: InboxBotWallets;
   let l1RpcUrls: string[];
 
   /** Every bot in this suite deploys and consumes through the same TestContract. */
@@ -62,10 +63,15 @@ describe('single-node/cross-chain/inbox_bot', () => {
 
     ({ logger: log, aztecNode } = t);
     l1RpcUrls = t.aztecNodeConfig.l1RpcUrls;
-    wallet = await EmbeddedWallet.create(aztecNode, { ephemeral: true });
+    const [publicWallet, privateWallet] = await Promise.all([
+      EmbeddedWallet.create(aztecNode, { ephemeral: true }),
+      EmbeddedWallet.create(aztecNode, { ephemeral: true }),
+    ]);
+    wallets = { public: publicWallet, private: privateWallet };
   }, 600_000);
 
   afterAll(async () => {
+    await Promise.all([wallets.public.stop(), wallets.private.stop()]);
     await t.teardown();
   });
 
@@ -90,7 +96,7 @@ describe('single-node/cross-chain/inbox_bot', () => {
       inboxSaturationIntervalSeconds: 0,
       ...overrides,
     };
-    const bot = await InboxBot.create(config, wallet, aztecNode, t.aztecNodeAdmin, store, telemetry);
+    const bot = await InboxBot.create(config, wallets, aztecNode, t.aztecNodeAdmin, store, telemetry);
     return { bot, store, telemetry };
   };
 

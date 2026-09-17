@@ -22,6 +22,16 @@ bot:
   node:
     env:
       OTEL_SERVICE_NAME: "bot-inbox"
+    resources:
+      requests:
+        cpu: "2"
+        memory: "4Gi"
+      limits:
+        cpu: "4"
+        memory: "8Gi"
+
+  nodeSelector:
+    cores: "4"
 
   persistence:
     enabled: true

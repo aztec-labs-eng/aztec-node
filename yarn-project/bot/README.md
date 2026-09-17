@@ -27,6 +27,11 @@ that address.
 Every message is then assigned an L2 domain (`public` or `private`) and consumed through it, and the bot
 records whether the consuming block was also the block that inserted the message.
 
+Public and private consumption use separate embedded wallets. Each wallet owns its own PXE store, operation
+queue, prover, and derived L2 account, while both connect to the same Aztec node and register the same TestContract.
+One lane can therefore simulate and prove while the other is busy. The coordinator, L1 producer, durable Inbox
+store, and batch scheduler remain shared.
+
 Once a day (by default) it runs a **saturation batch** of 257 messages: one more than a bucket holds, so the
 Inbox has to roll a full bucket over inside a single L1 block.
 
@@ -150,10 +155,11 @@ on `saturation_enabled == 1`.
 
 ## Telemetry
 
-Meter and tracer name: `InboxBot`. Sixteen instruments, all under `aztec.bot.inbox.`. Counters are
-`UpDownCounter`s that only ever move up (the telemetry wrapper has no monotonic counter), so Prometheus does
-**not** append `_total` to them; known attribute combinations are pre-seeded to `0` so a quiet bot still
-exports every series a dashboard queries.
+Meter and tracer name: `InboxBot`. Eighteen instruments, all under `aztec.bot.inbox.`. Event counters are
+`UpDownCounter`s that only move up (the telemetry wrapper has no monotonic counter); `l2_active_attempts` uses
+the same instrument as a gauge-like value and moves down when wallet work finishes. Prometheus does **not** append
+`_total` to them. Known attribute combinations are pre-seeded to `0` so a quiet bot exports every series a
+dashboard queries.
 
 The Prometheus names below follow the collector's OTLP→Prometheus translation: dots become underscores and the
 OTel unit is appended (`spartan/metrics` runs the contrib collector's `prometheus` exporter with its default
@@ -168,6 +174,8 @@ the metric browser the first time the bot runs.
 | `aztec.bot.inbox.message_count`                   | UpDownCounter     | `messages` | `aztec_bot_inbox_message_count_messages`                 |
 | `aztec.bot.inbox.stage_duration`                  | Histogram         | `s`        | `aztec_bot_inbox_stage_duration_seconds_{bucket,sum,count}` |
 | `aztec.bot.inbox.simulation_count`                | UpDownCounter     | `attempts` | `aztec_bot_inbox_simulation_count_attempts`              |
+| `aztec.bot.inbox.l2_send_duration`                | Histogram         | `s`        | `aztec_bot_inbox_l2_send_duration_seconds_{bucket,sum,count}` |
+| `aztec.bot.inbox.l2_active_attempts`              | UpDownCounter     | `attempts` | `aztec_bot_inbox_l2_active_attempts_attempts`             |
 | `aztec.bot.inbox.public_execution_count`          | UpDownCounter     | `attempts` | `aztec_bot_inbox_public_execution_count_attempts`        |
 | `aztec.bot.inbox.prediction_mismatch_count`       | UpDownCounter     | `attempts` | `aztec_bot_inbox_prediction_mismatch_count_attempts`     |
 | `aztec.bot.inbox.check_count`                     | UpDownCounter     | `checks`   | `aztec_bot_inbox_check_count_checks`                     |

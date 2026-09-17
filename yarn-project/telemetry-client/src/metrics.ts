@@ -1820,6 +1820,18 @@ export const BOT_INBOX_SIMULATION_COUNT: MetricDefinition = {
   unit: 'attempts',
   valueType: ValueType.INT,
 };
+export const BOT_INBOX_L2_SEND_DURATION: MetricDefinition = {
+  name: 'aztec.bot.inbox.l2_send_duration',
+  description: 'Duration of the wallet simulate, prove, and submit operation for an Inbox consumption lane',
+  unit: 's',
+  valueType: ValueType.DOUBLE,
+};
+export const BOT_INBOX_L2_ACTIVE_ATTEMPTS: MetricDefinition = {
+  name: 'aztec.bot.inbox.l2_active_attempts',
+  description: 'Number of Inbox consumption wallet operations currently active in each lane',
+  unit: 'attempts',
+  valueType: ValueType.INT,
+};
 export const BOT_INBOX_PUBLIC_EXECUTION_COUNT: MetricDefinition = {
   name: 'aztec.bot.inbox.public_execution_count',
   description: 'Count of public consumption executions by outcome',
