@@ -33,7 +33,7 @@ Grant only the actual deployment identity access. Existing shared RPC/deployer/f
 
 ## Derive and audit accounts
 
-Run `scripts/calculate_publisher_indices.sh <environment>` from Spartan, then compare its output with the **same revision's** `terraform/deploy-aztec-infra/main.tf` and key-setup scripts. Older helpers fund only `PUBLISHERS_PER_PROVER` keys and omit Inbox bots; do not trust a successful exit as complete coverage.
+Run `scripts/calculate_publisher_indices.sh <environment>` from Spartan, then compare its output with the **same revision's** `terraform/deploy-aztec-infra/main.tf` and key-setup scripts. Older helpers can undercount prover capacity or omit newly added workloads; do not trust a successful exit as complete coverage.
 
 For equal primary/HA pod counts, validator publishers require:
 
@@ -41,9 +41,7 @@ For equal primary/HA pod counts, validator publishers require:
 VALIDATOR_REPLICAS × VALIDATOR_PUBLISHERS_PER_REPLICA × (1 + VALIDATOR_HA_REPLICAS)
 ```
 
-If HA pod counts differ, derive ranges from Terraform's actual per-release offsets. Attester count is not publisher count. Prover publisher coverage must mirror the maximum prover replica capacity used by Terraform, including `PROVER_AGENT_KEDA_MAX_REPLICAS` when KEDA is enabled and zero when proving is disabled. Check non-KEDA defaults against the actual code too. Include every enabled transfers/swaps/cross-chain/Inbox bot replica and its configured start index. Verify all ranges are disjoint.
-
-A useful arithmetic example: two primary pods, one equally sized HA release, four publishers per pod, capacity four with two prover publishers each, and three single-replica bots need `16 + 8 + 3 = 27` funded identities. This is an example, not a universal topology or funding budget.
+If HA pod counts differ, derive ranges from Terraform's actual per-release offsets. Attester count is not publisher count. Prover publisher coverage must mirror the maximum prover replica capacity used by Terraform, including `PROVER_AGENT_KEDA_MAX_REPLICAS` when KEDA is enabled and zero when proving is disabled. Check non-KEDA defaults against the actual code too. Include every enabled bot replica and its configured start index. Verify all ranges are disjoint.
 
 Derive public addresses with the same mnemonic derivation path/index as deployment. Report index/address/balance only. Audit the separate rollup deployer and the funding source too. Attesters do not automatically need ETH merely because their keys are registered.
 
@@ -51,7 +49,7 @@ For workstation L1 reads, use the `l1-rpc-cast` skill when available. Its local 
 
 ## Fund only the reviewed deficit
 
-Prepare a read-only proposal with chain, funding source, recipient addresses/indices, current balances, low/high watermarks, exact per-recipient deficit, deployer top-up, total value, and gas headroom. Choose amounts for the run's duration/load; a previous long experiment's 10 SepETH/account is not a default. If the user will supply funds, give the public funding address, chain, and total, then wait for a confirmed receipt/balance. Never request their private key in chat.
+Prepare a read-only proposal with chain, funding source, recipient addresses/indices, current balances, low/high watermarks, exact per-recipient deficit, deployer top-up, total value, and gas headroom. Choose amounts for the run's duration/load rather than copying another network's budget. If the user will supply funds, give the public funding address, chain, and total, then wait for a confirmed receipt/balance. Never request their private key in chat.
 
 `scripts/ensure_funded_environment.sh` and `scripts/ensure_eth_balances.sh` **send transactions**; neither is a dry-run balance checker. Inspect their current behavior and use them only after the funding amounts/destination are authorized. A funding proposal not already covered by the user's approval needs explicit approval before broadcast.
 

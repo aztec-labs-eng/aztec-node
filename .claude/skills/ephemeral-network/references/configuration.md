@@ -44,8 +44,6 @@ Review the complete topology: validators, validators per pod, HA replicas and an
 
 Preserve consensus timings unless the experiment requires changing them. If a named runtime preset rejects an intentional override, understand `ALLOW_OVERRIDING_NETWORK_CONFIG` before setting it. Incompatible protocol changes generally need a fresh network, not an image swap against old contracts/data.
 
-Fast Inbox experiments also require a source revision containing the Inbox bot and its complete env-to-Terraform-to-chart wiring. Verify `BOT_INBOX_REPLICAS`, mnemonic start index, interval, messages per batch, consume mode, seed/outstanding cap, and L1-to-L2 timeout in that revision. Do not add unsupported variables to an older template and assume they take effect.
-
 Run `bash -n` on changed shell/env inputs, `./bootstrap.sh build` from Spartan, and `scripts/check_env_vars.sh` as appropriate. The build includes Helm lint and Terraform formatting checks; inspect failures rather than silently treating them as irrelevant. Render/check the intended chart values when adding wiring. Do not bulk-format unrelated Terraform to make a new environment pass.
 
 ## Build and publish

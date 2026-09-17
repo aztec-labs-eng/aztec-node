@@ -19,7 +19,7 @@ Establish the source commit/stack, namespace, GCP project/cluster/location, L1 c
 
 1. For a new network, read [configuration and image](references/configuration.md). Verify cloud access and isolate every resource name before publishing the immutable image.
 2. Read [secrets and funding](references/secrets-and-funding.md) before loading credentials or deriving accounts. Reconcile account indices with the actual Terraform capacity, then execute only the authorized funding proposal.
-3. Read [deployment and operations](references/operations.md) before deployment, redeployment, monitoring, or teardown. Use its activation and proof gates to distinguish a healthy deployment from pods that merely started.
+3. Read [deployment and operations](references/operations.md) before deployment, redeployment, monitoring, or teardown. The standard post-deploy check requires advancing blocks, accepted epoch proofs, mined transactions, no empty or missed slots, no reorgs, and no major errors in logs.
 
 Before using real credentials, inspect the selected revision for the known secret-logging paths described in the funding reference. This is a prerequisite for safely running that revision, not a reason to print its secrets while investigating.
 
