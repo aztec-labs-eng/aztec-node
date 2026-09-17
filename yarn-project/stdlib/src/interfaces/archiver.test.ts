@@ -17,12 +17,14 @@ import {
   type BlocksQuery,
   BlocksQuerySchema,
   type CheckpointQuery,
+  CheckpointQuerySchema,
   type CheckpointsQuery,
   CheckpointsQuerySchema,
   type L1SyncPoint,
   type L2Frontier,
   type L2Tips,
   type ProposedCheckpointQuery,
+  ProposedCheckpointQuerySchema,
 } from '../block/l2_block_source.js';
 import type { ValidateCheckpointResult } from '../block/validate_block_result.js';
 import { Checkpoint } from '../checkpoint/checkpoint.js';
@@ -401,9 +403,9 @@ describe('BlockQuerySchema', () => {
     expect(BlockQuerySchema.safeParse({ hash: '0x1', archive: '0x2' }).success).toBe(false);
   });
 
-  it('rejects extra keys (onlyCheckpointed is plural-only)', () => {
-    expect(BlockQuerySchema.safeParse({ number: 1, onlyCheckpointed: true }).success).toBe(false);
-    expect(BlockQuerySchema.safeParse({ tag: 'checkpointed', onlyCheckpointed: true }).success).toBe(false);
+  it('drops fields that are not part of this query', () => {
+    expect(BlockQuerySchema.parse({ number: 1, onlyCheckpointed: true })).toEqual({ number: BlockNumber(1) });
+    expect(BlockQuerySchema.parse({ tag: 'checkpointed', onlyCheckpointed: true })).toEqual({ tag: 'checkpointed' });
   });
 
   it('rejects an anchor: this API names a block one way', () => {
@@ -428,6 +430,7 @@ describe('BlocksQuerySchema', () => {
     const json = JSON.parse(JSON.stringify(query));
     const parsed = BlocksQuerySchema.parse(json);
     expect(parsed).toEqual(query);
+    expect(BlocksQuerySchema.parse({ ...json, futureOption: true })).toEqual(query);
   });
 
   it('rejects mixed-key inputs', () => {
@@ -440,6 +443,30 @@ describe('BlocksQuerySchema', () => {
 
   it('rejects epoch query with onlyCheckpointed: false', () => {
     expect(BlocksQuerySchema.safeParse({ epoch: 1, onlyCheckpointed: false }).success).toBe(false);
+  });
+});
+
+describe.each([
+  { name: 'CheckpointQuerySchema', schema: CheckpointQuerySchema, tags: ['checkpointed', 'proven', 'finalized'] },
+  { name: 'ProposedCheckpointQuerySchema', schema: ProposedCheckpointQuerySchema, tags: ['proposed'] },
+])('$name', ({ schema, tags }) => {
+  it.each([{ number: CheckpointNumber(7) }, { slot: SlotNumber(8) }, ...tags.map(tag => ({ tag }))])(
+    'roundtrips and strips unknown fields from %j',
+    query => {
+      const json = JSON.parse(JSON.stringify(query));
+      expect(schema.parse(json)).toEqual(query);
+      expect(schema.parse({ ...json, futureOption: true })).toEqual(query);
+    },
+  );
+
+  it.each([
+    {},
+    { futureOption: true },
+    { number: 7, slot: 8 },
+    { number: 7, slot: -1, futureOption: true },
+    { tag: 'latest', futureOption: true },
+  ])('rejects invalid selectors %j', query => {
+    expect(schema.safeParse(query).success).toBe(false);
   });
 });
 

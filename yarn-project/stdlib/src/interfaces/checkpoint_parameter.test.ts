@@ -20,10 +20,12 @@ describe('CheckpointParameterSchema', () => {
 
   it('rejects an object naming a checkpoint two ways, or none at all', () => {
     expect(CheckpointParameterSchema.safeParse({ number: 7, slot: 7 }).success).toBe(false);
-    // `tag` is a checkpoint selector the range APIs know, so it is a contradiction here rather than a stray field.
-    expect(CheckpointParameterSchema.safeParse({ number: 7, tag: 'proven' }).success).toBe(false);
     expect(CheckpointParameterSchema.safeParse({}).success).toBe(false);
     expect(CheckpointParameterSchema.safeParse({ futureOption: true }).success).toBe(false);
+  });
+
+  it('drops fields that are not part of this parameter', () => {
+    expect(CheckpointParameterSchema.parse({ number: 7, tag: 'proven' })).toEqual({ number: CheckpointNumber(7) });
   });
 
   it('rejects an invalid value for a key it knows', () => {

@@ -1,9 +1,6 @@
-import type { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { CheckpointNumberSchema, SlotNumberSchema } from '@aztec-labs/foundation/branded-types';
-import { selectorSchema } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
-import { CHECKPOINT_QUERY_KEYS } from '../block/l2_block_source.js';
 import { CheckpointTagSchema } from './chain_tips.js';
 
 /**
@@ -13,10 +10,11 @@ import { CheckpointTagSchema } from './chain_tips.js';
  * or a checkpoint-tip name (e.g. `'checkpointed'`, `'proven'`, `'finalized'`).
  */
 export const CheckpointParameterSchema = z.union([
-  selectorSchema<{ number: CheckpointNumber } | { slot: SlotNumber }>(
-    [z.object({ number: CheckpointNumberSchema }), z.object({ slot: SlotNumberSchema })],
-    CHECKPOINT_QUERY_KEYS,
-  ),
+  z
+    .object({ number: z.unknown().optional(), slot: z.unknown().optional() })
+    .pipe(
+      z.union([z.object({ number: CheckpointNumberSchema }).strict(), z.object({ slot: SlotNumberSchema }).strict()]),
+    ),
   CheckpointTagSchema,
   CheckpointNumberSchema,
 ]);

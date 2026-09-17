@@ -80,11 +80,9 @@ describe('logs query reference blocks', () => {
     expect(parsed).not.toHaveProperty('futureOption');
   });
 
-  it('rejects an anchor carrying a block selector it cannot combine with', () => {
-    // `tag` is a block selector the API knows, so an anchor carrying one is a contradiction, not a stray field.
-    expect(
-      PrivateLogsQuerySchema.safeParse(wire({ tags, referenceBlock: { number: 7, hash, tag: 'proven' } })).success,
-    ).toBe(false);
+  it('drops fields that are not part of an anchor', () => {
+    const parsed = PrivateLogsQuerySchema.parse(wire({ tags, referenceBlock: { number: 7, hash, tag: 'proven' } }));
+    expect(parsed.referenceBlock).toEqual({ number: 7, hash });
   });
 
   it('only lets a bare hash past the resolved schema the logs source is read with', () => {

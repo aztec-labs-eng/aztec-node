@@ -85,48 +85,6 @@ export function setSchema<T>(value: ZodFor<T>): ZodFor<Set<T>> {
   return z.array(value).transform(entries => new Set(entries));
 }
 
-/** An object shape a selector alternative is written as, before {@link selectorSchema} makes it strict. */
-type SelectorShape = ZodObject<ZodRawShape>;
-
-/**
- * Builds a schema for an API selector or option object: one that names a thing in one of several ways, or carries a
- * set of flags.
- *
- * Keys the family does not know are dropped before validation, so a client built against a later version of the API
- * — one that may send a field this version has never heard of — is served rather than refused. Keys it does know are
- * held to the exact shapes in `accepts`, so an object naming two things at once, or naming one in a combination this
- * endpoint cannot serve, is still rejected: answering it would answer a different question than the one asked.
- *
- * `knownKeys` defaults to every key `accepts` mentions. Pass it where the family is wider than one endpoint takes: a
- * logs anchor accepts only `{ number, hash }`, but `tag` is still a block selector, and an anchor carrying one is a
- * contradiction rather than a stray field.
- *
- * `T` is the caller's word for what `accepts` parses to, not something the compiler derives from it: the shapes are
- * taken as a heterogeneous list, which erases their individual outputs. Each caller's round-trip test is what holds
- * the two together.
- */
-export function selectorSchema<T>(
-  accepts: readonly [SelectorShape, ...SelectorShape[]],
-  knownKeys: readonly string[] = accepts.flatMap(alternative => Object.keys(alternative.shape)),
-): ZodType<T, unknown> {
-  const known = new Set(knownKeys);
-  const alternatives = accepts.map(alternative => alternative.strict());
-  const oneOf = alternatives.length === 1 ? alternatives[0] : z.union(alternatives);
-  return z.preprocess(value => dropUnknownKeys(value, known), oneOf) as ZodType<T, unknown>;
-}
-
-/**
- * Drops the own enumerable keys that `known` does not list. Anything but an object is passed through untouched, as
- * is an array, which no selector is. A class instance is copied down to its own data properties, which is harmless:
- * the alternatives only ever describe the wire shapes a selector arrives in.
- */
-function dropUnknownKeys(value: unknown, known: ReadonlySet<string>): unknown {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return value;
-  }
-  return Object.fromEntries(Object.entries(value).filter(([key]) => known.has(key)));
-}
-
 /** Given an already parsed and validated object, extracts the keys defined in the given schema. Does not validate again. */
 export function pickFromSchema<T extends object, S extends ZodObject<ZodRawShape>>(obj: T, schema: S) {
   return pick(obj, ...Object.keys(schema.shape));

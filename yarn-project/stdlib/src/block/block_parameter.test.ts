@@ -82,12 +82,13 @@ describe('BlockParameterSchema', () => {
   it('rejects an invalid value for a key it knows even alongside one it does not', () => {
     expect(BlockParameterSchema.safeParse({ tag: 'not-a-tag', futureOption: true }).success).toBe(false);
     expect(BlockParameterSchema.safeParse({ number: -1, futureOption: true }).success).toBe(false);
+    expect(BlockParameterSchema.safeParse({ number: 7, hash: 'invalid', futureOption: true }).success).toBe(false);
   });
 
-  it('rejects a single-block selector carrying a key that belongs to a range query', () => {
-    // `limit` is meaningless here but not unknown, so dropping it would answer a different question.
-    expect(BlockParameterSchema.safeParse({ number: 7, limit: 5 }).success).toBe(false);
-    expect(BlockParameterSchema.safeParse({ number: 7, onlyCheckpointed: true }).success).toBe(false);
+  it('drops fields used by other methods', () => {
+    expect(BlockParameterSchema.parse({ number: 7, limit: 5, onlyCheckpointed: true })).toEqual({
+      number: BlockNumber(7),
+    });
   });
 
   it('rejects an anchor missing either half', () => {

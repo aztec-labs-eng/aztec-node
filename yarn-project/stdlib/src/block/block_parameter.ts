@@ -1,7 +1,7 @@
 import { type BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
-import { schemas, selectorSchema } from '@aztec-labs/foundation/schemas';
+import { schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { BlockHash } from './block_hash.js';
@@ -35,34 +35,22 @@ export type NormalizedBlockParameter =
   | { archive: Fr }
   | { tag: Exclude<BlockTag, 'latest'> };
 
-/**
- * Every key the block-selecting APIs know, across all of them: the ways of naming one block and the ways of naming a
- * range of them. A selector is parsed leniently about keys outside this list and strictly about the ones in it, so
- * asking for one block with a key that means something to a range query is refused rather than quietly dropped.
- */
-export const BLOCK_QUERY_KEYS = [
-  'number',
-  'hash',
-  'archive',
-  'tag',
-  'from',
-  'limit',
-  'epoch',
-  'onlyCheckpointed',
-] as const;
+const normalizedBlockParameterObjectSchema = z.object({
+  number: z.unknown().optional(),
+  hash: z.unknown().optional(),
+  archive: z.unknown().optional(),
+  tag: z.unknown().optional(),
+});
 
-/** The object shapes naming a block one way, shared by every block selector below. */
-const singleBlockSelectors = [
-  z.object({ number: BlockNumberSchema }),
-  z.object({ hash: BlockHash.schema }),
-  z.object({ archive: schemas.Fr }),
-  z.object({ tag: BlockTagWithoutLatestSchema }),
-] as const;
+const normalizedBlockParameterVariants = z.union([
+  z.object({ number: BlockNumberSchema }).strict(),
+  z.object({ hash: BlockHash.schema }).strict(),
+  z.object({ archive: schemas.Fr }).strict(),
+  z.object({ tag: BlockTagWithoutLatestSchema }).strict(),
+]);
 
-export const NormalizedBlockParameterSchema: z.ZodType<NormalizedBlockParameter, unknown> = selectorSchema(
-  singleBlockSelectors,
-  BLOCK_QUERY_KEYS,
-);
+export const NormalizedBlockParameterSchema: z.ZodType<NormalizedBlockParameter, unknown> =
+  normalizedBlockParameterObjectSchema.pipe(normalizedBlockParameterVariants);
 
 /**
  * Anchor naming a block by both its height and its hash.
@@ -74,13 +62,10 @@ export const NormalizedBlockParameterSchema: z.ZodType<NormalizedBlockParameter,
  */
 export type AnchoredBlockParameter = { number: BlockNumber; hash: BlockHash };
 
-/** The object shape of an {@link AnchoredBlockParameter}, for selectors that accept one. */
-export const anchoredBlockSelector = z.object({ number: BlockNumberSchema, hash: BlockHash.schema });
-
-export const AnchoredBlockParameterSchema: z.ZodType<AnchoredBlockParameter, unknown> = selectorSchema(
-  [anchoredBlockSelector],
-  BLOCK_QUERY_KEYS,
-);
+export const AnchoredBlockParameterSchema: z.ZodType<AnchoredBlockParameter, unknown> = z.object({
+  number: BlockNumberSchema,
+  hash: BlockHash.schema,
+});
 
 /**
  * Selector for a block in RPC calls.
@@ -93,9 +78,11 @@ export const AnchoredBlockParameterSchema: z.ZodType<AnchoredBlockParameter, unk
 export type BlockParameter = NormalizedBlockParameter | AnchoredBlockParameter | BlockNumber | BlockHash | BlockTag;
 
 export const BlockParameterSchema: z.ZodType<BlockParameter, unknown> = z.union([
-  selectorSchema<AnchoredBlockParameter | NormalizedBlockParameter>(
-    [anchoredBlockSelector, ...singleBlockSelectors],
-    BLOCK_QUERY_KEYS,
+  normalizedBlockParameterObjectSchema.pipe(
+    z.union([
+      z.object({ number: BlockNumberSchema, hash: BlockHash.schema }).strict(),
+      normalizedBlockParameterVariants,
+    ]),
   ),
   BlockHash.schema,
   BlockTagSchema,
