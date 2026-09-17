@@ -5,9 +5,10 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 
+import { testSpan } from '../../fixtures/timing.js';
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { PROVING_SLOT_TIMING, setupWithProver } from '../setup.js';
-import { SingleNodeTestContext } from '../single_node_test_context.js';
+import { ARCHIVER_POLL_INTERVAL, SingleNodeTestContext } from '../single_node_test_context.js';
 
 jest.setTimeout(1000 * 60 * 10);
 
@@ -84,25 +85,56 @@ describe('single-node/proving/multi_proof', () => {
     // advanced past epoch 0's slots, leaving it with no blocks, and the snapshot below would then have
     // nothing to read. Anchoring on the next epoch guarantees its full slot range is ahead of us.
     const epoch = await test.waitUntilNextEpochStarts();
+
+    // Let the epoch produce a checkpoint before warping past it. `warpToEpochStart` discards the rest of
+    // the epoch in L1 time, and a checkpoint the sequencer is still building when the warp lands is
+    // re-targeted at a slot beyond it — so under load the anchored epoch can end with nothing published
+    // for it at all, leaving the snapshot below nothing to read. An epoch that really produces nothing
+    // fails here naming the epoch, rather than blaming the archiver further down.
+    //
+    // The budget has to outlast the last moment a checkpoint for this epoch can be observed. The clock
+    // starts one L1 slot before the epoch opens (`waitUntilNextEpochStarts` returns on the block before
+    // the boundary), the last block that can carry a `propose` for it sits one L1 slot before the next
+    // boundary, and the archiver indexes that block some time after it is mined — so an epoch's worth of
+    // slots alone would expire exactly as that last checkpoint lands, with nothing left for indexing it.
+    await testSpan('wait:epoch-first-checkpoint', () =>
+      retryUntil(
+        async () => (await context.aztecNode.getCheckpointsData({ epoch })).length > 0 || undefined,
+        `a checkpoint for epoch ${epoch} is indexed`,
+        (test.epochDuration + 1) * test.L2_SLOT_DURATION_IN_S,
+        0.5,
+      ),
+    );
+
     await test.warpToEpochStart(epoch + 1);
 
-    // Snapshot the anchored epoch's checkpoints. The epoch is now closed on L1 (no more epoch-N
-    // checkpoints can land once epoch N+1 has begun), but the node's archiver may still be catching up.
+    // Snapshot the anchored epoch's checkpoints. The epoch is now closed on L1: the call above returns on
+    // the first block it observes at or past one L1 slot before the boundary, so with blocks at least an L1
+    // slot apart the next one is at or past the boundary itself, and anything still unmined for epoch N
+    // reverts the slot check. The archiver, though, may still be catching up.
     // Read the authoritative L1 checkpoint tip, then wait until the archiver has indexed every checkpoint
-    // up to it — only then is the epoch-N subset complete. A `length > 0` poll would race a partial view
-    // and snapshot a prefix of the epoch.
+    // up to it — only then is the epoch-N subset complete. Waiting on `length > 0` alone would race a
+    // partial view and snapshot a prefix of the epoch, so it gates the complete view rather than replacing
+    // the completeness check.
     const tip = (await test.monitor.run(true)).checkpointNumber;
-    const checkpoints = await retryUntil(
-      async () => {
-        const all = await context.aztecNode.getCheckpointsData({ from: CheckpointNumber(1), limit: Number(tip) });
-        if (all.length < Number(tip)) {
-          return undefined;
-        }
-        return all.filter(cp => getEpochAtSlot(cp.header.slotNumber, test.constants) === epoch);
-      },
-      `archiver indexes all checkpoints up to ${tip} for epoch ${epoch}`,
-      test.L2_SLOT_DURATION_IN_S,
-      0.5,
+    const checkpoints = await testSpan('wait:epoch-checkpoints-complete', () =>
+      retryUntil(
+        async () => {
+          const all = await context.aztecNode.getCheckpointsData({ from: CheckpointNumber(1), limit: Number(tip) });
+          if (all.length < Number(tip)) {
+            return undefined;
+          }
+          const epochCheckpoints = all.filter(cp => getEpochAtSlot(cp.header.slotNumber, test.constants) === epoch);
+          // `retryUntil` treats any truthy value as success, and an empty array is truthy: returning the
+          // filter result directly would accept a complete view holding nothing for this epoch, and
+          // `at(-1)!` below would then hand `undefined` to the caller. The wait before the warp is what
+          // keeps the epoch non-empty; this only stops that footgun from reaching the non-null assertion.
+          return epochCheckpoints.length > 0 ? epochCheckpoints : undefined;
+        },
+        `archiver indexes all checkpoints up to ${tip} for epoch ${epoch}`,
+        test.L2_SLOT_DURATION_IN_S,
+        0.5,
+      ),
     );
 
     // `getHasSubmittedProof` is keyed by the number of checkpoints the epoch-root proof covers, so we
@@ -117,7 +149,26 @@ describe('single-node/proving/multi_proof', () => {
     // Wait until all three provers have submitted proofs for the anchored epoch
     await test.waitForAllProversToSubmit(epoch, epochCheckpointCount);
 
-    const provenBlockNumber = await context.aztecNode.getBlockNumber('proven');
+    // That polls L1, while the assertion below reads the node, so give the archiver a window to index the
+    // proof — a poll interval lost to CI load is otherwise enough to read the previous proven tip. Bounded
+    // rather than `waitForNodeToSync`, which loops without a timeout. 200 archiver polls: an archiver that
+    // has not indexed a mined event by then is stuck rather than slow, and a shorter wait also narrows the
+    // window in which the next epoch's proof could land and overshoot the assertion below. The result is
+    // boxed because `retryUntil` stops on any truthy value, and block number 0 is not truthy.
+    const { proven: provenBlockNumber } = await testSpan('wait:proof-indexed', () =>
+      retryUntil(
+        async () => {
+          const proven = await context.aztecNode.getBlockNumber('proven');
+          return proven >= epochLastBlockNum ? { proven } : undefined;
+        },
+        `node indexes the proof for epoch ${epoch} up to block ${epochLastBlockNum}`,
+        (ARCHIVER_POLL_INTERVAL * 200) / 1000,
+        0.5,
+      ),
+    );
+
+    // Still an equality check: the wait only rules out lag, so a proven tip past this epoch's last block —
+    // a later epoch having been proven — fails here rather than passing as "at least far enough".
     expect(provenBlockNumber).toEqual(epochLastBlockNum);
 
     logger.info(`Test succeeded`);
