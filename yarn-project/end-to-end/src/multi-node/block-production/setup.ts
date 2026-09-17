@@ -156,6 +156,11 @@ export async function setupBlockProductionWithProver(opts: {
    * test can tell one validator's observations from another's and hold exactly one proposer.
    */
   testDeps?: (index: number) => NodeTestDeps;
+  /**
+   * Target committee size. {@link WIDE_SLOT_TIMING} picks 3 of the {@link NODE_COUNT} validators, so a test that
+   * needs a specific node to be able to attest has to widen it rather than assume eligibility.
+   */
+  aztecTargetCommitteeSize?: number;
 }): Promise<BlockProductionWithProverFixture> {
   const {
     syncChainTip = 'checkpointed',
