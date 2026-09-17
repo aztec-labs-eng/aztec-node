@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import type { P2PConfig } from '../config.js';
+import { BENCHMARK_CONSTANTS } from '../test-helpers/testbench-utils.js';
 import { WorkerClientManager, testChainConfig } from './worker_client_manager.js';
 
 const NUMBER_OF_ITERATIONS = 2;
@@ -14,6 +15,8 @@ const NODES_TO_CHANGE_PORT = 1;
 const WORKER_READY_TIMEOUT_MS = 120_000;
 const CONNECTIVITY_TIMEOUT_MS = 120_000;
 const PROPAGATION_TIMEOUT_MS = 60_000;
+const SETUP_TIMEOUT_MS =
+  WORKER_READY_TIMEOUT_MS + BENCHMARK_CONSTANTS.PEER_DISCOVERY_WAIT_MS + CONNECTIVITY_TIMEOUT_MS + 30_000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Test Summary:
@@ -55,9 +58,7 @@ describe('Port Change', () => {
     const peers = await workerClientManager.waitForAllConnectivity(numberOfClients - 1, CONNECTIVITY_TIMEOUT_MS);
     expect(Math.min(...peers)).toBe(numberOfClients - 1);
     logger.info('Workers Ready');
-    // Forking five libp2p nodes and settling the mesh measures ~40s at 6x oversubscription of the
-    // declared CPU budget and ~75s at 12x, so the ceiling is sized to the tail rather than the mean.
-  }, 120 * 1000);
+  }, SETUP_TIMEOUT_MS);
 
   it(
     'should change port and propagate the gossip message correctly',
@@ -96,7 +97,7 @@ describe('Port Change', () => {
         for (let j = 0; j < NODES_TO_CHANGE_PORT; j++) {
           const clientIndexToChangePort = Math.floor(Math.random() * numberOfClients);
           logger.info(`Changing port for client ${clientIndexToChangePort}`);
-          await workerClientManager.changePort(clientIndexToChangePort, await getPort());
+          await workerClientManager.changePort(clientIndexToChangePort, await getPort(), WORKER_READY_TIMEOUT_MS);
 
           // Rediscovery is what this test exercises: wait for the mesh to re-form rather than for a
           // fixed number of peer-manager heartbeats, which is what the next iteration's gossip needs.
