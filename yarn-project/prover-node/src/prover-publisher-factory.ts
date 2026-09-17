@@ -7,6 +7,7 @@ import type { ProverPublisherConfig, ProverTxSenderConfig } from '@aztec-labs/se
 import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { ProverNodePublisher } from './prover-node-publisher.js';
+import type { VerbatimAttestationsSource } from './verbatim-attestations.js';
 
 export class ProverPublisherFactory {
   constructor(
@@ -14,6 +15,7 @@ export class ProverPublisherFactory {
     private deps: {
       rollupContract: RollupContract;
       publisherManager: PublisherManager<L1TxUtils>;
+      verbatimAttestations: VerbatimAttestationsSource;
       proofSubmissionTarget?: EthAddress;
       telemetry?: TelemetryClient;
     },
@@ -39,6 +41,7 @@ export class ProverPublisherFactory {
       {
         rollupContract: this.deps.rollupContract,
         l1TxUtils: l1Publisher,
+        verbatimAttestations: this.deps.verbatimAttestations,
         proofSubmissionTarget: this.deps.proofSubmissionTarget,
         telemetry: this.deps.telemetry,
       },

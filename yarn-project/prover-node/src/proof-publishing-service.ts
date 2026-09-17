@@ -1,5 +1,4 @@
 import type { BatchedBlob } from '@aztec-labs/blob-lib';
-import type { ViemCommitteeAttestation } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type CheckpointNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -44,7 +43,6 @@ export type PublishCandidate = {
   publicInputs: RootRollupPublicInputs;
   proof: Proof;
   batchedBlobInputs: BatchedBlob;
-  attestations: ViemCommitteeAttestation[];
   /** Committee-attested checkpoint headers for the range, supplying the L1-verified fee recipient/value. */
   headers: CheckpointHeader[];
 };
@@ -339,7 +337,6 @@ export class ProofPublishingService {
       publicInputs: candidate.publicInputs,
       proof: candidate.proof,
       batchedBlobInputs: candidate.batchedBlobInputs,
-      attestations: candidate.attestations,
       headers: candidate.headers,
       // Stop the L1 tx retrying past the candidate's submission-window deadline.
       deadline: candidate.deadline,

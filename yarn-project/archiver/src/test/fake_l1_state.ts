@@ -8,7 +8,7 @@ import type {
   MessageSentLog,
   RollupContract,
 } from '@aztec-labs/ethereum/contracts';
-import { MULTI_CALL_3_ADDRESS } from '@aztec-labs/ethereum/contracts';
+import { MULTI_CALL_3_ADDRESS, computeAttestationsHash } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { type BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
@@ -24,16 +24,7 @@ import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-lab
 import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import {
-  type AbiParameter,
-  type FormattedBlock,
-  type Transaction,
-  encodeAbiParameters,
-  encodeFunctionData,
-  keccak256,
-  multicall3Abi,
-  toHex,
-} from 'viem';
+import { type FormattedBlock, type Transaction, encodeFunctionData, multicall3Abi, toHex } from 'viem';
 
 /** Configuration for the fake L1 state. */
 export type FakeL1StateConfig = {
@@ -751,10 +742,7 @@ export class FakeL1State {
       ],
     });
 
-    // Compute attestationsHash (same logic as CalldataRetriever)
-    const attestationsHash = Buffer32.fromString(
-      keccak256(encodeAbiParameters([this.getCommitteeAttestationsStructDef()], [verbatimAttestations])),
-    );
+    const attestationsHash = Buffer32.fromString(computeAttestationsHash(verbatimAttestations));
 
     // Compute payloadDigest (same logic as CalldataRetriever)
     const payloadDigest = getHashedSignaturePayloadTypedData(consensusPayload);
@@ -774,25 +762,6 @@ export class FakeL1State {
       chainId: 1,
       rollupAddress: this.config.rollupAddress,
     };
-  }
-
-  /** Extracts the CommitteeAttestations struct definition from RollupAbi for hash computation. */
-  private getCommitteeAttestationsStructDef(): AbiParameter {
-    const proposeFunction = RollupAbi.find(item => item.type === 'function' && item.name === 'propose') as
-      | { type: 'function'; name: string; inputs: readonly AbiParameter[] }
-      | undefined;
-
-    if (!proposeFunction) {
-      throw new Error('propose function not found in RollupAbi');
-    }
-
-    const attestationsParam = proposeFunction.inputs.find(param => param.name === '_attestations');
-    if (!attestationsParam) {
-      throw new Error('_attestations parameter not found in propose function');
-    }
-
-    const tupleParam = attestationsParam as unknown as { type: 'tuple'; components?: readonly AbiParameter[] };
-    return { type: 'tuple', components: tupleParam.components || [] } as AbiParameter;
   }
 
   private async makeVersionedBlobHashes(checkpoint: Checkpoint): Promise<`0x${string}`[]> {

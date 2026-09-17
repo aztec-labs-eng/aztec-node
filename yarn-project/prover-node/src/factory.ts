@@ -1,4 +1,4 @@
-import type { Archiver } from '@aztec-labs/archiver';
+import { type Archiver, CalldataRetriever } from '@aztec-labs/archiver';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { Blob } from '@aztec-labs/blob-lib';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
@@ -7,6 +7,7 @@ import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import type { ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { pick } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -33,6 +34,7 @@ import { createPublicClient } from 'viem';
 import type { SpecificProverNodeConfig } from './config.js';
 import { ProverNode } from './prover-node.js';
 import { ProverPublisherFactory } from './prover-publisher-factory.js';
+import { L1VerbatimAttestationsSource } from './verbatim-attestations.js';
 
 export type ProverNodeDeps = {
   telemetry?: TelemetryClient;
@@ -101,6 +103,14 @@ export async function createProverNode(
     pollingInterval: config.viemPollingIntervalMS,
   });
 
+  // Trace/debug RPCs are only reached when a propose tx cannot be decoded from its calldata directly.
+  const debugRpcUrls = config.l1DebugRpcUrls.length > 0 ? config.l1DebugRpcUrls : config.l1RpcUrls;
+  const debugClient = createPublicClient({
+    chain: chain.chainInfo,
+    transport: makeL1HttpTransport(debugRpcUrls, { timeout: config.l1HttpTimeoutMS }),
+    pollingInterval: config.viemPollingIntervalMS,
+  }) as ViemPublicDebugClient;
+
   const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
 
   const l1TxUtils = deps.l1TxUtils
@@ -133,10 +143,27 @@ export async function createProverNode(
     funderL1TxUtils = funder;
   }
 
+  // Re-reads the propose calldata of the checkpoint being proven so the epoch proof carries the exact
+  // attestations tuple the rollup hashed at propose time (see `L1VerbatimAttestationsSource`).
+  const verbatimAttestations = new L1VerbatimAttestationsSource({
+    l2BlockSource: archiver,
+    rollupContract,
+    calldataRetriever: new CalldataRetriever(
+      publicClient,
+      debugClient,
+      await rollupContract.getTargetCommitteeSize(),
+      undefined,
+      log.createChild('calldata-retriever'),
+      config.rollupAddress,
+    ),
+    bindings: log.getBindings(),
+  });
+
   const publisherFactory =
     deps.publisherFactory ??
     new ProverPublisherFactory(config, {
       rollupContract,
+      verbatimAttestations,
       proofSubmissionTarget: config.proofSubmissionTargetAddress,
       publisherManager: new PublisherManager(l1TxUtils, getPublisherConfigFromProverConfig(config), {
         bindings: log.getBindings(),

@@ -14,6 +14,7 @@ import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import chunk from 'lodash.chunk';
 import {
+  type AbiParameter,
   type Account,
   ContractFunctionRevertedError,
   type GetContractReturnType,
@@ -54,6 +55,37 @@ export type ViemCommitteeAttestations = {
   signatureIndices: `0x${string}`;
   signaturesOrAddresses: `0x${string}`;
 };
+
+/**
+ * ABI definition of the `CommitteeAttestations` struct, read off the `propose` function's `_attestations`
+ * parameter so it tracks the deployed ABI rather than a hand-written copy.
+ */
+export function getCommitteeAttestationsStructDef(): AbiParameter {
+  const proposeFunction = RollupAbi.find(item => item.type === 'function' && item.name === 'propose');
+  if (!proposeFunction || proposeFunction.type !== 'function') {
+    throw new Error('propose function not found in RollupAbi');
+  }
+
+  const attestationsParam = proposeFunction.inputs.find(param => param.name === '_attestations');
+  if (!attestationsParam) {
+    throw new Error('_attestations parameter not found in propose function');
+  }
+  if (attestationsParam.type !== 'tuple') {
+    throw new Error(`Expected _attestations parameter to be a tuple, got ${attestationsParam.type}`);
+  }
+
+  return attestationsParam;
+}
+
+/**
+ * Computes the `attestationsHash` the rollup stores at propose time and re-checks when an epoch proof or an
+ * invalidation is submitted. The hash covers the packed tuple byte for byte, including bitmap bits past the
+ * committee size that no L1 or node-side decoder reads, so it can only be computed from the exact bytes that
+ * were posted — never from a tuple re-derived out of decoded attestations.
+ */
+export function computeAttestationsHash(attestations: ViemCommitteeAttestations): Hex {
+  return keccak256(encodeAbiParameters([getCommitteeAttestationsStructDef()], [attestations]));
+}
 
 export type L1RollupContractAddresses = Pick<
   L1ContractAddresses,

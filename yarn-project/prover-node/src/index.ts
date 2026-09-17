@@ -5,3 +5,4 @@ export * from './monitors/index.js';
 export * from './proof-publishing-service.js';
 export * from './prover-node-publisher.js';
 export * from './prover-node.js';
+export * from './verbatim-attestations.js';

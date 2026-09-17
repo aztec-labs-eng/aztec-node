@@ -2,7 +2,11 @@ import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { BatchedBlob, getEthBlobEvaluationInputs } from '@aztec-labs/blob-lib';
 import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
-import type { RollupContract, ViemCommitteeAttestation } from '@aztec-labs/ethereum/contracts';
+import {
+  type RollupContract,
+  type ViemCommitteeAttestations,
+  computeAttestationsHash,
+} from '@aztec-labs/ethereum/contracts';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { areArraysEqual } from '@aztec-labs/foundation/collection';
@@ -11,7 +15,6 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
-import { CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import type { L1PublishProofStats } from '@aztec-labs/stdlib/stats';
@@ -20,6 +23,7 @@ import { inspect } from 'util';
 import { type Hex, type TransactionReceipt, encodeFunctionData, formatEther, formatGwei } from 'viem';
 
 import { type EstimatedSubmitProofStats, ProverNodePublisherMetrics } from './metrics.js';
+import type { VerbatimAttestationsSource } from './verbatim-attestations.js';
 
 /** Arguments to the submitEpochProof method of the rollup contract */
 export type L1SubmitEpochProofArgs = {
@@ -48,6 +52,8 @@ export class ProverNodePublisher {
 
   protected proofSubmissionTarget: Hex;
 
+  protected verbatimAttestations: VerbatimAttestationsSource;
+
   public readonly l1TxUtils: L1TxUtils;
 
   constructor(
@@ -55,6 +61,7 @@ export class ProverNodePublisher {
     deps: {
       rollupContract: RollupContract;
       l1TxUtils: L1TxUtils;
+      verbatimAttestations: VerbatimAttestationsSource;
       proofSubmissionTarget?: EthAddress;
       telemetry?: TelemetryClient;
     },
@@ -68,6 +75,7 @@ export class ProverNodePublisher {
     this.rollupContract = deps.rollupContract;
     this.proofSubmissionTarget = deps.proofSubmissionTarget?.toString() ?? deps.rollupContract.address;
     this.l1TxUtils = deps.l1TxUtils;
+    this.verbatimAttestations = deps.verbatimAttestations;
   }
 
   public getRollupContract() {
@@ -85,7 +93,6 @@ export class ProverNodePublisher {
     publicInputs: RootRollupPublicInputs;
     proof: Proof;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
     headers: CheckpointHeader[];
     /** Whether the range covers the whole epoch. Governs whether an already-overtaken proof is still worth sending. */
     kind: 'full' | 'partial';
@@ -111,10 +118,18 @@ export class ProverNodePublisher {
       return 'already-submitted';
     }
 
-    // Validate epoch proof range and hashes are correct before submitting
-    const provenPrefixLength = await this.validateEpochProofSubmission(args);
+    // Re-read the attestations tuple from the propose calldata rather than re-deriving it from the decoded
+    // attestations: the rollup checks the submission against the `attestationsHash` it stored at propose time,
+    // which covers bytes (spare bitmap bits, recovery-byte form) that no decoder round-trips faithfully. A
+    // failure to recover them fails the submission — rebuilding the tuple instead would just burn gas on a
+    // revert.
+    const attestations = await this.verbatimAttestations.getVerbatimAttestations(toCheckpoint);
+    const submitArgs = { ...args, attestations };
 
-    const txReceipt = await this.sendSubmitEpochProofTx(args, provenPrefixLength);
+    // Validate epoch proof range and hashes are correct before submitting
+    const provenPrefixLength = await this.validateEpochProofSubmission(submitArgs);
+
+    const txReceipt = await this.sendSubmitEpochProofTx(submitArgs, provenPrefixLength);
     if (!txReceipt) {
       this.log.error(`Failed to mine submitEpochProof tx`, undefined, ctx);
       return 'failed';
@@ -159,11 +174,11 @@ export class ProverNodePublisher {
     publicInputs: RootRollupPublicInputs;
     proof: Proof;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
+    attestations: ViemCommitteeAttestations;
     headers: CheckpointHeader[];
     kind: 'full' | 'partial';
   }): Promise<number> {
-    const { fromCheckpoint, toCheckpoint, publicInputs, batchedBlobInputs, kind } = args;
+    const { fromCheckpoint, toCheckpoint, publicInputs, batchedBlobInputs, attestations, kind } = args;
 
     // Check that the checkpoint numbers match the expected epoch to be proven
     const { pending, proven } = await this.rollupContract.getTips();
@@ -197,6 +212,17 @@ export class ProverNodePublisher {
     if (!publicInputs.endArchiveRoot.equals(endCheckpointLog.archive)) {
       throw new Error(
         `End archive root mismatch: ${publicInputs.endArchiveRoot.toString()} !== ${endCheckpointLog.archive.toString()}`,
+      );
+    }
+
+    // The rollup only checks the attestations of the last checkpoint in the range, against the hash it stored
+    // when that checkpoint was proposed. Checking it here turns a byte-level divergence into a named error
+    // instead of an opaque `Rollup__InvalidAttestations` revert once the tx is mined.
+    const submittedAttestationsHash = computeAttestationsHash(attestations);
+    if (submittedAttestationsHash !== endCheckpointLog.attestationsHash.toString()) {
+      throw new Error(
+        `Attestations hash mismatch for checkpoint ${toCheckpoint}: ` +
+          `${submittedAttestationsHash} !== ${endCheckpointLog.attestationsHash.toString()}`,
       );
     }
 
@@ -242,16 +268,17 @@ export class ProverNodePublisher {
     publicInputs: RootRollupPublicInputs;
     proof: Proof;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
     headers: CheckpointHeader[];
     /** Whether the range covers the whole epoch. Governs whether an already-overtaken proof is still worth sending. */
     kind: 'full' | 'partial';
   }): Promise<void> {
     const { epochNumber, fromCheckpoint, toCheckpoint } = args;
 
-    const provenPrefixLength = await this.validateEpochProofSubmission(args);
+    const attestations = await this.verbatimAttestations.getVerbatimAttestations(toCheckpoint);
+    const analyzeArgs = { ...args, attestations };
+    const provenPrefixLength = await this.validateEpochProofSubmission(analyzeArgs);
 
-    const data = this.encodeSubmitEpochProofCalldata(args, provenPrefixLength);
+    const data = this.encodeSubmitEpochProofCalldata(analyzeArgs, provenPrefixLength);
     const senderAddress = this.l1TxUtils.getSenderAddress();
 
     const [gasLimit, feesPerGas, latestBlock] = await Promise.all([
@@ -293,7 +320,7 @@ export class ProverNodePublisher {
       publicInputs: RootRollupPublicInputs;
       proof: Proof;
       batchedBlobInputs: BatchedBlob;
-      attestations: ViemCommitteeAttestation[];
+      attestations: ViemCommitteeAttestations;
       headers: CheckpointHeader[];
     },
     provenPrefixLength: number,
@@ -313,7 +340,7 @@ export class ProverNodePublisher {
       publicInputs: RootRollupPublicInputs;
       proof: Proof;
       batchedBlobInputs: BatchedBlob;
-      attestations: ViemCommitteeAttestation[];
+      attestations: ViemCommitteeAttestations;
       headers: CheckpointHeader[];
     },
     provenPrefixLength: number,
@@ -362,7 +389,6 @@ export class ProverNodePublisher {
     toCheckpoint: CheckpointNumber;
     publicInputs: RootRollupPublicInputs;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
     headers: CheckpointHeader[];
   }) {
     // Returns arguments for EpochProofLib.sol -> getEpochProofPublicInputs()
@@ -389,7 +415,7 @@ export class ProverNodePublisher {
       publicInputs: RootRollupPublicInputs;
       proof: Proof;
       batchedBlobInputs: BatchedBlob;
-      attestations: ViemCommitteeAttestation[];
+      attestations: ViemCommitteeAttestations;
       headers: CheckpointHeader[];
     },
     provenPrefixLength: number,
@@ -405,9 +431,7 @@ export class ProverNodePublisher {
         .slice(0, provenPrefixLength)
         .map(({ coinbase, accumulatedFees }) => ({ coinbase, accumulatedFees })),
       headers: argsArray[3].slice(provenPrefixLength),
-      attestations: CommitteeAttestationsAndSigners.packAttestations(
-        args.attestations.map(a => CommitteeAttestation.fromViem(a)),
-      ),
+      attestations: args.attestations,
       blobInputs: argsArray[4],
       proof: proofHex,
     };

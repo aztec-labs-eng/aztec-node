@@ -97,7 +97,6 @@ describe('ProofPublishingService', () => {
       publicInputs: overrides.publicInputs ?? RootRollupPublicInputs.random(),
       proof: overrides.proof ?? Proof.empty(),
       batchedBlobInputs: overrides.batchedBlobInputs ?? makeBlob(),
-      attestations: overrides.attestations ?? [],
       headers: overrides.headers ?? [],
     };
   }
