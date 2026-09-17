@@ -140,7 +140,7 @@ describe('single-node/l1-reorgs/messages', () => {
   //
   // The reorg happens while a non-final block of the current checkpoint is held at the checkpoint test gate, after
   // that block was stored by the proposer's own archiver and before the next block freezes its message range. The
-  // replacement is a single atomic `reorgWithReplacement` over pre-built calls, keeping the L1 height: an
+  // replacement is a single atomic same-height `reorgWithReplacement` over pre-built calls: an
   // intermediate shorter message prefix would be a legal reason for the archiver to prune the held block, so one is
   // never exposed.
   it('preserves the built block and its checkpoint across a placement-only L1 reorg', async () => {
@@ -243,19 +243,28 @@ describe('single-node/l1-reorgs/messages', () => {
             expect(block.transactions.filter(tx => rollupSenders.includes(tx.to?.toLowerCase() ?? ''))).toHaveLength(0);
           }
 
-          // Every replacement call is prepared before L1 is touched and both replacement blocks are mined by the one
-          // `anvil_reorg`, so the archiver never observes a state in which the message log is shorter than it was.
-          // The chain does get shorter in L1 *height*, since the replacement is two blocks and the window is more
-          // — that is what makes the stale syncpoint below name a block the canonical chain no longer reaches.
+          // Every replacement call is prepared before L1 is touched and both replacement blocks are mined by the
+          // one `anvil_reorg`, so the archiver never observes a state in which the message log is shorter than it
+          // was, and it re-mines the whole depth, so the L1 height is preserved. Interval mining is paused across
+          // the swap so the height and hash comparisons below read a chain that is not moving underneath them.
           expect(depth).toBeGreaterThanOrEqual(2);
           const anchorBefore = await l1Client.getBlock({ blockNumber: reorgFrom });
+          const headBefore = await l1Client.getBlock({ blockNumber: BigInt(head) });
           logger.warn(`Replacing L1 blocks [${reorgFrom}, ${head}] with one message per block`, { depth });
           ctx.assertStillHeld('replace the L1 suffix');
-          await context.cheatCodes.eth.reorgWithReplacement(depth, [[first.call], [second.call]]);
+          await context.cheatCodes.eth.execWithPausedAnvil(async () => {
+            await context.cheatCodes.eth.reorgWithReplacement(depth, [[first.call], [second.call]]);
 
-          // The block the first message was re-mined into is a different block from the one both were in.
-          const anchorAfter = await l1Client.getBlock({ blockNumber: reorgFrom });
-          expect(anchorAfter.hash).not.toEqual(anchorBefore.hash);
+            // A different chain of the same height: the replacement re-mines every block it rolled back, so the
+            // syncpoint check below cannot pass on a height the chain simply has not reached yet.
+            const [anchorAfter, headAfter] = await Promise.all([
+              l1Client.getBlock({ blockNumber: reorgFrom }),
+              l1Client.getBlock({ blockNumber: BigInt(head) }),
+            ]);
+            expect(headAfter.number).toEqual(headBefore.number);
+            expect(anchorAfter.hash).not.toEqual(anchorBefore.hash);
+            expect(headAfter.hash).not.toEqual(headBefore.hash);
+          });
 
           // The Inbox agrees on content and disagrees on placement.
           const stateAfter = await retryUntil(
@@ -287,29 +296,29 @@ describe('single-node/l1-reorgs/messages', () => {
           });
 
           // Count and rolling hash are identical either side of a placement-only reorg, so they cannot say which L1
-          // chain the archiver's log belongs to. The message syncpoint can: it is the L1 block at which the stored
-          // log was last found equal to the Inbox's own position, so waiting for it to name the replacement chain
-          // is what makes this a completed reconciliation rather than one sync pass having fired.
-          const replacementHead = await l1Client.getBlock({ blockNumber: BigInt(reorgFrom) });
-          const syncedTo = await retryUntil(
-            async () => {
-              const synced = await archiver.getSyncedMessageL1Block();
-              if (synced === undefined || synced.l1BlockNumber < replacementHead.number) {
-                return undefined;
-              }
-              // At the replacement block itself the hash has to match; past it the syncpoint is on a descendant of
-              // the replacement chain, which is equally good evidence and is what a busy chain will report.
-              const onReplacement =
-                synced.l1BlockNumber > replacementHead.number || synced.l1BlockHash.toString() === replacementHead.hash;
-              return onReplacement ? synced : undefined;
+          // chain the archiver's log belongs to. The message syncpoint can, but only with its hash checked against
+          // the canonical chain at its own height: the pre-reorg syncpoint sits on the abandoned chain at a height
+          // the replacement also reaches, so a height test alone is satisfied before anything reconciles. Requiring
+          // the pre-reorg head height as well means the archiver has re-read the whole replaced suffix.
+          const syncedTo = await waitForCanonicalMessageSyncpoint(
+            archiver,
+            {
+              getCanonicalBlockHash: (l1BlockNumber: bigint) =>
+                l1Client.getBlock({ blockNumber: l1BlockNumber }).then(
+                  block => block.hash ?? undefined,
+                  () => undefined,
+                ),
             },
-            'archiver certifies its message log against the replacement L1 chain',
-            L1_BLOCK_TIME_IN_S * 8,
-            0.2,
+            {
+              atLeastL1BlockNumber: BigInt(head),
+              what: 'archiver certifies its message log against the replacement L1 chain',
+              timeoutSeconds: L1_BLOCK_TIME_IN_S * 10,
+              logger,
+            },
           );
           logger.warn(`Archiver message log certified on the replacement chain`, {
             syncedL1Block: syncedTo.l1BlockNumber,
-            replacementL1Block: replacementHead.number,
+            preReorgHead: head,
           });
           expect((await archiver.getSyncedMessagePosition()).totalMessageCount).toEqual(secondEnd);
           expect((await node.getBlockData(event.blockNumber))?.blockHash.toString()).toEqual(

@@ -79,8 +79,8 @@ describe('waitForCanonicalMessageSyncpoint', () => {
     expect(result).toEqual(caughtUp);
   });
 
-  // A syncpoint naming a height the canonical chain does not reach is on an abandoned suffix, which is exactly the
-  // state immediately after a replacement shortens the chain.
+  // A syncpoint naming a height the canonical chain does not reach is on an abandoned suffix, which is the state a
+  // reorg deeper than its replacement leaves behind.
   it('waits out a syncpoint naming a height past the canonical tip', async () => {
     const pastTip = { l1BlockNumber: 110n, l1BlockHash: hash(7) };
     const reconciled = { l1BlockNumber: 100n, l1BlockHash: hash(8) };
