@@ -10,6 +10,7 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { AttestationPool } from '../../../../mem_pools/index.js';
 import type { TxPoolV2 } from '../../../../mem_pools/tx_pool_v2/interfaces.js';
+import { ReqRespStatus, ReqRespStatusError } from '../../status.js';
 import { BitVector } from './bitvector.js';
 import { reqRespBlockTxsHandler } from './block_txs_handler.js';
 import { BlockTxsRequest, BlockTxsResponse, MAX_BLOCK_TXS_PER_REQUEST } from './block_txs_reqresp.js';
@@ -76,12 +77,17 @@ describe('reqRespBlockTxsHandler', () => {
     });
 
     it('rejects a request naming more explicit hashes than the per-request cap', async () => {
-      // A peer with an empty bit list but a huge explicit-hash list would otherwise force one
+      // A peer with an empty bit list but many explicit hashes would otherwise force one
       // full tx to be served per hash; the request must be rejected before the pool lookup.
       const tooMany = Array.from({ length: MAX_BLOCK_TXS_PER_REQUEST + 1 }, () => TxHash.random());
       const request = makeRequest(Fr.random(), BitVector.init(0, []), [], tooMany);
 
-      await expect(callHandler(request)).rejects.toThrow();
+      const err = await callHandler(request).then(
+        () => undefined,
+        e => e,
+      );
+      expect(err).toBeInstanceOf(ReqRespStatusError);
+      expect((err as ReqRespStatusError).status).toBe(ReqRespStatus.BADLY_FORMED_REQUEST);
       expect(txPool.getTxsByHash).not.toHaveBeenCalled();
     });
   });
