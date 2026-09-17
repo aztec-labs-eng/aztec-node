@@ -1407,8 +1407,8 @@ export class CheckpointProposalJob implements Traceable {
    * archiver sync above it does, so a test cannot leave the job blocked by a broken hook.
    *
    * `remainingBuildSubslots` is a snapshot taken here: a hook that holds the job spends the slot's real budget, so a
-   * caller that needs to know whether another block can still be built has to re-check `proposalSendDeadline`
-   * against the clock before it releases.
+   * caller that needs to know whether another block can still be built asks the `schedule` view, which answers from
+   * this proposer's own {@link ProposerTimetable} rather than re-deriving sub-slot arithmetic from the deadlines.
    */
   private async notifyBlockReadyToBroadcast(opts: {
     block: L2Block;
@@ -1437,6 +1437,12 @@ export class CheckpointProposalJob implements Traceable {
       proposalSendDeadline: new Date(sendDeadline * 1000),
       consumedMessageCount: opts.consumedMessageCount,
       inboxPrefixRef: opts.inboxPrefixRef,
+      schedule: {
+        selectNextSubslot: nowSeconds => this.timetable.selectNextSubslot(this.targetSlot, nowSeconds),
+        getProposalReceiveDeadlineSeconds: () => this.timetable.getCheckpointProposalReceiveDeadline(this.targetSlot),
+        getProposalReceiveStartSeconds: () => this.timetable.getCheckpointProposalReceiveStart(this.targetSlot),
+        getAttestationDeadlineSeconds: () => this.timetable.getAttestationDeadline(this.targetSlot),
+      },
     });
   }
 

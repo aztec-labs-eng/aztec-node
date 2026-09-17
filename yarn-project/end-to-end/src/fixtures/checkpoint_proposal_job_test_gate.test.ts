@@ -1,18 +1,36 @@
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { CheckpointProposalJobTestEvent } from '@aztec-labs/sequencer-client';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
+import { ProposerTimetable } from '@aztec-labs/stdlib/timetable';
 import { describe, expect, it, jest } from '@jest/globals';
 
-import { CheckpointProposalJobTestGate } from './checkpoint_proposal_job_test_gate.js';
+import { CheckpointHoldEndedError, CheckpointProposalJobTestGate } from './checkpoint_proposal_job_test_gate.js';
 
 describe('CheckpointProposalJobTestGate', () => {
   const log = createLogger('e2e:checkpoint-gate-test');
 
+  /**
+   * A real {@link ProposerTimetable} on the suites' 36s/6s cadence, so the gate's sub-slot questions are answered by
+   * the production scheduler rather than by arithmetic repeated in the test. Genesis is at 0, so slot `n` starts at
+   * `n * 36`.
+   */
+  const timetable = new ProposerTimetable({
+    l1Constants: { l1GenesisTime: 0n, slotDuration: 36, ethereumSlotDuration: 12 },
+    blockDuration: 6,
+    minBlockDuration: 1,
+    p2pPropagationTime: 0.5,
+    checkpointProposalPrepareTime: 0.5,
+    checkpointProposalInitTime: 1,
+  });
+
+  const slot = SlotNumber(10);
+
   const makeEvent = (overrides: Partial<CheckpointProposalJobTestEvent> = {}): CheckpointProposalJobTestEvent => ({
     phase: 'block-ready-to-broadcast',
-    slot: SlotNumber(10),
+    slot,
     checkpointNumber: CheckpointNumber(3),
     blockNumber: BlockNumber(7),
     indexWithinCheckpoint: IndexWithinCheckpoint(0),
@@ -22,6 +40,12 @@ describe('CheckpointProposalJobTestGate', () => {
     proposalSendDeadline: new Date(Date.now() + 30_000),
     consumedMessageCount: 5n,
     inboxPrefixRef: InboxMessagePrefixRef.random(),
+    schedule: {
+      selectNextSubslot: nowSeconds => timetable.selectNextSubslot(slot, nowSeconds),
+      getProposalReceiveDeadlineSeconds: () => timetable.getCheckpointProposalReceiveDeadline(slot),
+      getProposalReceiveStartSeconds: () => timetable.getCheckpointProposalReceiveStart(slot),
+      getAttestationDeadlineSeconds: () => timetable.getAttestationDeadline(slot),
+    },
     ...overrides,
   });
 
@@ -183,6 +207,134 @@ describe('CheckpointProposalJobTestGate', () => {
 
     await hooks.onCheckpointPhase!(makeEvent());
     expect(gate.isHolding).toBe(false);
+  });
+
+  // A watchdog that fires halfway through a test's held work has to fail that work there. Racing the failure
+  // channel against the match alone leaves the body running and the failure unobserved until whatever the body
+  // was awaiting eventually times out with no explanation.
+  it('surfaces a watchdog timeout that fires while the held body is still running', async () => {
+    const gate = makeGate(20);
+    const neverResolves = promiseWithResolvers<void>();
+    const held = gate.withHold(
+      () => true,
+      () => neverResolves.promise,
+    );
+    const holding = gate.hooks.onCheckpointPhase!(makeEvent());
+
+    await expect(held).rejects.toThrow('without being released');
+    await holding;
+    neverResolves.resolve();
+  });
+
+  // Racing does not cancel the body, so the work started inside a hold keeps running after the watchdog let the
+  // proposer go. Anything that would change the chain has to refuse instead of racing a resumed proposer.
+  it('refuses further chain work from a body that outlived its hold', async () => {
+    const gate = makeGate(20);
+    const started = promiseWithResolvers<void>();
+    const release = promiseWithResolvers<void>();
+    let afterTimeout: unknown;
+
+    const held = gate.withHold(
+      () => true,
+      async ctx => {
+        ctx.assertStillHeld('send the first L1 message');
+        started.resolve();
+        await release.promise;
+        try {
+          ctx.assertStillHeld('replace the L1 suffix');
+        } catch (err) {
+          afterTimeout = err;
+        }
+        expect(ctx.signal.aborted).toBe(true);
+      },
+    );
+    const holding = gate.hooks.onCheckpointPhase!(makeEvent());
+
+    await started.promise;
+    await expect(held).rejects.toThrow('without being released');
+    release.resolve();
+    await holding;
+    // The body's own second step, which would have reorged L1 behind a resumed proposer, refused.
+    await new Promise(resolve => setImmediate(resolve));
+    expect(afterTimeout).toBeInstanceOf(CheckpointHoldEndedError);
+    expect((afterTimeout as CheckpointHoldEndedError).reason).toBe('watchdog');
+  });
+
+  // The body has to be able to tell "another ordinary block can still be built" from "the final send deadline is
+  // open", which are different questions: the send deadline stays open for a whole block sub-slot after the last
+  // startable one. The answer comes from the proposer's own timetable, not from the snapshot in the event.
+  it('answers sub-slot startability from the proposer timetable rather than the event snapshot', async () => {
+    const gate = makeGate();
+    const checked = gate.withHold(
+      () => true,
+      ctx => {
+        // A hold that has spent sub-slot zero lands the release in sub-slot one, which is a later index than the
+        // held block's, so another ordinary block is still startable.
+        const subslotOneStart = timetable.getBlockBuildDeadline(slot, 0) + 1;
+        expect(ctx.nextSubslot(subslotOneStart * 1000).index).toBe(1);
+        expect(ctx.canStartAnotherBlock(subslotOneStart * 1000)).toBe(true);
+
+        // Past the last sub-slot's build deadline no ordinary block is left, even though the snapshot still
+        // claimed three and the proposal send deadline has not passed yet.
+        const spent = timetable.getBlockBuildDeadline(slot, timetable.getMaxBlocksPerCheckpoint() - 1) * 1000;
+        expect(ctx.nextSubslot(spent).canStart).toBe(false);
+        expect(ctx.canStartAnotherBlock(spent)).toBe(false);
+        expect(ctx.remainingHoldBudgetMs(spent)).toBeGreaterThan(0);
+        return Promise.resolve();
+      },
+    );
+    const holding = gate.hooks.onCheckpointPhase!(
+      makeEvent({ indexWithinCheckpoint: IndexWithinCheckpoint(0), remainingBuildSubslots: 3 }),
+    );
+    await checked;
+    await holding;
+  });
+
+  // The stale-block scenarios release a signed block that peers still have to accept on ingress, which the
+  // proposal send deadline does not bound: it is one propagation budget earlier than the consensus receive
+  // deadline validators actually enforce.
+  it('reports the ingress budget separately from the proposal send budget', async () => {
+    const gate = makeGate();
+    const receiveDeadline = timetable.getCheckpointProposalReceiveDeadline(slot);
+    const sendDeadline = receiveDeadline - timetable.p2pPropagationTime;
+    const checked = gate.withHold(
+      () => true,
+      ctx => {
+        const now = (sendDeadline - 1) * 1000;
+        expect(ctx.remainingHoldBudgetMs(now)).toBe(1000);
+        expect(ctx.remainingIngressBudgetMs(now)).toBe(1000 + timetable.p2pPropagationTime * 1000);
+        return Promise.resolve();
+      },
+    );
+    const holding = gate.hooks.onCheckpointPhase!(makeEvent({ proposalSendDeadline: new Date(sendDeadline * 1000) }));
+    await checked;
+    await holding;
+  });
+
+  // A watchdog that fires before anything matched used to leave `matched` and `completed` pending forever, so a
+  // test awaiting either hung until jest's own timeout rather than reporting the gate's diagnosis.
+  it('does not leave consumers waiting on a match that can no longer happen', async () => {
+    const gate = makeGate(20);
+    const armed = gate.arm(() => false);
+
+    await expect(armed.matched).rejects.toThrow('waiting for a matching checkpoint phase');
+    await expect(armed.completed).rejects.toThrow('waiting for a matching checkpoint phase');
+  });
+
+  // A hold abandoned by the watchdog must not look like a clean completion to anything awaiting the phase to
+  // resume, or the test continues past a barrier that was never honored.
+  it('fails the completion channel when a hold is abandoned rather than resolving it', async () => {
+    const gate = makeGate(20);
+    const armed = gate.arm(() => true);
+    const holding = gate.hooks.onCheckpointPhase!(makeEvent());
+    await armed.matched;
+
+    await expect(armed.completed).rejects.toThrow('without being released');
+    await holding;
+
+    // Releasing after the watchdog already settled the arming changes nothing.
+    gate.release();
+    await expect(armed.completed).rejects.toThrow('without being released');
   });
 
   afterEach(() => {
