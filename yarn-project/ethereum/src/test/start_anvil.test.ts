@@ -233,7 +233,9 @@ describe.each(BEHAVIOURS)('startAnvil teardown when anvil %s SIGTERM', behaviour
         await spawn.dispose();
       }
     },
-    90_000,
+    // A healthy cell is a start plus at most one escalation, ~7s, and ~7s again with the cores it runs
+    // on oversubscribed sevenfold. The rest is headroom for a start that is retrying.
+    60_000,
   );
 });
 
