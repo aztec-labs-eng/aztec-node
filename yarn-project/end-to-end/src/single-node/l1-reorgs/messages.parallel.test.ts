@@ -10,6 +10,12 @@ import type { ChainMonitor } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
+import {
+  type L2Block,
+  L2BlockSourceEvents,
+  type L2PruneUncheckpointedEvent,
+  type L2PruneUnprovenEvent,
+} from '@aztec-labs/stdlib/block';
 import 'jest-extended';
 import type { Hex } from 'viem';
 
@@ -43,6 +49,7 @@ describe('single-node/l1-reorgs/messages', () => {
 
   let l1Client: ExtendedViemWalletClient;
   let l1ClientDelayer: Delayer;
+  let proverDelayer: Delayer;
   let gate: CheckpointProposalJobTestGate;
   let inbox: InboxContract;
 
@@ -55,7 +62,7 @@ describe('single-node/l1-reorgs/messages', () => {
     t = new L1ReorgsTest();
     gate = new CheckpointProposalJobTestGate(createLogger('e2e:l1-reorgs:messages:gate'), 180_000);
     await t.setup({ checkpointProposalJobTestHooks: gate.hooks });
-    ({ test, context, logger, node, archiver, monitor } = t);
+    ({ test, context, logger, node, archiver, monitor, proverDelayer } = t);
     ({ L1_BLOCK_TIME_IN_S, L2_SLOT_DURATION_IN_S } = t);
     ({ client: l1Client, delayer: l1ClientDelayer } = await test.createL1Client());
     inbox = new InboxContract(l1Client, context.deployL1ContractsValues.l1ContractAddresses.inboxAddress.toString());
@@ -125,12 +132,19 @@ describe('single-node/l1-reorgs/messages', () => {
   //
   // The reorg happens while a non-final block of the current checkpoint is held at the checkpoint test gate, after
   // that block was stored by the proposer's own archiver and before the next block freezes its message range. The
-  // replacement is a single atomic same-height `reorgWithReplacement` over pre-built calls: an intermediate shorter
-  // message prefix would be a legal reason for the archiver to prune the held block, so one is never exposed.
+  // replacement is a single atomic `reorgWithReplacement` over pre-built calls, keeping the L1 height: an
+  // intermediate shorter message prefix would be a legal reason for the archiver to prune the held block, so one is
+  // never exposed.
   it('preserves the built block and its checkpoint across a placement-only L1 reorg', async () => {
     // Send L2 txs to trigger multi-block checkpoints and wait for them to land in a checkpoint
     await sendTransactions(TX_COUNT, 300);
     await test.waitUntilCheckpointNumber(CheckpointNumber(2), L2_SLOT_DURATION_IN_S * 6);
+
+    // Production is stopped before anything is sent. Pausing drains the in-flight checkpoint and its pending L1
+    // submission, so the window the reorg will replace cannot contain a checkpoint publication, and no running
+    // proposer can consume the messages before the gate exists to hold it.
+    const sequencer = context.aztecNodeService.getSequencer()!;
+    await sequencer.pause();
 
     // The reorg must not reach the parent checkpoint's own L1 publication, so the window opens after the most
     // recent publication rather than in the middle of one.
@@ -157,132 +171,186 @@ describe('single-node/l1-reorgs/messages', () => {
     const stateBefore = await inbox.getState();
     expect(stateBefore.totalMessagesInserted).toEqual(secondEnd);
 
-    // Hold the first non-final block of a checkpoint that has consumed through both messages.
-    const armed = gate.arm(
-      event =>
-        event.phase === 'block-ready-to-broadcast' && event.isStandalone && event.consumedMessageCount >= secondEnd,
-    );
+    // Blocks pruned from anywhere in the chain while the reorg is in flight. Registered before L1 is touched: a
+    // prune of the held block or of its ancestors is exactly what this scenario says must not happen, and a
+    // post-hoc read of the chain cannot tell "never pruned" from "pruned and rebuilt to the same shape".
+    const prunes: L2Block[] = [];
+    const onPruneUnproven = (args: L2PruneUnprovenEvent) => prunes.push(...args.blocks);
+    const onPruneUncheckpointed = (args: L2PruneUncheckpointedEvent) => prunes.push(...args.blocks);
+    archiver.events.on(L2BlockSourceEvents.L2PruneUnproven, onPruneUnproven);
+    archiver.events.on(L2BlockSourceEvents.L2PruneUncheckpointed, onPruneUncheckpointed);
+
+    // Armed before production resumes, so the block that consumes both messages cannot be built and gossiped
+    // before there is anything to hold it.
     let held;
     try {
-      held = await Promise.race([armed.matched, armed.failed]);
-      logger.warn(`Holding block ${held.blockNumber} of checkpoint ${held.checkpointNumber} at slot ${held.slot}`, {
-        consumedMessageCount: held.consumedMessageCount,
-        remainingBuildSubslots: held.remainingBuildSubslots,
-      });
-      expect(held.remainingBuildSubslots).toBeGreaterThanOrEqual(1);
+      await sequencer.start();
+      held = await gate.withHold(
+        event =>
+          event.phase === 'block-ready-to-broadcast' && event.isStandalone && event.consumedMessageCount >= secondEnd,
+        async ctx => {
+          const event = ctx.event;
+          logger.warn(
+            `Holding block ${event.blockNumber} of checkpoint ${event.checkpointNumber} at slot ${event.slot}`,
+            {
+              consumedMessageCount: event.consumedMessageCount,
+              remainingBuildSubslots: event.remainingBuildSubslots,
+            },
+          );
+          expect(ctx.canStartAnotherBlock()).toBe(true);
 
-      // The held block really consumed both messages, at their original compact indices.
+          // The held block really consumed both messages, at their original compact indices.
+          for (const message of [first, second]) {
+            const witness = await node.getL1ToL2MessageMembershipWitness(event.blockNumber, message.msgHash);
+            expect(witness).toBeDefined();
+            expect(witness![0]).toEqual(message.index);
+          }
+
+          // The reorg window: from the L1 block that carried the first message up to the current head. Its lower
+          // bound is strictly above the last observed checkpoint publication, so no published checkpoint is inside
+          // it, and production was stopped for the whole window until the gate was armed.
+          const head = BigInt((await monitor.run(true)).l1BlockNumber);
+          const reorgFrom = first.txReceipt.blockNumber;
+          expect(reorgFrom).toBeGreaterThan(BigInt(l1BlockBeforeMessages));
+          const depth = Number(head - reorgFrom + 1n);
+
+          // Nothing else in the window may be dropped by the replacement. A rollup transaction inside it would be a
+          // checkpoint publication or a proof, whose removal is a different scenario entirely.
+          const rollupAddress = context.deployL1ContractsValues.l1ContractAddresses.rollupAddress
+            .toString()
+            .toLowerCase();
+          for (let n = reorgFrom; n <= head; n++) {
+            const block = await l1Client.getBlock({ blockNumber: n, includeTransactions: true });
+            expect(block.transactions.filter(tx => tx.to?.toLowerCase() === rollupAddress)).toHaveLength(0);
+          }
+
+          // A proof landing inside the window would be replaced away with it, so the prover's next submission is
+          // deferred past the replacement rather than cancelled: the suite still needs it to prove the checkpoint.
+          proverDelayer.pauseNextTxUntilBlock(reorgFrom + BigInt(depth) + 1n, L1_BLOCK_TIME_IN_S * 8);
+
+          // Every replacement call is prepared before L1 is touched, and both replacement blocks are mined by the
+          // one `anvil_reorg`, so the archiver never observes a state in which the message log is shorter than it
+          // was. The replacement keeps the L1 height, so anvil advances its timestamps normally.
+          expect(depth).toBeGreaterThanOrEqual(2);
+          logger.warn(`Replacing L1 blocks [${reorgFrom}, ${head}] with one message per block`, { depth });
+          ctx.assertStillHeld('replace the L1 suffix');
+          await context.cheatCodes.eth.reorgWithReplacement(depth, [[first.call], [second.call]]);
+
+          // The Inbox agrees on content and disagrees on placement.
+          const stateAfter = await retryUntil(
+            async () => {
+              const state = await inbox.getState();
+              return state.totalMessagesInserted === secondEnd ? state : undefined;
+            },
+            'Inbox re-inserts both messages after the replacement',
+            L1_BLOCK_TIME_IN_S * 6,
+            0.2,
+          );
+          expect(stateAfter.totalMessagesInserted).toEqual(stateBefore.totalMessagesInserted);
+          expect(stateAfter.rollingHash.toString()).toEqual(stateBefore.rollingHash.toString());
+
+          const bucketsAfter = {
+            first: await liveBucketEndingAt(firstEnd),
+            second: await liveBucketEndingAt(secondEnd),
+          };
+          // Placement changed: a boundary now sits between the two messages and each ends its own bucket. The end
+          // the messages already shared is still a live bucket end, so nothing already built on it has been
+          // invalidated.
+          expect(bucketsAfter.first).toBeDefined();
+          expect(bucketsAfter.second).toBeDefined();
+          expect(bucketsAfter.second!.seq).toBeGreaterThan(bucketsAfter.first!.seq);
+          logger.warn(`Placement-only reorg complete`, {
+            totalMessages: stateAfter.totalMessagesInserted,
+            bucketBefore: bucketsBefore.second!.seq,
+            bucketsAfter: [bucketsAfter.first!.seq, bucketsAfter.second!.seq],
+          });
+
+          // Count and rolling hash are identical either side of a placement-only reorg, so they cannot say which L1
+          // chain the archiver's log belongs to. The message syncpoint can: it is the L1 block at which the stored
+          // log was last found equal to the Inbox's own position, so waiting for it to name the replacement chain
+          // is what makes this a completed reconciliation rather than one sync pass having fired.
+          const replacementHead = await l1Client.getBlock({ blockNumber: BigInt(reorgFrom) });
+          const syncedTo = await retryUntil(
+            async () => {
+              const synced = await archiver.getSyncedMessageL1Block();
+              if (synced === undefined || synced.l1BlockNumber < replacementHead.number) {
+                return undefined;
+              }
+              // At the replacement block itself the hash has to match; past it the syncpoint is on a descendant of
+              // the replacement chain, which is equally good evidence and is what a busy chain will report.
+              const onReplacement =
+                synced.l1BlockNumber > replacementHead.number || synced.l1BlockHash.toString() === replacementHead.hash;
+              return onReplacement ? synced : undefined;
+            },
+            'archiver certifies its message log against the replacement L1 chain',
+            L1_BLOCK_TIME_IN_S * 8,
+            0.2,
+          );
+          logger.warn(`Archiver message log certified on the replacement chain`, {
+            syncedL1Block: syncedTo.l1BlockNumber,
+            replacementL1Block: replacementHead.number,
+          });
+          expect((await archiver.getSyncedMessagePosition()).totalMessageCount).toEqual(secondEnd);
+          expect((await node.getBlockData(event.blockNumber))?.blockHash.toString()).toEqual(
+            event.blockHash.toString(),
+          );
+
+          const remaining = ctx.remainingHoldBudgetMs();
+          logger.warn(`Releasing with ${remaining}ms of proposal budget left`, {
+            nextSubslot: ctx.nextSubslot().index,
+          });
+          expect(ctx.canStartAnotherBlock()).toBe(true);
+          expect(remaining).toBeGreaterThan(BLOCK_DURATION_MS);
+          return event;
+        },
+      );
+
+      // The already-built block was never pruned and never rebuilt: same number, same hash.
+      const afterRelease = await node.getBlockData(held.blockNumber);
+      expect(afterRelease).toBeDefined();
+      expect(afterRelease!.blockHash.toString()).toEqual(held.blockHash.toString());
+      expect(afterRelease!.checkpointNumber).toEqual(held.checkpointNumber);
+
+      // The same checkpoint number publishes, for the same slot: a later checkpoint taking its number would mean the
+      // work was abandoned and redone, which is exactly what this scenario says must not happen.
+      const published = await retryUntil(
+        async () => {
+          const [checkpoint] = await node.getCheckpoints(held!.checkpointNumber, 1, { includeBlocks: true });
+          return checkpoint;
+        },
+        `checkpoint ${held.checkpointNumber} publishes`,
+        L2_SLOT_DURATION_IN_S * 4,
+        0.5,
+      );
+      expect(published.header.slotNumber).toEqual(held.slot);
+      expect(published.blocks.map(block => block.number)).toContain(Number(held.blockNumber));
+
+      // Both messages keep their original compact indices and resolve witnesses on the canonical chain.
       for (const message of [first, second]) {
-        const witness = await node.getL1ToL2MessageMembershipWitness(held.blockNumber, message.msgHash);
+        expect(await node.getL1ToL2MessageIndex(message.msgHash)).toEqual(message.index);
+        const witness = await node.getL1ToL2MessageMembershipWitness('latest', message.msgHash);
         expect(witness).toBeDefined();
         expect(witness![0]).toEqual(message.index);
+        expect(await isL1ToL2MessageReady(node, message.msgHash)).toBe(true);
       }
 
-      // The reorg window: from the L1 block that carried the first message up to the current head. Its lower bound
-      // is strictly above the last observed checkpoint publication, so no published checkpoint is inside it.
-      const head = BigInt((await monitor.run(true)).l1BlockNumber);
-      const reorgFrom = first.txReceipt.blockNumber;
-      expect(reorgFrom).toBeGreaterThan(BigInt(l1BlockBeforeMessages));
-      const depth = Number(head - reorgFrom + 1n);
-
-      // Nothing else in the window may be dropped by the replacement. A rollup transaction inside it would be a
-      // checkpoint publication or a proof, whose removal is a different scenario entirely, so the premise is
-      // asserted rather than assumed.
-      const rollupAddress = context.deployL1ContractsValues.l1ContractAddresses.rollupAddress.toString().toLowerCase();
-      for (let n = reorgFrom; n <= head; n++) {
-        const block = await l1Client.getBlock({ blockNumber: n, includeTransactions: true });
-        const foreign = block.transactions.filter(tx => tx.to?.toLowerCase() === rollupAddress);
-        expect(foreign).toHaveLength(0);
-      }
-
-      // Every replacement call is prepared before L1 is touched, and both replacement blocks are mined by the one
-      // `anvil_reorg`, so the archiver never observes a state in which the message log is shorter than it was.
-      expect(depth).toBeGreaterThanOrEqual(2);
-      logger.warn(`Replacing L1 blocks [${reorgFrom}, ${head}] with one message per block`, { depth });
-      await context.cheatCodes.eth.reorgWithReplacement(depth, [[first.call], [second.call]]);
-
-      // The Inbox agrees on content and disagrees on placement.
-      const stateAfter = await retryUntil(
-        async () => {
-          const state = await inbox.getState();
-          return state.totalMessagesInserted === secondEnd ? state : undefined;
-        },
-        'Inbox re-inserts both messages after the replacement',
-        L1_BLOCK_TIME_IN_S * 6,
-        0.2,
-      );
-      expect(stateAfter.totalMessagesInserted).toEqual(stateBefore.totalMessagesInserted);
-      expect(stateAfter.rollingHash.toString()).toEqual(stateBefore.rollingHash.toString());
-
-      const bucketsAfter = {
-        first: await liveBucketEndingAt(firstEnd),
-        second: await liveBucketEndingAt(secondEnd),
-      };
-      // Placement changed: a boundary now sits between the two messages and each ends its own bucket. The end the
-      // messages already shared is still a live bucket end, so nothing already built on it has been invalidated.
-      expect(bucketsAfter.first).toBeDefined();
-      expect(bucketsAfter.second).toBeDefined();
-      expect(bucketsAfter.second!.seq).toBeGreaterThan(bucketsAfter.first!.seq);
-      logger.warn(`Placement-only reorg complete`, {
-        totalMessages: stateAfter.totalMessagesInserted,
-        bucketBefore: bucketsBefore.second!.seq,
-        bucketsAfter: [bucketsAfter.first!.seq, bucketsAfter.second!.seq],
-      });
-
-      // The archiver has reconciled to the replacement chain and still holds the held block's parent chain.
+      // The preserved checkpoint is proven by the fixture's prover node.
+      const lastBlock = BlockNumber(published.blocks.at(-1)!.number);
       await retryUntil(
-        async () => (await archiver.getSyncedMessagePosition()).totalMessageCount >= secondEnd,
-        'archiver reconciles to the replacement message log',
-        L1_BLOCK_TIME_IN_S * 6,
-        0.2,
+        async () => (await node.getBlockNumber('proven')) >= lastBlock,
+        `proven tip reaches block ${lastBlock}`,
+        L2_SLOT_DURATION_IN_S * t.test.epochDuration * 4,
+        1,
       );
-      expect((await node.getBlockData(held.blockNumber))?.blockHash.toString()).toEqual(held.blockHash.toString());
 
-      const remaining = gate.remainingHoldBudgetMs()!;
-      logger.warn(`Releasing with ${remaining}ms of proposal budget left`);
-      expect(remaining).toBeGreaterThan(BLOCK_DURATION_MS);
+      // Nothing the held block depends on was ever pruned: not the block itself, and not any of its ancestors.
+      // Collected from the archiver's own prune events over the whole reorg-to-proof window.
+      expect(prunes.filter(block => block.number <= held!.blockNumber)).toEqual([]);
     } finally {
-      gate.release();
+      archiver.events.off(L2BlockSourceEvents.L2PruneUnproven, onPruneUnproven);
+      archiver.events.off(L2BlockSourceEvents.L2PruneUncheckpointed, onPruneUncheckpointed);
+      proverDelayer.nextWait = undefined;
     }
-    await armed.completed;
-
-    // The already-built block was never pruned and never rebuilt: same number, same hash.
-    const afterRelease = await node.getBlockData(held!.blockNumber);
-    expect(afterRelease).toBeDefined();
-    expect(afterRelease!.blockHash.toString()).toEqual(held!.blockHash.toString());
-    expect(afterRelease!.checkpointNumber).toEqual(held!.checkpointNumber);
-
-    // The same checkpoint number publishes, for the same slot: a later checkpoint taking its number would mean the
-    // work was abandoned and redone, which is exactly what this scenario says must not happen.
-    const published = await retryUntil(
-      async () => {
-        const [checkpoint] = await node.getCheckpoints(held!.checkpointNumber, 1, { includeBlocks: true });
-        return checkpoint;
-      },
-      `checkpoint ${held!.checkpointNumber} publishes`,
-      L2_SLOT_DURATION_IN_S * 4,
-      0.5,
-    );
-    expect(published.header.slotNumber).toEqual(held!.slot);
-    expect(published.blocks.map(block => block.number)).toContain(Number(held!.blockNumber));
-
-    // Both messages keep their original compact indices and resolve witnesses on the canonical chain.
-    for (const message of [first, second]) {
-      expect(await node.getL1ToL2MessageIndex(message.msgHash)).toEqual(message.index);
-      const witness = await node.getL1ToL2MessageMembershipWitness('latest', message.msgHash);
-      expect(witness).toBeDefined();
-      expect(witness![0]).toEqual(message.index);
-      expect(await isL1ToL2MessageReady(node, message.msgHash)).toBe(true);
-    }
-
-    // The preserved checkpoint is proven by the fixture's prover node.
-    const lastBlock = BlockNumber(published.blocks.at(-1)!.number);
-    await retryUntil(
-      async () => (await node.getBlockNumber('proven')) >= lastBlock,
-      `proven tip reaches block ${lastBlock}`,
-      L2_SLOT_DURATION_IN_S * t.test.epochDuration * 4,
-      1,
-    );
 
     // Verify multi-block checkpoints were built
     await test.assertMultipleBlocksPerSlot(2);
