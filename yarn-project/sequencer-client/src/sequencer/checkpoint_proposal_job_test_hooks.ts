@@ -30,6 +30,12 @@ export type CheckpointProposalJobTestPhase = 'block-ready-to-broadcast';
  * can validly still return the sub-slot this block was built in when the block finished early.
  */
 export type CheckpointProposalJobSchedule = {
+  /**
+   * The proposer's own clock in milliseconds, which is what every deadline here is measured against. Not
+   * `Date.now()`: the job reads its `DateProvider`, and the e2e provider runs at a fixed offset from wall clock, so
+   * a budget compared against the wall clock can report time remaining in a slot that has already passed.
+   */
+  nowMs(): number;
   /** The sub-slot the build loop would select on its next iteration, were it asked at `nowSeconds`. */
   selectNextBuildSubslot(nowSeconds: number): SubslotSelection;
   /**

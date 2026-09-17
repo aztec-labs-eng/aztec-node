@@ -150,10 +150,13 @@ export class CheckpointProposalJobTestGate {
    * Milliseconds left before the held block's checkpoint has to be on the wire. A test asserts this is still enough
    * for the work it has planned after the release, and fails rather than releasing into a deadline it has spent.
    * Undefined when nothing is held.
+   *
+   * Measured against the proposer's own clock by default, not the wall clock: the e2e date provider runs at an
+   * offset, so a wall-clock comparison can report budget left in a slot the proposer has already given up on.
    */
-  public remainingHoldBudgetMs(now: number = Date.now()): number | undefined {
+  public remainingHoldBudgetMs(now?: number): number | undefined {
     const held = this.arming?.held;
-    return held === undefined ? undefined : held.proposalSendDeadline.getTime() - now;
+    return held === undefined ? undefined : held.proposalSendDeadline.getTime() - (now ?? held.schedule.nowMs());
   }
 
   /**
@@ -259,10 +262,11 @@ export class CheckpointProposalJobTestGate {
           throw new CheckpointHoldEndedError(reason, what);
         }
       },
-      remainingHoldBudgetMs: (now = Date.now()) => event.proposalSendDeadline.getTime() - now,
-      remainingIngressBudgetMs: (now = Date.now()) => event.schedule.getProposalReceiveDeadlineSeconds() * 1000 - now,
-      nextSubslot: (now = Date.now()) => event.schedule.selectNextBuildSubslot(now / 1000),
-      canStartAnotherBlock: (now = Date.now()) => event.schedule.canBuildAnotherBlock(now / 1000),
+      remainingHoldBudgetMs: (now = event.schedule.nowMs()) => event.proposalSendDeadline.getTime() - now,
+      remainingIngressBudgetMs: (now = event.schedule.nowMs()) =>
+        event.schedule.getProposalReceiveDeadlineSeconds() * 1000 - now,
+      nextSubslot: (now = event.schedule.nowMs()) => event.schedule.selectNextBuildSubslot(now / 1000),
+      canStartAnotherBlock: (now = event.schedule.nowMs()) => event.schedule.canBuildAnotherBlock(now / 1000),
     };
   }
 

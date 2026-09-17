@@ -50,10 +50,15 @@ describe('CheckpointProposalJobTestGate', () => {
    * `maxBlocks`. Mirrors the job: the loop waits out the sub-slot before re-selecting, so the next selection never
    * happens earlier than that sub-slot's deadline. The job's own unit tests pin that this is what it passes.
    */
-  const makeSchedule = (subslotIndex: number, maxBlocks: number): CheckpointProposalJobTestEvent['schedule'] => {
+  const makeSchedule = (
+    subslotIndex: number,
+    maxBlocks: number,
+    nowMs: () => number = () => Date.now(),
+  ): CheckpointProposalJobTestEvent['schedule'] => {
     const deadline = timetable.getBlockBuildDeadline(slot, subslotIndex);
     const next = (nowSeconds: number) => timetable.selectNextSubslot(slot, Math.max(nowSeconds, deadline));
     return {
+      nowMs,
       selectNextBuildSubslot: next,
       canBuildAnotherBlock: nowSeconds => {
         if (subslotIndex + 1 >= maxBlocks) {
@@ -307,6 +312,33 @@ describe('CheckpointProposalJobTestGate', () => {
     );
     const holding = gate.hooks.onCheckpointPhase!(
       makeEvent({ indexWithinCheckpoint: IndexWithinCheckpoint(0), remainingBuildSubslots: 3 }),
+    );
+    await checked;
+    await holding;
+  });
+
+  // The e2e date provider runs at a fixed offset from wall clock, and every deadline the job reports is on that
+  // clock. A budget compared against `Date.now()` therefore reports time left in a slot the proposer has already
+  // spent — the assertions that guard a release would pass precisely when they should fail.
+  it('measures budgets on the proposer’s clock, not the wall clock', async () => {
+    const gate = makeGate();
+    // The proposer is a full slot ahead of wall clock, and its own clock is past this checkpoint's send deadline.
+    const offsetMs = timetable.aztecSlotDuration * 1000;
+    const proposerNowMs = () => Date.now() + offsetMs;
+    const sendDeadline = new Date(Date.now() + 1_000);
+
+    const checked = gate.withHold(
+      () => true,
+      ctx => {
+        expect(ctx.remainingHoldBudgetMs()).toBeLessThan(0);
+        expect(gate.remainingHoldBudgetMs()).toBeLessThan(0);
+        // The wall clock still claims a second of budget, which is the answer that used to be reported.
+        expect(ctx.remainingHoldBudgetMs(Date.now())).toBeGreaterThan(0);
+        return Promise.resolve();
+      },
+    );
+    const holding = gate.hooks.onCheckpointPhase!(
+      makeEvent({ proposalSendDeadline: sendDeadline, schedule: makeSchedule(0, 4, proposerNowMs) }),
     );
     await checked;
     await holding;
