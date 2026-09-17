@@ -1,7 +1,7 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { type AddressInfo, createServer } from 'node:net';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -10,26 +10,63 @@ import { createPublicClient, http, parseAbiItem } from 'viem';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
 
-/** Stands in for an anvil that announces itself and then refuses to die on SIGTERM. */
-const UNKILLABLE_ANVIL = `#!/usr/bin/env bash
-trap '' TERM INT
-port=8545
-while [ $# -gt 0 ]; do
-  [ "$1" = '--port' ] && port=$2
-  shift
-done
-echo $$ > "$ANVIL_STUB_PIDFILE"
-echo "Listening on 127.0.0.1:$port"
-while true; do sleep 1 & wait $!; done
+/**
+ * Stands in for an anvil that announces itself, holds its port, and refuses to die on SIGTERM. It holds
+ * a real port because whether the port comes back is what teardown has to guarantee, and unlike the
+ * stand-in's liveness that cannot be confused by a killed process lingering as a zombie under a
+ * container PID 1 that never reaps. Like anvil it reports the port it actually bound, so callers can
+ * ask for an ephemeral one rather than racing to reserve a number in advance.
+ *
+ * It is `.cjs` so that `require` works wherever the temp directory happens to sit, and it is launched
+ * through the shell wrapper below rather than a `#!${'$'}{process.execPath}` shebang, which would break on
+ * a node path containing a space or exceeding the kernel's shebang limit.
+ */
+const UNKILLABLE_ANVIL = `
+const net = require('node:net');
+process.on('SIGTERM', () => {});
+process.on('SIGINT', () => {});
+// Nothing else will ever reap this: SIGTERM is ignored, and a test that fails before teardown never
+// sends the SIGKILL that would. Without this it survives as a listener holding the port indefinitely.
+setTimeout(() => process.exit(1), 60_000);
+const argv = process.argv;
+const requested = argv.indexOf('--port') === -1 ? 0 : Number(argv[argv.indexOf('--port') + 1]);
+net.createServer().listen(requested, '127.0.0.1', function () {
+  console.log('Listening on 127.0.0.1:' + this.address().port);
+});
 `;
 
-function isAlive(pid: number): boolean {
+/** Runs the stand-in under the node running this suite, quoted so a path with spaces survives. */
+const UNKILLABLE_ANVIL_LAUNCHER = `#!/bin/sh
+exec "${process.execPath}" "$(dirname "$0")/stub.cjs" "$@"
+`;
+
+/** Attempts to bind the port, reporting what stopped it when it could not. */
+async function probePort(port: number): Promise<{ free: boolean; error?: string }> {
+  const probe = createServer();
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
+    await new Promise<void>((resolve, reject) => {
+      probe.once('error', reject);
+      probe.listen(port, '127.0.0.1', () => resolve());
+    });
+    return { free: true };
+  } catch (err) {
+    return { free: false, error: (err as Error).message };
+  } finally {
+    await new Promise<void>(resolve => probe.close(() => resolve()));
   }
+}
+
+/** Fails unless the port is free, allowing `within` ms for a process that has been signalled to go. */
+async function expectPortFree(port: number, within = 0): Promise<void> {
+  const deadline = Date.now() + within;
+  let probed = await probePort(port);
+  while (!probed.free && Date.now() < deadline) {
+    await sleep(100);
+    probed = await probePort(port);
+  }
+  // Assert on the bind error rather than a bare boolean: it names what is still holding the port, which
+  // is the whole diagnostic value of these two tests.
+  expect(probed.error ?? 'port is free').toEqual('port is free');
 }
 
 async function withAnvilBin<T>(bin: string, fn: () => Promise<T>): Promise<T> {
@@ -47,36 +84,36 @@ async function withAnvilBin<T>(bin: string, fn: () => Promise<T>): Promise<T> {
 }
 
 describe('startAnvil teardown', () => {
-  it('leaves nothing running when anvil ignores SIGTERM', async () => {
+  it('releases the port when anvil ignores SIGTERM', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'anvil-stub-'));
     const stub = join(dir, 'anvil');
-    const pidFile = join(dir, 'pid');
-    writeFileSync(stub, UNKILLABLE_ANVIL, { mode: 0o755 });
-    process.env.ANVIL_STUB_PIDFILE = pidFile;
+    writeFileSync(join(dir, 'stub.cjs'), UNKILLABLE_ANVIL);
+    writeFileSync(stub, UNKILLABLE_ANVIL_LAUNCHER, { mode: 0o755 });
 
+    let anvil: Anvil | undefined;
     try {
-      // A concrete port, not 0: the stand-in echoes back whatever it is given, and real anvil is what
-      // turns a requested 0 into the actual port in that line. It binds nothing, so the value is free.
-      const { anvil } = await withAnvilBin(stub, () => startAnvil({ port: 39544 }));
-      const pid = parseInt(readFileSync(pidFile, 'utf8').trim());
-      expect(isAlive(pid)).toBe(true);
+      const started = await withAnvilBin(stub, () => startAnvil({ port: 0 }));
+      anvil = started.anvil;
+      const port = parseInt(new URL(started.rpcUrl).port);
+      expect((await probePort(port)).free).toBe(false);
 
       const start = Date.now();
       await anvil.stop();
-      // Must not hang: the SIGTERM the watchdog sends is ignored here, so only the kill escalation
-      // can end this, and that escalation has to both fire and be waited for.
+      // Must not hang: the SIGTERM the watchdog sends is ignored here, so only the kill escalation can
+      // end this, and that escalation has to both fire and be waited for.
       expect(Date.now() - start).toBeLessThan(15_000);
       expect(anvil.status).toEqual('idle');
 
-      // The stand-in is not our child, so it is reaped by init rather than by us and can linger as a
-      // zombie for a moment after the group kill; what matters is that it goes, not that it has gone
-      // by the exact instant stop() returns. Without the escalation it never goes at all.
-      for (let i = 0; i < 50 && isAlive(pid); i++) {
-        await sleep(100);
-      }
-      expect(isAlive(pid)).toBe(false);
+      // And the stand-in must actually be gone, not merely abandoned — without the escalation it outlives
+      // teardown holding this port for the rest of the run. The grace is for the kill itself: both
+      // processes are signalled at once here, so nothing orders the stand-in's fds closing before the
+      // watchdog's exit is observed.
+      await expectPortFree(port, 10_000);
     } finally {
-      delete process.env.ANVIL_STUB_PIDFILE;
+      // An assertion failing before `stop()` would otherwise strand a listener that ignores SIGTERM and
+      // that nothing else ever signals; the stand-in's own self-destruct is only the backstop for a
+      // failure that stops even this from running.
+      await anvil?.stop().catch(() => {});
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
@@ -88,16 +125,10 @@ describe('startAnvil teardown', () => {
     await anvil.stop();
 
     // Rebinding immediately is the caller-visible form of "anvil is really gone": suites reuse ports
-    // across cases, so a stop() that returns early hands the next startAnvil a port still in use.
-    const rebound = createServer();
-    try {
-      await new Promise<void>((resolve, reject) => {
-        rebound.once('error', reject);
-        rebound.listen(port, '127.0.0.1', () => resolve());
-      });
-    } finally {
-      await new Promise<void>(resolve => rebound.close(() => resolve()));
-    }
+    // across cases, so a stop() that returns early hands the next startAnvil a port still in use. No
+    // grace, because anvil honours the SIGTERM here and the watchdog waits for it before exiting — if
+    // anvil ever stopped honouring it this would escalate like the test above and need one too.
+    await expectPortFree(port);
   }, 60_000);
 });
 
