@@ -2434,6 +2434,48 @@ describe('CheckpointProposalJob', () => {
       );
     });
 
+    // A hook that holds the job spends the slot's real budget, so `remainingBuildSubslots` is stale the moment it
+    // is read. The event therefore also carries the proposer's own scheduling view, and a held hook asks that for
+    // what is still startable rather than re-deriving sub-slot arithmetic from the deadlines.
+    it('carries a scheduling view answering from the proposer timetable at the time it is asked', async () => {
+      const events: CheckpointProposalJobTestEvent[] = [];
+      const hookedJob = createHookedJob(event => {
+        events.push(event);
+        return Promise.resolve();
+      });
+      mockSubslots(hookedJob, 2);
+      const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await hookedJob.executeAndAwait();
+
+      const timetable = hookedJob.getTimetable();
+      const slot = SlotNumber(newSlotNumber);
+      // The sub-slot mock above is consumed by the build loop, so ask the real scheduler for the comparison.
+      jest.restoreAllMocks();
+      const realTimetable = makeProposerTimetable({ l1Constants, blockDurationMs: 3000 });
+      const buildFrameStart = realTimetable.getBuildFrameStart(slot);
+      for (const event of events) {
+        expect(event.schedule.getProposalReceiveDeadlineSeconds()).toEqual(
+          timetable.getCheckpointProposalReceiveDeadline(slot),
+        );
+        expect(event.schedule.getProposalReceiveStartSeconds()).toEqual(
+          timetable.getCheckpointProposalReceiveStart(slot),
+        );
+        expect(event.schedule.getAttestationDeadlineSeconds()).toEqual(timetable.getAttestationDeadline(slot));
+        // The view is evaluated at the instant it is asked, not frozen when the event was created.
+        expect(event.schedule.selectNextSubslot(buildFrameStart)).toEqual(
+          realTimetable.selectNextSubslot(slot, buildFrameStart),
+        );
+        expect(event.schedule.selectNextSubslot(buildFrameStart + 1000)).toEqual({
+          canStart: false,
+          index: undefined,
+          deadline: undefined,
+          isLastBlock: false,
+        });
+      }
+    });
+
     it('aborts the checkpoint when the hook throws, without gossiping the block', async () => {
       const hookedJob = createHookedJob(() => Promise.reject(new Error('hook failed')));
       mockSubslots(hookedJob, 2);
