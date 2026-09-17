@@ -21,22 +21,19 @@ An expired gcloud login can leave a correct-looking kubeconfig that cannot refre
 
 Start from `spartan/environments/next-net.env` or the closest requested topology. Read `scripts/source_env_basic.sh`, `source_network_env.sh`, `deploy_network.sh`, and the Terraform modules to resolve precedence/defaults. Pass the environment basename without `.env` to the bootstrap commands.
 
-Set or review these values explicitly:
+Change these values when adapting next-net:
 
 | Setting | Purpose |
 | --- | --- |
-| `GCP_PROJECT_ID`, `GCP_REGION`, `CLUSTER` | Existing GKE destination |
 | `NAMESPACE` | Unique name; also isolates release names and Terraform state |
-| `NETWORK` | Runtime preset, not namespace; retaining `next-net` can be appropriate |
 | `DESTROY_NAMESPACE=false` | Preserve PVCs during ordinary redeploys; next-net's template enables destruction |
-| `CREATE_ROLLUP_CONTRACTS=${CREATE_ROLLUP_CONTRACTS:-false}` | Require an explicit first-deploy override |
 | `LABS_INFRA_MNEMONIC_SECRET_NAME` | Dedicated mnemonic, even when reusing the runtime preset |
-| `BLOB_BUCKET_DIRECTORY`, snapshot directory/URL | Unique object prefixes; no old-chain snapshots on fresh genesis |
-| `PROVER_FAILED_PROOF_STORE`, `L1_TX_FAILED_STORE` | Unique diagnostic prefixes |
+| `BLOB_BUCKET_DIRECTORY` | Unique object prefix |
+| `PROVER_FAILED_PROOF_STORE` | Unique failed-proof prefix |
+| `L1_TX_FAILED_STORE` | Unique failed-transaction prefix |
 | `RPC_GATEWAY_ENABLED` and gateway hosts | Disable unless ingress is wanted; never reuse next-net's hostname |
-| `CREATE_ETH_DEVNET=false`, `ETHEREUM_CHAIN_ID=11155111` | Sepolia rather than a new local L1 |
-| `DEPLOY_INTERNAL_BOOTNODE=true`, private P2P settings | Isolated discovery within the cluster |
-| `REAL_VERIFIER=true` | Real proofs when validating proving health |
+
+Verify `GCP_PROJECT_ID`, `GCP_REGION`, and `CLUSTER` against the intended destination. `NETWORK` is a runtime preset, not the namespace; retaining `next-net` can be appropriate. Keep the template's Sepolia, internal bootnode, private P2P, real-verifier, and explicit `CREATE_ROLLUP_CONTRACTS=${CREATE_ROLLUP_CONTRACTS:-false}` settings unless the experiment requires a change. If enabling snapshots, use a unique output prefix and do not load old-chain snapshots on fresh genesis.
 
 The GCS backend currently uses bucket `aztec-terraform`, with module prefixes rooted at `${CLUSTER}/${NAMESPACE}`. Confirm that in `scripts/override_terraform_backend.sh`; an environment filename alone does not isolate state. Check the intended namespace and state prefix for existing resources before calling a network new. Do not rename or reuse an existing network's state to get past collisions.
 
