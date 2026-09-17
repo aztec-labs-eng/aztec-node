@@ -84,11 +84,6 @@ tests:
       - *palla
       - *phil
 
-  - regex: "ethereum/src/l1_tx_utils/.*\\.test\\.ts"
-    flake_group_id: e2e-p2p-epoch-flakes
-    owners:
-      - *palla
-
   # tx_stats_bench's 10 TPS sub-test occasionally returns valid:false from a single IVC
   # verification under heavy concurrency (8 parallel verifiers, each spawning a fresh bb subprocess
   # via the bb.js NativeUnixSocket backend introduced in #21564). The serial sub-tests pass.
