@@ -5,6 +5,7 @@ import type { PeerId } from '@libp2p/interface';
 import { mock, mockDeep } from 'jest-mock-extended';
 
 import type { MemPools } from '../../../mem_pools/interface.js';
+import { ReqRespStatus, ReqRespStatusError } from '../status.js';
 import { calculateTxResponseSize, reqRespTxHandler } from './tx.js';
 
 describe('calculateTxResponseSize', () => {
@@ -99,7 +100,12 @@ describe('reqRespTxHandler', () => {
     });
     const request = new TxHashArray(...Array.from({ length: 101 }, () => TxHash.random())).toBuffer();
 
-    await expect(reqRespTxHandler(mempools)(peerId, request)).rejects.toThrow();
+    const err = await reqRespTxHandler(mempools)(peerId, request).then(
+      () => undefined,
+      e => e,
+    );
+    expect(err).toBeInstanceOf(ReqRespStatusError);
+    expect((err as ReqRespStatusError).status).toBe(ReqRespStatus.BADLY_FORMED_REQUEST);
     // Over-cap request is rejected before any pool read.
     expect(lookups).toHaveLength(0);
   });

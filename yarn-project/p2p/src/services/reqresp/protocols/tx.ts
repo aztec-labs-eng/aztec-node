@@ -4,13 +4,16 @@ import { TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { MemPools } from '../../../mem_pools/interface.js';
+import { DEFAULT_MAX_RESPONSE_SIZE_KB } from '../../encoding.js';
 import type { ReqRespSubProtocolHandler } from '../interface.js';
 import { ReqRespStatus, ReqRespStatusError } from '../status.js';
 
-// Honest requesters chunk tx-fetch requests at 8 hashes (see chunkTxHashesRequest
-// and the batch requester default). Reject anything far above that so one peer
-// cannot pull far more txs than an honest request needs in a single call.
-const MAX_TX_HASHES_PER_REQUEST = 100;
+// Bound the request so the response the responder builds cannot exceed the reqresp
+// transport's max response size: each hash yields up to MAX_TX_SIZE_KB, so cap the
+// count at that budget. Honest requesters chunk at 8 (see chunkTxHashesRequest), well
+// under this; a peer naming more is rejected before the pool lookup instead of forcing
+// the node to read and serialize a response larger than the transport will carry.
+const MAX_TX_HASHES_PER_REQUEST = Math.floor(DEFAULT_MAX_RESPONSE_SIZE_KB / MAX_TX_SIZE_KB);
 
 /**
  * We want to keep the logic of the req resp handler in this file, but we do not have a reference to the mempools here
