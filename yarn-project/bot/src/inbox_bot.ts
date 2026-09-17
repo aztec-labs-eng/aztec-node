@@ -1509,10 +1509,15 @@ export class InboxBot implements BotLifecycle {
   private async completeConsumption(message: InboxMessageRecord, receipt: MinedTxReceipt): Promise<void> {
     let current = message;
     if (message.includedAt === undefined) {
+      const includedAt = this.dateProvider.now();
       if (message.mode === 'public') {
         this.recordPublicExecution('success', message, receipt);
       }
-      if ((await this.checkConsumptionNullifier(message, receipt)) === 'failed') {
+      const [nullifierResult, relationResult] = await Promise.allSettled([
+        this.checkConsumptionNullifier(message, receipt),
+        this.classifyBlockRelation(message, receipt),
+      ]);
+      if (nullifierResult.status === 'fulfilled' && nullifierResult.value === 'failed') {
         // The transaction executed, but not the consumption it was sent for, so the message is not consumed.
         const failed = await this.store.transitionMessageFrom(message.messageId, ['sent'], 'failed', {
           failedAt: this.dateProvider.now(),
@@ -1523,9 +1528,15 @@ export class InboxBot implements BotLifecycle {
         }
         return;
       }
-      const relation = await this.classifyBlockRelation(message, receipt);
+      if (nullifierResult.status === 'rejected') {
+        throw nullifierResult.reason;
+      }
+      if (relationResult.status === 'rejected') {
+        throw relationResult.reason;
+      }
+      const relation = relationResult.value;
       current = await this.store.patchMessage(message.messageId, {
-        includedAt: this.dateProvider.now(),
+        includedAt,
         proposedInclusionBlockNumber: receipt.blockNumber.toString(),
         insertionBlockNumber: relation.insertionBlockNumber?.toString(),
         blockRelation: relation.relation,

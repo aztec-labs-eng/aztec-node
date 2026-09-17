@@ -109,6 +109,17 @@ describe('findMessageInsertionBlock', () => {
     expect(await findMessageInsertionBlock(tenPerBlock, 89n, BlockNumber(9), 128)).toEqual(9);
   });
 
+  it('checks the adjacent block first for the common same-block case', async () => {
+    const reads: number[] = [];
+    const node = nodeWithLeaves(blockNumber => {
+      reads.push(blockNumber);
+      return blockNumber * 10;
+    });
+
+    expect(await findMessageInsertionBlock(node, 89n, BlockNumber(9), 128)).toEqual(9);
+    expect(reads).toEqual([9, 8]);
+  });
+
   it('is inconclusive when the upper bound does not cover the message', async () => {
     expect(await findMessageInsertionBlock(tenPerBlock, 95n, BlockNumber(9), 128)).toBeUndefined();
   });

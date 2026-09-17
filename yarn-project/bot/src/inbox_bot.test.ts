@@ -1401,6 +1401,22 @@ describe('InboxBot', () => {
       });
     });
 
+    it('timestamps proposed inclusion before running post-inclusion diagnostics', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
+      const [message] = await produceObservedBatch(bot);
+      await consume(bot);
+      const sent = await reload(message);
+      const insertion = await chain.insert(sent);
+      await consume(bot);
+      chain.mine(sent, { blockNumber: insertion.number, nullifiers: [await nullifierOf(sent)] });
+      const includedAt = dateProvider.now();
+      chain.onBlockRead = () => dateProvider.advanceTime(5);
+
+      await consume(bot);
+
+      expect((await reload(message)).includedAt).toEqual(includedAt);
+    });
+
     it('fails a consumption whose effects do not carry the message nullifier', async () => {
       const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
       const [message] = await produceObservedBatch(bot);
@@ -1418,6 +1434,22 @@ describe('InboxBot', () => {
       expect(publicExecutions('success')).toEqual(1);
       expect(milestones('included')).toEqual(0);
       expect(milestones('completed')).toEqual(0);
+    });
+
+    it('does not let a relation lookup error mask a failed consumption nullifier check', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
+      const [message] = await produceObservedBatch(bot);
+      await consume(bot);
+      const sent = await reload(message);
+      const insertion = await chain.insert(sent);
+      await consume(bot);
+      chain.mine(sent, { blockNumber: insertion.number, nullifiers: [Fr.random()] });
+      chain.node.getBlockData.mockRejectedValue(new Error('block RPC unavailable'));
+
+      await consume(bot);
+
+      expect(await reload(message)).toMatchObject({ state: 'failed', failureReason: 'invalid_consumption' });
+      expect(checks('consumption_nullifier', 'failed')).toEqual(1);
     });
 
     it('reports a later block relation without treating the lost race as a failure', async () => {
