@@ -589,7 +589,11 @@ describe('ProposalHandler checkpoint validation', () => {
 
     it('accepts a protocol-valid checkpoint when no local cap is set (fixture is protocol-valid)', async () => {
       const header = makeMatchingHeader();
-      setupDeepValidationMocks({ header, archive: new AppendOnlyTreeSnapshot(archiveRoot, 1), ...makeProtocolValidCheckpoint() });
+      setupDeepValidationMocks({
+        header,
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        ...makeProtocolValidCheckpoint(),
+      });
       const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
       const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
       expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
@@ -597,13 +601,25 @@ describe('ProposalHandler checkpoint validation', () => {
 
     it('treats a local VALIDATOR_MAX cap exceedance as non-slashable checkpoint_exceeds_local_cap', async () => {
       const header = makeMatchingHeader();
-      setupDeepValidationMocks({ header, archive: new AppendOnlyTreeSnapshot(archiveRoot, 1), ...makeProtocolValidCheckpoint() });
+      setupDeepValidationMocks({
+        header,
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        ...makeProtocolValidCheckpoint(),
+      });
       (config as any).validateMaxTxsPerBlock = 0;
       const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
       const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
-      expect(result).toEqual({ isValid: false, reason: 'checkpoint_exceeds_local_cap', checkpointNumber: CheckpointNumber(1) });
+      expect(result).toEqual({
+        isValid: false,
+        reason: 'checkpoint_exceeds_local_cap',
+        checkpointNumber: CheckpointNumber(1),
+      });
       // The dispatch table that drives markInvalidProposalSlot + slash votes must not fire for a local decline.
-      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[(result as { reason: keyof typeof SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT }).reason]).toBe(false);
+      expect(
+        SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[
+          (result as { reason: keyof typeof SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT }).reason
+        ],
+      ).toBe(false);
     });
 
     it('keeps a genuinely protocol-invalid checkpoint slashable even with a local cap set (control)', async () => {
@@ -613,8 +629,16 @@ describe('ProposalHandler checkpoint validation', () => {
       (config as any).validateMaxTxsPerBlock = 0;
       const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
       const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
-      expect(result).toEqual({ isValid: false, reason: 'checkpoint_validation_failed', checkpointNumber: CheckpointNumber(1) });
-      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[(result as { reason: keyof typeof SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT }).reason]).toBe(true);
+      expect(result).toEqual({
+        isValid: false,
+        reason: 'checkpoint_validation_failed',
+        checkpointNumber: CheckpointNumber(1),
+      });
+      expect(
+        SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[
+          (result as { reason: keyof typeof SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT }).reason
+        ],
+      ).toBe(true);
     });
 
     it('returns checkpoint_header_mismatch when headers differ', async () => {
