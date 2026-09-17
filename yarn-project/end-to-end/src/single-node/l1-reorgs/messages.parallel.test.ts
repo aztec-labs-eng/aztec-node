@@ -4,7 +4,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { type Logger, createLogger } from '@aztec-labs/aztec.js/log';
 import { isL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
-import { InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { InboxContract, MULTI_CALL_3_ADDRESS, RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { Delayer } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { ChainMonitor } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
@@ -25,6 +25,7 @@ import {
   sendL1ToL2Message,
   sendL1ToL2MessagesInOneBlock,
 } from '../../fixtures/l1_to_l2_messaging.js';
+import { waitForCanonicalMessageSyncpoint } from '../../fixtures/message_syncpoint.js';
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { waitForL1ToL2MessageSeen } from '../../shared/wait_for_l1_to_l2_message.js';
 import type { SingleNodeTestContext } from '../single_node_test_context.js';
@@ -55,6 +56,13 @@ describe('single-node/l1-reorgs/messages', () => {
 
   /** Block sub-slot duration in milliseconds on this suite's cadence, from FAST_REORG_TIMING. */
   const BLOCK_DURATION_MS = 5000;
+
+  /**
+   * L1 blocks the placement-only reorg reserves for itself: the two message sends plus the hold. The prover's next
+   * submission is deferred past it before the window opens, and the window is asserted to have stayed inside it, so
+   * "no rollup transaction was replaced away" is a bound set in advance rather than a hope checked afterwards.
+   */
+  const REORG_WINDOW_L1_BLOCKS = 16;
 
   const sendTransactions = (count: number, offset = 0) => t.sendTransactions(count, offset);
 
@@ -151,6 +159,16 @@ describe('single-node/l1-reorgs/messages', () => {
     const publishedBefore = await monitor.run(true);
     const l1BlockBeforeMessages = publishedBefore.l1BlockNumber;
 
+    // The prover is the only rollup sender left once the sequencer is paused, and a proof landing inside the window
+    // would be replaced away with it. Its next submission is deferred past the window before the window even opens
+    // — installing this after the fact could not undo a proof that already landed — and it is a delay rather than a
+    // cancellation, so the proof the suite still needs is only postponed. `pauseNextTxUntilBlock` consumes itself on
+    // the next tx through the client; the `finally` below clears it if nothing did.
+    proverDelayer.pauseNextTxUntilBlock(
+      BigInt(l1BlockBeforeMessages) + BigInt(REORG_WINDOW_L1_BLOCKS),
+      L1_BLOCK_TIME_IN_S * (REORG_WINDOW_L1_BLOCKS + 4),
+    );
+
     // Two messages in this order, sharing one L1 block and therefore one bucket.
     logger.warn(`Sending two cross chain messages in a single L1 block`);
     const [first, second] = await sendReplayableMessagePair();
@@ -180,12 +198,12 @@ describe('single-node/l1-reorgs/messages', () => {
     archiver.events.on(L2BlockSourceEvents.L2PruneUnproven, onPruneUnproven);
     archiver.events.on(L2BlockSourceEvents.L2PruneUncheckpointed, onPruneUncheckpointed);
 
-    // Armed before production resumes, so the block that consumes both messages cannot be built and gossiped
+    // The gate is armed synchronously by `withHold`, so creating the hold *before* restarting the sequencer is
+    // what makes the arming precede production: a block consuming both messages cannot be built and gossiped
     // before there is anything to hold it.
     let held;
     try {
-      await sequencer.start();
-      held = await gate.withHold(
+      const holding = gate.withHold(
         event =>
           event.phase === 'block-ready-to-broadcast' && event.isStandalone && event.consumedMessageCount >= secondEnd,
         async ctx => {
@@ -214,27 +232,30 @@ describe('single-node/l1-reorgs/messages', () => {
           expect(reorgFrom).toBeGreaterThan(BigInt(l1BlockBeforeMessages));
           const depth = Number(head - reorgFrom + 1n);
 
-          // Nothing else in the window may be dropped by the replacement. A rollup transaction inside it would be a
-          // checkpoint publication or a proof, whose removal is a different scenario entirely.
-          const rollupAddress = context.deployL1ContractsValues.l1ContractAddresses.rollupAddress
-            .toString()
-            .toLowerCase();
+          // Nothing else in the window may be dropped by the replacement: a checkpoint publication or a proof
+          // inside it would be a different scenario entirely. Both are sent through Multicall3 rather than
+          // straight to the rollup, so checking the rollup address alone would miss every one of them.
+          const { rollupAddress } = context.deployL1ContractsValues.l1ContractAddresses;
+          const rollupSenders = [rollupAddress.toString(), MULTI_CALL_3_ADDRESS].map(address => address.toLowerCase());
+          expect(BigInt(head) - reorgFrom).toBeLessThan(BigInt(REORG_WINDOW_L1_BLOCKS));
           for (let n = reorgFrom; n <= head; n++) {
             const block = await l1Client.getBlock({ blockNumber: n, includeTransactions: true });
-            expect(block.transactions.filter(tx => tx.to?.toLowerCase() === rollupAddress)).toHaveLength(0);
+            expect(block.transactions.filter(tx => rollupSenders.includes(tx.to?.toLowerCase() ?? ''))).toHaveLength(0);
           }
 
-          // A proof landing inside the window would be replaced away with it, so the prover's next submission is
-          // deferred past the replacement rather than cancelled: the suite still needs it to prove the checkpoint.
-          proverDelayer.pauseNextTxUntilBlock(reorgFrom + BigInt(depth) + 1n, L1_BLOCK_TIME_IN_S * 8);
-
-          // Every replacement call is prepared before L1 is touched, and both replacement blocks are mined by the
-          // one `anvil_reorg`, so the archiver never observes a state in which the message log is shorter than it
-          // was. The replacement keeps the L1 height, so anvil advances its timestamps normally.
+          // Every replacement call is prepared before L1 is touched and both replacement blocks are mined by the one
+          // `anvil_reorg`, so the archiver never observes a state in which the message log is shorter than it was.
+          // The chain does get shorter in L1 *height*, since the replacement is two blocks and the window is more
+          // — that is what makes the stale syncpoint below name a block the canonical chain no longer reaches.
           expect(depth).toBeGreaterThanOrEqual(2);
+          const anchorBefore = await l1Client.getBlock({ blockNumber: reorgFrom });
           logger.warn(`Replacing L1 blocks [${reorgFrom}, ${head}] with one message per block`, { depth });
           ctx.assertStillHeld('replace the L1 suffix');
           await context.cheatCodes.eth.reorgWithReplacement(depth, [[first.call], [second.call]]);
+
+          // The block the first message was re-mined into is a different block from the one both were in.
+          const anchorAfter = await l1Client.getBlock({ blockNumber: reorgFrom });
+          expect(anchorAfter.hash).not.toEqual(anchorBefore.hash);
 
           // The Inbox agrees on content and disagrees on placement.
           const stateAfter = await retryUntil(
@@ -304,6 +325,11 @@ describe('single-node/l1-reorgs/messages', () => {
           return event;
         },
       );
+      // Attached before anything can reject: if the sequencer fails to restart, the hold's own failure must not
+      // surface as an unhandled rejection while the start error propagates.
+      holding.catch(() => {});
+      await sequencer.start();
+      held = await holding;
 
       // The already-built block was never pruned and never rebuilt: same number, same hash.
       const afterRelease = await node.getBlockData(held.blockNumber);
@@ -347,6 +373,8 @@ describe('single-node/l1-reorgs/messages', () => {
       // Collected from the archiver's own prune events over the whole reorg-to-proof window.
       expect(prunes.filter(block => block.number <= held!.blockNumber)).toEqual([]);
     } finally {
+      // Releases the gate whether the hold matched, the body threw, or the sequencer never restarted.
+      gate.release();
       archiver.events.off(L2BlockSourceEvents.L2PruneUnproven, onPruneUnproven);
       archiver.events.off(L2BlockSourceEvents.L2PruneUncheckpointed, onPruneUncheckpointed);
       proverDelayer.nextWait = undefined;
