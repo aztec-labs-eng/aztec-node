@@ -400,6 +400,14 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return this.proverNode;
   }
 
+  /**
+   * Returns the validator client, if this node runs one. Exposed for tests that need to observe a validator's own
+   * offense emitter directly, alongside the existing sequencer and prover accessors.
+   */
+  public getValidatorClient(): ValidatorClient | undefined {
+    return this.validatorClient;
+  }
+
   public getBlockSource(): L2BlockSource {
     return this.blockSource;
   }

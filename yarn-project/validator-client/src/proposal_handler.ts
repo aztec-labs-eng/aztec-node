@@ -18,6 +18,7 @@ import {
 import { pick } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { FifoSet } from '@aztec-labs/foundation/fifo-set';
 import type { LogData } from '@aztec-labs/foundation/log';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -25,7 +26,7 @@ import { retryUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider, Timer, execWithSignal } from '@aztec-labs/foundation/timer';
 import { isErrorClass } from '@aztec-labs/foundation/types';
 import type { P2P, PeerId } from '@aztec-labs/p2p';
-import type { BlockData, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
+import type { BlockData, BlockHash, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
 import {
   getPreviousCheckpointInboxRollingHash,
@@ -287,6 +288,47 @@ function describeEndpointFailure(result: InboxEndpointCheckResult | undefined): 
   };
 }
 
+/**
+ * One block proposal's identity, as every observation below reports it.
+ *
+ * `blockHash` is the proposal's own signed header hash, which is what an e2e test holds from the proposer side: a
+ * slot alone cannot distinguish the stale block from the replacement built for the same slot.
+ */
+export type ObservedBlockProposal = {
+  slot: SlotNumber;
+  blockHash: BlockHash;
+  proposer: EthAddress;
+};
+
+/**
+ * Optional in-process observations of a node's block-proposal handling, injected through the node factory and never
+ * part of the serialized configuration, so they are unreachable over RPC and absent from every production path that
+ * does not pass them. They report; they never change a verdict, and they are called synchronously so they cannot
+ * add latency to the validation window.
+ */
+export type BlockProposalObservers = {
+  /**
+   * The *first* Inbox metadata comparison for a proposal, before any local-sync retry. The completed decision alone
+   * cannot show this happened: the metadata helper retries a local-view mismatch until its deadline, so a proposal
+   * rejected for a prefix mismatch and one accepted after a sync look the same from the outcome.
+   */
+  onFirstInboxMetadataCheck?: (
+    event: ObservedBlockProposal & { accepted: boolean; reason?: StreamingBlockCheckReason },
+  ) => void;
+  /**
+   * A node's completed decision on a block proposal, after classification and any slashing side effect has run.
+   * `slashable` is the production classification ({@link SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT}), not a second
+   * table maintained for tests.
+   */
+  onBlockProposalDecision?: (
+    event: ObservedBlockProposal & {
+      accepted: boolean;
+      reason?: BlockProposalValidationFailureReason;
+      slashable: boolean;
+    },
+  ) => void;
+};
+
 /** Block-proposal validation failures that constitute a slashable invalid-block offense. */
 export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: BlockProposalValidationFailureReason[] = [
   'state_mismatch',
@@ -403,6 +445,7 @@ export class ProposalHandler {
     private dateProvider: DateProvider = new DateProvider(),
     telemetry: TelemetryClient = getTelemetryClient(),
     private log = createLogger('validator:proposal-handler'),
+    private observers: BlockProposalObservers = {},
   ) {
     if (config.fishermanMode) {
       this.log = this.log.createChild('[FISHERMAN]');
@@ -435,6 +478,36 @@ export class ProposalHandler {
    */
   public recordOwnCheckpointProposalAsValid(slot: SlotNumber, archive: Fr, checkpointNumber: CheckpointNumber): void {
     this.reexecutionTracker.recordOutcome(slot, archive, 'valid', checkpointNumber);
+  }
+
+  /**
+   * Reports a completed block-proposal decision to the injected observers, if any. Called by the validator once its
+   * classification and any slashing side effect have run, and by the non-validator handler at the same point, so an
+   * observation always describes a decision this node has finished acting on.
+   */
+  public async notifyBlockProposalDecision(
+    proposal: BlockProposal,
+    result: BlockProposalValidationResult,
+  ): Promise<void> {
+    const observer = this.observers.onBlockProposalDecision;
+    if (observer === undefined) {
+      return;
+    }
+    observer({
+      ...(await this.observedProposal(proposal)),
+      accepted: result.isValid,
+      reason: result.isValid ? undefined : result.reason,
+      slashable: !result.isValid && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason),
+    });
+  }
+
+  /** A proposal's identity for the observers: its slot, its own signed header hash, and its signer. */
+  private async observedProposal(proposal: BlockProposal): Promise<ObservedBlockProposal> {
+    return {
+      slot: proposal.slotNumber,
+      blockHash: await proposal.blockHeader.hash(),
+      proposer: proposal.getSender() ?? EthAddress.ZERO,
+    };
   }
 
   /** Whether a slashable invalid block or checkpoint proposal was observed at the given slot (InvalidProposalSlotSource). */
@@ -515,6 +588,7 @@ export class ProposalHandler {
             numTxs: result.reexecutionResult?.block?.body?.txEffects?.length ?? 0,
             reexecuted: shouldReexecute,
           });
+          await this.notifyBlockProposalDecision(proposal, result);
           return true;
         } else {
           // Track invalid proposals / equivocations so offense observers (the attested-invalid-proposal
@@ -533,6 +607,7 @@ export class ProposalHandler {
             `Non-validator block proposal ${blockNumber} at slot ${slotNumber} failed processing with ${result.reason}`,
             { blockNumber: result.blockNumber, slotNumber, reason: result.reason },
           );
+          await this.notifyBlockProposalDecision(proposal, result);
           return false;
         }
       } catch (error) {
@@ -1283,6 +1358,13 @@ export class ProposalHandler {
     proposalInfo: LogData,
   ): Promise<StreamingBlockMetadataCheckResult> {
     const first = await this.checkStreamingBlockMetadata(proposal, blockNumber, parentBlock);
+    if (this.observers.onFirstInboxMetadataCheck !== undefined) {
+      this.observers.onFirstInboxMetadataCheck({
+        ...(await this.observedProposal(proposal)),
+        accepted: first.accepted,
+        reason: first.accepted ? undefined : first.reason,
+      });
+    }
     if (first.accepted || !isRetryableStreamingBlockCheckReason(first.reason)) {
       return first;
     }

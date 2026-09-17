@@ -1800,6 +1800,12 @@ export class CheckpointProposalJob implements Traceable {
       context,
     );
     this.metrics.recordCheckpointProposalFailed(reason);
+    this.eventEmitter.emit('checkpoint-build-aborted', {
+      slot: this.targetSlot,
+      checkpointNumber: this.checkpointNumber,
+      reason,
+      consumedTotalMsgCount: state.cursor.totalMessageCount,
+    });
   }
 
   /**

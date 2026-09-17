@@ -44,6 +44,7 @@ import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import {
+  type BlockProposalObservers,
   FullNodeCheckpointsBuilder as CheckpointsBuilder,
   FullNodeCheckpointsBuilder,
   NodeKeystoreAdapter,
@@ -75,6 +76,12 @@ export interface CreateAztecNodeDeps {
    * {@link AztecNodeConfig} so nothing serialized or exposed over RPC can reach them.
    */
   checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks;
+  /**
+   * Test-only observations of this node's block-proposal handling, threaded to the proposal handler as a
+   * dependency. Kept off {@link AztecNodeConfig} for the same reason, and purely reporting: they never change a
+   * verdict.
+   */
+  blockProposalObservers?: BlockProposalObservers;
 }
 
 /** Options controlling which subsystems are started when creating a node. */
@@ -367,6 +374,7 @@ export async function createAztecNodeService(
         blobClient,
         reexecutionTracker,
         slashingProtectionDb: deps.slashingProtectionDb,
+        blockProposalObservers: deps.blockProposalObservers,
       });
 
       // If we have a validator client, register it as a source of offenses for the slasher,
@@ -405,6 +413,7 @@ export async function createAztecNodeService(
         dateProvider,
         telemetry,
         reexecutionTracker,
+        blockProposalObservers: deps.blockProposalObservers,
       });
       proposalHandler.register(p2pClient, reexecute, archiver);
     }
