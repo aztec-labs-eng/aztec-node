@@ -21,7 +21,7 @@ import {
   type L2PruneUncheckpointedEvent,
   type L2PruneUnprovenEvent,
 } from '@aztec-labs/stdlib/block';
-import { getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
+import { computeQuorum, getSlotAtTimestamp, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import type { BlockProposalObservers } from '@aztec-labs/validator-client';
 import { type Hex, encodeFunctionData, parseEventLogs } from 'viem';
@@ -156,6 +156,10 @@ describe('multi-node/block-production/cross_chain_messages', () => {
       minTxsPerBlock: 0,
       maxTxsPerBlock: 1,
       buildCheckpointIfEmpty: true,
+      // The reorg phase below names one non-proposer validator and requires its signature on the replacement
+      // checkpoint. The profile's default picks 3 of the 4 registered validators, which would leave that choice to
+      // chance; with every node eligible the named one can always attest. Quorum is 3 either way.
+      aztecTargetCommitteeSize: NODE_COUNT,
       testDeps: index => ({
         checkpointProposalJobTestHooks: gates[index].hooks,
         blockProposalObservers: {
@@ -299,6 +303,12 @@ describe('multi-node/block-production/cross_chain_messages', () => {
       return { msgHash: Fr.fromHexString(event.args.hash), index: event.args.message.index };
     };
 
+    /** The committee that may attest at `slot`, lower-cased for address comparison. */
+    const committeeAtSlot = async (slot: SlotNumber) => {
+      const committee = await rollup.getCommitteeAt(getTimestampForSlot(slot, test.constants));
+      return (committee ?? []).map(address => address.toString().toLowerCase());
+    };
+
     // A dedicated L1 sender, so the messages this phase sends cannot collide on nonce with the publisher or the
     // prover, whose transactions are the ones the reorg must not replace away.
     const { client: messageSender } = await test.createL1Client();
@@ -369,8 +379,17 @@ describe('multi-node/block-production/cross_chain_messages', () => {
       const heldBlockHash: BlockHash = held.blockHash;
       const heldProposer = fixture.validators[proposerIndex].attester;
       // The named validator is a committee member that is not the proposer, so its prefix mismatch is a peer's
-      // verdict on someone else's block rather than a node disagreeing with itself.
-      const validatorIndex = (proposerIndex + 1) % NODE_COUNT;
+      // verdict on someone else's block rather than a node disagreeing with itself. Membership is read from the
+      // rollup for the held slot rather than assumed from the node index: a validator outside the committee could
+      // not attest to the replacement, and its missing signature would be a setup artefact, not a protocol result.
+      const committeeAtHeldSlot = await committeeAtSlot(heldSlot);
+      const eligible = times(NODE_COUNT, i => i).filter(
+        index =>
+          index !== proposerIndex &&
+          committeeAtHeldSlot.includes(fixture.validators[index].attester.toString().toLowerCase()),
+      );
+      expect(eligible.length).toBeGreaterThan(0);
+      const validatorIndex = eligible[0];
       const namedValidator = fixture.validators[validatorIndex].attester;
       logger.warn(`Holding block ${held.blockNumber} of checkpoint ${held.checkpointNumber} at slot ${heldSlot}`, {
         proposerIndex,
@@ -646,7 +665,11 @@ describe('multi-node/block-production/cross_chain_messages', () => {
         publishedSigners,
         recoveredSigners,
       });
-      expect(publishedSigners.length).toBeGreaterThan(NODE_COUNT / 2);
+      // The named validator is still in the committee at the replacement slot, and quorum is measured against that
+      // committee rather than against the node count.
+      const committeeAtReplacement = await committeeAtSlot(replacementSlot);
+      expect(committeeAtReplacement).toContain(namedValidator.toString().toLowerCase());
+      expect(publishedSigners.length).toBeGreaterThanOrEqual(computeQuorum(committeeAtReplacement.length));
       expect(recoveredSigners).toContain(namedValidator.toString());
 
       // Every node converged on the same replacement chain, the removed message has no witness on it, and the
