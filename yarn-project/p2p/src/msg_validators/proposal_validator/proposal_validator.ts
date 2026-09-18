@@ -1,7 +1,7 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
-import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
+import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
 import {
   type BlockProposal,
   type CheckpointProposalCore,
@@ -18,7 +18,7 @@ export class ProposalValidator {
   private timetable: ConsensusTimetable;
   private logger: Logger;
   private txsPermitted: boolean;
-  private maxTxsPerBlock?: number;
+  private maxTxsPerBlock: number;
   private skipSlotValidation: boolean;
   private signatureContext: CoordinationSignatureContext;
   private clockDisparityMs: number;
@@ -39,7 +39,7 @@ export class ProposalValidator {
     this.epochCache = epochCache;
     this.timetable = timetable;
     this.txsPermitted = opts.txsPermitted;
-    this.maxTxsPerBlock = opts.maxTxsPerBlock;
+    this.maxTxsPerBlock = Math.min(opts.maxTxsPerBlock ?? MAX_TXS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT);
     this.skipSlotValidation = opts.skipSlotValidation ?? false;
     this.signatureContext = opts.signatureContext;
     this.clockDisparityMs = opts.clockDisparityMs;
@@ -165,7 +165,7 @@ export class ProposalValidator {
     }
 
     // Max txs per block check
-    if (this.maxTxsPerBlock !== undefined && proposal.txHashes.length > this.maxTxsPerBlock) {
+    if (proposal.txHashes.length > this.maxTxsPerBlock) {
       this.logger.warn(
         `Penalizing peer for proposal with ${proposal.txHashes.length} transaction(s) when max is ${this.maxTxsPerBlock}`,
       );

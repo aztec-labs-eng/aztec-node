@@ -3,7 +3,21 @@
  * These constants define maximum allowed sizes during deserialization
  * to prevent DoS attacks via maliciously crafted messages.
  */
+import {
+  MIN_TX_BLOB_FIELDS,
+  NUM_BLOCK_END_BLOB_FIELDS,
+  NUM_CHECKPOINT_END_MARKER_FIELDS,
+} from '@aztec-labs/blob-lib/encoding';
 import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
+
+/**
+ * Maximum transaction count that fits in a checkpoint's blobs, assuming a single block and minimal txs.
+ * Also bounds any individual block, regardless of operator-configured transaction limits.
+ */
+export const MAX_TXS_PER_CHECKPOINT = Math.floor(
+  (BLOBS_PER_CHECKPOINT * FIELDS_PER_BLOB - NUM_BLOCK_END_BLOB_FIELDS - NUM_CHECKPOINT_END_MARKER_FIELDS) /
+    MIN_TX_BLOB_FIELDS,
+);
 
 /** Max transactions per block for deserialization validation */
 export const MAX_TXS_PER_BLOCK = 2 ** 16;

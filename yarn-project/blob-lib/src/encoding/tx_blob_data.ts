@@ -108,6 +108,18 @@ export function decodeTxBlobData(fields: Fr[] | FieldReader): TxBlobData {
   };
 }
 
+/** Minimum blob footprint of a transaction with one mandatory nullifier and no other effects. */
+export const MIN_TX_BLOB_FIELDS = getNumTxBlobFields({
+  numNoteHashes: 0,
+  numNullifiers: 1,
+  numL2ToL1Msgs: 0,
+  numPublicDataWrites: 0,
+  numPrivateLogs: 0,
+  privateLogsLength: 0,
+  publicLogsLength: 0,
+  contractClassLogLength: 0,
+});
+
 export function getNumTxBlobFields(txStartMarker: Omit<TxStartMarker, 'revertCode' | 'numBlobFields'>) {
   return (
     1 + // tx start marker

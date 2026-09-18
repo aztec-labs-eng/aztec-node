@@ -1,9 +1,10 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
 import { EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
+import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
 import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
@@ -17,6 +18,7 @@ import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
+import { BlockProposalValidator } from './block_proposal_validator.js';
 import { CheckpointProposalValidator } from './checkpoint_proposal_validator.js';
 import { ProposalValidator } from './proposal_validator.js';
 
@@ -527,12 +529,54 @@ describe('ProposalValidator', () => {
         expect(result).toEqual({ result: 'accept' });
       });
 
-      it('accepts when maxTxsPerBlock is not set (unlimited)', async () => {
+      it('accepts a small proposal when maxTxsPerBlock is not set', async () => {
         const proposal = await makeBlockProposal({ txHashes: Array.from({ length: 10 }, () => TxHash.random()) });
         const result = await validator.validateTxs(proposal);
         expect(result).toEqual({ result: 'accept' });
       });
     });
+  });
+
+  describe.each(['block', 'checkpoint'] as const)('%s proposal protocol tx-count ceiling', kind => {
+    const signer = Secp256k1Signer.random();
+
+    it.each([undefined, MAX_TXS_PER_CHECKPOINT + 100])(
+      'enforces the protocol ceiling with configured maxTxsPerBlock=%s',
+      async maxTxsPerBlock => {
+        const opts = {
+          txsPermitted: true,
+          maxTxsPerBlock,
+          signatureContext: TEST_COORDINATION_SIGNATURE_CONTEXT,
+          clockDisparityMs: TEST_CLOCK_DISPARITY_MS,
+        };
+        epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+
+        for (const count of [MAX_TXS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT + 1]) {
+          const block = {
+            blockHeader: makeBlockHeader(0, { slotNumber: currentSlot }),
+            indexWithinCheckpoint: IndexWithinCheckpoint(0),
+            txHashes: times(count, () => TxHash.random()),
+          };
+          const result =
+            kind === 'block'
+              ? await new BlockProposalValidator(epochCache, makeTimetable(), opts).validate(
+                  await makeBlockProposal({ ...block, signer }),
+                )
+              : await new CheckpointProposalValidator(epochCache, makeTimetable(), opts).validate(
+                  await makeCheckpointProposal({
+                    checkpointHeader: makeCheckpointHeader(0, { slotNumber: currentSlot }),
+                    signer,
+                    lastBlock: block,
+                  }),
+                );
+          expect(result).toEqual(
+            count === MAX_TXS_PER_CHECKPOINT
+              ? { result: 'accept' }
+              : { result: 'reject', severity: PeerErrorSeverity.MidToleranceError },
+          );
+        }
+      },
+    );
   });
 
   describe('maxBlocksPerCheckpoint', () => {
