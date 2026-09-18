@@ -1,12 +1,13 @@
 import { DomainSeparator } from '@aztec-labs/constants';
 import { type BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
+import { poseidon2HashWithSeparator as poseidon2HashWithSeparatorSync } from '@aztec-labs/foundation/crypto/sync';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
+  type AsyncHasher,
   SiblingPath,
   UnbalancedMerkleTreeCalculator,
   computeRootFromSiblingPath,
-  makePoseidonMerkleHash,
 } from '@aztec-labs/foundation/trees';
 import { z } from 'zod';
 
@@ -18,7 +19,13 @@ import type { TxHash } from './tx_hash.js';
  * Hasher for the internal nodes of a block's tx effects tree. Must match the accumulation the rollup circuits perform
  * up the tx rollup tree.
  */
-export const txEffectsTreeNodeHash = makePoseidonMerkleHash(DomainSeparator.TX_EFFECTS_TREE);
+export const txEffectsTreeNodeHash: AsyncHasher['hash'] = (left, right) =>
+  Promise.resolve(
+    poseidon2HashWithSeparatorSync(
+      [Buffer.from(left), Buffer.from(right)],
+      DomainSeparator.TX_EFFECTS_TREE,
+    ).toBuffer() as Buffer<ArrayBuffer>,
+  );
 
 /**
  * Proof that a tx was included in a block and produced exactly the effects the block reports for it.
