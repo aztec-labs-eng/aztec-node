@@ -506,6 +506,27 @@ describe('ArchiverDataStoreUpdater', () => {
     });
   });
 
+  describe('late proposals', () => {
+    it('reports a proposed block already checkpointed on L1 as already-checkpointed, without rewriting it', async () => {
+      const block = await L2Block.random(BlockNumber(1), {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+      });
+
+      // The checkpoint carrying the block lands on L1 while the proposal is still being re-executed, so the
+      // block is already stored as checkpointed by the time the proposal reaches the store.
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
+      const logsAfterCheckpoint = await store.logs.getPublicLogsForBlock(block.number);
+
+      await expect(updater.addProposedBlock(block)).resolves.toEqual('already-checkpointed');
+
+      expect(await store.blocks.getLatestL2BlockNumber()).toEqual(BlockNumber(1));
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+      expect(await store.logs.getPublicLogsForBlock(block.number)).toEqual(logsAfterCheckpoint);
+    });
+  });
+
   describe('L2 frontier cache refresh', () => {
     it('does not refresh the cache when the writer transaction aborts', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();

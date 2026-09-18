@@ -21,6 +21,7 @@ import {
 import type { ContractClassLog, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
+import type { AddProposedBlockResult } from '../store/block_store.js';
 import type { ArchiverDataStores } from '../store/data_stores.js';
 import type { L2FrontierCache } from '../store/l2_frontier_cache.js';
 import { prepareBlockTxEffectsTreeData } from '../store/tx_effect_tree_data.js';
@@ -56,17 +57,22 @@ export class ArchiverDataStoreUpdater {
    *
    * @param block - The proposed L2 block to add.
    * @param pendingChainValidationStatus - Optional validation status to set.
-   * @returns True if the operation is successful.
+   * @returns Whether the block was added, or `already-checkpointed` if it duplicates a checkpointed block.
    */
   public async addProposedBlock(
     block: L2Block,
     pendingChainValidationStatus?: ValidateCheckpointResult,
-  ): Promise<boolean> {
+  ): Promise<AddProposedBlockResult> {
     await prepareBlockTxEffectsTreeData([block]);
     const result = await this.stores.db.transactionAsync(async () => {
-      await this.stores.blocks.addProposedBlock(block);
+      const outcome = await this.stores.blocks.addProposedBlock(block);
+      // The checkpoint carrying this block was ingested from L1 first, which already extracted its logs and
+      // contract data. Re-extracting them here would duplicate that work.
+      if (outcome === 'already-checkpointed') {
+        return outcome;
+      }
 
-      const opResults = await Promise.all([
+      await Promise.all([
         // Update the pending chain validation status if provided
         pendingChainValidationStatus &&
           this.stores.blocks.setPendingChainValidationStatus(pendingChainValidationStatus),
@@ -76,9 +82,11 @@ export class ArchiverDataStoreUpdater {
         this.addContractDataToDb(block),
       ]);
 
-      return opResults.every(Boolean);
+      return outcome;
     });
-    await this.l2FrontierCache?.refresh();
+    if (result === 'added') {
+      await this.l2FrontierCache?.refresh();
+    }
     return result;
   }
 

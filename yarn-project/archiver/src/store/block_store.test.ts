@@ -23,7 +23,6 @@ import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type IndexedTxEffect, TxHash, computeTxEffectLeaves } from '@aztec-labs/stdlib/tx';
 
 import {
-  BlockAlreadyCheckpointedError,
   BlockArchiveNotConsistentError,
   BlockCheckpointNumberNotSequentialError,
   BlockIndexNotSequentialError,
@@ -1128,7 +1127,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
 
-      await expect(blockStore.addProposedBlock(block1)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block1)).resolves.toEqual('added');
       await expect(blockStore.addProposedBlock(block2)).rejects.toThrow(BlockNumberNotSequentialError);
     });
 
@@ -1157,7 +1156,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         lastArchive: lastBlockArchive,
       });
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
 
       // Add block 4 for the same checkpoint 2 in a separate call
       const block4 = await L2Block.random(BlockNumber(4), {
@@ -1165,7 +1164,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(1),
         lastArchive: block3.archive,
       });
-      await expect(blockStore.addProposedBlock(block4)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block4)).resolves.toEqual('added');
 
       expect(await blockStore.getLatestL2BlockNumber()).toBe(4);
     });
@@ -1185,7 +1184,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         lastArchive: lastBlockArchive,
       });
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
 
       // Add block 4 for the same checkpoint 2 in a separate call but with a missing index
       const block4 = await L2Block.random(BlockNumber(4), {
@@ -1305,7 +1304,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         lastArchive: lastBlockArchive,
       });
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
 
       // Add block 4 with incorrect archive (should fail)
       const block4 = await L2Block.random(BlockNumber(4), {
@@ -1343,7 +1342,7 @@ describe('BlockStore', () => {
       await expect(blockStore.addProposedBlock(block1)).rejects.toThrow(CannotOverwriteCheckpointedBlockError);
     });
 
-    it('throws BlockAlreadyCheckpointedError if proposed block matches the checkpointed one', async () => {
+    it('reports already-checkpointed if proposed block matches the checkpointed one', async () => {
       const checkpoint1 = makePublishedCheckpoint(
         await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2, startBlockNumber: 1 }),
         10,
@@ -1352,7 +1351,13 @@ describe('BlockStore', () => {
 
       // Re-propose the same block that was already checkpointed
       const checkpointedBlock = checkpoint1.checkpoint.blocks[1];
-      await expect(blockStore.addProposedBlock(checkpointedBlock)).rejects.toThrow(BlockAlreadyCheckpointedError);
+      await expect(blockStore.addProposedBlock(checkpointedBlock)).resolves.toEqual('already-checkpointed');
+
+      // The block is left as the store recorded it when the checkpoint was added
+      const stored = await blockStore.getBlockData({ number: checkpointedBlock.number });
+      expect(stored?.checkpointNumber).toEqual(CheckpointNumber(1));
+      expect(await blockStore.getCheckpointedL2BlockNumber()).toBe(2);
+      expect(await blockStore.getLatestL2BlockNumber()).toBe(2);
     });
   });
 
@@ -2588,7 +2593,7 @@ describe('BlockStore', () => {
         lastArchive: pendingBlock!.archive,
       });
 
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
     });
 
     it('throws with proposed checkpoint value when neither confirmed nor pending matches', async () => {
