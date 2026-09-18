@@ -1,4 +1,6 @@
 import {
+  AttesterExitExtLibAbi,
+  AttesterExitExtLibBytecode,
   CoinIssuerAbi,
   CoinIssuerBytecode,
   DateGatedRelayerAbi,
@@ -102,6 +104,11 @@ export const RollupArtifact = {
         name: 'ValidatorOperationsExtLib',
         contractAbi: ValidatorOperationsExtLibAbi,
         contractBytecode: ValidatorOperationsExtLibBytecode as Hex,
+      },
+      AttesterExitExtLib: {
+        name: 'AttesterExitExtLib',
+        contractAbi: AttesterExitExtLibAbi,
+        contractBytecode: AttesterExitExtLibBytecode as Hex,
       },
       RewardExtLib: {
         name: 'RewardExtLib',
