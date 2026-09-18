@@ -29,7 +29,7 @@ The top-level `Nargo.toml` is a workspace file. Contract dependencies live in `m
 
 To add another contract to the same workspace, run `aztec new <name>` from inside the workspace directory; this adds a new `<name>_contract` and `<name>_test` crate pair. To initialize a project inside an existing empty directory, `cd` into it and run `aztec init`, which scaffolds the same two-crate layout pre-populated with a runnable [Counter example](../../tutorials/contract_tutorials/counter_contract.md) (use `aztec new` if you want a blank starting point instead).
 
-See the vanilla Noir docs for [more info on packages](https://noir-lang.org/docs/noir/modules_packages_crates/crates_and_packages).
+See the vanilla Noir docs for [more info on packages](https://noir-lang.org/docs/project_structure/crates_and_packages).
 
 ## Contract block
 
@@ -50,11 +50,11 @@ By convention, contracts are named in `PascalCase`.
 
 The `#[aztec]` macro performs a lot of the low-level operations required to take a circuit language like Noir and build smart contracts out of it - including automatically creating external interfaces, inserting standard contract functions, etc. **All Aztec smart contracts must have this macro applied to them.**
 
-**Note:** each Noir crate (package) can only have _a single_ contract. If you are writing a multi-contract system, then each of them needs to be in their own separate crate. To learn more about crates and packages, visit the [Noir documentation](https://noir-lang.org/docs/noir/modules_packages_crates/crates_and_packages).
+**Note:** each Noir crate (package) can only have _a single_ contract. If you are writing a multi-contract system, then each of them needs to be in their own separate crate. To learn more about crates and packages, visit the [Noir documentation](https://noir-lang.org/docs/project_structure/crates_and_packages).
 
 ## Imports
 
-Aside from the [`#[aztec]`](pathname:///aztec-nr-api/#api_ref_version/noir_aztec/macros/fn.aztec) macro import, all other imports need to go _inside_ the `contract` block - this is because `contract` acts like `mod`, creating a new [module](https://noir-lang.org/docs/noir/modules_packages_crates/modules).
+Aside from the [`#[aztec]`](pathname:///aztec-nr-api/#api_ref_version/noir_aztec/macros/fn.aztec) macro import, all other imports need to go _inside_ the `contract` block - this is because `contract` acts like `mod`, creating a new [module](https://noir-lang.org/docs/project_structure/modules).
 
 ```rust
 use aztec::macros::aztec;
@@ -85,7 +85,7 @@ contract MyContract {
 
 In Aztec, defining state requires a few more steps, as there are both private and public variables (where these keywords refer to the privacy of the variable rather than their accessibility), and multiple _kinds_ of state variables.
 
-We define state using a [`struct`](https://noir-lang.org/docs/noir/concepts/data_types/structs) that will hold the entire contract state. We call this struct _the storage struct_, and each variable inside this struct is called [_a state variable_.](./state_variables)
+We define state using a [`struct`](https://noir-lang.org/docs/language/data_types/structs) that will hold the entire contract state. We call this struct _the storage struct_, and each variable inside this struct is called [_a state variable_.](./state_variables)
 
 ```rust
 use aztec::macros::aztec;

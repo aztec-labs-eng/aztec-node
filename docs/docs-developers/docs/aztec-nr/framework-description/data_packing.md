@@ -50,7 +50,7 @@ When a note's members are already `Field`-sized, deriving is enough:
 
 #include_code field_like_note /docs/examples/contracts/packing_example/src/types.nr rust
 
-`Eq` is a Noir standard trait for equality comparisons (see [Noir's `Eq` trait](https://noir-lang.org/docs/noir/concepts/data_types/traits)). `#[note]` does not require it, but deriving it is idiomatic because it enables `assert_eq` in tests and note-equality checks. `Serialize` and `Deserialize` are similarly optional here, and useful when a note type crosses a function boundary.
+`Eq` is a Noir standard trait for equality comparisons (see [Noir's `Eq` trait](https://noir-lang.org/docs/language/traits)). `#[note]` does not require it, but deriving it is idiomatic because it enables `assert_eq` in tests and note-equality checks. `Serialize` and `Deserialize` are similarly optional here, and useful when a note type crosses a function boundary.
 
 This is how the built-in note types work too: [`AddressNote`](pathname:///aztec-nr-api/#api_ref_version/address_note/struct.AddressNote) and [`FieldNote`](pathname:///aztec-nr-api/#api_ref_version/field_note/struct.FieldNote) both derive `Packable` directly because their members are already `Field` or `AztecAddress`.
 
