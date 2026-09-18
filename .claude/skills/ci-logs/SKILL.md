@@ -10,7 +10,8 @@ When you need to analyze logs from ci.aztec-labs.com, delegate to the `analyze-l
 
 ## Usage
 
-1. **Extract the hash** from the URL (e.g., `http://ci.aztec-labs.com/e93bcfdc738dc2e0` → `e93bcfdc738dc2e0`)
+1. **Extract the hash** from the URL (e.g., `http://ci.aztec-labs.com/e93bcfdc738dc2e0` → `e93bcfdc738dc2e0`).
+   A whole run's id is decimal (`1789731399863940`); the logs nested inside it are hex. Both work with `dlog`.
 
 2. **Spawn the `analyze-logs` subagent** using the Task tool with the hash and focus area (e.g. "errors", "test \<name>", or a custom question) in the prompt.
 
