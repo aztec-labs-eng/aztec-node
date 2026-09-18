@@ -121,11 +121,6 @@ type CheckpointProposalBroadcast = {
   checkpoint: Checkpoint;
   proposal: CheckpointProposal;
   blockProposedAt: number;
-  /**
-   * Sequence number of the live Inbox bucket the checkpoint's final message position resolved to at the pre-gossip
-   * preflight: the unsigned L1 `propose` lookup aid. Re-resolved by the pre-publication preflight before the send.
-   */
-  bucketHint: bigint;
   /** The checkpoint's final streaming state, for the pre-publication preflight. */
   streamingState: StreamingCheckpointState;
 };
@@ -1087,14 +1082,8 @@ export class CheckpointProposalJob implements Traceable {
         );
         this.metrics.recordCheckpointSuccess();
         // Return a broadcast result with a dummy proposal — fisherman mode skips attestation collection and never
-        // publishes, so the bucket hint is never read.
-        return {
-          checkpoint,
-          proposal: undefined!,
-          blockProposedAt: this.dateProvider.now(),
-          bucketHint: 0n,
-          streamingState,
-        };
+        // publishes.
+        return { checkpoint, proposal: undefined!, blockProposedAt: this.dateProvider.now(), streamingState };
       }
 
       // Validate the header and the Inbox consumption against L1 state before broadcasting: the parent the header
@@ -1104,9 +1093,8 @@ export class CheckpointProposalJob implements Traceable {
       // preflight repeats it once the parent has landed, keeping only the assumptions still outstanding then.
       // The simulation is bounded by the attestation deadline: a verdict that arrives once no validator can attest
       // any more must not lead to signing.
-      let bucketHint: bigint;
       try {
-        bucketHint = await this.preflightWithinDeadline(
+        await this.preflightWithinDeadline(
           checkpoint.header,
           streamingState,
           this.checkpointSimulationOverridesPlan,
@@ -1165,10 +1153,8 @@ export class CheckpointProposalJob implements Traceable {
         this.checkpointMetrics.noteCheckpointBroadcast(this.dateProvider.now());
       }
 
-      // Return immediately after broadcast — attestation collection happens in the background. The bucket hint is
-      // the live bucket the preflight resolved the header's final position to, whether or not a last block was held
-      // for broadcast.
-      return { checkpoint, proposal, blockProposedAt, bucketHint, streamingState };
+      // Return immediately after broadcast — attestation collection happens in the background.
+      return { checkpoint, proposal, blockProposedAt, streamingState };
     } catch (err) {
       if (err && (err instanceof DutyAlreadySignedError || err instanceof SlashingProtectionError)) {
         // swallow this error. It's already been logged by a function deeper in the stack
