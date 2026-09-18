@@ -1323,7 +1323,10 @@ export class LibP2PService extends WithTracer implements P2PService {
       result,
       obj: block,
       metadata: { isEquivocated, isOversized } = {},
-    } = await this.validateReceivedMessage<BlockProposal, { isEquivocated: boolean; isOversized: boolean }>(
+    } = await this.validateReceivedMessage<
+      BlockProposal,
+      { isEquivocated: boolean; isOversized: boolean; capFull?: boolean }
+    >(
       () => this.validateAndStoreBlockProposal(source, BlockProposal.fromBuffer(payloadData)),
       msgId,
       source,
@@ -1347,7 +1350,9 @@ export class LibP2PService extends WithTracer implements P2PService {
   protected async validateAndStoreBlockProposal(
     peerId: PeerId,
     block: BlockProposal,
-  ): Promise<ReceivedMessageValidationResult<BlockProposal, { isEquivocated: boolean; isOversized: boolean }>> {
+  ): Promise<
+    ReceivedMessageValidationResult<BlockProposal, { isEquivocated: boolean; isOversized: boolean; capFull?: boolean }>
+  > {
     const validationResult = await this.blockProposalValidator.validate(block);
 
     if (validationResult.result === 'reject') {
@@ -1380,9 +1385,11 @@ export class LibP2PService extends WithTracer implements P2PService {
       return { result: TopicValidatorResult.Ignore, obj: block, metadata: { isEquivocated, isOversized } };
     }
 
-    // Too many blocks received for this slot and index, penalize peer and do not re-broadcast
+    // Local per-position retention cap is full. That is receiver-local state, not evidence the
+    // sender forwarded invalid data (it could not know our cache was full), so drop the extra
+    // payload without penalizing the peer. Do not re-broadcast.
     if (!added) {
-      this.logger.warn(`Penalizing peer for block proposal exceeding per-position cap`, {
+      this.logger.debug(`Ignoring block proposal exceeding per-position cap`, {
         ...block.toBlockInfo(),
         indexWithinCheckpoint: block.indexWithinCheckpoint,
         count,
@@ -1390,9 +1397,14 @@ export class LibP2PService extends WithTracer implements P2PService {
         source: peerId.toString(),
       });
       return {
-        result: TopicValidatorResult.Reject,
-        metadata: { isEquivocated, isOversized },
-        severity: PeerErrorSeverity.HighToleranceError,
+        // isEquivocated is false here even when count > 1: a full cache is a receiver-local drop, not
+        // a fresh equivocation by this block. Genuine equivocation is already captured on the add
+        // (duplicateProposalCallback below). capFull tells the checkpoint path, whose terminal block
+        // this may be, to ignore the whole checkpoint too, rather than store and re-broadcast it while
+        // its terminal block was silently dropped.
+        result: TopicValidatorResult.Ignore,
+        obj: block,
+        metadata: { isEquivocated: false, isOversized, capFull: true },
       };
     }
 
@@ -1562,7 +1574,8 @@ export class LibP2PService extends WithTracer implements P2PService {
         [Attributes.P2P_ID]: peerId.toString(),
       });
       const blockProposalResult = await this.validateAndStoreBlockProposal(peerId, blockProposal);
-      const { obj, metadata: { isEquivocated, isOversized: blockIsOversized } = {} } = blockProposalResult;
+      const { obj, metadata: { isEquivocated, isOversized: blockIsOversized, capFull: blockCapFull } = {} } =
+        blockProposalResult;
       isOversized = blockIsOversized ?? false;
 
       if (blockProposalResult.result === TopicValidatorResult.Reject || !obj || isEquivocated) {
@@ -1576,6 +1589,21 @@ export class LibP2PService extends WithTracer implements P2PService {
           result: TopicValidatorResult.Reject,
           severity:
             'severity' in blockProposalResult ? blockProposalResult.severity : PeerErrorSeverity.MidToleranceError,
+        };
+      } else if (blockCapFull) {
+        // The terminal block hit our receiver-local per-position retention cap, so we dropped it
+        // without storing or re-broadcasting. Ignore the whole checkpoint the same way: do not add
+        // the checkpoint core, invoke no callbacks, and do not re-broadcast. Storing and accepting the
+        // checkpoint while its terminal block was silently dropped is what lets a node with a different
+        // local cache insert that block, flag the checkpoint as equivocation, and penalize this relayer.
+        this.logger.debug(`Ignoring checkpoint whose terminal block hit the per-position retention cap`, {
+          [Attributes.SLOT_NUMBER]: checkpoint.slotNumber.toString(),
+          [Attributes.P2P_ID]: peerId.toString(),
+        });
+        return {
+          result: TopicValidatorResult.Ignore,
+          obj: checkpoint,
+          metadata: { isEquivocated: false, processBlock: false, isOversized },
         };
       } else if (blockProposalResult.result === TopicValidatorResult.Accept && obj && !isEquivocated && !isOversized) {
         // An oversized terminal block is re-broadcast as slashing evidence but never processed.
@@ -1602,19 +1630,19 @@ export class LibP2PService extends WithTracer implements P2PService {
       };
     }
 
-    // Too many checkpoint proposals received for this slot, penalize peer and do not re-broadcast.
-    // Note: We still return the checkpoint obj so the lastBlock can be processed if valid
+    // Local per-slot retention cap is full. That is receiver-local state, not evidence the sender
+    // forwarded invalid data, so drop the extra payload without penalizing the peer. Do not
+    // re-broadcast. We still return the checkpoint obj so the lastBlock can be processed if valid.
     if (!added) {
-      this.logger.warn(`Penalizing peer for checkpoint proposal exceeding per-slot cap`, {
+      this.logger.debug(`Ignoring checkpoint proposal exceeding per-slot cap`, {
         ...checkpoint.toCheckpointInfo(),
         count,
         source: peerId.toString(),
       });
       return {
-        result: TopicValidatorResult.Reject,
+        result: TopicValidatorResult.Ignore,
         obj: checkpoint,
         metadata: { isEquivocated, processBlock, isOversized },
-        severity: PeerErrorSeverity.HighToleranceError,
       };
     }
 
