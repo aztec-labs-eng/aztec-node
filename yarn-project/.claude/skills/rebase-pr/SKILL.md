@@ -19,7 +19,7 @@ Simple workflow to rebase a PR on its base branch, resolve conflicts, and push.
 ### Step 1: Validate PR
 
 ```bash
-gh pr view <PR> --repo AztecProtocol/aztec-packages --json state,headRefName,baseRefName
+gh pr view <PR> --repo aztec-labs-eng/aztec-node --json state,headRefName,baseRefName
 ```
 
 **Abort if:**
