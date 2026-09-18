@@ -1587,14 +1587,17 @@ describe('LibP2PService', () => {
       });
       await service.handleGossipedCheckpointProposal(checkpoint.toBuffer(), 'msg-1', mockPeerId);
 
-      // The terminal block cap-fulls; a full local cache must not become a peer penalty via the
-      // checkpoint path, and the checkpoint is not rejected on it.
+      // The terminal block cap-fulls, so the whole checkpoint is ignored: not rejected (no relayer
+      // penalty), but also not stored or re-broadcast, and no callback fires. Accepting and
+      // re-broadcasting it while the terminal block was silently dropped is what let a node with a
+      // different local cache flag the checkpoint as equivocation and penalize this honest relayer.
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Ignore);
       expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
-      expect(reportMessageValidationResultSpy).not.toHaveBeenCalledWith(
-        'msg-1',
-        MOCK_PEER_ID,
-        TopicValidatorResult.Reject,
-      );
+      expect(await attestationPool.getCheckpointProposal(targetSlot)).toBeUndefined();
+      expect(duplicateProposalCallback).not.toHaveBeenCalled();
+      expect(blockReceivedCallback).not.toHaveBeenCalled();
+      expect(allNodesCheckpointReceivedCallback).not.toHaveBeenCalled();
+      expect(validatorCheckpointReceivedCallback).not.toHaveBeenCalled();
     });
   });
 
