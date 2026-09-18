@@ -1,21 +1,20 @@
-import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { isErrorClass } from '@aztec-labs/foundation/types';
-import { type InboxBucketSource, selectInboxBucketForBlock } from '@aztec-labs/sequencer-client';
+import {
+  PROTOCOL_INBOX_CONSUMPTION_CAPS,
+  type StreamingMessageSource,
+  selectSafeLocalEnd,
+} from '@aztec-labs/sequencer-client';
 import { type AvmSimulator, PublicContractsDB, PublicProcessorFactory } from '@aztec-labs/simulator/server';
 import { CollectionLimitsConfig, PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
 import { BlockHash, type L2BlockSource, type L2Frontier } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import type { MerkleTreeWriteOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
-import {
-  type L1ToL2MessageSource,
-  appendL1ToL2MessagesToTree,
-  getInboxCutoffTimestamp,
-} from '@aztec-labs/stdlib/messaging';
+import { appendL1ToL2MessagesToTree } from '@aztec-labs/stdlib/messaging';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { type GlobalVariables, PublicSimulationOutput, type SimulationOverrides, type Tx } from '@aztec-labs/stdlib/tx';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -25,7 +24,7 @@ import type { NextBlockPlan, NextBlockPredictor } from './next_block/index.js';
 import { applyPublicDataOverrides } from './public_data_overrides.js';
 
 /** Inbox queries the simulator needs to predict the message bundle the next block would consume. */
-type SimulatorInboxSource = InboxBucketSource & Pick<L1ToL2MessageSource, 'getInboxBucketByTotalMsgCount'>;
+type SimulatorInboxSource = Pick<StreamingMessageSource, 'getSyncedMessagePosition' | 'getL1ToL2MessageRange'>;
 
 /** Attempts at planning the next block on a chain the world state agrees with, before giving up. */
 const MAX_PREDICTION_ATTEMPTS = 2;
@@ -43,7 +42,7 @@ export interface NodePublicCallsSimulatorDeps {
   worldStateSynchronizer: WorldStateSynchronizer;
   /** Read only for the message total of the block a mid-checkpoint prediction's per-checkpoint cap starts from. */
   blockSource: L2BlockSource;
-  /** Inbox bucket queries, used to predict the L1-to-L2 messages the next block will consume. */
+  /** Inbox message queries, used to predict the L1-to-L2 messages the next block will consume. */
   l1ToL2MessageSource: SimulatorInboxSource;
   contractDataSource: ContractDataSource;
   predictor: NextBlockPredictor;
@@ -151,7 +150,6 @@ export class NodePublicCallsSimulator {
     await using merkleTreeFork = await this.worldStateSynchronizer.fork(plan.latestBlockNumber);
 
     await this.appendPredictedL1ToL2Messages(merkleTreeFork, {
-      slotNumber: globals.slotNumber,
       checkpointStartBlock: plan.newCheckpoint ? undefined : proposedCheckpointLastBlock(frontier),
     });
 
@@ -228,65 +226,51 @@ export class NodePublicCallsSimulator {
   }
 
   /**
-   * Appends the L1-to-L2 message bundle the next block would consume to the simulation fork, so a transaction
-   * consuming a message that has reached the Inbox but no block yet simulates against the state it will run in.
-   * Runs the same bucket selection the sequencer runs (lag eligibility plus the per-block and per-checkpoint caps),
-   * treating the next block as non-final: the censorship cutoff only widens consumption on a checkpoint's last
-   * block, and the node cannot know whether the next block is it.
+   * Appends the L1-to-L2 messages the next block would consume to the simulation fork, so a transaction consuming
+   * a message that has reached the Inbox but no block yet simulates against the state it will run in. Runs the same
+   * local-only part of the sequencer's selection: every message the archiver has observed, up to the per-block cap
+   * and the threshold one bucket below the checkpoint cap.
    *
-   * Best-effort. Any failure — Inbox buckets not synced yet, a torn archiver snapshot — leaves the fork at the tip
-   * state, which is what the transaction sees if the next block consumes nothing.
+   * This is a lower bound, not the sequencer's choice. Above that threshold, and on a checkpoint's final block, the
+   * sequencer's end depends on a live L1 bucket end it reads from the Inbox and this node does not, so the
+   * prediction stops where the local log alone is authoritative.
+   *
+   * Best-effort. Any failure, such as messages not synced yet or a torn archiver snapshot, leaves the fork at the
+   * tip state, which is what the transaction sees if the next block consumes nothing.
    */
   private async appendPredictedL1ToL2Messages(
     fork: MerkleTreeWriteOperations,
     opts: {
-      /** Slot the next block lands in; anchors the censorship cutoff. */
-      slotNumber: SlotNumber;
       /** Last block of the checkpoint the next block extends; undefined when the next block opens a checkpoint. */
       checkpointStartBlock: BlockNumber | undefined;
     },
   ): Promise<void> {
     try {
-      const parentTotalMsgCount = (await fork.getTreeInfo(MerkleTreeId.L1_TO_L2_MESSAGE_TREE)).size;
-      const parentBucket = await this.l1ToL2MessageSource.getInboxBucketByTotalMsgCount(parentTotalMsgCount);
-      if (parentBucket === undefined) {
-        this.log.debug(`Inbox bucket at message total ${parentTotalMsgCount} not synced; simulating against the tip`, {
-          parentTotalMsgCount,
-        });
-        return;
-      }
+      const cursorCount = (await fork.getTreeInfo(MerkleTreeId.L1_TO_L2_MESSAGE_TREE)).size;
 
       // Origin of the per-checkpoint cap: the total consumed as of the checkpoint's parent. A block extending an
       // in-progress checkpoint reads it off that checkpoint's parent block; a block opening one starts from the tip.
-      const checkpointStartTotalMsgCount =
+      const checkpointStartCount =
         opts.checkpointStartBlock === undefined
-          ? parentTotalMsgCount
+          ? cursorCount
           : await this.getConsumedMessageTotal(opts.checkpointStartBlock);
-      if (checkpointStartTotalMsgCount === undefined) {
+      if (checkpointStartCount === undefined) {
         this.log.debug(`Block ${opts.checkpointStartBlock} has no header on this node; simulating against the tip`);
         return;
       }
 
-      const l1Constants = this.epochCache.getL1Constants();
-      const selection = await selectInboxBucketForBlock({
-        messageSource: this.l1ToL2MessageSource,
-        now: BigInt(Math.floor(this.dateProvider.now() / 1000)),
-        minBucketAgeSeconds: BigInt(l1Constants.ethereumSlotDuration),
-        parent: { seq: parentBucket.seq, totalMsgCount: parentBucket.totalMsgCount },
-        checkpointStartTotalMsgCount,
-        perBlockCap: MAX_L1_TO_L2_MSGS_PER_BLOCK,
-        perCheckpointCap: MAX_L1_TO_L2_MSGS_PER_CHECKPOINT,
-        isLastBlock: false,
-        cutoffTimestamp: getInboxCutoffTimestamp(opts.slotNumber, l1Constants),
-      });
-      if (!selection.consume || selection.bundle.length === 0) {
+      const caps = PROTOCOL_INBOX_CONSUMPTION_CAPS;
+      const localSyncedCount = (await this.l1ToL2MessageSource.getSyncedMessagePosition()).totalMessageCount;
+      const greedyEnd = selectSafeLocalEnd({ cursorCount, localSyncedCount, checkpointStartCount, caps });
+      if (greedyEnd <= cursorCount) {
         return;
       }
 
-      await appendL1ToL2MessagesToTree(fork, selection.bundle);
-      this.log.debug(`Appended ${selection.bundle.length} predicted L1-to-L2 messages to the simulation fork`, {
-        bucketSeq: selection.bucket.seq,
-        messageCount: selection.bundle.length,
+      const { messages } = await this.l1ToL2MessageSource.getL1ToL2MessageRange(cursorCount, greedyEnd);
+      await appendL1ToL2MessagesToTree(fork, messages);
+      this.log.debug(`Appended ${messages.length} predicted L1-to-L2 messages to the simulation fork`, {
+        cursorCount,
+        greedyEnd,
       });
     } catch (err) {
       this.log.verbose(`Could not predict the next block's L1-to-L2 messages, simulating against the tip: ${err}`);
