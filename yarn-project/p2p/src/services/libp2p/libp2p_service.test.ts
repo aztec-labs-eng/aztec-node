@@ -806,6 +806,35 @@ describe('LibP2PService', () => {
       expect(duplicateProposalCallback).not.toHaveBeenCalled();
     });
 
+    it('does not attribute a duplicate proposal when the committee is empty (no expected proposer)', async () => {
+      // With an empty committee every signer is accepted, so two distinct honest proposers for the
+      // same slot/position look like equivocation. There is no expected proposer to attribute the
+      // offense to, so the duplicate callback must not fire (mirrors the checkpoint equivocation
+      // watcher, which refuses to slash when the slot has no proposer).
+      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
+      const header = makeBlockHeader(1, { slotNumber: targetSlot });
+      const indexWithinCheckpoint = IndexWithinCheckpoint(0);
+
+      const proposal1 = await makeBlockProposal({
+        signer,
+        blockHeader: header,
+        indexWithinCheckpoint,
+        archiveRoot: Fr.random(),
+      });
+      await service.processBlockFromPeer(proposal1.toBuffer(), 'msg-1', mockPeerId);
+
+      const otherSigner = Secp256k1Signer.random();
+      const proposal2 = await makeBlockProposal({
+        signer: otherSigner,
+        blockHeader: header,
+        indexWithinCheckpoint,
+        archiveRoot: Fr.random(),
+      });
+      await service.processBlockFromPeer(proposal2.toBuffer(), 'msg-2', mockPeerId);
+
+      expect(duplicateProposalCallback).not.toHaveBeenCalled();
+    });
+
     it('validation failure penalizes peer with correct severity', async () => {
       const header = makeBlockHeader(1, { slotNumber: targetSlot });
       // Create block signed by wrong signer
