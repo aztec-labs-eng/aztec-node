@@ -33,7 +33,7 @@
     "get-port": "^7.1.0",
     "jest-mock-extended": "^4.0.0",
     "tslib": "^2.4.0",
-    "viem": "npm:@aztec/viem@2.38.2",
+    "viem": "npm:@aztec/viem@2.38.3",
     "zod": "~4.4.3"
   },
   "devDependencies": {
