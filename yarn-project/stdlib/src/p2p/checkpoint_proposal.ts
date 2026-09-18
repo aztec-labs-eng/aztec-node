@@ -35,6 +35,7 @@ import {
 } from './signature_utils.js';
 import { SignedTxs } from './signed_txs.js';
 import { TopicType } from './topic_type.js';
+import { decodeCanonical, readOptionalFieldFlag } from './wire_format.js';
 
 export type { CheckpointProposalHash } from '@aztec-labs/foundation/branded-types';
 
@@ -306,17 +307,18 @@ export class CheckpointProposal extends Gossipable implements Signable {
   }
 
   static fromBuffer(buf: Buffer | BufferReader): CheckpointProposal {
-    const reader = BufferReader.asReader(buf);
+    return decodeCanonical(buf, 'CheckpointProposal', reader => CheckpointProposal.readFrom(reader));
+  }
 
+  /** Decodes a proposal from a reader without requiring it to reach the end of the buffer. */
+  private static readFrom(reader: BufferReader): CheckpointProposal {
     const checkpointHeader = reader.readObject(CheckpointHeader);
     const archive = reader.readObject(Fr);
     const feeAssetPriceModifier = reader.readInt256();
     const signature = reader.readObject(Signature);
     const signatureContext = readCoordinationSignatureContext(reader);
 
-    const hasLastBlock = reader.readNumber();
-
-    if (hasLastBlock) {
+    if (readOptionalFieldFlag(reader, 'CheckpointProposal lastBlock')) {
       const blockHeader = reader.readObject(BlockHeader);
       const indexWithinCheckpoint = IndexWithinCheckpoint(reader.readNumber());
       const blockSignature = reader.readObject(Signature);
@@ -327,11 +329,9 @@ export class CheckpointProposal extends Gossipable implements Signable {
       const txHashes = reader.readArray(txHashCount, TxHash);
       const inboxPrefixRef = reader.readObject(InboxMessagePrefixRef);
 
-      let signedTxs: SignedTxs | undefined;
-      const hasSignedTxs = reader.readNumber();
-      if (hasSignedTxs) {
-        signedTxs = SignedTxs.fromBuffer(reader);
-      }
+      const signedTxs = readOptionalFieldFlag(reader, 'CheckpointProposal lastBlock signedTxs')
+        ? SignedTxs.fromBuffer(reader)
+        : undefined;
 
       return new CheckpointProposal(checkpointHeader, archive, feeAssetPriceModifier, signature, signatureContext, {
         blockHeader,

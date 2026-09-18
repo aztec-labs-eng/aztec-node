@@ -3,6 +3,7 @@ import { IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { BufferReader } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 import { InboxMessagePrefixRef } from '../messaging/inbox_message_prefix_ref.js';
@@ -117,6 +118,29 @@ describe('Block Proposal serialization / deserialization', () => {
     );
 
     expect(tampered.getSender()).toBeUndefined();
+  });
+
+  // A decoder that accepts more than one encoding of the same proposal has no canonical byte string for it:
+  // trailing bytes or a flag value no encoder writes would both name a proposal the signature covers.
+  describe('canonical encoding', () => {
+    it('rejects trailing bytes after a complete proposal', () => {
+      const withJunk = Buffer.concat([makeFixtureProposal().toBuffer(), Buffer.from([0xde, 0xad])]);
+      expect(() => BlockProposal.fromBuffer(withJunk)).toThrow(/trailing byte/);
+    });
+
+    it.each([2, 255, 0xffffffff])('rejects a signedTxs presence flag of %i', flag => {
+      const buffer = makeFixtureProposal().toBuffer();
+      buffer.writeUInt32BE(flag, buffer.length - 4);
+      expect(() => BlockProposal.fromBuffer(buffer)).toThrow(/presence flag/);
+    });
+
+    // A nested decode reads its part of a larger buffer, so only the top-level entry point demands the end.
+    it('still decodes from a reader positioned in a larger buffer', () => {
+      const proposal = makeFixtureProposal();
+      const reader = BufferReader.asReader(Buffer.concat([proposal.toBuffer(), Buffer.from([1, 2, 3])]));
+      expect(BlockProposal.fromBuffer(reader).toBuffer()).toEqual(proposal.toBuffer());
+      expect(reader.readBytes(3)).toEqual(Buffer.from([1, 2, 3]));
+    });
   });
 
   describe('inbox prefix reference', () => {

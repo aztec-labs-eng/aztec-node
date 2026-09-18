@@ -35,6 +35,7 @@ import {
 } from './signature_utils.js';
 import { SignedTxs } from './signed_txs.js';
 import { TopicType } from './topic_type.js';
+import { decodeCanonical, readOptionalFieldFlag } from './wire_format.js';
 
 export type { BlockProposalHash } from '@aztec-labs/foundation/branded-types';
 
@@ -279,8 +280,11 @@ export class BlockProposal extends Gossipable implements Signable {
   }
 
   static fromBuffer(buf: Buffer | BufferReader): BlockProposal {
-    const reader = BufferReader.asReader(buf);
+    return decodeCanonical(buf, 'BlockProposal', reader => BlockProposal.readFrom(reader));
+  }
 
+  /** Decodes a proposal from a reader without requiring it to reach the end of the buffer. */
+  private static readFrom(reader: BufferReader): BlockProposal {
     const blockHeader = reader.readObject(BlockHeader);
     const indexWithinCheckpoint = IndexWithinCheckpoint(reader.readNumber());
     const archiveRoot = reader.readObject(Fr);
@@ -293,11 +297,9 @@ export class BlockProposal extends Gossipable implements Signable {
     const txHashes = reader.readArray(txHashCount, TxHash);
     const inboxPrefixRef = reader.readObject(InboxMessagePrefixRef);
 
-    let signedTxs: SignedTxs | undefined;
-    const hasSignedTxs = reader.readNumber();
-    if (hasSignedTxs) {
-      signedTxs = SignedTxs.fromBuffer(reader);
-    }
+    const signedTxs = readOptionalFieldFlag(reader, 'BlockProposal signedTxs')
+      ? SignedTxs.fromBuffer(reader)
+      : undefined;
 
     return new BlockProposal(
       blockHeader,
