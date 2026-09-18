@@ -6,6 +6,8 @@ Javascript types and helper functions for the aztec circuits.
 
 `yarn && yarn test`
 
+For opt-in transaction-effects transport measurements, see the [benchmark guide](./benchmarks/README.md).
+
 ## Updating Snapshots
 
 The tests will fail if you've made changes to things like the Public Inputs for the rollup/kernel circuits or the accumulators,
