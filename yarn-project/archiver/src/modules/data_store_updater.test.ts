@@ -653,7 +653,7 @@ describe('ArchiverDataStoreUpdater', () => {
       await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
       const logsAfterCheckpoint = await store.logs.getPublicLogsForBlock(block.number);
 
-      await expect(updater.addProposedBlock(block)).resolves.toEqual('already-checkpointed');
+      await expect(updater.addProposedBlock(block, emptyPrefix)).resolves.toEqual('already-checkpointed');
 
       expect(await store.blocks.getLatestL2BlockNumber()).toEqual(BlockNumber(1));
       expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
