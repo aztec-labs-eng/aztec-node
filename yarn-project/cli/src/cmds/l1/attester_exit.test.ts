@@ -4,6 +4,7 @@ import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import { AttesterStatus, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
+import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { type Anvil, EthCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -43,7 +44,7 @@ describe('initiate-withdraw-by-attester command', () => {
       initiateWithdrawByAttester({
         rpcUrls: ['http://127.0.0.1:1'],
         chainId: foundry.id,
-        mnemonic,
+        privateKey: `0x${Buffer.from(attester.getHdKey().privateKey!).toString('hex')}`,
         attesterAddress: EthAddress.fromString(withdrawer.address),
         rollupAddress: EthAddress.ZERO,
         log: () => {},
@@ -91,117 +92,214 @@ describe('attester exit through the client and CLI', () => {
   let anvil: Anvil;
   let rpcUrl: string;
 
-  afterAll(async () => {
+  afterEach(async () => {
     await anvil?.stop();
   });
 
-  it('deploys, exits as the attester, and pays only the withdrawer-selected recipient after both delays', async () => {
-    ({ anvil, rpcUrl } = await startAnvil());
-    const { l1ContractAddresses } = await deployAztecL1Contracts(
-      rpcUrl,
-      '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba',
-      foundry.id,
-      {
-        ...DefaultL1ContractsConfig,
-        vkTreeRoot: Fr.random(),
-        protocolContractsHash: Fr.random(),
-        genesisArchiveRoot: Fr.random(),
-        realVerifier: false,
-        aztecTargetCommitteeSize: 4,
-        entryQueueBootstrapValidatorSetSize: 21,
-        entryQueueBootstrapFlushSize: 21,
-        entryQueueMaxFlushSize: 21,
-        initialValidators: Array.from({ length: 21 }, (_, index) => ({
-          attester:
-            index === 0
-              ? EthAddress.fromString(attester.address)
-              : EthAddress.fromString(`0x${(1000 + index).toString(16).padStart(40, '0')}`),
-          withdrawer: EthAddress.fromString(withdrawer.address),
-          bn254SecretKey: new SecretValue(BigInt(index + 1)),
-        })),
-      },
-    );
-    const attesterClient = createExtendedL1Client([rpcUrl], attester, foundry);
-    const withdrawerClient = createExtendedL1Client([rpcUrl], withdrawer, foundry);
-    const rollup = new RollupContract(attesterClient, l1ContractAddresses.rollupAddress);
-    const target = EthAddress.fromString(attester.address);
-    const recipient = mnemonicToAccount(mnemonic, { addressIndex: 2 }).address;
-    const token = getContract({
-      address: (await rollup.getStakingAsset()).toString(),
-      abi: TestERC20Abi,
-      client: attesterClient,
-    });
-    const governance = getContract({
-      address: l1ContractAddresses.governanceAddress.toString(),
-      abi: GovernanceAbi,
-      client: attesterClient,
-    });
-    const ownerRollup = getContract({ address: rollup.address, abi: RollupAbi, client: withdrawerClient });
-    const original = await rollup.getAttesterView(target);
-    const recipientBalance = await token.read.balanceOf([recipient]);
+  it.each(['direct', 'signed', 'batch', 'up-to-limit'] as const)(
+    '%s exits preserve withdrawer control and both delays',
+    async mode => {
+      const isBatch = mode === 'batch' || mode === 'up-to-limit';
+      const validatorCount = isBatch ? 42 : 21;
+      const exitCount = isBatch ? 2 : 1;
+      const attesters = [attester, ...[3, 4].map(addressIndex => mnemonicToAccount(mnemonic, { addressIndex }))];
+      ({ anvil, rpcUrl } = await startAnvil());
+      const { l1ContractAddresses } = await deployAztecL1Contracts(
+        rpcUrl,
+        '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba',
+        foundry.id,
+        {
+          ...DefaultL1ContractsConfig,
+          vkTreeRoot: Fr.random(),
+          protocolContractsHash: Fr.random(),
+          genesisArchiveRoot: Fr.random(),
+          realVerifier: false,
+          aztecTargetCommitteeSize: 4,
+          entryQueueBootstrapValidatorSetSize: validatorCount,
+          entryQueueBootstrapFlushSize: validatorCount,
+          entryQueueMaxFlushSize: validatorCount,
+          initialValidators: Array.from({ length: validatorCount }, (_, index) => ({
+            attester:
+              index < attesters.length
+                ? EthAddress.fromString(attesters[index].address)
+                : EthAddress.fromString(`0x${(1000 + index).toString(16).padStart(40, '0')}`),
+            withdrawer: EthAddress.fromString(withdrawer.address),
+            bn254SecretKey: new SecretValue(BigInt(index + 1)),
+          })),
+        },
+      );
+      const attesterClient = createExtendedL1Client([rpcUrl], attester, foundry);
+      const withdrawerClient = createExtendedL1Client([rpcUrl], withdrawer, foundry);
+      const rollup = new RollupContract(attesterClient, l1ContractAddresses.rollupAddress);
+      const target = EthAddress.fromString(attester.address);
+      const recipient = mnemonicToAccount(mnemonic, { addressIndex: 2 }).address;
+      const token = getContract({
+        address: (await rollup.getStakingAsset()).toString(),
+        abi: TestERC20Abi,
+        client: attesterClient,
+      });
+      const governance = getContract({
+        address: l1ContractAddresses.governanceAddress.toString(),
+        abi: GovernanceAbi,
+        client: attesterClient,
+      });
+      const ownerRollup = getContract({ address: rollup.address, abi: RollupAbi, client: withdrawerClient });
+      const original = await rollup.getAttesterView(target);
+      const recipientBalance = await token.read.balanceOf([recipient]);
 
-    const before = await rollup.getAttesterExitLimitState();
-    expect(before).toMatchObject({ validatorCount: 21n, committeeSize: 4n, used: 0n, allowance: 1n, canExit: true });
-    expect(await rollup.getAttesterExitWindow()).toBe(before.window);
+      const before = await rollup.getAttesterExitLimitState();
+      expect(before).toMatchObject({
+        validatorCount: BigInt(validatorCount),
+        committeeSize: 4n,
+        used: 0n,
+        allowance: BigInt(exitCount),
+        canExit: true,
+      });
+      expect(await rollup.getAttesterExitWindow()).toBe(before.window);
 
-    const receipt = await initiateWithdrawByAttester({
-      rpcUrls: [rpcUrl],
-      chainId: foundry.id,
-      mnemonic,
-      attesterAddress: target,
-      rollupAddress: l1ContractAddresses.rollupAddress,
-      log: () => {},
-      debugLogger: logger,
-    });
-    expect(receipt.status).toBe('success');
-    const pending = await rollup.getAttesterView(target);
-    expect(pending.status).toBe(AttesterStatus.ZOMBIE);
-    expect(pending.exit.exists).toBe(true);
-    expect(pending.exit.isRecipient).toBe(false);
-    expect(pending.exit.recipientOrWithdrawer).toEqual(EthAddress.fromString(withdrawer.address));
-    expect(pending.exit.amount).toBe(original.effectiveBalance);
-    expect(await token.read.balanceOf([recipient])).toBe(recipientBalance);
-    expect(await rollup.getAttesterExitLimitState()).toMatchObject({
-      validatorCount: 20n,
-      used: 1n,
-      allowance: 0n,
-      canExit: false,
-    });
-    const withdrawal = await governance.read.getWithdrawal([pending.exit.withdrawalId]);
+      if (mode === 'direct') {
+        const receipt = await initiateWithdrawByAttester({
+          rpcUrls: [rpcUrl],
+          chainId: foundry.id,
+          privateKey: `0x${Buffer.from(attester.getHdKey().privateKey!).toString('hex')}`,
+          attesterAddress: target,
+          rollupAddress: l1ContractAddresses.rollupAddress,
+          log: () => {},
+          debugLogger: logger,
+        });
+        expect(receipt.status).toBe('success');
+      } else {
+        const deadline = (await attesterClient.getBlock()).timestamp + 3600n;
+        const authorizations = await Promise.all(
+          attesters.map(account =>
+            rollup.createAttesterExitAuthorization(EthAddress.fromString(account.address), deadline, data =>
+              account.signTypedData(data),
+            ),
+          ),
+        );
+        if (mode === 'signed') {
+          const { receipt } = await rollup.initiateWithdrawByAttesterWithSignature(
+            createL1TxUtils(withdrawerClient, { logger }),
+            authorizations[0],
+          );
+          expect(receipt.status).toBe('success');
+        } else {
+          const toViem = (authorization: (typeof authorizations)[number]) => ({
+            ...authorization,
+            attester: authorization.attester.toString(),
+          });
+          if (mode === 'batch') {
+            await expect(
+              withdrawerClient.simulateContract({
+                address: rollup.address,
+                abi: RollupAbi,
+                functionName: 'initiateWithdrawByAttesterBatch',
+                args: [authorizations.map(toViem)],
+              }),
+            ).rejects.toThrow('Staking__AttesterExitLimitExceeded');
+            for (const account of attesters) {
+              expect((await rollup.getAttesterView(EthAddress.fromString(account.address))).exit.exists).toBe(false);
+            }
+            expect(await rollup.getAttesterExitLimitState()).toMatchObject({ used: 0n });
+          }
+          const directory = await mkdtemp(join(tmpdir(), 'attester-exit-batch-'));
+          const path = join(directory, 'authorizations.json');
+          const batch = mode === 'batch' ? authorizations.slice(0, exitCount) : authorizations;
+          try {
+            await writeFile(
+              path,
+              JSON.stringify(
+                batch.map(authorization => ({
+                  attester: authorization.attester.toString(),
+                  deadline: authorization.deadline.toString(),
+                  signature: Signature.fromViemSignature(authorization.signature).toString(),
+                })),
+              ),
+            );
+            const program = new Command().exitOverride();
+            injectCommands(program, () => {}, logger);
+            await program.parseAsync([
+              'node',
+              'aztec',
+              'initiate-withdraw-by-attester-batch',
+              '--l1-rpc-urls',
+              rpcUrl,
+              '--l1-chain-id',
+              String(foundry.id),
+              '--private-key',
+              `0x${Buffer.from(withdrawer.getHdKey().privateKey!).toString('hex')}`,
+              '--rollup',
+              rollup.address,
+              '--authorizations',
+              path,
+              ...(mode === 'up-to-limit' ? ['--up-to-limit'] : []),
+            ]);
+          } finally {
+            await rm(directory, { recursive: true, force: true });
+          }
+          const second = await rollup.getAttesterView(EthAddress.fromString(attesters[1].address));
+          expect(second.status).toBe(AttesterStatus.ZOMBIE);
+          expect(second.exit).toMatchObject({
+            exists: true,
+            isRecipient: false,
+            recipientOrWithdrawer: EthAddress.fromString(withdrawer.address),
+            amount: original.effectiveBalance,
+          });
+        }
+        const untouched = await rollup.getAttesterView(EthAddress.fromString(attesters[2].address));
+        expect(untouched.exit.exists).toBe(false);
+        expect(untouched.status).toBe(original.status);
+      }
+      const pending = await rollup.getAttesterView(target);
+      expect(pending.status).toBe(AttesterStatus.ZOMBIE);
+      expect(pending.exit.exists).toBe(true);
+      expect(pending.exit.isRecipient).toBe(false);
+      expect(pending.exit.recipientOrWithdrawer).toEqual(EthAddress.fromString(withdrawer.address));
+      expect(pending.exit.amount).toBe(original.effectiveBalance);
+      expect(await token.read.balanceOf([recipient])).toBe(recipientBalance);
+      expect(await rollup.getAttesterExitLimitState()).toMatchObject({
+        validatorCount: BigInt(validatorCount - exitCount),
+        used: BigInt(exitCount),
+        allowance: isBatch ? 1n : 0n,
+        canExit: false,
+      });
+      const withdrawal = await governance.read.getWithdrawal([pending.exit.withdrawalId]);
 
-    await expect(
-      attesterClient.simulateContract({
-        address: rollup.address,
-        abi: RollupAbi,
-        functionName: 'initiateWithdraw',
-        args: [attester.address, recipient],
-      }),
-    ).rejects.toThrow();
+      await expect(
+        attesterClient.simulateContract({
+          address: rollup.address,
+          abi: RollupAbi,
+          functionName: 'initiateWithdraw',
+          args: [attester.address, recipient],
+        }),
+      ).rejects.toThrow();
 
-    const selection = await ownerRollup.write.initiateWithdraw([attester.address, recipient]);
-    expect((await withdrawerClient.waitForTransactionReceipt({ hash: selection })).status).toBe('success');
-    const selected = await rollup.getAttesterView(target);
-    expect(selected.exit.withdrawalId).toBe(pending.exit.withdrawalId);
-    expect(selected.exit.exitableAt).toBe(pending.exit.exitableAt);
-    expect(selected.exit.recipientOrWithdrawer).toEqual(EthAddress.fromString(recipient));
-    expect(selected.exit.isRecipient).toBe(true);
-    expect(await governance.read.getWithdrawal([pending.exit.withdrawalId])).toEqual(withdrawal);
+      const selection = await ownerRollup.write.initiateWithdraw([attester.address, recipient]);
+      expect((await withdrawerClient.waitForTransactionReceipt({ hash: selection })).status).toBe('success');
+      const selected = await rollup.getAttesterView(target);
+      expect(selected.exit.withdrawalId).toBe(pending.exit.withdrawalId);
+      expect(selected.exit.exitableAt).toBe(pending.exit.exitableAt);
+      expect(selected.exit.recipientOrWithdrawer).toEqual(EthAddress.fromString(recipient));
+      expect(selected.exit.isRecipient).toBe(true);
+      expect(await governance.read.getWithdrawal([pending.exit.withdrawalId])).toEqual(withdrawal);
 
-    const unlock = pending.exit.exitableAt > withdrawal.unlocksAt ? pending.exit.exitableAt : withdrawal.unlocksAt;
-    const cheatCodes = new EthCheatCodes([rpcUrl], new DateProvider());
-    await cheatCodes.warp(unlock - 1n);
-    await expect(
-      attesterClient.simulateContract({
-        address: rollup.address,
-        abi: RollupAbi,
-        functionName: 'finalizeWithdraw',
-        args: [attester.address],
-      }),
-    ).rejects.toThrow();
-    await cheatCodes.warp(unlock);
-    const finalized = await ownerRollup.write.finalizeWithdraw([attester.address]);
-    expect((await withdrawerClient.waitForTransactionReceipt({ hash: finalized })).status).toBe('success');
-    expect(await token.read.balanceOf([recipient])).toBe(recipientBalance + pending.exit.amount);
-    expect((await rollup.getAttesterView(target)).exit.exists).toBe(false);
-  }, 240_000);
+      const unlock = pending.exit.exitableAt > withdrawal.unlocksAt ? pending.exit.exitableAt : withdrawal.unlocksAt;
+      const cheatCodes = new EthCheatCodes([rpcUrl], new DateProvider());
+      await cheatCodes.warp(unlock - 1n);
+      await expect(
+        attesterClient.simulateContract({
+          address: rollup.address,
+          abi: RollupAbi,
+          functionName: 'finalizeWithdraw',
+          args: [attester.address],
+        }),
+      ).rejects.toThrow();
+      await cheatCodes.warp(unlock);
+      const finalized = await ownerRollup.write.finalizeWithdraw([attester.address]);
+      expect((await withdrawerClient.waitForTransactionReceipt({ hash: finalized })).status).toBe('success');
+      expect(await token.read.balanceOf([recipient])).toBe(recipientBalance + pending.exit.amount);
+      expect((await rollup.getAttesterView(target)).exit.exists).toBe(false);
+    },
+    240_000,
+  );
 });
