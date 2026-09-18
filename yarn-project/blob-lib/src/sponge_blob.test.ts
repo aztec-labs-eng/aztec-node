@@ -1,7 +1,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
 
-import { SpongeBlob } from './sponge_blob.js';
+import { Poseidon2Sponge, SpongeBlob } from './sponge_blob.js';
 import { makeSpongeBlob } from './testing.js';
 
 describe('SpongeBlob', () => {
@@ -50,4 +50,47 @@ describe('SpongeBlob', () => {
       hash,
     );
   });
+});
+
+describe('Poseidon2Sponge', () => {
+  /** Absorbs one field at a time, mirroring noir's Poseidon2Sponge::absorb, whose whole struct circuits compare. */
+  const absorbPerField = async (sponge: Poseidon2Sponge, fields: Fr[]) => {
+    for (const field of fields) {
+      if (sponge.cacheSize === sponge.cache.length) {
+        await sponge.performDuplex();
+        sponge.cache[0] = field;
+        sponge.cacheSize = 1;
+      } else {
+        sponge.cache[sponge.cacheSize++] = field;
+      }
+    }
+  };
+
+  it.each([
+    { lengths: [5] },
+    { lengths: [4] },
+    { lengths: [7] },
+    { lengths: [3, 1] },
+    { lengths: [3, 2] },
+    { lengths: [3, 5] },
+    { lengths: [2, 2] },
+    { lengths: [1, 1, 1, 1, 1] },
+    { lengths: [1, 4, 6] },
+    { lengths: [0, 3, 0, 4] },
+    { lengths: [10, 11, 3, 7] },
+  ])(
+    'matches a field-by-field absorb, unused cache slots included, for absorb lengths $lengths',
+    async ({ lengths }) => {
+      const chunked = Poseidon2Sponge.init(new Fr(42));
+      const perField = Poseidon2Sponge.init(new Fr(42));
+      let next = 1;
+      for (const length of lengths) {
+        const fields = Array.from({ length }, () => new Fr(next++));
+        await chunked.absorb(fields);
+        await absorbPerField(perField, fields);
+        expect(chunked.toFields()).toEqual(perField.toFields());
+      }
+      expect(await chunked.squeeze()).toEqual(await perField.squeeze());
+    },
+  );
 });
