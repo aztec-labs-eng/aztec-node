@@ -12,7 +12,15 @@ import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
 import { readFile, writeFile } from 'node:fs/promises';
-import { encodeFunctionData, formatEther, getContract, isHex, maxUint256, recoverTypedDataAddress } from 'viem';
+import {
+  encodeFunctionData,
+  formatEther,
+  getContract,
+  isHex,
+  maxUint256,
+  parseEventLogs,
+  recoverTypedDataAddress,
+} from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 import { atomicUpdateFile } from '../../utils/commands.js';
@@ -394,7 +402,11 @@ function parseAttesterExitAuthorization(value: unknown, index: number): Attester
   if (typeof authorization.deadline !== 'string' || !/^\d+$/.test(authorization.deadline)) {
     throw new Error(`Attester exit authorization ${index} deadline must be a decimal string`);
   }
-  if (typeof authorization.signature !== 'string' || !isHex(authorization.signature)) {
+  if (
+    typeof authorization.signature !== 'string' ||
+    !isHex(authorization.signature) ||
+    !Signature.isValidString(authorization.signature)
+  ) {
     throw new Error(`Attester exit authorization ${index} has an invalid signature`);
   }
 
@@ -432,12 +444,38 @@ export async function initiateWithdrawByAttesterBatch({
     throw new Error(`Attester exit batch reverted: ${receipt.transactionHash}`);
   }
 
-  log(`Submitted ${authorizations.length} attester exit authorizations. Transaction hash: ${receipt.transactionHash}`);
-  if (upToLimit) {
-    log('The rollup processed the largest permitted prefix of the authorization list.');
+  const exits = parseEventLogs({
+    abi: RollupAbi,
+    eventName: 'WithdrawInitiatedByAttester',
+    logs: receipt.logs.filter(event => event.address.toLowerCase() === rollupAddress.toString().toLowerCase()),
+  });
+  const processedCount = exits.length;
+  if (
+    processedCount > authorizations.length ||
+    (!upToLimit && processedCount !== authorizations.length) ||
+    exits.some(
+      (event, index) => event.args.attester.toLowerCase() !== authorizations[index].attester.toString().toLowerCase(),
+    )
+  ) {
+    throw new Error(
+      `Transaction ${receipt.transactionHash} succeeded, but its exit events do not match the submitted prefix`,
+    );
   }
-  debugLogger.info('Attester exit batch submitted', {
+  const remainingCount = authorizations.length - processedCount;
+  log(
+    `Processed ${processedCount} of ${authorizations.length} attester exit authorizations. Transaction hash: ${receipt.transactionHash}`,
+  );
+  log(
+    remainingCount > 0
+      ? `Remaining authorizations: ${remainingCount}. Zero-based JSON array indices ${processedCount} through ${authorizations.length - 1} (inclusive).`
+      : 'Remaining authorizations: 0 (none).',
+  );
+  debugLogger.info('Attester exit batch processed', {
     authorizationCount: authorizations.length,
+    processedCount,
+    remainingCount,
+    remainingStartIndex: remainingCount > 0 ? processedCount : undefined,
+    remainingEndIndexExclusive: remainingCount > 0 ? authorizations.length : undefined,
     upToLimit,
     rollup: rollupAddress.toString(),
     transactionHash: receipt.transactionHash,
