@@ -3,8 +3,14 @@
 // 1_000_000_000_000_000_000 Wei = 1 ETH
 export const WEI_CONST = 1_000_000_000n;
 
-// EIP-7825: protocol-level cap on tx gas limit (2^24). Clients reject above this.
+// Our conservative ceiling on the total gas limit of any L1 tx we send (2^24), matching the EIP-7825 cap.
+// EIP-8037 keeps 2^24 as the execution cap but would allow a higher total; we stay at the tighter value.
 export const MAX_L1_TX_LIMIT = 16_777_216n;
+
+// Minimum headroom to add on top of a simulated gasUsed when the node did not report maxUsedGas.
+// gasUsed is net of refunds (capped at a fifth of the gas used), so undoing a maximum refund alone
+// already needs a 25% bump before any allowance for execution paths that differ from the simulated one.
+export const MIN_SIMULATED_GAS_LIMIT_BUFFER_PERCENTAGE = 30;
 
 // setting a minimum bump percentage to 10% due to geth's implementation
 // https://github.com/ethereum/go-ethereum/blob/e3d61e6db028c412f74bc4d4c7e117a9e29d0de0/core/txpool/legacypool/list.go#L298

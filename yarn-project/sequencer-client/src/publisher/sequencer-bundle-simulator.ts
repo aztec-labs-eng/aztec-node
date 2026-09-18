@@ -1,6 +1,10 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { Multicall3, type RollupContract, buildSimulationOverridesStateOverride } from '@aztec-labs/ethereum/contracts';
-import { type L1TxUtils, MAX_L1_TX_LIMIT } from '@aztec-labs/ethereum/l1-tx-utils';
+import {
+  type L1TxUtils,
+  MAX_L1_TX_LIMIT,
+  MIN_SIMULATED_GAS_LIMIT_BUFFER_PERCENTAGE,
+} from '@aztec-labs/ethereum/l1-tx-utils';
 import { formatViemError } from '@aztec-labs/ethereum/utils';
 import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -20,8 +24,8 @@ export type DroppedRequest = {
  * Result of {@link SequencerBundleSimulator.simulate}.
  *
  * - `success`: simulation succeeded. `requests` is the filtered survivor list, `gasLimit` is
- *   the bumped gas limit derived from `gasUsed` (plus blob evaluation gas). `droppedRequests`
- *   lists the entries that were observed to revert in simulation.
+ *   the bumped gas limit derived from the simulated transaction gas (plus blob evaluation gas).
+ *   `droppedRequests` lists the entries that were observed to revert in simulation.
  * - `fallback`: the node does not support eth_simulateV1 (or the simulate call threw). The
  *   caller should send `requests` as-is with a safe gas limit (e.g. {@link MAX_L1_TX_LIMIT}).
  *   `droppedRequests` carries any entries that the first pass already proved reverted, so the
@@ -38,7 +42,13 @@ export type BundleSimulateResult =
 export type AbortReason = 'empty-bundle' | 'all-reverted' | 'second-pass-reverts';
 
 type SimulatePassResult =
-  | { kind: 'decoded'; survivors: RequestWithExpiry[]; droppedRequests: DroppedRequest[]; gasUsed: bigint }
+  | {
+      kind: 'decoded';
+      survivors: RequestWithExpiry[];
+      droppedRequests: DroppedRequest[];
+      gasUsed: bigint;
+      maxUsedGas?: bigint;
+    }
   | { kind: 'fallback' };
 
 /**
@@ -114,7 +124,7 @@ export class SequencerBundleSimulator {
     }
 
     if (firstPass.droppedRequests.length === 0) {
-      return this.buildSuccessResult(l1TxUtils, firstPass.survivors, [], firstPass.gasUsed, proposeRequest);
+      return this.buildSuccessResult(l1TxUtils, firstPass.survivors, [], firstPass, proposeRequest);
     }
 
     this.log.warn('Some bundle entries reverted; re-simulating reduced bundle', {
@@ -155,11 +165,12 @@ export class SequencerBundleSimulator {
       };
     }
 
+    // The reduced bundle is what we are about to send, so its own gas metrics are the ones that size the tx.
     return this.buildSuccessResult(
       l1TxUtils,
       secondPass.survivors,
       firstPass.droppedRequests,
-      secondPass.gasUsed,
+      secondPass,
       proposeRequest,
     );
   }
@@ -168,15 +179,17 @@ export class SequencerBundleSimulator {
     l1TxUtils: L1TxUtils,
     survivors: RequestWithExpiry[],
     droppedRequests: DroppedRequest[],
-    bundleGasUsed: bigint,
+    bundleGas: { gasUsed: bigint; maxUsedGas?: bigint },
     proposeRequest: RequestWithExpiry | undefined,
   ): BundleSimulateResult {
     const proposeSurvived = proposeRequest !== undefined && survivors.includes(proposeRequest);
     const blobEvaluationGas = proposeSurvived ? (proposeRequest?.blobEvaluationGas ?? 0n) : 0n;
-    const gasLimit = this.computeGasLimit(l1TxUtils, bundleGasUsed, blobEvaluationGas);
+    const gasLimit = this.computeGasLimit(l1TxUtils, bundleGas, blobEvaluationGas);
     this.log.debug('Bundle simulate complete', {
       survivingRequests: survivors.length,
-      bundleGasUsed,
+      bundleGasUsed: bundleGas.gasUsed,
+      bundleMaxUsedGas: bundleGas.maxUsedGas,
+      blobEvaluationGas,
       gasLimit,
       actions: survivors.map(r => r.action),
     });
@@ -184,12 +197,31 @@ export class SequencerBundleSimulator {
   }
 
   /**
-   * `gasLimit = bumpGasLimit(ceil(gasUsed * 64 / 63))`, plus blob evaluation gas if a propose
-   * survived, capped at the L1 block gas limit.
+   * `gasLimit = bumpGasLimit(ceil(basis * 64 / 63))`, plus blob evaluation gas if a propose survived,
+   * capped at {@link MAX_L1_TX_LIMIT}.
+   *
+   * The basis is the simulation's `maxUsedGas` when the node reports it, since that is measured before
+   * refunds. Otherwise it is `gasUsed`, which is net of refunds and so gets at least
+   * {@link MIN_SIMULATED_GAS_LIMIT_BUFFER_PERCENTAGE} of headroom instead of the configured buffer; a
+   * larger configured buffer still wins. Neither figure guarantees a sufficient limit, hence the padding.
    */
-  private computeGasLimit(l1TxUtils: L1TxUtils, bundleGasUsed: bigint, blobEvaluationGas: bigint): bigint {
-    const gasUsedWithEip150 = (bundleGasUsed * 64n + 62n) / 63n;
-    const gasLimit = l1TxUtils.bumpGasLimit(gasUsedWithEip150) + blobEvaluationGas;
+  private computeGasLimit(
+    l1TxUtils: L1TxUtils,
+    bundleGas: { gasUsed: bigint; maxUsedGas?: bigint },
+    blobEvaluationGas: bigint,
+  ): bigint {
+    const basis = bundleGas.maxUsedGas ?? bundleGas.gasUsed;
+    const gasUsedWithEip150 = (basis * 64n + 62n) / 63n;
+    const gasConfigOverrides =
+      bundleGas.maxUsedGas === undefined
+        ? {
+            gasLimitBufferPercentage: Math.max(
+              l1TxUtils.config.gasLimitBufferPercentage,
+              MIN_SIMULATED_GAS_LIMIT_BUFFER_PERCENTAGE,
+            ),
+          }
+        : undefined;
+    const gasLimit = l1TxUtils.bumpGasLimit(gasUsedWithEip150, gasConfigOverrides) + blobEvaluationGas;
     return gasLimit > MAX_L1_TX_LIMIT ? MAX_L1_TX_LIMIT : gasLimit;
   }
 
@@ -248,6 +280,12 @@ export class SequencerBundleSimulator {
         returnData: entry.returnData,
       });
     }
-    return { kind: 'decoded', survivors, droppedRequests, gasUsed: simResult.gasUsed };
+    return {
+      kind: 'decoded',
+      survivors,
+      droppedRequests,
+      gasUsed: simResult.gasUsed,
+      maxUsedGas: simResult.maxUsedGas,
+    };
   }
 }
