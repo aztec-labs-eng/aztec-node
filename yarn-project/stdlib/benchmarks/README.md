@@ -16,6 +16,9 @@ the output prefix. The JSON contains raw sample totals, repetitions, summaries, 
 samples, and environment metadata. The Markdown contains tables for a PR description. Results have no performance
 pass/fail threshold. Run on an otherwise idle machine; comparisons on macOS do not establish production Linux performance.
 
+Keep generated JSON and Markdown in the ignored `bench-out/` directory; include the report in the PR description, and
+do not commit benchmark output.
+
 ## Workloads
 
 - **Small hashes:** 64 independent three-field hashes, requested sequentially or concurrently with `Promise.all`.
