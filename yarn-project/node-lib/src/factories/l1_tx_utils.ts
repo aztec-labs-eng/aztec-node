@@ -150,7 +150,26 @@ export async function createForwarderL1TxUtilsFromSigners(
 ) {
   const sharedDeps = await createSharedDeps(config, deps);
 
-  return signers.map(signer =>
+  // Deduplicate signers by address to avoid creating multiple ForwarderL1TxUtils instances
+  // for the same publisher address (e.g., when multiple attesters share the same publisher key).
+  // Two instances for one account keep independent nonce counts and can collide, dropping a tx.
+  const signersByAddress = new Map<string, EthSigner>();
+  for (const signer of signers) {
+    const addressKey = signer.address.toString().toLowerCase();
+    if (!signersByAddress.has(addressKey)) {
+      signersByAddress.set(addressKey, signer);
+    }
+  }
+
+  const uniqueSigners = Array.from(signersByAddress.values());
+
+  if (uniqueSigners.length < signers.length) {
+    sharedDeps.logger.info(
+      `Deduplicated ${signers.length} signers to ${uniqueSigners.length} unique publisher addresses`,
+    );
+  }
+
+  return uniqueSigners.map(signer =>
     createForwarderL1TxUtilsBase({ client, signer }, forwarderAddress, { ...sharedDeps, kzg: deps.kzg }, config),
   );
 }
