@@ -51,6 +51,17 @@ describe('PrivateLog', () => {
     expect(PrivateLog.empty().hasZeroPadding()).toBe(true);
   });
 
+  it('rejects an emitted length that is not a valid index into the fields', () => {
+    const zeroPadded = padArrayEnd(
+      makeTuple(PRIVATE_LOG_SIZE_IN_FIELDS, Fr.random).slice(0, 3),
+      Fr.ZERO,
+      PRIVATE_LOG_SIZE_IN_FIELDS,
+    );
+    expect(new PrivateLog(zeroPadded, -1).hasZeroPadding()).toBe(false);
+    expect(new PrivateLog(zeroPadded, 3.5).hasZeroPadding()).toBe(false);
+    expect(new PrivateLog(zeroPadded, NaN).hasZeroPadding()).toBe(false);
+  });
+
   it('number of emitted fields is correct', () => {
     const smallLogFields = [new Fr(1), new Fr(2), new Fr(3)];
     const smallLog = new PrivateLog(

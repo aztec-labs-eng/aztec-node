@@ -69,7 +69,10 @@ export class PrivateLog {
    */
   hasZeroPadding() {
     return (
-      this.emittedLength <= PRIVATE_LOG_SIZE_IN_FIELDS && this.fields.slice(this.emittedLength).every(f => f.isZero())
+      Number.isInteger(this.emittedLength) &&
+      this.emittedLength >= 0 &&
+      this.emittedLength <= PRIVATE_LOG_SIZE_IN_FIELDS &&
+      this.fields.slice(this.emittedLength).every(f => f.isZero())
     );
   }
 
