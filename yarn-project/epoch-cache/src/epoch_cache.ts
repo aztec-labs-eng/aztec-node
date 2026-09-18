@@ -129,7 +129,10 @@ export class EpochCache implements EpochCacheInterface {
       const chain = createEthereumChain(config.l1RpcUrls, config.l1ChainId);
       const publicClient = createPublicClient({
         chain: chain.chainInfo,
-        transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
+        transport: makeL1HttpTransport(config.l1RpcUrls, {
+          timeout: config.l1HttpTimeoutMS,
+          maxLogsWindowSize: config.maxL1LogsWindowSize,
+        }),
         pollingInterval: config.viemPollingIntervalMS,
       });
       rollup = new RollupContract(publicClient, rollupOrAddress.toString());
