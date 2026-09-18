@@ -61,6 +61,7 @@ import type { SequencerPublisherFactory } from '../publisher/sequencer-publisher
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { CheckpointProposalJob } from './checkpoint_proposal_job.js';
 import { CheckpointProposalJobMetrics } from './checkpoint_proposal_job_metrics.js';
+import type { CheckpointProposalJobTestHooks } from './checkpoint_proposal_job_test_hooks.js';
 import { CheckpointVoter } from './checkpoint_voter.js';
 import { SequencerInterruptedError } from './errors.js';
 import type { SequencerEvents } from './events.js';
@@ -158,6 +159,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>,
     protected telemetry: TelemetryClient = getTelemetryClient(),
     protected log = createLogger('sequencer'),
+    /** Test-only checkpoint-build hooks, injected by the node factory and never read from configuration. */
+    protected checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks,
   ) {
     super();
     this.stateLog = log.createChild('state');
@@ -866,6 +869,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       this.tracer,
       this.log.getBindings(),
       proposedCheckpointData,
+      this.checkpointProposalJobTestHooks,
     );
   }
 

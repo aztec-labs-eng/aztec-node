@@ -82,6 +82,7 @@ import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/val
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import type { CheckpointProposalJobMetricsRecorder } from './checkpoint_proposal_job_metrics.js';
+import type { CheckpointProposalJobTestHooks } from './checkpoint_proposal_job_test_hooks.js';
 import { CheckpointVoter } from './checkpoint_voter.js';
 import { SequencerInterruptedError } from './errors.js';
 import type { SequencerEvents } from './events.js';
@@ -246,6 +247,7 @@ export class CheckpointProposalJob implements Traceable {
     public readonly tracer: Tracer,
     bindings?: LoggerBindings,
     private readonly proposedCheckpointData?: ProposedCheckpointData,
+    private readonly testHooks?: CheckpointProposalJobTestHooks,
   ) {
     this.log = createLogger('sequencer:checkpoint-proposal', {
       ...bindings,
@@ -402,6 +404,15 @@ export class CheckpointProposalJob implements Traceable {
       // Wait for the previous checkpoint to land on L1 before submitting, so we can check it
       // matches the proposed checkpoint we used as parent, and has valid attestations.
       if (signedAttestations && (await this.waitForValidParentCheckpointOnL1())) {
+        // Wait for the window the propose is actually sent in before resolving anything from L1. The Inbox bucket
+        // hint the preflight returns is an unsigned bucket sequence, and an L1 reorg that re-partitions the Inbox
+        // renumbers buckets without changing a single message: a hint resolved a slot earlier would then name a
+        // bucket that no longer ends where this checkpoint does, and `propose` reverts on a checkpoint that is
+        // otherwise still perfectly publishable.
+        await this.publisher.waitForTargetSlot(this.targetSlot);
+        if (this.interrupted) {
+          throw new SequencerInterruptedError();
+        }
         // Attestation collection took seconds and L1 may have moved: re-run the integrated header and Inbox
         // preflight against L1's current state, and take the bucket hint from it.
         const bucketHint = await this.preflightBeforePublication(checkpoint.header, streamingState);
@@ -621,15 +632,22 @@ export class CheckpointProposalJob implements Traceable {
    *
    * The hash is compared rather than the height alone, since a chain rebuilt after a prune reuses the block numbers.
    *
-   * This is a preflight, not a guarantee: the proposal is enqueued here and only broadcast once the publisher's wait
-   * for the target slot returns, and the archiver can prune in that window as it can after the transaction is sent.
-   * What the check buys is the common case, where the prune is already visible by the time the slot arrives.
+   * This is a preflight, not a guarantee: the archiver can still prune between here and the moment the transaction
+   * lands. What the check buys is the common case, where the prune is already visible by the time the slot arrives.
    *
    * Skipped whenever proposed blocks aren't pushed (`skipPushProposedBlocksToArchiver`, fisherman mode): the archiver
    * never held them in the first place, so their absence says nothing about a prune.
+   *
+   * Also skipped under the test-only `skipWaitForValidParentCheckpointOnL1`, which exists to publish a checkpoint
+   * descending from a parent the local archiver rejects. Rejecting that parent prunes this checkpoint's blocks as a
+   * matter of course, so the check would only ever abandon the very scenario the flag was set to produce.
    */
   private async checkpointBlocksAreStillLocal(checkpoint: Checkpoint): Promise<boolean> {
-    if (this.config.skipPushProposedBlocksToArchiver || this.config.fishermanMode) {
+    if (
+      this.config.skipPushProposedBlocksToArchiver ||
+      this.config.fishermanMode ||
+      this.config.skipWaitForValidParentCheckpointOnL1
+    ) {
       return true;
     }
     const lastBlock = checkpoint.blocks.at(-1);
@@ -1316,6 +1334,16 @@ export class CheckpointProposalJob implements Traceable {
       // If this throws, we abort the entire checkpoint.
       await this.syncProposedBlockToArchiver(block, blockPrefixRef);
 
+      await this.notifyBlockReadyToBroadcast({
+        block,
+        blockNumber,
+        indexWithinCheckpoint,
+        inboxPrefixRef: blockPrefixRef,
+        consumedMessageCount: streamingState.cursor.totalMessageCount,
+        isStandalone: !timingInfo.isLastBlock,
+        remainingBuildSubslots: Math.max(0, maxBlocks - (timingInfo.index + 1)),
+      });
+
       // If this is the last block, do not broadcast it, since it will be included in the checkpoint proposal.
       if (timingInfo.isLastBlock) {
         this.log.verbose(`Completed final block ${blockNumber} for slot ${this.targetSlot}`, {
@@ -1371,6 +1399,45 @@ export class CheckpointProposalJob implements Traceable {
     });
 
     return { aborted: false, blocksInCheckpoint, blockPendingBroadcast, streamingState };
+  }
+
+  /**
+   * Awaits the injected test hook, if any, at the instant a block is signed and stored locally but not yet on the
+   * wire. Absent hooks cost one undefined check, and a hook that throws fails the checkpoint the same way the
+   * archiver sync above it does, so a test cannot leave the job blocked by a broken hook.
+   *
+   * `remainingBuildSubslots` is a snapshot taken here: a hook that holds the job spends the slot's real budget, so a
+   * caller that needs to know whether another block can still be built has to re-check `proposalSendDeadline`
+   * against the clock before it releases.
+   */
+  private async notifyBlockReadyToBroadcast(opts: {
+    block: L2Block;
+    blockNumber: BlockNumber;
+    indexWithinCheckpoint: IndexWithinCheckpoint;
+    inboxPrefixRef: InboxMessagePrefixRef;
+    consumedMessageCount: bigint;
+    isStandalone: boolean;
+    remainingBuildSubslots: number;
+  }): Promise<void> {
+    const onCheckpointPhase = this.testHooks?.onCheckpointPhase;
+    if (onCheckpointPhase === undefined) {
+      return;
+    }
+    const sendDeadline =
+      this.timetable.getCheckpointProposalReceiveDeadline(this.targetSlot) - this.timetable.p2pPropagationTime;
+    await onCheckpointPhase({
+      phase: 'block-ready-to-broadcast',
+      slot: this.targetSlot,
+      checkpointNumber: this.checkpointNumber,
+      blockNumber: opts.blockNumber,
+      indexWithinCheckpoint: opts.indexWithinCheckpoint,
+      blockHash: await opts.block.hash(),
+      isStandalone: opts.isStandalone,
+      remainingBuildSubslots: opts.remainingBuildSubslots,
+      proposalSendDeadline: new Date(sendDeadline * 1000),
+      consumedMessageCount: opts.consumedMessageCount,
+      inboxPrefixRef: opts.inboxPrefixRef,
+    });
   }
 
   /**
