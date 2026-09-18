@@ -670,15 +670,17 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       };
 
       ({ proverNode } = await testSpan('setup:env:prover-node', () =>
-        createAndSyncProverNode(
-          proverNodePrivateKeyHex,
-          config,
-          {
-            ...config.proverNodeConfig,
-            dataDirectory: proverNodeDataDirectory,
-          },
-          { dateProvider, p2pClientDeps, telemetry: telemetryClient },
-          { genesis },
+        withLoggerBindings({ actor: 'prover-0' }, () =>
+          createAndSyncProverNode(
+            proverNodePrivateKeyHex,
+            config,
+            {
+              ...config.proverNodeConfig,
+              dataDirectory: proverNodeDataDirectory,
+            },
+            { dateProvider, p2pClientDeps, telemetry: telemetryClient },
+            { genesis },
+          ),
         ),
       ));
       logger.trace('Created prover node');
@@ -874,7 +876,7 @@ export async function waitForProvenChain(
  * Creates an AztecNodeService with the prover node enabled as a subsystem.
  * Returns both the aztec node service (for lifecycle management) and the prover node (for test internals access).
  */
-export function createAndSyncProverNode(
+export async function createAndSyncProverNode(
   proverNodePrivateKey: `0x${string}`,
   baseConfig: AztecNodeConfig,
   configOverrides: Pick<AztecNodeConfig, 'dataDirectory'>,
@@ -886,27 +888,25 @@ export function createAndSyncProverNode(
   },
   options: { genesis?: GenesisData; dontStart?: boolean },
 ): Promise<{ proverNode: AztecNodeService }> {
-  return withLoggerBindings({ actor: 'prover-0' }, async () => {
-    const proverNode = await createAztecNodeService(
-      {
-        ...baseConfig,
-        ...configOverrides,
-        p2pPort: 0,
-        enableProverNode: true,
-        disableValidator: true,
-        proverPublisherPrivateKeys: [new SecretValue(proverNodePrivateKey)],
-      },
-      deps,
-      { genesis: options.genesis, dontStartProverNode: options.dontStart },
-    );
+  const proverNode = await createAztecNodeService(
+    {
+      ...baseConfig,
+      ...configOverrides,
+      p2pPort: 0,
+      enableProverNode: true,
+      disableValidator: true,
+      proverPublisherPrivateKeys: [new SecretValue(proverNodePrivateKey)],
+    },
+    deps,
+    { genesis: options.genesis, dontStartProverNode: options.dontStart },
+  );
 
-    if (!proverNode.getProverNode()) {
-      throw new Error('Prover node subsystem was not created despite enableProverNode being set');
-    }
+  if (!proverNode.getProverNode()) {
+    throw new Error('Prover node subsystem was not created despite enableProverNode being set');
+  }
 
-    getLogger().info(`Created and synced prover node`);
-    return { proverNode };
-  });
+  getLogger().info(`Created and synced prover node`);
+  return { proverNode };
 }
 
 export type BalancesFn = ReturnType<typeof getBalancesFn>;
