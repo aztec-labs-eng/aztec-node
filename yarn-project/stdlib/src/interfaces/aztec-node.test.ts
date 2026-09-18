@@ -20,7 +20,7 @@ import type { ContractArtifact } from '../abi/abi.js';
 import { AztecAddress } from '../aztec-address/index.js';
 import type { BlockData } from '../block/block_data.js';
 import type { DataInBlock } from '../block/in_block.js';
-import { BlockHash, type BlockParameter } from '../block/index.js';
+import { BlockHash, type BlockParameter, isAnchoredBlockParameter } from '../block/index.js';
 import type { CheckpointsQuery, L2BlockTag, L2Tips } from '../block/l2_block_source.js';
 import type { CheckpointData } from '../checkpoint/checkpoint_data.js';
 import {
@@ -148,6 +148,12 @@ describe('AztecNodeApiSchema', () => {
     await expect(
       context.client.findLeavesIndexes(BlockNumber(1), MerkleTreeId.ARCHIVE, times(MAX_RPC_LEN + 1, Fr.random)),
     ).rejects.toThrow();
+
+    // An anchor naming the block by both number and hash survives the wire as one object, not as either half.
+    const anchor = { number: BlockNumber(1), hash: BlockHash.random() };
+    const anchored = await context.client.findLeavesIndexes(anchor, MerkleTreeId.ARCHIVE, [Fr.random(), Fr.random()]);
+    expect(anchored).toEqual([{ data: 1n, l2BlockNumber: 1, l2BlockHash: new BlockHash(new Fr(1)) }, undefined]);
+    expect(handler.lastFindLeavesIndexesBlock).toEqual(anchor);
   });
 
   it('getL1ToL2MessageMembershipWitness', async () => {
@@ -334,6 +340,19 @@ describe('AztecNodeApiSchema', () => {
     expect(response).toHaveLength(1);
     expect(response[0]).toHaveLength(1);
     expect(response[0][0].txHash).toBeDefined();
+
+    const anchor = { number: BlockNumber(1), hash: BlockHash.random() };
+    expect(
+      await context.client.getPrivateLogsByTags({ tags: [SiloedTag.random()], referenceBlock: anchor }),
+    ).toHaveLength(1);
+
+    // An anchor that does not pin a fork is refused at the boundary rather than reaching the node.
+    await expect(
+      context.client.getPrivateLogsByTags({
+        tags: [SiloedTag.random()],
+        referenceBlock: BlockNumber(1) as unknown as BlockHash,
+      }),
+    ).rejects.toThrow();
   });
 
   it('getPublicLogsByTags', async () => {
@@ -661,6 +680,7 @@ class MockAztecNode implements AztecNode {
   public validatorStats: ValidatorsStats | undefined;
   public singleValidatorStats: SingleValidatorStats | undefined;
   public lastReferenceBlock: BlockParameter | undefined;
+  public lastFindLeavesIndexesBlock: BlockParameter | undefined;
 
   constructor(private artifact: ContractArtifact) {}
 
@@ -746,9 +766,7 @@ class MockAztecNode implements AztecNode {
     treeId: MerkleTreeId,
     leafValues: Fr[],
   ): Promise<(DataInBlock<bigint> | undefined)[]> {
-    expect(
-      referenceBlock === 'latest' || BlockHash.isBlockHash(referenceBlock) || typeof referenceBlock === 'number',
-    ).toBe(true);
+    this.lastFindLeavesIndexesBlock = referenceBlock;
     expect(leafValues).toHaveLength(2);
     expect(leafValues[0]).toBeInstanceOf(Fr);
     expect(leafValues[1]).toBeInstanceOf(Fr);
@@ -897,6 +915,9 @@ class MockAztecNode implements AztecNode {
   }
   getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
     expect(Array.isArray(query.tags)).toBe(true);
+    if (query.referenceBlock !== undefined) {
+      expect(isAnchoredBlockParameter(query.referenceBlock) || BlockHash.isBlockHash(query.referenceBlock)).toBe(true);
+    }
     return Promise.resolve([query.tags.map(() => randomLogResult())]);
   }
   getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {

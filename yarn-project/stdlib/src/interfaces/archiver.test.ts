@@ -37,7 +37,7 @@ import {
 import { EmptyL1RollupConstants, type L1RollupConstants } from '../epoch-helpers/index.js';
 import { PublicKeys } from '../keys/public_keys.js';
 import { type LogResult, randomLogResult } from '../logs/log_result.js';
-import type { PrivateLogsQuery, PublicLogsQuery } from '../logs/logs_query.js';
+import type { PrivateLogsQuery, PublicLogsQuery, ResolvedLogsQuery } from '../logs/logs_query.js';
 import { SiloedTag } from '../logs/siloed_tag.js';
 import { Tag } from '../logs/tag.js';
 import type { InboxBucket } from '../messaging/inbox_bucket.js';
@@ -181,6 +181,14 @@ describe('ArchiverApiSchema', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toHaveLength(1);
     expect(result[0][0].txHash).toBeDefined();
+
+    // The archiver is only ever handed an anchor the node has already reduced to a hash, and says so.
+    await expect(
+      context.client.getPrivateLogsByTags({
+        tags: [SiloedTag.random()],
+        referenceBlock: { number: BlockNumber(1), hash: BlockHash.random() } as unknown as BlockHash,
+      }),
+    ).rejects.toThrow();
   });
 
   it('getPublicLogsByTags', async () => {
@@ -612,11 +620,11 @@ class MockArchiver implements ArchiverApi {
     expect(blockNumber).toEqual(BlockNumber(1));
     return Promise.resolve(`0x01`);
   }
-  getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
+  getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]> {
     expect(Array.isArray(query.tags)).toBe(true);
     return Promise.resolve([query.tags.map(() => randomLogResult())]);
   }
-  getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {
+  getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]> {
     expect(query.contractAddress).toBeInstanceOf(AztecAddress);
     expect(Array.isArray(query.tags)).toBe(true);
     return Promise.resolve([query.tags.map(() => randomLogResult())]);
