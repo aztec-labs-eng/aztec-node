@@ -179,10 +179,10 @@ export class Poseidon2Sponge {
     const state = await poseidon2AbsorbChain(this.state, chain);
     // ts doesn't understand that the above always gives 4
     this.state = [state[0], state[1], state[2], state[3]];
-    // Noir's per-field absorb leaves each cache slot holding the last field that passed through it, including slots at
-    // or beyond the new cacheSize. Circuits compare whole sponges, so those slots must match too. Position i of the
-    // combined [...cache.slice(0, cacheSize), ...fields] sequence lands in slot i % rate, and the last rate positions
-    // cover every slot.
+    // This branch processes at least one full block, so Noir's per-field absorb would have written every cache slot.
+    // Slots at or beyond the new cacheSize retain values from the previous block; circuits compare those slots too.
+    // Position i of [...cache.slice(0, cacheSize), ...fields] lands in slot i % rate. The last rate positions recover
+    // the last value written to every slot.
     for (let i = total - rate; i < total; i++) {
       this.cache[i % rate] = i < this.cacheSize ? chain[i] : fields[i - this.cacheSize];
     }

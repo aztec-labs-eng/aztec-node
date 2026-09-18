@@ -1,0 +1,19 @@
+[1mdiff --git a/yarn-project/blob-lib/src/sponge_blob.ts b/yarn-project/blob-lib/src/sponge_blob.ts[m
+[1mindex ca4eb371340..629b64015b6 100644[m
+[1m--- a/yarn-project/blob-lib/src/sponge_blob.ts[m
+[1m+++ b/yarn-project/blob-lib/src/sponge_blob.ts[m
+[36m@@ -179,10 +179,10 @@[m [mexport class Poseidon2Sponge {[m
+     const state = await poseidon2AbsorbChain(this.state, chain);[m
+     // ts doesn't understand that the above always gives 4[m
+     this.state = [state[0], state[1], state[2], state[3]];[m
+[31m-    // Noir's per-field absorb leaves each cache slot holding the last field that passed through it, including slots at[m
+[31m-    // or beyond the new cacheSize. Circuits compare whole sponges, so those slots must match too. Position i of the[m
+[31m-    // combined [...cache.slice(0, cacheSize), ...fields] sequence lands in slot i % rate, and the last rate positions[m
+[31m-    // cover every slot.[m
+[32m+[m[32m    // This branch processes at least one full block, so Noir's per-field absorb would have written every cache slot.[m
+[32m+[m[32m    // Slots at or beyond the new cacheSize retain values from the previous block; circuits compare those slots too.[m
+[32m+[m[32m    // Position i of [...cache.slice(0, cacheSize), ...fields] lands in slot i % rate. The last rate positions recover[m
+[32m+[m[32m    // the last value written to every slot.[m
+     for (let i = total - rate; i < total; i++) {[m
+       this.cache[i % rate] = i < this.cacheSize ? chain[i] : fields[i - this.cacheSize];[m
+     }[m
