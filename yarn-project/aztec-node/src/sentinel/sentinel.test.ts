@@ -8,6 +8,7 @@ import type { P2PClient } from '@aztec-labs/p2p';
 import { OffenseType, WANT_TO_SLASH_EVENT, type WantToSlashArgs } from '@aztec-labs/slasher';
 import {
   CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
   GENESIS_BLOCK_HEADER_HASH,
   L2Block,
   type L2BlockSource,
@@ -143,7 +144,12 @@ describe('sentinel', () => {
      * a checkpoint that has landed on L1 covering the slot.
      */
     const mineCheckpointForSlot = (checkpoint: Checkpoint, checkpointAttestations: CommitteeAttestation[] = []) => {
-      const published = new PublishedCheckpoint(checkpoint, L1PublishedData.random(), checkpointAttestations);
+      const published = new PublishedCheckpoint(
+        checkpoint,
+        L1PublishedData.random(),
+        checkpointAttestations,
+        CommitteeAttestationsAndSigners.packAttestations(checkpointAttestations),
+      );
       const checkpointSlot = checkpoint.header.slotNumber;
       archiver.getCheckpoint.mockImplementation(query =>
         Promise.resolve('slot' in query && query.slot === checkpointSlot ? published : undefined),

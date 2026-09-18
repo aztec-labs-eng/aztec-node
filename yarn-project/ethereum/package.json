@@ -9,6 +9,7 @@
     "./config": "./dest/config.js",
     "./constants": "./dest/constants.js",
     "./contracts": "./dest/contracts/index.js",
+    "./contracts/committee-attestations": "./dest/contracts/committee_attestations.js",
     "./deploy-aztec-l1-contracts": "./dest/deploy_aztec_l1_contracts.js",
     "./deploy-l1-contract": "./dest/deploy_l1_contract.js",
     "./contracts/registry": "./dest/contracts/registry.js",

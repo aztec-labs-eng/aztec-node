@@ -8,7 +8,7 @@ import { ProverBrokerConfig, createAndStartProvingBroker } from '@aztec-labs/pro
 import { getLastSiblingPath } from '@aztec-labs/prover-client/helpers';
 import { type CheckpointSubTreeProofs, ChonkCache } from '@aztec-labs/prover-client/orchestrator';
 import { AvmSimulatorPool, PublicProcessorFactory } from '@aztec-labs/simulator/server';
-import type { L2Block } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestationsAndSigners, type L2Block } from '@aztec-labs/stdlib/block';
 import { getEpochAtSlot, getSlotRangeForEpoch } from '@aztec-labs/stdlib/epoch-helpers';
 import type { ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
@@ -173,12 +173,15 @@ async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logg
     MerkleTreeId.ARCHIVE,
     worldState.getSnapshot(BlockNumber(checkpoint.blocks[0].number - 1)),
   );
-  const attestations = checkpoint.number === jobData.checkpoints.at(-1)!.number ? jobData.attestations : [];
+  const isLastCheckpoint = checkpoint.number === jobData.checkpoints.at(-1)!.number;
+  const verbatimAttestations = isLastCheckpoint
+    ? jobData.verbatimAttestations
+    : CommitteeAttestationsAndSigners.packAttestations([]);
   return new CheckpointProver(
     {
       checkpoint,
       epochNumber: jobData.epochNumber,
-      attestations,
+      verbatimAttestations,
       previousBlockHeader,
       l1ToL2Messages,
       previousInboxRollingHash,

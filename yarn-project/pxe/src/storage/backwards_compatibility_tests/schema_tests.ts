@@ -11,7 +11,13 @@ import { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
 import { type ContractArtifact, EventSelector, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
 import { PublicDataWrite, RevertCode } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { BlockHash, Body, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import {
+  BlockHash,
+  Body,
+  CommitteeAttestationsAndSigners,
+  GENESIS_BLOCK_HEADER_HASH,
+  L2Block,
+} from '@aztec-labs/stdlib/block';
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { CompleteAddress, SerializableContractInstance } from '@aztec-labs/stdlib/contract';
 import { GasFees } from '@aztec-labs/stdlib/gas';
@@ -302,6 +308,7 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
         ),
         new L1PublishedData(59n, 61n, new Fr(67n).toString()),
         [],
+        CommitteeAttestationsAndSigners.packAttestations([]),
       );
 
       // `'blocks-added'` writes to `pxe_l2_tips` (proposed tag) and `pxe_l2_block_hashes`.

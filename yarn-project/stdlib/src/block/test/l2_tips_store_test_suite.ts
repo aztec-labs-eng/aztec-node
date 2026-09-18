@@ -3,6 +3,7 @@ import { times } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type CheckpointId,
+  CommitteeAttestationsAndSigners,
   GENESIS_CHECKPOINT_HEADER_HASH,
   L2Block,
   type L2BlockId,
@@ -91,7 +92,12 @@ export function testL2TipsStore(makeTipsStore: () => Promise<L2TipsStore>) {
       blockToCheckpoint.set(block.number, checkpointNumber);
     }
 
-    return new PublishedCheckpoint(checkpoint, L1PublishedData.random(), []);
+    return new PublishedCheckpoint(
+      checkpoint,
+      L1PublishedData.random(),
+      [],
+      CommitteeAttestationsAndSigners.packAttestations([]),
+    );
   };
 
   /** Creates a thin chain-checkpointed event carrying the block + checkpoint ids of the checkpoint's last block. */

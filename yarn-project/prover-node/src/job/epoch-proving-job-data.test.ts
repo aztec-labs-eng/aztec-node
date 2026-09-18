@@ -2,7 +2,7 @@ import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-ty
 import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
 
@@ -31,7 +31,7 @@ describe('EpochProvingJobData', () => {
       },
       previousBlockHeader: BlockHeader.random(),
       previousInboxRollingHash: Fr.random(),
-      attestations: times(3, CommitteeAttestation.random),
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(times(3, CommitteeAttestation.random)),
     };
 
     const serialized = serializeEpochProvingJobData(jobData);

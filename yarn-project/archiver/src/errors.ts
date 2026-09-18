@@ -283,3 +283,22 @@ export class CannotOverwriteCheckpointedBlockError extends Error {
     this.name = 'CannotOverwriteCheckpointedBlockError';
   }
 }
+
+/**
+ * Thrown when a checkpoint is about to be written with a packed attestations tuple that does not decode.
+ * The store keeps only the tuple and decodes it on read, so writing an undecodable one would leave a
+ * checkpoint that can be written but never read back.
+ */
+export class UndecodableCheckpointAttestationsError extends Error {
+  constructor(
+    public readonly checkpointNumber: number,
+    public readonly committeeSize: number,
+    public override readonly cause: unknown,
+  ) {
+    super(
+      `Cannot store checkpoint ${checkpointNumber}: its attestations tuple does not decode for a committee of ` +
+        `${committeeSize} (${cause instanceof Error ? cause.message : String(cause)})`,
+    );
+    this.name = 'UndecodableCheckpointAttestationsError';
+  }
+}

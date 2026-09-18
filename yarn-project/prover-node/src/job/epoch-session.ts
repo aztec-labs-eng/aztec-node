@@ -340,10 +340,12 @@ export class EpochSession implements Traceable {
     checkpointCount: number,
     timer: Timer,
   ): Promise<void> {
-    // Attestations come from the highest-numbered registered checkpoint — that's the one
-    // whose attestations the L1 contract checks for the proven range.
+    // Attestations come from the highest-numbered registered checkpoint — that's the one whose attestations
+    // the L1 contract checks for the proven range. They go out as the tuple that was posted to L1, byte for
+    // byte: the rollup checks the submission against the `attestationsHash` it stored at propose time, and
+    // repacking the decoded attestations does not reproduce those bytes.
     const lastCheckpoint = this.checkpoints[this.checkpoints.length - 1];
-    const attestations = lastCheckpoint.attestations.map(a => a.toViem());
+    const attestations = lastCheckpoint.verbatimAttestations;
     const epochSizeBlocks = this.checkpoints.reduce((acc, c) => acc + c.checkpoint.blocks.length, 0);
     const epochSizeTxs = this.checkpoints.reduce(
       (acc, c) => acc + c.checkpoint.blocks.reduce((bAcc, block) => bAcc + block.body.txEffects.length, 0),

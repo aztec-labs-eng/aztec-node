@@ -21,7 +21,12 @@ import { TestTxProvider } from '@aztec-labs/p2p/test-helpers';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { AvmSimulatorPool } from '@aztec-labs/simulator/server';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { CommitteeAttestation, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import {
+  CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
+  GENESIS_BLOCK_HEADER_HASH,
+  L2Block,
+} from '@aztec-labs/stdlib/block';
 import { CheckpointReexecutionTracker, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
@@ -546,10 +551,12 @@ describe('ValidatorClient Integration', () => {
       );
 
       // Publish checkpoint 1 to both archivers
+      const checkpoint1Attestations = [CommitteeAttestation.random()];
       const publishedCheckpoint1 = PublishedCheckpoint.from({
         checkpoint: checkpoint1,
         l1: new L1PublishedData(1n, BigInt(Math.floor(Date.now() / 1000)), Buffer32.random().toString()),
-        attestations: [CommitteeAttestation.random()],
+        attestations: checkpoint1Attestations,
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(checkpoint1Attestations),
       });
       await attestor.archiver.addCheckpoints([publishedCheckpoint1]);
       await proposer.archiver.addCheckpoints([publishedCheckpoint1]);
