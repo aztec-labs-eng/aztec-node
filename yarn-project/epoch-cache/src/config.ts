@@ -3,7 +3,12 @@ import { type L1ReaderConfig, getL1ReaderConfigFromEnv } from '@aztec-labs/ether
 
 export type EpochCacheConfig = Pick<
   L1ReaderConfig & L1ContractsConfig,
-  'l1RpcUrls' | 'l1ChainId' | 'viemPollingIntervalMS' | 'ethereumSlotDuration' | 'l1HttpTimeoutMS'
+  | 'l1RpcUrls'
+  | 'l1ChainId'
+  | 'viemPollingIntervalMS'
+  | 'ethereumSlotDuration'
+  | 'l1HttpTimeoutMS'
+  | 'maxL1LogsWindowSize'
 >;
 
 export function getEpochCacheConfigEnvVars(): EpochCacheConfig {

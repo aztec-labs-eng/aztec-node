@@ -77,7 +77,10 @@ export async function createArchiver(
   const httpTimeout = config.l1HttpTimeoutMS;
   const publicClient = createPublicClient({
     chain: chain.chainInfo,
-    transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: httpTimeout }),
+    transport: makeL1HttpTransport(config.l1RpcUrls, {
+      timeout: httpTimeout,
+      maxLogsWindowSize: config.maxL1LogsWindowSize,
+    }),
     pollingInterval: config.viemPollingIntervalMS,
   });
 
@@ -85,7 +88,10 @@ export async function createArchiver(
   const debugRpcUrls = config.l1DebugRpcUrls.length > 0 ? config.l1DebugRpcUrls : config.l1RpcUrls;
   const debugClient = createPublicClient({
     chain: chain.chainInfo,
-    transport: makeL1HttpTransport(debugRpcUrls, { timeout: httpTimeout }),
+    transport: makeL1HttpTransport(debugRpcUrls, {
+      timeout: httpTimeout,
+      maxLogsWindowSize: config.maxL1LogsWindowSize,
+    }),
     pollingInterval: config.viemPollingIntervalMS,
   }) as ViemPublicDebugClient;
 
