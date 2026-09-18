@@ -15,7 +15,7 @@ File: `proposal_validator.ts`
 | 1 | **Slot check**: must be `currentSlot` or `nextSlot`. Previous slot within 500ms tolerance: IGNORE. | REJECT | HighToleranceError |
 | 2 | **Signature**: `getSender()` must recover a valid address. If `signedTxs` present, its recovered sender must match. | REJECT | MidToleranceError |
 | 3 | **Txs permitted**: if `disableTransactions`, must have 0 txHashes and 0 embedded txs | REJECT | MidToleranceError |
-| 4 | **Max txs**: `txHashes.length <= maxTxsPerBlock` | REJECT | MidToleranceError |
+| 4 | **Max txs**: `txHashes.length <= MAX_TXS_PER_CHECKPOINT` (based on blob capacity), further restricted by `maxTxsPerBlock` when configured. Also applies to checkpoint-embedded blocks. | REJECT | MidToleranceError |
 | 5 | **Embedded txs in txHashes**: every embedded tx's hash must appear in `txHashes` | REJECT | MidToleranceError |
 | 6 | **Proposer check**: signer must match expected proposer for slot (skipped if committee size = 0) | REJECT | MidToleranceError |
 | 7 | **Tx hash integrity**: each embedded tx's recomputed hash must match declared hash | REJECT | LowToleranceError |
@@ -120,4 +120,3 @@ Determines whether the validator signs an attestation.
 ### Gossipsub Topic Scoring
 
 P3 enabled with expected rate of 1 message per slot. P4 weight = -20, max P3 penalty = -34 per topic.
-
