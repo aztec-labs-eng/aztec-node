@@ -40,7 +40,7 @@ jest.setTimeout(TIMEOUT);
 // End-to-end proof pipeline: client proves transactions, submits to node, sequencer builds blocks,
 // prover node generates epoch proofs, and L1 verifies them. FullProverTest uses real BB proofs when
 // FAKE_PROOFS=0 (CI_FULL only); fake proofs otherwise. Setup: PIPELINING_SETUP_OPTS (ethSlot=4s,
-// aztecSlot=12s). Timeout is 45 min real / 15 min fake. Time-warp: cheatCodes.rollup.advanceToNextEpoch.
+// aztecSlot=12s). Timeout is 45 min real / 15 min fake. Time-warp: FullProverTest.advanceToNextEpochSafely.
 // jest.setTimeout(TIMEOUT) is 45 min for real proofs, 15 min for fake proofs.
 describe('single-node/prover/full', () => {
   const COINBASE_ADDRESS = EthAddress.random();
@@ -89,6 +89,10 @@ describe('single-node/prover/full', () => {
     'makes both public and private transfers',
     async () => {
       logger.info(`Starting test for public and private transfer`);
+
+      // Anchoring the PXEs on the checkpointed tip removes the incidental way a stalled sequencer used
+      // to surface here, so checkpoint health is asserted outright over the whole test, drain included.
+      const watch = t.watchSequencerEvents(t.getSequencers(t.nodes));
 
       const balance = await feeJuiceToken.read.balanceOf([feeJuicePortal.address]);
       logger.info(`Balance of fee juice token: ${balance}`);
@@ -141,14 +145,17 @@ describe('single-node/prover/full', () => {
       tokenSim.transferPrivate(sender, recipient, privateSendAmount);
       tokenSim.transferPublic(sender, recipient, publicSendAmount);
 
-      // Warp to the next epoch
+      // Snapshot the reward and proven-checkpoint baselines before the epoch advance: draining the
+      // sequencer takes at least a slot, and a proof landing during that drain would fold the very
+      // increase the assertions below look for into the "before" values.
       const epoch = await cheatCodes.rollup.getEpoch();
-      logger.info(`Advancing from epoch ${epoch} to next epoch`);
-      await cheatCodes.rollup.advanceToNextEpoch();
-
       const rewardsBeforeCoinbase = await rollup.getSequencerRewards(COINBASE_ADDRESS);
       const rewardsBeforeProver = await rollup.getSpecificProverRewardsForEpoch(BigInt(epoch), t.proverAddress);
       const oldProvenCheckpointNumber = await rollup.getProvenCheckpointNumber();
+
+      // Warp to the next epoch
+      logger.info(`Advancing from epoch ${epoch} to next epoch`);
+      await t.advanceToNextEpochSafely();
 
       // And wait for the first pair of txs to be proven
       logger.info(`Awaiting proof for the previous epoch`);
@@ -189,6 +196,9 @@ describe('single-node/prover/full', () => {
 
       // May be less than totalRewards due to burn.
       expect(sequencerGain + proverGain).toBeLessThanOrEqual(totalRewards);
+
+      watch.stop();
+      t.assertNoFailuresFromSequencers(watch.failEvents);
     },
     TIMEOUT,
   );
@@ -311,7 +321,7 @@ describe('single-node/prover/full', () => {
     // Warp to the next epoch
     const epoch = await cheatCodes.rollup.getEpoch();
     logger.info(`Advancing from epoch ${epoch} to next epoch`);
-    await cheatCodes.rollup.advanceToNextEpoch();
+    await t.advanceToNextEpochSafely();
 
     // And wait for the first pair of txs to be proven
     logger.info(`Awaiting proof for the previous epoch`);
@@ -423,10 +433,11 @@ describe('single-node/prover/full', () => {
       // Flag the valid transfer on the token simulator
       tokenSim.transferPrivate(sender, recipient, sendAmount);
 
-      // Warp to the next epoch
+      // Warp to the next epoch. The sequencer is paused and drained first, so the flood of invalid txs
+      // outstanding here cannot be confused with a healthy proposal being stranded by the warp.
       const epoch = await cheatCodes.rollup.getEpoch();
       logger.info(`Advancing from epoch ${epoch} to next epoch`);
-      await cheatCodes.rollup.advanceToNextEpoch();
+      await t.advanceToNextEpochSafely();
 
       const results = await txPromises;
 

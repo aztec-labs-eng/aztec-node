@@ -411,7 +411,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
   public watchNodeSequencerEvents(
     nodes: AztecNodeService[],
     getMetadata: (i: number) => Record<string, any> = i => ({ validator: this.validators[i].attester }),
-  ): { failEvents: TrackedSequencerEvent[]; stateChanges: TrackedSequencerEvent[] } {
+  ): { failEvents: TrackedSequencerEvent[]; stateChanges: TrackedSequencerEvent[]; stop: () => void } {
     return this.watchSequencerEvents(this.getSequencers(nodes), getMetadata);
   }
 
