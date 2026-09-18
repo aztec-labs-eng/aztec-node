@@ -285,9 +285,8 @@ Look for log entries related to:
 **Issue**: `eth_getLogs` query exceeds limits
 
 **Solution**:
-- Reduce block range in queries
-- Use archive node with higher limits
-- Implement chunked log retrieval
+- Set `MAX_L1_LOGS_WINDOW_SIZE` to the largest block range your provider accepts (default `10000`). The node splits any wider query into consecutive requests of at most that many blocks.
+- Use an archive node with higher limits
 
 **Issue**: Transaction replacement failures
 
