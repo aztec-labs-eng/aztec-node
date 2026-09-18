@@ -90,6 +90,8 @@ describe('single-node/sequencer/safe_epoch_warp', () => {
     // the loop before any further tx is sent, leaving the delayer armed and nothing lost. This setup
     // runs with slashing off and no governance proposals, so the sequencer's only L1 tx is the
     // checkpoint proposal.
+    // The advance is called right after, with an L2 slot of headroom before the dropped checkpoint's
+    // slot passes and the archiver prunes its blocks out of the tracked set.
     const delayer = test.context.sequencerDelayer!;
     delayer.cancelNextTx();
     await retryUntil(() => delayer.getCancelledTxs().length > 0, 'the dropped checkpoint publication', 180, 0.1);

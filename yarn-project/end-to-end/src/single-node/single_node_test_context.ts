@@ -1095,7 +1095,10 @@ export class SingleNodeTestContext {
    * question.
    *
    * Any non-benign sequencer failure recorded while draining also blocks the warp: warping on top of an
-   * unhealthy chain buries the cause under the prune that follows.
+   * unhealthy chain buries the cause under the prune that follows. That makes this helper suitable only
+   * where uninterrupted, successful production is the expectation — it is the wrong tool for a recovery
+   * scenario, where `proposer-rollup-check-failed` (transient archiver mismatch) and
+   * `pipelined-checkpoint-discarded` (an unexpected parent arriving) are part of the behavior under test.
    *
    * The tracked set is the proposed tip sampled either side of the drain plus every `block-proposed`
    * seen in between. `block-proposed` fires before the proposal reaches the archiver, so a block built
@@ -1165,9 +1168,10 @@ export class SingleNodeTestContext {
             this.logger.warn(`Resuming ${sequencers.length} sequencers after the epoch advance`);
             await Promise.all(sequencers.map(sequencer => sequencer.start()));
           } else {
-            // The pause never finished draining, so its submissions are still in flight. Restarting the
-            // poll loop on top of that would race them; leave the sequencers down for teardown.
-            this.logger.error(`Leaving sequencers paused: the drain did not finish`);
+            // Either the pause never started or it never finished draining, so submissions may still be
+            // in flight. Restarting the poll loop on top of them would race; leave this to teardown,
+            // whose `stop()` interrupts and awaits them.
+            this.logger.error(`Not resuming sequencers: the pause did not complete`);
           }
         } catch (err) {
           // Only surface a resume failure when the advance itself succeeded; otherwise it would replace
