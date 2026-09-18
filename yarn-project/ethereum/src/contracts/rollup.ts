@@ -11,7 +11,6 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
-import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import chunk from 'lodash.chunk';
 import {
@@ -32,7 +31,6 @@ import {
   hexToBigInt,
   keccak256,
 } from 'viem';
-import { z } from 'zod';
 
 import { getPublicClient } from '../client.js';
 import type { DeployAztecL1ContractsReturnType } from '../deploy_aztec_l1_contracts.js';
@@ -41,6 +39,7 @@ import type { L1ReaderConfig } from '../l1_reader.js';
 import type { L1TxRequest, L1TxUtils, ReadOnlyL1TxUtils } from '../l1_tx_utils/index.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError, mergeAbis } from '../utils.js';
+import type { ViemCommitteeAttestations } from './committee_attestations.js';
 import { GSEContract } from './gse.js';
 import type { L1EventLog } from './log.js';
 import { SlasherContract } from './slasher_contract.js';
@@ -48,21 +47,12 @@ import { SlashingProposerContract } from './slashing_proposer.js';
 import { checkBlockTag } from './utils.js';
 import { type WatchContractEventOptions, watchContractEvent } from './watch_event.js';
 
+export { type ViemCommitteeAttestations, ViemCommitteeAttestationsSchema } from './committee_attestations.js';
+
 export type ViemCommitteeAttestation = {
   addr: `0x${string}`;
   signature: ViemSignature;
 };
-
-export type ViemCommitteeAttestations = {
-  signatureIndices: `0x${string}`;
-  signaturesOrAddresses: `0x${string}`;
-};
-
-/** Zod schema for the raw packed `CommitteeAttestations` viem tuple (two 0x-prefixed hex strings). */
-export const ViemCommitteeAttestationsSchema: ZodFor<ViemCommitteeAttestations> = z.object({
-  signatureIndices: schemas.HexStringWith0x,
-  signaturesOrAddresses: schemas.HexStringWith0x,
-});
 
 /**
  * ABI definition of the `CommitteeAttestations` struct, read off the `propose` function's `_attestations`

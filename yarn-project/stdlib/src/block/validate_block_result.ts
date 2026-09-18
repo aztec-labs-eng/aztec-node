@@ -1,4 +1,7 @@
-import { type ViemCommitteeAttestations, ViemCommitteeAttestationsSchema } from '@aztec-labs/ethereum/contracts';
+import {
+  type ViemCommitteeAttestations,
+  ViemCommitteeAttestationsSchema,
+} from '@aztec-labs/ethereum/contracts/committee-attestations';
 import { EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';

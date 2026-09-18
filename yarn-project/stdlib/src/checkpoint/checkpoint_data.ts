@@ -1,4 +1,7 @@
-import { type ViemCommitteeAttestations, ViemCommitteeAttestationsSchema } from '@aztec-labs/ethereum/contracts';
+import {
+  type ViemCommitteeAttestations,
+  ViemCommitteeAttestationsSchema,
+} from '@aztec-labs/ethereum/contracts/committee-attestations';
 import {
   BlockNumber,
   BlockNumberSchema,

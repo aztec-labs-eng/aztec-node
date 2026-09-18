@@ -1,5 +1,8 @@
 // Ignoring import issue to fix portable inferred type issue in zod schema
-import { type ViemCommitteeAttestations, ViemCommitteeAttestationsSchema } from '@aztec-labs/ethereum/contracts';
+import {
+  type ViemCommitteeAttestations,
+  ViemCommitteeAttestationsSchema,
+} from '@aztec-labs/ethereum/contracts/committee-attestations';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { randomBigInt } from '@aztec-labs/foundation/crypto/random';
 import { schemas } from '@aztec-labs/foundation/schemas';
