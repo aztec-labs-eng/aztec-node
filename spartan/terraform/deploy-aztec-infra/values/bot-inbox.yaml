@@ -1,0 +1,40 @@
+bot:
+  replicaCount: 1
+  botMode: "inbox"
+  txIntervalSeconds: 300
+  # Inbox mode rejects followChain NONE outright; PROPOSED keeps the outstanding-message cap draining.
+  followChain: "PROPOSED"
+  feePaymentMethod: "fee_juice"
+  # Keep reporting after failures, but retain an unhealthy signal until a later successful step.
+  maxErrors: 3
+  stopIfUnhealthy: false
+  botPrivateKey: "0xcafe04"
+  l1ToL2SeedCount: 512
+  l1ToL2TimeoutSeconds: 3600
+  inboxMessagesPerBatch: 4
+  inboxConsumeMode: "mixed"
+  # 0 disables the daily full-bucket saturation batch, which is one atomic 257-message L1 transaction.
+  inboxSaturationIntervalSeconds: 0
+  # Left empty on purpose so the wallet estimates: the shared limits are tuned for the transfer bot's circuit.
+  daGasLimit: ""
+  l2GasLimit: ""
+
+  node:
+    env:
+      OTEL_SERVICE_NAME: "bot-inbox"
+
+  persistence:
+    enabled: true
+  statefulSet:
+    volumeClaimTemplates:
+      - metadata:
+          name: data
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 2Gi
+
+  service:
+    headless:
+      enabled: true
