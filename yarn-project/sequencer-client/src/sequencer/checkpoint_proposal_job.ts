@@ -404,6 +404,15 @@ export class CheckpointProposalJob implements Traceable {
       // Wait for the previous checkpoint to land on L1 before submitting, so we can check it
       // matches the proposed checkpoint we used as parent, and has valid attestations.
       if (signedAttestations && (await this.waitForValidParentCheckpointOnL1())) {
+        // Wait for the window the propose is actually sent in before resolving anything from L1. The Inbox bucket
+        // hint the preflight returns is an unsigned bucket sequence, and an L1 reorg that re-partitions the Inbox
+        // renumbers buckets without changing a single message: a hint resolved a slot earlier would then name a
+        // bucket that no longer ends where this checkpoint does, and `propose` reverts on a checkpoint that is
+        // otherwise still perfectly publishable.
+        await this.publisher.waitForTargetSlot(this.targetSlot);
+        if (this.interrupted) {
+          throw new SequencerInterruptedError();
+        }
         // Attestation collection took seconds and L1 may have moved: re-run the integrated header and Inbox
         // preflight against L1's current state, and take the bucket hint from it.
         const bucketHint = await this.preflightBeforePublication(checkpoint.header, streamingState);
