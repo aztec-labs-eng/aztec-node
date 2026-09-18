@@ -23,6 +23,7 @@ import { testSpan } from '../fixtures/timing.js';
 import { getPrivateKeyFromIndex } from '../fixtures/utils.js';
 import { NO_REORG_SUBMISSION_EPOCHS } from '../single-node/setup.js';
 import {
+  type NodeTestDeps,
   SingleNodeTestContext,
   type SingleNodeTestOpts,
   type TrackedSequencerEvent,
@@ -40,6 +41,7 @@ export {
   MULTI_VALIDATOR_BLOCK_PRODUCTION_TIMING,
   WIDE_SLOT_TIMING,
   type BlockProposedEvent,
+  type NodeTestDeps,
   type TrackedSequencerEvent,
   type SingleNodeTestOpts,
 } from '../single-node/single_node_test_context.js';
@@ -226,6 +228,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
     opts: Partial<AztecNodeConfig> & {
       dontStartSequencer?: boolean;
       slashingProtectionDb?: SlashingProtectionDatabase;
+      testDeps?: NodeTestDeps;
     } = {},
   ) {
     this.logger.warn('Creating and syncing a validator node...');
@@ -254,7 +257,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
    */
   public createValidatorNodeAt(
     index: number,
-    opts: Partial<AztecNodeConfig> & { dontStartSequencer?: boolean } = {},
+    opts: Partial<AztecNodeConfig> & { dontStartSequencer?: boolean; testDeps?: NodeTestDeps } = {},
   ): Promise<AztecNodeService> {
     return this.createValidatorNode([this.privateKeyAt(index)], opts);
   }

@@ -34,6 +34,7 @@ import {
   MULTI_VALIDATOR_BLOCK_PRODUCTION_TIMING,
   MultiNodeTestContext,
   type MultiNodeTestOpts,
+  type NodeTestDeps,
   type RegisteredValidator,
   type TrackedSequencerEvent,
   WIDE_SLOT_TIMING,
@@ -77,7 +78,7 @@ export type BlockProductionWithProverFixture = {
 };
 
 /** Per-validator node config, or a function deriving it from the validator's 0-based index. */
-type ValidatorNodeOpts = Partial<AztecNodeConfig> & { dontStartSequencer?: boolean };
+type ValidatorNodeOpts = Partial<AztecNodeConfig> & { dontStartSequencer?: boolean; testDeps?: NodeTestDeps };
 
 /** Shared spine: builds N mock-gossip validators, sets up the context, spawns one node per validator. */
 async function buildValidatorCluster(opts: {
@@ -150,11 +151,22 @@ export async function setupBlockProductionWithProver(opts: {
    * blobs during L1 sync while its peers promote their own proposed checkpoints and skip the blob fetch.
    */
   disableCheckpointPromotionOnFirstNode?: boolean;
+  /**
+   * In-process test dependencies for the validator node at each 0-based index. Each node gets its own object, so a
+   * test can tell one validator's observations from another's and hold exactly one proposer.
+   */
+  testDeps?: (index: number) => NodeTestDeps;
+  /**
+   * Target committee size. {@link WIDE_SLOT_TIMING} picks 3 of the {@link NODE_COUNT} validators, so a test that
+   * needs a specific node to be able to attest has to widen it rather than assume eligibility.
+   */
+  aztecTargetCommitteeSize?: number;
 }): Promise<BlockProductionWithProverFixture> {
   const {
     syncChainTip = 'checkpointed',
     clearInheritedCoinbase = false,
     disableCheckpointPromotionOnFirstNode = false,
+    testDeps,
     ...setupOpts
   } = opts;
 
@@ -177,6 +189,7 @@ export async function setupBlockProductionWithProver(opts: {
       ...(disableCheckpointPromotionOnFirstNode && index === 0
         ? { skipPromoteProposedCheckpointDuringL1Sync: true }
         : {}),
+      ...(testDeps ? { testDeps: testDeps(index) } : {}),
     }),
   });
 
@@ -197,13 +210,22 @@ export async function setupBlockProductionWithProver(opts: {
   return { test, context, logger, rollup, archiver, validators, nodes, contract, wallet, from, failEvents };
 }
 
-/** Waits until a specific multi-block checkpoint is proven, verifying that proving succeeds with multiple-blocks-per-slot. */
+/**
+ * Waits until a specific multi-block checkpoint is proven, verifying that proving succeeds with
+ * multiple-blocks-per-slot.
+ *
+ * `expectedFailure` lets a test that deliberately abandons a slot name exactly which sequencer failures it has
+ * already asserted on. Everything it does not match still has to be absent, so an unexpected failure is never
+ * swallowed — the alternative, clearing the list, would hide every other failure with it.
+ */
 export async function waitForProvenCheckpoint(
   fixture: BlockProductionWithProverFixture,
   targetCheckpoint: CheckpointNumber,
+  opts: { expectedFailure?: (event: TrackedSequencerEvent) => boolean } = {},
 ) {
   const { test, nodes, logger, failEvents } = fixture;
-  test.assertNoFailuresFromSequencers(failEvents);
+  const unexpected = opts.expectedFailure ? failEvents.filter(event => !opts.expectedFailure!(event)) : failEvents;
+  test.assertNoFailuresFromSequencers(unexpected);
 
   logger.warn(`Stopping validator sequencers before waiting for checkpoint ${targetCheckpoint} to be proven`);
   await Promise.all(nodes.map(n => n.getSequencer()?.stop()));
@@ -264,6 +286,7 @@ export {
   WIDE_SLOT_TIMING,
   MULTI_VALIDATOR_BLOCK_PRODUCTION_TIMING,
   MultiNodeTestContext,
+  type NodeTestDeps,
   type RegisteredValidator,
   type TrackedSequencerEvent,
   buildMockGossipValidators,

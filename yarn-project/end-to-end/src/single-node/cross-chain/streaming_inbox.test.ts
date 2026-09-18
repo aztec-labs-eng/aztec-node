@@ -166,7 +166,12 @@ describe('single-node/cross-chain/streaming_inbox', () => {
       const parentWitness =
         below === 0 ? undefined : await aztecNode.getL1ToL2MessageMembershipWitness(BlockNumber(below), msgHash);
       if (data !== undefined && witness !== undefined && witness[0] === leafIndex && parentWitness === undefined) {
-        return { blockNumber, checkpointNumber: data.checkpointNumber, index: data.indexWithinCheckpoint };
+        return {
+          blockNumber,
+          blockHash: data.blockHash,
+          checkpointNumber: data.checkpointNumber,
+          index: data.indexWithinCheckpoint,
+        };
       }
       log.warn(`Block ${blockNumber} did not confirm as the one inserting ${msgHash.toString()}; searching again`, {
         attempt,
@@ -190,6 +195,26 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     getL1ToL2MessageIndex: (msgHash: Fr) => aztecNode.getL1ToL2MessageIndex(msgHash),
     getBlockData: () => aztecNode.getBlockData(blockNumber),
   });
+
+  /**
+   * A node view for a background readiness poll that stops answering once the test is done with it. `retryUntil`
+   * propagates a thrown error, so cancelling makes an in-flight `waitForL1ToL2MessageReady` settle promptly instead
+   * of polling a node the fixture is about to tear down.
+   */
+  const cancellableNodeView = () => {
+    let cancelled = false;
+    const refuse = () => Promise.reject(new Error('background readiness wait was cancelled by the test'));
+    return {
+      cancel: () => {
+        cancelled = true;
+      },
+      view: {
+        getL1ToL2MessageIndex: (msgHash: Fr) => (cancelled ? refuse() : aztecNode.getL1ToL2MessageIndex(msgHash)),
+        getBlockData: (query?: Parameters<AztecNode['getBlockData']>[0]) =>
+          cancelled ? refuse() : aztecNode.getBlockData(query!),
+      },
+    };
+  };
 
   /** Waits until the prover node has proven through `blockNumber`. */
   const waitForProvenThrough = async (blockNumber: BlockNumber) => {
@@ -232,11 +257,16 @@ describe('single-node/cross-chain/streaming_inbox', () => {
   // sees it, which is the only barrier from which "the message did not exist for the parent and does for the
   // inserting block" is a statement about committed state rather than about when the test happened to look.
   //
-  // While held the test sends the L1 message, watches the node index it without that making it ready, starts a
-  // readiness wait against the proven tip that is demonstrably behind, and queues a public consume. Releasing lets
-  // block one insert the message and execute the consume against its own post-bundle message root, so the same
-  // block both inserts and spends it. The pending proven-tip wait then has to resolve on its own once the prover
-  // node proves the covering checkpoint.
+  // Everything expensive is prepared before the hold: this suite is the only sender on this Inbox, so the compact
+  // index the message will take is known ahead of time and the public consume can be proved against it while
+  // nothing is holding a live proposer. The hold itself then only does bounded, event-driven work — send and mine
+  // the message, watch the node index it without that making it ready, start a readiness wait against a proven tip
+  // that is demonstrably behind, and queue the already-proved consume — so the budget it spends is the budget of
+  // those L1 round trips and not of a client-side proof.
+  //
+  // Releasing lets block one insert the message and execute the consume against its own post-bundle message root,
+  // so the same block both inserts and spends it. The pending proven-tip wait then has to resolve on its own once
+  // the prover node proves the covering checkpoint.
   it('streams a message into a non-first block, consumes it there, and proves the checkpoint', async () => {
     const l1Account = t.ethAccount;
     const [secret, secretHash] = await generateClaimSecret();
@@ -245,125 +275,152 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     // are not an artifact of the helper answering true for everything.
     expect(await isL1ToL2MessageReady(aztecNode, Fr.random())).toBe(false);
 
-    // Hold the first block of a checkpoint that still has sub-slots left to build the message into.
-    const armed = gate.arm(
-      event => event.phase === 'block-ready-to-broadcast' && event.indexWithinCheckpoint === 0 && event.isStandalone,
+    // Nothing but this test sends to the Inbox, so the index the message will take is the Inbox's current total.
+    // Proving the consume against it here keeps the client-side proof out of the hold entirely; the send below
+    // asserts the index it actually got, so a competing sender fails the premise rather than the assertion.
+    const readiness = cancellableNodeView();
+    const anticipatedIndex = (await t.inbox.getState()).totalMessagesInserted;
+    const message = { recipient: testContract.address, content: Fr.random(), secretHash };
+    const consume = await proveInteraction(
+      wallet,
+      testContract.methods.consume_message_from_arbitrary_sender_public(
+        message.content,
+        secret,
+        l1Account,
+        anticipatedIndex,
+      ),
+      { from: user1Address },
     );
-    let consumeTxHash;
-    let msgHash: Fr;
-    let messageContent: Fr;
-    let globalLeafIndex: bigint;
-    let provenReady: Promise<boolean>;
-    let held;
+
+    // Hold the first block of a checkpoint that still has sub-slots left to build the message into. Everything from
+    // here to the end of the case runs against the cancellable node view's lifetime, so the readiness poll started
+    // inside the hold cannot outlive the case that started it, however the case ends.
     try {
-      held = await Promise.race([armed.matched, armed.failed]);
-      log.warn(`Holding block ${held.blockNumber} of checkpoint ${held.checkpointNumber}`, {
-        slot: held.slot,
-        remainingBuildSubslots: held.remainingBuildSubslots,
-        consumedMessageCount: held.consumedMessageCount,
-      });
-      // The checkpoint has room for the block that will carry the message.
-      expect(held.remainingBuildSubslots).toBeGreaterThanOrEqual(1);
+      const held = await gate.withHold(
+        event => event.phase === 'block-ready-to-broadcast' && event.indexWithinCheckpoint === 0 && event.isStandalone,
+        async ctx => {
+          const event = ctx.event;
+          log.warn(`Holding block ${event.blockNumber} of checkpoint ${event.checkpointNumber}`, {
+            slot: event.slot,
+            remainingBuildSubslots: event.remainingBuildSubslots,
+            consumedMessageCount: event.consumedMessageCount,
+          });
+          // The checkpoint has room for the block that will carry the message.
+          expect(ctx.canStartAnotherBlock()).toBe(true);
 
-      const message = { recipient: testContract.address, content: Fr.random(), secretHash };
-      messageContent = message.content;
-      const sent = await sendMessageToL2(message);
-      msgHash = sent.msgHash;
-      globalLeafIndex = sent.globalLeafIndex.toBigInt();
+          ctx.assertStillHeld('send the L1 to L2 message');
+          const sent = await sendMessageToL2(message);
+          const msgHash = sent.msgHash;
+          const globalLeafIndex = sent.globalLeafIndex.toBigInt();
+          // The consume was proved against this index before the hold began; a different one would have meant a
+          // competing send, which this suite does not have.
+          expect(globalLeafIndex).toEqual(anticipatedIndex);
 
-      // The node indexes the message while production is held: observing and indexing a message is not the same
-      // as a block having inserted it, and readiness has to report the latter.
-      await retryUntil(
-        async () => {
-          const index = await aztecNode.getL1ToL2MessageIndex(msgHash);
-          return index === undefined ? undefined : { index };
+          // The node indexes the message while production is held: observing and indexing a message is not the same
+          // as a block having inserted it, and readiness has to report the latter.
+          await retryUntil(
+            async () => {
+              const index = await aztecNode.getL1ToL2MessageIndex(msgHash);
+              return index === undefined ? undefined : { index };
+            },
+            `node assigns a compact index to message ${msgHash.toString()}`,
+            Number(t.constants.ethereumSlotDuration) * 6,
+            0.2,
+          );
+          expect(await aztecNode.getL1ToL2MessageIndex(msgHash)).toEqual(globalLeafIndex);
+          expect(await isL1ToL2MessageReady(aztecNode, msgHash, 'latest')).toBe(false);
+
+          // Started here, while the proven tip is demonstrably behind the message: the helper has to poll to a true
+          // answer rather than being called once readiness is already established. Its rejection is handled the
+          // moment it is created so a failure inside the hold cannot surface later as an unhandled rejection.
+          expect(await isL1ToL2MessageReady(aztecNode, msgHash, 'proven')).toBe(false);
+          const provenReady = waitForL1ToL2MessageReady(readiness.view, msgHash, {
+            timeoutSeconds: Number(t.constants.slotDuration) * t.epochDuration * 4,
+            chainTip: 'proven',
+          });
+          // Handled the instant it exists: a failure later in the hold must not surface as an unhandled rejection,
+          // and `readiness.cancel()` in this case's `finally` is what settles it if the case never awaits it.
+          provenReady.catch(() => {});
+
+          // Queue the consume while the checkpoint is held, so the block that inserts the message can also spend it.
+          ctx.assertStillHeld('queue the consume transaction');
+          const consumeTxHash = await consume.send({ wait: NO_WAIT });
+          // NO_WAIT still awaits the node's `sendTx`, which awaits the mempool add, so on this in-process node the
+          // proposer's pool already holds the tx. Asserted rather than assumed: the same-block claim below depends on
+          // block one being able to pick it up, and a pool that dropped it would fail there for an unrelated reason.
+          expect((await aztecNode.getPendingTxs()).map(tx => tx.txHash.toString())).toContain(consumeTxHash.toString());
+          log.warn(`Queued consume tx ${consumeTxHash.toString()} while checkpoint ${event.checkpointNumber} is held`);
+
+          // The hold spends the proposer's real budget. Releasing into a spent schedule would abandon the slot and
+          // make every assertion below fail for the wrong reason, so both the sub-slot the proposer would start next
+          // and the send deadline are checked against the clock right before the release.
+          const remaining = ctx.remainingHoldBudgetMs();
+          const next = ctx.nextSubslot();
+          log.warn(`Releasing with ${remaining}ms of proposal budget left`, { nextSubslot: next.index });
+          expect(ctx.canStartAnotherBlock()).toBe(true);
+          expect(remaining).toBeGreaterThan(BLOCK_DURATION_MS);
+
+          return { event, msgHash, globalLeafIndex, consumeTxHash, provenReady };
         },
-        `node assigns a compact index to message ${msgHash.toString()}`,
-        Number(t.constants.ethereumSlotDuration) * 6,
-        0.2,
       );
-      expect(await aztecNode.getL1ToL2MessageIndex(msgHash)).toEqual(globalLeafIndex);
-      expect(await isL1ToL2MessageReady(aztecNode, msgHash, 'latest')).toBe(false);
+      const { msgHash, globalLeafIndex, consumeTxHash, provenReady } = held;
 
-      // Started here, while the proven tip is demonstrably behind the message: the helper has to poll to a true
-      // answer rather than being called once readiness is already established.
-      expect(await isL1ToL2MessageReady(aztecNode, msgHash, 'proven')).toBe(false);
-      provenReady = waitForL1ToL2MessageReady(aztecNode, msgHash, {
-        timeoutSeconds: Number(t.constants.slotDuration) * t.epochDuration * 4,
-        chainTip: 'proven',
+      // The message entered the tree at a block of the held checkpoint, past its first.
+      const inserting = await findInsertingBlock(msgHash);
+      log.warn(`Message ${msgHash.toString()} inserted at block ${inserting.blockNumber}`, {
+        checkpointNumber: inserting.checkpointNumber,
+        index: inserting.index,
+        heldCheckpoint: held.event.checkpointNumber,
       });
+      expect(inserting.checkpointNumber).toEqual(held.event.checkpointNumber);
+      expect(inserting.index).toBeGreaterThan(0);
+      expect(inserting.blockNumber).toBeGreaterThan(held.event.blockNumber);
 
-      // Queue the consume while the checkpoint is held, so the block that inserts the message can also spend it.
-      const consume = await proveInteraction(
-        wallet,
-        testContract.methods.consume_message_from_arbitrary_sender_public(
-          message.content,
-          secret,
-          l1Account,
-          globalLeafIndex,
-        ),
-        { from: user1Address },
+      // The parent did not hold the message and the inserting block does, at the compact index L1 assigned.
+      const parent = BlockNumber(inserting.blockNumber - 1);
+      expect(await aztecNode.getL1ToL2MessageMembershipWitness(parent, msgHash)).toBeUndefined();
+      const witness = await aztecNode.getL1ToL2MessageMembershipWitness(inserting.blockNumber, msgHash);
+      expect(witness).toBeDefined();
+      expect(witness![0]).toEqual(globalLeafIndex);
+
+      // Readiness pinned to those two blocks: false at the parent, true at the inserting block. Pinning is what
+      // makes this a statement about the two blocks rather than about the tip moving between the two calls.
+      expect(await isL1ToL2MessageReady(pinnedTo(parent), msgHash)).toBe(false);
+      expect(await isL1ToL2MessageReady(pinnedTo(inserting.blockNumber), msgHash)).toBe(true);
+
+      // Same-block consumption: the block's constant data pins the message root to its own post-bundle value, so the
+      // public call sees the message the same block just inserted. The block is identified by hash as well as by
+      // number, so a prune that rebuilt this height would fail here rather than pass on a coincidence of numbering.
+      const consumeReceipt = await waitForTx(aztecNode, consumeTxHash, {
+        timeout: Number(t.constants.slotDuration) * 4,
+      });
+      expect(consumeReceipt.executionResult).toBe(TxExecutionResult.SUCCESS);
+      expect(consumeReceipt.blockNumber).toEqual(Number(inserting.blockNumber));
+      expect((await aztecNode.getBlockData(inserting.blockNumber))!.blockHash.toString()).toEqual(
+        inserting.blockHash.toString(),
       );
-      consumeTxHash = await consume.send({ wait: NO_WAIT });
-      log.warn(`Queued consume tx ${consumeTxHash.toString()} while checkpoint ${held.checkpointNumber} is held`);
 
-      // The hold spends the proposer's real budget. Releasing into a spent deadline would abandon the slot and
-      // make every assertion below fail for the wrong reason, so the budget is checked rather than assumed.
-      const remaining = gate.remainingHoldBudgetMs()!;
-      log.warn(`Releasing with ${remaining}ms of proposal budget left`);
-      expect(remaining).toBeGreaterThan(BLOCK_DURATION_MS * 2);
+      // The leaf is nullified, so a second consume of the same message reverts.
+      const { receipt: doubleSpend } = await testContract.methods
+        .consume_message_from_arbitrary_sender_public(message.content, secret, l1Account, globalLeafIndex)
+        .send({ from: user1Address, wait: { dontThrowOnRevert: true } });
+      expect(doubleSpend.executionResult).toBe(TxExecutionResult.REVERTED);
+
+      // The prover node proves the covering checkpoint, and the readiness wait started against the proven tip while
+      // the checkpoint was still being built resolves on its own once it does.
+      await waitForProvenThrough(inserting.blockNumber);
+      expect(await provenReady).toBe(true);
+      expect(await isL1ToL2MessageReady(aztecNode, msgHash, 'proven')).toBe(true);
+
+      // The proven chain holds the same block — same hash, not merely the same number — with both the insertion and
+      // the successful consume in it.
+      const provenBlock = (await aztecNode.getBlock(inserting.blockNumber, { includeTransactions: true }))!;
+      expect(provenBlock.hash.toString()).toEqual(inserting.blockHash.toString());
+      expect(await aztecNode.getL1ToL2MessageMembershipWitness(inserting.blockNumber, msgHash)).toBeDefined();
+      expect(provenBlock.body.txEffects.map(effect => effect.txHash.toString())).toContain(consumeTxHash.toString());
     } finally {
-      gate.release();
+      readiness.cancel();
     }
-    await armed.completed;
-
-    // The message entered the tree at a block of the held checkpoint, past its first.
-    const inserting = await findInsertingBlock(msgHash!);
-    log.warn(`Message ${msgHash!.toString()} inserted at block ${inserting.blockNumber}`, {
-      checkpointNumber: inserting.checkpointNumber,
-      index: inserting.index,
-      heldCheckpoint: held!.checkpointNumber,
-    });
-    expect(inserting.checkpointNumber).toEqual(held!.checkpointNumber);
-    expect(inserting.index).toBeGreaterThan(0);
-    expect(inserting.blockNumber).toBeGreaterThan(held!.blockNumber);
-
-    // The parent did not hold the message and the inserting block does, at the compact index L1 assigned.
-    const parent = BlockNumber(inserting.blockNumber - 1);
-    expect(await aztecNode.getL1ToL2MessageMembershipWitness(parent, msgHash!)).toBeUndefined();
-    const witness = await aztecNode.getL1ToL2MessageMembershipWitness(inserting.blockNumber, msgHash!);
-    expect(witness).toBeDefined();
-    expect(witness![0]).toEqual(globalLeafIndex!);
-
-    // Readiness pinned to those two blocks: false at the parent, true at the inserting block. Pinning is what
-    // makes this a statement about the two blocks rather than about the tip moving between the two calls.
-    expect(await isL1ToL2MessageReady(pinnedTo(parent), msgHash!)).toBe(false);
-    expect(await isL1ToL2MessageReady(pinnedTo(inserting.blockNumber), msgHash!)).toBe(true);
-
-    // Same-block consumption: the block's constant data pins the message root to its own post-bundle value, so the
-    // public call sees the message the same block just inserted.
-    const consumeReceipt = await waitForTx(aztecNode, consumeTxHash!, {
-      timeout: Number(t.constants.slotDuration) * 4,
-    });
-    expect(consumeReceipt.executionResult).toBe(TxExecutionResult.SUCCESS);
-    expect(consumeReceipt.blockNumber).toEqual(Number(inserting.blockNumber));
-
-    // The leaf is nullified, so a second consume of the same message reverts.
-    const { receipt: doubleSpend } = await testContract.methods
-      .consume_message_from_arbitrary_sender_public(messageContent!, secret, l1Account, globalLeafIndex!)
-      .send({ from: user1Address, wait: { dontThrowOnRevert: true } });
-    expect(doubleSpend.executionResult).toBe(TxExecutionResult.REVERTED);
-
-    // The prover node proves the covering checkpoint, and the readiness wait started against the proven tip while
-    // the checkpoint was still being built resolves on its own once it does.
-    await waitForProvenThrough(inserting.blockNumber);
-    expect(await provenReady!).toBe(true);
-    expect(await isL1ToL2MessageReady(aztecNode, msgHash!, 'proven')).toBe(true);
-
-    // The proven chain holds both the insertion and the successful consume.
-    const provenBlock = (await aztecNode.getBlock(inserting.blockNumber, { includeTransactions: true }))!;
-    expect(await aztecNode.getL1ToL2MessageMembershipWitness(inserting.blockNumber, msgHash!)).toBeDefined();
-    expect(provenBlock.body.txEffects.map(effect => effect.txHash.toString())).toContain(consumeTxHash!.toString());
   });
 
   // Test 2 (latency bound): the delay between a message's L1 inclusion and the L2 block that makes it

@@ -91,4 +91,16 @@ export type SequencerEvents = {
     checkpointNumber: CheckpointNumber;
     reason: string;
   }) => void;
+  /**
+   * Emitted when streaming Inbox consumption cannot complete the checkpoint and the slot is abandoned: the
+   * proposer's cursor sits at a prefix no publishable checkpoint can end at, usually because the local message view
+   * moved under it (`inbox_prefix_reorged`) or because no live bucket end could be resolved in time
+   * (`inbox_completion_unresolved`). The counterpart of the metrics and log line the same path already produces.
+   */
+  ['checkpoint-build-aborted']: (args: {
+    slot: SlotNumber;
+    checkpointNumber: CheckpointNumber;
+    reason: string;
+    consumedTotalMsgCount: bigint;
+  }) => void;
 };

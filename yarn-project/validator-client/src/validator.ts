@@ -72,6 +72,7 @@ import type { ExtendedValidatorKeyStore } from './key_store/interface.js';
 import { NodeKeystoreAdapter } from './key_store/node_keystore_adapter.js';
 import { ValidatorMetrics } from './metrics.js';
 import {
+  type BlockProposalObservers,
   type BlockProposalValidationFailureReason,
   type CheckpointProposalValidationFailureResult,
   ProposalHandler,
@@ -223,6 +224,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     dateProvider: DateProvider = new DateProvider(),
     telemetry: TelemetryClient = getTelemetryClient(),
     slashingProtectionDb?: SlashingProtectionDatabase,
+    observers: BlockProposalObservers = {},
   ) {
     const metrics = new ValidatorMetrics(telemetry);
     const consensusTimetable = new ConsensusTimetable({
@@ -245,6 +247,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       dateProvider,
       telemetry,
       undefined,
+      observers,
     );
 
     const nodeKeystoreAdapter = NodeKeystoreAdapter.fromKeyStoreManager(keyStoreManager);
@@ -500,6 +503,9 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
         this.slashInvalidBlock(proposal);
         this.markInvalidProposalSlot(proposal.slotNumber);
       }
+      // Reported after the classification and the slashing side effect above have run, so an observer never sees a
+      // rejection whose offense this node has not finished deciding on.
+      await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult, { escapeHatchOpen });
       return false;
     }
 
@@ -509,6 +515,10 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       fishermanMode: this.config.fishermanMode || false,
       escapeHatchOpen,
     });
+
+    // The escape hatch rejects a proposal this node just validated, so it is reported alongside the result rather
+    // than after it: an observer that read `accepted` alone would have the opposite of the node's actual answer.
+    await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult, { escapeHatchOpen });
 
     if (escapeHatchOpen) {
       this.log.warn(`Escape hatch open for slot ${slotNumber}, rejecting block proposal`, proposalInfo);

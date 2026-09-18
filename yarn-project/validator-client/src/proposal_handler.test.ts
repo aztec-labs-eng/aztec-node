@@ -45,8 +45,10 @@ import type { CheckpointBuilder, FullNodeCheckpointsBuilder } from './checkpoint
 import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import type { ValidatorMetrics } from './metrics.js';
 import {
+  type BlockProposalObservers,
   type CheckpointProposalValidationResult,
   ProposalHandler,
+  SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT,
   SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT,
 } from './proposal_handler.js';
 
@@ -1673,7 +1675,10 @@ describe('ProposalHandler checkpoint validation', () => {
     }
 
     /** Genesis-parent block proposal at slot 1 consuming two messages, with the handler wired to reach the checks. */
-    async function setupStreamingProposal(inboxPrefixRef: InboxMessagePrefixRef, options: { nowMs?: number } = {}) {
+    async function setupStreamingProposal(
+      inboxPrefixRef: InboxMessagePrefixRef,
+      options: { nowMs?: number; observers?: BlockProposalObservers } = {},
+    ) {
       const blockHeader = makeBlockHeader(1, { slotNumber: SlotNumber(1) });
       blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex = 2;
       const proposal = ValidatedBlockProposal(
@@ -1703,9 +1708,28 @@ describe('ProposalHandler checkpoint validation', () => {
         new CheckpointReexecutionTracker(),
         metrics,
         dateProvider,
+        undefined,
+        undefined,
+        options.observers,
       );
       return { proposal, blockHandler, txProvider };
     }
+
+    /** Collects every first-metadata-check observation a handler reports. */
+    const collectFirstChecks = () => {
+      const seen: { slot: SlotNumber; blockHash: string; proposer: string; accepted: boolean; reason?: string }[] = [];
+      const observers: BlockProposalObservers = {
+        onFirstInboxMetadataCheck: event =>
+          seen.push({
+            slot: event.slot,
+            blockHash: event.blockHash.toString(),
+            proposer: event.proposer.toString(),
+            accepted: event.accepted,
+            reason: event.reason,
+          }),
+      };
+      return { seen, observers };
+    };
 
     const rejection = (reason: string) => ({ isValid: false, blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM), reason });
 
@@ -1734,6 +1758,136 @@ describe('ProposalHandler checkpoint validation', () => {
       expect(result).toEqual(rejection('inbox_prefix_mismatch'));
       expect(txProvider.getTxsForBlockProposal).not.toHaveBeenCalled();
       expect(reexecuteSpy).not.toHaveBeenCalled();
+    });
+
+    // The first Inbox metadata comparison is the only place a local-view mismatch is visible as such: the helper
+    // retries until its deadline, so by the time a decision exists a mismatch that recovered and one that persisted
+    // look identical. A multi-node reorg test asserts on this, so it has to report the proposal it was about.
+    describe('first metadata check observation', () => {
+      it('reports a persistent mismatch on the exact proposal, and still rejects it non-punitively', async () => {
+        const { seen, observers } = collectFirstChecks();
+        const { proposal, blockHandler } = await setupStreamingProposal(signedRef, { observers });
+        mockLocalView(new Fr(0xdead));
+
+        const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+        expect(seen).toEqual([
+          {
+            slot: proposal.slotNumber,
+            blockHash: (await proposal.blockHeader.hash()).toString(),
+            proposer: proposal.getSender()!.toString(),
+            accepted: false,
+            reason: 'inbox_prefix_mismatch',
+          },
+        ]);
+        expect(result).toEqual(rejection('inbox_prefix_mismatch'));
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT).not.toContain('inbox_prefix_mismatch');
+      });
+
+      // The same observation has to fire when the local view was merely behind and the retry recovered: otherwise a
+      // test could not tell "the mismatch happened and was survived" from "no mismatch ever happened".
+      it('reports a transient mismatch that the local-sync retry recovers from, and accepts the proposal', async () => {
+        const { seen, observers } = collectFirstChecks();
+        // Two seconds of wait budget left: enough for the forced sync to land before the attestation deadline.
+        const { proposal, blockHandler } = await setupStreamingProposal(signedRef, { observers, nowMs: 38_000 });
+        mockLocalView(new Fr(0xdead));
+        blockSource.syncImmediate.mockImplementation(() => {
+          mockLocalView(prefixHash);
+          return Promise.resolve();
+        });
+        jest.spyOn(blockHandler, 'reexecuteTransactions').mockResolvedValue({ block: undefined } as any);
+
+        const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+        expect(seen).toEqual([
+          expect.objectContaining({ accepted: false, reason: 'inbox_prefix_mismatch', slot: proposal.slotNumber }),
+        ]);
+        expect(result.isValid).toBe(true);
+      });
+
+      it('reports an accepted first check with no reason', async () => {
+        const { seen, observers } = collectFirstChecks();
+        const { proposal, blockHandler } = await setupStreamingProposal(signedRef, { observers });
+        mockLocalView(prefixHash);
+        jest.spyOn(blockHandler, 'reexecuteTransactions').mockResolvedValue({
+          block: { number: BlockNumber(INITIAL_L2_BLOCK_NUM) } as unknown as L2Block,
+        } as any);
+
+        await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+        expect(seen).toEqual([expect.objectContaining({ accepted: true, reason: undefined })]);
+      });
+
+      it('behaves identically with no observers injected', async () => {
+        const withObservers = collectFirstChecks();
+        const observed = await setupStreamingProposal(signedRef, { observers: withObservers.observers });
+        mockLocalView(new Fr(0xdead));
+        const observedResult = await observed.blockHandler.handleBlockProposal(observed.proposal, {} as any, true);
+
+        const plain = await setupStreamingProposal(signedRef);
+        mockLocalView(new Fr(0xdead));
+        const plainResult = await plain.blockHandler.handleBlockProposal(plain.proposal, {} as any, true);
+
+        expect(plainResult).toEqual(observedResult);
+      });
+    });
+
+    // The completed decision is what a test waits on for the terminal verdict, so it has to carry the production
+    // slashability classification rather than a second table maintained alongside it.
+    describe('block proposal decision observation', () => {
+      /** Runs `handleBlockProposal` and reports the decision the handler would hand to an observer. */
+      const decisionFor = async (result: Parameters<ProposalHandler['notifyBlockProposalDecision']>[1]) => {
+        const seen: { accepted: boolean; reason?: string; slashable: boolean; slot: SlotNumber; blockHash: string }[] =
+          [];
+        const { proposal, blockHandler } = await setupStreamingProposal(signedRef, {
+          observers: {
+            onBlockProposalDecision: event =>
+              seen.push({
+                accepted: event.accepted,
+                reason: event.reason,
+                slashable: event.slashable,
+                slot: event.slot,
+                blockHash: event.blockHash.toString(),
+              }),
+          },
+        });
+        await blockHandler.notifyBlockProposalDecision(proposal, result);
+        return { seen, proposal };
+      };
+
+      it('classifies an Inbox prefix mismatch as a non-slashable rejection', async () => {
+        const { seen, proposal } = await decisionFor({
+          isValid: false,
+          reason: 'inbox_prefix_mismatch',
+          blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM),
+        });
+
+        expect(seen).toEqual([
+          {
+            accepted: false,
+            reason: 'inbox_prefix_mismatch',
+            slashable: false,
+            slot: proposal.slotNumber,
+            blockHash: (await proposal.blockHeader.hash()).toString(),
+          },
+        ]);
+      });
+
+      it('classifies a state mismatch as a slashable rejection', async () => {
+        const { seen } = await decisionFor({
+          isValid: false,
+          reason: 'state_mismatch',
+          blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM),
+        });
+
+        expect(seen).toEqual([expect.objectContaining({ accepted: false, reason: 'state_mismatch', slashable: true })]);
+      });
+
+      it('reports an accepted proposal with no reason and no offense', async () => {
+        const { seen } = await decisionFor({ isValid: true, blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM) });
+
+        expect(seen).toEqual([expect.objectContaining({ accepted: true, reason: undefined, slashable: false })]);
+      });
     });
 
     it('re-executes with the bundle read by count when the checks pass, and inserts it with the signed reference', async () => {

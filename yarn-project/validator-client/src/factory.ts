@@ -14,7 +14,7 @@ import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import type { InboxEndpointReader } from './checkpoint_endpoint_check.js';
 import { ValidatorMetrics } from './metrics.js';
-import { ProposalHandler } from './proposal_handler.js';
+import { type BlockProposalObservers, ProposalHandler } from './proposal_handler.js';
 import { ValidatorClient } from './validator.js';
 
 export function createProposalHandler(
@@ -31,6 +31,8 @@ export function createProposalHandler(
     dateProvider: DateProvider;
     telemetry: TelemetryClient;
     reexecutionTracker: CheckpointReexecutionTracker;
+    /** Test-only in-process observations of this node's proposal handling; absent in production. */
+    blockProposalObservers?: BlockProposalObservers;
   },
 ) {
   const metrics = new ValidatorMetrics(deps.telemetry);
@@ -54,6 +56,7 @@ export function createProposalHandler(
     deps.dateProvider,
     deps.telemetry,
     undefined,
+    deps.blockProposalObservers,
   );
 }
 
@@ -73,6 +76,8 @@ export function createValidatorClient(
     blobClient: BlobClientInterface;
     reexecutionTracker: CheckpointReexecutionTracker;
     slashingProtectionDb?: SlashingProtectionDatabase;
+    /** Test-only in-process observations of this node's proposal handling; absent in production. */
+    blockProposalObservers?: BlockProposalObservers;
   },
 ) {
   if (config.disableValidator || !deps.keyStoreManager) {
@@ -96,5 +101,6 @@ export function createValidatorClient(
     deps.dateProvider,
     deps.telemetry,
     deps.slashingProtectionDb,
+    deps.blockProposalObservers,
   );
 }

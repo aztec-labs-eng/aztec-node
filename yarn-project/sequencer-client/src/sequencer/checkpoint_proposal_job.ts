@@ -71,7 +71,7 @@ import type {
 import { orderAttestations, trimAttestations } from '@aztec-labs/stdlib/p2p';
 import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import type { L2BlockBuiltStats } from '@aztec-labs/stdlib/stats';
-import type { ProposerTimetable } from '@aztec-labs/stdlib/timetable';
+import type { ProposerTimetable, SubslotSelection } from '@aztec-labs/stdlib/timetable';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { type FailedTx, Tx } from '@aztec-labs/stdlib/tx';
 import { AttestationTimeoutError } from '@aztec-labs/stdlib/validators';
@@ -1342,6 +1342,10 @@ export class CheckpointProposalJob implements Traceable {
         consumedMessageCount: streamingState.cursor.totalMessageCount,
         isStandalone: !timingInfo.isLastBlock,
         remainingBuildSubslots: Math.max(0, maxBlocks - (timingInfo.index + 1)),
+        subslotIndex: timingInfo.index,
+        subslotDeadline: timingInfo.deadline,
+        blocksBuiltIncludingThis: blocksInCheckpoint.length,
+        maxBlocksInCheckpoint: maxBlocks,
       });
 
       // If this is the last block, do not broadcast it, since it will be included in the checkpoint proposal.
@@ -1407,8 +1411,9 @@ export class CheckpointProposalJob implements Traceable {
    * archiver sync above it does, so a test cannot leave the job blocked by a broken hook.
    *
    * `remainingBuildSubslots` is a snapshot taken here: a hook that holds the job spends the slot's real budget, so a
-   * caller that needs to know whether another block can still be built has to re-check `proposalSendDeadline`
-   * against the clock before it releases.
+   * caller that needs to know whether another block can still be built asks the `schedule` view instead. That view
+   * answers for the loop's own next iteration, which happens no earlier than this sub-slot's deadline because the
+   * loop waits it out, and which stops at the checkpoint's block-count cap regardless of how much time is left.
    */
   private async notifyBlockReadyToBroadcast(opts: {
     block: L2Block;
@@ -1418,6 +1423,10 @@ export class CheckpointProposalJob implements Traceable {
     consumedMessageCount: bigint;
     isStandalone: boolean;
     remainingBuildSubslots: number;
+    subslotIndex: number;
+    subslotDeadline: number;
+    blocksBuiltIncludingThis: number;
+    maxBlocksInCheckpoint: number;
   }): Promise<void> {
     const onCheckpointPhase = this.testHooks?.onCheckpointPhase;
     if (onCheckpointPhase === undefined) {
@@ -1434,10 +1443,34 @@ export class CheckpointProposalJob implements Traceable {
       blockHash: await opts.block.hash(),
       isStandalone: opts.isStandalone,
       remainingBuildSubslots: opts.remainingBuildSubslots,
+      subslotIndex: opts.subslotIndex,
       proposalSendDeadline: new Date(sendDeadline * 1000),
       consumedMessageCount: opts.consumedMessageCount,
       inboxPrefixRef: opts.inboxPrefixRef,
+      schedule: {
+        nowMs: () => this.dateProvider.now(),
+        selectNextBuildSubslot: nowSeconds => this.selectNextBuildSubslot(nowSeconds, opts.subslotDeadline),
+        canBuildAnotherBlock: nowSeconds => {
+          if (opts.blocksBuiltIncludingThis >= opts.maxBlocksInCheckpoint) {
+            return false;
+          }
+          const next = this.selectNextBuildSubslot(nowSeconds, opts.subslotDeadline);
+          return next.canStart && next.index > opts.subslotIndex;
+        },
+        getProposalReceiveDeadlineSeconds: () => this.timetable.getCheckpointProposalReceiveDeadline(this.targetSlot),
+        getProposalReceiveStartSeconds: () => this.timetable.getCheckpointProposalReceiveStart(this.targetSlot),
+        getAttestationDeadlineSeconds: () => this.timetable.getAttestationDeadline(this.targetSlot),
+      },
     });
+  }
+
+  /**
+   * The sub-slot the build loop would select on the iteration after one that ended at `subslotDeadline`. The loop
+   * waits out that deadline before re-selecting, so the selection never happens earlier than it however quickly the
+   * block was built — asking the timetable at the current instant instead would report the sub-slot just used.
+   */
+  private selectNextBuildSubslot(nowSeconds: number, subslotDeadline: number): SubslotSelection {
+    return this.timetable.selectNextSubslot(this.targetSlot, Math.max(nowSeconds, subslotDeadline));
   }
 
   /**
@@ -1768,6 +1801,12 @@ export class CheckpointProposalJob implements Traceable {
       context,
     );
     this.metrics.recordCheckpointProposalFailed(reason);
+    this.eventEmitter.emit('checkpoint-build-aborted', {
+      slot: this.targetSlot,
+      checkpointNumber: this.checkpointNumber,
+      reason,
+      consumedTotalMsgCount: state.cursor.totalMessageCount,
+    });
   }
 
   /**

@@ -2434,6 +2434,135 @@ describe('CheckpointProposalJob', () => {
       );
     });
 
+    // A hook that holds the job spends the slot's real budget, so `remainingBuildSubslots` is stale the moment it is
+    // read and the event carries the proposer's own scheduling view instead. What that view must model is the build
+    // loop's *next iteration*, which does not happen now: the loop waits out the sub-slot this block was built in
+    // before re-selecting. Asking the timetable at the current instant instead reports the sub-slot just used
+    // whenever the block finished early, which is the ordinary case.
+    describe('scheduling view', () => {
+      /**
+       * Drives the build loop through `indices`, with each sub-slot carrying the deadline the real timetable gives
+       * that index, so the schedule queries and the assertions below agree on what a sub-slot is. Non-contiguous
+       * indices model sub-slots the loop never built in (a proposer that started late, or a build that failed and
+       * was retried), which is exactly where the sub-slot index and the index within the checkpoint diverge.
+       */
+      const runOverSubslots = async (indices: number[], txsPerBlock: number[]) => {
+        const events: CheckpointProposalJobTestEvent[] = [];
+        const hookedJob = createHookedJob(event => {
+          events.push(event);
+          return Promise.resolve();
+        });
+        const timetable = hookedJob.getTimetable();
+        const slot = SlotNumber(newSlotNumber);
+        const spy = jest.spyOn(timetable, 'selectNextSubslot');
+        indices.forEach((index, i) =>
+          spy.mockReturnValueOnce({
+            canStart: true,
+            index,
+            deadline: timetable.getBlockBuildDeadline(slot, index),
+            isLastBlock: i === indices.length - 1,
+          }),
+        );
+        spy.mockReturnValue(noSubslot());
+        const { lastBlock } = await setupMultipleBlocks(txsPerBlock.length, txsPerBlock);
+        validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+        await hookedJob.executeAndAwait();
+        // The schedule queries call through to the timetable, so the sub-slot mock has to be gone before they are
+        // asked anything: it is the build loop's script, not the scheduler under test.
+        spy.mockRestore();
+        return { events, timetable, slot };
+      };
+
+      /**
+       * The latest instant at which the timetable would still hand back the sub-slot a block was built in: one
+       * minimum block duration before its deadline. The boundary case of a block finishing early, and the one that
+       * separates asking the timetable now from asking it for the loop's next iteration.
+       */
+      const finishedEarly = (timetable: ProposerTimetable, slot: SlotNumber, event: CheckpointProposalJobTestEvent) =>
+        timetable.getBlockBuildDeadline(slot, event.subslotIndex) - timetable.minBlockDuration;
+
+      it('answers for the next loop iteration, not for the instant the block finished', async () => {
+        const { events, timetable, slot } = await runOverSubslots([0, 1], [2, 1]);
+        const first = events[0];
+        const early = finishedEarly(timetable, slot, first);
+
+        // The timetable, asked directly, still offers the sub-slot block zero was just built in — the loop has not
+        // waited it out yet. Answering the hook with that would call the block it already built "another block".
+        expect(timetable.selectNextSubslot(slot, early).index).toEqual(first.subslotIndex);
+        expect(first.schedule.selectNextBuildSubslot(early).index).toBeGreaterThan(first.subslotIndex);
+        expect(first.schedule.canBuildAnotherBlock(early)).toBe(true);
+
+        // Once the build frame is spent no further block is startable, whenever the question is asked.
+        const spent = timetable.getBlockBuildDeadline(slot, timetable.getMaxBlocksPerCheckpoint() - 1);
+        expect(first.schedule.selectNextBuildSubslot(spent).canStart).toBe(false);
+        expect(first.schedule.canBuildAnotherBlock(spent)).toBe(false);
+      });
+
+      // A sub-slot the loop never produced a block in still advances the timetable index, so the sub-slot index and
+      // the index within the checkpoint diverge. Comparing the next sub-slot against the checkpoint index would
+      // report a sub-slot the loop has already left behind as still available.
+      it('reports the sub-slot the block was built in, not its index within the checkpoint', async () => {
+        const { events, timetable, slot } = await runOverSubslots([1, 3], [2, 1]);
+
+        expect(events.map(e => e.indexWithinCheckpoint)).toEqual([0, 1]);
+        expect(events.map(e => e.subslotIndex)).toEqual([1, 3]);
+
+        const first = events[0];
+        const early = finishedEarly(timetable, slot, first);
+        // Against the checkpoint index (0) sub-slot one would look like "another block"; it is the one just built.
+        expect(first.schedule.selectNextBuildSubslot(early).index).toBeGreaterThan(first.subslotIndex);
+        expect(first.schedule.canBuildAnotherBlock(early)).toBe(true);
+      });
+
+      // Time left in the slot is not the only bound: the checkpoint's block-count cap stops the loop regardless of
+      // how many sub-slots the timetable still offers.
+      it('reports no further block once the checkpoint block cap is reached', async () => {
+        const events: CheckpointProposalJobTestEvent[] = [];
+        const hookedJob = createHookedJob(event => {
+          events.push(event);
+          return Promise.resolve();
+        });
+        hookedJob.updateConfig({ maxBlocksPerCheckpoint: 2 });
+        const timetable = hookedJob.getTimetable();
+        const slot = SlotNumber(newSlotNumber);
+        const spy = jest.spyOn(timetable, 'selectNextSubslot');
+        [0, 1].forEach(index =>
+          spy.mockReturnValueOnce({
+            canStart: true,
+            index,
+            deadline: timetable.getBlockBuildDeadline(slot, index),
+            isLastBlock: false,
+          }),
+        );
+        spy.mockReturnValue(noSubslot());
+        const { lastBlock } = await setupMultipleBlocks(2, [2, 1]);
+        validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+        await hookedJob.executeAndAwait();
+        spy.mockRestore();
+
+        const [first, second] = events;
+        // Sub-slots remain for both, so the only thing stopping a third block is the cap of two.
+        expect(first.schedule.canBuildAnotherBlock(finishedEarly(timetable, slot, first))).toBe(true);
+        expect(second.schedule.selectNextBuildSubslot(finishedEarly(timetable, slot, second)).canStart).toBe(true);
+        expect(second.schedule.canBuildAnotherBlock(finishedEarly(timetable, slot, second))).toBe(false);
+      });
+
+      it('exposes this slot’s consensus bounds', async () => {
+        const { events, timetable, slot } = await runOverSubslots([0, 1], [2, 1]);
+        for (const event of events) {
+          expect(event.schedule.getProposalReceiveDeadlineSeconds()).toEqual(
+            timetable.getCheckpointProposalReceiveDeadline(slot),
+          );
+          expect(event.schedule.getProposalReceiveStartSeconds()).toEqual(
+            timetable.getCheckpointProposalReceiveStart(slot),
+          );
+          expect(event.schedule.getAttestationDeadlineSeconds()).toEqual(timetable.getAttestationDeadline(slot));
+        }
+      });
+    });
+
     it('aborts the checkpoint when the hook throws, without gossiping the block', async () => {
       const hookedJob = createHookedJob(() => Promise.reject(new Error('hook failed')));
       mockSubslots(hookedJob, 2);
