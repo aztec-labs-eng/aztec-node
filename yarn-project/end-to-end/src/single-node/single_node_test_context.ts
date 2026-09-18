@@ -1094,8 +1094,17 @@ export class SingleNodeTestContext {
    * proposed and checkpointed tips would not do: a prune makes them equal by deleting the very blocks in
    * question.
    *
+   * Any non-benign sequencer failure recorded while draining also blocks the warp: warping on top of an
+   * unhealthy chain buries the cause under the prune that follows.
+   *
+   * The tracked set is the proposed tip sampled either side of the drain plus every `block-proposed`
+   * seen in between. `block-proposed` fires before the proposal reaches the archiver, so a block built
+   * in the instant before this call subscribed is caught by the post-drain sample instead — unless it
+   * was already pruned by then, which stays uncovered.
+   *
    * Pass only the sequencer-bearing nodes; a prover-only node has no sequencer to pause and must keep
-   * tracking L1 across the warp.
+   * tracking L1 across the warp. `opts.timeout` (seconds, default 120) bounds the drain and the
+   * verification separately.
    */
   public async advanceToNextEpochWithSequencersPaused(
     nodes: AztecNodeService[],
@@ -1104,6 +1113,7 @@ export class SingleNodeTestContext {
     opts: { timeout?: number } = {},
   ): Promise<void> {
     const sequencers = this.getSequencers(nodes);
+    const timeout = opts.timeout ?? 120;
     await testSpan('warp:next-epoch-sequencers-paused', async () => {
       const proposals: L2BlockId[] = [];
       const watch = this.watchSequencerEvents(sequencers);
@@ -1115,19 +1125,35 @@ export class SingleNodeTestContext {
         return () => seq.off('block-proposed', listener);
       });
 
-      // Sampled before the pause: a block proposed before this call started listening is still in flight
-      // and must survive the warp just the same.
-      const { proposed } = await node.getChainTips();
-      if (proposed.number > 0) {
-        proposals.push(proposed);
-      }
+      const trackProposedTip = async () => {
+        const { proposed } = await node.getChainTips();
+        if (proposed.number > 0) {
+          proposals.push(proposed);
+        }
+      };
 
+      let paused = false;
       let advanced = false;
       try {
-        this.logger.warn(`Pausing ${sequencers.length} sequencers before advancing to the next epoch`);
-        await Promise.all(sequencers.map(sequencer => sequencer.pause()));
+        // Sampled before the pause: a block proposed before this call started listening is still in
+        // flight and must survive the warp just the same.
+        await trackProposedTip();
 
-        await this.assertProposalsAreCheckpointed(node, proposals, watch.failEvents, opts.timeout ?? 120);
+        this.logger.warn(`Pausing ${sequencers.length} sequencers before advancing to the next epoch`);
+        await executeTimeout(
+          () => Promise.all(sequencers.map(sequencer => sequencer.pause())),
+          timeout * 1000,
+          'sequencers to drain before the epoch advance',
+        );
+        paused = true;
+
+        // Sampled again now the drain is over, since `block-proposed` fires before the proposal reaches
+        // the archiver: a block built just before this call subscribed shows up here rather than above.
+        await trackProposedTip();
+
+        this.assertNoDrainFailures(watch.failEvents);
+        await this.assertProposalsAreCheckpointed(node, proposals, watch.failEvents, timeout);
+        this.assertNoDrainFailures(watch.failEvents);
 
         await cheatCodes.rollup.advanceToNextEpoch();
         advanced = true;
@@ -1135,8 +1161,14 @@ export class SingleNodeTestContext {
         watch.stop();
         unsubscribeProposals.forEach(off => off());
         try {
-          this.logger.warn(`Resuming ${sequencers.length} sequencers after the epoch advance`);
-          await Promise.all(sequencers.map(sequencer => sequencer.start()));
+          if (paused) {
+            this.logger.warn(`Resuming ${sequencers.length} sequencers after the epoch advance`);
+            await Promise.all(sequencers.map(sequencer => sequencer.start()));
+          } else {
+            // The pause never finished draining, so its submissions are still in flight. Restarting the
+            // poll loop on top of that would race them; leave the sequencers down for teardown.
+            this.logger.error(`Leaving sequencers paused: the drain did not finish`);
+          }
         } catch (err) {
           // Only surface a resume failure when the advance itself succeeded; otherwise it would replace
           // the error explaining why the advance was unsafe.
@@ -1147,6 +1179,19 @@ export class SingleNodeTestContext {
         }
       }
     });
+  }
+
+  /**
+   * Throws if any non-benign sequencer failure was recorded. Warping on top of an already-unhealthy
+   * chain buries the cause under the prune that follows, and the fixture warps are not all wrapped in a
+   * test-level {@link assertNoFailuresFromSequencers}.
+   */
+  private assertNoDrainFailures(failEvents: TrackedSequencerEvent[]): void {
+    if (failEvents.length === 0) {
+      return;
+    }
+    this.logger.error(`Sequencer failures while draining for the epoch advance`, failEvents);
+    throw new Error(`Refusing to warp: the sequencers failed while draining: ${JSON.stringify(failEvents)}`);
   }
 
   /**

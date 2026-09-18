@@ -19,6 +19,7 @@ describe('single-node/sequencer/safe_epoch_warp', () => {
   let test: SingleNodeTestContext;
   let node: AztecNode;
   let logger: Logger;
+  let watch: ReturnType<SingleNodeTestContext['watchSequencerEvents']> | undefined;
 
   const setupTest = async (opts: SingleNodeTestOpts = {}) => {
     test = await setupBlockProducer({
@@ -54,6 +55,8 @@ describe('single-node/sequencer/safe_epoch_warp', () => {
   };
 
   afterEach(async () => {
+    watch?.stop();
+    watch = undefined;
     await test.teardown();
   });
 
@@ -63,9 +66,8 @@ describe('single-node/sequencer/safe_epoch_warp', () => {
     const proposed = await waitForUnpublishedProposal();
     logger.info(`Advancing an epoch with block ${proposed.number} (${proposed.hash}) still unpublished`);
 
-    const watch = test.watchSequencerEvents(test.getSequencers(test.nodes));
+    watch = test.watchSequencerEvents(test.getSequencers(test.nodes));
     await test.advanceToNextEpochWithSequencersPaused(test.nodes, node, test.context.cheatCodes);
-    watch.stop();
     test.assertNoFailuresFromSequencers(watch.failEvents);
 
     // The block that was in flight is still the block at that height — a prune would have removed it or
@@ -83,8 +85,14 @@ describe('single-node/sequencer/safe_epoch_warp', () => {
 
     await waitForUnpublishedProposal();
 
-    // Drop the sequencer's next L1 tx, so the checkpoint carrying an in-flight proposal never lands.
-    test.context.sequencerDelayer!.cancelNextTx();
+    // Drop the sequencer's next L1 tx and wait until one has actually been dropped. Arming alone is
+    // racy: the in-flight proposal's tx may already have been broadcast, and pausing could then halt
+    // the loop before any further tx is sent, leaving the delayer armed and nothing lost. This setup
+    // runs with slashing off and no governance proposals, so the sequencer's only L1 tx is the
+    // checkpoint proposal.
+    const delayer = test.context.sequencerDelayer!;
+    delayer.cancelNextTx();
+    await retryUntil(() => delayer.getCancelledTxs().length > 0, 'the dropped checkpoint publication', 180, 0.1);
 
     await expect(
       test.advanceToNextEpochWithSequencersPaused(test.nodes, node, test.context.cheatCodes, { timeout: 30 }),
