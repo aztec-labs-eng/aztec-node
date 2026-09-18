@@ -1,3 +1,4 @@
+import { GENESIS_NULLIFIER_TREE_ROOT } from '@aztec-labs/constants';
 import { BlockNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
@@ -23,7 +24,7 @@ describe('L2Block', () => {
   });
 
   it('can create an initial block', async () => {
-    // Values taken from world_state.test.cpp WorldStateTest.GetInitialTreeInfoForAllTrees
+    // The non-nullifier roots are those of an empty world state; only the nullifier tree is seeded at genesis.
     const emptyBlockHeader = BlockHeader.empty();
     emptyBlockHeader.state.l1ToL2MessageTree.root = Fr.fromString(
       '0x0fef6d80d31109ddb56d6b3f607cbc9c0af0bff3ea0d43e8f278983c64c11f7a',
@@ -31,9 +32,7 @@ describe('L2Block', () => {
     emptyBlockHeader.state.partial.noteHashTree.root = Fr.fromString(
       '0x2590f2aab19dd791700b4a43d3f52bb88ef2409a3731da8e848663559202e4c6',
     );
-    emptyBlockHeader.state.partial.nullifierTree.root = Fr.fromString(
-      '0x18935581a8ed73d08ffd00386fba55ba6c89f3ab848a76b8fedfa9034cee0454',
-    );
+    emptyBlockHeader.state.partial.nullifierTree.root = new Fr(GENESIS_NULLIFIER_TREE_ROOT);
     emptyBlockHeader.state.partial.nullifierTree.nextAvailableLeafIndex = TreeLeafIndex(128);
     emptyBlockHeader.state.partial.publicDataTree.root = Fr.fromString(
       '0x1bef38b621017d3c7416663d0cd81369424560710526a3fbaaec13e356b9d084',

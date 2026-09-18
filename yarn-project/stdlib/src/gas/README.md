@@ -208,8 +208,8 @@ itself, before actual teardown consumption is known.
 
 | Constant                        | Value          |
 | ------------------------------- | -------------- |
-| `L1_GAS_PER_CHECKPOINT_PROPOSED` | 300,000       |
-| `L1_GAS_PER_EPOCH_VERIFIED`     | 3,600,000      |
+| `L1_GAS_PER_CHECKPOINT_PROPOSED` | 500,000       |
+| `L1_GAS_PER_EPOCH_VERIFIED`     | 4,000,000      |
 | `BLOBS_PER_CHECKPOINT` (FeeLib) | 3              |
 | `BLOB_GAS_PER_BLOB`             | 2^17           |
 | `MINIMUM_CONGESTION_MULTIPLIER` | 1e9            |

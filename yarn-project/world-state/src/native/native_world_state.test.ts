@@ -16,6 +16,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { SiblingPath } from '@aztec-labs/foundation/trees';
+import { DEFAULT_GENESIS_DATA } from '@aztec-labs/protocol-contracts';
 import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
 import { L2Block } from '@aztec-labs/stdlib/block';
 import { DatabaseVersionManager } from '@aztec-labs/stdlib/database-version/manager';
@@ -1567,8 +1568,10 @@ describe('NativeWorldState', () => {
       const ws = await NativeWorldStateService.new(EthAddress.random(), dataDir, wsTreeMapSizes);
       const { state: initialState, ...initialRest } = ws.getInitialHeader();
 
-      // With prefilled.
+      // With prefilled. Spread DEFAULT_GENESIS_DATA so the nullifier tree matches the default-genesis baseline above
+      // (which seeds the canonical protocol contract registration nullifiers); only the public data differs.
       const genesis: GenesisData = {
+        ...DEFAULT_GENESIS_DATA,
         prefilledPublicData: [
           new PublicDataTreeLeaf(new Fr(1000), new Fr(2000)),
           new PublicDataTreeLeaf(new Fr(3000), new Fr(4000)),

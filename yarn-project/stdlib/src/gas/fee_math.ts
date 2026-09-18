@@ -5,8 +5,8 @@
 
 // Constants matching FeeLib.sol
 export const MINIMUM_CONGESTION_MULTIPLIER = 1_000_000_000n;
-export const L1_GAS_PER_CHECKPOINT_PROPOSED = 300_000n;
-export const L1_GAS_PER_EPOCH_VERIFIED = 3_600_000n;
+export const L1_GAS_PER_CHECKPOINT_PROPOSED = 500_000n;
+export const L1_GAS_PER_EPOCH_VERIFIED = 4_000_000n;
 export const BLOBS_PER_CHECKPOINT = 3n;
 export const BLOB_GAS_PER_BLOB = 2n ** 17n;
 export const MAGIC_CONGESTION_VALUE_MULTIPLIER = 854_700_854n;
