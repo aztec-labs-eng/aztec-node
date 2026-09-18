@@ -72,6 +72,19 @@ describe('logs query reference blocks', () => {
     expect(PrivateLogsQuerySchema.safeParse(wire({ tags, referenceBlock })).success).toBe(false);
   });
 
+  it('drops an unknown key from a nested anchor', () => {
+    const parsed = PrivateLogsQuerySchema.parse(
+      wire({ tags, referenceBlock: { number: 7, hash, futureOption: true }, futureOption: true }),
+    );
+    expect(parsed.referenceBlock).toEqual({ number: 7, hash });
+    expect(parsed).not.toHaveProperty('futureOption');
+  });
+
+  it('drops fields that are not part of an anchor', () => {
+    const parsed = PrivateLogsQuerySchema.parse(wire({ tags, referenceBlock: { number: 7, hash, tag: 'proven' } }));
+    expect(parsed.referenceBlock).toEqual({ number: 7, hash });
+  });
+
   it('only lets a bare hash past the resolved schema the logs source is read with', () => {
     expect(ResolvedPrivateLogsQuerySchema.parse(wire({ tags, referenceBlock: hash })).referenceBlock).toEqual(hash);
     expect(ResolvedPrivateLogsQuerySchema.safeParse(wire({ tags, referenceBlock: { number: 7, hash } })).success).toBe(

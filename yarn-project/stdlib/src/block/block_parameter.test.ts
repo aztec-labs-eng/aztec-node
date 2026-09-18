@@ -62,6 +62,35 @@ describe('BlockParameterSchema', () => {
     expect(BlockParameterSchema.safeParse(wire).success).toBe(false);
   });
 
+  it.each([
+    ['a bare number', { number: 7, futureOption: true }, { number: BlockNumber(7) }],
+    [
+      'an anchor',
+      { number: 7, hash: BlockHash.fromBuffer(Buffer.alloc(32, 1)).toString(), futureOption: true },
+      { number: BlockNumber(7), hash: BlockHash.fromBuffer(Buffer.alloc(32, 1)) },
+    ],
+    ['a tag', { tag: 'proven', futureOption: { nested: true } }, { tag: 'proven' }],
+  ])('drops a key it does not know from %s', (_, wire, expected) => {
+    expect(BlockParameterSchema.parse(wire)).toEqual(expected);
+  });
+
+  it('rejects an object left naming no block', () => {
+    expect(BlockParameterSchema.safeParse({}).success).toBe(false);
+    expect(BlockParameterSchema.safeParse({ futureOption: true }).success).toBe(false);
+  });
+
+  it('rejects an invalid value for a key it knows even alongside one it does not', () => {
+    expect(BlockParameterSchema.safeParse({ tag: 'not-a-tag', futureOption: true }).success).toBe(false);
+    expect(BlockParameterSchema.safeParse({ number: -1, futureOption: true }).success).toBe(false);
+    expect(BlockParameterSchema.safeParse({ number: 7, hash: 'invalid', futureOption: true }).success).toBe(false);
+  });
+
+  it('drops fields used by other methods', () => {
+    expect(BlockParameterSchema.parse({ number: 7, limit: 5, onlyCheckpointed: true })).toEqual({
+      number: BlockNumber(7),
+    });
+  });
+
   it('rejects an anchor missing either half', () => {
     expect(BlockParameterSchema.safeParse({ number: 7, hash: undefined }).success).toBe(false);
     expect(BlockParameterSchema.safeParse({ number: undefined, hash: BlockHash.random().toString() }).success).toBe(

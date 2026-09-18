@@ -10,8 +10,11 @@ import { CheckpointTagSchema } from './chain_tips.js';
  * or a checkpoint-tip name (e.g. `'checkpointed'`, `'proven'`, `'finalized'`).
  */
 export const CheckpointParameterSchema = z.union([
-  z.object({ number: CheckpointNumberSchema }).strict(),
-  z.object({ slot: SlotNumberSchema }).strict(),
+  z
+    .object({ number: z.unknown().optional(), slot: z.unknown().optional() })
+    .pipe(
+      z.union([z.object({ number: CheckpointNumberSchema }).strict(), z.object({ slot: SlotNumberSchema }).strict()]),
+    ),
   CheckpointTagSchema,
   CheckpointNumberSchema,
 ]);

@@ -33,7 +33,7 @@ import type { TxEffectMembershipWitness } from '../tx/tx_effect_membership.js';
 import type { TxHash } from '../tx/tx_hash.js';
 import type { BlockData } from './block_data.js';
 import { BlockHash } from './block_hash.js';
-import { BlockTagWithoutLatestSchema, type NormalizedBlockParameter } from './block_parameter.js';
+import { type NormalizedBlockParameter, NormalizedBlockParameterSchema } from './block_parameter.js';
 import type { L2Block } from './l2_block.js';
 import {
   type ValidateCheckpointNegativeResult,
@@ -55,19 +55,23 @@ export type BlocksQuery =
   | { from: BlockNumber; limit: number; onlyCheckpointed?: boolean }
   | { epoch: EpochNumber; onlyCheckpointed: true };
 
-export const BlockQuerySchema: z.ZodType<BlockQuery, unknown> = z.union([
-  z.object({ number: BlockNumberSchema }).strict(),
-  z.object({ hash: BlockHash.schema }).strict(),
-  z.object({ archive: schemas.Fr }).strict(),
-  z.object({ tag: BlockTagWithoutLatestSchema }).strict(),
-]);
+export const BlockQuerySchema: z.ZodType<BlockQuery, unknown> = NormalizedBlockParameterSchema;
 
-export const BlocksQuerySchema: z.ZodType<BlocksQuery, unknown> = z.union([
-  z
-    .object({ from: BlockNumberSchema, limit: z.number().int().min(1), onlyCheckpointed: z.boolean().optional() })
-    .strict(),
-  z.object({ epoch: EpochNumberSchema, onlyCheckpointed: z.literal(true) }).strict(),
-]);
+export const BlocksQuerySchema: z.ZodType<BlocksQuery, unknown> = z
+  .object({
+    from: z.unknown().optional(),
+    limit: z.unknown().optional(),
+    onlyCheckpointed: z.unknown().optional(),
+    epoch: z.unknown().optional(),
+  })
+  .pipe(
+    z.union([
+      z
+        .object({ from: BlockNumberSchema, limit: z.number().int().min(1), onlyCheckpointed: z.boolean().optional() })
+        .strict(),
+      z.object({ epoch: EpochNumberSchema, onlyCheckpointed: z.literal(true) }).strict(),
+    ]),
+  );
 
 /** Lookup a single confirmed checkpoint by checkpoint number, slot, or chain-tip tag. */
 export type CheckpointQuery =
@@ -95,11 +99,19 @@ export type CheckpointsQuery =
  */
 export type ProposedCheckpointQuery = { number: CheckpointNumber } | { slot: SlotNumber } | { tag: 'proposed' };
 
-export const CheckpointQuerySchema: z.ZodType<CheckpointQuery, unknown> = z.union([
-  z.object({ number: CheckpointNumberSchema }).strict(),
-  z.object({ slot: SlotNumberSchema }).strict(),
-  z.object({ tag: z.union([z.literal('checkpointed'), z.literal('proven'), z.literal('finalized')]) }).strict(),
-]);
+const checkpointQueryObjectSchema = z.object({
+  number: z.unknown().optional(),
+  slot: z.unknown().optional(),
+  tag: z.unknown().optional(),
+});
+
+export const CheckpointQuerySchema: z.ZodType<CheckpointQuery, unknown> = checkpointQueryObjectSchema.pipe(
+  z.union([
+    z.object({ number: CheckpointNumberSchema }).strict(),
+    z.object({ slot: SlotNumberSchema }).strict(),
+    z.object({ tag: z.union([z.literal('checkpointed'), z.literal('proven'), z.literal('finalized')]) }).strict(),
+  ]),
+);
 
 const checkpointsQueryLimitSchema = () =>
   z
@@ -110,19 +122,37 @@ const checkpointsQueryLimitSchema = () =>
       message: `limit must be at most ${MAX_RPC_CHECKPOINTS_DATA_LEN}`,
     });
 
-export const CheckpointsQuerySchema: z.ZodType<CheckpointsQuery, unknown> = z.union([
-  z.object({ from: CheckpointNumberSchema, limit: checkpointsQueryLimitSchema() }).strict(),
-  z
-    .object({ fromSlot: SlotNumberSchema, limit: checkpointsQueryLimitSchema(), reverse: z.boolean().optional() })
-    .strict(),
-  z.object({ epoch: EpochNumberSchema }).strict(),
-]);
+export const CheckpointsQuerySchema: z.ZodType<CheckpointsQuery, unknown> = z
+  .object({
+    from: z.unknown().optional(),
+    fromSlot: z.unknown().optional(),
+    limit: z.unknown().optional(),
+    reverse: z.unknown().optional(),
+    epoch: z.unknown().optional(),
+  })
+  .pipe(
+    z.union([
+      z.object({ from: CheckpointNumberSchema, limit: checkpointsQueryLimitSchema() }).strict(),
+      z
+        .object({ fromSlot: SlotNumberSchema, limit: checkpointsQueryLimitSchema(), reverse: z.boolean().optional() })
+        .strict(),
+      z.object({ epoch: EpochNumberSchema }).strict(),
+    ]),
+  );
 
-export const ProposedCheckpointQuerySchema: z.ZodType<ProposedCheckpointQuery, unknown> = z.union([
-  z.object({ number: CheckpointNumberSchema }).strict(),
-  z.object({ slot: SlotNumberSchema }).strict(),
-  z.object({ tag: z.literal('proposed') }).strict(),
-]);
+export const ProposedCheckpointQuerySchema: z.ZodType<ProposedCheckpointQuery, unknown> = z
+  .object({
+    number: z.unknown().optional(),
+    slot: z.unknown().optional(),
+    tag: z.unknown().optional(),
+  })
+  .pipe(
+    z.union([
+      z.object({ number: CheckpointNumberSchema }).strict(),
+      z.object({ slot: SlotNumberSchema }).strict(),
+      z.object({ tag: z.literal('proposed') }).strict(),
+    ]),
+  );
 
 /**
  * Interface of classes allowing for the retrieval of L2 blocks.

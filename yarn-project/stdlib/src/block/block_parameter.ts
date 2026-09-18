@@ -35,12 +35,22 @@ export type NormalizedBlockParameter =
   | { archive: Fr }
   | { tag: Exclude<BlockTag, 'latest'> };
 
-export const NormalizedBlockParameterSchema: z.ZodType<NormalizedBlockParameter, unknown> = z.union([
+const normalizedBlockParameterObjectSchema = z.object({
+  number: z.unknown().optional(),
+  hash: z.unknown().optional(),
+  archive: z.unknown().optional(),
+  tag: z.unknown().optional(),
+});
+
+const normalizedBlockParameterVariants = z.union([
   z.object({ number: BlockNumberSchema }).strict(),
   z.object({ hash: BlockHash.schema }).strict(),
   z.object({ archive: schemas.Fr }).strict(),
   z.object({ tag: BlockTagWithoutLatestSchema }).strict(),
 ]);
+
+export const NormalizedBlockParameterSchema: z.ZodType<NormalizedBlockParameter, unknown> =
+  normalizedBlockParameterObjectSchema.pipe(normalizedBlockParameterVariants);
 
 /**
  * Anchor naming a block by both its height and its hash.
@@ -52,9 +62,10 @@ export const NormalizedBlockParameterSchema: z.ZodType<NormalizedBlockParameter,
  */
 export type AnchoredBlockParameter = { number: BlockNumber; hash: BlockHash };
 
-export const AnchoredBlockParameterSchema: z.ZodType<AnchoredBlockParameter, unknown> = z
-  .object({ number: BlockNumberSchema, hash: BlockHash.schema })
-  .strict();
+export const AnchoredBlockParameterSchema: z.ZodType<AnchoredBlockParameter, unknown> = z.object({
+  number: BlockNumberSchema,
+  hash: BlockHash.schema,
+});
 
 /**
  * Selector for a block in RPC calls.
@@ -67,8 +78,12 @@ export const AnchoredBlockParameterSchema: z.ZodType<AnchoredBlockParameter, unk
 export type BlockParameter = NormalizedBlockParameter | AnchoredBlockParameter | BlockNumber | BlockHash | BlockTag;
 
 export const BlockParameterSchema: z.ZodType<BlockParameter, unknown> = z.union([
-  AnchoredBlockParameterSchema,
-  NormalizedBlockParameterSchema,
+  normalizedBlockParameterObjectSchema.pipe(
+    z.union([
+      z.object({ number: BlockNumberSchema, hash: BlockHash.schema }).strict(),
+      normalizedBlockParameterVariants,
+    ]),
+  ),
   BlockHash.schema,
   BlockTagSchema,
   BlockNumberSchema,
