@@ -9,6 +9,7 @@ import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 import * as proc from 'child_process';
 import { promises as fs } from 'fs';
+import { randomUUID } from 'node:crypto';
 import * as path from 'path';
 
 import type { ACIRCallback, ACIRExecutionResult } from './acvm/acvm.js';
@@ -208,7 +209,16 @@ export class NativeACVMSimulator implements CircuitSimulator {
         // compiled output, so concurrent writers agree on the contents, but a plain write is not
         // atomic and would expose a truncated file. Write aside and rename, which is atomic within
         // a filesystem, so a reader sees either no file or a complete one.
-        const pendingPath = `${artifactPath}.${process.pid}.tmp`;
+        //
+        // The aside path is unique per write rather than per process: `artifactPaths` only dedupes within
+        // one simulator, so two simulators in the same process (two prover nodes under one test, or the
+        // per-invocation simulators a single prover builds) reach here concurrently for the same circuit.
+        // Sharing an aside path there lets one rename it away before the other renames, and the loser fails
+        // with ENOENT on a proving job that is never retried. The suffix comes from `node:crypto` rather than
+        // the foundation helper, which degrades to a per-process counter under SEED and would collide again
+        // across the processes sharing this directory. The pid stays as a prefix so a stray aside file names
+        // the process that left it.
+        const pendingPath = `${artifactPath}.${process.pid}.${randomUUID()}.tmp`;
         await fs.writeFile(pendingPath, contents);
         await fs.rename(pendingPath, artifactPath);
         return artifactPath;
