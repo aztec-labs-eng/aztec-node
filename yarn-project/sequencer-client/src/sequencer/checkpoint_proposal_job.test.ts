@@ -972,6 +972,32 @@ describe('CheckpointProposalJob', () => {
       expect(publicationPlan?.pendingCheckpointState).toBeUndefined();
     });
 
+    // The bucket hint the publication preflight returns is an unsigned Inbox bucket sequence, and an L1 reorg that
+    // re-partitions the Inbox renumbers buckets without changing a single message. Resolving the hint before the
+    // wait for the send window would leave the propose naming a bucket that no longer ends where this checkpoint
+    // does, and it would revert on a checkpoint that is otherwise still publishable.
+    it('runs the publication preflight only once the send window has been reached', async () => {
+      const pipelinedJob = await createPipelinedJobWithBlock(proposedParent);
+      mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
+      const reachedWindow = promiseWithResolvers<void>();
+      const sendWindow = promiseWithResolvers<void>();
+      publisher.waitForTargetSlot.mockImplementation(() => {
+        reachedWindow.resolve();
+        return sendWindow.promise;
+      });
+
+      const running = pipelinedJob.executeAndAwait();
+      await reachedWindow.promise;
+      expect(publisher.validateCheckpointHeaderAndInbox).toHaveBeenCalledTimes(1);
+      expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+
+      sendWindow.resolve();
+      await running;
+
+      expect(publisher.validateCheckpointHeaderAndInbox).toHaveBeenCalledTimes(2);
+      expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+    });
+
     it('drops every build-time override from the publication preflight once no prune is due', async () => {
       const pipelinedJob = await createPipelinedJobWithBlock(proposedParent);
       mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });

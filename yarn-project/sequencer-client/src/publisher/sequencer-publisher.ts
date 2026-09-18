@@ -874,8 +874,11 @@ export class SequencerPublisher implements Disposable {
    * Sleeps until one L1 slot before the L2 slot boundary, and then waits for that L1 block
    * to be mined, so we don't risk being included in it. If that block never gets mined after
    * a timeout, we assume it got skipped on L1, so we send the tx anyway.
+   *
+   * Public so a caller that encodes L1 state into a request can wait for this window before building it, rather
+   * than building against a chain tip that the wait then leaves behind.
    */
-  private async waitForTargetSlot(targetSlot: SlotNumber): Promise<void> {
+  public async waitForTargetSlot(targetSlot: SlotNumber): Promise<void> {
     const l1Constants = this.epochCache.getL1Constants();
     const nowInSeconds = this.dateProvider.nowInSeconds();
     const startOfTargetSlotTs = getTimestampForSlot(targetSlot, l1Constants);
