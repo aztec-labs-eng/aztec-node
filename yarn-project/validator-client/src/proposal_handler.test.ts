@@ -6,6 +6,7 @@ import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { TestDateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { type FieldsOf, unfreeze } from '@aztec-labs/foundation/types';
 import type { P2P } from '@aztec-labs/p2p';
@@ -1409,6 +1410,32 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
       });
 
+      // p2p evaluates one proposal twice, and an archiver rollback between the two calls prunes the blocks the
+      // first verdict rested on. The second look then fails before it can name a checkpoint number at all, which
+      // by checkpoint number alone is indistinguishable from a first evaluation of an unknown checkpoint.
+      it('keeps the slot recorded as valid when the checkpoint blocks are pruned before a later call', async () => {
+        const { header, inboxRollingHash } = setupContentValidCheckpoint({ midLeafCount: 5, lastLeafCount: 7 });
+        inbox.setBuckets([{ seq: 4n, total: 7n, rollingHash: inboxRollingHash }]);
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).resolves.toEqual({
+          isValid: true,
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
+
+        // The archiver rolled back and the checkpoint's blocks are gone, so revalidation cannot get far enough to
+        // name the checkpoint it is failing on.
+        blockSource.getBlockData.mockResolvedValue(undefined);
+        blockSource.getBlocksForSlot.mockResolvedValue([]);
+
+        const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+
+        expect(result.isValid).toBe(false);
+        expect((result as { checkpointNumber?: CheckpointNumber }).checkpointNumber).toBeUndefined();
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
+      });
+
       // Forgetting a determination is never the safe direction, and the tracker keys its per-slot entry by slot
       // alone. An equivocating proposer whose second proposal this node cannot check must not thereby erase what
       // the first one established about the slot.
@@ -1677,7 +1704,7 @@ describe('ProposalHandler checkpoint validation', () => {
     /** Genesis-parent block proposal at slot 1 consuming two messages, with the handler wired to reach the checks. */
     async function setupStreamingProposal(
       inboxPrefixRef: InboxMessagePrefixRef,
-      options: { nowMs?: number; observers?: BlockProposalObservers } = {},
+      options: { nowMs?: number; observers?: BlockProposalObservers; log?: Logger } = {},
     ) {
       const blockHeader = makeBlockHeader(1, { slotNumber: SlotNumber(1) });
       blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex = 2;
@@ -1709,7 +1736,7 @@ describe('ProposalHandler checkpoint validation', () => {
         metrics,
         dateProvider,
         undefined,
-        undefined,
+        options.log,
         options.observers,
       );
       return { proposal, blockHandler, txProvider };
@@ -1960,6 +1987,38 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(elapsedMs).toBeLessThan(WAIT_BUDGET_MS + 2 * WAIT_INTERVAL_MS);
         // Waiting never buys the proposer any network work: the rejection still happens before tx collection.
         expect(txProvider.getTxsForBlockProposal).not.toHaveBeenCalled();
+      });
+
+      // The first attempt's ordinary lag says nothing about why this node gave up; a store fault that appeared
+      // later is the diagnosis worth reporting, and reporting only the first attempt discards it.
+      it('reports the latest unexpected failure when the wait times out, not the first attempt lag', async () => {
+        const log = createLogger('test:proposal-handler');
+        const warn = jest.spyOn(log, 'warn');
+        const { proposal, blockHandler } = await setupStreamingProposal(signedRef, {
+          nowMs: BEFORE_DEADLINE_MS,
+          log,
+        });
+        // The metadata checks pass on every attempt; only the range read fails, first as ordinary lag and then
+        // with a store fault the checks did not anticipate.
+        l1ToL2MessageSource.getMessagePosition.mockImplementation(count =>
+          Promise.resolve(count === 0n ? position(0n, Fr.ZERO) : count === 2n ? position(2n, prefixHash) : undefined),
+        );
+        let reads = 0;
+        l1ToL2MessageSource.getL1ToL2MessageRange.mockImplementation(() => {
+          reads++;
+          return Promise.reject(
+            new Error(reads === 1 ? 'Inbox message range [0, 2) is not fully synced' : 'database is closed'),
+          );
+        });
+
+        const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+        expect(result).toEqual(rejection('inbox_prefix_unavailable'));
+        expect(reads).toBeGreaterThan(1);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('Timed out reading a consistent Inbox bundle'),
+          expect.objectContaining({ error: 'database is closed' }),
+        );
       });
 
       it('rejects immediately without syncing when the attestation deadline has already passed', async () => {

@@ -620,20 +620,33 @@ export class InboxMessageSynchronizer {
    * temporarily unreachable, or answers a pruned range cannot distinguish a reorg from its own view. Treating that
    * as a replacement would delete messages and restart recovery on nothing more than an RPC failure, so callers keep
    * their pending work and retry instead. Only a block that reads back with a different hash is `replaced`.
+   *
+   * Parsing the returned hash is part of the guarded read for the same reason: a provider answering with a value
+   * that is not a 32-byte hash has told this node nothing about the chain, and a malformed answer must not escape
+   * as an exception from a check whose whole contract is three outcomes.
    */
   private async checkL1Block(block: L1BlockId): Promise<L1BlockStatus> {
-    let remote;
+    let remoteHash: Buffer32;
     try {
-      remote = await this.publicClient.getBlock({ blockNumber: block.l1BlockNumber, includeTransactions: false });
+      const remote = await this.publicClient.getBlock({
+        blockNumber: block.l1BlockNumber,
+        includeTransactions: false,
+      });
+      if (remote?.hash === undefined || remote.hash === null) {
+        this.log.debug(`L1 block ${block.l1BlockNumber} was returned without a hash; canonicality is unknown`, {
+          l1BlockNumber: block.l1BlockNumber,
+        });
+        return 'unknown';
+      }
+      remoteHash = Buffer32.fromString(remote.hash);
     } catch (err) {
-      this.log.debug(`Could not read L1 block ${block.l1BlockNumber} to confirm it is still canonical: ${err}`);
+      this.log.debug(`Could not read L1 block ${block.l1BlockNumber} to confirm it is still canonical: ${err}`, {
+        l1BlockNumber: block.l1BlockNumber,
+        err,
+      });
       return 'unknown';
     }
-    if (remote?.hash === undefined || remote.hash === null) {
-      this.log.debug(`L1 block ${block.l1BlockNumber} was returned without a hash; canonicality is unknown`);
-      return 'unknown';
-    }
-    return Buffer32.fromString(remote.hash).equals(block.l1BlockHash) ? 'canonical' : 'replaced';
+    return remoteHash.equals(block.l1BlockHash) ? 'canonical' : 'replaced';
   }
 }
 

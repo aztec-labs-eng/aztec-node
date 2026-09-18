@@ -211,12 +211,21 @@ export async function readStreamingBlockBundle(
 }
 
 /**
- * Message fragments that identify an ordinary local-view shortfall from the archiver's range read: the range reaches
- * past what this node has synced, or its bounds are not a valid range at all. Matched on the message text rather than
- * on the error's class, since a JSON-RPC hop between the validator and its message source leaves the class behind
- * while preserving the message.
+ * The complete message forms of an ordinary local-view shortfall from the archiver's range read: the range reaches
+ * past what this node has synced, or its bounds are not a valid range at all. Matched on the message text rather
+ * than on the error's class, since a JSON-RPC hop between the validator and its message source leaves the class
+ * behind while preserving the message.
+ *
+ * Anchored to the whole message on purpose. A substring test also swallows anything that quotes one of these — a
+ * store or provider fault reported as `database unavailable: Inbox message range [3, 7) is not fully synced` is a
+ * failure the checks did not anticipate, and reporting it as ordinary sync lag loses the only diagnosis a validator
+ * that runs out of retries can offer. Matching is about which failures are *reported*, not which are accepted:
+ * every range-read failure stays non-punitive either way.
  */
-const EXPECTED_RANGE_READ_FAILURES = ['is not fully synced', 'Invalid Inbox leaf count range'];
+const EXPECTED_RANGE_READ_FAILURES: readonly RegExp[] = [
+  /^Inbox message range \[-?\d+, -?\d+\) is not fully synced(: [\s\S]*)?$/,
+  /^Invalid Inbox leaf count range \[-?\d+, -?\d+\)$/,
+];
 
 /** Upper bound on the error text carried onto a result, so a verbose provider error cannot blow up a log record. */
 const MAX_REPORTED_ERROR_LENGTH = 200;
@@ -224,7 +233,7 @@ const MAX_REPORTED_ERROR_LENGTH = 200;
 /** Bounded text of a range-read failure the checks did not anticipate, or undefined for ordinary sync lag. */
 function unexpectedRangeReadError(err: unknown): string | undefined {
   const message = err instanceof Error ? err.message : String(err);
-  return EXPECTED_RANGE_READ_FAILURES.some(fragment => message.includes(fragment))
+  return EXPECTED_RANGE_READ_FAILURES.some(form => form.test(message))
     ? undefined
     : message.slice(0, MAX_REPORTED_ERROR_LENGTH);
 }

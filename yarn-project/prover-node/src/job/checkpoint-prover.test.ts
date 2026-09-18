@@ -10,6 +10,7 @@ import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type { ChonkCache, SubTreeResult } from '@aztec-labs/prover-client/orchestrator';
 import type { PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import type { L2Block } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ForkMerkleTreeOperations, ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
 import { BlockHeader, type Tx } from '@aztec-labs/stdlib/tx';
@@ -440,6 +441,32 @@ describe('CheckpointProver', () => {
       return { startNewBlock, appendLeaves };
     }
 
+    /** As {@link stubExecution}, but serving each block's txs as public ones so they reach the verifier circuits. */
+    function stubExecutionWithPublicTxs() {
+      const stubs = stubExecution();
+      const startChonkVerifierCircuits = jest.fn((..._args: unknown[]) => Promise.resolve());
+      const subTree = {
+        getSubTreeResult: () => new Promise<never>(() => {}),
+        startNewBlock: stubs.startNewBlock,
+        startChonkVerifierCircuits,
+        addTxs: () => Promise.resolve(),
+        setBlockCompleted: () => Promise.resolve(),
+        cancel: () => {},
+        stop: () => Promise.resolve(),
+      };
+      proverFactory.createCheckpointSubTreeOrchestrator.mockResolvedValue(subTree as any);
+      txProvider.getTxsForBlock.mockReset();
+      txProvider.getTxsForBlock.mockImplementation((block: L2Block) =>
+        Promise.resolve({
+          txs: block.body.txEffects.map(
+            effect => ({ getTxHash: () => effect.txHash, data: { forPublic: {} } }) as unknown as Tx,
+          ),
+          missingTxs: [],
+        }),
+      );
+      return { ...stubs, startChonkVerifierCircuits };
+    }
+
     it('slices the checkpoint messages per block by the headers leaf counts', async () => {
       checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 3, txsPerBlock: 0 });
       // The parent consumed 10 messages; the blocks consume 2, 0 and 1 more.
@@ -491,9 +518,30 @@ describe('CheckpointProver', () => {
       });
 
       await expect(prover.whenSubTreeProofsReady()).rejects.toThrow();
-      // The first block was started before the second's count was found to rewind.
-      expect(startNewBlock).toHaveBeenCalledTimes(1);
+      // Every block's count is checked before any block is enqueued, so a rewind later in the checkpoint still
+      // leaves no block re-executing against a slice derived from it.
+      expect(startNewBlock).not.toHaveBeenCalled();
       expect(causes()).toContainEqual(expect.stringMatching(/leaf count 12 is below its parent's 13/));
+      expect(prover.isFailed()).toBe(true);
+
+      await cleanup(prover);
+    });
+
+    // Verifier jobs go into a shared cache that outlives this checkpoint's sub-tree, so one started before the span
+    // is validated survives the cancellation that follows and keeps proving for a checkpoint nothing will accept.
+    it('starts no verifier circuits for a checkpoint whose message span is invalid', async () => {
+      checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2, txsPerBlock: 1 });
+      pinConsumedMessageCounts(checkpoint, [12, 13]);
+      const { startNewBlock, startChonkVerifierCircuits } = stubExecutionWithPublicTxs();
+
+      const prover = makeProver({
+        previousBlockHeader: makePreviousBlockHeader(10),
+        l1ToL2Messages: [Fr.random(), Fr.random()],
+      });
+
+      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow();
+      expect(startChonkVerifierCircuits).not.toHaveBeenCalled();
+      expect(startNewBlock).not.toHaveBeenCalled();
       expect(prover.isFailed()).toBe(true);
 
       await cleanup(prover);

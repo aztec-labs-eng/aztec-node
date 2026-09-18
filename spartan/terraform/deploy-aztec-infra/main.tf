@@ -61,7 +61,7 @@ module "web3signer" {
   VALIDATOR_MNEMONIC_START_INDEX           = tonumber(var.VALIDATOR_MNEMONIC_START_INDEX)
   VALIDATOR_PUBLISHER_MNEMONIC_START_INDEX = tonumber(var.VALIDATOR_PUBLISHER_MNEMONIC_START_INDEX)
   VALIDATOR_PUBLISHERS_PER_REPLICA         = var.VALIDATOR_PUBLISHERS_PER_REPLICA
-  PROVER_COUNT                             = local.prover_agent_replica_capacity
+  PROVER_COUNT                             = local.prover_publisher_bearing_nodes
   PUBLISHERS_PER_PROVER                    = tonumber(var.PROVER_PUBLISHERS_PER_PROVER)
   PROVER_PUBLISHER_MNEMONIC_START_INDEX    = tonumber(var.PROVER_PUBLISHER_MNEMONIC_START_INDEX)
 
@@ -103,7 +103,12 @@ locals {
     tag        = split(":", var.VALIDATOR_HA_DOCKER_IMAGE)[1]
   } : local.aztec_image
 
-  prover_agent_replica_capacity = var.PROVER_ENABLED ? (var.PROVER_AGENT_KEDA_ENABLED ? var.PROVER_AGENT_KEDA_MAX_REPLICAS : tonumber(var.PROVER_REPLICAS)) : 0
+  # Publisher keys belong to prover nodes, not prover agents: an agent proves and hands its result back, while the
+  # node signs and submits to L1, and only the prover stack's `node` sub-chart reads PUBLISHERS_PER_PROVER. The chart
+  # deploys one prover node per release (`node.replicaCount`, never overridden here), so an enabled prover owns
+  # exactly one publisher key range however far its agents autoscale. This must stay in step with
+  # spartan/scripts/prover_publisher_count.sh, which funds the same range.
+  prover_publisher_bearing_nodes = var.PROVER_ENABLED ? 1 : 0
 
   # Max node count: max of primary (VALIDATOR_REPLICAS) and HA pod counts
   # Determines how many attester keystores and publisher key ranges to generate

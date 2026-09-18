@@ -1302,6 +1302,10 @@ export class ProposalHandler {
    * never saw. The retry re-runs the whole read (metadata plus range) on each attempt rather than reusing a range
    * from an earlier view, because the parent and checkpoint-start counts it derives can move while a reorg is being
    * followed.
+   *
+   * Every attempt's unexpected error is kept, not only the first one's. A read that starts as ordinary sync lag and
+   * later hits a store fault or a broken provider is the case worth reporting, and reporting only the first attempt
+   * discards exactly that: the diagnosis a node whose retries ran out has to offer is its latest failure.
    */
   private async awaitStreamingBlockBundle(
     proposal: BlockProposal,
@@ -1309,9 +1313,16 @@ export class ProposalHandler {
     parentBlock: 'genesis' | BlockData,
     proposalInfo: LogData,
   ): Promise<StreamingBlockCheckResult> {
+    let latestUnexpectedError: string | undefined;
     const readBundle = async (): Promise<StreamingBlockCheckResult> => {
       const metadata = await this.checkStreamingBlockMetadata(proposal, blockNumber, parentBlock);
-      return metadata.accepted ? readStreamingBlockBundle(this.l1ToL2MessageSource, metadata) : metadata;
+      const result: StreamingBlockCheckResult = metadata.accepted
+        ? await readStreamingBlockBundle(this.l1ToL2MessageSource, metadata)
+        : metadata;
+      if (!result.accepted && result.error !== undefined) {
+        latestUnexpectedError = result.error;
+      }
+      return result;
     };
 
     const first = await readBundle();
@@ -1334,12 +1345,14 @@ export class ProposalHandler {
         reason: 'inbox_prefix_sync_timeout',
         firstReason: first.reason,
         // Set only when the message source failed for a reason the checks did not anticipate, rather than sync lag.
-        error: first.error,
+        // The latest such failure, since a later store fault says more about why this node gave up than the first
+        // attempt's lag does.
+        error: latestUnexpectedError,
         slot: slotNumber,
         waitedMs: timer.ms(),
         ...proposalInfo,
       });
-      return first;
+      return { ...first, error: latestUnexpectedError };
     }
     return resolved;
   }
@@ -1803,10 +1816,16 @@ export class ProposalHandler {
     // slot is a different question, and still records. A recorded `invalid` is protected for the slot outright:
     // the tracker keys its slot entry by slot alone, so an equivocating proposer whose second proposal this node
     // could not check would otherwise erase the first one's determination.
+    //
+    // The protected `valid` is matched by slot and archive as well as by checkpoint number, because the second look
+    // can fail before the blocks are loaded and then carries no checkpoint number at all: pruning the block the
+    // cached verdict rested on makes revalidation report `last_block_not_found`, which by checkpoint number alone
+    // is indistinguishable from a first evaluation and would overwrite the verdict this node reached.
     const outcome = result.isValid ? ('valid' as const) : CHECKPOINT_VALIDATION_REASON_TO_OUTCOME[result.reason];
     const wouldForgetVerdict =
       outcome === 'unvalidated' &&
       (this.reexecutionTracker.getOutcomeForSlot(slot) === 'invalid' ||
+        this.reexecutionTracker.hasValidOutcomeForSlot(slot, proposal.archive) ||
         (result.checkpointNumber !== undefined &&
           this.reexecutionTracker.hasReexecuted(result.checkpointNumber, proposal.archive)));
     if (outcome !== undefined && !wouldForgetVerdict) {
@@ -1915,10 +1934,23 @@ export class ProposalHandler {
     }
   }
 
-  /** The endpoint gate's own ceiling, narrowed by a slot whose attestation window is nearly spent. */
+  /**
+   * The endpoint gate's own ceiling, narrowed by a slot whose attestation window is nearly spent.
+   *
+   * The floor survives past the attestation deadline on purpose, and is bounded at
+   * {@link INBOX_ENDPOINT_CHECK_MIN_WINDOW_MS} for it: a late node still wants the content verdict for telemetry,
+   * and reaching one costs one bounded local L1 read. What the floor must not buy is a signature, which is why
+   * {@link getAttestationDeadline} is re-read at the signing boundary rather than here — a window is not a
+   * permission to attest.
+   */
   private getInboxEndpointWindowMs(slot: SlotNumber): number {
     const remainingMs = this.getReexecutionDeadline(slot).getTime() - this.dateProvider.now();
     return Math.min(INBOX_ENDPOINT_CHECK_WINDOW_MS, Math.max(INBOX_ENDPOINT_CHECK_MIN_WINDOW_MS, remainingMs));
+  }
+
+  /** The consensus attestation deadline for a slot: the last moment an attestation for it may be signed. */
+  public getAttestationDeadline(slot: SlotNumber): Date {
+    return this.getReexecutionDeadline(slot);
   }
 
   /**

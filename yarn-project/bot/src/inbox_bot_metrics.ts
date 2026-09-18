@@ -95,6 +95,7 @@ export const InboxBotReasons = [
   'invalid_witness',
   'invalid_consumption',
   'replay_accepted',
+  'replay_unproven',
   'bucket_mismatch',
   'reorg',
 ] as const;

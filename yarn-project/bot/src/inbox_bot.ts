@@ -20,6 +20,7 @@ import {
   type BotConfig,
   MAX_INBOX_MESSAGES_PER_BATCH,
   MAX_INBOX_MESSAGES_PER_BUCKET,
+  type ResolvedBotConfig,
   applyInboxModeDefaults,
   assertValidInboxConfig,
 } from './config.js';
@@ -182,7 +183,7 @@ export interface InboxBotDeps {
   consumers: InboxL2Consumers;
   store: InboxStore;
   telemetry: TelemetryClient;
-  config: BotConfig;
+  config: ResolvedBotConfig;
   dateProvider?: DateProvider;
   syncChainTip?: BlockTag;
 }
@@ -213,7 +214,7 @@ export class InboxBot implements BotLifecycle {
   public readonly node: AztecNode;
   public readonly wallet: EmbeddedWallet;
   public readonly defaultAccountAddress: AztecAddress;
-  public config: BotConfig;
+  public config: ResolvedBotConfig;
 
   private readonly contractAddress: AztecAddress;
   private readonly producer: InboxL1Producer;
@@ -235,7 +236,15 @@ export class InboxBot implements BotLifecycle {
   private stepInFlight = false;
   private consumeStepInFlight = false;
   private consecutiveProductionFailures = 0;
-  private consecutiveConsumptionFailures = 0;
+  /** Consecutive consumption *polls* that threw. Reset by a poll that completes. */
+  private consecutivePollFailures = 0;
+  /**
+   * Consecutive failures of asynchronous consumption work — attempts and replay probes — counted when they settle,
+   * whichever poll started them. Kept apart from the poll streak because a poll finishes long before the jobs it
+   * dispatched do: resetting one streak for both lets a bot fail one background job per poll forever without ever
+   * reaching the unhealthy threshold.
+   */
+  private consecutiveBackgroundFailures = 0;
   /**
    * Consumption attempts running in the background, keyed by message id. Membership is what guarantees a message
    * never has two attempts in flight, whatever the persisted state says.
@@ -999,10 +1008,12 @@ export class InboxBot implements BotLifecycle {
       await this.dispatchAttempts([...observed, ...active]);
       await this.scanReplayProbes();
 
-      this.consecutiveConsumptionFailures = 0;
-      this.consumptionHealthy = true;
+      // Only the poll's own streak: the jobs this poll dispatched have not settled, and a poll that did nothing
+      // is no evidence that the background work which has been failing has recovered.
+      this.consecutivePollFailures = 0;
+      this.updateConsumptionHealth();
     } catch (err) {
-      this.registerConsumptionFailure(err);
+      this.registerPollFailure(err);
     } finally {
       this.consumeStepInFlight = false;
     }
@@ -1233,10 +1244,17 @@ export class InboxBot implements BotLifecycle {
    *
    * `maxPendingTxs` gates the L2 submissions this makes, the way it gates the other bots through `BotRunner`; the
    * node is asked only once a message is actually about to be dispatched.
+   *
+   * The pool count is a reading of the past: a job dispatched by this poll does not appear in it until its
+   * transaction reaches the node, which is several awaits away. Availability is therefore computed once and spent
+   * as jobs are launched, with every in-flight attempt counted against the cap. Attempts that have not submitted
+   * yet are counted too, which is conservative in the only safe direction: until the code tracks submitted and
+   * unsubmitted jobs apart, undercounting availability dispatches fewer messages, while overcounting floods a pool
+   * the operator capped on purpose.
    */
   private async dispatchAttempts(candidates: InboxMessageRecord[]): Promise<void> {
     const seen = new Set<string>();
-    let pendingChecked = false;
+    let available: number | undefined;
     for (const candidate of candidates) {
       if (seen.has(candidate.messageId) || this.attemptsInFlight.has(candidate.messageId)) {
         continue;
@@ -1256,19 +1274,30 @@ export class InboxBot implements BotLifecycle {
       if (this.attemptsInFlight.size >= MAX_CONCURRENT_CONSUMPTION_ATTEMPTS) {
         return;
       }
-      if (!pendingChecked && this.config.maxPendingTxs > 0) {
-        pendingChecked = true;
-        const pendingTxCount = await this.node.getPendingTxCount();
-        if (pendingTxCount >= this.config.maxPendingTxs) {
-          this.log.debug(`Not dispatching inbox consumption attempts, the node is at its pending transaction cap`, {
-            pendingTxCount,
+      if (this.config.maxPendingTxs > 0) {
+        if (available === undefined) {
+          const pendingTxCount = await this.node.getPendingTxCount();
+          available = this.config.maxPendingTxs - pendingTxCount - this.attemptsInFlight.size;
+          if (available <= 0) {
+            this.log.debug(`Not dispatching inbox consumption attempts, the node is at its pending transaction cap`, {
+              pendingTxCount,
+              attemptsInFlight: this.attemptsInFlight.size,
+              maxPendingTxs: this.config.maxPendingTxs,
+            });
+            return;
+          }
+        }
+        if (available <= 0) {
+          this.log.debug(`Stopping inbox consumption dispatch, the pending transaction budget is spent`, {
             maxPendingTxs: this.config.maxPendingTxs,
+            attemptsInFlight: this.attemptsInFlight.size,
           });
           return;
         }
+        available--;
       }
       const job = this.runConsumptionAttempt(message)
-        .catch(err => this.registerConsumptionFailure(err))
+        .catch(err => this.registerBackgroundFailure(err))
         .finally(() => this.attemptsInFlight.delete(message.messageId));
       this.attemptsInFlight.set(message.messageId, job);
     }
@@ -1448,7 +1477,7 @@ export class InboxBot implements BotLifecycle {
       await this.store.transitionMessageFrom(message.messageId, ['preparing'], waiting, { attempts });
     }
     if (reason === 'rpc') {
-      this.registerConsumptionFailure(err);
+      this.registerBackgroundFailure(err);
     }
   }
 
@@ -1602,6 +1631,7 @@ export class InboxBot implements BotLifecycle {
       this.readinessBackfill.set(completed.messageId, this.dateProvider.now());
     }
     await this.recordMessageMilestone(completed, 'completed');
+    this.registerBackgroundSuccess();
   }
 
   /**
@@ -1746,13 +1776,22 @@ export class InboxBot implements BotLifecycle {
         this.log.warn(`Giving up on the replay probe for a batch whose nullifier never became visible`, {
           batchId: batch.batchId,
         });
+        // The check is recorded as failed before the batch is marked probed. Marking it probed alone would let a
+        // run whose messages all reached a terminal success close as a success, with replay protection never
+        // actually demonstrated.
+        await this.recordCheck('replay_rejection', 'failed', {
+          batchId: batch.batchId,
+          messageId: spent.messageId,
+          reason: 'probe_timeout',
+        });
+        this.recordFailure('replay_unproven', { batchId: batch.batchId, messageId: spent.messageId });
         await this.store.recordBatchProbe(batch.batchId, 'replay');
         continue;
       }
       this.probesInFlight.set(
         batch.batchId,
         this.runReplayProbe(batch.batchId, spent)
-          .catch(err => this.registerConsumptionFailure(err))
+          .catch(err => this.registerBackgroundFailure(err))
           .finally(() => this.probesInFlight.delete(batch.batchId)),
       );
     }
@@ -1804,6 +1843,7 @@ export class InboxBot implements BotLifecycle {
       if (isAlreadyNullifiedError(err)) {
         await this.recordCheck('replay_rejection', 'passed', { batchId, messageId: message.messageId, mode: opposite });
         await this.store.recordBatchProbe(batchId, 'replay');
+        this.registerBackgroundSuccess();
       } else {
         this.log.warn(`Replay probe was inconclusive; it will be tried again`, {
           batchId,
@@ -1820,17 +1860,41 @@ export class InboxBot implements BotLifecycle {
     await this.store.recordBatchProbe(batchId, 'replay');
   }
 
-  private registerConsumptionFailure(err: unknown): void {
-    this.consecutiveConsumptionFailures++;
+  /** Records a failure of the consumption poll itself, which a later completed poll clears. */
+  private registerPollFailure(err: unknown): void {
+    this.consecutivePollFailures++;
     this.log.error(`Inbox bot consumption step failed`, {
-      consecutiveFailures: this.consecutiveConsumptionFailures,
+      consecutivePollFailures: this.consecutivePollFailures,
       err,
     });
-    if (
-      this.config.maxConsecutiveErrors > 0 &&
-      this.consecutiveConsumptionFailures >= this.config.maxConsecutiveErrors
-    ) {
-      this.consumptionHealthy = false;
+    this.updateConsumptionHealth();
+  }
+
+  /**
+   * Records a failure of asynchronous consumption work. Only a background operation that actually succeeds clears
+   * this streak, so a job that fails once per poll still reaches the unhealthy threshold.
+   */
+  private registerBackgroundFailure(err: unknown): void {
+    this.consecutiveBackgroundFailures++;
+    this.log.error(`Inbox bot background consumption work failed`, {
+      consecutiveBackgroundFailures: this.consecutiveBackgroundFailures,
+      err,
+    });
+    this.updateConsumptionHealth();
+  }
+
+  /** Records that a background attempt or probe reached its expected outcome, clearing the background streak. */
+  private registerBackgroundSuccess(): void {
+    this.consecutiveBackgroundFailures = 0;
+    this.updateConsumptionHealth();
+  }
+
+  /** Recomputes consumption health from both streaks, and exits if the operator asked an unhealthy bot to stop. */
+  private updateConsumptionHealth(): void {
+    const limit = this.config.maxConsecutiveErrors;
+    this.consumptionHealthy =
+      limit <= 0 || (this.consecutivePollFailures < limit && this.consecutiveBackgroundFailures < limit);
+    if (!this.consumptionHealthy) {
       this.exitIfUnhealthy();
     }
   }
