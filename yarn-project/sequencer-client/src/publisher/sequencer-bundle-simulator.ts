@@ -1,10 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { Multicall3, type RollupContract, buildSimulationOverridesStateOverride } from '@aztec-labs/ethereum/contracts';
-import {
-  type L1TxUtils,
-  MAX_L1_TX_LIMIT,
-  MIN_SIMULATED_GAS_LIMIT_BUFFER_PERCENTAGE,
-} from '@aztec-labs/ethereum/l1-tx-utils';
+import { type L1TxUtils, MAX_L1_TX_LIMIT } from '@aztec-labs/ethereum/l1-tx-utils';
 import { formatViemError } from '@aztec-labs/ethereum/utils';
 import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -201,9 +197,8 @@ export class SequencerBundleSimulator {
    * capped at {@link MAX_L1_TX_LIMIT}.
    *
    * The basis is the simulation's `maxUsedGas` when the node reports it, since that is measured before
-   * refunds. Otherwise it is `gasUsed`, which is net of refunds and so gets at least
-   * {@link MIN_SIMULATED_GAS_LIMIT_BUFFER_PERCENTAGE} of headroom instead of the configured buffer; a
-   * larger configured buffer still wins. Neither figure guarantees a sufficient limit, hence the padding.
+   * refunds, and its `gasUsed` otherwise. Either way the headroom on top is the buffer configured for the
+   * L1 tx utils; neither figure guarantees a sufficient limit, hence the padding and the buffer.
    */
   private computeGasLimit(
     l1TxUtils: L1TxUtils,
@@ -212,16 +207,7 @@ export class SequencerBundleSimulator {
   ): bigint {
     const basis = bundleGas.maxUsedGas ?? bundleGas.gasUsed;
     const gasUsedWithEip150 = (basis * 64n + 62n) / 63n;
-    const gasConfigOverrides =
-      bundleGas.maxUsedGas === undefined
-        ? {
-            gasLimitBufferPercentage: Math.max(
-              l1TxUtils.config.gasLimitBufferPercentage,
-              MIN_SIMULATED_GAS_LIMIT_BUFFER_PERCENTAGE,
-            ),
-          }
-        : undefined;
-    const gasLimit = l1TxUtils.bumpGasLimit(gasUsedWithEip150, gasConfigOverrides) + blobEvaluationGas;
+    const gasLimit = l1TxUtils.bumpGasLimit(gasUsedWithEip150) + blobEvaluationGas;
     return gasLimit > MAX_L1_TX_LIMIT ? MAX_L1_TX_LIMIT : gasLimit;
   }
 

@@ -78,16 +78,16 @@ describe('SequencerBundleSimulator gas limit', () => {
     expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_219_048n }));
   });
 
-  it('applies a 30% floor when the node does not report maxUsedGas', async () => {
+  it('falls back to gasUsed with the same configured buffer when maxUsedGas is missing', async () => {
     l1TxUtils.simulate.mockResolvedValue({ gasUsed: 1_000_000n, result: aggregate3Result([true]) });
 
     const result = await simulator.simulate([makeRequest('propose')], targetSlot);
 
-    // ceil(1_000_000 * 64 / 63) = 1_015_874, bumped by 30% instead of the configured 20%.
-    expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_320_636n }));
+    // ceil(1_000_000 * 64 / 63) = 1_015_874, bumped by the configured 20% — same as for a reported maxUsedGas.
+    expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_219_048n }));
   });
 
-  it('keeps a configured buffer larger than the floor when maxUsedGas is missing', async () => {
+  it('uses a larger configured buffer when maxUsedGas is missing', async () => {
     l1TxUtils.config = { ...l1TxUtils.config, gasLimitBufferPercentage: 50 };
     l1TxUtils.simulate.mockResolvedValue({ gasUsed: 1_000_000n, result: aggregate3Result([true]) });
 
@@ -96,7 +96,17 @@ describe('SequencerBundleSimulator gas limit', () => {
     expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_523_811n }));
   });
 
-  it('does not apply the floor to a reported maxUsedGas', async () => {
+  it('uses a smaller configured buffer when maxUsedGas is missing', async () => {
+    l1TxUtils.config = { ...l1TxUtils.config, gasLimitBufferPercentage: 10 };
+    l1TxUtils.simulate.mockResolvedValue({ gasUsed: 1_000_000n, result: aggregate3Result([true]) });
+
+    const result = await simulator.simulate([makeRequest('propose')], targetSlot);
+
+    // The configured buffer is used as-is; a gasUsed basis is not clamped up to any minimum.
+    expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_117_461n }));
+  });
+
+  it('uses a smaller configured buffer when maxUsedGas is reported', async () => {
     l1TxUtils.config = { ...l1TxUtils.config, gasLimitBufferPercentage: 10 };
     l1TxUtils.simulate.mockResolvedValue({
       gasUsed: 800_000n,
@@ -106,7 +116,6 @@ describe('SequencerBundleSimulator gas limit', () => {
 
     const result = await simulator.simulate([makeRequest('propose')], targetSlot);
 
-    // The configured 10% is kept: the floor only covers the refund arithmetic of a gasUsed-based estimate.
     expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_117_461n }));
   });
 
@@ -144,8 +153,8 @@ describe('SequencerBundleSimulator gas limit', () => {
 
     const result = await simulator.simulate([propose, invalidate], targetSlot);
 
-    // The second pass reported no maxUsedGas, so its own gasUsed is the basis and the 30% floor applies.
-    expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_320_636n }));
+    // The second pass reported no maxUsedGas, so its own gasUsed is the basis, bumped by the configured 20%.
+    expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 1_219_048n }));
   });
 
   it('caps the gas limit at MAX_L1_TX_LIMIT after padding and bumping', async () => {
