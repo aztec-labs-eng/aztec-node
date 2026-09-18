@@ -2,6 +2,7 @@ import { type ForeignCallHandler, decompressWitness } from '@aztec-foundation/no
 import { abiDecode } from '@aztec-foundation/noir-noirc_abi';
 import type { InputMap } from '@aztec-foundation/noir-types';
 
+import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { runInDirectory } from '@aztec-labs/foundation/fs';
 import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -208,7 +209,12 @@ export class NativeACVMSimulator implements CircuitSimulator {
         // compiled output, so concurrent writers agree on the contents, but a plain write is not
         // atomic and would expose a truncated file. Write aside and rename, which is atomic within
         // a filesystem, so a reader sees either no file or a complete one.
-        const pendingPath = `${artifactPath}.${process.pid}.tmp`;
+        //
+        // The aside path is unique per write rather than per process: `artifactPaths` only dedupes within
+        // one simulator, so two simulators in the same process (two prover nodes under one test, say) reach
+        // here concurrently for the same circuit. Sharing an aside path there lets one rename it away before
+        // the other renames, and the loser fails with ENOENT on a proving job that is never retried.
+        const pendingPath = `${artifactPath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
         await fs.writeFile(pendingPath, contents);
         await fs.rename(pendingPath, artifactPath);
         return artifactPath;
