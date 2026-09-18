@@ -86,7 +86,9 @@ export type InboxMessageRecoveryProgress = {
  * needs no event lookups), or a stored message whose event L1 still emits at the same index and hash within five L1
  * blocks of the height it was observed at, found by walking the log backwards with a bounded number of event lookups
  * per pass. A lookup that misses moves the search to an older candidate, and running out of candidates falls back to
- * the deployment block. Once an anchor is chosen the log is rolled back to it in one store transaction: the suffix
+ * the deployment block, which is itself re-read: the Inbox's first message can be emitted by a later transaction in
+ * the block the contracts were deployed in, so the deployment block is the one block an exclusive cursor may not
+ * skip. Once an anchor is chosen the log is rolled back to it in one store transaction: the suffix
  * rows are deleted, the proposed blocks that consumed more messages than the retained count are pruned with their
  * descendants, the scanned cursor rewinds to the block before the anchor's and the syncpoint is cleared. Nothing is
  * fetched in that pass; ordinary forward ingestion refills the log from the rewound cursor, rewriting the retained
@@ -256,8 +258,9 @@ export class InboxMessageSynchronizer {
       return this.startRecovery(head, remote, finalizedL1Block);
     }
 
-    if (head.l1BlockNumber <= cursor.l1BlockNumber) {
-      // A head at or below what has already been scanned, and the log does not agree with it: there is no forward
+    const ingestFrom = this.ingestionStartFor(cursor);
+    if (head.l1BlockNumber < ingestFrom) {
+      // A head below the first block still to be scanned, and the log does not agree with it: there is no forward
       // range to fetch, so find where the local log and the canonical one part ways.
       return this.startRecovery(head, remote, finalizedL1Block);
     }
@@ -290,7 +293,7 @@ export class InboxMessageSynchronizer {
 
     let headBatch: InboxMessage[];
     try {
-      headBatch = await this.ingestForward(cursor.l1BlockNumber + 1n, head);
+      headBatch = await this.ingestForward(ingestFrom, head);
     } catch (err) {
       if (err instanceof CapturedHeadReplacedError) {
         this.log.verbose(`L1 head ${head.l1BlockNumber} was replaced while fetching L1 to L2 messages`);
@@ -374,6 +377,21 @@ export class InboxMessageSynchronizer {
       { headL1BlockNumber: head.l1BlockNumber, syncPointL1BlockNumber: syncPoint.l1BlockNumber },
     );
     return 'lagged';
+  }
+
+  /**
+   * First L1 block ordinary ingestion must read, given the scanned cursor.
+   *
+   * The cursor is exclusive, so fetching normally resumes at the block after it. The deployment block is the
+   * exception: message index 0 can be emitted by a later transaction in that very block, and a cursor sitting at it
+   * means nothing has read it yet — that is where the archiver starts with no persisted cursor, and where the
+   * zero-anchor rollback rewinds to. Resuming one block later would skip index 0 permanently, since no later message
+   * can fill the gap and every pass would rediscover the same disagreement. Only the deployment block is re-read;
+   * genuine completed cursors keep exclusive semantics, and re-reading it is harmless because the store rewrites an
+   * unchanged message in place.
+   */
+  private ingestionStartFor(cursor: L1BlockId): bigint {
+    return cursor.l1BlockNumber <= this.l1Start.l1BlockNumber ? this.l1Start.l1BlockNumber : cursor.l1BlockNumber + 1n;
   }
 
   /**
@@ -489,7 +507,7 @@ export class InboxMessageSynchronizer {
           headL1BlockNumber: recovery.head.l1BlockNumber,
           lookups: recovery.lookups,
         });
-        return { keep: zeroMessagePosition(), anchorL1Block: this.l1Start.l1BlockNumber + 1n };
+        return { keep: zeroMessagePosition(), anchorL1Block: this.l1Start.l1BlockNumber };
       }
       const candidate = await this.stores.messages.getL1ToL2Message(candidateIndex);
       if (candidate === undefined) {
