@@ -987,6 +987,10 @@ impl PrivateContext {
         log: BoundedVec<Field, PRIVATE_LOG_CIPHERTEXT_LEN>,
         note_hash_counter: u32,
     ) {
+        // Safety: the base rollup constrains every field of a private log beyond its length to be zero, so a log that
+        // fails this check can never be included in a block. Nothing here relies on the check; it only surfaces the
+        // mistake to the developer at simulation time, with a clear message, instead of at block building.
+        unsafe { assert_private_log_zero_padded(log) };
         let counter = self.next_counter();
         let full_log = [tag].concat(log.storage());
         let private_log = PrivateLogData { log: PrivateLog::new(full_log, log.len() + 1), note_hash_counter };
@@ -1538,5 +1542,59 @@ impl Empty for PrivateContext {
             expected_non_revertible_side_effect_counter: 0,
             expected_revertible_side_effect_counter: 0,
         }
+    }
+}
+
+/// Checks that every entry of `log`'s storage past `log.len()` is zero, which the protocol requires of every private
+/// log. `BoundedVec::truncate` and `BoundedVec::pop` only move `len` and leave the vacated storage in place, so a
+/// vector that was shortened before being emitted carries stale values into the log's padding unless the caller
+/// zeroes them; `BoundedVec::from_array` always yields zeroed storage.
+unconstrained fn assert_private_log_zero_padded<let N: u32>(log: BoundedVec<Field, N>) {
+    let storage = log.storage();
+    let len = log.len();
+    for i in len..N {
+        assert(
+            storage[i] == 0,
+            f"Private log has a non-zero field at index {i}, beyond its length {len}. Fields beyond the length must be zero: if the BoundedVec was shortened with truncate or pop, zero the vacated entries first, or build it with BoundedVec::from_array.",
+        );
+    }
+}
+
+mod test {
+    use crate::protocol::{constants::PRIVATE_LOG_CIPHERTEXT_LEN, traits::Empty};
+    use super::PrivateContext;
+
+    #[test]
+    unconstrained fn emits_short_log_with_zero_padding() {
+        let mut context = PrivateContext::empty();
+        let log: BoundedVec<Field, PRIVATE_LOG_CIPHERTEXT_LEN> = BoundedVec::from_array([1, 2, 3]);
+        context.emit_private_log_unsafe(7, log);
+
+        assert_eq(context.private_logs.len(), 1);
+        let emitted = context.private_logs.get(0).inner.log;
+        assert_eq(emitted.length, 4);
+        assert_eq(emitted.fields[0], 7);
+        assert_eq(emitted.fields[1], 1);
+        assert_eq(emitted.fields[2], 2);
+        assert_eq(emitted.fields[3], 3);
+        for i in 4..emitted.fields.len() {
+            assert_eq(emitted.fields[i], 0);
+        }
+    }
+
+    #[test(should_fail_with = "beyond its length")]
+    unconstrained fn rejects_log_with_stale_storage_after_truncate() {
+        let mut context = PrivateContext::empty();
+        let mut log: BoundedVec<Field, PRIVATE_LOG_CIPHERTEXT_LEN> = BoundedVec::from_array([1, 2, 3, 4, 5]);
+        log.truncate(3);
+        context.emit_private_log_unsafe(7, log);
+    }
+
+    #[test(should_fail_with = "beyond its length")]
+    unconstrained fn rejects_log_with_stale_storage_after_pop() {
+        let mut context = PrivateContext::empty();
+        let mut log: BoundedVec<Field, PRIVATE_LOG_CIPHERTEXT_LEN> = BoundedVec::from_array([1, 2, 3]);
+        let _ = log.pop();
+        context.emit_private_log_unsafe(7, log);
     }
 }

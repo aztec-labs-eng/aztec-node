@@ -14,6 +14,7 @@ import {
   TX_ERROR_INCORRECT_CONTRACT_CLASS_ID,
   TX_ERROR_INCORRECT_HASH,
   TX_ERROR_MALFORMED_CONTRACT_CLASS_LOG,
+  TX_ERROR_PRIVATE_LOG_PADDING,
   Tx,
   type TxValidationResult,
   type TxValidator,
@@ -33,6 +34,7 @@ export class DataTxValidator implements TxValidator<Tx> {
       (await this.#hasCorrectHash(tx)) ??
       (await this.#hasCorrectCalldata(tx)) ??
       (await this.#hasCorrectContractClassLogs(tx)) ??
+      this.#hasZeroPaddedPrivateLogs(tx) ??
       (await this.#hasCorrectContractClassIds(tx));
     return reason ? { result: 'invalid', reason: [reason] } : { result: 'valid' };
   }
@@ -132,6 +134,24 @@ export class DataTxValidator implements TxValidator<Tx> {
       }
     }
 
+    return undefined;
+  }
+
+  // The protocol circuits require every private log to be zero beyond `emittedLength`, so a tx carrying one that is
+  // not can never be included. Reject it here so a sequencer does not build a block it cannot prove. Every log is
+  // checked, including empty ones.
+  #hasZeroPaddedPrivateLogs(tx: Tx): string | undefined {
+    const privateLogs = tx.data.getPrivateLogs();
+    const badLogIndex = privateLogs.findIndex(log => !log.hasZeroPadding());
+    if (badLogIndex !== -1) {
+      const reason = TX_ERROR_PRIVATE_LOG_PADDING;
+      this.#log.verbose(
+        `Rejecting tx ${tx.getTxHash().toString()}. Reason: ${reason}. Private log index: ${badLogIndex}. Emitted length: ${
+          privateLogs[badLogIndex].emittedLength
+        }.`,
+      );
+      return reason;
+    }
     return undefined;
   }
 
