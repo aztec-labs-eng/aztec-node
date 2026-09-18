@@ -23,6 +23,7 @@ import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   GENESIS_BLOCK_HEADER_HASH,
+  type L2Block,
   L2BlockSourceEvents,
   type L2BlockSourceUpdatedEvent,
 } from '@aztec-labs/stdlib/block';
@@ -194,6 +195,10 @@ describe('Archiver Sync', () => {
   afterEach(async () => {
     await archiver?.stop();
   });
+
+  // Adds a locally built block to an archiver, carrying the Inbox prefix reference the fake L1 gives its leaf count.
+  const addLocalBlock = (block: L2Block, target: Archiver = archiver) =>
+    target.addBlock(block, fake.getInboxPrefixRefFor(block));
 
   // Returns every stored L1-to-L2 message leaf (as hex), in insertion order (compact indexing).
   const getStoredLeaves = async () =>
@@ -1714,9 +1719,13 @@ describe('Archiver Sync', () => {
         numL1ToL2Messages: 3,
       });
 
+      // A proposer only builds on messages its archiver has observed: sync the messages, not yet the checkpoint.
+      fake.setL1BlockNumber(4995n);
+      await archiver.syncImmediate();
+
       // Now add blocks from checkpoint 2 via addBlock (simulating local block production)
       for (const block of cp2.blocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       // Verify blocks are retrievable but not yet checkpointed
@@ -1902,7 +1911,7 @@ describe('Archiver Sync', () => {
 
       // This is what a proposal whose re-execution outlasted the checkpoint's publication looks like: the block
       // matches what L1 already checkpointed, so it is dropped rather than reported as a failure.
-      await expect(archiver.addBlock(blockAlreadySyncedFromCheckpoint)).resolves.toBeUndefined();
+      await expect(addLocalBlock(blockAlreadySyncedFromCheckpoint)).resolves.toBeUndefined();
       expect(await archiver.getL2Tips()).toEqual(tipsBefore);
     }, 10_000);
 
@@ -1939,7 +1948,7 @@ describe('Archiver Sync', () => {
       });
 
       // Try to add the block for the past slot - should be rejected
-      await expect(archiver.addBlock(pastSlotBlocks[0])).rejects.toThrow(BlockOrCheckpointSlotExpiredError);
+      await expect(addLocalBlock(pastSlotBlocks[0])).rejects.toThrow(BlockOrCheckpointSlotExpiredError);
     }, 10_000);
 
     it('adds missing blocks when checkpoint has more blocks than local', async () => {
@@ -1963,8 +1972,12 @@ describe('Archiver Sync', () => {
         numBlocks: 2,
       });
 
+      // A proposer only builds on messages its archiver has observed: sync the messages, not yet the checkpoint.
+      fake.setL1BlockNumber(4995n);
+      await archiver.syncImmediate();
+
       // Add only the FIRST block locally via addBlock
-      await archiver.addBlock(cp2.blocks[0]);
+      await addLocalBlock(cp2.blocks[0]);
 
       // Verify only first block is visible
       const firstBlockNumber = cp2.blocks[0].number;
@@ -2051,7 +2064,7 @@ describe('Archiver Sync', () => {
 
       // Add blocks locally via addBlock
       for (const block of provisionalBlocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       // Verify blocks are visible but not checkpointed
@@ -2108,7 +2121,7 @@ describe('Archiver Sync', () => {
 
       // Add both blocks locally via addBlock
       for (const block of provisionalBlocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       // Verify both blocks are visible
@@ -2170,7 +2183,7 @@ describe('Archiver Sync', () => {
 
       // Add blocks locally via addBlock for slot 1
       for (const block of provisionalBlocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       // Verify blocks are visible
@@ -2269,7 +2282,7 @@ describe('Archiver Sync', () => {
       });
 
       for (const block of provisionalBlocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       const lastProvisionalBlockNumber = provisionalBlocks[provisionalBlocks.length - 1].number;
@@ -2334,7 +2347,7 @@ describe('Archiver Sync', () => {
       });
 
       for (const block of provisionalBlocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       const lastProvisionalBlockNumber = provisionalBlocks[provisionalBlocks.length - 1].number;
@@ -2430,7 +2443,7 @@ describe('Archiver Sync', () => {
         slotNumber: orphanSlot,
       });
       for (const block of provisionalBlocks) {
-        await targetArchiver.addBlock(block);
+        await addLocalBlock(block, targetArchiver);
       }
 
       // Hold L1 at slot 1 so the slot has not ended from L1's perspective.
@@ -2577,8 +2590,13 @@ describe('Archiver Sync', () => {
         slotNumber: orphanSuffixSlot,
       });
       const orphanSuffixBlocks = orphanSuffixCheckpoint.blocks;
+      // These blocks consume nothing beyond what the fake holds.
+      const consumedTotal = checkpointTwoBlocks.at(-1)!.header.state.l1ToL2MessageTree.nextAvailableLeafIndex;
+      orphanSuffixBlocks.forEach(
+        block => (block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = consumedTotal),
+      );
       for (const block of orphanSuffixBlocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       dateProvider.setTime((noProposalPruneDeadlineForSlot(orphanSuffixSlot) + 1) * 1000);
@@ -2653,7 +2671,7 @@ describe('Archiver Sync', () => {
         l1BlockNumber: 100n,
       });
       for (const block of provisionalBlocks) {
-        await archiver.addBlock(block);
+        await addLocalBlock(block);
       }
 
       // A different checkpoint 2 lands on L1, conflicting with the local provisional blocks.
