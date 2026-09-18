@@ -1204,6 +1204,9 @@ describe('ProposalHandler checkpoint validation', () => {
       // own window, so a view that recovers in time still yields a valid verdict.
       it('accepts once a lagging provider catches up within the retry window', async () => {
         const { header, inboxRollingHash } = setupContentValidCheckpoint({ midLeafCount: 5, lastLeafCount: 7 });
+        // The gate's window is bounded by the attestation deadline and is zero once it has passed, so this case
+        // has to run inside the slot: retrying L1 past the deadline only buys a verdict that cannot be signed.
+        dateProvider.setTime(0);
         inbox.setBuckets([{ seq: 3n, total: 3n, rollingHash: Fr.random() }]);
         inbox.onRead(readIndex => {
           if (readIndex > 0) {
