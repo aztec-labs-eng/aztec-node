@@ -53,14 +53,20 @@ Do NOT:
 
 ### Step 1: Get CI Log Hash
 
-**If given PR number**:
+**If given PR number**, read the hashes straight off the check rollup. Every
+`ci/...` context carries a `ci.aztec-labs.com` URL: `ci/x-fast` is the whole run and each
+`ci/<test path>` context is one failing test.
 ```bash
-gh pr view <PR> --repo aztec-labs-eng/aztec-node --json headRefName,baseRefName,statusCheckRollup
+gh pr view <PR> --repo aztec-labs-eng/aztec-node --json statusCheckRollup \
+  --jq '.statusCheckRollup[] | select((.name // .context) | startswith("ci/")) | "\(.name // .context) \(.conclusion // .state) \(.targetUrl)"'
 ```
-Extract the `ci` job's `detailsUrl` and get the run ID (number after `runs/`).
+
+Only if no `ci/` context exists, fall back to the GitHub Actions log. Take the `ci` job's
+`detailsUrl`, extract the run ID (number after `runs/`), and read the id out of the
+post-actions environment:
 
 ```bash
-gh run view <RUN_ID> --repo aztec-labs-eng/aztec-node --log 2>&1 | grep -i "CI run log id"
+gh run view <RUN_ID> --repo aztec-labs-eng/aztec-node --log 2>&1 | grep -o 'CI_LOG_ID: [0-9]*'
 ```
 
 **If given CI URL or hash**: Extract the hash directly.

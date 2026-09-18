@@ -471,11 +471,13 @@ case "$cmd" in
         exit 1
       fi
       redis_cli LRANGE "$key" 0 -1 | $pager
-    elif [ "$CI_REDIS_AVAILABLE" -eq 1 ]; then
+    # A redis started locally for local CI runs does not hold the shared CI logs, so a
+    # miss falls through to the dashboard over http instead of reporting the key absent.
+    elif [ "$CI_REDIS_AVAILABLE" -eq 1 ] && [ "$(redis_cli EXISTS "$key")" == "1" ]; then
       redis_getz "$key" | $pager
     else
       if [ -z "${CI_PASSWORD:-}" ]; then
-        echo "No redis available and CI_PASSWORD not set for http fallback."
+        echo "Log not found in redis and CI_PASSWORD not set for http fallback."
         exit 1
       fi
       curl -sf "http://aztec:$CI_PASSWORD@ci.aztec-labs.com/$key.txt" | $pager

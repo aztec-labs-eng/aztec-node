@@ -10,9 +10,15 @@ When you need to analyze logs from ci.aztec-labs.com, delegate to the `analyze-l
 
 ## Usage
 
-1. **Extract the hash** from the URL (e.g., `http://ci.aztec-labs.com/e93bcfdc738dc2e0` → `e93bcfdc738dc2e0`)
+1. **Extract the hash** from the URL (e.g., `http://ci.aztec-labs.com/e93bcfdc738dc2e0` → `e93bcfdc738dc2e0`).
+   A whole run's id is decimal (`1789731399863940`); the logs nested inside it are hex. Both work with `dlog`.
 
-2. **Spawn the `analyze-logs` subagent** using the Task tool with the hash and focus area (e.g. "errors", "test \<name>", or a custom question) in the prompt.
+2. **Check `CI_PASSWORD` is set** before spawning anything. Without a redis tunnel it is
+   the only credential that reaches the logs, and the subagent cannot ask for it — only
+   you can. If `[ -z "$CI_PASSWORD" ]`, ask the user for the value and pass it to the
+   subagent so it can export it for the download.
+
+3. **Spawn the `analyze-logs` subagent** using the Task tool with the hash and focus area (e.g. "errors", "test \<name>", or a custom question) in the prompt.
 
 ## Examples
 
@@ -25,5 +31,8 @@ When you need to analyze logs from ci.aztec-labs.com, delegate to the `analyze-l
 ## Do NOT
 
 - Do NOT use WebFetch to access ci.aztec-labs.com (requires auth)
+- Do NOT guess or invent a `CI_PASSWORD` value, and do not retry the download hoping it
+  will work: `dlog` exits with "CI_PASSWORD not set for http fallback" and the only fix
+  is to ask the user
 - Do NOT try to curl the URL directly
 - Always use the analyze-logs agent which knows how to use `yarn ci dlog`
