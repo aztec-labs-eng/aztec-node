@@ -43,7 +43,8 @@ this benchmark's measurements.
 
 ## Recorded run
 
-[Complete results](./sponge-m4-pro.md) and [raw samples/environment](./sponge-m4-pro.json) were collected on an Apple M4 Pro
+[Complete results](https://github.com/aztec-labs-eng/aztec-node/pull/255) and
+[raw samples/environment](./sponge-m4-pro.json) were collected on an Apple M4 Pro
 with Node v24.15.0 and bb.js/native 6.0.0-nightly.20260916, from clean commit
 `e0faa6f3b664afc820b291e6925e301d902f3818`. All four backends passed all 20 validation cases, including cross-backend
 state and hash equality.
