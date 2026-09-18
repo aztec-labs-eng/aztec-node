@@ -10,7 +10,7 @@ type MapValueSlot<K extends Key | Buffer> = ['map', string, 'slot', K];
  * A map backed by LMDB.
  */
 export class LmdbAztecMap<K extends Key, V extends Value> implements AztecMap<K, V>, AztecAsyncMap<K, V> {
-  protected db: Database<[K, V], MapValueSlot<K>>;
+  protected db: Database<[K, V], MapValueSlot<Key>>;
   protected name: string;
 
   protected startSentinel: MapValueSlot<Buffer>;
@@ -18,7 +18,7 @@ export class LmdbAztecMap<K extends Key, V extends Value> implements AztecMap<K,
 
   constructor(rootDb: Database, mapName: string) {
     this.name = mapName;
-    this.db = rootDb as Database<[K, V], MapValueSlot<K>>;
+    this.db = rootDb as Database<[K, V], MapValueSlot<Key>>;
 
     // sentinels are used to define the start and end of the map
     // with LMDB's key encoding, no _primitive value_ can be "less than" an empty buffer or greater than Byte 255
@@ -163,7 +163,7 @@ export class LmdbAztecMap<K extends Key, V extends Value> implements AztecMap<K,
     }
   }
 
-  protected slot(key: K): MapValueSlot<K> {
+  protected slot(key: Key): MapValueSlot<Key> {
     return ['map', this.name, 'slot', key];
   }
 

@@ -16,7 +16,7 @@ export type CustomRange<K> = {
 };
 
 /** Maps a custom range into a range of valid key types to iterate over. */
-export function mapRange<CK, K extends Key = Key>(range: CustomRange<CK>, mapFn: (key: CK) => K): Range<K> {
+export function mapRange<CK, K extends Key = Key>(range: CustomRange<CK>, mapFn: (key: CK) => K): CustomRange<K> {
   return {
     start: range.start !== undefined ? mapFn(range.start) : undefined,
     end: range.end !== undefined ? mapFn(range.end) : undefined,
@@ -25,7 +25,18 @@ export function mapRange<CK, K extends Key = Key>(range: CustomRange<CK>, mapFn:
   };
 }
 
-/** A range of keys to iterate over. */
-export type Range<K extends Key = Key> = CustomRange<K>;
+/**
+ * The boundaries a range over keys of type `K` may be expressed with.
+ *
+ * Array keys order element-wise in every backend, so a prefix of a tuple key is a well-defined
+ * boundary: it sorts immediately before every key that extends it. A store keyed by
+ * `[address, timestamp, blockNumber, index]` can therefore bracket one address with `[address]`, or
+ * one address and timestamp with `[address, timestamp]`, without inventing values for the components
+ * it does not want to constrain. Key types that are not tuples accept only themselves.
+ */
+export type KeyPrefix<K> = (K extends readonly [...infer Init, unknown] ? K | KeyPrefix<Init> : K) & Key;
+
+/** A range of keys to iterate over, bounded by whole keys or by prefixes of them. */
+export type Range<K extends Key = Key> = CustomRange<KeyPrefix<K>>;
 
 export type StoreSize = { mappingSize: number; physicalFileSize: number; actualSize: number; numItems: number };

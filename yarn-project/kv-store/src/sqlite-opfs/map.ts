@@ -171,11 +171,11 @@ export class SQLiteOPFSAztecMap<K extends Key, V extends Value> implements Aztec
     return parsed as K;
   }
 
-  protected encodedKey(key: K): Buffer {
+  protected encodedKey(key: Key): Buffer {
     return toBufferKey(this.normalizeKey(key));
   }
 
-  protected normalizeKey(key: K): (string | number | Uint8Array)[] {
+  protected normalizeKey(key: Key): (string | number | Uint8Array)[] {
     return Array.isArray(key) ? key : [key];
   }
 
