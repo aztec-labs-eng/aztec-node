@@ -33,6 +33,7 @@
     "tslib": "^2.4.0"
   },
   "devDependencies": {
+    "@aztec-foundation/bb.js": "0.1.0-dummy",
     "@jest/globals": "^30.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.17",
