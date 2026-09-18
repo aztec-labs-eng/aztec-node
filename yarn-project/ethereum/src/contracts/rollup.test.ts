@@ -16,6 +16,7 @@ import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsReturnType, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { ReadOnlyL1TxUtils } from '../l1_tx_utils/index.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { RollupCheatCodes } from '../test/rollup_cheat_codes.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ViemClient } from '../types.js';
@@ -785,6 +786,22 @@ describe('Rollup', () => {
 
       expect(await rollup.getCheckpointNumber()).toBe(CheckpointNumber.fromBigInt(pending));
       expect(await rollup.getProvenCheckpointNumber()).toBe(CheckpointNumber.fromBigInt(proven));
+    });
+  });
+
+  describe('getProtocolFeeMargin', () => {
+    it('reads the margin in effect at a pinned L1 block, not the latest one', async () => {
+      const rollupCheatCodes = new RollupCheatCodes(cheatCodes, deployed.l1ContractAddresses);
+
+      await rollupCheatCodes.clearProvingCostCooldown();
+      await rollupCheatCodes.setProtocolFeeMargin(1000);
+      const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
+
+      await rollupCheatCodes.clearProvingCostCooldown();
+      await rollupCheatCodes.setProtocolFeeMargin(2000);
+
+      expect(await rollup.getProtocolFeeMargin()).toBe(2000);
+      expect(await rollup.getProtocolFeeMargin({ blockNumber: pinnedBlock })).toBe(1000);
     });
   });
 

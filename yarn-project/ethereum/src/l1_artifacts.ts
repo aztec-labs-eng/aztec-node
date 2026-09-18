@@ -56,7 +56,23 @@ import {
   ValidatorSelectionLibBytecode,
 } from '@aztec-foundation/l1-artifacts';
 
+import { hasHexPrefix, isHex, withoutHexPrefix } from '@aztec-labs/foundation/string';
 import type { Hex } from 'viem';
+
+/**
+ * Narrows an imported artifact bytecode string to `Hex` after checking it is non-empty, 0x-prefixed
+ * and an even number of hex digits.
+ * @param name - Name of the artifact, used in the error message.
+ * @param bytecode - The bytecode string as imported from the artifacts package.
+ * @throws If the string is not valid deployable bytecode.
+ */
+export function asBytecode(name: string, bytecode: string): Hex {
+  const digits = withoutHexPrefix(bytecode);
+  if (!hasHexPrefix(bytecode) || digits.length === 0 || digits.length % 2 !== 0 || !isHex(digits)) {
+    throw new Error(`Invalid bytecode for ${name}: expected a non-empty 0x-prefixed even-length hex string`);
+  }
+  return bytecode as Hex;
+}
 
 export const RegistryArtifact = {
   name: 'Registry',
@@ -96,7 +112,7 @@ export const RollupArtifact = {
       EpochProofExtLib: {
         name: 'EpochProofExtLib',
         contractAbi: EpochProofExtLibAbi,
-        contractBytecode: EpochProofExtLibBytecode as Hex,
+        contractBytecode: asBytecode('EpochProofExtLib', EpochProofExtLibBytecode),
       },
       ValidatorOperationsExtLib: {
         name: 'ValidatorOperationsExtLib',

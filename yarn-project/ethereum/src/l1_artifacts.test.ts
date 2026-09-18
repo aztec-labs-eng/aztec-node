@@ -1,4 +1,4 @@
-import { RollupArtifact } from './l1_artifacts.js';
+import { RollupArtifact, asBytecode } from './l1_artifacts.js';
 
 describe('Rollup deployment artifacts', () => {
   it('supplies deployable bytecode for every linked library', () => {
@@ -9,5 +9,21 @@ describe('Rollup deployment artifacts', () => {
         expect(libraries[name]?.contractBytecode).toMatch(/^0x[0-9a-f]+$/i);
       }
     }
+  });
+});
+
+describe('asBytecode', () => {
+  it('returns the bytecode when it is valid', () => {
+    expect(asBytecode('Lib', '0xdeadBEEF')).toBe('0xdeadBEEF');
+  });
+
+  it.each([
+    ['', 'empty'],
+    ['0x', 'prefix only'],
+    ['deadbeef', 'missing prefix'],
+    ['0xdeadbee', 'odd number of digits'],
+    ['0xnothex', 'non-hex digits'],
+  ])('throws on %p (%s)', bytecode => {
+    expect(() => asBytecode('Lib', bytecode)).toThrow('Invalid bytecode for Lib');
   });
 });
