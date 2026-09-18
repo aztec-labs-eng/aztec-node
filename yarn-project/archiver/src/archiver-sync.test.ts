@@ -1884,7 +1884,7 @@ describe('Archiver Sync', () => {
       archiver.events.off(L2BlockSourceEvents.CheckpointEquivocationDetected, equivocationSpy);
     }, 15_000);
 
-    it('rejects adding blocks that are already checkpointed', async () => {
+    it('ignores a late proposal for a block that is already checkpointed', async () => {
       // First, sync checkpoint 1 from L1 to establish a baseline
       const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: 70n,
@@ -1892,14 +1892,18 @@ describe('Archiver Sync', () => {
         numL1ToL2Messages: 3,
       });
 
-      fake.setL1BlockNumber(100n);
+      // Stay on the checkpoint's own slot so the proposal is not rejected as expired before it reaches the store
+      fake.setL1BlockNumber(70n);
       await archiver.syncImmediate();
 
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
       const blockAlreadySyncedFromCheckpoint = cp1.blocks[cp1.blocks.length - 1];
+      const tipsBefore = await archiver.getL2Tips();
 
-      // Now try and add one of the blocks via the addProposedBlock method. It should throw
-      await expect(archiver.addBlock(blockAlreadySyncedFromCheckpoint)).rejects.toThrow();
+      // This is what a proposal whose re-execution outlasted the checkpoint's publication looks like: the block
+      // matches what L1 already checkpointed, so it is dropped rather than reported as a failure.
+      await expect(archiver.addBlock(blockAlreadySyncedFromCheckpoint)).resolves.toBeUndefined();
+      expect(await archiver.getL2Tips()).toEqual(tipsBefore);
     }, 10_000);
 
     it('rejects adding blocks for past slots', async () => {

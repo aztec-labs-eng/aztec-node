@@ -42,7 +42,6 @@ import {
 } from '@aztec-labs/stdlib/tx';
 
 import {
-  BlockAlreadyCheckpointedError,
   BlockArchiveNotConsistentError,
   BlockCheckpointNumberNotSequentialError,
   BlockIndexNotSequentialError,
@@ -137,6 +136,13 @@ type ProposedCheckpointStorage = CommonCheckpointStorage & {
 };
 
 export type RemoveCheckpointsResult = { blocksRemoved: L2Block[] | undefined };
+
+/**
+ * Outcome of adding a proposed block. `already-checkpointed` means the block was already stored as part of an
+ * L1 checkpoint with the same archive root: the proposal is a late duplicate that carries nothing new. This is
+ * expected under pipelining, when the checkpoint lands on L1 while the proposal is still being re-executed.
+ */
+export type AddProposedBlockResult = 'added' | 'already-checkpointed';
 
 /**
  * Single-block lookup with the chain-tip `tag` variant of {@link BlockQuery} already resolved
@@ -250,9 +256,9 @@ export class BlockStore {
    * This is an uncheckpointed block that has been proposed by the sequencer but not yet included in a checkpoint on L1.
    * For checkpointed blocks (already published to L1), use addCheckpoints() instead.
    * @param block - The proposed L2 block to be added to the store.
-   * @returns True if the operation is successful.
+   * @returns Whether the block was added, or `already-checkpointed` if it duplicates a checkpointed block.
    */
-  async addProposedBlock(block: L2Block, opts: { force?: boolean } = {}): Promise<boolean> {
+  async addProposedBlock(block: L2Block, opts: { force?: boolean } = {}): Promise<AddProposedBlockResult> {
     await prepareBlockTxEffectsTreeData([block]);
     return await this.db.transactionAsync(async () => {
       const blockNumber = block.number;
@@ -267,10 +273,12 @@ export class BlockStore {
       // Verify we're not overwriting checkpointed blocks
       const lastCheckpointedBlockNumber = await this.getCheckpointedL2BlockNumber();
       if (!opts.force && blockNumber <= lastCheckpointedBlockNumber) {
-        // Check if the proposed block matches the already-checkpointed one
+        // A late proposal matching the already-checkpointed block is not an error, so it is reported as an
+        // outcome rather than thrown: throwing would abort the enclosing write transaction, which the
+        // kv-store reports as a failed commit.
         const existingBlock = await this.getBlockData({ number: BlockNumber(blockNumber) });
         if (existingBlock && existingBlock.archive.root.equals(block.archive.root)) {
-          throw new BlockAlreadyCheckpointedError(blockNumber);
+          return 'already-checkpointed';
         }
         throw new CannotOverwriteCheckpointedBlockError(blockNumber, lastCheckpointedBlockNumber);
       }
@@ -318,7 +326,7 @@ export class BlockStore {
 
       await this.addBlockToDatabase(block, block.checkpointNumber, block.indexWithinCheckpoint);
 
-      return true;
+      return 'added';
     });
   }
 

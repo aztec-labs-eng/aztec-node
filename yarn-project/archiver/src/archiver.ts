@@ -39,7 +39,7 @@ import type { BlockHeader, TxEffectMembershipWitness, TxHash } from '@aztec-labs
 import { type TelemetryClient, type Traceable, type Tracer, trackSpan } from '@aztec-labs/telemetry-client';
 
 import { type ArchiverConfig, mapArchiverConfig } from './config.js';
-import { BlockAlreadyCheckpointedError, BlockOrCheckpointSlotExpiredError, NoBlobBodiesFoundError } from './errors.js';
+import { BlockOrCheckpointSlotExpiredError, NoBlobBodiesFoundError } from './errors.js';
 import { validateAndLogHistoricalLogsAvailability } from './l1/validate_historical_logs.js';
 import { validateAndLogTraceAvailability } from './l1/validate_trace.js';
 import { ArchiverDataSourceBase } from './modules/data_source_base.js';
@@ -396,7 +396,13 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
 
       try {
         if (type === 'block') {
-          const [durationMs] = await elapsed(() => this.updater.addProposedBlock(item.block));
+          const [durationMs, outcome] = await elapsed(() => this.updater.addProposedBlock(item.block));
+          if (outcome === 'already-checkpointed') {
+            this.log.debug(`Proposed block ${itemNumber} matches already checkpointed block, ignoring late proposal`);
+            // A late proposal that matches an already-checkpointed block adds nothing new, so it is not appended.
+            resolve();
+            continue;
+          }
           this.instrumentation.processNewProposedBlock(durationMs, item.block);
           blocksAdded.push(item.block);
         } else {
@@ -405,12 +411,6 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
         this.log.debug(`Added ${type} ${itemNumber} to store`);
         resolve();
       } catch (err: any) {
-        if (err instanceof BlockAlreadyCheckpointedError) {
-          this.log.debug(`Proposed block ${itemNumber} matches already checkpointed block, ignoring late proposal`);
-          // A late proposal that matches an already-checkpointed block adds nothing new, so it is not appended.
-          resolve();
-          continue;
-        }
         this.log.error(`Failed to add ${type} ${itemNumber} to store: ${err.message}`, err, {
           number: itemNumber,
           type,
