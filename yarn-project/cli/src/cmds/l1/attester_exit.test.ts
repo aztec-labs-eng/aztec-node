@@ -13,7 +13,7 @@ import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { Command } from 'commander';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getContract } from 'viem';
@@ -86,6 +86,27 @@ describe('initiate-withdraw-by-attester-batch command', () => {
       await rm(directory, { recursive: true });
     }
   });
+  it.each(['0x', '0x12', `0x${'11'.repeat(64)}`, '0xnothex'])(
+    'rejects malformed signature %s with its authorization index',
+    async signature => {
+      const directory = await mkdtemp(join(tmpdir(), 'attester-exit-invalid-'));
+      const path = join(directory, 'authorizations.json');
+      try {
+        await writeFile(
+          path,
+          JSON.stringify([
+            { attester: attester.address, deadline: '123456789', signature: Signature.random().toString() },
+            { attester: withdrawer.address, deadline: '123456789', signature },
+          ]),
+        );
+        await expect(readAttesterExitAuthorizations(path)).rejects.toThrow(
+          'Attester exit authorization 1 has an invalid signature',
+        );
+      } finally {
+        await rm(directory, { recursive: true });
+      }
+    },
+  );
 });
 
 describe('attester exit through the client and CLI', () => {
@@ -217,7 +238,8 @@ describe('attester exit through the client and CLI', () => {
               ),
             );
             const program = new Command().exitOverride();
-            injectCommands(program, () => {}, logger);
+            const messages: string[] = [];
+            injectCommands(program, message => messages.push(message), logger);
             await program.parseAsync([
               'node',
               'aztec',
@@ -234,6 +256,43 @@ describe('attester exit through the client and CLI', () => {
               path,
               ...(mode === 'up-to-limit' ? ['--up-to-limit'] : []),
             ]);
+            expect(messages).toContainEqual(
+              expect.stringContaining(`Processed ${exitCount} of ${batch.length} attester exit authorizations.`),
+            );
+            expect(messages).toContain(
+              mode === 'up-to-limit'
+                ? 'Remaining authorizations: 1. Zero-based JSON array indices 2 through 2 (inclusive).'
+                : 'Remaining authorizations: 0 (none).',
+            );
+            if (mode === 'up-to-limit') {
+              const remaining = JSON.parse(await readFile(path, 'utf8')).slice(exitCount);
+              await writeFile(path, JSON.stringify(remaining));
+              messages.length = 0;
+              const retry = new Command().exitOverride();
+              injectCommands(retry, message => messages.push(message), logger);
+              await retry.parseAsync([
+                'node',
+                'aztec',
+                'initiate-withdraw-by-attester-batch',
+                '--l1-rpc-urls',
+                rpcUrl,
+                '--l1-chain-id',
+                String(foundry.id),
+                '--private-key',
+                `0x${Buffer.from(withdrawer.getHdKey().privateKey!).toString('hex')}`,
+                '--rollup',
+                rollup.address,
+                '--authorizations',
+                path,
+                '--up-to-limit',
+              ]);
+              expect(messages).toContainEqual(
+                expect.stringContaining('Processed 0 of 1 attester exit authorizations.'),
+              );
+              expect(messages).toContain(
+                'Remaining authorizations: 1. Zero-based JSON array indices 0 through 0 (inclusive).',
+              );
+            }
           } finally {
             await rm(directory, { recursive: true, force: true });
           }
