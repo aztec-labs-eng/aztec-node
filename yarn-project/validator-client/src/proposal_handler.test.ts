@@ -3,7 +3,13 @@ import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { INITIAL_L2_BLOCK_NUM, MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  EpochNumber,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TestDateProvider, Timer } from '@aztec-labs/foundation/timer';
@@ -55,7 +61,7 @@ import {
 /** A block header consuming no Inbox messages (leaf count zero), so the streaming checks see an empty bundle. */
 function makeBlockHeader(...args: Parameters<typeof makeRandomBlockHeader>) {
   const header = makeRandomBlockHeader(...args);
-  header.state.l1ToL2MessageTree.nextAvailableLeafIndex = 0;
+  header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(0);
   return header;
 }
 
@@ -85,11 +91,11 @@ function makeSlotBlocks(archiveRoots: Fr[]): L2Block[] {
   return archiveRoots.map(
     (root, i) =>
       ({
-        archive: new AppendOnlyTreeSnapshot(root, i + 1),
+        archive: new AppendOnlyTreeSnapshot(root, TreeLeafIndex(i + 1)),
         number: BlockNumber(i + 1),
         checkpointNumber: CheckpointNumber(1),
         header: makeBlockHeader(0, {
-          lastArchive: new AppendOnlyTreeSnapshot(i === 0 ? Fr.ZERO : archiveRoots[i - 1], i),
+          lastArchive: new AppendOnlyTreeSnapshot(i === 0 ? Fr.ZERO : archiveRoots[i - 1], TreeLeafIndex(i)),
           slotNumber: SlotNumber(1),
           blockNumber: BlockNumber(i + 1),
         }),
@@ -511,7 +517,7 @@ describe('ProposalHandler checkpoint validation', () => {
 
       const archiver = mock<Pick<Archiver, 'addProposedCheckpoint' | 'getProposedCheckpointData'>>();
       archiver.getProposedCheckpointData.mockResolvedValue({
-        archive: new AppendOnlyTreeSnapshot(proposal.archive, 1),
+        archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(1)),
       } as ProposedCheckpointData);
       const handleSpy = jest.spyOn(handler, 'handleCheckpointProposal');
 
@@ -570,7 +576,7 @@ describe('ProposalHandler checkpoint validation', () => {
 
       const archiver = mock<Pick<Archiver, 'addProposedCheckpoint' | 'getProposedCheckpointData'>>();
       archiver.getProposedCheckpointData.mockResolvedValue({
-        archive: new AppendOnlyTreeSnapshot(Fr.random(), 1),
+        archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1)),
       } as ProposedCheckpointData);
       archiver.addProposedCheckpoint.mockResolvedValue(undefined);
 
@@ -633,7 +639,7 @@ describe('ProposalHandler checkpoint validation', () => {
     function setupDeepValidationMocks(computedCheckpoint: Partial<Checkpoint>, forkArchiveRoot: Fr = Fr.ZERO) {
       // Block with matching archive so the early archive check passes
       const block = {
-        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
         number: 1,
         checkpointNumber: CheckpointNumber(1),
         header: {
@@ -654,7 +660,7 @@ describe('ProposalHandler checkpoint validation', () => {
       mockCheckpointBuilder = mock<CheckpointBuilder>();
       mockCheckpointBuilder.completeCheckpoint.mockResolvedValue({
         header: CheckpointHeader.empty(),
-        archive: new AppendOnlyTreeSnapshot(Fr.ZERO, 0),
+        archive: new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(0)),
         getCheckpointOutHash: () => checkpointOutHash,
         blocks: [],
         number: CheckpointNumber(1),
@@ -683,7 +689,7 @@ describe('ProposalHandler checkpoint validation', () => {
     }) {
       const { firstBlockNumber, parentLeafCount, lastLeafCount } = opts;
       const block = {
-        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
         number: firstBlockNumber,
         checkpointNumber: CheckpointNumber(1),
         header: {
@@ -883,7 +889,7 @@ describe('ProposalHandler checkpoint validation', () => {
 
       setupDeepValidationMocks({
         header,
-        archive: new AppendOnlyTreeSnapshot(Fr.random(), 1),
+        archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1)),
       });
 
       const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
@@ -896,7 +902,7 @@ describe('ProposalHandler checkpoint validation', () => {
 
       setupDeepValidationMocks({
         header,
-        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
       });
 
       const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
@@ -909,7 +915,7 @@ describe('ProposalHandler checkpoint validation', () => {
 
       setupDeepValidationMocks({
         header,
-        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
         // Empty blocks array triggers validateCheckpointStructure failure ("Checkpoint has no blocks")
         blocks: [],
       });
@@ -935,10 +941,10 @@ describe('ProposalHandler checkpoint validation', () => {
         gasFees: header.gasFees,
         timestamp: header.timestamp,
       });
-      unfreeze(blockHeader).lastArchive = new AppendOnlyTreeSnapshot(lastArchiveRoot, 0);
+      unfreeze(blockHeader).lastArchive = new AppendOnlyTreeSnapshot(lastArchiveRoot, TreeLeafIndex(0));
 
       const minimalBlock = {
-        archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
         number: 1,
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: 0,
@@ -952,7 +958,7 @@ describe('ProposalHandler checkpoint validation', () => {
       setupDeepValidationMocks(
         {
           header,
-          archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
           blocks: [minimalBlock],
           number: CheckpointNumber(1),
           slot: SlotNumber(1),
@@ -1055,11 +1061,11 @@ describe('ProposalHandler checkpoint validation', () => {
           gasFees: header.gasFees,
           timestamp: header.timestamp,
         });
-        unfreeze(blockHeader).lastArchive = new AppendOnlyTreeSnapshot(Fr.ZERO, 0);
+        unfreeze(blockHeader).lastArchive = new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(0));
         // The rebuilt checkpoint is mocked wholesale, so its block only has to satisfy the final structural
         // validation; the blocks the archiver serves below are what the counts and the endpoint derive from.
         const computedBlock = {
-          archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
           number: 5,
           checkpointNumber: CheckpointNumber(1),
           indexWithinCheckpoint: 0,
@@ -1071,7 +1077,7 @@ describe('ProposalHandler checkpoint validation', () => {
         } as unknown as L2Block;
         setupDeepValidationMocks({
           header,
-          archive: new AppendOnlyTreeSnapshot(archiveRoot, 1),
+          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
           blocks: [computedBlock],
           number: CheckpointNumber(1),
           slot: SlotNumber(1),
@@ -1081,26 +1087,26 @@ describe('ProposalHandler checkpoint validation', () => {
         // The checkpoint is blocks 5 and 6 of slot 1; block 4, before it, consumed through message total 3.
         const midArchive = Fr.random();
         const midBlock = {
-          archive: new AppendOnlyTreeSnapshot(midArchive, 1),
+          archive: new AppendOnlyTreeSnapshot(midArchive, TreeLeafIndex(1)),
           number: 5,
           checkpointNumber: CheckpointNumber(1),
           indexWithinCheckpoint: 0,
           header: {
             globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
             state: { l1ToL2MessageTree: { nextAvailableLeafIndex: midLeafCount } },
-            lastArchive: new AppendOnlyTreeSnapshot(Fr.random(), 0),
+            lastArchive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(0)),
             getBlockNumber: () => 5,
           },
         } as unknown as L2Block;
         const lastBlock = {
-          archive: new AppendOnlyTreeSnapshot(archiveRoot, 2),
+          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(2)),
           number: 6,
           checkpointNumber: CheckpointNumber(1),
           indexWithinCheckpoint: 1,
           header: {
             globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
             state: { l1ToL2MessageTree: { nextAvailableLeafIndex: lastLeafCount } },
-            lastArchive: new AppendOnlyTreeSnapshot(midArchive, 1),
+            lastArchive: new AppendOnlyTreeSnapshot(midArchive, TreeLeafIndex(1)),
             getBlockNumber: () => 6,
           },
         } as unknown as L2Block;
@@ -1558,7 +1564,8 @@ describe('ProposalHandler checkpoint validation', () => {
   // only genuine duplicates (same archive) and otherwise wait for the local prune.
   describe('handleBlockProposal block-number guard (reorg-aware)', () => {
     /** Block-data stub at the target number with the given archive root. */
-    const blockAt = (archiveRoot: Fr) => ({ archive: new AppendOnlyTreeSnapshot(archiveRoot, 1) }) as BlockData;
+    const blockAt = (archiveRoot: Fr) =>
+      ({ archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)) }) as BlockData;
 
     it('rejects a genuine duplicate (existing block has the same archive)', async () => {
       const archive = Fr.random();
@@ -1680,7 +1687,7 @@ describe('ProposalHandler checkpoint validation', () => {
       options: { nowMs?: number; observers?: BlockProposalObservers } = {},
     ) {
       const blockHeader = makeBlockHeader(1, { slotNumber: SlotNumber(1) });
-      blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex = 2;
+      blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(2);
       const proposal = ValidatedBlockProposal(
         await makeBlockProposal({ blockHeader, archiveRoot: Fr.random(), txHashes: [], inboxPrefixRef }),
       );

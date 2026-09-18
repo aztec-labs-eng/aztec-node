@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { CheckpointNumber } from './checkpoint_number.js';
+import type { TreeLeafIndex } from './tree_leaf_index.js';
 import type { Branded } from './types.js';
 
 /**
@@ -76,6 +77,18 @@ BlockNumber.fromString = function (value: string): BlockNumber {
  */
 BlockNumber.fromCheckpointNumber = function (value: CheckpointNumber): BlockNumber {
   return value as unknown as BlockNumber;
+};
+
+/**
+ * Converts the next-available leaf index of an archive tree to a block number.
+ *
+ * The archive tree holds one leaf per block, so the number of leaves it has accumulated is the number of the next
+ * block to be built, and a snapshot taken before block N has N leaves.
+ * @param value - The archive tree's next available leaf index.
+ * @returns The corresponding BlockNumber.
+ */
+BlockNumber.fromTreeLeafIndex = function (value: TreeLeafIndex): BlockNumber {
+  return BlockNumber(value);
 };
 
 /**

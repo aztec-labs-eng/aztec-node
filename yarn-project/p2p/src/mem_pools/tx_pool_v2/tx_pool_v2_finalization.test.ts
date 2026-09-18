@@ -1,4 +1,10 @@
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -68,7 +74,7 @@ describe('TxPoolV2 finalization stall', () => {
       return new TxEffect(RevertCode.OK, tx.getTxHash(), Fr.ZERO, [], nullifiers, [], [], [], [], []);
     });
     const body = new Body(txEffects);
-    const archive = new AppendOnlyTreeSnapshot(Fr.random(), header.globalVariables.blockNumber + 1);
+    const archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(header.globalVariables.blockNumber + 1));
     return new L2Block(
       archive,
       header,

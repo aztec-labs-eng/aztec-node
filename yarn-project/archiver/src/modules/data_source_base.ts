@@ -6,6 +6,7 @@ import {
   type EpochNumber,
   IndexWithinCheckpoint,
   type SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -96,7 +97,7 @@ export abstract class ArchiverDataSourceBase
     this.initialBlockHash = initialBlockHash;
     this.genesisArchiveRoot = genesisArchiveRoot;
 
-    const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+    const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
     this.genesisBlock = new L2Block(
       genesisArchive,
       initialHeader,

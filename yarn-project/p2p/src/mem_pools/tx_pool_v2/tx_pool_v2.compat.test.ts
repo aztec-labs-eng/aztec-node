@@ -3,7 +3,12 @@
  * These tests mirror the original TxPool test suite (aztec_kv_tx_pool.test.ts)
  * but use the new TxPoolV2 interface.
  */
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { map, sort, toArray } from '@aztec-labs/foundation/iterable';
@@ -110,7 +115,7 @@ describe('TxPoolV2 Compatibility Tests', () => {
       return new TxEffect(RevertCode.OK, tx.getTxHash(), Fr.ZERO, [], nullifiers, [], [], [], [], []);
     });
     const body = new Body(txEffects);
-    const archive = new AppendOnlyTreeSnapshot(Fr.random(), header.globalVariables.blockNumber + 1);
+    const archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(header.globalVariables.blockNumber + 1));
     return new L2Block(
       archive,
       header,

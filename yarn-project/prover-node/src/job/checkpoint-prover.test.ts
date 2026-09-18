@@ -1,6 +1,6 @@
 import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, EpochNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -590,7 +590,7 @@ describe('CheckpointProver', () => {
    */
   function pinConsumedMessageCounts(target: Checkpoint, counts: number[] = target.blocks.map(() => 0)) {
     target.blocks.forEach((block, i) => {
-      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = counts[i];
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(counts[i]);
     });
   }
 
@@ -609,7 +609,7 @@ describe('CheckpointProver', () => {
   /** A previous block header whose L1-to-L2 leaf count is `consumedMessageCount`. */
   function makePreviousBlockHeader(consumedMessageCount = 0): BlockHeader {
     const header = BlockHeader.empty();
-    header.state.l1ToL2MessageTree.nextAvailableLeafIndex = consumedMessageCount;
+    header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(consumedMessageCount);
     return header;
   }
 

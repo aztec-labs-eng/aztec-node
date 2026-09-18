@@ -1,4 +1,4 @@
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 
@@ -34,13 +34,25 @@ describe('L2Block', () => {
     emptyBlockHeader.state.partial.nullifierTree.root = Fr.fromString(
       '0x18935581a8ed73d08ffd00386fba55ba6c89f3ab848a76b8fedfa9034cee0454',
     );
-    emptyBlockHeader.state.partial.nullifierTree.nextAvailableLeafIndex = 128;
+    emptyBlockHeader.state.partial.nullifierTree.nextAvailableLeafIndex = TreeLeafIndex(128);
     emptyBlockHeader.state.partial.publicDataTree.root = Fr.fromString(
       '0x1bef38b621017d3c7416663d0cd81369424560710526a3fbaaec13e356b9d084',
     );
-    emptyBlockHeader.state.partial.publicDataTree.nextAvailableLeafIndex = 128;
+    emptyBlockHeader.state.partial.publicDataTree.nextAvailableLeafIndex = TreeLeafIndex(128);
     const emptyBlock = L2Block.empty(emptyBlockHeader);
     const emptyBlockHash = await emptyBlock.hash();
     expect(emptyBlockHash.equals(GENESIS_BLOCK_HEADER_HASH)).toBeTruthy();
+  });
+
+  it.each([2 ** 32, 2 ** 42])('round trips a block whose tree indices are %p', async index => {
+    const block = await L2Block.random(BlockNumber(42));
+    block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(index);
+    block.header.state.partial.noteHashTree.nextAvailableLeafIndex = TreeLeafIndex(index);
+    block.header.state.partial.nullifierTree.nextAvailableLeafIndex = TreeLeafIndex(index);
+    block.header.state.partial.publicDataTree.nextAvailableLeafIndex = TreeLeafIndex(index);
+
+    expect(L2Block.fromBuffer(block.toBuffer())).toEqual(block);
+    expect(L2Block.schema.parse(JSON.parse(jsonStringify(block)))).toEqual(block);
+    expect(block.toBlockBlobData().blockEndStateField.noteHashNextAvailableLeafIndex).toBe(index);
   });
 });

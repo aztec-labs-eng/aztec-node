@@ -8,7 +8,7 @@ import {
   MAX_PROTOCOL_CONTRACTS,
   PRIVATE_LOG_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
-import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -364,7 +364,7 @@ export function mapClaimedLengthArrayToNoir<T extends Serializable, N extends nu
 export function mapAppendOnlyTreeSnapshotFromNoir(snapshot: AppendOnlyTreeSnapshotNoir): AppendOnlyTreeSnapshot {
   return new AppendOnlyTreeSnapshot(
     mapFieldFromNoir(snapshot.root),
-    mapNumberFromNoir(snapshot.next_available_leaf_index),
+    TreeLeafIndex.fromField(mapFieldFromNoir(snapshot.next_available_leaf_index)),
   );
 }
 

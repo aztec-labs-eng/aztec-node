@@ -9,7 +9,7 @@ import {
   NULLIFIER_TREE_HEIGHT,
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
-import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { timesAsync } from '@aztec-labs/foundation/collection';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -504,7 +504,7 @@ describe('NativeWorldState', () => {
       const stateReference = await fork.getStateReference();
       const archiveInfo = await fork.getTreeInfo(MerkleTreeId.ARCHIVE);
       const header = new BlockHeader(
-        new AppendOnlyTreeSnapshot(new Fr(archiveInfo.root), Number(archiveInfo.size)),
+        new AppendOnlyTreeSnapshot(new Fr(archiveInfo.root), TreeLeafIndex(Number(archiveInfo.size))),
         stateReference,
         Fr.random(), // spongeBlobHash
         Fr.random(), // txEffectsTreeRoot
@@ -535,7 +535,7 @@ describe('NativeWorldState', () => {
       const stateReference = await fork.getStateReference();
       const archiveInfo = await fork.getTreeInfo(MerkleTreeId.ARCHIVE);
       const header = new BlockHeader(
-        new AppendOnlyTreeSnapshot(new Fr(archiveInfo.root), Number(archiveInfo.size)),
+        new AppendOnlyTreeSnapshot(new Fr(archiveInfo.root), TreeLeafIndex(Number(archiveInfo.size))),
         stateReference,
         Fr.random(), // spongeBlobHash
         Fr.random(), // txEffectsTreeRoot

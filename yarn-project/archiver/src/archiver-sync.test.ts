@@ -10,7 +10,13 @@ import {
   type RollupContract,
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  EpochNumber,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { sum, times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
@@ -1622,7 +1628,7 @@ describe('Archiver Sync', () => {
         slotNumber: fake.getL2SlotAtL1Block(LOCAL_BLOCKS_L1_BLOCK),
       });
       checkpoint.blocks.forEach(
-        (block, i) => (block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = leafCounts[i]),
+        (block, i) => (block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(leafCounts[i])),
       );
       for (const block of checkpoint.blocks) {
         await addLocalBlock(block);
@@ -2190,7 +2196,7 @@ describe('Archiver Sync', () => {
         previousArchive: lastBlockInCp1.archive,
         slotNumber: fake.getL2SlotAtL1Block(LOCAL_BLOCKS_L1_BLOCK),
       });
-      cp2.blocks[0].header.state.l1ToL2MessageTree.nextAvailableLeafIndex = 3;
+      cp2.blocks[0].header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(3);
       await addLocalBlock(cp2.blocks[0]);
       await archiver.addProposedCheckpoint({
         checkpointNumber: CheckpointNumber(2),

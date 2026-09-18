@@ -3,7 +3,13 @@ import {
   CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE,
   CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE,
 } from '@aztec-labs/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toArray } from '@aztec-labs/foundation/iterable';
@@ -116,7 +122,7 @@ const emptyPrefix = InboxMessagePrefixRef.empty();
  */
 async function randomBlock(blockNumber: number, opts: Parameters<typeof L2Block.random>[1] = {}): Promise<L2Block> {
   const block = await L2Block.random(BlockNumber(blockNumber), opts);
-  block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = 0;
+  block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(0);
   return block;
 }
 
@@ -843,7 +849,7 @@ describe('ArchiverDataStoreUpdater', () => {
         slotNumber: SlotNumber(100),
         ...(previousBlock ? { lastArchive: previousBlock.archive } : {}),
       });
-      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = leafCount;
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(leafCount);
       return block;
     };
     const refAt = async (leafCount: number) =>
@@ -933,7 +939,7 @@ describe('ArchiverDataStoreUpdater', () => {
         slotNumber: SlotNumber(100),
         ...(previousBlock ? { lastArchive: previousBlock.archive } : {}),
       });
-      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = leafCount;
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(leafCount);
       return block;
     };
     const positionAt = async (count: number) => (await store.messages.getMessagePosition(BigInt(count)))!;

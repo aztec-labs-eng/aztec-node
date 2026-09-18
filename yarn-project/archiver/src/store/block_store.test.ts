@@ -5,6 +5,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -347,7 +348,7 @@ describe('BlockStore', () => {
 
     it('accepts blocks that properly cross checkpoint boundaries', async () => {
       // Checkpoint 1: blocks 1-2, Checkpoint 2: blocks 3-4 — proper boundary crossing
-      const genesisArchive = new AppendOnlyTreeSnapshot(new Fr(GENESIS_ARCHIVE_ROOT), 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(new Fr(GENESIS_ARCHIVE_ROOT), TreeLeafIndex(1));
       const checkpoints = await makeChainedCheckpoints(2, {
         previousArchive: genesisArchive,
         blocksPerCheckpoint: 2,

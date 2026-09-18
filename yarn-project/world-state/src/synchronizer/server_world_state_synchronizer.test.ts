@@ -1,4 +1,4 @@
-import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { timesParallel } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -274,7 +274,7 @@ describe('ServerWorldStateSynchronizer', () => {
     afterEach(() => {
       const blocks = allBlocks();
       originalLeafCounts.forEach(
-        (count, i) => (blocks[i].header.state.l1ToL2MessageTree.nextAvailableLeafIndex = count),
+        (count, i) => (blocks[i].header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(count)),
       );
     });
 
@@ -283,7 +283,9 @@ describe('ServerWorldStateSynchronizer', () => {
       originalLeafCounts = blockLeafCounts.map(
         (_, i) => blocks[i].header.state.l1ToL2MessageTree.nextAvailableLeafIndex,
       );
-      blockLeafCounts.forEach((count, i) => (blocks[i].header.state.l1ToL2MessageTree.nextAvailableLeafIndex = count));
+      blockLeafCounts.forEach(
+        (count, i) => (blocks[i].header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(count)),
+      );
 
       messagesByRange = new Map([
         ['0-3', [new Fr(10n), new Fr(11n), new Fr(12n)]],

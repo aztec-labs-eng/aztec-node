@@ -7,6 +7,7 @@ import {
   IndexWithinCheckpoint,
   IndexWithinCheckpointSchema,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
@@ -173,7 +174,7 @@ export class L2Block {
       makeTxOptions?: (txIndex: number) => Partial<Parameters<typeof Body.random>[0]>;
     } & Partial<Parameters<typeof BlockHeader.random>[0]> = {},
   ): Promise<L2Block> {
-    const archive = new AppendOnlyTreeSnapshot(Fr.random(), blockNumber + 1);
+    const archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(blockNumber + 1));
     const header = BlockHeader.random({ ...blockHeaderOverrides, blockNumber });
     const body = await Body.random({ txsPerBlock, makeTxOptions, ...txOptions });
     return new L2Block(archive, header, body, checkpointNumber, indexWithinCheckpoint);
