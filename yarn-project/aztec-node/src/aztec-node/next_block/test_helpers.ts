@@ -1,5 +1,11 @@
 import type { FeeHeader } from '@aztec-labs/ethereum/contracts';
-import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  EpochNumber,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   BlockHash,
@@ -89,7 +95,7 @@ export function makeProposedCheckpointData(args: {
     blockCount: 1,
     totalManaUsed: args.totalManaUsed ?? 555n,
     feeAssetPriceModifier: args.feeAssetPriceModifier ?? 7n,
-    archive: new AppendOnlyTreeSnapshot(args.archiveRoot ?? Fr.ZERO, 0),
+    archive: new AppendOnlyTreeSnapshot(args.archiveRoot ?? Fr.ZERO, TreeLeafIndex(0)),
     checkpointOutHash: args.checkpointOutHash ?? Fr.fromString('0xfeed'),
     inboxMsgTotal: 0n,
   };

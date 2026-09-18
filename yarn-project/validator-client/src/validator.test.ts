@@ -8,6 +8,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
@@ -101,7 +102,7 @@ function makeKeyStore(validator: {
 /** A block header consuming no Inbox messages (leaf count zero), so the streaming checks see an empty bundle. */
 function makeBlockHeader(...args: Parameters<typeof makeRandomBlockHeader>) {
   const header = makeRandomBlockHeader(...args);
-  header.state.l1ToL2MessageTree.nextAvailableLeafIndex = 0;
+  header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(0);
   return header;
 }
 
@@ -434,7 +435,7 @@ describe('ValidatorClient', () => {
         ...blockBuildResult.block,
         number: blockNumber,
         header: makeBlockHeader(1, { blockNumber, slotNumber: proposal.slotNumber }),
-        archive: new AppendOnlyTreeSnapshot(proposal.archive, blockNumber),
+        archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
         checkpointNumber: CheckpointNumber(1),
       } as unknown as L2Block;
       const disposeFork = jest.fn();
@@ -459,7 +460,7 @@ describe('ValidatorClient', () => {
       } as any);
       mockCheckpointBuilder.completeCheckpoint.mockResolvedValue({
         header: computedHeader,
-        archive: new AppendOnlyTreeSnapshot(proposal.archive, blockNumber),
+        archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
         getCheckpointOutHash: () => Fr.random(),
         blocks: [checkpointBlock],
         number: CheckpointNumber(1),
@@ -570,7 +571,7 @@ describe('ValidatorClient', () => {
           globalVariables: blockHeader.globalVariables,
           state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
         },
-        archive: new AppendOnlyTreeSnapshot(Fr.random(), blockNumber - 1),
+        archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(blockNumber - 1)),
         blockHash: BlockHash.random(),
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
@@ -600,7 +601,7 @@ describe('ValidatorClient', () => {
         block: {
           header: clonedBlockHeader,
           body: { txEffects: times(proposal.txHashes.length, () => TxEffect.empty()) },
-          archive: new AppendOnlyTreeSnapshot(proposal.archive, blockNumber),
+          archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
           checkpointNumber: CheckpointNumber(1),
           indexWithinCheckpoint: IndexWithinCheckpoint(0),
         } as unknown as L2Block,
@@ -642,7 +643,7 @@ describe('ValidatorClient', () => {
 
       const terminalGlobals = terminalBlock.blockHeader.globalVariables;
       const laterBlockHeader = makeBlockHeader(2, {
-        lastArchive: new AppendOnlyTreeSnapshot(terminalBlock.archive, terminalBlock.blockNumber),
+        lastArchive: new AppendOnlyTreeSnapshot(terminalBlock.archive, TreeLeafIndex(terminalBlock.blockNumber)),
         blockNumber: BlockNumber(terminalBlock.blockNumber + 1),
         slotNumber: proposal.slotNumber,
         chainId: terminalGlobals.chainId,
@@ -669,7 +670,7 @@ describe('ValidatorClient', () => {
 
       const terminalBlockData = {
         header: terminalBlock.blockHeader,
-        archive: new AppendOnlyTreeSnapshot(terminalBlock.archive, terminalBlock.blockNumber),
+        archive: new AppendOnlyTreeSnapshot(terminalBlock.archive, TreeLeafIndex(terminalBlock.blockNumber)),
         blockHash: BlockHash.random(),
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: terminalBlock.indexWithinCheckpoint,
@@ -682,7 +683,7 @@ describe('ValidatorClient', () => {
         ...blockBuildResult.block,
         header: laterBlock.blockHeader,
         body: { txEffects: times(laterBlock.txHashes.length, () => TxEffect.empty()) },
-        archive: new AppendOnlyTreeSnapshot(laterBlock.archive, laterBlock.blockNumber),
+        archive: new AppendOnlyTreeSnapshot(laterBlock.archive, TreeLeafIndex(laterBlock.blockNumber)),
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: laterBlock.indexWithinCheckpoint,
       } as unknown as L2Block;
@@ -936,9 +937,9 @@ describe('ValidatorClient', () => {
       expect(didValidate).toBe(true);
 
       // Create 3 blocks for the slot, each with a distinct archive root
-      const block1Archive = new AppendOnlyTreeSnapshot(Fr.random(), 1);
-      const block2Archive = new AppendOnlyTreeSnapshot(Fr.random(), 2);
-      const block3Archive = new AppendOnlyTreeSnapshot(Fr.random(), 3);
+      const block1Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1));
+      const block2Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(2));
+      const block3Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(3));
       const blocks = [
         { archive: block1Archive, number: 1 },
         { archive: block2Archive, number: 2 },
@@ -1707,7 +1708,7 @@ describe('ValidatorClient', () => {
             getSlot: () => SlotNumber(parentSlotNumber),
             globalVariables: parentGlobalVariables,
           },
-          archive: new AppendOnlyTreeSnapshot(Fr.random(), parentBlockNumber),
+          archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(parentBlockNumber)),
           blockHash: BlockHash.random(),
           checkpointNumber: parentCheckpointNumber,
           indexWithinCheckpoint: IndexWithinCheckpoint(0), // Parent is first block in checkpoint

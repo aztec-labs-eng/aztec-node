@@ -5,7 +5,12 @@ import {
   NULLIFIER_SUBTREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
-import { BlockNumber, type CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  type CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { L2Block } from '@aztec-labs/stdlib/block';
@@ -15,7 +20,7 @@ import type {
   MerkleTreeWriteOperations,
 } from '@aztec-labs/stdlib/interfaces/server';
 import { mockCheckpointAndMessages, mockL1ToL2Messages } from '@aztec-labs/stdlib/testing';
-import { AppendOnlyTreeSnapshot, MerkleTreeId, TreeLeafIndex } from '@aztec-labs/stdlib/trees';
+import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 
 import type { NativeWorldStateService } from '../native/native_world_state.js';

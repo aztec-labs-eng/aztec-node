@@ -1,6 +1,11 @@
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_NOTE_HASHES_PER_TX, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { times, timesParallel } from '@aztec-labs/foundation/collection';
 import type { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -92,7 +97,7 @@ export function makeStateForBlock(blockNumber: number, txsPerBlock: number): Sta
   return new StateReference(
     AppendOnlyTreeSnapshot.random(),
     new PartialStateReference(
-      new AppendOnlyTreeSnapshot(Fr.random(), noteHashIndex),
+      new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(noteHashIndex)),
       AppendOnlyTreeSnapshot.random(),
       AppendOnlyTreeSnapshot.random(),
     ),

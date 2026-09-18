@@ -1,4 +1,5 @@
 import { STATE_REFERENCE_LENGTH } from '@aztec-labs/constants';
+import { TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
@@ -33,11 +34,11 @@ describe('StateReference', () => {
 
   it.each([2 ** 32, 2 ** 42])('round trips leaf index %p through buffer and fields', index => {
     const withIndex = new StateReference(
-      new AppendOnlyTreeSnapshot(Fr.random(), index),
+      new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(index)),
       new PartialStateReference(
-        new AppendOnlyTreeSnapshot(Fr.random(), index),
-        new AppendOnlyTreeSnapshot(Fr.random(), index),
-        new AppendOnlyTreeSnapshot(Fr.random(), index),
+        new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(index)),
+        new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(index)),
+        new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(index)),
       ),
     );
 

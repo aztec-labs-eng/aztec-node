@@ -7,6 +7,7 @@ import {
   type NESTED_RECURSIVE_ROLLUP_HONK_PROOF_LENGTH,
   OUT_HASH_TREE_HEIGHT,
 } from '@aztec-labs/constants';
+import { TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import type { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { BLS12Point } from '@aztec-labs/foundation/curves/bls12';
@@ -375,7 +376,7 @@ export class TopTreeOrchestrator extends ProvingScheduler {
       const tree = await treeCalculator.computeTree(leaves.map(l => l.toBuffer()));
       const nextAvailableLeafIndex = leaves.length;
       return {
-        treeSnapshot: new AppendOnlyTreeSnapshot(Fr.fromBuffer(tree.root), nextAvailableLeafIndex),
+        treeSnapshot: new AppendOnlyTreeSnapshot(Fr.fromBuffer(tree.root), TreeLeafIndex(nextAvailableLeafIndex)),
         siblingPath: tree.getSiblingPath(nextAvailableLeafIndex).map(Fr.fromBuffer) as Tuple<
           Fr,
           typeof OUT_HASH_TREE_HEIGHT

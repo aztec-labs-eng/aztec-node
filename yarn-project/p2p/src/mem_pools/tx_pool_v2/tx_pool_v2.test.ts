@@ -5,7 +5,13 @@ import {
   PUBLIC_TX_L2_GAS_OVERHEAD,
   TX_DA_GAS_OVERHEAD,
 } from '@aztec-labs/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -219,7 +225,7 @@ describe('TxPoolV2', () => {
       );
     });
     const body = new Body(txEffects);
-    const archive = new AppendOnlyTreeSnapshot(Fr.random(), header.globalVariables.blockNumber + 1);
+    const archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(header.globalVariables.blockNumber + 1));
     return new L2Block(
       archive,
       header,
@@ -232,7 +238,7 @@ describe('TxPoolV2', () => {
   /** Creates an empty L2Block with no transactions */
   const makeEmptyBlock = (header: BlockHeader): L2Block => {
     const body = new Body([]);
-    const archive = new AppendOnlyTreeSnapshot(Fr.random(), header.globalVariables.blockNumber + 1);
+    const archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(header.globalVariables.blockNumber + 1));
     return new L2Block(
       archive,
       header,
@@ -3162,7 +3168,7 @@ describe('TxPoolV2', () => {
         header: CheckpointHeader.empty(),
         startBlock: BlockNumber(startBlock),
         blockCount,
-        archive: new AppendOnlyTreeSnapshot(Fr.ZERO, 0),
+        archive: new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(0)),
         checkpointOutHash: Fr.ZERO,
         feeAssetPriceModifier: 0n,
         attestations: [],

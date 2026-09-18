@@ -1,4 +1,9 @@
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { BlockHash, L2Block } from '@aztec-labs/stdlib/block';
@@ -69,7 +74,7 @@ describe('tx effect leaf ingestion', () => {
         txOptions: { maxEffects: 0, numPublicCallsPerTx: 0 },
       });
       // No Inbox messages are consumed, so the proposed-block insertion guard checks the empty prefix.
-      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = 0;
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(0);
       const blockHash = BlockHash.random();
       block.header.setHash(blockHash);
       const leaf = new Fr(123);

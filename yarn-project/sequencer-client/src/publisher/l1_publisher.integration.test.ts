@@ -43,6 +43,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times, timesParallel } from '@aztec-labs/foundation/collection';
@@ -282,7 +283,7 @@ describe('L1Publisher integration', () => {
     const initialHeaderHash = (await initialHeader.hash()).toString();
     const genesisArchiveSnapshot = new AppendOnlyTreeSnapshot(
       deployL1ContractsArgs.genesisArchiveRoot ?? new Fr(GENESIS_ARCHIVE_ROOT),
-      1,
+      TreeLeafIndex(1),
     );
     const genesisBlock = new L2Block(
       genesisArchiveSnapshot,

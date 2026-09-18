@@ -1,14 +1,14 @@
 import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX, NULLIFIER_SUBTREE_HEIGHT } from '@aztec-labs/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Body, L2Block } from '@aztec-labs/stdlib/block';
-import {
-  AppendOnlyTreeSnapshot,
-  MerkleTreeId,
-  type MerkleTreeWriteOperations,
-  TreeLeafIndex,
-} from '@aztec-labs/stdlib/trees';
+import { AppendOnlyTreeSnapshot, MerkleTreeId, type MerkleTreeWriteOperations } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, TxEffect } from '@aztec-labs/stdlib/tx';
 
 /**

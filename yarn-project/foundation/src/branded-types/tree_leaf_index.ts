@@ -1,5 +1,7 @@
-import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { z } from 'zod';
+
+import type { Fr } from '../curves/bn254/index.js';
+import type { Branded } from './types.js';
 
 /**
  * Index of a leaf within a merkle tree.
@@ -8,8 +10,11 @@ import { z } from 'zod';
  * not fit in a uint32. Indices are kept as JavaScript numbers, which are exact through 53 bits, and are constrained
  * to the non-negative safe-integer range so that a value that cannot be represented exactly fails loudly instead of
  * silently losing precision. The binary encoding of a leaf index is a uint64.
+ *
+ * The type is branded so that a plain number cannot stand in for an index without passing through one of the
+ * constructors below, which is what keeps an unchecked `Number(bigint)` or a truncated width from leaking in.
  */
-export type TreeLeafIndex = number;
+export type TreeLeafIndex = Branded<number, 'TreeLeafIndex'>;
 
 /**
  * Checks that a number is a usable tree leaf index.
@@ -21,7 +26,7 @@ export function TreeLeafIndex(value: number): TreeLeafIndex {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new Error(`Invalid tree leaf index ${value}: must be a non-negative safe integer`);
   }
-  return value;
+  return value as TreeLeafIndex;
 }
 
 /**
@@ -34,7 +39,7 @@ TreeLeafIndex.fromBigInt = function (value: bigint): TreeLeafIndex {
   if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error(`Invalid tree leaf index ${value}: must be a non-negative safe integer`);
   }
-  return Number(value);
+  return Number(value) as TreeLeafIndex;
 };
 
 /**

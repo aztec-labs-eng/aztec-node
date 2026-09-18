@@ -10,7 +10,7 @@ import type {
 } from '@aztec-labs/ethereum/contracts';
 import { MULTI_CALL_3_ADDRESS, messageSentSearchWindow } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
-import { type BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type BlockNumber, CheckpointNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -168,7 +168,7 @@ export class FakeL1State {
   constructor(private readonly config: FakeL1StateConfig) {
     this.l1BlockNumber = config.l1StartBlock;
     this.finalizedL1BlockNumber = config.l1StartBlock;
-    this.lastArchive = new AppendOnlyTreeSnapshot(config.genesisArchiveRoot, 1);
+    this.lastArchive = new AppendOnlyTreeSnapshot(config.genesisArchiveRoot, TreeLeafIndex(1));
   }
 
   /**
@@ -319,7 +319,7 @@ export class FakeL1State {
     });
     if (blocks === undefined) {
       for (const block of result.checkpoint.blocks) {
-        block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = Number(consumedMessageTotal);
+        block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex.fromBigInt(consumedMessageTotal);
       }
     }
     // The checkpoint header commits to the Inbox rolling hash over every message consumed through it, which on L1 is

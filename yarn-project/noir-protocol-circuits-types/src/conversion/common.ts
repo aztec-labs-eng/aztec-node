@@ -8,7 +8,7 @@ import {
   MAX_PROTOCOL_CONTRACTS,
   PRIVATE_LOG_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
-import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -42,7 +42,6 @@ import {
   AppendOnlyTreeSnapshot,
   type NullifierLeafPreimage,
   type PublicDataTreeLeafPreimage,
-  TreeLeafIndex,
 } from '@aztec-labs/stdlib/trees';
 import {
   BlockHeader,

@@ -1,6 +1,6 @@
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { AppendOnlyTreeSnapshot, MerkleTreeId, TreeLeafIndex } from '@aztec-labs/stdlib/trees';
+import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { StateReference } from '@aztec-labs/stdlib/tx';
 
 export interface WorldStateStatusSummary {

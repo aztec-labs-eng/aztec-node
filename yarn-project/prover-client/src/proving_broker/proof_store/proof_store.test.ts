@@ -1,3 +1,4 @@
+import { TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { InMemoryFileStore } from '@aztec-labs/stdlib/file-store';
 import type { ProvingJobId } from '@aztec-labs/stdlib/interfaces/server';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
@@ -14,8 +15,8 @@ describe('proof stores', () => {
   const makeInputsWithLeafIndex = (index: number): TxMergeRollupPrivateInputs => {
     const inputs = makeTxMergeRollupPrivateInputs();
     for (const rollup of inputs.previousRollups) {
-      rollup.publicInputs.startTreeSnapshots.noteHashTree.nextAvailableLeafIndex = index;
-      rollup.publicInputs.endTreeSnapshots.noteHashTree.nextAvailableLeafIndex = index;
+      rollup.publicInputs.startTreeSnapshots.noteHashTree.nextAvailableLeafIndex = TreeLeafIndex(index);
+      rollup.publicInputs.endTreeSnapshots.noteHashTree.nextAvailableLeafIndex = TreeLeafIndex(index);
     }
     return inputs;
   };

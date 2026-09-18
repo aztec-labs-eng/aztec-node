@@ -7,6 +7,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -52,7 +53,9 @@ describe('Archiver Store', () => {
   beforeEach(async () => {
     const now = +new Date();
     // Build a non-trivial initial header so we can distinguish it from BlockHeader.empty().
-    initialHeader = BlockHeader.empty({ lastArchive: new AppendOnlyTreeSnapshot(Fr.fromString('0x1234'), 1) });
+    initialHeader = BlockHeader.empty({
+      lastArchive: new AppendOnlyTreeSnapshot(Fr.fromString('0x1234'), TreeLeafIndex(1)),
+    });
     // Genesis archive root is the post-block-0 archive root from L1, distinct from
     // initialHeader.lastArchive.root (which is the pre-block-0 archive, always empty in practice).
     genesisArchiveRoot = Fr.fromString('0xabcd');
@@ -135,7 +138,7 @@ describe('Archiver Store', () => {
 
   describe('getCheckpoints', () => {
     it('returns published checkpoints with full checkpoint data', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -151,7 +154,7 @@ describe('Archiver Store', () => {
     });
 
     it('respects the limit parameter', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -162,7 +165,7 @@ describe('Archiver Store', () => {
     });
 
     it('respects the starting checkpoint number', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -182,7 +185,7 @@ describe('Archiver Store', () => {
   describe('getCheckpoints({ epoch })', () => {
     it('returns checkpoints for a specific epoch based on slot numbers', async () => {
       // l1Constants has epochDuration: 4, so epoch 0 has slots 0-3, epoch 1 has slots 4-7
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,
         makeCheckpointOptions: cpNumber => {
@@ -203,7 +206,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns empty array for epoch with no checkpoints', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(1, {
         previousArchive: genesisArchive,
         makeCheckpointOptions: () => ({ slotNumber: SlotNumber(2) }), // Epoch 0
@@ -216,7 +219,7 @@ describe('Archiver Store', () => {
 
     it('returns checkpoints in correct order (ascending by checkpoint number)', async () => {
       // Create multiple checkpoints all in epoch 0
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,
         makeCheckpointOptions: cpNumber => {
@@ -235,7 +238,7 @@ describe('Archiver Store', () => {
 
   describe('getCheckpoint', () => {
     it('returns checkpoint by number', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -245,7 +248,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns undefined for unknown checkpoint number', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(2, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -254,7 +257,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns checkpoint by slot', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const targetSlot = SlotNumber(7);
       const testCheckpoints = await makeChainedCheckpoints(2, {
         previousArchive: genesisArchive,
@@ -270,7 +273,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns undefined for unknown slot', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(1, {
         previousArchive: genesisArchive,
         makeCheckpointOptions: () => ({ slotNumber: SlotNumber(5) }),
@@ -282,7 +285,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns the latest checkpointed checkpoint for tag=checkpointed', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -292,7 +295,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns the proven checkpoint for tag=proven when one exists', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
       await archiverStore.blocks.setProvenCheckpointNumber(CheckpointNumber(2));
@@ -309,7 +312,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns the finalized checkpoint for tag=finalized when one exists', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
       await archiverStore.blocks.setProvenCheckpointNumber(CheckpointNumber(3));
@@ -328,7 +331,7 @@ describe('Archiver Store', () => {
 
   describe('getCheckpointData', () => {
     it('returns checkpoint data by number', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -344,7 +347,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns checkpoint data by slot', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const targetSlot = SlotNumber(11);
       const testCheckpoints = await makeChainedCheckpoints(2, {
         previousArchive: genesisArchive,
@@ -365,7 +368,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns the latest checkpointed data for tag=checkpointed', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -375,7 +378,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns the proven checkpoint data for tag=proven', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
       await archiverStore.blocks.setProvenCheckpointNumber(CheckpointNumber(2));
@@ -386,7 +389,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns the finalized checkpoint data for tag=finalized', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
       await archiverStore.blocks.setProvenCheckpointNumber(CheckpointNumber(3));
@@ -405,7 +408,7 @@ describe('Archiver Store', () => {
 
   describe('getCheckpoints / getCheckpointsData', () => {
     it('getCheckpoints returns the right slice from from+limit', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(5, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -415,7 +418,7 @@ describe('Archiver Store', () => {
     });
 
     it('getCheckpointsData returns the right slice from from+limit', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(5, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -430,7 +433,7 @@ describe('Archiver Store', () => {
     });
 
     it('getCheckpointsData returns [] for unknown epoch', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // checkpoint 1 in epoch 0 (slot 1, epochDuration=4)
       const testCheckpoints = await makeChainedCheckpoints(1, {
         previousArchive: genesisArchive,
@@ -526,7 +529,7 @@ describe('Archiver Store', () => {
     });
 
     it('never falls back to confirmed checkpoints', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const confirmedCheckpoints = await makeChainedCheckpoints(2, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(confirmedCheckpoints);
 
@@ -559,7 +562,7 @@ describe('Archiver Store', () => {
     // Genesis archive for the first block — bound in beforeEach so it picks up the suite-level genesisArchiveRoot.
     let genesisArchive: AppendOnlyTreeSnapshot;
     beforeEach(() => {
-      genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
     });
 
     it('adds a block to the store', async () => {
@@ -703,7 +706,7 @@ describe('Archiver Store', () => {
 
   describe('getBlocks with onlyCheckpointed', () => {
     it('returns checkpointed blocks with checkpoint info', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -733,7 +736,7 @@ describe('Archiver Store', () => {
     });
 
     it('respects the limit parameter', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -747,7 +750,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns blocks starting from specified block number', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, { previousArchive: genesisArchive });
       await archiverStore.blocks.addCheckpoints(testCheckpoints);
 
@@ -769,7 +772,7 @@ describe('Archiver Store', () => {
 
   describe('getBlocks / getBlocksData with epoch query', () => {
     it('returns empty array for epoch with no checkpoints', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1 is in epoch 0 (slot 1, epochDuration=4)
       const testCheckpoints = await makeChainedCheckpoints(1, {
         previousArchive: genesisArchive,
@@ -783,7 +786,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns blocks for epoch with checkpoints', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(2, {
         previousArchive: genesisArchive,
         makeCheckpointOptions: cpNumber => ({
@@ -813,7 +816,7 @@ describe('Archiver Store', () => {
     });
 
     it('resolves proposed to the latest block', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,
         blocksPerCheckpoint: 2,
@@ -827,7 +830,7 @@ describe('Archiver Store', () => {
     });
 
     it('resolves checkpointed, proven, and finalized to the corresponding block', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,
         blocksPerCheckpoint: 2,
@@ -853,7 +856,7 @@ describe('Archiver Store', () => {
     });
 
     it('returns the genesis block when proven tag points to genesis', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const testCheckpoints = await makeChainedCheckpoints(1, {
         previousArchive: genesisArchive,
         blocksPerCheckpoint: 1,
@@ -877,7 +880,7 @@ describe('Archiver Store', () => {
     });
 
     it('rejects rollback to a block that is not at a checkpoint boundary', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1: 3 blocks (1, 2, 3). Checkpoint 2: 3 blocks (4, 5, 6).
       const testCheckpoints = await makeChainedCheckpoints(2, {
         previousArchive: genesisArchive,
@@ -897,7 +900,7 @@ describe('Archiver Store', () => {
     });
 
     it('rejects rollback to a proposed but not yet checkpointed block', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       const checkpoints1 = await makeChainedCheckpoints(1, {
         previousArchive: genesisArchive,
         blocksPerCheckpoint: 2,
@@ -918,7 +921,7 @@ describe('Archiver Store', () => {
     });
 
     it('allows rollback to the last block of a checkpoint and updates sync points', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1: 3 blocks (1, 2, 3), L1 block 10. Checkpoint 2: 3 blocks (4, 5, 6), L1 block 20.
       const testCheckpoints = await makeChainedCheckpoints(2, {
         previousArchive: genesisArchive,
@@ -940,7 +943,7 @@ describe('Archiver Store', () => {
     });
 
     it('includes correct boundary info in error for mid-checkpoint rollback', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1: 2 blocks (1, 2). Checkpoint 2: 3 blocks (3, 4, 5).
       const checkpoints1 = await makeChainedCheckpoints(1, {
         previousArchive: genesisArchive,
@@ -963,7 +966,7 @@ describe('Archiver Store', () => {
     });
 
     it('rolls back proven checkpoint number when target is before proven block', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1: blocks 1-2, Checkpoint 2: blocks 3-4, Checkpoint 3: blocks 5-6
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,
@@ -983,7 +986,7 @@ describe('Archiver Store', () => {
     });
 
     it('preserves proven checkpoint number when target is after proven block', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1: blocks 1-2, Checkpoint 2: blocks 3-4, Checkpoint 3: blocks 5-6
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,
@@ -1003,7 +1006,7 @@ describe('Archiver Store', () => {
     });
 
     it('rolls back finalized checkpoint number when target is before finalized block', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1: blocks 1-2, Checkpoint 2: blocks 3-4, Checkpoint 3: blocks 5-6
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,
@@ -1024,7 +1027,7 @@ describe('Archiver Store', () => {
     });
 
     it('preserves finalized checkpoint number when target is after finalized block', async () => {
-      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
       // Checkpoint 1: blocks 1-2, Checkpoint 2: blocks 3-4, Checkpoint 3: blocks 5-6
       const testCheckpoints = await makeChainedCheckpoints(3, {
         previousArchive: genesisArchive,

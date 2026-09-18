@@ -1,11 +1,10 @@
+import { TreeLeafIndex, TreeLeafIndexSchema } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { BufferReader, BufferSink, FieldReader } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { inspect } from 'util';
 import { z } from 'zod';
-
-import { TreeLeafIndex, TreeLeafIndexSchema } from './tree_leaf_index.js';
 
 /**
  * Snapshot of an append only tree.
@@ -83,7 +82,7 @@ export class AppendOnlyTreeSnapshot {
   }
 
   static empty() {
-    return new AppendOnlyTreeSnapshot(Fr.ZERO, 0);
+    return new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(0));
   }
 
   /**
@@ -114,6 +113,6 @@ export class AppendOnlyTreeSnapshot {
   }
 
   static random() {
-    return new AppendOnlyTreeSnapshot(Fr.random(), Math.floor(Math.random() * 1000));
+    return new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(Math.floor(Math.random() * 1000)));
   }
 }
