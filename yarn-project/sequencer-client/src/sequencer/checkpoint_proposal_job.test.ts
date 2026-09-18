@@ -2171,6 +2171,23 @@ describe('CheckpointProposalJob', () => {
       expect(metrics.recordCheckpointProposalFailed).toHaveBeenCalledWith('checkpoint_blocks_pruned');
     });
 
+    it('publishes despite pruned blocks when the parent checkpoint gate is skipped', async () => {
+      mockSubslots(1);
+      streamingInbox.set(leaves(5));
+      // Rejecting the parent this checkpoint descends from is what prunes these blocks, so under the flag that asks
+      // for exactly that descendant the prune must not abandon the slot.
+      job.updateConfig({ skipWaitForValidParentCheckpointOnL1: true });
+      l2BlockSource.getBlockData.mockResolvedValue(undefined);
+
+      const { lastBlock } = await setupMultipleBlocks(1, [1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await job.executeAndAwait();
+
+      expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+      expect(metrics.recordCheckpointProposalFailed).not.toHaveBeenCalledWith('checkpoint_blocks_pruned');
+    });
+
     // The preflights are L1 simulations awaited inside the duty; a slow provider must not carry the job past the
     // point at which its signature or its send could still land.
     describe('preflight deadlines', () => {

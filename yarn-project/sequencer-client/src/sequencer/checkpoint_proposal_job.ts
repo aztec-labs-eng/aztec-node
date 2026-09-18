@@ -632,15 +632,22 @@ export class CheckpointProposalJob implements Traceable {
    *
    * The hash is compared rather than the height alone, since a chain rebuilt after a prune reuses the block numbers.
    *
-   * This is a preflight, not a guarantee: the proposal is enqueued here and only broadcast once the publisher's wait
-   * for the target slot returns, and the archiver can prune in that window as it can after the transaction is sent.
-   * What the check buys is the common case, where the prune is already visible by the time the slot arrives.
+   * This is a preflight, not a guarantee: the archiver can still prune between here and the moment the transaction
+   * lands. What the check buys is the common case, where the prune is already visible by the time the slot arrives.
    *
    * Skipped whenever proposed blocks aren't pushed (`skipPushProposedBlocksToArchiver`, fisherman mode): the archiver
    * never held them in the first place, so their absence says nothing about a prune.
+   *
+   * Also skipped under the test-only `skipWaitForValidParentCheckpointOnL1`, which exists to publish a checkpoint
+   * descending from a parent the local archiver rejects. Rejecting that parent prunes this checkpoint's blocks as a
+   * matter of course, so the check would only ever abandon the very scenario the flag was set to produce.
    */
   private async checkpointBlocksAreStillLocal(checkpoint: Checkpoint): Promise<boolean> {
-    if (this.config.skipPushProposedBlocksToArchiver || this.config.fishermanMode) {
+    if (
+      this.config.skipPushProposedBlocksToArchiver ||
+      this.config.fishermanMode ||
+      this.config.skipWaitForValidParentCheckpointOnL1
+    ) {
       return true;
     }
     const lastBlock = checkpoint.blocks.at(-1);
