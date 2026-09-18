@@ -192,6 +192,8 @@ export class InboxBotMetrics {
   private readonly messageCount: UpDownCounter;
   private readonly stageDuration: Histogram;
   private readonly simulationCount: UpDownCounter;
+  private readonly l2SendDuration: Histogram;
+  private readonly l2ActiveAttempts: UpDownCounter;
   private readonly publicExecutionCount: UpDownCounter;
   private readonly predictionMismatchCount: UpDownCounter;
   private readonly checkCount: UpDownCounter;
@@ -229,6 +231,13 @@ export class InboxBotMetrics {
     });
     this.simulationCount = createUpDownCounterWithDefault(this.meter, Metrics.BOT_INBOX_SIMULATION_COUNT, {
       [Attributes.BOT_INBOX_RESULT]: [...InboxBotSimulationResults],
+      [Attributes.BOT_INBOX_MODE]: [...InboxBotModes],
+      [Attributes.BOT_INBOX_SCENARIO]: [...InboxBotScenarios],
+    });
+    this.l2SendDuration = this.meter.createHistogram(Metrics.BOT_INBOX_L2_SEND_DURATION, {
+      advice: { explicitBucketBoundaries: STAGE_DURATION_BUCKETS_SECONDS },
+    });
+    this.l2ActiveAttempts = createUpDownCounterWithDefault(this.meter, Metrics.BOT_INBOX_L2_ACTIVE_ATTEMPTS, {
       [Attributes.BOT_INBOX_MODE]: [...InboxBotModes],
       [Attributes.BOT_INBOX_SCENARIO]: [...InboxBotScenarios],
     });
@@ -351,6 +360,28 @@ export class InboxBotMetrics {
       [Attributes.BOT_INBOX_MODE]: labels.mode,
       [Attributes.BOT_INBOX_SCENARIO]: labels.scenario,
     });
+  }
+
+  /** Records a wallet operation entering its mode-specific PXE/prover lane. */
+  public recordL2AttemptStarted(labels: InboxBotMessageLabels): void {
+    this.l2ActiveAttempts.add(1, {
+      [Attributes.BOT_INBOX_MODE]: labels.mode,
+      [Attributes.BOT_INBOX_SCENARIO]: labels.scenario,
+    });
+  }
+
+  /** Records a wallet operation leaving its lane and how long simulate, prove, and submit took. */
+  public recordL2AttemptFinished(labels: InboxBotMessageLabels, seconds: number): void {
+    const attributes = {
+      [Attributes.BOT_INBOX_MODE]: labels.mode,
+      [Attributes.BOT_INBOX_SCENARIO]: labels.scenario,
+    };
+    this.l2ActiveAttempts.add(-1, attributes);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      this.log.debug(`Dropping an impossible inbox L2 send duration`, { seconds, ...labels });
+      return;
+    }
+    this.l2SendDuration.record(seconds, attributes);
   }
 
   public recordPublicExecution(result: InboxBotPublicExecutionResult, scenario: InboxBotScenario): void {

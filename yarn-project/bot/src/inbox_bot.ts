@@ -179,13 +179,22 @@ export interface InboxBotDeps {
   /** Contract the messages are addressed to and consumed through, which their nullifiers are siloed with. */
   contractAddress: AztecAddress;
   producer: InboxL1Producer;
-  consumer: InboxL2Consumer;
+  consumers: InboxL2Consumers;
   store: InboxStore;
   telemetry: TelemetryClient;
   config: BotConfig;
   dateProvider?: DateProvider;
   syncChainTip?: BlockTag;
 }
+
+/** Independent wallet/PXE lanes used for public and private Inbox consumption. */
+export interface InboxBotWallets {
+  public: EmbeddedWallet;
+  private: EmbeddedWallet;
+}
+
+/** Mode-specific consumers whose wallet operation queues do not block one another. */
+export type InboxL2Consumers = Record<InboxBotMode, InboxL2Consumer>;
 
 /**
  * Bot that exercises the Fast Inbox: it produces atomic batches of L1→L2 messages on its own clock and follows
@@ -208,7 +217,7 @@ export class InboxBot implements BotLifecycle {
 
   private readonly contractAddress: AztecAddress;
   private readonly producer: InboxL1Producer;
-  private readonly consumer: InboxL2Consumer;
+  private readonly consumers: InboxL2Consumers;
   private readonly store: InboxStore;
   private readonly metrics: InboxBotMetrics;
   private readonly dateProvider: DateProvider;
@@ -250,7 +259,7 @@ export class InboxBot implements BotLifecycle {
     this.defaultAccountAddress = deps.defaultAccountAddress;
     this.contractAddress = deps.contractAddress;
     this.producer = deps.producer;
-    this.consumer = deps.consumer;
+    this.consumers = deps.consumers;
     this.store = deps.store;
     this.config = deps.config;
     this.dateProvider = deps.dateProvider ?? new DateProvider();
@@ -273,7 +282,7 @@ export class InboxBot implements BotLifecycle {
    */
   static async create(
     config: BotConfig,
-    wallet: EmbeddedWallet,
+    wallets: InboxBotWallets,
     aztecNode: AztecNode,
     aztecNodeAdmin: AztecNodeAdmin | undefined,
     store: BotStore,
@@ -283,10 +292,29 @@ export class InboxBot implements BotLifecycle {
     const effectiveConfig = applyInboxModeDefaults(config);
     assertValidInboxConfig(effectiveConfig);
 
-    const factory = new BotFactory(effectiveConfig, wallet, store, aztecNode, aztecNodeAdmin, syncChainTip);
-    const { defaultAccountAddress, contract, l1Client, rollupVersion } = await factory.setupCrossChain({
+    const publicFactory = new BotFactory(
+      effectiveConfig,
+      wallets.public,
+      store,
+      aztecNode,
+      aztecNodeAdmin,
+      syncChainTip,
+    );
+    const { defaultAccountAddress, contract, l1Client, rollupVersion } = await publicFactory.setupCrossChain({
       seedMessages: false,
     });
+    const privateFactory = new BotFactory(
+      effectiveConfig,
+      wallets.private,
+      store,
+      aztecNode,
+      aztecNodeAdmin,
+      syncChainTip,
+    );
+    const privateLane = await privateFactory.setupCrossChain({ seedMessages: false, accountIndex: 1 });
+    if (!privateLane.contract.address.equals(contract.address)) {
+      throw new Error(`Inbox consumer lanes registered different TestContract addresses`);
+    }
     const { l1ContractAddresses } = await aztecNode.getNodeInfo();
     const inboxAddress = EthAddress.fromString(l1ContractAddresses.inboxAddress.toString());
 
@@ -301,11 +329,19 @@ export class InboxBot implements BotLifecycle {
 
     return new InboxBot({
       node: aztecNode,
-      wallet,
+      wallet: wallets.public,
       defaultAccountAddress,
       contractAddress: contract.address,
       producer,
-      consumer: new WalletInboxL2Consumer(wallet, contract, defaultAccountAddress, effectiveConfig),
+      consumers: {
+        public: new WalletInboxL2Consumer(wallets.public, contract, defaultAccountAddress, effectiveConfig),
+        private: new WalletInboxL2Consumer(
+          wallets.private,
+          privateLane.contract,
+          privateLane.defaultAccountAddress,
+          effectiveConfig,
+        ),
+      },
       store: store.inbox,
       telemetry,
       config: effectiveConfig,
@@ -1278,7 +1314,13 @@ export class InboxBot implements BotLifecycle {
 
     let txHash: TxHash;
     try {
-      txHash = await this.consumer.send(request);
+      this.metrics.recordL2AttemptStarted(preparing);
+      const startedAt = this.dateProvider.now();
+      try {
+        txHash = await this.consumers[preparing.mode].send(request);
+      } finally {
+        this.metrics.recordL2AttemptFinished(preparing, (this.dateProvider.now() - startedAt) / 1000);
+      }
     } catch (err) {
       await this.handleAttemptFailure(preparing, err);
       return;
@@ -1509,10 +1551,15 @@ export class InboxBot implements BotLifecycle {
   private async completeConsumption(message: InboxMessageRecord, receipt: MinedTxReceipt): Promise<void> {
     let current = message;
     if (message.includedAt === undefined) {
+      const includedAt = this.dateProvider.now();
       if (message.mode === 'public') {
         this.recordPublicExecution('success', message, receipt);
       }
-      if ((await this.checkConsumptionNullifier(message, receipt)) === 'failed') {
+      const [nullifierResult, relationResult] = await Promise.allSettled([
+        this.checkConsumptionNullifier(message, receipt),
+        this.classifyBlockRelation(message, receipt),
+      ]);
+      if (nullifierResult.status === 'fulfilled' && nullifierResult.value === 'failed') {
         // The transaction executed, but not the consumption it was sent for, so the message is not consumed.
         const failed = await this.store.transitionMessageFrom(message.messageId, ['sent'], 'failed', {
           failedAt: this.dateProvider.now(),
@@ -1523,9 +1570,15 @@ export class InboxBot implements BotLifecycle {
         }
         return;
       }
-      const relation = await this.classifyBlockRelation(message, receipt);
+      if (nullifierResult.status === 'rejected') {
+        throw nullifierResult.reason;
+      }
+      if (relationResult.status === 'rejected') {
+        throw relationResult.reason;
+      }
+      const relation = relationResult.value;
       current = await this.store.patchMessage(message.messageId, {
-        includedAt: this.dateProvider.now(),
+        includedAt,
         proposedInclusionBlockNumber: receipt.blockNumber.toString(),
         insertionBlockNumber: relation.insertionBlockNumber?.toString(),
         blockRelation: relation.relation,
@@ -1746,7 +1799,7 @@ export class InboxBot implements BotLifecycle {
     };
 
     try {
-      await this.consumer.simulate(request);
+      await this.consumers[opposite].simulate(request);
     } catch (err) {
       if (isAlreadyNullifiedError(err)) {
         await this.recordCheck('replay_rejection', 'passed', { batchId, messageId: message.messageId, mode: opposite });

@@ -297,6 +297,7 @@ locals {
     "validator.node.env.SEQ_MAX_TX_PER_BLOCK"                                     = var.SEQ_MAX_TX_PER_BLOCK
     "validator.node.env.SEQ_MAX_TX_PER_CHECKPOINT"                                = var.SEQ_MAX_TX_PER_CHECKPOINT
     "validator.node.env.P2P_MAX_PENDING_TX_COUNT"                                 = var.P2P_MAX_PENDING_TX_COUNT
+    "validator.node.env.P2P_MIN_TX_POOL_AGE_MS"                                   = var.P2P_MIN_TX_POOL_AGE_MS
     "validator.node.env.SEQ_PER_BLOCK_ALLOCATION_MULTIPLIER"                      = var.SEQ_PER_BLOCK_ALLOCATION_MULTIPLIER
     "validator.node.env.SEQ_BLOCK_DURATION_MS"                                    = var.SEQ_BLOCK_DURATION_MS
     "validator.node.env.SEQ_L1_PUBLISHING_TIME_ALLOWANCE_IN_SLOT"                 = var.SEQ_L1_PUBLISHING_TIME_ALLOWANCE_IN_SLOT
@@ -380,6 +381,7 @@ locals {
       "service.p2p.announcePort"          = local.p2p_port_p2p_bootstrap
       "service.p2p.port"                  = local.p2p_port_p2p_bootstrap
       "node.env.P2P_MAX_PENDING_TX_COUNT" = var.P2P_MAX_PENDING_TX_COUNT
+      "node.env.P2P_MIN_TX_POOL_AGE_MS"   = var.P2P_MIN_TX_POOL_AGE_MS
     }
     boot_node_host_path  = ""
     bootstrap_nodes_path = ""
@@ -496,6 +498,7 @@ locals {
           "node.node.env.P2P_GOSSIPSUB_DHI"                     = var.P2P_GOSSIPSUB_DHI
           "node.node.env.P2P_DROP_TX_CHANCE"                    = var.P2P_DROP_TX_CHANCE
           "node.node.env.P2P_MAX_PENDING_TX_COUNT"              = var.P2P_MAX_PENDING_TX_COUNT
+          "node.node.env.P2P_MIN_TX_POOL_AGE_MS"                = var.P2P_MIN_TX_POOL_AGE_MS
           "node.node.env.WS_NUM_HISTORIC_CHECKPOINTS"           = var.WS_NUM_HISTORIC_CHECKPOINTS
           "node.node.env.TX_COLLECTION_FILE_STORE_URLS"         = var.TX_COLLECTION_FILE_STORE_URLS
           "node.service.p2p.nodePortEnabled"                    = var.P2P_NODEPORT_ENABLED
@@ -554,6 +557,7 @@ locals {
         "node.env.P2P_GOSSIPSUB_DHI"                  = var.P2P_GOSSIPSUB_DHI
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
+        "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
         "node.env.BLOB_FILE_STORE_UPLOAD_URL"         = var.BLOB_FILE_STORE_UPLOAD_URL
         "node.env.TX_FILE_STORE_ENABLED"              = var.TX_FILE_STORE_ENABLED
@@ -591,6 +595,7 @@ locals {
         "node.env.BLOB_ALLOW_EMPTY_SOURCES"           = var.BLOB_ALLOW_EMPTY_SOURCES
         "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
+        "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG" = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
         "node.secret.envEnabled"                      = true
         "node.env.FISHERMAN_MODE"                     = "true"
@@ -642,6 +647,7 @@ locals {
         "node.env.P2P_GOSSIPSUB_DHI"                  = var.P2P_GOSSIPSUB_DHI
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
+        "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
         "node.env.TX_COLLECTION_FILE_STORE_URLS"      = var.TX_COLLECTION_FILE_STORE_URLS
       }
@@ -736,8 +742,8 @@ locals {
       chart = "aztec-bot"
       values = [
         "common.yaml",
-        "bot-inbox.yaml",
         "bot-resources-${var.BOT_RESOURCE_PROFILE}.yaml",
+        "bot-inbox.yaml",
       ]
       custom_settings = {
         "bot.replicaCount"                   = var.BOT_INBOX_REPLICAS

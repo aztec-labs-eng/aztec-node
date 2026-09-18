@@ -32,6 +32,8 @@ describe('InboxBotMetrics', () => {
         [Metrics.BOT_INBOX_MESSAGE_COUNT, 'up_down_counter', 'messages', ValueType.INT],
         [Metrics.BOT_INBOX_STAGE_DURATION, 'histogram', 's', ValueType.DOUBLE],
         [Metrics.BOT_INBOX_SIMULATION_COUNT, 'up_down_counter', 'attempts', ValueType.INT],
+        [Metrics.BOT_INBOX_L2_SEND_DURATION, 'histogram', 's', ValueType.DOUBLE],
+        [Metrics.BOT_INBOX_L2_ACTIVE_ATTEMPTS, 'up_down_counter', 'attempts', ValueType.INT],
         [Metrics.BOT_INBOX_PUBLIC_EXECUTION_COUNT, 'up_down_counter', 'attempts', ValueType.INT],
         [Metrics.BOT_INBOX_PREDICTION_MISMATCH_COUNT, 'up_down_counter', 'attempts', ValueType.INT],
         [Metrics.BOT_INBOX_CHECK_COUNT, 'up_down_counter', 'checks', ValueType.INT],

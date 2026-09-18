@@ -476,14 +476,17 @@ describe('InboxBot', () => {
       ...overrides,
     });
 
-  const buildBot = (overrides: Partial<BotConfig> = {}) =>
+  const buildBot = (
+    overrides: Partial<BotConfig> = {},
+    consumers: { public: InboxL2Consumer; private: InboxL2Consumer } = { public: consumer, private: consumer },
+  ) =>
     new InboxBot({
       node: chain.node,
       wallet: mock<EmbeddedWallet>(),
       defaultAccountAddress: recipient,
       contractAddress: recipient,
       producer,
-      consumer,
+      consumers,
       store,
       telemetry,
       config: buildConfig(overrides),
@@ -1333,6 +1336,47 @@ describe('InboxBot', () => {
       expect(consumer.sent.length).toEqual(1);
     });
 
+    it('lets a ready private lane complete while the public lane is proving', async () => {
+      const publicConsumer = new FakeInboxL2Consumer();
+      const privateConsumer = new FakeInboxL2Consumer();
+      const bot = buildBot(
+        { inboxConsumeMode: 'mixed', inboxMessagesPerBatch: 2 },
+        { public: publicConsumer, private: privateConsumer },
+      );
+      const messages = await produceObservedBatch(bot);
+      const publicMessage = messages.find(message => message.mode === 'public')!;
+      const privateMessage = messages.find(message => message.mode === 'private')!;
+      await chain.insert(privateMessage);
+      const { promise, resolve } = promiseWithResolvers<void>();
+      publicConsumer.gate = promise;
+
+      await bot.consumeStep();
+      await retryUntil(async () => (await reload(privateMessage)).state === 'sent', 'private lane submits', 1, 0.01);
+
+      expect(await reload(publicMessage)).toMatchObject({ state: 'preparing' });
+      expect(privateConsumer.sent.map(request => request.mode)).toEqual(['private']);
+      expect(
+        telemetry.meter.sum(Metrics.BOT_INBOX_L2_ACTIVE_ATTEMPTS, {
+          [Attributes.BOT_INBOX_MODE]: 'public',
+          [Attributes.BOT_INBOX_SCENARIO]: 'normal',
+        }),
+      ).toEqual(1);
+      expect(
+        telemetry.meter.values(Metrics.BOT_INBOX_L2_SEND_DURATION, {
+          [Attributes.BOT_INBOX_MODE]: 'private',
+          [Attributes.BOT_INBOX_SCENARIO]: 'normal',
+        }),
+      ).toEqual([0]);
+      resolve();
+      await bot.waitForBackgroundWork();
+      expect(
+        telemetry.meter.sum(Metrics.BOT_INBOX_L2_ACTIVE_ATTEMPTS, {
+          [Attributes.BOT_INBOX_MODE]: 'public',
+          [Attributes.BOT_INBOX_SCENARIO]: 'normal',
+        }),
+      ).toEqual(0);
+    });
+
     it('keeps observing other messages while an attempt is held in flight', async () => {
       const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
       const [first] = await produceObservedBatch(bot);
@@ -1401,6 +1445,22 @@ describe('InboxBot', () => {
       });
     });
 
+    it('timestamps proposed inclusion before running post-inclusion diagnostics', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
+      const [message] = await produceObservedBatch(bot);
+      await consume(bot);
+      const sent = await reload(message);
+      const insertion = await chain.insert(sent);
+      await consume(bot);
+      chain.mine(sent, { blockNumber: insertion.number, nullifiers: [await nullifierOf(sent)] });
+      const includedAt = dateProvider.now();
+      chain.onBlockRead = () => dateProvider.advanceTime(5);
+
+      await consume(bot);
+
+      expect((await reload(message)).includedAt).toEqual(includedAt);
+    });
+
     it('fails a consumption whose effects do not carry the message nullifier', async () => {
       const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
       const [message] = await produceObservedBatch(bot);
@@ -1418,6 +1478,22 @@ describe('InboxBot', () => {
       expect(publicExecutions('success')).toEqual(1);
       expect(milestones('included')).toEqual(0);
       expect(milestones('completed')).toEqual(0);
+    });
+
+    it('does not let a relation lookup error mask a failed consumption nullifier check', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
+      const [message] = await produceObservedBatch(bot);
+      await consume(bot);
+      const sent = await reload(message);
+      const insertion = await chain.insert(sent);
+      await consume(bot);
+      chain.mine(sent, { blockNumber: insertion.number, nullifiers: [Fr.random()] });
+      chain.node.getBlockData.mockRejectedValue(new Error('block RPC unavailable'));
+
+      await consume(bot);
+
+      expect(await reload(message)).toMatchObject({ state: 'failed', failureReason: 'invalid_consumption' });
+      expect(checks('consumption_nullifier', 'failed')).toEqual(1);
     });
 
     it('reports a later block relation without treating the lost race as a failure', async () => {

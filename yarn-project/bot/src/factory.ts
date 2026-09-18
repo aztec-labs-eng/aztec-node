@@ -131,8 +131,10 @@ export class BotFactory {
    * Sets up the account, the L1 client and the TestContract used by the cross-chain bot modes.
    * @param options.seedMessages - Whether to top the store up to `l1ToL2SeedCount` L1→L2 messages and block on
    * the first one becoming ready. Inbox mode produces its own batches on its own clock, so it opts out.
+   * @param options.accountIndex - Selects an independent funded test account, or offsets the configured account
+   * salt when a private key is present. The two Inbox lanes use different indices.
    */
-  public async setupCrossChain(options: { seedMessages?: boolean } = {}): Promise<{
+  public async setupCrossChain(options: { seedMessages?: boolean; accountIndex?: number } = {}): Promise<{
     wallet: EmbeddedWallet;
     defaultAccountAddress: AztecAddress;
     contract: TestContract;
@@ -140,7 +142,7 @@ export class BotFactory {
     l1Client: ExtendedViemWalletClient;
     rollupVersion: bigint;
   }> {
-    const defaultAccountAddress = await this.setupAccount();
+    const defaultAccountAddress = await this.setupAccount(options.accountIndex);
     await this.ensureFeeJuiceBalance(defaultAccountAddress);
 
     // Create L1 client (same pattern as bridgeL1FeeJuice)
@@ -224,26 +226,29 @@ export class BotFactory {
    * Checks if the sender account contract is initialized, and initializes it if necessary.
    * @returns The sender wallet.
    */
-  private async setupAccount() {
+  private async setupAccount(accountIndex = 0) {
     const privateKey = this.config.senderPrivateKey?.getValue();
     if (privateKey) {
       this.log.info(`Setting up account with provided private key`);
-      return await this.setupAccountWithPrivateKey(privateKey);
+      return await this.setupAccountWithPrivateKey(privateKey, accountIndex);
     } else {
       this.log.info(`Setting up test account`);
-      return await this.setupTestAccount();
+      return await this.setupTestAccount(accountIndex);
     }
   }
 
   /**
-   * Keyless fallback for tests and local dev: reuses the first genesis test account, whose address is
-   * pre-funded with fee juice via `initialFundedAccounts`. The test accounts are initializerless, so this
+   * Keyless fallback for tests and local dev: reuses a genesis test account, whose address is pre-funded with fee
+   * juice via `initialFundedAccounts`. The test accounts are initializerless, so this
    * must create an initializerless account for the address to match the funded one. Production bots set a
    * sender private key and fund the resulting initializerless account from L1 instead; see
    * setupAccountWithPrivateKey.
    */
-  private async setupTestAccount() {
-    const [initialAccountData] = await getInitialTestAccountsData();
+  private async setupTestAccount(accountIndex: number) {
+    const initialAccountData = (await getInitialTestAccountsData())[accountIndex];
+    if (!initialAccountData) {
+      throw new Error(`No initial test account exists at index ${accountIndex}`);
+    }
     const accountManager = await this.wallet.createSchnorrInitializerlessAccount(
       initialAccountData.secret,
       initialAccountData.salt,
@@ -252,8 +257,8 @@ export class BotFactory {
     return accountManager.address;
   }
 
-  private async setupAccountWithPrivateKey(privateKey: Fr) {
-    const salt = this.config.senderSalt ?? Fr.ONE;
+  private async setupAccountWithPrivateKey(privateKey: Fr, accountIndex: number) {
+    const salt = (this.config.senderSalt ?? Fr.ONE).add(new Fr(accountIndex));
     const signingKey = GrumpkinScalar.fromBuffer(privateKey.toBuffer());
     const secret = await deriveSecretKeyFromSigningKey(signingKey);
     const accountManager = await this.wallet.createSchnorrInitializerlessAccount(secret, salt, signingKey);

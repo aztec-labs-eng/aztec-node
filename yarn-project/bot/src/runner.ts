@@ -12,7 +12,7 @@ import { type BotLifecycle, type RunnableBot, isBotLifecycle } from './base_bot.
 import { Bot } from './bot.js';
 import type { BotConfig } from './config.js';
 import { CrossChainBot } from './cross_chain_bot.js';
-import { InboxBot } from './inbox_bot.js';
+import { InboxBot, type InboxBotWallets } from './inbox_bot.js';
 import type { BotInfo, BotRunnerApi } from './interface.js';
 import { BotStore } from './store/index.js';
 
@@ -30,12 +30,16 @@ export class BotRunner implements BotRunnerApi, Traceable {
   public constructor(
     private config: BotConfig,
     private readonly wallet: EmbeddedWallet,
+    private readonly inboxWallets: InboxBotWallets,
     private readonly aztecNode: AztecNode,
     private readonly telemetry: TelemetryClient,
     private readonly aztecNodeAdmin: AztecNodeAdmin | undefined,
     private readonly store: BotStore,
     private readonly syncChainTip?: BlockTag,
   ) {
+    if (config.botMode === 'inbox' && inboxWallets.public === inboxWallets.private) {
+      throw new Error(`Inbox mode requires independent public and private wallets`);
+    }
     this.tracer = telemetry.getTracer('Bot');
 
     this.runningPromise = new RunningPromise(() => this.#work(), this.log, config.txIntervalSeconds * 1000);
@@ -82,6 +86,9 @@ export class BotRunner implements BotRunnerApi, Traceable {
   public async stop() {
     await this.#stopBot();
     await this.store.close();
+    await Promise.all(
+      [...new Set([this.wallet, this.inboxWallets.public, this.inboxWallets.private])].map(w => w.stop()),
+    );
     this.log.info(`Stopped bot`);
   }
 
@@ -103,13 +110,17 @@ export class BotRunner implements BotRunnerApi, Traceable {
    */
   public async update(config: BotConfig) {
     this.log.verbose(`Updating bot config`);
+    const updatedConfig = { ...this.config, ...config };
+    if (updatedConfig.botMode === 'inbox' && this.inboxWallets.public === this.inboxWallets.private) {
+      throw new Error(`Switching to inbox mode requires a restart so independent wallet lanes can be created`);
+    }
     const wasRunning = this.isRunning();
     if (wasRunning) {
       // Only the bot is stopped, not the store: the recreated bot keeps using it, and a bot that persists its
       // work needs it open to resume from what the stopped one wrote.
       await this.#stopBot();
     }
-    this.config = { ...this.config, ...config };
+    this.config = updatedConfig;
     this.runningPromise.setPollingIntervalMS(this.config.txIntervalSeconds * 1000);
     await this.#createBot();
     this.log.info(`Bot config updated`);
@@ -210,7 +221,7 @@ export class BotRunner implements BotRunnerApi, Traceable {
         case 'inbox':
           this.bot = InboxBot.create(
             this.config,
-            this.wallet,
+            this.inboxWallets,
             this.aztecNode,
             this.aztecNodeAdmin,
             this.store,
