@@ -40,6 +40,28 @@ describe('PrivateLog', () => {
     expect(PrivateLog.fromBlobFields(fields.length, fields)).toEqual(log);
   });
 
+  it('checks the padding beyond the emitted length', () => {
+    const fields = makeTuple(PRIVATE_LOG_SIZE_IN_FIELDS, Fr.random);
+    expect(new PrivateLog(fields, PRIVATE_LOG_SIZE_IN_FIELDS).hasZeroPadding()).toBe(true);
+    expect(new PrivateLog(fields, 3).hasZeroPadding()).toBe(false);
+    expect(new PrivateLog(fields, PRIVATE_LOG_SIZE_IN_FIELDS + 1).hasZeroPadding()).toBe(false);
+    expect(
+      new PrivateLog(padArrayEnd(fields.slice(0, 3), Fr.ZERO, PRIVATE_LOG_SIZE_IN_FIELDS), 3).hasZeroPadding(),
+    ).toBe(true);
+    expect(PrivateLog.empty().hasZeroPadding()).toBe(true);
+  });
+
+  it('rejects an emitted length that is not a valid index into the fields', () => {
+    const zeroPadded = padArrayEnd(
+      makeTuple(PRIVATE_LOG_SIZE_IN_FIELDS, Fr.random).slice(0, 3),
+      Fr.ZERO,
+      PRIVATE_LOG_SIZE_IN_FIELDS,
+    );
+    expect(new PrivateLog(zeroPadded, -1).hasZeroPadding()).toBe(false);
+    expect(new PrivateLog(zeroPadded, 3.5).hasZeroPadding()).toBe(false);
+    expect(new PrivateLog(zeroPadded, NaN).hasZeroPadding()).toBe(false);
+  });
+
   it('number of emitted fields is correct', () => {
     const smallLogFields = [new Fr(1), new Fr(2), new Fr(3)];
     const smallLog = new PrivateLog(

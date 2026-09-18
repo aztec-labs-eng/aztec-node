@@ -263,13 +263,16 @@ export class PrivateKernelTailCircuitPublicInputs {
     return nullifiers.filter(n => !n.isZero());
   }
 
-  getNonEmptyPrivateLogs() {
-    const privateLogs = this.forPublic
+  getPrivateLogs() {
+    return this.forPublic
       ? this.forPublic.nonRevertibleAccumulatedData.privateLogs.concat(
           this.forPublic.revertibleAccumulatedData.privateLogs,
         )
       : this.forRollup!.end.privateLogs;
-    return privateLogs.filter(n => !n.isEmpty());
+  }
+
+  getNonEmptyPrivateLogs() {
+    return this.getPrivateLogs().filter(n => !n.isEmpty());
   }
 
   getNonEmptyContractClassLogsHashes() {

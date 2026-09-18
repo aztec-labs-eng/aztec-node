@@ -63,6 +63,19 @@ export class PrivateLog {
     return this.emittedLength === 0;
   }
 
+  /**
+   * Whether `emittedLength` is within bounds and every field beyond it is zero, as the protocol circuits require of
+   * every private log.
+   */
+  hasZeroPadding() {
+    return (
+      Number.isInteger(this.emittedLength) &&
+      this.emittedLength >= 0 &&
+      this.emittedLength <= PRIVATE_LOG_SIZE_IN_FIELDS &&
+      this.fields.slice(this.emittedLength).every(f => f.isZero())
+    );
+  }
+
   static empty() {
     return new PrivateLog(makeTuple(PRIVATE_LOG_SIZE_IN_FIELDS, Fr.zero), 0);
   }

@@ -34,6 +34,7 @@ export const TX_ERROR_CONTRACT_CLASS_LOG_COUNT = 'Mismatched number of contract 
 export const TX_ERROR_CONTRACT_CLASS_LOG_LENGTH = 'Incorrect contract class logs length';
 export const TX_ERROR_CONTRACT_CLASS_LOGS = 'Mismatched contract class logs';
 export const TX_ERROR_CONTRACT_CLASS_LOG_SORTING = 'Incorrectly sorted contract class logs';
+export const TX_ERROR_PRIVATE_LOG_PADDING = 'Non-zero private log fields beyond emitted length';
 export const TX_ERROR_INCORRECT_HASH = 'Incorrect tx hash';
 
 // Size
