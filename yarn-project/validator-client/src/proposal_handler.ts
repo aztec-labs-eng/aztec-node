@@ -1937,16 +1937,14 @@ export class ProposalHandler {
   /**
    * The endpoint gate's own ceiling, narrowed by a slot whose attestation window is nearly spent.
    *
-   * The floor applies only while there is budget left. A slot whose attestation deadline has passed gets no window
-   * at all: granting a second there buys a signature the committee's timetable no longer accepts, and the caller
-   * would rather have the refusal than a verdict it cannot act on. Finishing the read for telemetry is still
-   * allowed — {@link getAttestationDeadline} is what stops the signature.
+   * The floor survives past the attestation deadline on purpose, and is bounded at
+   * {@link INBOX_ENDPOINT_CHECK_MIN_WINDOW_MS} for it: a late node still wants the content verdict for telemetry,
+   * and reaching one costs one bounded local L1 read. What the floor must not buy is a signature, which is why
+   * {@link getAttestationDeadline} is re-read at the signing boundary rather than here — a window is not a
+   * permission to attest.
    */
   private getInboxEndpointWindowMs(slot: SlotNumber): number {
     const remainingMs = this.getReexecutionDeadline(slot).getTime() - this.dateProvider.now();
-    if (remainingMs <= 0) {
-      return 0;
-    }
     return Math.min(INBOX_ENDPOINT_CHECK_WINDOW_MS, Math.max(INBOX_ENDPOINT_CHECK_MIN_WINDOW_MS, remainingMs));
   }
 

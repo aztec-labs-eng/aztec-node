@@ -289,7 +289,8 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
     ...numberConfigHelper(DefaultSequencerConfig.minPeersToPropose),
   },
   allowUnsafeInboxCatchupCapacity: {
-    env: 'SEQ_ALLOW_UNSAFE_INBOX_CATCHUP_CAPACITY',
+    // Deliberately not settable from the environment, like the other test-only flags here: a deployment must not
+    // be able to opt out of the catch-up floor by accident.
     description:
       'Allow starting with fewer block opportunities per checkpoint than a mandatory streaming-Inbox backlog needs' +
       ' (for testing only).',

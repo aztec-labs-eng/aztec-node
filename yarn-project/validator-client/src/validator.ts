@@ -597,19 +597,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       return undefined;
     }
 
-    // Validation may have run right up to the attestation deadline — the Inbox endpoint gate and the archiver sync
-    // waits are both bounded by it rather than finishing well inside it — so the deadline is re-read here, with
-    // nothing left between it and the signature. Finishing a late validation is still worth doing for telemetry;
-    // signing on it is not, because the committee's timetable has already closed on this slot.
-    const attestationDeadline = this.proposalHandler.getAttestationDeadline(proposalSlotNumber);
-    if (+attestationDeadline <= this.dateProvider.now()) {
-      this.log.warn(`Attestation deadline for slot ${proposalSlotNumber} passed during validation, not signing`, {
-        ...proposalInfo,
-        attestationDeadline: attestationDeadline.toISOString(),
-      });
-      return undefined;
-    }
-
     // Provided all of the above checks pass, we can attest to the proposal
     this.log.info(
       `${partOfCommittee ? 'Attesting to' : 'Validated'} checkpoint proposal for slot ${proposalSlotNumber}`,
@@ -689,6 +676,22 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
   ): Promise<CheckpointAttestation[] | undefined> {
     // Equivocation check: must happen right before signing to minimize the race window
     if (!this.shouldAttestToSlot(proposal.slotNumber)) {
+      return undefined;
+    }
+
+    // Deadline check, for the same reason and in the same place. Validation can run right up to the attestation
+    // deadline — the Inbox endpoint gate and the archiver sync waits are both bounded by it rather than finishing
+    // well inside it — so it is re-read here, with nothing left between it and the signature. Finishing a late
+    // validation is still worth doing for telemetry; signing on it is not, because the committee's timetable has
+    // already closed on this slot. Both the peer path and the proposer's own `collectOwnAttestations` sign through
+    // here, so this is the one place that covers both.
+    const attestationDeadline = this.proposalHandler.getAttestationDeadline(proposal.slotNumber);
+    if (+attestationDeadline <= this.dateProvider.now()) {
+      this.log.warn(`Attestation deadline for slot ${proposal.slotNumber} passed during validation, not signing`, {
+        slot: proposal.slotNumber,
+        archive: proposal.archive.toString(),
+        attestationDeadline: attestationDeadline.toISOString(),
+      });
       return undefined;
     }
 

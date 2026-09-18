@@ -347,6 +347,11 @@ describe('ValidatorClient', () => {
       );
       const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
       const proposal = await makeCheckpointProposal({ lastBlock: {} });
+      // Own attestations are signed through the same deadline-guarded helper as a peer's, so the collection has to
+      // run inside the proposal's slot; the short deadline below is what this case is actually about.
+      dateProvider.setTime(
+        validatorClient.getProposalHandler().getAttestationDeadline(proposal.slotNumber).getTime() - 5_000,
+      );
       // collectAttestations still throws as we don't have a real p2pClient
       await expect(
         validatorClient.collectAttestations(proposal, 3, new Date(dateProvider.now() + 100), CheckpointNumber(1)),
@@ -966,6 +971,20 @@ describe('ValidatorClient', () => {
         );
 
         expect(attestations).toHaveLength(1);
+        expect(addCheckpointAttestationsSpy).toHaveBeenCalledTimes(1);
+        validateCheckpointSpy.mockRestore();
+      });
+
+      // The proposer's own attestations are signed through the same helper, so the check has to cover that path
+      // too — it does not go through `attestToCheckpointProposal` at all.
+      it('does not sign its own attestations past the deadline either', async () => {
+        const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
+          await setupLateValidation();
+        dateProvider.setTime(deadlineMs - 1_000);
+        expect(await validatorClient.collectOwnAttestations(checkpointProposal, CheckpointNumber(1))).toHaveLength(1);
+
+        dateProvider.setTime(deadlineMs + 1_000);
+        expect(await validatorClient.collectOwnAttestations(checkpointProposal, CheckpointNumber(1))).toEqual([]);
         expect(addCheckpointAttestationsSpy).toHaveBeenCalledTimes(1);
         validateCheckpointSpy.mockRestore();
       });

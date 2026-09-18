@@ -1164,7 +1164,19 @@ describe('InboxBot', () => {
       await bot.waitForBackgroundWork();
       expect(bot.isHealthy()).toBe(true);
 
-      // A poll that dispatches nothing must not clear the streak the background failure built up.
+      // A poll that dispatches nothing must not clear the streak the background failure built up: the message is
+      // held in flight for the duration, so this poll has nothing to retry.
+      const { promise, resolve } = promiseWithResolvers<void>();
+      consumer.gate = promise;
+      const held = bot.consumeStep();
+      await bot.consumeStep();
+      expect(bot.isHealthy()).toBe(true);
+      resolve();
+      await held;
+      await bot.waitForBackgroundWork();
+      consumer.gate = undefined;
+
+      // The second real background failure crosses the threshold.
       await bot.consumeStep();
       await bot.waitForBackgroundWork();
       expect(bot.isHealthy()).toBe(false);
@@ -1761,6 +1773,11 @@ describe('InboxBot', () => {
         expect(checks('replay_rejection', 'passed')).toEqual(0);
         expect(checks('replay_rejection', 'failed')).toEqual(1);
         expect(failures('replay_unproven')).toEqual(1);
+        // The failed check is what stops a run whose messages all succeeded from closing as a success: the batch
+        // is marked probed, so `replayProbedAt` alone would otherwise satisfy completion.
+        const batch = await store.getBatch(completed.batchId);
+        expect(batch?.failedChecks).toContain('replay_rejection');
+        expect(batch?.replayProbedAt).toBeDefined();
       });
 
       it('does not accept an unrelated rejection as replay protection, and tries again', async () => {

@@ -19,8 +19,9 @@ export type L1EventLog<T> = {
  * pruned state range all fail every sub-range too, so splitting on them only multiplies the same request.
  */
 const LOG_RANGE_LIMIT_PATTERNS: readonly RegExp[] = [
-  /block range/i,
-  /range is too (large|wide)/i,
+  /(exceeds?|exceeded|over|beyond|limited to|no more than|maximum|max) .{0,40}block range/i,
+  /block range .{0,40}(too (large|wide|big)|exceed|limit)/i,
+  /range is too (large|wide|big)/i,
   /too many (results|logs)/i,
   /query returned more than/i,
   /response size (is too large|exceeded)/i,
@@ -77,17 +78,20 @@ async function fetchLogsWithinBudget<T>(
   fromBlock: bigint,
   toBlock: bigint,
   fetch: (fromBlock: bigint, toBlock: bigint) => Promise<readonly T[]>,
-  budget: { remainingCalls: number },
+  budget: { remainingCalls: number; lastError?: unknown },
 ): Promise<T[]> {
   if (budget.remainingCalls <= 0) {
     throw new Error(
       `Exhausted the ${MAX_LOG_FETCH_CALLS} request budget splitting an L1 log range; last attempted [${fromBlock}, ${toBlock}]`,
+      // The provider's own last refusal is what a reader needs to diagnose this, so it is not replaced.
+      { cause: budget.lastError },
     );
   }
   budget.remainingCalls--;
   try {
     return [...(await fetch(fromBlock, toBlock))];
   } catch (err) {
+    budget.lastError = err;
     if (fromBlock >= toBlock || !isLogRangeLimitError(err)) {
       throw err;
     }

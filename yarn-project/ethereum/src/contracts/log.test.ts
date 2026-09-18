@@ -59,6 +59,7 @@ describe('fetchLogsBisectingRange', () => {
     ['a rate limit', 'Your app has exceeded its compute units per second capacity'],
     ['an outage', 'service temporarily unavailable'],
     ['missing state', 'missing trie node 0xabc (path )'],
+    ['a pruned range', 'blocks in the requested block range are unavailable on this node'],
   ])('does not split on %s, and reports it as it arrived', async (_label, message) => {
     const { fetch, ranges } = providerAlwaysFailing(new Error(message));
     await expect(fetchLogsBisectingRange(1n, 100n, fetch)).rejects.toThrow(message);
@@ -97,6 +98,7 @@ describe('isLogRangeLimitError', () => {
     'rate limit exceeded',
     'missing trie node 0xabc',
     'socket hang up',
+    'blocks in the requested block range are unavailable on this node',
   ])('does not classify %s as a range limit', message => {
     expect(isLogRangeLimitError(new Error(message))).toBe(false);
   });
