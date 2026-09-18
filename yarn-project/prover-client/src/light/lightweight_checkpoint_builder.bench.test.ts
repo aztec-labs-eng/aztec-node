@@ -1,6 +1,6 @@
 import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
-import { timesAsync } from '@aztec-labs/foundation/collection';
+import { median, timesAsync } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -20,6 +20,7 @@ import { NativeWorldStateService } from '@aztec-labs/world-state/native';
 import { afterAll, afterEach, beforeEach, describe, it, jest } from '@jest/globals';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 import { LightweightCheckpointBuilder } from './lightweight_checkpoint_builder.js';
 
@@ -143,29 +144,35 @@ describe('LightweightCheckpointBuilder benchmarks', () => {
       const slotNumber = SlotNumber(15);
       const blockNumber = BlockNumber(1);
       const constants = makeCheckpointConstants(slotNumber);
-      const fork = await worldState.fork();
-
-      const builder = LightweightCheckpointBuilder.startNewCheckpoint(
-        CheckpointNumber(1),
-        constants,
-        [],
-        Fr.ZERO,
-        fork,
-      );
-
       const globalVariables = makeGlobalVariables(blockNumber, slotNumber);
       const txs = await timesAsync(numTxs, i => makeTx(globalVariables, 5000 + i));
-
-      const { timings } = await builder.addBlock(globalVariables, txs, [], { insertTxsEffects: true });
-
       const prefix = `addBlock/${label}/${numTxs} txs`;
-      for (const [step, ms] of Object.entries(timings)) {
-        results.push({ name: `${prefix}/${step}`, value: ms, unit: 'ms' });
-      }
-      const total = Object.values(timings).reduce((a, b) => a + b, 0);
-      results.push({ name: `${prefix}/total`, value: total, unit: 'ms' });
+      const run = async () => {
+        const fork = await worldState.fork();
+        try {
+          const builder = LightweightCheckpointBuilder.startNewCheckpoint(
+            CheckpointNumber(1),
+            constants,
+            [],
+            Fr.ZERO,
+            fork,
+          );
+          const start = performance.now();
+          const { timings } = await builder.addBlock(globalVariables, txs, [], { insertTxsEffects: true });
+          return { buildHeaderAndBody: timings.buildHeaderAndBody, total: performance.now() - start };
+        } finally {
+          await fork.close();
+        }
+      };
 
-      await fork.close();
+      await timesAsync(3, run);
+      const samples = await timesAsync(15, run);
+      results.push({
+        name: `${prefix}/buildHeaderAndBody`,
+        value: median(samples.map(sample => sample.buildHeaderAndBody))!,
+        unit: 'ms',
+      });
+      results.push({ name: `${prefix}/total`, value: median(samples.map(sample => sample.total))!, unit: 'ms' });
     });
   });
 });

@@ -1,7 +1,7 @@
 import { BackendType, Barretenberg, BarretenbergSync } from '@aztec-foundation/bb.js';
 import { findBbBinary, findNapiBinary, findPackageRoot } from '@aztec-foundation/bb.js/platform';
 
-import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
+import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, DomainSeparator, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { median } from '@aztec-labs/foundation/collection';
 import * as crypto from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -18,15 +18,19 @@ import { clearInterval, setInterval } from 'node:timers';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 
-let api: Barretenberg | BarretenbergSync;
+let leafApi: Barretenberg | BarretenbergSync;
+let internalApi: Barretenberg | BarretenbergSync;
 let diagnostic: number[] | undefined;
 let checkHashes = false;
 const log = createLogger('stdlib:tx-effects-transport-bench');
 
-async function hashFields(fields: Fr[]) {
+async function hashFields(fields: Fr[], selectedApi = leafApi) {
   diagnostic?.push(fields.length);
   const command = { inputs: fields.map(field => field.toBuffer()) };
-  const response = api instanceof BarretenbergSync ? api.poseidon2Hash(command) : await api.poseidon2Hash(command);
+  const response =
+    selectedApi instanceof BarretenbergSync
+      ? selectedApi.poseidon2Hash(command)
+      : await selectedApi.poseidon2Hash(command);
   const hash = Fr.fromBuffer(Buffer.from(response.hash));
   if (checkHashes) {
     expect(hash).toEqual(await crypto.poseidon2Hash(fields));
@@ -45,7 +49,7 @@ jest.unstable_mockModule('@aztec-labs/foundation/crypto/poseidon', () => ({
   poseidon2HashWithSeparator: (input: Fieldable[], separator: number) => {
     const fields = serializeToFields(input);
     fields.unshift(new Fr(separator));
-    return hashFields(fields);
+    return hashFields(fields, separator === Number(DomainSeparator.TX_EFFECTS_TREE) ? internalApi : leafApi);
   },
 }));
 
@@ -58,7 +62,12 @@ const { ContractClassLog, ContractClassLogFields } = await import('../logs/contr
 const { PrivateLog } = await import('../logs/private_log.js');
 const { PublicLog } = await import('../logs/public_log.js');
 const { TxEffect } = await import('./tx_effect.js');
-const { computeTxEffectsTreeData, txEffectsTreeNodeHash } = await import('./tx_effect_membership.js');
+const {
+  computeRootFromTxEffectMembershipWitness,
+  computeTxEffectMembershipWitnessFromLeaves,
+  computeTxEffectsTreeData,
+  txEffectsTreeNodeHash,
+} = await import('./tx_effect_membership.js');
 const { TxHash } = await import('./tx_hash.js');
 
 const profiles = ['sparse', 'small-categories', 'log-heavy'] as const;
@@ -128,6 +137,22 @@ async function makeScenarios() {
           run: () => new Body(effects).computeTxEffectsTree(),
         },
       );
+      if (profile === 'sparse') {
+        const witnessIndex = Math.floor(count / 2);
+        const witness = await computeTxEffectMembershipWitnessFromLeaves(data.leaves, witnessIndex);
+        scenarios.push(
+          {
+            name: `membership/${count}/construct`,
+            requests: count - 1,
+            run: () => computeTxEffectMembershipWitnessFromLeaves(data.leaves, witnessIndex),
+          },
+          {
+            name: `membership/${count}/verify`,
+            requests: witness.siblingPath.pathSize,
+            run: () => computeRootFromTxEffectMembershipWitness(data.leaves[witnessIndex], witness),
+          },
+        );
+      }
       if (profile === 'sparse' && count > 1) {
         scenarios.push({
           name: `internal-tree/${count}`,
@@ -247,10 +272,54 @@ benchmark(
     const bbPath = findBbBinary();
     const options = { threads: 1, skipSrsInit: true, ...(bbPath ? { bbPath } : {}) };
     const backends = [
-      { name: 'UDS', create: () => Barretenberg.new({ ...options, backend: BackendType.NativeUnixSocket }) },
-      { name: 'async SHM', create: () => Barretenberg.new({ ...options, backend: BackendType.NativeSharedMemory }) },
-      { name: 'sync SHM', create: () => BarretenbergSync.new({ ...options, backend: BackendType.NativeSharedMemory }) },
+      {
+        name: 'UDS',
+        create: async () => {
+          const api = await Barretenberg.new({ ...options, backend: BackendType.NativeUnixSocket });
+          return { leaf: api, internal: api };
+        },
+      },
+      {
+        name: 'async SHM',
+        create: async () => {
+          const api = await Barretenberg.new({ ...options, backend: BackendType.NativeSharedMemory });
+          return { leaf: api, internal: api };
+        },
+      },
+      {
+        name: 'sync SHM',
+        create: async () => {
+          const api = await BarretenbergSync.new({ ...options, backend: BackendType.NativeSharedMemory });
+          return { leaf: api, internal: api };
+        },
+      },
+      {
+        name: 'UDS leaves + sync SHM internal',
+        create: async () => ({
+          leaf: await Barretenberg.new({ ...options, backend: BackendType.NativeUnixSocket }),
+          internal: await BarretenbergSync.new({ ...options, backend: BackendType.NativeSharedMemory }),
+        }),
+      },
+      {
+        name: 'async SHM leaves + sync SHM internal',
+        create: async () => ({
+          leaf: await Barretenberg.new({ ...options, backend: BackendType.NativeSharedMemory }),
+          internal: await BarretenbergSync.new({ ...options, backend: BackendType.NativeSharedMemory }),
+        }),
+      },
     ];
+    const selectBackend = async (backend: (typeof backends)[number]) => {
+      const selected = await backend.create();
+      leafApi = selected.leaf;
+      internalApi = selected.internal;
+      return selected;
+    };
+    const destroyBackend = async (selected: Awaited<ReturnType<typeof selectBackend>>) => {
+      await selected.leaf.destroy();
+      if (selected.internal !== selected.leaf) {
+        await selected.internal.destroy();
+      }
+    };
     const packageRoot = findPackageRoot();
     if (!packageRoot || !bbPath) {
       throw new Error('Native bb binary and package metadata are required; no backend fallback is allowed');
@@ -295,7 +364,7 @@ benchmark(
     await mkdir(dirname(output), { recursive: true });
 
     for (const backend of backends) {
-      api = await backend.create();
+      const selected = await selectBackend(backend);
       try {
         checkHashes = true;
         const scenarios = await makeScenarios();
@@ -331,7 +400,7 @@ benchmark(
         diagnostic = undefined;
         checkHashes = false;
         await Barretenberg.destroySingleton();
-        await api.destroy();
+        await destroyBackend(selected);
       }
     }
     for (const row of results) {
@@ -342,7 +411,7 @@ benchmark(
     for (let round = 0; round < rounds; round++) {
       const order = [...backends.slice(round), ...backends.slice(0, round)];
       for (const backend of order) {
-        api = await backend.create();
+        const selected = await selectBackend(backend);
         try {
           const scenarios = await makeScenarios();
           if (round % 2) {
@@ -360,14 +429,14 @@ benchmark(
           }
           log.info('Completed timing round', { backend: backend.name, round });
         } finally {
-          await api.destroy();
+          await destroyBackend(selected);
         }
       }
     }
 
     for (let round = 0; round < rounds; round++) {
       for (const backend of [...backends.slice(round), ...backends.slice(0, round)]) {
-        api = await backend.create();
+        const selected = await selectBackend(backend);
         try {
           const effects = makeEffects('small-categories', 64);
           const run = () => new Body(effects).computeTxEffectsTree();
@@ -379,22 +448,21 @@ benchmark(
             result: await responsiveness(run),
           });
         } finally {
-          await api.destroy();
+          await destroyBackend(selected);
         }
       }
     }
 
     const summaries = results.map(row => ({ ...row, ...summarize(row.roundsMs.flat(), row.repetitions) }));
-    const format = (row: ReturnType<typeof summarize>) =>
-      `${row.medianMs.toFixed(3)} [${row.q1Ms.toFixed(3)}, ${row.q3Ms.toFixed(3)}]`;
+    const format = (row: ReturnType<typeof summarize>) => row.medianMs.toFixed(3);
     const table = [
-      '| Workload | UDS ms/op [Q1, Q3] | Async SHM ms/op [Q1, Q3] | Sync SHM ms/op [Q1, Q3] | UDS/sync | Saved ms/op |',
-      '| --- | ---: | ---: | ---: | ---: | ---: |',
+      `| Workload | ${backends.map(backend => `${backend.name} ms/op`).join(' | ')} |`,
+      `| --- | ${backends.map(() => '---:').join(' | ')} |`,
       ...diagnostics.map(({ scenario }) => {
         const rows = backends.map(
           backend => summaries.find(row => row.backend === backend.name && row.scenario === scenario)!,
         );
-        return `| ${scenario} | ${rows.map(format).join(' | ')} | ${(rows[0].medianMs / rows[2].medianMs).toFixed(2)}x | ${(rows[0].medianMs - rows[2].medianMs).toFixed(3)} |`;
+        return `| ${scenario} | ${rows.map(format).join(' | ')} |`;
       }),
     ].join('\n');
     const probeTable = [

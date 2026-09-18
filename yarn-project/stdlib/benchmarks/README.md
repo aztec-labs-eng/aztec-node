@@ -1,9 +1,10 @@
 # Transaction-effects transport benchmark
 
-This opt-in benchmark measures existing Poseidon2 hashing over native UDS, native async SHM, and native sync SHM.
-It uses production transaction-effects and tree code, with a benchmark-only replacement of the foundation hash helpers
-to select each real backend. Field serialization, domain separators, Promise interfaces, and request scheduling are
-preserved. Backend initialization must succeed explicitly; there is no fallback, native batching, or CI registration.
+This opt-in benchmark measures existing Poseidon2 hashing over native UDS, native async SHM, native sync SHM, and two
+mixed configurations that use sync SHM only for transaction-effects tree internal nodes. It uses production
+transaction-effects and tree code, with a benchmark-only replacement of the foundation hash helpers to select each
+real backend by domain separator. Field serialization, domain separators, Promise interfaces, and request scheduling
+are preserved. Backend initialization must succeed explicitly; there is no fallback, native batching, or CI registration.
 
 From `yarn-project`, after installing dependencies and building the workspace:
 
@@ -26,10 +27,13 @@ do not commit benchmark output.
 - **Leaves:** `computeTxEffectsTreeData` computes categories and leaves with the existing concurrency.
 - **Internal tree:** the existing unbalanced root helper over precomputed sparse-profile leaf buffers. It makes
   N−1 sequential three-field requests. Buffer preparation is excluded from this isolated measurement.
+- **Membership:** construction and verification using precomputed sparse-profile leaves. Construction includes only
+  internal-node hashing; verification hashes the selected leaf along its variable-depth sibling path.
 - **Complete commitment:** a fresh `Body.computeTxEffectsTree()` per operation, including leaf-buffer serialization.
   Fresh bodies avoid the categories/leaves cache. Effects objects are immutable throughout the run.
 
-Effects workloads use 1, 3, 16, and 64 transactions; isolated internal-tree measurements omit the hash-free single leaf.
+Effects and membership workloads use 1, 3, 16, and 64 transactions; isolated internal-tree measurements omit the
+hash-free single leaf.
 These deterministic synthetic profiles exercise different request sizes, rather than reproduce observed traffic:
 
 | Profile | Effects per transaction | Leaf-construction hash requests per transaction |
@@ -47,13 +51,13 @@ log-heavy case is a hashing stress control, not a claim that its total payload f
 
 Each backend gets three warmups and a three-operation pilot for every scenario. The fastest pilot sets a common
 repetition count across transports, targeting 100 ms per sample, capped at 1,000 repetitions. Three rounds collect
-five samples each, rotating backend order (UDS/async/sync, async/sync/UDS, sync/UDS/async) and reversing scenario order
-on the middle round. Each backend is recreated and warmed each round; only one measured backend is alive at a time.
+five samples each, rotating the five-backend order by one position each round and reversing scenario order on the
+middle round. Each backend is recreated and warmed each round; only one measured configuration is alive at a time.
 
-Reported times are medians per complete operation with [Q1, Q3], the medians of the lower/upper seven samples excluding
-the overall median. JSON also includes IQR widths and operations/second. Samples can be shorter than 100 ms due to the
-cap and timing variation. All samples are retained. Overlapping intervals are inconclusive, and these are not statistical
-significance tests. The finite fixture set and rotating rounds do not eliminate JIT, GC, or thermal effects.
+Reported tables contain median time per complete operation. JSON retains raw samples, quartiles, IQR widths, and
+operations/second. Samples can be shorter than 100 ms due to the cap and timing variation. All samples are retained.
+Small differences are inconclusive; the finite fixture set and rotating rounds do not eliminate JIT, GC, or thermal
+effects.
 
 Timing includes production serialization and async scheduling, but excludes initialization, fixture generation,
 correctness checks, diagnostics, and reporting. Singleton initialization/selection is bypassed equally for all transports.
