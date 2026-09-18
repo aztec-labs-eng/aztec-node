@@ -6,7 +6,7 @@ import type { EndToEndContext } from '../fixtures/utils.js';
 import { benchmarkSetup, sendTxs, waitTxs } from './utils.js';
 
 const AZTEC_SLOT_DURATION_SECONDS = 600;
-const ETHEREUM_SLOT_DURATION_SECONDS = 12;
+const ETHEREUM_SLOT_DURATION_SECONDS = 8;
 const BLOCK_DURATION_MS = 200_000;
 const L1_TX_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -23,8 +23,11 @@ describe('benchmarks/build_block', () => {
       maxTxsPerBlock: 1024,
       // The timetable is now always enforced, so give the single bench block enough headroom that
       // it never hits a sub-slot build deadline (we want to measure pure build time, not a
-      // deadline-truncated block). With aztecSlotDuration=600s and ethereumSlotDuration=12s there is
-      // no sub-8s normalization, so init=1s, assemble=1s, P=2s. The model requires
+      // deadline-truncated block). ethereumSlotDuration sits at FAST_PROFILE_ETHEREUM_SLOT_DURATION:
+      // the fast-profile budget clamp is strictly below it, so the production budgets still apply
+      // (init=1s, assemble=1s, P=2s), while the Inbox-backlog floor exempts it at the boundary. That
+      // floor rejects a sequencer deriving fewer than MIN_BLOCKS_FOR_INBOX_CATCHUP blocks per
+      // checkpoint, and one block per slot is exactly what this bench wants. The model requires
       //   timeAvailableForBlocks = S - init - (assemble + 2P + D) >= D
       //   => 600 - 1 - (1 + 4 + 200) = 394 >= 200, giving maxBlocksPerSlot = floor(394/200) = 1.
       // The first (and only) sub-slot's build deadline is init + D = 201s into the slot, far more
