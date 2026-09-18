@@ -17,7 +17,7 @@ import type { L2Block } from '../block/l2_block.js';
 import type { L2BlockInfo } from '../block/l2_block_info.js';
 import { MAX_TXS_PER_BLOCK } from '../deserialization/index.js';
 import { DutyType, type SigningContext } from '../ha-signing/index.js';
-import { InboxMessagePrefixRef } from '../messaging/inbox_message_prefix_ref.js';
+import { InboxBucketRef } from '../messaging/inbox_bucket.js';
 import { BlockHeader } from '../tx/block_header.js';
 import { TxHash } from '../tx/index.js';
 import type { Tx } from '../tx/tx.js';
@@ -86,13 +86,11 @@ export class BlockProposal extends Gossipable implements Signable {
     public readonly signedTxs?: SignedTxs,
 
     /**
-     * The signed Inbox message-prefix reference this block proposes to have consumed through: the rolling hash over
-     * the first `blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex` messages. Validators confirm the hash at
-     * that count against their own Inbox view and read the consumed bundle from the resulting count range, rather
-     * than trusting a proposer-supplied message list. The position may be interior to an L1 bucket. Covered by the
-     * proposal signature (part of `getPayloadToSign`), so the count and the hash are signed as a pair.
+     * Reference to the Inbox bucket this block proposes to consume, when the proposer commits to one. Validators
+     * resolve it against their own Inbox view and derive the consumed message bundle from it rather than trusting a
+     * proposer-supplied message list. Covered by the proposal signature (part of `getPayloadToSign`).
      */
-    public readonly inboxPrefixRef?: InboxMessagePrefixRef,
+    public readonly bucketRef?: InboxBucketRef,
   ) {
     super();
   }
@@ -130,9 +128,9 @@ export class BlockProposal extends Gossipable implements Signable {
 
   /**
    * Get the payload to sign for this block proposal.
-   * The signature is over: blockHeader + indexWithinCheckpoint + archiveRoot + txHashes, plus the Inbox prefix
-   * reference when set. Appending only when set binds the reference to the signature so a relay cannot strip or
-   * inject it without breaking recovery.
+   * The signature is over: blockHeader + indexWithinCheckpoint + archiveRoot + txHashes, plus the bucket reference
+   * when set. Appending only when set binds the reference to the signature so a relay cannot strip or inject it
+   * without breaking recovery.
    */
   getPayloadToSign(): Buffer {
     return serializeToBuffer([
@@ -141,7 +139,7 @@ export class BlockProposal extends Gossipable implements Signable {
       this.archiveRoot,
       this.txHashes.length,
       this.txHashes,
-      ...(this.inboxPrefixRef ? [this.inboxPrefixRef] : []),
+      ...(this.bucketRef ? [this.bucketRef] : []),
     ]);
   }
 
@@ -170,7 +168,7 @@ export class BlockProposal extends Gossipable implements Signable {
     signatureContext: CoordinationSignatureContext,
     proposalSigner: (typedData: TypedDataDefinition, context: SigningContext) => Promise<Signature>,
     txsSigner?: (typedData: TypedDataDefinition, context: SigningContext) => Promise<Signature>,
-    inboxPrefixRef?: InboxMessagePrefixRef,
+    bucketRef?: InboxBucketRef,
   ): Promise<BlockProposal> {
     // Create a temporary proposal to get the payload to sign
     const tempProposal = new BlockProposal(
@@ -181,7 +179,7 @@ export class BlockProposal extends Gossipable implements Signable {
       Signature.empty(),
       signatureContext,
       undefined,
-      inboxPrefixRef,
+      bucketRef,
     );
 
     // Create the block signing context
@@ -216,7 +214,7 @@ export class BlockProposal extends Gossipable implements Signable {
       sig,
       signatureContext,
       signedTxs,
-      inboxPrefixRef,
+      bucketRef,
     );
   }
 
@@ -269,11 +267,11 @@ export class BlockProposal extends Gossipable implements Signable {
     } else {
       buffer.push(0); // hasSignedTxs = false
     }
-    // Optional Inbox prefix-reference tail. Appended only when set, so a proposal without a reference
+    // Optional bucket-reference tail. Appended only when set, so a proposal without a reference
     // serializes without the tail and a decoder that reaches EOF reads it as unset.
-    if (this.inboxPrefixRef) {
-      buffer.push(1); // hasInboxPrefixRef = true
-      buffer.push(this.inboxPrefixRef.toBuffer());
+    if (this.bucketRef) {
+      buffer.push(1); // hasBucketRef = true
+      buffer.push(this.bucketRef.toBuffer());
     }
     return serializeToBuffer(buffer);
   }
@@ -300,13 +298,13 @@ export class BlockProposal extends Gossipable implements Signable {
       }
     }
 
-    // Optional Inbox prefix-reference tail. A buffer that ends after the signedTxs flag decodes as
+    // Optional bucket-reference tail. A buffer that ends after the signedTxs flag decodes as
     // "no reference", so proposals written without the tail round-trip cleanly.
-    let inboxPrefixRef: InboxMessagePrefixRef | undefined;
+    let bucketRef: InboxBucketRef | undefined;
     if (!reader.isEmpty()) {
-      const hasInboxPrefixRef = reader.readNumber();
-      if (hasInboxPrefixRef) {
-        inboxPrefixRef = InboxMessagePrefixRef.fromBuffer(reader);
+      const hasBucketRef = reader.readNumber();
+      if (hasBucketRef) {
+        bucketRef = InboxBucketRef.fromBuffer(reader);
       }
     }
 
@@ -318,7 +316,7 @@ export class BlockProposal extends Gossipable implements Signable {
       signature,
       signatureContext,
       signedTxs,
-      inboxPrefixRef,
+      bucketRef,
     );
   }
 
@@ -334,7 +332,7 @@ export class BlockProposal extends Gossipable implements Signable {
       this.txHashes.length * TxHash.SIZE +
       4 /* hasSignedTxs flag */ +
       (this.signedTxs ? this.signedTxs.getSize() : 0) +
-      (this.inboxPrefixRef ? 4 /* hasInboxPrefixRef flag */ + this.inboxPrefixRef.getSize() : 0)
+      (this.bucketRef ? 4 /* hasBucketRef flag */ + this.bucketRef.getSize() : 0)
     );
   }
 
@@ -369,7 +367,7 @@ export class BlockProposal extends Gossipable implements Signable {
       txHashes: this.txHashes.map(h => h.toString()),
       chainId: this.signatureContext.chainId,
       rollupAddress: this.signatureContext.rollupAddress.toString(),
-      inboxPrefixRef: this.inboxPrefixRef?.toInspect(),
+      bucketRef: this.bucketRef?.toInspect(),
     };
   }
 
@@ -396,7 +394,7 @@ export class BlockProposal extends Gossipable implements Signable {
       this.signature,
       this.signatureContext,
       undefined,
-      this.inboxPrefixRef,
+      this.bucketRef,
     );
   }
 }
