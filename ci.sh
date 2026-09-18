@@ -472,19 +472,31 @@ case "$cmd" in
       fi
       redis_cli LRANGE "$key" 0 -1 | $pager
     # A redis started locally for local CI runs does not hold the shared CI logs, so a
-    # miss falls through to the dashboard over http instead of reporting the key absent.
+    # miss falls through to the dashboard over https instead of reporting the key absent.
     elif [ "$CI_REDIS_AVAILABLE" -eq 1 ] && [ "$(redis_cli EXISTS "$key")" == "1" ]; then
       redis_getz "$key" | $pager
     else
       if [ -z "${CI_PASSWORD:-}" ]; then
-        echo "Log not found in redis and CI_PASSWORD not set for http fallback."
+        echo "Log not found in redis and CI_PASSWORD not set for https fallback."
         exit 1
       fi
-      curl -sf "http://aztec:$CI_PASSWORD@ci.aztec-labs.com/$key.txt" | $pager
-      if [ ${PIPESTATUS[0]} -ne 0 ]; then
-        echo "Failed to fetch log via http."
+      # The dashboard 308s http to https, and curl neither follows nor fails on a 3xx,
+      # so an http url here downloads nothing and still exits 0.
+      tmp_log=$(mktemp)
+      if ! curl -sfL -u "aztec:$CI_PASSWORD" -o "$tmp_log" "https://ci.aztec-labs.com/$key.txt"; then
+        rm -f "$tmp_log"
+        echo "Failed to fetch log via https."
         exit 1
       fi
+      # A key the dashboard does not hold comes back 200 with this as the whole body,
+      # so the status code alone never reveals it.
+      if [ ! -s "$tmp_log" ] || [ "$(head -c 64 "$tmp_log")" == "Key not found" ]; then
+        rm -f "$tmp_log"
+        echo "Key not found."
+        exit 1
+      fi
+      $pager < "$tmp_log"
+      rm -f "$tmp_log"
     fi
     ;;
 
