@@ -1,5 +1,3 @@
-import { InboxAbi } from '@aztec-foundation/l1-artifacts';
-
 import type { Archiver } from '@aztec-labs/archiver';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
@@ -13,10 +11,14 @@ import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import 'jest-extended';
-import { type Hex, encodeFunctionData } from 'viem';
+import type { Hex } from 'viem';
 
 import { CheckpointProposalJobTestGate } from '../../fixtures/checkpoint_proposal_job_test_gate.js';
-import { sendL1ToL2Message } from '../../fixtures/l1_to_l2_messaging.js';
+import {
+  encodeSendL2MessageData,
+  sendL1ToL2Message,
+  sendL1ToL2MessagesInOneBlock,
+} from '../../fixtures/l1_to_l2_messaging.js';
 import type { EndToEndContext } from '../../fixtures/utils.js';
 import { waitForL1ToL2MessageSeen } from '../../shared/wait_for_l1_to_l2_message.js';
 import type { SingleNodeTestContext } from '../single_node_test_context.js';
@@ -71,34 +73,35 @@ describe('single-node/l1-reorgs/messages', () => {
     );
 
   /**
-   * Sends one L1-to-L2 message and returns it together with the exact `sendL2Message` call that produced it, so the
-   * same call can be replayed verbatim under a different L1 block grouping. A message's leaf hash is derived from
-   * sender, recipient, content, secret hash and version, none of which depend on which L1 block carried it, so a
-   * replay of the same call from the same sender reproduces the same leaf at the same position.
+   * Sends two L1-to-L2 messages inside one L1 block, so the Inbox holds both in a single bucket, and returns each
+   * together with the exact `sendL2Message` call that produced it, so the same calls can be replayed verbatim under
+   * a different L1 block grouping. A message's leaf hash is derived from sender, recipient, content, secret hash and
+   * version, none of which depend on which L1 block carried it, so a replay of the same calls from the same sender
+   * reproduces the same leaves at the same positions.
    */
-  const sendReplayableMessage = async () => {
+  const sendReplayableMessagePair = async () => {
     const { l1ContractAddresses } = context.deployL1ContractsValues;
-    const recipient = await AztecAddress.random();
-    const content = Fr.random();
-    const secretHash = Fr.random();
     const version = BigInt(
       await new RollupContract(l1Client, l1ContractAddresses.rollupAddress.toString()).getVersion(),
     );
-    const sent = await sendL1ToL2Message({ recipient, content, secretHash }, { l1ContractAddresses, l1Client });
-    const call = {
-      to: l1ContractAddresses.inboxAddress.toString() as Hex,
-      from: l1Client.account.address,
-      input: encodeFunctionData({
-        abi: InboxAbi,
-        functionName: 'sendL2Message',
-        args: [{ actor: recipient.toString(), version }, content.toString(), secretHash.toString()],
-      }),
-      // Anvil estimates a replacement transaction against the chain before the rollback, where this send's bucket
-      // already exists and the append is warm. Replayed after the rollback the same call opens the bucket cold and
-      // costs far more, so an estimated limit runs out of gas and the message is never emitted.
-      gas: 1_000_000n,
-    };
-    return { ...sent, index: sent.globalLeafIndex.toBigInt(), call };
+    const messages = [
+      { recipient: await AztecAddress.random(), content: Fr.random(), secretHash: Fr.random() },
+      { recipient: await AztecAddress.random(), content: Fr.random(), secretHash: Fr.random() },
+    ];
+    const sent = await sendL1ToL2MessagesInOneBlock(messages, { l1ContractAddresses, l1Client });
+    return sent.map((message, index) => ({
+      ...message,
+      index: message.globalLeafIndex.toBigInt(),
+      call: {
+        to: l1ContractAddresses.inboxAddress.toString() as Hex,
+        from: l1Client.account.address,
+        input: encodeSendL2MessageData(messages[index], version),
+        // Anvil estimates a replacement transaction against the chain before the rollback, where the pair's bucket
+        // already exists and both appends are warm. Replayed after the rollback each call opens its own bucket cold
+        // and costs far more, so an estimated limit runs out of gas and the message is never emitted.
+        gas: 1_000_000n,
+      },
+    }));
   };
 
   /** The live L1 bucket ending exactly at `total`, or undefined when no bucket ends there. */
@@ -112,6 +115,13 @@ describe('single-node/l1-reorgs/messages', () => {
   // the L2 block that already consumed both messages must survive: the claim is preservation of work in progress,
   // which is only demonstrable on block identity and same-slot publication, never on the messages merely
   // reappearing.
+  //
+  // The partition is split rather than merged: both messages start in one L1 block and one bucket, and the
+  // replacement gives each its own block and bucket. Splitting only adds a boundary, so every bucket end that
+  // existed before the reorg still exists after it. Merging would instead delete the boundary between the two
+  // messages, and a checkpoint that has already been built on that boundary but has not reached L1 yet can then no
+  // longer be published at all — its final message total is no longer any live bucket's end, so the proposer is
+  // right to prune and rebuild, and the scenario would not be placement-only for that checkpoint.
   //
   // The reorg happens while a non-final block of the current checkpoint is held at the checkpoint test gate, after
   // that block was stored by the proposer's own archiver and before the next block freezes its message range. The
@@ -127,12 +137,10 @@ describe('single-node/l1-reorgs/messages', () => {
     const publishedBefore = await monitor.run(true);
     const l1BlockBeforeMessages = publishedBefore.l1BlockNumber;
 
-    // Two messages in this order, each in its own L1 block and therefore its own bucket. Sends are sequential and
-    // each awaits its own receipt, so the second cannot share the first's L1 block.
-    logger.warn(`Sending two cross chain messages in separate L1 blocks`);
-    const first = await sendReplayableMessage();
-    const second = await sendReplayableMessage();
-    expect(second.txReceipt.blockNumber).toBeGreaterThan(first.txReceipt.blockNumber);
+    // Two messages in this order, sharing one L1 block and therefore one bucket.
+    logger.warn(`Sending two cross chain messages in a single L1 block`);
+    const [first, second] = await sendReplayableMessagePair();
+    expect(second.txReceipt.blockNumber).toEqual(first.txReceipt.blockNumber);
     expect(second.index).toEqual(first.index + 1n);
 
     const firstEnd = first.index + 1n;
@@ -141,10 +149,10 @@ describe('single-node/l1-reorgs/messages', () => {
       first: await liveBucketEndingAt(firstEnd),
       second: await liveBucketEndingAt(secondEnd),
     };
-    // The premise of the scenario: the messages are split across two live buckets to begin with.
-    expect(bucketsBefore.first).toBeDefined();
+    // The premise of the scenario: the messages share one live bucket, so no boundary sits between them and no
+    // checkpoint can have ended on one.
+    expect(bucketsBefore.first).toBeUndefined();
     expect(bucketsBefore.second).toBeDefined();
-    expect(bucketsBefore.second!.seq).toBeGreaterThan(bucketsBefore.first!.seq);
 
     const stateBefore = await inbox.getState();
     expect(stateBefore.totalMessagesInserted).toEqual(secondEnd);
@@ -187,10 +195,11 @@ describe('single-node/l1-reorgs/messages', () => {
         expect(foreign).toHaveLength(0);
       }
 
-      // Every replacement call is prepared before L1 is touched, and both go into one replacement block, so the
-      // archiver never observes a state in which the message log is shorter than it was.
-      logger.warn(`Replacing L1 blocks [${reorgFrom}, ${head}] with both messages in one block`, { depth });
-      await context.cheatCodes.eth.reorgWithReplacement(depth, [[first.call, second.call]]);
+      // Every replacement call is prepared before L1 is touched, and both replacement blocks are mined by the one
+      // `anvil_reorg`, so the archiver never observes a state in which the message log is shorter than it was.
+      expect(depth).toBeGreaterThanOrEqual(2);
+      logger.warn(`Replacing L1 blocks [${reorgFrom}, ${head}] with one message per block`, { depth });
+      await context.cheatCodes.eth.reorgWithReplacement(depth, [[first.call], [second.call]]);
 
       // The Inbox agrees on content and disagrees on placement.
       const stateAfter = await retryUntil(
@@ -209,13 +218,15 @@ describe('single-node/l1-reorgs/messages', () => {
         first: await liveBucketEndingAt(firstEnd),
         second: await liveBucketEndingAt(secondEnd),
       };
-      // Placement changed: the boundary between the two messages is gone and both now end one bucket.
-      expect(bucketsAfter.first).toBeUndefined();
+      // Placement changed: a boundary now sits between the two messages and each ends its own bucket. The end the
+      // messages already shared is still a live bucket end, so nothing already built on it has been invalidated.
+      expect(bucketsAfter.first).toBeDefined();
       expect(bucketsAfter.second).toBeDefined();
+      expect(bucketsAfter.second!.seq).toBeGreaterThan(bucketsAfter.first!.seq);
       logger.warn(`Placement-only reorg complete`, {
         totalMessages: stateAfter.totalMessagesInserted,
-        bucketsBefore: [bucketsBefore.first!.seq, bucketsBefore.second!.seq],
-        bucketAfter: bucketsAfter.second!.seq,
+        bucketBefore: bucketsBefore.second!.seq,
+        bucketsAfter: [bucketsAfter.first!.seq, bucketsAfter.second!.seq],
       });
 
       // The archiver has reconciled to the replacement chain and still holds the held block's parent chain.
