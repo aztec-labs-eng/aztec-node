@@ -70,6 +70,7 @@ export const DefaultSequencerConfig = {
   skipPublishingCheckpointsPercent: 0,
   maxBlocksPerCheckpoint: DEFAULT_MAX_BLOCKS_PER_CHECKPOINT,
   minPeersToPropose: 1,
+  allowUnsafeInboxCatchupCapacity: false,
 } satisfies ResolvedSequencerConfig;
 
 /**
@@ -286,6 +287,13 @@ export const sequencerConfigMappings: ConfigMappingsType<SequencerConfig> = {
       'Minimum number of connected p2p peers required to build and propose a checkpoint (zero to disable the check).' +
       ' Ignored when p2p is disabled by config.',
     ...numberConfigHelper(DefaultSequencerConfig.minPeersToPropose),
+  },
+  allowUnsafeInboxCatchupCapacity: {
+    env: 'SEQ_ALLOW_UNSAFE_INBOX_CATCHUP_CAPACITY',
+    description:
+      'Allow starting with fewer block opportunities per checkpoint than a mandatory streaming-Inbox backlog needs' +
+      ' (for testing only).',
+    ...booleanConfigHelper(DefaultSequencerConfig.allowUnsafeInboxCatchupCapacity),
   },
   ...pickConfigMappings(p2pConfigMappings, ['txPublicSetupAllowListExtend']),
 };

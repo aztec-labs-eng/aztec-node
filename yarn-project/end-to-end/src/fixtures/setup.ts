@@ -397,6 +397,9 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
     config.listenAddress = '127.0.0.1';
 
     config.minTxPoolAgeMs = opts.minTxPoolAgeMs ?? 0;
+    // E2e profiles deliberately derive one or two block opportunities per slot against an Inbox nobody is filling,
+    // which is below the production catch-up floor the sequencer otherwise refuses to start under.
+    config.allowUnsafeInboxCatchupCapacity = opts.allowUnsafeInboxCatchupCapacity ?? true;
 
     // Create a temp directory for any services that need it and cleanup later
     const directoryToCleanup = path.join(tmpdir(), randomBytes(8).toString('hex'));
