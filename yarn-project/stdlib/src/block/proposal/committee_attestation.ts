@@ -1,4 +1,5 @@
 import type { ViemCommitteeAttestation, ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
@@ -76,10 +77,10 @@ export class CommitteeAttestation {
         }
 
         const v = dataBuffer[dataIndex];
-        const r = `0x${dataBuffer.subarray(dataIndex + 1, dataIndex + 33).toString('hex')}` as const;
-        const s = `0x${dataBuffer.subarray(dataIndex + 33, dataIndex + 65).toString('hex')}` as const;
+        const r = Buffer32.fromBuffer(dataBuffer.subarray(dataIndex + 1, dataIndex + 33));
+        const s = Buffer32.fromBuffer(dataBuffer.subarray(dataIndex + 33, dataIndex + 65));
 
-        const signature = Signature.fromViemSignature({ r, s, v });
+        const signature = new Signature(r, s, v);
 
         // For signed attestations, we use a zero address as the address is recovered from the signature
         attestations.push(new CommitteeAttestation(EthAddress.ZERO, signature));
@@ -90,8 +91,7 @@ export class CommitteeAttestation {
           throw new Error(`Insufficient data for address at position ${i}`);
         }
 
-        const addressBytes = dataBuffer.subarray(dataIndex, dataIndex + 20);
-        const address = EthAddress.fromString(`0x${addressBytes.toString('hex')}`);
+        const address = EthAddress.fromBuffer(dataBuffer.subarray(dataIndex, dataIndex + 20));
 
         // For address-only attestations, use empty signature
         attestations.push(new CommitteeAttestation(address, Signature.empty()));
