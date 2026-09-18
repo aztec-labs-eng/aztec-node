@@ -24,7 +24,6 @@ import {
   encodeErrorResult,
   encodeFunctionData,
   http,
-  numberToHex,
 } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -58,12 +57,6 @@ const logger = createLogger('ethereum:test:l1_tx_utils');
 const SIMPLE_CONTRACT_BYTECODE = '0x69602a60005260206000f3600052600a6016f3';
 
 const CHECK_INTERVAL_MS = process.env.TEST_CHECK_INTERVAL_MS ? parseInt(process.env.TEST_CHECK_INTERVAL_MS) : 100;
-
-/** The parts of an eth_simulateV1 JSON-RPC request that the tests below assert on. */
-type SimulateV1RpcRequest = {
-  method: string;
-  params: [{ blockStateCalls: { calls: Record<string, unknown>[] }[] }, unknown];
-};
 
 export type PendingTransaction = {
   hash: `0x${string}`;
@@ -1603,15 +1596,12 @@ describe('L1TxUtils', () => {
     it('omits fee fields from the simulated call', async () => {
       // Fee fields on a simulated call make the node enforce balance >= gas * maxFeePerGas, which rejects the
       // whole eth_simulateV1 request when the sender cannot afford the worst-case gas cap.
-      using requestSpy = jest.spyOn(l1Client, 'request');
+      using simulateBlocksSpy = jest.spyOn(l1Client, 'simulateBlocks');
 
       await gasUtils.simulate(request);
 
-      // `request` is generic over the RPC schema, so jest cannot infer its recorded arguments.
-      const requests = requestSpy.mock.calls as unknown as [SimulateV1RpcRequest][];
-      const simulateArgs = requests.map(([args]) => args).find(args => args.method === 'eth_simulateV1');
-      const call = simulateArgs!.params[0].blockStateCalls[0].calls[0];
-      expect(call).toHaveProperty('gas', numberToHex(MAX_L1_TX_LIMIT));
+      const call = simulateBlocksSpy.mock.calls[0][0].blocks[0].calls[0];
+      expect(call).toHaveProperty('gas', MAX_L1_TX_LIMIT);
       expect(call).not.toHaveProperty('maxFeePerGas');
       expect(call).not.toHaveProperty('maxPriorityFeePerGas');
     });
@@ -1925,9 +1915,9 @@ describe('L1TxUtils', () => {
       expect(readOnlyUtils).not.toHaveProperty('sendAndMonitorTransaction');
     });
 
-    it('uses fallback gas estimate when the wrapped eth_simulateV1 error reports unsupported method', async () => {
+    it('uses fallback gas estimate when wrapped simulateBlocks error reports unsupported method', async () => {
       const readOnlyUtils = new ReadOnlyL1TxUtils(publicClient, logger, dateProvider);
-      using _requestSpy = jest.spyOn(publicClient, 'request').mockRejectedValue(
+      using _simulateBlocksSpy = jest.spyOn(publicClient, 'simulateBlocks').mockRejectedValue(
         new L1RpcError('L1 RPC request failed', {
           cause: new MethodNotFoundRpcError(new Error('method not found'), { method: 'eth_simulateV1' }),
         }),
@@ -1947,7 +1937,7 @@ describe('L1TxUtils', () => {
     it('throws a descriptive error when the node rejects the simulation for insufficient funds', async () => {
       const from: Hex = '0x1111111111111111111111111111111111111111';
       const readOnlyUtils = new ReadOnlyL1TxUtils(publicClient, logger, dateProvider);
-      using _requestSpy = jest.spyOn(publicClient, 'request').mockRejectedValue(
+      using _simulateBlocksSpy = jest.spyOn(publicClient, 'simulateBlocks').mockRejectedValue(
         new L1RpcError('L1 RPC request failed', {
           cause: new RpcRequestError({
             body: {},
@@ -1964,7 +1954,7 @@ describe('L1TxUtils', () => {
 
     it('classifies an insufficient funds rejection reported without the dedicated error code', async () => {
       const readOnlyUtils = new ReadOnlyL1TxUtils(publicClient, logger, dateProvider);
-      using _requestSpy = jest.spyOn(publicClient, 'request').mockRejectedValue(
+      using _simulateBlocksSpy = jest.spyOn(publicClient, 'simulateBlocks').mockRejectedValue(
         new L1RpcError('L1 RPC request failed', {
           cause: new RpcRequestError({
             body: {},
@@ -1986,9 +1976,11 @@ describe('L1TxUtils', () => {
         errorName: 'Error',
         args: ['insufficient funds for fee'],
       });
-      // Only the fields the simulate path reads; a real eth_simulateV1 block carries many more.
-      const failedSimulation = [{ gasUsed: '0x3e8', calls: [{ status: '0x0', gasUsed: '0x3e8', returnData: data }] }];
-      using _requestSpy = jest.spyOn(publicClient, 'request').mockResolvedValue(failedSimulation);
+      // Only the fields _simulate reads; the full viem return type carries every block field.
+      const failedSimulation = [
+        { gasUsed: 1_000n, calls: [{ status: 'failure', error: undefined, data }] },
+      ] as unknown as Awaited<ReturnType<typeof publicClient.simulateBlocks>>;
+      using _simulateBlocksSpy = jest.spyOn(publicClient, 'simulateBlocks').mockResolvedValue(failedSimulation);
 
       const promise = readOnlyUtils.simulate({
         to: '0x1234567890123456789012345678901234567890',

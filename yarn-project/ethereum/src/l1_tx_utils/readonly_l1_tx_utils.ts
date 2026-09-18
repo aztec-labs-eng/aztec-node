@@ -36,7 +36,6 @@ import {
   WEI_CONST,
 } from './constants.js';
 import { P75AllTxsPriorityFeeStrategy, type PriorityFeeStrategy } from './fee-strategies/index.js';
-import { simulateBlocksWithMaxUsedGas } from './simulate_blocks.js';
 import type { FeesPerGas, L1BlobInputs, L1TxRequest, TransactionStats } from './types.js';
 import { getCalldataGasUsage, tryGetCustomErrorNameContractFunction } from './utils.js';
 
@@ -408,7 +407,7 @@ export class ReadOnlyL1TxUtils {
     abi: Abi,
   ): Promise<L1SimulationResult> {
     const simulateBlocks = () =>
-      simulateBlocksWithMaxUsedGas(this.client, {
+      this.client.simulateBlocks({
         validation: false,
         blocks: [
           {
