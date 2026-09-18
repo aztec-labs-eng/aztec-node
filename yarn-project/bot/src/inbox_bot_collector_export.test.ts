@@ -137,6 +137,8 @@ describe('InboxBotMetrics collector export', () => {
     metrics.recordStage('l1_mined_to_included', { scenario: 'normal', mode: 'public' }, 2.5);
     metrics.recordStage('l1_submission_to_mined', { scenario: 'saturation' }, 12);
     metrics.recordSimulation('not_ready', { scenario: 'normal', mode: 'public' });
+    metrics.recordL2AttemptStarted({ scenario: 'normal', mode: 'private' });
+    metrics.recordL2AttemptFinished({ scenario: 'normal', mode: 'private' }, 4.5);
     metrics.recordPublicExecution('success', 'normal');
     metrics.recordPredictionMismatch('normal');
     metrics.recordCheck('bucket_rollover', 'passed');
@@ -164,6 +166,8 @@ describe('InboxBotMetrics collector export', () => {
       'aztec.bot.inbox.l1_batch_count',
       'aztec.bot.inbox.l1_batch_size',
       'aztec.bot.inbox.l1_gas_used',
+      'aztec.bot.inbox.l2_active_attempts',
+      'aztec.bot.inbox.l2_send_duration',
       'aztec.bot.inbox.message_count',
       'aztec.bot.inbox.oldest_pending_age',
       'aztec.bot.inbox.pending_count',
@@ -180,6 +184,8 @@ describe('InboxBotMetrics collector export', () => {
     expect(byName.get('aztec.bot.inbox.message_count')).toMatchObject({ kind: 'sum', unit: 'messages' });
     expect(byName.get('aztec.bot.inbox.stage_duration')).toMatchObject({ kind: 'histogram', unit: 's' });
     expect(byName.get('aztec.bot.inbox.l1_gas_used')).toMatchObject({ kind: 'histogram', unit: 'gas' });
+    expect(byName.get('aztec.bot.inbox.l2_send_duration')).toMatchObject({ kind: 'histogram', unit: 's' });
+    expect(byName.get('aztec.bot.inbox.l2_active_attempts')).toMatchObject({ kind: 'sum', unit: 'attempts' });
     expect(byName.get('aztec.bot.inbox.pending_count')).toMatchObject({ kind: 'gauge', unit: 'messages' });
     expect(byName.get('aztec.bot.inbox.saturation_enabled')).toMatchObject({ kind: 'gauge', unit: '1' });
   });
