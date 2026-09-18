@@ -73,7 +73,7 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     await t.teardown();
   });
 
-  /** The L1 block timestamp at which an L1->L2 message was inserted; equals the message's Inbox bucket key. */
+  /** The L1 block timestamp at which an L1->L2 message was inserted, the origin of the latency bound. */
   const getMessageL1Timestamp = async (l1BlockNumber: bigint): Promise<bigint> => {
     const block = await t.harnessL1Client.getBlock({ blockNumber: l1BlockNumber });
     return block.timestamp;
@@ -82,8 +82,9 @@ describe('single-node/cross-chain/streaming_inbox', () => {
   /**
    * Finds the L2 block that inserted `msgHash` into the L1-to-L2 message tree by scanning forward from
    * `fromBlock` for the first block whose committed tree resolves a membership witness. Under the streaming
-   * Inbox a message enters the tree at the block that consumes its Inbox bucket, which need not be the first
-   * block of a checkpoint. Returns the block-data (checkpoint number + index within checkpoint) of that block.
+   * Inbox a message enters the tree at the first block the proposer builds after its archiver observed the
+   * message, which need not be the first block of a checkpoint. Returns the block-data (checkpoint number + index
+   * within checkpoint) of that block.
    */
   const findInsertingBlock = (msgHash: Fr, fromBlock: BlockNumber) => {
     return retryUntil(
