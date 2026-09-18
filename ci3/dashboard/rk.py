@@ -20,7 +20,7 @@ from pathlib import Path
 # Import core rendering logic
 from rk_core import (
     YELLOW, BLUE, GREEN, RED, PURPLE, BOLD, RESET,
-    hyperlink, r, get_section_data, get_list_as_string
+    LINK_OPEN, hyperlink, r, get_section_data, get_list_as_string
 )
 S3_LOGS_BUCKET = os.getenv('S3_LOGS_BUCKET', 'aztec-ci-artifacts')
 S3_LOGS_PREFIX = os.getenv('S3_LOGS_PREFIX', 'logs')
@@ -143,11 +143,17 @@ def convert_to_ocs8(text):
         return hyperlink(url, url)
     return re.sub(pattern, replace_link, text)
 
+# ansi2html >= 1.9.4 rewrites any link target without a URL scheme to "#", which would break every
+# same-site link. Route them through a placeholder origin and strip it once converted.
+_SAME_SITE_ORIGIN = 'http://same-site.invalid'
+_SAME_SITE_LINK = re.compile(r'\x1b\]8;;(?=/(?!/))')
+
 def ansi_to_html(text):
     text = convert_to_ocs8(text)
+    text = _SAME_SITE_LINK.sub(lambda _: LINK_OPEN + _SAME_SITE_ORIGIN, text)
     conv = Ansi2HTMLConverter(inline=True)
     html = conv.convert(text, full=False)
-    return html
+    return html.replace(f'href="{_SAME_SITE_ORIGIN}/', 'href="/')
 
 def update_status(offset: int, filter_str: str, filter_prop: str) -> None:
     ga_status = get_github_actions_status()

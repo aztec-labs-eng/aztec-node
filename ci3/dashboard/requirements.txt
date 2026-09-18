@@ -2,7 +2,7 @@ flask
 gunicorn
 redis
 boto3
-ansi2html
+ansi2html==1.9.5
 Flask-Compress
 requests
 Flask-HTTPAuth
