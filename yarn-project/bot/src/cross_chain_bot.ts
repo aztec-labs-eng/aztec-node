@@ -36,7 +36,7 @@ import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/cl
 import type { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { BaseBot } from './base_bot.js';
-import type { BotConfig } from './config.js';
+import { type BotConfig, DEFAULT_L1_TO_L2_SEED_COUNT } from './config.js';
 import { BotFactory } from './factory.js';
 import { seedL1ToL2Message } from './l1_to_l2_seeding.js';
 import type { BotStore, PendingL1ToL2Message } from './store/index.js';
@@ -101,7 +101,10 @@ export class CrossChainBot extends BaseBot {
     const pendingMessages = await this.store.getUnconsumedL1ToL2Messages();
 
     // Send an L1→L2 message if we're below the threshold and not already seeding one
-    if (pendingMessages.length < this.config.l1ToL2SeedCount && !this.pendingSeedPromise) {
+    if (
+      pendingMessages.length < (this.config.l1ToL2SeedCount ?? DEFAULT_L1_TO_L2_SEED_COUNT) &&
+      !this.pendingSeedPromise
+    ) {
       this.pendingSeedPromise = this.seedNewL1ToL2Message()
         .catch(err => this.log.warn(`Failed to seed L1→L2 message: ${err}`, logCtx))
         .finally(() => {

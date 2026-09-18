@@ -21,7 +21,8 @@ describe('bot config defaults', () => {
     expect(config.privateTransfersPerTx).toEqual(1);
     expect(config.publicTransfersPerTx).toEqual(1);
     expect(config.l2ToL1MessagesPerTx).toEqual(1);
-    expect(config.l1ToL2SeedCount).toEqual(1);
+    // Left unset so the mode-specific default can tell an unset value from an explicit one.
+    expect(config.l1ToL2SeedCount).toBeUndefined();
     expect(config.maxPendingTxs).toEqual(128);
     expect(config.maxConsecutiveErrors).toEqual(0);
     expect(config.minFeePadding).toEqual(3);
@@ -43,10 +44,10 @@ describe('bot config defaults', () => {
 });
 
 describe('applyInboxModeDefaults', () => {
-  it('leaves every other mode untouched', () => {
+  it('keeps the single in-flight message every other mode relies on', () => {
     for (const botMode of ['transfer', 'amm', 'crosschain'] as const) {
       const config: BotConfig = { ...getBotDefaultConfig(), botMode };
-      expect(applyInboxModeDefaults(config)).toEqual(config);
+      expect(applyInboxModeDefaults(config)).toEqual({ ...config, l1ToL2SeedCount: 1 });
     }
   });
 
@@ -60,6 +61,18 @@ describe('applyInboxModeDefaults', () => {
     const config: BotConfig = { ...getBotDefaultConfig(), botMode: 'inbox', l1ToL2SeedCount: 300 };
 
     expect(applyInboxModeDefaults(config).l1ToL2SeedCount).toEqual(300);
+  });
+
+  // The default is applied from the absence of a value, not from it matching the general default, so an operator
+  // who asks for one in-flight message gets one — and is then told it cannot drive a batch.
+  it('keeps an explicit cap that happens to equal the general default, and validation then rejects it', () => {
+    const config: BotConfig = { ...getBotDefaultConfig(), botMode: 'inbox', l1ToL2SeedCount: 1 };
+    const effective = applyInboxModeDefaults(config);
+
+    expect(effective.l1ToL2SeedCount).toEqual(1);
+    expect(() => assertValidInboxConfig({ ...effective, followChain: 'CHECKPOINTED' })).toThrow(
+      /at least inboxMessagesPerBatch/,
+    );
   });
 
   it('does not change any other field', () => {

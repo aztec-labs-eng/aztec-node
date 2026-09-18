@@ -40,6 +40,7 @@ import {
   type BotConfig,
   MAX_INBOX_MESSAGES_PER_BATCH,
   MAX_INBOX_MESSAGES_PER_BUCKET,
+  type ResolvedBotConfig,
   applyInboxModeDefaults,
   getBotDefaultConfig,
 } from './config.js';
@@ -463,7 +464,7 @@ describe('InboxBot', () => {
   const milestones = (milestone: string) =>
     telemetry.meter.sum(Metrics.BOT_INBOX_MESSAGE_COUNT, { [Attributes.BOT_INBOX_MILESTONE]: milestone });
 
-  const buildConfig = (overrides: Partial<BotConfig> = {}): BotConfig =>
+  const buildConfig = (overrides: Partial<BotConfig> = {}): ResolvedBotConfig =>
     applyInboxModeDefaults({
       ...getBotDefaultConfig(),
       botMode: 'inbox',
@@ -1144,6 +1145,31 @@ describe('InboxBot', () => {
       expect(bot.isHealthy()).toBe(true);
     });
 
+    // A poll finishes long before the jobs it dispatched settle, so resetting one streak for both lets a bot fail
+    // one background job per poll forever without ever crossing the threshold.
+    it('reaches the unhealthy threshold on one failing background attempt per poll', async () => {
+      const bot = buildBot({
+        inboxConsumeMode: 'public',
+        inboxMessagesPerBatch: 1,
+        maxConsecutiveErrors: 2,
+      });
+      consumer.sendError = new Error('socket hang up');
+
+      await bot.produceStep();
+      for (const message of await store.getActiveMessages()) {
+        chain.observe(message);
+      }
+
+      await bot.consumeStep();
+      await bot.waitForBackgroundWork();
+      expect(bot.isHealthy()).toBe(true);
+
+      // A poll that dispatches nothing must not clear the streak the background failure built up.
+      await bot.consumeStep();
+      await bot.waitForBackgroundWork();
+      expect(bot.isHealthy()).toBe(false);
+    });
+
     it('exits the process when it becomes unhealthy and the operator asked it to stop', async () => {
       const exit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
       try {
@@ -1597,6 +1623,36 @@ describe('InboxBot', () => {
       expect(consumer.sent.length).toEqual(1);
     });
 
+    // The pending count is a reading of the past: a job dispatched by this poll does not reach the pool until its
+    // transaction is submitted, several awaits later. Dispatching on the unadjusted count floods a capped pool.
+    it('dispatches only as many attempts as the pending transaction budget allows', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 4, maxPendingTxs: 8 });
+      const messages = await produceObservedBatch(bot);
+      expect(messages.length).toEqual(4);
+      chain.node.getPendingTxCount.mockResolvedValue(7);
+
+      await consume(bot);
+
+      expect(consumer.sent.length).toEqual(1);
+    });
+
+    it('counts attempts already in flight against the pending transaction budget', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 4, maxPendingTxs: 2 });
+      await produceObservedBatch(bot);
+      chain.node.getPendingTxCount.mockResolvedValue(0);
+      const { promise, resolve } = promiseWithResolvers<void>();
+      consumer.gate = promise;
+
+      // Two attempts start and stay in flight, filling the budget; a second poll must dispatch nothing more.
+      await bot.consumeStep();
+      expect(consumer.sent.length).toEqual(2);
+      await bot.consumeStep();
+      expect(consumer.sent.length).toEqual(2);
+
+      resolve();
+      await bot.waitForBackgroundWork();
+    });
+
     it('does not resurrect a message that timed out while its consumption attempt was in flight', async () => {
       const bot = buildBot({
         inboxConsumeMode: 'public',
@@ -1689,6 +1745,22 @@ describe('InboxBot', () => {
 
         expect(checks('replay_rejection', 'failed')).toEqual(1);
         expect(failures('replay_accepted')).toEqual(1);
+      });
+
+      // `replayProbedAt` alone must not satisfy a successful run: the probe never demonstrated replay protection.
+      it('fails the batch when the replay probe gives up without ever seeing the nullifier', async () => {
+        const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1, l1ToL2MessageTimeoutSeconds: 60 });
+        const completed = await completeOneMessage(bot);
+        expect(completed.state).toEqual('completed');
+
+        // The spending nullifier never becomes visible, and the batch outlives the message timeout.
+        dateProvider.advanceTime(120);
+        await consume(bot);
+
+        expect(consumer.simulated).toEqual([]);
+        expect(checks('replay_rejection', 'passed')).toEqual(0);
+        expect(checks('replay_rejection', 'failed')).toEqual(1);
+        expect(failures('replay_unproven')).toEqual(1);
       });
 
       it('does not accept an unrelated rejection as replay protection, and tries again', async () => {
