@@ -488,7 +488,6 @@ function makeStubProver(
     checkpoint,
     epochNumber: EpochNumber(5),
     slotNumber: checkpoint.header.slotNumber,
-    attestations: [],
     previousBlockHeader: BlockHeader.empty(),
     l1ToL2Messages: [],
     previousArchiveSiblingPath: makeTuple(ARCHIVE_HEIGHT, () => Fr.ZERO),

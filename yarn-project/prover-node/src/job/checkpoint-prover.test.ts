@@ -98,7 +98,6 @@ describe('CheckpointProver', () => {
       expect(prover.checkpoint).toBe(checkpoint);
       expect(prover.epochNumber).toEqual(EpochNumber(5));
       expect(prover.slotNumber).toEqual(checkpoint.header.slotNumber);
-      expect(prover.attestations).toEqual([]);
       expect(prover.l1ToL2Messages).toEqual([]);
       expect(prover.isCancelled()).toBe(false);
       expect(prover.isFailed()).toBe(false);
@@ -622,7 +621,6 @@ describe('CheckpointProver', () => {
     const args: CheckpointProverArgs = {
       checkpoint: target,
       epochNumber: EpochNumber(5),
-      attestations: [],
       verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
       previousBlockHeader: makePreviousBlockHeader(),
       l1ToL2Messages: [],

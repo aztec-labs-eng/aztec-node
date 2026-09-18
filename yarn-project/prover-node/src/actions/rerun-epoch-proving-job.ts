@@ -174,7 +174,6 @@ async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logg
     worldState.getSnapshot(BlockNumber(checkpoint.blocks[0].number - 1)),
   );
   const isLastCheckpoint = checkpoint.number === jobData.checkpoints.at(-1)!.number;
-  const attestations = isLastCheckpoint ? jobData.attestations : [];
   const verbatimAttestations = isLastCheckpoint
     ? jobData.verbatimAttestations
     : CommitteeAttestationsAndSigners.packAttestations([]);
@@ -182,7 +181,6 @@ async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logg
     {
       checkpoint,
       epochNumber: jobData.epochNumber,
-      attestations,
       verbatimAttestations,
       previousBlockHeader,
       l1ToL2Messages,

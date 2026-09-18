@@ -196,7 +196,6 @@ function makeStubProver(checkpoint: Checkpoint, epochNumber: EpochNumber): StubP
 
 function makeRegisterData() {
   return {
-    attestations: [],
     verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
     previousBlockHeader: {} as any,
     l1ToL2Messages: [],

@@ -31,7 +31,6 @@ describe('EpochProvingJobData', () => {
       },
       previousBlockHeader: BlockHeader.random(),
       previousInboxRollingHash: Fr.random(),
-      attestations: times(3, CommitteeAttestation.random),
       verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(times(3, CommitteeAttestation.random)),
     };
 

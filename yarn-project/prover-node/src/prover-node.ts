@@ -370,7 +370,6 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       this.worldState.getSnapshot(previousBlockNumber),
     );
     return {
-      attestations: published.attestations,
       verbatimAttestations: published.verbatimAttestations,
       previousBlockHeader,
       l1ToL2Messages,
