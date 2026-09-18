@@ -56,7 +56,7 @@ Under the hood, the macro:
 
 ## Utility functions #[external("utility")]
 
-Utility functions perform state queries from an offchain client and are never included in transactions. They can access both private and public state, and can modify local PXE state (e.g., processing logs). Since execution is unconstrained and relies on [oracle calls](https://noir-lang.org/docs/explainers/explainer-oracle), no guarantees are made on result correctness.
+Utility functions perform state queries from an offchain client and are never included in transactions. They can access both private and public state, and can modify local PXE state (e.g., processing logs). Since execution is unconstrained and relies on [oracle calls](https://noir-lang.org/docs/guides/oracles), no guarantees are made on result correctness.
 
 A reasonable mental model is a Solidity `view` function that can only be invoked via `eth_call`, never in a transaction. Unlike Solidity `view` functions, utility functions can also modify local offchain PXE state.
 

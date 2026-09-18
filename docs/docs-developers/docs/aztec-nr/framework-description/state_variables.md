@@ -43,7 +43,7 @@ contract MyContract {
 }
 ```
 
-In Aztec.nr, we define a [`struct`](https://noir-lang.org/docs/noir/concepts/data_types/structs) that holds _all_ state variables. This struct is called **the storage struct**, and it is identified by having the [`#[storage]` macro](pathname:///aztec-nr-api/#api_ref_version/noir_aztec/macros/storage/fn.storage) applied to it.
+In Aztec.nr, we define a [`struct`](https://noir-lang.org/docs/language/data_types/structs) that holds _all_ state variables. This struct is called **the storage struct**, and it is identified by having the [`#[storage]` macro](pathname:///aztec-nr-api/#api_ref_version/noir_aztec/macros/storage/fn.storage) applied to it.
 
 ```rust
 use aztec::macros::aztec;
@@ -286,7 +286,7 @@ Methods that return `NoteMessage` include `initialize()`, `get_note()`, and `rep
 
 Implementing a private state variable requires careful coordination of multiple primitives and concepts (creating notes, encrypting, delivering, discovering and processing messages, reading notes, and computing their nullifiers). Aztec.nr provides convenient types and functions that handle all of these low-level details to allow developers to write safe code without having to understand the nitty-gritty.
 
-By applying the `#[note]` [macro](pathname:///aztec-nr-api/#api_ref_version/noir_aztec/macros/notes/fn.note) to a [noir struct](https://noir-lang.org/docs/noir/concepts/data_types/structs), users can define values that will be storable in notes. Private state variables can then hold these notes and be used to read, write, and deliver note messages to the intended recipient.
+By applying the `#[note]` [macro](pathname:///aztec-nr-api/#api_ref_version/noir_aztec/macros/notes/fn.note) to a [noir struct](https://noir-lang.org/docs/language/data_types/structs), users can define values that will be storable in notes. Private state variables can then hold these notes and be used to read, write, and deliver note messages to the intended recipient.
 
 :::note
 Advanced users can change this default behavior by either defining their [own custom note](./custom_notes.md) hash and nullifier functions, implementing their own state variables, or even accessing the note hash and nullifiers tree directly.
