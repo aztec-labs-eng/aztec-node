@@ -1,4 +1,3 @@
-import { chunk } from '@aztec-labs/foundation/collection';
 import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
 import { TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
@@ -10,9 +9,9 @@ import { ReqRespStatus, ReqRespStatusError } from '../status.js';
 
 // Bound the request so the response the responder builds cannot exceed the reqresp
 // transport's max response size: each hash yields up to MAX_TX_SIZE_KB, so cap the
-// count at that budget. Honest requesters chunk at 8 (see chunkTxHashesRequest), well
-// under this; a peer naming more is rejected before the pool lookup instead of forcing
-// the node to read and serialize a response larger than the transport will carry.
+// count at that budget. A peer naming more is rejected before the pool lookup, rather
+// than forcing the node to read and serialize a response larger than the transport
+// will carry. This node does not originate TX hash-list requests itself.
 const MAX_TX_HASHES_PER_REQUEST = Math.floor(DEFAULT_MAX_RESPONSE_SIZE_KB / MAX_TX_SIZE_KB);
 
 /**
@@ -61,19 +60,6 @@ export function reqRespTxHandler(mempools: MemPools): ReqRespSubProtocolHandler 
       throw new ReqRespStatusError(ReqRespStatus.INTERNAL_ERROR, { cause: err });
     }
   };
-}
-
-/**
- * Helper function to chunk an array of transaction hashes into chunks of a specified size.
- * This is mainly used in ReqResp in order not to request too many transactions at once from the single peer.
- *
- * @param hashes - The array of transaction hashes to chunk.
- * @param chunkSize - The size of each chunk. Default is 8. Reasoning:
- *  Per: https://github.com/AztecProtocol/aztec-packages/issues/15149#issuecomment-2999054485
- *  we define Q as max number of transactions per batch, the comment explains why we use 8.
- */
-export function chunkTxHashesRequest(hashes: TxHash[], chunkSize = 8): Array<TxHashArray> {
-  return chunk(hashes, chunkSize).map(chunk => new TxHashArray(...chunk));
 }
 
 /**
