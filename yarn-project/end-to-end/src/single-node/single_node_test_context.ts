@@ -1137,6 +1137,7 @@ export class SingleNodeTestContext {
 
       let paused = false;
       let advanced = false;
+      let resumeError: Error | undefined;
       try {
         // Sampled before the pause: a block proposed before this call started listening is still in
         // flight and must survive the warp just the same.
@@ -1174,13 +1175,17 @@ export class SingleNodeTestContext {
             this.logger.error(`Not resuming sequencers: the pause did not complete`);
           }
         } catch (err) {
-          // Only surface a resume failure when the advance itself succeeded; otherwise it would replace
-          // the error explaining why the advance was unsafe.
-          if (advanced) {
-            throw err;
+          resumeError = err instanceof Error ? err : new Error(`${err}`);
+          if (!advanced) {
+            this.logger.error(`Failed to resume sequencers after an unsafe epoch advance`, err);
           }
-          this.logger.error(`Failed to resume sequencers after an unsafe epoch advance`, err);
         }
+      }
+
+      // Reached only when the body succeeded: a failed advance propagates its own error out of the
+      // `finally` instead, so a resume failure can never replace the reason the warp was unsafe.
+      if (resumeError !== undefined) {
+        throw resumeError;
       }
     });
   }
