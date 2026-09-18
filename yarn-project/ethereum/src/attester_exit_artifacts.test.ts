@@ -11,6 +11,9 @@ describe('attester-exit deployment artifacts', () => {
         expect.objectContaining({ type: 'function', name: 'getAttesterExitLimitState' }),
         expect.objectContaining({ type: 'function', name: 'getAttesterExitWindow' }),
         expect.objectContaining({ type: 'function', name: 'initiateWithdrawByAttester' }),
+        expect.objectContaining({ type: 'function', name: 'initiateWithdrawByAttesterWithSignature' }),
+        expect.objectContaining({ type: 'function', name: 'initiateWithdrawByAttesterBatch' }),
+        expect.objectContaining({ type: 'function', name: 'initiateWithdrawByAttesterBatchUpToLimit' }),
       ]),
     );
   });

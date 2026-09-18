@@ -8,7 +8,7 @@ import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { memoize } from '@aztec-labs/foundation/decorators';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
+import { Signature, type ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { getErrorCause } from '@aztec-labs/foundation/types';
@@ -21,6 +21,7 @@ import {
   type Log,
   RpcRequestError,
   type StateOverride,
+  type TypedDataDefinition,
   type WatchContractEventReturnType,
   decodeErrorResult,
   decodeFunctionResult,
@@ -221,6 +222,21 @@ export type AttesterExitLimitState = {
   /** Rollup-wide capacity only; the transaction still checks the caller and position. */
   canExit: boolean;
 };
+
+/** An attester-signed authorization that anyone may relay to initiate the position's withdrawal. */
+export type AttesterExitAuthorization = {
+  attester: EthAddress;
+  deadline: bigint;
+  signature: ViemSignature;
+};
+
+function toViemAttesterExitAuthorization(authorization: AttesterExitAuthorization) {
+  return {
+    attester: authorization.attester.toString(),
+    deadline: authorization.deadline,
+    signature: authorization.signature,
+  };
+}
 
 /**
  * Exit information for a validator
@@ -1389,7 +1405,37 @@ export class RollupContract {
     return this.rollup.read.getAttesterExitLimitState();
   }
 
-  /** Initiates a attester exit. The transaction signer must be the position's attester. */
+  /** Builds the EIP-712 data an attester signs to authorize a relayed exit. */
+  public buildAttesterExitTypedData(attester: EthAddress, deadline: bigint): TypedDataDefinition {
+    return {
+      domain: {
+        name: 'Aztec Rollup',
+        version: '1',
+        chainId: this.client.chain.id,
+        verifyingContract: this.address,
+      },
+      types: {
+        AttesterExit: [
+          { name: 'attester', type: 'address' },
+          { name: 'deadline', type: 'uint256' },
+        ],
+      },
+      primaryType: 'AttesterExit',
+      message: { attester: attester.toString(), deadline },
+    };
+  }
+
+  /** Creates an attester exit authorization that can be submitted by another account. */
+  public async createAttesterExitAuthorization(
+    attester: EthAddress,
+    deadline: bigint,
+    signer: (typedData: TypedDataDefinition) => Promise<Hex>,
+  ): Promise<AttesterExitAuthorization> {
+    const signature = Signature.fromString(await signer(this.buildAttesterExitTypedData(attester, deadline)));
+    return { attester, deadline, signature: signature.toViemSignature() };
+  }
+
+  /** Initiates an attester exit. The transaction signer must be the position's attester. */
   public initiateWithdrawByAttester(
     l1TxUtils: L1TxUtils,
     attester: EthAddress,
@@ -1401,6 +1447,54 @@ export class RollupContract {
         abi: RollupAbi,
         functionName: 'initiateWithdrawByAttester',
         args: [attester.toString()],
+      }),
+    });
+  }
+
+  /** Relays one signed attester exit authorization. */
+  public initiateWithdrawByAttesterWithSignature(
+    l1TxUtils: L1TxUtils,
+    authorization: AttesterExitAuthorization,
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterWithSignature',
+        args: [toViemAttesterExitAuthorization(authorization)],
+      }),
+    });
+  }
+
+  /** Relays a signed attester exit batch that reverts unless every authorization can be processed. */
+  public initiateWithdrawByAttesterBatch(
+    l1TxUtils: L1TxUtils,
+    authorizations: AttesterExitAuthorization[],
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterBatch',
+        args: [authorizations.map(toViemAttesterExitAuthorization)],
+      }),
+    });
+  }
+
+  /** Relays the largest permitted prefix of a signed attester exit batch. */
+  public initiateWithdrawByAttesterBatchUpToLimit(
+    l1TxUtils: L1TxUtils,
+    authorizations: AttesterExitAuthorization[],
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterBatchUpToLimit',
+        args: [authorizations.map(toViemAttesterExitAuthorization)],
       }),
     });
   }
