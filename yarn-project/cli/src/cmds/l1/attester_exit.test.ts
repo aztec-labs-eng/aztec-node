@@ -8,15 +8,19 @@ import { type Anvil, EthCheatCodes, startAnvil } from '@aztec-labs/ethereum/test
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { Command } from 'commander';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getContract } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { injectCommands } from './index.js';
-import { initiateWithdrawByAttester } from './update_l1_validators.js';
+import { initiateWithdrawByAttester, readAttesterExitAuthorizations } from './update_l1_validators.js';
 
 const mnemonic = 'test test test test test test test test test test test junk';
 const attester = mnemonicToAccount(mnemonic);
@@ -46,6 +50,40 @@ describe('initiate-withdraw-by-attester command', () => {
         debugLogger: logger,
       }),
     ).rejects.toThrow('The transaction signer must match the attester address');
+  });
+});
+
+describe('initiate-withdraw-by-attester-batch command', () => {
+  it('requires a rollup and authorization file and exposes the up-to-limit mode', () => {
+    const program = new Command();
+    injectCommands(program, () => {}, logger);
+    const command = program.commands.find(command => command.name() === 'initiate-withdraw-by-attester-batch');
+    expect(command).toBeDefined();
+    expect(command?.options.find(option => option.long === '--rollup')?.mandatory).toBe(true);
+    expect(command?.options.find(option => option.long === '--authorizations')?.mandatory).toBe(true);
+    expect(command?.options.find(option => option.long === '--up-to-limit')).toBeDefined();
+  });
+
+  it('reads the JSON authorization format used by the batch command', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'attester-exit-'));
+    const path = join(directory, 'authorizations.json');
+    const signature = Signature.random();
+    await writeFile(
+      path,
+      JSON.stringify([{ attester: attester.address, deadline: '123456789', signature: signature.toString() }]),
+    );
+
+    try {
+      await expect(readAttesterExitAuthorizations(path)).resolves.toEqual([
+        {
+          attester: EthAddress.fromString(attester.address),
+          deadline: 123456789n,
+          signature: signature.toViemSignature(),
+        },
+      ]);
+    } finally {
+      await rm(directory, { recursive: true });
+    }
   });
 });
 
