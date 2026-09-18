@@ -10,6 +10,7 @@ import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
 import type { ChonkCache, SubTreeResult } from '@aztec-labs/prover-client/orchestrator';
 import type { PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import { CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ForkMerkleTreeOperations, ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
 import { BlockHeader, type Tx } from '@aztec-labs/stdlib/tx';
@@ -622,6 +623,7 @@ describe('CheckpointProver', () => {
       checkpoint: target,
       epochNumber: EpochNumber(5),
       attestations: [],
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
       previousBlockHeader: makePreviousBlockHeader(),
       l1ToL2Messages: [],
       previousInboxRollingHash: Fr.ZERO,

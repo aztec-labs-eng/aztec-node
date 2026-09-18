@@ -1,4 +1,5 @@
 import type { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -66,6 +67,8 @@ export type CheckpointProverArgs = {
   /** Epoch the checkpoint belongs to (derivable from slot + L1 constants; cached at register time). */
   epochNumber: EpochNumber;
   attestations: CommitteeAttestation[];
+  /** The packed attestations tuple exactly as posted to L1; what an epoch proof submission has to reproduce. */
+  verbatimAttestations: ViemCommitteeAttestations;
   previousBlockHeader: BlockHeader;
   l1ToL2Messages: Fr[];
   /** Inbox rolling hash of the previous checkpoint (this checkpoint's chain start); genesis is zero. */
@@ -100,6 +103,7 @@ export class CheckpointProver {
   readonly epochNumber: EpochNumber;
   readonly slotNumber: SlotNumber;
   readonly attestations: CommitteeAttestation[];
+  readonly verbatimAttestations: ViemCommitteeAttestations;
   readonly previousBlockHeader: BlockHeader;
   readonly l1ToL2Messages: Fr[];
   readonly previousInboxRollingHash: Fr;
@@ -138,6 +142,7 @@ export class CheckpointProver {
     this.epochNumber = args.epochNumber;
     this.slotNumber = args.checkpoint.header.slotNumber;
     this.attestations = args.attestations;
+    this.verbatimAttestations = args.verbatimAttestations;
     this.previousBlockHeader = args.previousBlockHeader;
     this.l1ToL2Messages = args.l1ToL2Messages;
     this.previousInboxRollingHash = args.previousInboxRollingHash;

@@ -6,7 +6,7 @@ import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
-import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
@@ -457,6 +457,7 @@ export class SessionManager {
       previousBlockHeader: checkpoints[0].previousBlockHeader,
       previousInboxRollingHash: checkpoints[0].previousInboxRollingHash,
       attestations: [],
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
     };
   }
 

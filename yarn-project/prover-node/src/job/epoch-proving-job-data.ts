@@ -1,6 +1,8 @@
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import { BlockHeader, Tx } from '@aztec-labs/stdlib/tx';
@@ -15,6 +17,8 @@ export type EpochProvingJobData = {
   /** Inbox rolling hash of the checkpoint before the epoch's first checkpoint (its chain start); genesis is zero. */
   previousInboxRollingHash: Fr;
   attestations: CommitteeAttestation[];
+  /** The packed attestations tuple of the epoch's last checkpoint, as posted to L1. */
+  verbatimAttestations: ViemCommitteeAttestations;
 };
 
 export function validateEpochProvingJobData(data: EpochProvingJobData) {
@@ -46,6 +50,8 @@ export function serializeEpochProvingJobData(data: EpochProvingJobData): Buffer 
     ...messages,
   ]);
   const attestations = data.attestations.map(attestation => attestation.toBuffer());
+  const signatureIndices = hexToBuffer(data.verbatimAttestations.signatureIndices);
+  const signaturesOrAddresses = hexToBuffer(data.verbatimAttestations.signaturesOrAddresses);
 
   return serializeToBuffer(
     data.epochNumber,
@@ -59,6 +65,10 @@ export function serializeEpochProvingJobData(data: EpochProvingJobData): Buffer 
     ...l1ToL2Messages,
     attestations.length,
     ...attestations,
+    signatureIndices.length,
+    signatureIndices,
+    signaturesOrAddresses.length,
+    signaturesOrAddresses,
   );
 }
 
@@ -79,6 +89,10 @@ export function deserializeEpochProvingJobData(buf: Buffer): EpochProvingJobData
   }
 
   const attestations = reader.readVector(CommitteeAttestation);
+  const verbatimAttestations: ViemCommitteeAttestations = {
+    signatureIndices: bufferToHex(reader.readBuffer()),
+    signaturesOrAddresses: bufferToHex(reader.readBuffer()),
+  };
 
   const txs = new Map<string, Tx>(txArray.map(tx => [tx.getTxHash().toString(), tx]));
 
@@ -90,5 +104,6 @@ export function deserializeEpochProvingJobData(buf: Buffer): EpochProvingJobData
     txs,
     l1ToL2Messages,
     attestations,
+    verbatimAttestations,
   };
 }

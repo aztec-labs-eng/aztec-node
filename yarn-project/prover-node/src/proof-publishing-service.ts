@@ -1,5 +1,5 @@
 import type { BatchedBlob } from '@aztec-labs/blob-lib';
-import type { ViemCommitteeAttestation } from '@aztec-labs/ethereum/contracts';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type CheckpointNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -44,7 +44,7 @@ export type PublishCandidate = {
   publicInputs: RootRollupPublicInputs;
   proof: Proof;
   batchedBlobInputs: BatchedBlob;
-  attestations: ViemCommitteeAttestation[];
+  attestations: ViemCommitteeAttestations;
   /** Committee-attested checkpoint headers for the range, supplying the L1-verified fee recipient/value. */
   headers: CheckpointHeader[];
 };
