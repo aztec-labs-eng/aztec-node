@@ -154,6 +154,20 @@ export class CheckpointReexecutionTracker {
   }
 
   /**
+   * Whether this slot's recorded outcome is `valid` *and* was recorded for this archive root.
+   *
+   * {@link hasReexecuted} answers the same question but needs a checkpoint number, which the paths that re-validate
+   * a cached verdict do not always have: pruning the checkpoint's last block makes revalidation fail before the
+   * blocks are loaded, so its failure carries no checkpoint number. Keyed by slot and archive, this still tells a
+   * later local inability apart from a determination about the same checkpoint, while a different archive at the
+   * same slot remains a different question that records as usual.
+   */
+  public hasValidOutcomeForSlot(slot: SlotNumber, archiveRoot: Fr): boolean {
+    const entry = this.bySlot.get(slot);
+    return entry?.outcome === 'valid' && entry.archiveRoot === archiveRoot.toString();
+  }
+
+  /**
    * Returns the recorded tx-collection result for a block proposal at the given slot and
    * `indexWithinCheckpoint`, or `undefined` if no record exists.
    *

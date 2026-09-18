@@ -597,6 +597,19 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       return undefined;
     }
 
+    // Validation may have run right up to the attestation deadline — the Inbox endpoint gate and the archiver sync
+    // waits are both bounded by it rather than finishing well inside it — so the deadline is re-read here, with
+    // nothing left between it and the signature. Finishing a late validation is still worth doing for telemetry;
+    // signing on it is not, because the committee's timetable has already closed on this slot.
+    const attestationDeadline = this.proposalHandler.getAttestationDeadline(proposalSlotNumber);
+    if (+attestationDeadline <= this.dateProvider.now()) {
+      this.log.warn(`Attestation deadline for slot ${proposalSlotNumber} passed during validation, not signing`, {
+        ...proposalInfo,
+        attestationDeadline: attestationDeadline.toISOString(),
+      });
+      return undefined;
+    }
+
     // Provided all of the above checks pass, we can attest to the proposal
     this.log.info(
       `${partOfCommittee ? 'Attesting to' : 'Validated'} checkpoint proposal for slot ${proposalSlotNumber}`,

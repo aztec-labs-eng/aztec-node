@@ -928,6 +928,66 @@ describe('ValidatorClient', () => {
       validateCheckpointSpy.mockRestore();
     });
 
+    // The Inbox endpoint gate and the archiver sync waits both run right up to the attestation deadline, so a
+    // validation can finish after it. Signing then produces an attestation the committee's timetable has already
+    // closed on; the content verdict is still worth having for telemetry, the signature is not.
+    describe('attestation deadline', () => {
+      /** A checkpoint proposal for the validated slot, with content validation stubbed to pass. */
+      async function setupLateValidation() {
+        const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
+        expect(await validatorClient.validateBlockProposal(proposal, sender)).toBe(true);
+
+        const checkpointProposal = await makeCheckpointProposal({
+          archiveRoot: proposal.archive,
+          checkpointHeader: makeCheckpointHeader(0, { slotNumber: proposal.slotNumber }),
+          lastBlock: {
+            blockHeader: makeBlockHeader(1, { blockNumber: BlockNumber(123), slotNumber: proposal.slotNumber }),
+            indexWithinCheckpoint: IndexWithinCheckpoint(0),
+            txHashes: proposal.txHashes,
+          },
+        });
+        const validateCheckpointSpy = jest
+          .spyOn(validatorClient.getProposalHandler(), 'validateCheckpointProposal')
+          .mockResolvedValue({ isValid: true, checkpointNumber: CheckpointNumber(1) });
+        inbox.setBuckets([{ seq: 0n, total: 0n, rollingHash: checkpointProposal.checkpointHeader.inboxRollingHash }]);
+
+        const deadlineMs = validatorClient.getProposalHandler().getAttestationDeadline(proposal.slotNumber).getTime();
+        return { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs };
+      }
+
+      it('signs a validation that finishes before the deadline', async () => {
+        const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
+          await setupLateValidation();
+        dateProvider.setTime(deadlineMs - 1_000);
+
+        const attestations = await validatorClient.attestToCheckpointProposal(
+          ValidatedCheckpointProposalCore(checkpointProposal),
+          sender,
+        );
+
+        expect(attestations).toHaveLength(1);
+        expect(addCheckpointAttestationsSpy).toHaveBeenCalledTimes(1);
+        validateCheckpointSpy.mockRestore();
+      });
+
+      it.each([0, 1_000])('does not sign a validation that finishes %ims past the deadline', async pastMs => {
+        const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
+          await setupLateValidation();
+        dateProvider.setTime(deadlineMs + pastMs);
+
+        const attestations = await validatorClient.attestToCheckpointProposal(
+          ValidatedCheckpointProposalCore(checkpointProposal),
+          sender,
+        );
+
+        expect(attestations).toBeUndefined();
+        expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+        // The proposal was still validated: a late node keeps its own view of the checkpoint for telemetry.
+        expect(validateCheckpointSpy).toHaveBeenCalled();
+        validateCheckpointSpy.mockRestore();
+      });
+    });
+
     it('should not attest to a checkpoint proposal that references a middle block instead of the last', async () => {
       const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
 
