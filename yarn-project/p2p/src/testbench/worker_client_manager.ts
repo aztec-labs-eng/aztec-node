@@ -229,7 +229,6 @@ class WorkerClientManager {
       this.peerIds = new Array(numberOfClients);
 
       this.processes = [];
-      const readySignals: Promise<void>[] = [];
 
       for (let batchStart = 0; batchStart < numberOfClients; batchStart += batchSize) {
         const batchEnd = Math.min(batchStart + batchSize, numberOfClients);
@@ -246,7 +245,6 @@ class WorkerClientManager {
           const config = this.createClientConfig(i, this.ports[i], otherNodes);
           const [childProcess, readySignal] = this.spawnWorkerProcess(config, i, options.readyTimeoutMs);
 
-          readySignals.push(readySignal);
           batchPromises.push(readySignal);
           this.processes.push(childProcess);
         }
@@ -259,16 +257,6 @@ class WorkerClientManager {
       }
 
       await sleep(BENCHMARK_CONSTANTS.PEER_DISCOVERY_WAIT_MS);
-
-      await Promise.race([
-        Promise.all(readySignals),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Timeout waiting for all workers to be ready')),
-            BENCHMARK_CONSTANTS.WORKER_READY_TIMEOUT_MS,
-          ),
-        ),
-      ]);
 
       return this.peerEnrs;
     } catch (error) {
@@ -292,8 +280,13 @@ class WorkerClientManager {
    *
    * @param clientIndex - The index of the client to change port for
    * @param newPort - The new port to use
+   * @param readyTimeoutMs - The replacement worker's startup budget
    */
-  async changePort(clientIndex: number, newPort: number) {
+  async changePort(
+    clientIndex: number,
+    newPort: number,
+    readyTimeoutMs: number = BENCHMARK_CONSTANTS.WORKER_READY_TIMEOUT_MS,
+  ) {
     try {
       if (clientIndex < 0 || clientIndex >= this.processes.length) {
         throw new Error(`Invalid client index: ${clientIndex}`);
@@ -320,19 +313,11 @@ class WorkerClientManager {
       this.logger.info(`Changing port for client ${clientIndex} to ${newPort} with other nodes `, otherNodes);
 
       const config = this.createClientConfig(clientIndex, newPort, otherNodes);
-      const [childProcess, readySignal] = this.spawnWorkerProcess(config, clientIndex);
+      const [childProcess, readySignal] = this.spawnWorkerProcess(config, clientIndex, readyTimeoutMs);
 
       this.processes[clientIndex] = childProcess;
 
-      await Promise.race([
-        readySignal,
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`Timeout waiting for client ${clientIndex} to be ready`)),
-            BENCHMARK_CONSTANTS.WORKER_READY_TIMEOUT_MS,
-          ),
-        ),
-      ]);
+      await readySignal;
     } catch (error) {
       this.logger.error(`Error during changePort for client ${clientIndex}:`, error);
       // Only clean up the specific process that had an issue
@@ -447,24 +432,23 @@ class WorkerClientManager {
    * Waits until every worker client has at least `minPeers` peers in its gossipsub mesh for the tx
    * topic. Mesh membership rather than raw connection count is what decides whether a gossiped tx
    * reaches a peer, so this is the condition to wait on before asserting on propagation. Returns the
-   * per-client mesh counts from the last poll.
+   * per-client mesh counts once connected, and rejects if the mesh does not converge before the timeout.
    */
   async waitForAllConnectivity(minPeers: number, timeoutMs: number): Promise<number[]> {
     let mesh: number[] = [];
-    const settled = await retryUntil(
+    return await retryUntil(
       async () => {
         const counts = await Promise.all(this.processes.map((_, i) => this.queryPeerCounts(i, 5000)));
         mesh = counts.map(c => c.meshCount);
-        return mesh.every(c => c >= minPeers) ? mesh : undefined;
+        return mesh.length > 0 && mesh.every(c => c >= minPeers) ? mesh : undefined;
       },
       `all clients to reach ${minPeers} mesh peers`,
       timeoutMs / 1000,
       0.5,
-    ).catch(() => undefined);
-    if (!settled) {
+    ).catch(error => {
       this.logger.warn(`Mesh wait timed out after ${timeoutMs}ms; per-client mesh peers: ${mesh.join(',')}`);
-    }
-    return mesh;
+      throw error;
+    });
   }
 
   private async getPeerCount(clientIndex: number, timeoutMs: number): Promise<number> {

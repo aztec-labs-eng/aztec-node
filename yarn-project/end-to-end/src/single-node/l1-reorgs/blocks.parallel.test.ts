@@ -210,8 +210,10 @@ describe('single-node/l1-reorgs/blocks', () => {
 
     // Create another prover node so it submits a proof and wait until it is submitted
     await test.createProverNode();
-    const provenCheckpointRetry = await test.waitUntilProvenCheckpointNumber(CheckpointNumber(1));
-    await expect(monitor.run(true).then(m => m.provenCheckpointNumber)).resolves.toBeGreaterThanOrEqual(1);
+    const provenCheckpointRetry = await test.waitUntilProvenCheckpointNumber(provenCheckpoint);
+    await expect(monitor.run(true).then(m => m.provenCheckpointNumber)).resolves.toBeGreaterThanOrEqual(
+      provenCheckpoint,
+    );
 
     // Check that the node has followed along
     logger.warn(`Testing old node`);
