@@ -529,17 +529,25 @@ describe('multi-node/block-production/cross_chain_messages', () => {
             (await archivers[validatorIndex].getBlockData({ number: parentNumber }))!.archive.root.toString(),
           ).toEqual(parentOnProposer.archive.root.toString());
 
-          // Replacing the suffix re-mines it from the fork point, which leaves the L1 head stamped behind where it
-          // was. Protocol time follows L1 here, so it walks backwards with it, and the held block was signed at the
-          // very start of its build frame — the same instant its slot's proposal receive window opens. Releasing
-          // straight after the reorg therefore gossips a proposal that is *too early*, and peers drop it at ingress
-          // for a slot that has not opened yet rather than comparing its Inbox prefix. Wait for the clock to climb
-          // back into the window first; interval mining stamps the next L1 blocks forward again, so this resolves on
-          // its own. The bound is wall-clock (`retryUntil` measures with a real timer), so a chain that stopped
-          // advancing fails here rather than downstream at the assertion it silently breaks.
+          // Replacing the suffix re-mines it from the fork point, so the new head can be stamped behind the old
+          // one; how far behind varies, and has been seen at both nothing and a full L1 slot for the same depth.
+          // The nodes share one clock that follows L1, so a loss rewinds protocol time, and the held block was
+          // signed at the very start of its build frame — the same instant its slot's proposal receive window
+          // opens. Releasing straight after the reorg therefore gossips a proposal that is *too early*, and peers
+          // drop it at ingress for a slot that has not opened yet instead of comparing its Inbox prefix. Wait for
+          // the clock to reach the window first. It gets there on its own: the shared provider is an offset on the
+          // real clock, so it resumes advancing immediately, and later L1 blocks re-base it forward again. The
+          // bound is only so that a clock that never arrives fails here, naming the window, rather than downstream
+          // at the assertion the early release silently breaks.
+          const beforeWait = ctx.ingressWindow();
+          logger.warn(`Waiting for slot ${heldSlot} to reach its proposal receive window`, {
+            opensInMs: beforeWait.opensInMs,
+            closesInMs: beforeWait.closesInMs,
+            reorgDepth: Number(head - reorgFrom + 1n),
+          });
           await retryUntil(
-            () => Promise.resolve(ctx.ingressWindow().opensInMs <= 0 || undefined),
-            `slot ${heldSlot} reopens its proposal receive window after the reorg`,
+            () => ctx.ingressWindow().opensInMs <= 0 || undefined,
+            `slot ${heldSlot} reaches its proposal receive window after the reorg`,
             test.L1_BLOCK_TIME_IN_S * 4,
             0.2,
           );
@@ -547,7 +555,7 @@ describe('multi-node/block-production/cross_chain_messages', () => {
           // The release has to land inside the window peers accept a proposal in, and leave the proposer a real
           // next sub-slot: both are asked of the job's own schedule, not of the event's snapshot, and from one
           // reading of the clock so they cannot describe two different instants.
-          const releaseAt = ctx.event.schedule.nowMs();
+          const releaseAt = ctx.now();
           const ingressWindow = ctx.ingressWindow(releaseAt);
           logger.warn(`Releasing the stale block`, {
             opensInMs: ingressWindow.opensInMs,

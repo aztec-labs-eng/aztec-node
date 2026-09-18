@@ -43,11 +43,15 @@ export type HoldContext = {
    * released checkpoint miss its own slot, so a test checks it before releasing.
    */
   remainingHoldBudgetMs(now?: number): number;
+  /** The clock the schedule answers every other question on, sampled once so several checks can share it. */
+  now(): number;
   /**
-   * Where `now` sits in the p2p proposal receive window for this slot, the bound that matters when a released
-   * block has to be accepted by peers. `opensInMs` is how long the window still has to open and `closesInMs` how
-   * long it has left, so a proposal released now is acceptable exactly when `opensInMs <= 0 < closesInMs`. Both
-   * are read from a single `now`, so the two ends cannot be sampled either side of a clock that is moving.
+   * Where `now` sits in the strict p2p proposal receive window for this slot, the bound that matters when a
+   * released block has to be accepted by peers. `opensInMs` is how long the window still has to open and
+   * `closesInMs` how long it has left, so `opensInMs <= 0 < closesInMs` puts a proposal released now safely
+   * inside it. That is a sufficient condition rather than the exact one: peers judge at receive time and widen
+   * both ends by their clock-disparity tolerance. Both ends are read from a single `now`, so they cannot be
+   * sampled either side of a clock that is moving.
    */
   ingressWindow(now?: number): { opensInMs: number; closesInMs: number };
   /** The sub-slot the proposer's build loop would select on its next iteration, evaluated now. */
@@ -265,6 +269,7 @@ export class CheckpointProposalJobTestGate {
         }
       },
       remainingHoldBudgetMs: (now = event.schedule.nowMs()) => event.proposalSendDeadline.getTime() - now,
+      now: () => event.schedule.nowMs(),
       ingressWindow: (now = event.schedule.nowMs()) => ({
         opensInMs: event.schedule.getProposalReceiveStartSeconds() * 1000 - now,
         closesInMs: event.schedule.getProposalReceiveDeadlineSeconds() * 1000 - now,

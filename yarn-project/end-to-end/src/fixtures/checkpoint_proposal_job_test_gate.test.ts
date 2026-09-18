@@ -388,11 +388,15 @@ describe('CheckpointProposalJobTestGate', () => {
     const checked = gate.withHold(
       () => true,
       ctx => {
+        const receiveDeadline = timetable.getCheckpointProposalReceiveDeadline(slot);
         const tooEarly = (receiveStart - 12) * 1000;
         expect(ctx.ingressWindow(tooEarly).opensInMs).toBe(12_000);
-        expect(ctx.ingressWindow(tooEarly).closesInMs).toBeGreaterThan(0);
+        expect(ctx.ingressWindow(tooEarly).closesInMs).toBe((receiveDeadline - receiveStart + 12) * 1000);
         expect(ctx.ingressWindow(receiveStart * 1000).opensInMs).toBe(0);
         expect(ctx.ingressWindow((receiveStart + 1) * 1000).opensInMs).toBe(-1000);
+        // The strict window is inclusive at the deadline, which is why the helper's contract is "<= 0 < closes"
+        // rather than a claim about what peers accept: they widen this by their clock-disparity tolerance.
+        expect(ctx.ingressWindow(receiveDeadline * 1000).closesInMs).toBe(0);
         return Promise.resolve();
       },
     );
