@@ -1,11 +1,18 @@
-import { chunk } from '@aztec-labs/foundation/collection';
 import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
 import { TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { MemPools } from '../../../mem_pools/interface.js';
+import { DEFAULT_MAX_RESPONSE_SIZE_KB } from '../../encoding.js';
 import type { ReqRespSubProtocolHandler } from '../interface.js';
 import { ReqRespStatus, ReqRespStatusError } from '../status.js';
+
+// Bound the request so the response the responder builds cannot exceed the reqresp
+// transport's max response size: each hash yields up to MAX_TX_SIZE_KB, so cap the
+// count at that budget. A peer naming more is rejected before the pool lookup, rather
+// than forcing the node to read and serialize a response larger than the transport
+// will carry. This node does not originate TX hash-list requests itself.
+const MAX_TX_HASHES_PER_REQUEST = Math.floor(DEFAULT_MAX_RESPONSE_SIZE_KB / MAX_TX_SIZE_KB);
 
 /**
  * We want to keep the logic of the req resp handler in this file, but we do not have a reference to the mempools here
@@ -30,28 +37,29 @@ export function reqRespTxHandler(mempools: MemPools): ReqRespSubProtocolHandler 
       throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST, { cause: err });
     }
 
+    if (txHashes.length > MAX_TX_HASHES_PER_REQUEST) {
+      throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST);
+    }
+
+    // De-duplicate before serving: without this a peer can repeat one hash many
+    // times and make the node re-read and re-serialize the same tx per copy,
+    // turning a small request into a much larger response.
+    const uniqueByHash = new Map<string, TxHash>();
+    for (const txHash of txHashes) {
+      uniqueByHash.set(txHash.toString(), txHash);
+    }
+
     try {
       const txs = new TxArray(
-        ...(await Promise.all(txHashes.map(txHash => mempools.txPool.getTxByHash(txHash)))).filter(t => !!t),
+        ...(await Promise.all([...uniqueByHash.values()].map(txHash => mempools.txPool.getTxByHash(txHash)))).filter(
+          t => !!t,
+        ),
       );
       return txs.toBuffer();
     } catch (err: any) {
       throw new ReqRespStatusError(ReqRespStatus.INTERNAL_ERROR, { cause: err });
     }
   };
-}
-
-/**
- * Helper function to chunk an array of transaction hashes into chunks of a specified size.
- * This is mainly used in ReqResp in order not to request too many transactions at once from the single peer.
- *
- * @param hashes - The array of transaction hashes to chunk.
- * @param chunkSize - The size of each chunk. Default is 8. Reasoning:
- *  Per: https://github.com/AztecProtocol/aztec-packages/issues/15149#issuecomment-2999054485
- *  we define Q as max number of transactions per batch, the comment explains why we use 8.
- */
-export function chunkTxHashesRequest(hashes: TxHash[], chunkSize = 8): Array<TxHashArray> {
-  return chunk(hashes, chunkSize).map(chunk => new TxHashArray(...chunk));
 }
 
 /**
