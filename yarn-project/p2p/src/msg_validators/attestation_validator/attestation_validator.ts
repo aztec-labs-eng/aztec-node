@@ -11,6 +11,8 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
+import { classifyReceiveWindowArrival } from '../receive_window.js';
+
 export class CheckpointAttestationValidator implements P2PValidator<CheckpointAttestation> {
   protected epochCache: EpochCacheInterface;
   protected logger: Logger;
@@ -56,17 +58,23 @@ export class CheckpointAttestationValidator implements P2PValidator<CheckpointAt
       const startSeconds = this.timetable.getAttestationReceiveStart(slotNumber);
       const deadlineSeconds = this.timetable.getAttestationDeadline(slotNumber);
       const nowMs = Number(this.epochCache.getEpochAndSlotNow().nowMs);
-      if (
-        nowMs < startSeconds * 1000 - this.clockDisparityMs ||
-        nowMs > deadlineSeconds * 1000 + this.clockDisparityMs
-      ) {
-        this.logger.warn(`Checkpoint attestation slot ${slotNumber} is outside its receive window`, {
-          slotNumber,
-          nowMs,
-          windowStartSeconds: startSeconds,
-          windowDeadlineSeconds: deadlineSeconds,
-        });
-        return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
+      const windowMiss = classifyReceiveWindowArrival(
+        nowMs,
+        startSeconds * 1000 - this.clockDisparityMs,
+        deadlineSeconds * 1000 + this.clockDisparityMs,
+      );
+      if (windowMiss) {
+        this.logger.warn(
+          `Checkpoint attestation slot ${slotNumber} is outside its receive window (${windowMiss.outcome.result})`,
+          {
+            slotNumber,
+            nowMs,
+            missMs: windowMiss.missMs,
+            windowStartSeconds: startSeconds,
+            windowDeadlineSeconds: deadlineSeconds,
+          },
+        );
+        return windowMiss.outcome;
       }
 
       // Verify the signature is valid
