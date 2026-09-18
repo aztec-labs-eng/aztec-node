@@ -30,6 +30,7 @@ import {
   BlockHash,
   type BlockParameter,
   type BlockQuery,
+  CommitteeAttestationsAndSigners,
   type L1SyncPoint,
   L2Block,
   type L2BlockSource,
@@ -1855,6 +1856,7 @@ describe('aztec node', () => {
         blockCount: 1,
         feeAssetPriceModifier: 0n,
         attestations: [],
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
         l1: { blockNumber: 10n, blockTimestamp: 1000n, blockHash: '0x0000' } as any,
       };
     }

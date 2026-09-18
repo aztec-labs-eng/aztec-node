@@ -11,6 +11,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
+import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import chunk from 'lodash.chunk';
 import {
@@ -30,6 +31,7 @@ import {
   hexToBigInt,
   keccak256,
 } from 'viem';
+import { z } from 'zod';
 
 import { getPublicClient } from '../client.js';
 import type { DeployAztecL1ContractsReturnType } from '../deploy_aztec_l1_contracts.js';
@@ -54,6 +56,12 @@ export type ViemCommitteeAttestations = {
   signatureIndices: `0x${string}`;
   signaturesOrAddresses: `0x${string}`;
 };
+
+/** Zod schema for the raw packed `CommitteeAttestations` viem tuple (two 0x-prefixed hex strings). */
+export const ViemCommitteeAttestationsSchema: ZodFor<ViemCommitteeAttestations> = z.object({
+  signatureIndices: schemas.HexStringWith0x,
+  signaturesOrAddresses: schemas.HexStringWith0x,
+});
 
 export type L1RollupContractAddresses = Pick<
   L1ContractAddresses,

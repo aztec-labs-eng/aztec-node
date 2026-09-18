@@ -1,4 +1,5 @@
 import { GENESIS_ARCHIVE_ROOT, INITIAL_CHECKPOINT_NUMBER } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -12,6 +13,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   BlockHash,
   CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
   EthAddress,
   L2Block,
   type ValidateCheckpointResult,
@@ -30,6 +32,7 @@ import {
   CannotOverwriteCheckpointedBlockError,
   CheckpointNumberNotSequentialError,
   InitialCheckpointNumberNotSequentialError,
+  UndecodableCheckpointAttestationsError,
 } from '../errors.js';
 import {
   makeChainedCheckpoints,
@@ -116,6 +119,7 @@ describe('BlockStore', () => {
         first3[2].checkpoint,
         makeL1PublishedData(999),
         first3[2].attestations,
+        first3[2].verbatimAttestations,
       );
       // Also add checkpoint 4 (the next one) in the same batch; only checkpoint 4 is newly inserted.
       await expect(blockStore.addCheckpoints([cp3WithNewL1, publishedCheckpoints[3]])).resolves.toEqual([
@@ -1785,6 +1789,45 @@ describe('BlockStore', () => {
     });
   });
 
+  describe('checkpoint attestations', () => {
+    const publish = (verbatimAttestations: ViemCommitteeAttestations, attestations: CommitteeAttestation[]) =>
+      new PublishedCheckpoint(
+        publishedCheckpoints[0].checkpoint,
+        makeL1PublishedData(10),
+        attestations,
+        verbatimAttestations,
+      );
+
+    it('preserves a bitmap bit past the committee size across write and read', async () => {
+      const addresses = [EthAddress.random(), EthAddress.random(), EthAddress.random()];
+      const honest = CommitteeAttestationsAndSigners.packAttestations(addresses.map(CommitteeAttestation.fromAddress));
+      // A committee of three occupies bits 7..5 of the single bitmap byte. Bit 0 maps to no committee position,
+      // so no decoder reads it — but the attestationsHash the rollup stored at propose time covers it, so the
+      // store has to hand back these exact bytes.
+      const verbatimAttestations: ViemCommitteeAttestations = { ...honest, signatureIndices: '0x01' };
+      const attestations = CommitteeAttestation.fromPacked(verbatimAttestations, addresses.length);
+
+      await blockStore.addCheckpoints([publish(verbatimAttestations, attestations)]);
+
+      const stored = await blockStore.getCheckpointData(CheckpointNumber(1));
+      expect(stored!.verbatimAttestations).toEqual(verbatimAttestations);
+      expect(stored!.attestations).toEqual(attestations);
+    });
+
+    it('rejects a checkpoint whose attestations tuple does not decode', async () => {
+      // The bitmap claims the single committee member signed, but the payload carries no signature.
+      const verbatimAttestations: ViemCommitteeAttestations = {
+        signatureIndices: '0x80',
+        signaturesOrAddresses: '0x',
+      };
+
+      await expect(
+        blockStore.addCheckpoints([publish(verbatimAttestations, [CommitteeAttestation.empty()])]),
+      ).rejects.toThrow(UndecodableCheckpointAttestationsError);
+      await expect(blockStore.getCheckpointData(CheckpointNumber(1))).resolves.toBeUndefined();
+    });
+  });
+
   describe('getCheckpointedBlockByHash', () => {
     beforeEach(async () => {
       await blockStore.addCheckpoints(publishedCheckpoints);
@@ -2775,6 +2818,7 @@ describe('BlockStore', () => {
         proposed.checkpointNumber,
         l1,
         attestations,
+        CommitteeAttestationsAndSigners.packAttestations(attestations),
         proposed.archive.root,
       );
 
@@ -2784,7 +2828,13 @@ describe('BlockStore', () => {
 
     it('throws when no proposed checkpoint exists', async () => {
       await expect(
-        blockStore.promoteProposedToCheckpointed(CheckpointNumber(1), makeL1PublishedData(20), [], Fr.random()),
+        blockStore.promoteProposedToCheckpointed(
+          CheckpointNumber(1),
+          makeL1PublishedData(20),
+          [],
+          CommitteeAttestationsAndSigners.packAttestations([]),
+          Fr.random(),
+        ),
       ).rejects.toThrow('no proposed checkpoint exists');
     });
 
@@ -2792,7 +2842,13 @@ describe('BlockStore', () => {
       const { proposed } = await setupProposedCheckpoint();
 
       await expect(
-        blockStore.promoteProposedToCheckpointed(proposed.checkpointNumber, makeL1PublishedData(20), [], Fr.random()),
+        blockStore.promoteProposedToCheckpointed(
+          proposed.checkpointNumber,
+          makeL1PublishedData(20),
+          [],
+          CommitteeAttestationsAndSigners.packAttestations([]),
+          Fr.random(),
+        ),
       ).rejects.toThrow('archive root mismatch');
 
       // Proposed checkpoint should still exist (transaction rolled back)
@@ -2934,6 +2990,7 @@ describe('BlockStore', () => {
         proposed!.checkpointNumber,
         makeL1PublishedData(20),
         [],
+        CommitteeAttestationsAndSigners.packAttestations([]),
         proposed!.archive.root,
       );
 

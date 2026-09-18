@@ -1,4 +1,4 @@
-import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { type ViemCommitteeAttestations, ViemCommitteeAttestationsSchema } from '@aztec-labs/ethereum/contracts';
 import { EpochNumber, EpochNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
@@ -70,12 +70,6 @@ export type ValidateCheckpointNegativeResult =
 
 /** Result type for validating checkpoint attestations */
 export type ValidateCheckpointResult = { valid: true } | ValidateCheckpointNegativeResult;
-
-/** Zod schema for the raw packed `CommitteeAttestations` viem tuple (two 0x-prefixed hex strings). */
-const ViemCommitteeAttestationsSchema: ZodFor<ViemCommitteeAttestations> = z.object({
-  signatureIndices: schemas.HexStringWith0x,
-  signaturesOrAddresses: schemas.HexStringWith0x,
-});
 
 export const ValidateCheckpointResultSchema: ZodFor<ValidateCheckpointResult> = z.union([
   z.object({ valid: z.literal(true) }),

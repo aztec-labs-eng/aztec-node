@@ -350,6 +350,7 @@ describe('L1Publisher integration', () => {
             checkpoint,
             new L1PublishedData(BigInt(block.number), BigInt(block.number), (await block.hash()).toString()),
             [],
+            CommitteeAttestationsAndSigners.packAttestations([]),
           ),
         ];
       },

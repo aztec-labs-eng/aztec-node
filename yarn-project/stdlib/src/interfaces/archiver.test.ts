@@ -10,7 +10,13 @@ import omit from 'lodash.omit';
 import type { ContractArtifact } from '../abi/abi.js';
 import { FunctionSelector } from '../abi/function_selector.js';
 import { AztecAddress } from '../aztec-address/index.js';
-import { type BlockData, BlockHash, CommitteeAttestation, L2Block } from '../block/index.js';
+import {
+  type BlockData,
+  BlockHash,
+  CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
+  L2Block,
+} from '../block/index.js';
 import {
   type BlockQuery,
   BlockQuerySchema,
@@ -572,17 +578,21 @@ class MockArchiver implements ArchiverApi {
     return Promise.resolve([]);
   }
   async getCheckpoint(_query: CheckpointQuery): Promise<PublishedCheckpoint | undefined> {
+    const attestations = [CommitteeAttestation.random()];
     return PublishedCheckpoint.from({
       checkpoint: await Checkpoint.random(CheckpointNumber(1)),
-      attestations: [CommitteeAttestation.random()],
+      attestations,
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(attestations),
       l1: new L1PublishedData(1n, 0n, `0x`),
     });
   }
   async getCheckpoints(_query: CheckpointsQuery): Promise<PublishedCheckpoint[]> {
+    const attestations = [CommitteeAttestation.random()];
     return [
       PublishedCheckpoint.from({
         checkpoint: await Checkpoint.random(CheckpointNumber(1)),
-        attestations: [CommitteeAttestation.random()],
+        attestations,
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(attestations),
         l1: new L1PublishedData(1n, 0n, `0x`),
       }),
     ];
@@ -615,6 +625,7 @@ class MockArchiver implements ArchiverApi {
   }
   async getCheckpointsData(_query: CheckpointsQuery): Promise<CheckpointData[]> {
     const checkpoint = await Checkpoint.random(CheckpointNumber(1));
+    const attestations = [CommitteeAttestation.random()];
     return [
       {
         checkpointNumber: checkpoint.number,
@@ -624,7 +635,8 @@ class MockArchiver implements ArchiverApi {
         startBlock: BlockNumber(1),
         blockCount: checkpoint.blocks.length,
         feeAssetPriceModifier: 0n,
-        attestations: [CommitteeAttestation.random()],
+        attestations,
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(attestations),
         l1: L1PublishedData.random(),
       },
     ];

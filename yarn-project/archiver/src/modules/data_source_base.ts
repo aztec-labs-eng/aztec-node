@@ -374,7 +374,12 @@ export abstract class ArchiverDataSourceBase
       checkpoint.checkpointNumber,
       checkpoint.feeAssetPriceModifier,
     );
-    return new PublishedCheckpoint(fullCheckpoint, checkpoint.l1, checkpoint.attestations);
+    return new PublishedCheckpoint(
+      fullCheckpoint,
+      checkpoint.l1,
+      checkpoint.attestations,
+      checkpoint.verbatimAttestations,
+    );
   }
 
   public getBlocksForSlot(slotNumber: SlotNumber): Promise<L2Block[]> {
