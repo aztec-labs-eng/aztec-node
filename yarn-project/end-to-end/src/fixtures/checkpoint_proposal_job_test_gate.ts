@@ -44,10 +44,12 @@ export type HoldContext = {
    */
   remainingHoldBudgetMs(now?: number): number;
   /**
-   * Milliseconds left before a proposal released now would arrive past the hard consensus receive deadline its
-   * validators enforce on ingress. The bound that matters when the released block has to be accepted by peers.
+   * Where `now` sits in the p2p proposal receive window for this slot, the bound that matters when a released
+   * block has to be accepted by peers. `opensInMs` is how long the window still has to open and `closesInMs` how
+   * long it has left, so a proposal released now is acceptable exactly when `opensInMs <= 0 < closesInMs`. Both
+   * are read from a single `now`, so the two ends cannot be sampled either side of a clock that is moving.
    */
-  remainingIngressBudgetMs(now?: number): number;
+  ingressWindow(now?: number): { opensInMs: number; closesInMs: number };
   /** The sub-slot the proposer's build loop would select on its next iteration, evaluated now. */
   nextSubslot(now?: number): SubslotSelection;
   /**
@@ -263,8 +265,10 @@ export class CheckpointProposalJobTestGate {
         }
       },
       remainingHoldBudgetMs: (now = event.schedule.nowMs()) => event.proposalSendDeadline.getTime() - now,
-      remainingIngressBudgetMs: (now = event.schedule.nowMs()) =>
-        event.schedule.getProposalReceiveDeadlineSeconds() * 1000 - now,
+      ingressWindow: (now = event.schedule.nowMs()) => ({
+        opensInMs: event.schedule.getProposalReceiveStartSeconds() * 1000 - now,
+        closesInMs: event.schedule.getProposalReceiveDeadlineSeconds() * 1000 - now,
+      }),
       nextSubslot: (now = event.schedule.nowMs()) => event.schedule.selectNextBuildSubslot(now / 1000),
       canStartAnotherBlock: (now = event.schedule.nowMs()) => event.schedule.canBuildAnotherBlock(now / 1000),
     };

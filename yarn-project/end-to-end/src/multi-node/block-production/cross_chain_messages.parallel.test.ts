@@ -529,16 +529,35 @@ describe('multi-node/block-production/cross_chain_messages', () => {
             (await archivers[validatorIndex].getBlockData({ number: parentNumber }))!.archive.root.toString(),
           ).toEqual(parentOnProposer.archive.root.toString());
 
+          // Replacing the suffix re-mines it from the fork point, which leaves the L1 head stamped behind where it
+          // was. Protocol time follows L1 here, so it walks backwards with it, and the held block was signed at the
+          // very start of its build frame — the same instant its slot's proposal receive window opens. Releasing
+          // straight after the reorg therefore gossips a proposal that is *too early*, and peers drop it at ingress
+          // for a slot that has not opened yet rather than comparing its Inbox prefix. Wait for the clock to climb
+          // back into the window first; interval mining stamps the next L1 blocks forward again, so this resolves on
+          // its own. The bound is wall-clock (`retryUntil` measures with a real timer), so a chain that stopped
+          // advancing fails here rather than downstream at the assertion it silently breaks.
+          await retryUntil(
+            () => Promise.resolve(ctx.ingressWindow().opensInMs <= 0 || undefined),
+            `slot ${heldSlot} reopens its proposal receive window after the reorg`,
+            test.L1_BLOCK_TIME_IN_S * 4,
+            0.2,
+          );
+
           // The release has to land inside the window peers accept a proposal in, and leave the proposer a real
-          // next sub-slot: both are asked of the job's own schedule at this instant, not of the event's snapshot.
-          const ingressBudgetMs = ctx.remainingIngressBudgetMs();
+          // next sub-slot: both are asked of the job's own schedule, not of the event's snapshot, and from one
+          // reading of the clock so they cannot describe two different instants.
+          const releaseAt = ctx.event.schedule.nowMs();
+          const ingressWindow = ctx.ingressWindow(releaseAt);
           logger.warn(`Releasing the stale block`, {
-            ingressBudgetMs,
-            holdBudgetMs: ctx.remainingHoldBudgetMs(),
-            nextSubslot: ctx.nextSubslot().index,
+            opensInMs: ingressWindow.opensInMs,
+            closesInMs: ingressWindow.closesInMs,
+            holdBudgetMs: ctx.remainingHoldBudgetMs(releaseAt),
+            nextSubslot: ctx.nextSubslot(releaseAt).index,
           });
-          expect(ingressBudgetMs).toBeGreaterThan(0);
-          expect(ctx.canStartAnotherBlock()).toBe(true);
+          expect(ingressWindow.opensInMs).toBeLessThanOrEqual(0);
+          expect(ingressWindow.closesInMs).toBeGreaterThan(0);
+          expect(ctx.canStartAnotherBlock(releaseAt)).toBe(true);
           ctx.assertStillHeld('release the stale block');
           return { reorgFrom, head, replacementMsgHash: inserted.msgHash };
         })(),
