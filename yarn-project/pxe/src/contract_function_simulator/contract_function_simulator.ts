@@ -732,7 +732,12 @@ export async function generateSimulatedProvingResult(
     );
     gasUsed = meterGasUsed(revertibleData, isPrivateOnlyTx).add(meterGasUsed(nonRevertibleData, isPrivateOnlyTx));
     if (publicTeardownCallRequest) {
-      gasUsed = gasUsed.add(privateExecutionResult.entrypoint.publicInputs.txContext.gasSettings.teardownGasLimits);
+      // The teardown call is dispatched by the AVM like any other enqueued public call, so it consumes the startup
+      // gas on top of its gas limits.
+      const teardownStartupGas = Gas.from({ daGas: 0, l2Gas: FIXED_AVM_STARTUP_L2_GAS });
+      gasUsed = gasUsed
+        .add(privateExecutionResult.entrypoint.publicInputs.txContext.gasSettings.teardownGasLimits)
+        .add(teardownStartupGas);
     }
 
     inputsForPublic = new PartialPrivateTailPublicInputsForPublic(
