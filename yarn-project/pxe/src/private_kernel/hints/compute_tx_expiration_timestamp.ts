@@ -5,6 +5,7 @@ import type { UInt64 } from '@aztec-labs/stdlib/types';
 const ROUNDED_DURATIONS = [
   3600, // 1 hour
   1800, // 30 mins
+  60, // 1 min
   1, // 1 second
 ];
 
@@ -35,11 +36,11 @@ export function computeTxExpirationTimestamp(
   const maxTimestamp = anchorBlockTimestamp + BigInt(txLifetime);
   const expirationTimestamp = previousKernel.expirationTimestamp;
 
-  // If the expirationTimestamp set during the tx execution is greater than or equal to the max allowed duration,
-  // use the maximum allowed timestamp.
-  // Note: It shouldn't be larger than the max allowed duration, but we check for it anyway.
-  if (expirationTimestamp >= maxTimestamp) {
-    return maxTimestamp;
+  // The kernel emits maxTimestamp - 1 for a tx whose callees all use the default update delay, and maxTimestamp only
+  // when every callee has raised its delay above the default. Publish one value for both so the deadline does not
+  // reveal which kind of callee the tx has, and so the default case keeps its full window instead of rounding down.
+  if (expirationTimestamp >= maxTimestamp - 1n) {
+    return maxTimestamp - 1n;
   }
 
   // Round it down to the nearest hour/min/second to reduce precision and avoid revealing the exact value.
