@@ -21,6 +21,7 @@ import {
   type Log,
   RpcRequestError,
   type StateOverride,
+  type TransactionReceipt,
   type TypedDataDefinition,
   type WatchContractEventReturnType,
   decodeErrorResult,
@@ -30,6 +31,9 @@ import {
   getContract,
   hexToBigInt,
   keccak256,
+  maxUint256,
+  parseEventLogs,
+  recoverTypedDataAddress,
 } from 'viem';
 
 import { getPublicClient } from '../client.js';
@@ -228,6 +232,15 @@ export type AttesterExitAuthorization = {
   attester: EthAddress;
   deadline: bigint;
   signature: ViemSignature;
+};
+
+/** Receipt and the unprocessed half-open range of a submitted authorization array. */
+export type AttesterExitBatchResult = {
+  receipt: TransactionReceipt;
+  processedCount: number;
+  remainingCount: number;
+  remainingStartIndex: number | undefined;
+  remainingEndIndexExclusive: number | undefined;
 };
 
 function toViemAttesterExitAuthorization(authorization: AttesterExitAuthorization) {
@@ -1407,6 +1420,9 @@ export class RollupContract {
 
   /** Builds the EIP-712 data an attester signs to authorize a relayed exit. */
   public buildAttesterExitTypedData(attester: EthAddress, deadline: bigint): TypedDataDefinition {
+    if (!Number.isSafeInteger(this.client.chain.id) || this.client.chain.id <= 0) {
+      throw new Error('Chain ID must be a positive safe integer');
+    }
     return {
       domain: {
         name: 'Aztec Rollup',
@@ -1431,8 +1447,36 @@ export class RollupContract {
     deadline: bigint,
     signer: (typedData: TypedDataDefinition) => Promise<Hex>,
   ): Promise<AttesterExitAuthorization> {
+    if (deadline <= BigInt(Math.floor(Date.now() / 1000)) || deadline > maxUint256) {
+      throw new Error('Deadline must be a future Unix timestamp within uint256 range');
+    }
     const signature = Signature.fromString(await signer(this.buildAttesterExitTypedData(attester, deadline)));
-    return { attester, deadline, signature: signature.toViemSignature() };
+    const authorization = { attester, deadline, signature: signature.toViemSignature() };
+    await this.validateAttesterExitAuthorizations([authorization]);
+    return authorization;
+  }
+
+  /** Validates uniqueness, deadlines and EIP-712 signatures locally, without checking on-chain eligibility. */
+  public async validateAttesterExitAuthorizations(authorizations: AttesterExitAuthorization[]): Promise<void> {
+    const seen = new Set<string>();
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    for (const authorization of authorizations) {
+      const attester = authorization.attester.toString().toLowerCase();
+      if (seen.has(attester)) {
+        throw new Error(`Duplicate attester: ${attester}`);
+      }
+      seen.add(attester);
+      if (authorization.deadline <= now || authorization.deadline > maxUint256) {
+        throw new Error(`Invalid or expired deadline for attester ${attester}`);
+      }
+      const signer = await recoverTypedDataAddress({
+        ...this.buildAttesterExitTypedData(authorization.attester, authorization.deadline),
+        signature: { ...authorization.signature, v: BigInt(authorization.signature.v) },
+      });
+      if (signer.toLowerCase() !== attester) {
+        throw new Error(`Invalid signature for attester ${attester} on the selected rollup and chain`);
+      }
+    }
   }
 
   /** Initiates an attester exit. The transaction signer must be the position's attester. */
@@ -1497,6 +1541,47 @@ export class RollupContract {
         args: [authorizations.map(toViemAttesterExitAuthorization)],
       }),
     });
+  }
+
+  /** Submits signed exits and reports the processed prefix and remaining half-open index range from receipt events. */
+  public async submitAttesterExitBatch(
+    l1TxUtils: L1TxUtils,
+    authorizations: AttesterExitAuthorization[],
+    upToLimit = false,
+  ): Promise<AttesterExitBatchResult> {
+    const { receipt } = upToLimit
+      ? await this.initiateWithdrawByAttesterBatchUpToLimit(l1TxUtils, authorizations)
+      : await this.initiateWithdrawByAttesterBatch(l1TxUtils, authorizations);
+
+    if (receipt.status !== 'success') {
+      throw new Error(`Attester exit batch reverted: ${receipt.transactionHash}`);
+    }
+
+    const exits = parseEventLogs({
+      abi: RollupAbi,
+      eventName: 'WithdrawInitiatedByAttester',
+      logs: receipt.logs.filter(event => event.address.toLowerCase() === this.address.toLowerCase()),
+    });
+    const processedCount = exits.length;
+    if (
+      processedCount > authorizations.length ||
+      (!upToLimit && processedCount !== authorizations.length) ||
+      exits.some(
+        (event, index) => event.args.attester.toLowerCase() !== authorizations[index].attester.toString().toLowerCase(),
+      )
+    ) {
+      throw new Error(
+        `Transaction ${receipt.transactionHash} succeeded, but its exit events do not match the submitted prefix`,
+      );
+    }
+    const remainingCount = authorizations.length - processedCount;
+    return {
+      receipt,
+      processedCount,
+      remainingCount,
+      remainingStartIndex: remainingCount > 0 ? processedCount : undefined,
+      remainingEndIndexExclusive: remainingCount > 0 ? authorizations.length : undefined,
+    };
   }
 
   async getStakingAsset(): Promise<EthAddress> {

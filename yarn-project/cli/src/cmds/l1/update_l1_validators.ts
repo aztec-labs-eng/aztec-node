@@ -12,15 +12,7 @@ import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
 import { readFile, writeFile } from 'node:fs/promises';
-import {
-  encodeFunctionData,
-  formatEther,
-  getContract,
-  isHex,
-  maxUint256,
-  parseEventLogs,
-  recoverTypedDataAddress,
-} from 'viem';
+import { encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 import { atomicUpdateFile } from '../../utils/commands.js';
@@ -290,12 +282,6 @@ export async function signAttesterExit({
   if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
     throw new Error('The signing account must match the attester address');
   }
-  if (deadline <= BigInt(Math.floor(Date.now() / 1000)) || deadline > maxUint256) {
-    throw new Error('Deadline must be a future Unix timestamp within uint256 range');
-  }
-  if (!Number.isSafeInteger(chainId) || chainId <= 0) {
-    throw new Error('Chain ID must be a positive safe integer');
-  }
   const chain = createEthereumChain(rpcUrls, chainId);
   const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
   const rollup = new RollupContract(client, rollupAddress);
@@ -345,25 +331,7 @@ export async function validateAttesterExits({
   const client = getPublicClient({ l1RpcUrls: rpcUrls, l1ChainId: chainId });
   const rollup = new RollupContract(client, rollupAddress);
   const authorizations = await readAttesterExitAuthorizations(authorizationsPath);
-  const seen = new Set<string>();
-  const now = BigInt(Math.floor(Date.now() / 1000));
-  for (const authorization of authorizations) {
-    const attester = authorization.attester.toString().toLowerCase();
-    if (seen.has(attester)) {
-      throw new Error(`Duplicate attester: ${attester}`);
-    }
-    seen.add(attester);
-    if (authorization.deadline <= now || authorization.deadline > maxUint256) {
-      throw new Error(`Invalid or expired deadline for attester ${attester}`);
-    }
-    const signer = await recoverTypedDataAddress({
-      ...rollup.buildAttesterExitTypedData(authorization.attester, authorization.deadline),
-      signature: { ...authorization.signature, v: BigInt(authorization.signature.v) },
-    });
-    if (signer.toLowerCase() !== attester) {
-      throw new Error(`Invalid signature for attester ${attester} on the selected rollup and chain`);
-    }
-  }
+  await rollup.validateAttesterExitAuthorizations(authorizations);
   log(
     `Validated ${authorizations.length} attester exit authorizations. On-chain eligibility and capacity were not checked.`,
   );
@@ -436,32 +404,11 @@ export async function initiateWithdrawByAttesterBatch({
   const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
   const rollup = new RollupContract(client, rollupAddress);
   const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
-  const { receipt } = upToLimit
-    ? await rollup.initiateWithdrawByAttesterBatchUpToLimit(l1TxUtils, authorizations)
-    : await rollup.initiateWithdrawByAttesterBatch(l1TxUtils, authorizations);
-
-  if (receipt.status !== 'success') {
-    throw new Error(`Attester exit batch reverted: ${receipt.transactionHash}`);
-  }
-
-  const exits = parseEventLogs({
-    abi: RollupAbi,
-    eventName: 'WithdrawInitiatedByAttester',
-    logs: receipt.logs.filter(event => event.address.toLowerCase() === rollupAddress.toString().toLowerCase()),
-  });
-  const processedCount = exits.length;
-  if (
-    processedCount > authorizations.length ||
-    (!upToLimit && processedCount !== authorizations.length) ||
-    exits.some(
-      (event, index) => event.args.attester.toLowerCase() !== authorizations[index].attester.toString().toLowerCase(),
-    )
-  ) {
-    throw new Error(
-      `Transaction ${receipt.transactionHash} succeeded, but its exit events do not match the submitted prefix`,
-    );
-  }
-  const remainingCount = authorizations.length - processedCount;
+  const { receipt, processedCount, remainingCount } = await rollup.submitAttesterExitBatch(
+    l1TxUtils,
+    authorizations,
+    upToLimit,
+  );
   log(
     `Processed ${processedCount} of ${authorizations.length} attester exit authorizations. Transaction hash: ${receipt.transactionHash}`,
   );
