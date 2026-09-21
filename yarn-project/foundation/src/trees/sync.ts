@@ -1,7 +1,6 @@
 import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
 import { poseidon2HashWithSeparator } from '../crypto/sync/poseidon/index.js';
-
 import type { Hasher } from './hasher.js';
 
 /** Initializes the synchronous backend and returns a domain-separated Poseidon2 Merkle hasher. */

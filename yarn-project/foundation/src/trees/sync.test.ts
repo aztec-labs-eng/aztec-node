@@ -1,5 +1,4 @@
 import { Fr } from '../curves/bn254/field.js';
-
 import { makePoseidonMerkleHash } from './hasher.js';
 import { makePoseidonMerkleHashSync } from './sync.js';
 
