@@ -45,11 +45,11 @@ jobs:
       contents: read # checkout/fetch with the default github.token
       statuses: write # post_github_status posts per-job commit statuses (ci/x-fast etc.) with github.token
     steps:
-      # Do NOT bump actions/checkout to v6 here. v6 ("persist creds to a separate file", #2286)
-      # stores a persisted github.token in a temp credentials file pulled in via includeIf, which
-      # `git config --unset-all http....extraheader` cannot clear, so a credential it persists
-      # cannot be removed by anything that runs afterwards. v5.0.1 is still node24 but keeps it as
-      # a removable local extraheader.
+      # actions/checkout is pinned to v5.0.1 rather than v6 throughout this repo. v6 ("persist
+      # creds to a separate file", #2286) moves a persisted credential out of a local
+      # http.*.extraheader and into a temp credentials file pulled in via includeIf, which changes
+      # both where it lives and what can remove it. release-tag.yml is the only checkout that
+      # persists one, and the pin keeps its behaviour the one that has been validated here.
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -57,8 +57,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           # Fetch all of the PR's commits.
           fetch-depth: ${{ github.event.pull_request.commits || 1 }}
-          # This job never pushes, and the repo is public, so ci3/bootstrap_ec2's `git fetch origin`
-          # needs no credential here; the build instance authenticates with its own GITHUB_TOKEN.
+          # This job never pushes, and the repo is public, so the remote reads it does make on the
+          # runner resolve anonymously; the EC2 build instance clones with its own GITHUB_TOKEN.
           persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
