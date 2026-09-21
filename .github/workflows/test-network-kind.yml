@@ -1,10 +1,9 @@
 # KIND-based e2e tests that run on a local Kubernetes cluster on an EC2 instance.
 #
-# Two entry points:
-# - schedule (currently disabled): runs against today's nightly release once its release
-#   run has finished (select-image + wait-for-release, same model as deploy-next-net.yml).
-#   A day with no nightly tag fails loudly at select-image.
-# - workflow_dispatch: manual runs against an arbitrary ref.
+# Every job checks out main. These jobs hold the `deployment` environment's GCP credential, so the
+# code they run must not be selectable by whoever dispatches them; the version under test is the
+# docker image, which is what the input below chooses. A dispatch with no image tests today's
+# nightly, the same thing the (currently disabled) schedule does.
 name: Test Network KIND
 
 on:
@@ -13,27 +12,27 @@ on:
   #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
-      ref:
-        description: Git ref to checkout for the KIND test runner.
+      docker_image:
+        description: Docker image to test, e.g. azteclabs/aztec:6.0.0-nightly.20260921. Empty uses today's nightly.
         required: false
         type: string
-        default: main
+        default: ""
 
 # id-token: write lets the job assume the AWS role via OIDC.
-# actions: read covers wait_for_release's workflow-run queries on scheduled runs.
+# actions: read covers wait_for_release's workflow-run queries.
 permissions:
   contents: read
   actions: read
   id-token: write
 
 jobs:
-  # Scheduled runs only: construct today's nightly tag (never "latest", so a broken
-  # tag cron fails here instead of silently re-testing an old release).
+  # Resolves the image under test: the input if given, otherwise today's nightly (never
+  # "latest", so a broken tag cron fails here instead of silently re-testing an old release).
   select-image:
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     outputs:
-      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
+      docker_image: ${{ steps.image.outputs.docker_image }}
+      release_tag: ${{ steps.image.outputs.release_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -41,25 +40,36 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Determine nightly tag
-        id: nightly-tag
-        run: |
-          current_version=$(jq -r '."."' .release-please-manifest.json)
-          source_ref="v${current_version}-nightly.$(date -u +%Y%m%d)"
-          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
-          echo "Using nightly tag: $source_ref"
-
-      - name: Verify source git ref
+      - name: Resolve the image under test
+        id: image
+        env:
+          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
         run: |
           set -euo pipefail
-          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
-          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
-          echo "Nightly source commit: $(git rev-parse "${source_ref}^{}")"
+          if [[ -n "$INPUT_DOCKER_IMAGE" ]]; then
+            docker_image="$INPUT_DOCKER_IMAGE"
+            release_tag=""
+          else
+            current_version=$(jq -r '."."' .release-please-manifest.json)
+            docker_image="azteclabs/aztec:${current_version}-nightly.$(date -u +%Y%m%d)"
+            release_tag="v${current_version}-nightly.$(date -u +%Y%m%d)"
+          fi
+          echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "Testing image: $docker_image"
+
+      # A named image has to exist already; a derived nightly is gated by wait-for-release instead,
+      # since its release build may still be running.
+      - name: Verify the image exists
+        if: steps.image.outputs.release_tag == ''
+        run: docker manifest inspect "${{ steps.image.outputs.docker_image }}" >/dev/null
 
   # Block until the nightly tag's release CI has succeeded, so we only test releases
   # that actually shipped.
   wait-for-release:
     needs: select-image
+    # Only a derived nightly needs the gate; a named image was verified above.
+    if: needs.select-image.outputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -76,12 +86,12 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.source_ref }}"
+        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.release_tag }}"
 
   kind-test:
     needs: [select-image, wait-for-release]
-    # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
-    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
+    # The gate is skipped for a named image and must pass for a derived nightly.
+    if: ${{ !cancelled() && needs.select-image.result == 'success' && needs.wait-for-release.result != 'failure' }}
     runs-on: ubuntu-latest
     # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
@@ -90,8 +100,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # Scheduled runs check out the nightly tag so the tests match the release.
-          ref: ${{ inputs.ref || needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
@@ -111,5 +120,6 @@ jobs:
           CI3_SECURITY_GROUP_ID: ${{ vars.CI3_SECURITY_GROUP_ID }}
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: 180
+          DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
         run: |
-          ./.github/ci3.sh network-tests-kind
+          ./.github/ci3.sh network-tests-kind "$DOCKER_IMAGE"

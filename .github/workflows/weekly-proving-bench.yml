@@ -1,14 +1,19 @@
 name: Weekly Real Proving Benchmark
 
+# Every job here checks out main. These jobs hold the `deployment` environment's GCP credential,
+# so the code they run must not be selectable by whoever dispatches them; the version under test is
+# the docker image, which is what the input below chooses.
+
 on:
   # schedule:
   #   - cron: "0 6 * * 1" # Every Monday at 6 AM UTC
   workflow_dispatch:
     inputs:
-      nightly_tag:
-        description: "Nightly tag to use (e.g., 2.3.4-nightly.20251209). Leave empty to auto-detect."
+      docker_image:
+        description: "Docker image to benchmark, e.g. azteclabs/aztec:6.0.0-nightly.20260921. Empty uses today's nightly."
         required: false
         type: string
+        default: ""
 
 concurrency:
   group: weekly-proving-bench-${{ github.ref }}
@@ -26,9 +31,8 @@ jobs:
   select-image:
     runs-on: ubuntu-latest
     outputs:
-      nightly_tag: ${{ steps.nightly-tag.outputs.nightly_tag }}
-      docker_image: ${{ steps.nightly-tag.outputs.docker_image }}
-      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
+      nightly_tag: ${{ steps.image.outputs.nightly_tag }}
+      docker_image: ${{ steps.image.outputs.docker_image }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -36,42 +40,28 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Determine nightly tag
-        id: nightly-tag
+      - name: Resolve the image under test
+        id: image
+        env:
+          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
         run: |
-          if [[ -n "${{ inputs.nightly_tag }}" ]]; then
-            nightly_tag="${{ inputs.nightly_tag }}"
+          set -euo pipefail
+          if [[ -n "$INPUT_DOCKER_IMAGE" ]]; then
+            docker_image="$INPUT_DOCKER_IMAGE"
+            nightly_tag="${docker_image##*:}"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
             nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
+            docker_image="azteclabs/aztec:${nightly_tag}"
           fi
-
-          docker_image="azteclabs/aztec:${nightly_tag}"
-          source_ref="v${nightly_tag}"
           echo "nightly_tag=$nightly_tag" >> "$GITHUB_OUTPUT"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
-          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
-          echo "Using nightly tag: $nightly_tag"
-          echo "Using source ref: $source_ref"
+          echo "Benchmarking image: $docker_image"
 
-      - name: Verify source git ref
-        run: |
-          set -euo pipefail
-          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
-          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
-          source_sha=$(git rev-parse "${source_ref}^{}")
-          echo "Nightly source commit: $source_sha"
-
-      - name: Check if Docker image exists
-        run: |
-          DOCKER_IMAGE="${{ steps.nightly-tag.outputs.docker_image }}"
-          echo "Checking if Docker image exists: $DOCKER_IMAGE"
-          if docker manifest inspect "$DOCKER_IMAGE" > /dev/null 2>&1; then
-            echo "Docker image exists: $DOCKER_IMAGE"
-          else
-            echo "Docker image does not exist: $DOCKER_IMAGE"
-            exit 1
-          fi
+      # This workflow has no release gate, so a missing image must fail here rather than as an
+      # ImagePullBackOff once the network deploy is already under way.
+      - name: Verify the image exists
+        run: docker manifest inspect "${{ steps.image.outputs.docker_image }}" >/dev/null
 
   deploy-real-proving-network:
     needs: select-image
@@ -95,7 +85,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
 
       - name: Authenticate to Google Cloud
@@ -125,7 +115,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
@@ -168,7 +158,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
@@ -200,7 +190,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
 
       - name: Notify Slack on success

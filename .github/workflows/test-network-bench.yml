@@ -1,12 +1,9 @@
 # Spartan network benchmarks: TPS and proving benchmarks against a deployed network.
-# Results upload to a PR-specific path on the benchmark dashboard so nightly
-# (bench/main) is never affected.
 #
-# Two entry points:
-# - schedule (currently disabled): runs against today's nightly release once its release
-#   run has finished (select-image + wait-for-release, same model as deploy-next-net.yml).
-#   Scheduled runs have no PR number, so results are observational (no upload).
-# - workflow_dispatch: manual runs against an arbitrary ref.
+# Every job checks out main. These jobs hold the `deployment` environment's GCP credential, so the
+# code they run must not be selectable by whoever dispatches them; the version under test is the
+# docker image, which is what the inputs below choose. A dispatch with no image benchmarks today's
+# nightly, the same thing the (currently disabled) schedule does.
 name: Test Network Bench
 
 on:
@@ -20,32 +17,27 @@ on:
         required: false
         type: string
         default: ""
-      ref:
-        description: Git ref to checkout for the benchmark runner.
-        required: false
-        type: string
-        default: main
-      pr_number:
-        description: PR number for the bench/pr-<N> upload path. Empty skips the upload.
+      docker_image:
+        description: Docker image to benchmark, e.g. azteclabs/aztec:6.0.0-nightly.20260921. Empty uses today's nightly.
         required: false
         type: string
         default: ""
 
 # id-token: write lets the job assume the AWS role via OIDC.
-# actions: read covers wait_for_release's workflow-run queries on scheduled runs.
+# actions: read covers wait_for_release's workflow-run queries.
 permissions:
   contents: read
   actions: read
   id-token: write
 
 jobs:
-  # Scheduled runs only: construct today's nightly tag (never "latest", so a broken
-  # tag cron fails here instead of silently re-benching an old release).
+  # Resolves the image under test: the input if given, otherwise today's nightly (never
+  # "latest", so a broken tag cron fails here instead of silently re-benching an old release).
   select-image:
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     outputs:
-      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
+      docker_image: ${{ steps.image.outputs.docker_image }}
+      release_tag: ${{ steps.image.outputs.release_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -53,25 +45,36 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Determine nightly tag
-        id: nightly-tag
-        run: |
-          current_version=$(jq -r '."."' .release-please-manifest.json)
-          source_ref="v${current_version}-nightly.$(date -u +%Y%m%d)"
-          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
-          echo "Using nightly tag: $source_ref"
-
-      - name: Verify source git ref
+      - name: Resolve the image under test
+        id: image
+        env:
+          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
         run: |
           set -euo pipefail
-          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
-          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
-          echo "Nightly source commit: $(git rev-parse "${source_ref}^{}")"
+          if [[ -n "$INPUT_DOCKER_IMAGE" ]]; then
+            docker_image="$INPUT_DOCKER_IMAGE"
+            release_tag=""
+          else
+            current_version=$(jq -r '."."' .release-please-manifest.json)
+            docker_image="azteclabs/aztec:${current_version}-nightly.$(date -u +%Y%m%d)"
+            release_tag="v${current_version}-nightly.$(date -u +%Y%m%d)"
+          fi
+          echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "Benchmarking image: $docker_image"
+
+      # A named image has to exist already; a derived nightly is gated by wait-for-release instead,
+      # since its release build may still be running.
+      - name: Verify the image exists
+        if: steps.image.outputs.release_tag == ''
+        run: docker manifest inspect "${{ steps.image.outputs.docker_image }}" >/dev/null
 
   # Block until the nightly tag's release build has published the docker image,
   # so the deploys below don't race the build and hit ImagePullBackOff.
   wait-for-release:
     needs: select-image
+    # Only a derived nightly needs the gate; a named image was verified above.
+    if: needs.select-image.outputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -88,13 +91,13 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.source_ref }}"
+        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.release_tag }}"
 
   bench:
     name: ${{ matrix.bench_type }}
     needs: [select-image, wait-for-release]
-    # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
-    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
+    # The gate is skipped for a named image and must pass for a derived nightly.
+    if: ${{ !cancelled() && needs.select-image.result == 'success' && needs.wait-for-release.result != 'failure' }}
     runs-on: ubuntu-latest
     # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
@@ -102,13 +105,12 @@ jobs:
       fail-fast: false
       # An empty bench_type input runs both benchmarks in parallel; otherwise just the selected one.
       matrix:
-        include: ${{ fromJSON(inputs.bench_type == 'benchmark' && '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","download_cmd":"gh-spartan-bench","timeout":300}]' || inputs.bench_type == 'proving-benchmark' && '[{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","download_cmd":"gh-spartan-proving-bench","timeout":240}]' || '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","download_cmd":"gh-spartan-bench","timeout":300},{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","download_cmd":"gh-spartan-proving-bench","timeout":240}]') }}
+        include: ${{ fromJSON(inputs.bench_type == 'benchmark' && '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","timeout":300}]' || inputs.bench_type == 'proving-benchmark' && '[{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","timeout":240}]' || '[{"bench_type":"benchmark","ci3_cmd":"network-bench","scenario":"tps-scenario","namespace_suffix":"bench","timeout":300},{"bench_type":"proving-benchmark","ci3_cmd":"network-proving-bench","scenario":"prove-n-tps-fake","namespace_suffix":"proving-bench","timeout":240}]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # Scheduled runs check out the nightly tag so the runner matches the release.
-          ref: ${{ inputs.ref || needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
@@ -131,13 +133,12 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: ${{ matrix.timeout }}
           NO_SPOT: 1
-          PR_NUMBER: ${{ inputs.pr_number }}
+          DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
         run: |
-          namespace=${PR_NUMBER:+pr-$PR_NUMBER}
-          namespace=${namespace:-run-$RUN_ID}-${{ matrix.namespace_suffix }}
+          namespace=run-$RUN_ID-${{ matrix.namespace_suffix }}
           echo "NAMESPACE=$namespace" >> $GITHUB_ENV
           set -x
-          ./.github/ci3.sh ${{ matrix.ci3_cmd }} ${{ matrix.scenario }} "$namespace"
+          ./.github/ci3.sh ${{ matrix.ci3_cmd }} ${{ matrix.scenario }} "$namespace" "$DOCKER_IMAGE"
 
       - name: Cleanup network resources
         if: always()
@@ -148,23 +149,3 @@ jobs:
           namespace: ${{ env.NAMESPACE }}
           gcp_helm_sa_key: ${{ secrets.GCP_HELM_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
-
-      - name: Download benchmarks
-        if: always()
-        run: |
-          if ./ci.sh ${{ matrix.download_cmd }}; then
-            echo "ENABLE_DEPLOY_BENCH=1" >> $GITHUB_ENV
-          fi
-
-      - name: Upload benchmarks
-        if: always() && env.ENABLE_DEPLOY_BENCH == '1'
-        env:
-          GITHUB_TOKEN: ${{ secrets.AZTEC_BOT_GITHUB_TOKEN }}
-          COMMIT_SHA: ${{ github.sha }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-        run: |
-          if [[ -z "$PR_NUMBER" ]]; then
-            echo "No PR number; skipping benchmark upload."
-            exit 0
-          fi
-          ./ci3/upload_benchmarks "Spartan" "bench/pr-$PR_NUMBER" ./bench-out/bench.json "$COMMIT_SHA"
