@@ -1,6 +1,6 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { DelayedPublicMutableValues } from './delayed_public_mutable_values.js';
 import { ScheduledDelayChange } from './scheduled_delay_change.js';
@@ -40,7 +40,7 @@ describe('DelayedPublicMutableValues', () => {
     const packedStr = `[${packed.map(f => f.toString()).join(',')}]`;
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/delayed_public_mutable/delayed_public_mutable_values/test.nr',
       'packed_dpmv_from_typescript',
       packedStr,

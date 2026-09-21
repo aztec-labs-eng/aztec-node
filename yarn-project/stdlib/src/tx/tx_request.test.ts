@@ -2,7 +2,7 @@ import { TX_REQUEST_LENGTH } from '@aztec-labs/constants';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { FunctionSelector } from '../abi/index.js';
 import { AztecAddress } from '../aztec-address/index.js';
@@ -49,7 +49,7 @@ describe('TxRequest', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/abis/transaction/tx_request.nr',
       'test_data_tx_request_hash',
       hash.toString(),

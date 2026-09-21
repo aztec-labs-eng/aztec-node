@@ -1,5 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { PublicDataTreeLeaf, PublicDataTreeLeafPreimage } from './public_data_leaf.js';
 
@@ -18,7 +18,7 @@ describe('PublicDataTreeLeaf', () => {
     expect(hash).toMatchInlineSnapshot('"0x2efdfcfc865cbb7543183fae69374ee5106dde9741545afd2fbf12868b550614"');
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/data/public_data_tree_leaf_preimage.nr',
       'hash_from_ts',
       hash.toString(),

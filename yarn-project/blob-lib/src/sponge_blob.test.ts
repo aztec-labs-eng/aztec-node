@@ -1,5 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { Poseidon2Sponge, SpongeBlob } from './sponge_blob.js';
 import { makeSpongeBlob } from './testing.js';
@@ -28,7 +28,7 @@ describe('SpongeBlob', () => {
     expect(hash).toMatchInlineSnapshot('"0x142a2d54d67841d1ab00580036a6bb63e7ff8c1bc4ca5232628a9dde48bd55ae"');
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/sponge_blob.nr',
       'small_sponge_hash_from_ts',
       hash,
@@ -44,7 +44,7 @@ describe('SpongeBlob', () => {
     expect(hash).toMatchInlineSnapshot('"0x23f78d3bf4a9e4a96e28d05f4daaa32a91c93dac6e9903246dc69c2290e7a000"');
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/sponge_blob.nr',
       'full_sponge_hash_from_ts',
       hash,
