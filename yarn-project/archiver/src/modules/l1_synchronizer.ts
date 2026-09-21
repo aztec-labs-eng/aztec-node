@@ -1262,29 +1262,15 @@ export class ArchiverL1Synchronizer implements Traceable {
     const { lastSeenCheckpoint, pendingCheckpointNumber } = status;
     // Compare the last checkpoint (valid or not) we have (either retrieved in this round or loaded from store)
     // with what the rollup contract told us was the latest one (pinned at the currentL1BlockNumber).
-    const latestLocalCheckpointNumber =
-      lastSeenCheckpoint?.checkpointNumber ??
-      CheckpointNumber.max(
-        await this.stores.blocks.getLatestCheckpointNumber(),
-        await this.stores.blocks.getLatestRejectedCheckpointNumber(),
-      ) ??
-      CheckpointNumber.ZERO;
+    const latestLocalCheckpoint = lastSeenCheckpoint ?? (await this.getLocalProgressCheckpoint(status));
+    const latestLocalCheckpointNumber = latestLocalCheckpoint?.checkpointNumber ?? CheckpointNumber.ZERO;
 
     if (latestLocalCheckpointNumber < pendingCheckpointNumber) {
       // Here we have consumed all logs until the `currentL1Block` we pinned at the beginning of the archiver loop,
       // but still haven't reached the pending checkpoint according to the call to the rollup contract.
       // We suspect an L1 reorg that added checkpoints *behind* us. If that is the case, it must have happened between
-      // the last checkpoint we saw and the current one, so we reset the last synched L1 block number. In the edge case
-      // we don't have one, we go back 2 L1 epochs, which is the deepest possible reorg (assuming Casper is working).
-      const latestLocalCheckpoint:
-        | { checkpointNumber: CheckpointNumber; l1: L1PublishedData }
-        | CheckpointData
-        | RejectedCheckpoint
-        | undefined =
-        lastSeenCheckpoint ??
-        (await this.stores.blocks.getCheckpointData(latestLocalCheckpointNumber)) ??
-        (await this.stores.blocks.getRejectedCheckpointByNumber(latestLocalCheckpointNumber));
-
+      // the last accepted checkpoint and the current one, so we reset the last synched L1 block number. In the edge
+      // case we don't have one, we go back 2 L1 epochs, which is the deepest possible reorg (assuming Casper is working).
       const targetL1BlockNumber =
         latestLocalCheckpoint?.l1.blockNumber ??
         maxBigint(currentL1BlockNumber - 64n, this.l1Constants.l1StartBlock, 0n);
@@ -1307,6 +1293,27 @@ export class ArchiverL1Synchronizer implements Traceable {
         pendingCheckpointNumber,
       });
     }
+  }
+
+  /**
+   * Returns the stored checkpoint to measure local progress from when deciding whether checkpoints were added behind
+   * the sync point: the rollup's pending tip if we recorded it as rejected, otherwise the latest accepted checkpoint.
+   * A rejected checkpoint moves the sync point past its L1 block, so it only counts as seen while it is still the
+   * pending tip. If an L1 reorg replaced it with a different same-numbered checkpoint at an earlier L1 block, its
+   * stale marker must not hide that gap. Rejected entries are looked up by archive root rather than by number, since
+   * a reorg may leave a stale higher-numbered marker (e.g. a dropped descendant) while the pending tip is still one
+   * we rejected.
+   */
+  private async getLocalProgressCheckpoint(
+    status: Pick<RollupStatus, 'pendingArchive'>,
+  ): Promise<CheckpointData | RejectedCheckpoint | undefined> {
+    const rejectedPendingTip = await this.stores.blocks.getRejectedCheckpointByArchiveRoot(
+      Fr.fromString(status.pendingArchive),
+    );
+    return (
+      rejectedPendingTip ??
+      (await this.stores.blocks.getCheckpointData(await this.stores.blocks.getLatestCheckpointNumber()))
+    );
   }
 
   private async getCheckpointHeader(number: CheckpointNumber) {
