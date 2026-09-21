@@ -2,6 +2,7 @@ import {
   CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
   CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE,
   CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE,
+  MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
 import {
   BlockNumber,
@@ -75,6 +76,30 @@ function buildProtocolContractClassLog(contractClass: {
   return new ContractClassLog(
     ProtocolContractAddress.ContractClassRegistry,
     new ContractClassLogFields(fields),
+    fields.length,
+  );
+}
+
+/** Fields a ContractClassPublished log leaves for the bytecode encoding (length prefix included) after tag and metadata. */
+const BYTECODE_ENCODING_FIELDS = CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - 5;
+
+/**
+ * Builds a publication-looking ContractClassPublished log whose bytecode encoding declares
+ * `declaredByteLength` bytes but carries an all-zero payload.
+ */
+function buildContractClassPublishedLog(declaredByteLength: number, classId: Fr): ContractClassLog {
+  const fields = [
+    new Fr(CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE),
+    classId,
+    new Fr(1), // version
+    Fr.random(), // artifactHash
+    Fr.random(), // privateFunctionsRoot
+    new Fr(declaredByteLength),
+  ];
+  const padded = [...fields, ...Array(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - fields.length).fill(Fr.ZERO)];
+  return new ContractClassLog(
+    ProtocolContractAddress.ContractClassRegistry,
+    new ContractClassLogFields(padded),
     fields.length,
   );
 }
@@ -478,6 +503,90 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
       const timestamp = block2.header.globalVariables.timestamp + 1n;
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
+    });
+
+    it('persists the checkpoint when a contract class log declares a bytecode length over the packed limit', async () => {
+      // One byte past the protocol maximum still fits the physical log width, so the decoder used to
+      // accept it and the bytecode commitment blew up later, aborting the whole checkpoint transaction.
+      const overLimitLength = (MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS - 1) * (Fr.SIZE_IN_BYTES - 1) + 1;
+      const malformedClassId = Fr.random();
+
+      // A tx can carry at most one contract class log, so the malformed one rides its own tx effect.
+      const block = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        txsPerBlock: 2,
+      });
+      block.body.txEffects[0].contractClassLogs = [contractClassLog];
+      block.body.txEffects[1].contractClassLogs = [buildContractClassPublishedLog(overLimitLength, malformedClassId)];
+
+      await expect(
+        updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]),
+      ).resolves.toBeDefined();
+
+      const storedBlock = await store.blocks.getBlock({ number: BlockNumber(1) });
+      expect(storedBlock?.archive.root.equals(block.archive.root)).toBe(true);
+      expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
+      expect(await store.contractClasses.getContractClass(malformedClassId)).toBeUndefined();
+    });
+
+    it('persists the checkpoint when a contract class log declares a bytecode length over the log capacity', async () => {
+      const overCapacityLength = (BYTECODE_ENCODING_FIELDS - 1) * (Fr.SIZE_IN_BYTES - 1) + 1;
+      const malformedClassId = Fr.random();
+
+      // A tx can carry at most one contract class log, so the malformed one rides its own tx effect.
+      const block = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        txsPerBlock: 2,
+      });
+      block.body.txEffects[0].contractClassLogs = [contractClassLog];
+      block.body.txEffects[1].contractClassLogs = [
+        buildContractClassPublishedLog(overCapacityLength, malformedClassId),
+      ];
+
+      await expect(
+        updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]),
+      ).resolves.toBeDefined();
+
+      const storedBlock = await store.blocks.getBlock({ number: BlockNumber(1) });
+      expect(storedBlock?.archive.root.equals(block.archive.root)).toBe(true);
+      expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
+      expect(await store.contractClasses.getContractClass(malformedClassId)).toBeUndefined();
+    });
+
+    it('persists the checkpoint when computing a bytecode commitment fails for one class', async () => {
+      const failingClassId = Fr.random();
+      const original = ContractClassPublishedEvent.prototype.toContractClassPublicWithBytecodeCommitment;
+      const spy = jest
+        .spyOn(ContractClassPublishedEvent.prototype, 'toContractClassPublicWithBytecodeCommitment')
+        .mockImplementation(function (this: ContractClassPublishedEvent) {
+          return this.contractClassId.equals(failingClassId)
+            ? Promise.reject(new Error('bytecode commitment failed'))
+            : original.call(this);
+        });
+
+      try {
+        // A tx can carry at most one contract class log, so the malformed one rides its own tx effect.
+        const block = await randomBlock(1, {
+          checkpointNumber: CheckpointNumber(1),
+          indexWithinCheckpoint: IndexWithinCheckpoint(0),
+          txsPerBlock: 2,
+        });
+        block.body.txEffects[0].contractClassLogs = [contractClassLog];
+        block.body.txEffects[1].contractClassLogs = [buildContractClassPublishedLog(0, failingClassId)];
+
+        await expect(
+          updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]),
+        ).resolves.toBeDefined();
+
+        const storedBlock = await store.blocks.getBlock({ number: BlockNumber(1) });
+        expect(storedBlock?.archive.root.equals(block.archive.root)).toBe(true);
+        expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
+        expect(await store.contractClasses.getContractClass(failingClassId)).toBeUndefined();
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 
