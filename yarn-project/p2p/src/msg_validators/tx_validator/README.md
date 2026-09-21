@@ -22,12 +22,14 @@ Unsolicited transactions from any peer. Fully validated in two stages with a poo
 
 | Step | What runs | On failure |
 |------|-----------|------------|
-| **Stage 1** (fast) | TxPermitted, Data, Metadata, Timestamp, DoubleSpend, MinGasLimits, MaxGasLimits, Gas, Phases, BlockHeader | Penalize peer, reject tx |
+| **Stage 1** (fast) | TxPermitted, Data, Metadata, Timestamp, DoubleSpend, MinGasLimits, MaxGasLimits, MaxFeePerGas, FeePayerBalance, Phases, BlockHeader | Penalize peer, reject tx (except MaxFeePerGas: ignore tx, no penalty) |
 | **Pool pre-check** | `canAddPendingTx` — checks for duplicates, pool capacity | Ignore tx (no penalty) |
 | **Stage 2** (slow) | Proof verification | Penalize peer, reject tx |
 | **Pool add** | `addPendingTxs` | Accept, ignore, or reject |
 
-Each stage-1 and stage-2 validator is paired with a `PeerErrorSeverity`. If a validator fails, the sending peer is penalized with that severity. The `doubleSpendValidator` has special handling: its severity is determined by how recently the nullifier appeared (recent = high tolerance, old = low tolerance).
+Each stage-1 and stage-2 validator is paired with a `PeerErrorSeverity`, and the sending peer is penalized with that severity when it fails. When several validators fail, the harshest consequence wins. The `doubleSpendValidator` has special handling: its severity is determined by how recently the nullifier appeared (recent = high tolerance, old = low tolerance).
+
+`maxFeePerGasValidator` is the exception, marked `IgnoreWithoutPenalty`: a tx below the fee this node resolved for the next block may be perfectly valid for a peer ahead of us, so it is dropped without propagating and the peer keeps its score. Being the mildest consequence, it never masks a penalized failure on the same tx — which is why the fee-payer balance check is a separate entry (`feePayerBalanceValidator`) that stays penalized.
 
 ### 2. JSON-RPC
 
@@ -96,10 +98,11 @@ The `AllowedSetupCallsMetaValidator` checks a precomputed boolean flag (`TxMetaD
 | `MetadataTxValidator` | Chain ID, rollup version, protocol contracts hash, VK tree root | 4.18 us |
 | `TimestampTxValidator` | Transaction has not expired (expiration timestamp vs next slot) | 1.56 us |
 | `DoubleSpendTxValidator` | Nullifiers do not already exist in the nullifier tree | 106.08 us |
-| `GasTxValidator` | Max fee per gas meets current block fees (delegates to `MaxFeePerGasValidator`), and fee payer has sufficient FeeJuice balance | 1.02 ms |
+| `GasTxValidator` | Max fee per gas meets current block fees (delegates to `MaxFeePerGasValidator`), and fee payer has sufficient FeeJuice balance (delegates to `FeePayerBalanceValidator`) | 1.02 ms |
+| `FeePayerBalanceValidator` | Fee payer's FeeJuice balance, plus any setup-phase claim, covers the tx's fee limit. Used standalone in gossip, alongside `MaxFeePerGasValidator`; also called internally by `GasTxValidator` | ~1 ms |
 | `MinGasLimitsValidator` | Gas limits are >= the fixed protocol overheads. Applies on every entry point, with no exemptions | 3–10 us |
 | `MaxGasLimitsValidator` | Gas limits are <= AVM max processable L2 gas (optionally clamped further by network admission limits). Exempted on the gas estimation path | 3–10 us |
-| `MaxFeePerGasValidator` | Max fee per gas >= current block gas fees on both dimensions (DA and L2). Used standalone in pool migration; also called internally by `GasTxValidator` | 3–10 us |
+| `MaxFeePerGasValidator` | Max fee per gas >= current block gas fees on both dimensions (DA and L2). Used standalone in pool migration and in gossip; also called internally by `GasTxValidator` | 3–10 us |
 | `PhasesTxValidator` | Public function calls in setup phase are on the allow list | 10.12–13.12 us |
 | `AllowedSetupCallsMetaValidator` | Checks the precomputed `allowedSetupCalls` flag on `TxMetaData`. Used in pool migration instead of the full `PhasesTxValidator` | — |
 | `BlockHeaderTxValidator` | Transaction's anchor block hash exists in the archive tree | 98.88 us |
@@ -115,16 +118,17 @@ The `AllowedSetupCallsMetaValidator` checks a precomputed boolean flag (`TxMetaD
 | Metadata | Stage 1 | Yes | Yes | — | — |
 | Timestamp | Stage 1 | Yes | — | Yes | Yes |
 | DoubleSpend | Stage 1 | Yes | — | Yes | Yes |
-| Gas (fee balance) | Stage 1 | Optional* | — | Yes | — |
+| Gas (fee balance) | — | Optional* | — | Yes | — |
 | MinGasLimits | Stage 1 | Yes | — | Yes | Yes |
 | MaxGasLimits | Stage 1 | Yes*** | — | Yes | Yes |
-| MaxFeePerGas (standalone) | — | — | — | — | Yes |
+| MaxFeePerGas (standalone) | Stage 1 | — | — | — | Yes |
+| FeePayerBalance (standalone) | Stage 1 | — | — | — | — |
 | Phases | Stage 1 | Yes | — | Yes | — |
 | AllowedSetupCalls | — | — | — | — | Yes |
 | BlockHeader | Stage 1 | Yes | — | Yes | Yes |
 | Proof | Stage 2 | Optional** | Yes | — | — |
 
-\* Gas balance check is skipped when `skipFeeEnforcement` is set (testing/dev). `GasTxValidator` internally delegates to `MaxFeePerGasValidator` as its first step, so fee-per-gas is checked wherever `GasTxValidator` runs. Pool migration uses `MaxFeePerGasValidator` standalone because it doesn't need the balance check. Declared gas-limit validation is owned solely by `MinGasLimitsValidator` and `MaxGasLimitsValidator`.
+\* Gas balance check is skipped when `skipFeeEnforcement` is set (testing/dev). `GasTxValidator` internally delegates to `MaxFeePerGasValidator` as its first step, so fee-per-gas is checked wherever `GasTxValidator` runs. Gossip runs both halves standalone instead, so each can carry its own peer penalty. Pool migration uses `MaxFeePerGasValidator` standalone because it doesn't need the balance check. Declared gas-limit validation is owned solely by `MinGasLimitsValidator` and `MaxGasLimitsValidator`.
 \** Proof verification is skipped for simulations (no verifier provided).
 \*** Only the ceiling is skipped for simulations: gas estimation submits limits above the per-tx maximum, and the wallet clamps the real tx to the admission limit afterward. The floor still applies, since a tx below it can never be mined.
 

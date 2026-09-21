@@ -77,6 +77,8 @@ import {
 } from '../../msg_validators/index.js';
 import { MessageSeenValidator } from '../../msg_validators/msg_seen_validator/msg_seen_validator.js';
 import {
+  type GossipValidationFailure,
+  IgnoreWithoutPenalty,
   type TransactionValidator,
   createFirstStageTxValidationsForGossipedTransactions,
   createSecondStageTxValidationsForGossipedTransactions,
@@ -143,13 +145,21 @@ function buildConsensusTimetable(
   });
 }
 
-interface ValidationResult {
+interface ValidationResult<F extends GossipValidationFailure> {
   name: string;
   isValid: TxValidationResult;
-  severity: PeerErrorSeverity;
+  severity: F;
 }
 
-type ValidationOutcome = { allPassed: true } | { allPassed: false; failure: ValidationResult };
+/**
+ * Failure consequences ordered from mildest to harshest, so the outcome of a stage is the harshest failure it
+ * produced. A penalty-free ignore is the mildest: any penalized failure on the same tx wins over it.
+ */
+const GossipValidationFailureByHarshness = [IgnoreWithoutPenalty, ...PeerErrorSeverityByHarshness] as const;
+
+type ValidationOutcome<F extends GossipValidationFailure> =
+  | { allPassed: true }
+  | { allPassed: false; failure: ValidationResult<F> };
 
 // REFACTOR: Unify with the type above
 type ReceivedMessageValidationResult<T, M = undefined> =
@@ -1138,6 +1148,16 @@ export class LibP2PService extends WithTracer implements P2PService {
         const { name } = firstStageOutcome.failure;
         let { severity } = firstStageOutcome.failure;
 
+        // The tx failed a check that only holds against this node's own view (it pays less than the fee we
+        // resolved for the next block). Drop it without propagating, but leave the sender's score alone.
+        if (severity === IgnoreWithoutPenalty) {
+          this.logger.verbose(`Ignoring gossiped tx ${tx.getTxHash().toString()}: stage 1 local check failed`, {
+            validator: name,
+            source: source.toString(),
+          });
+          return { result: TopicValidatorResult.Ignore, obj: tx };
+        }
+
         // Double spend validator has a special case handler. We perform more detailed examination
         // as to how recently the nullifier was entered into the tree and if the transaction should
         // have 'known' the nullifier existed. This determines the severity of the penalty applied to the peer.
@@ -1855,7 +1875,7 @@ export class LibP2PService extends WithTracer implements P2PService {
   protected async createFirstStageMessageValidators(
     currentBlockNumber: BlockNumber,
     nextSlotTimestamp: UInt64,
-  ): Promise<Record<string, TransactionValidator>> {
+  ): Promise<Record<string, TransactionValidator<GossipValidationFailure>>> {
     const gasFees = await this.getGasFees();
     const allowedInSetup = [
       ...(await getDefaultAllowedSetupFunctions()),
@@ -1895,10 +1915,10 @@ export class LibP2PService extends WithTracer implements P2PService {
    * @param messageValidators - The message validators to run.
    * @returns The validation outcome.
    */
-  private async runValidations(
+  private async runValidations<F extends GossipValidationFailure>(
     tx: Tx,
-    messageValidators: Record<string, TransactionValidator>,
-  ): Promise<ValidationOutcome> {
+    messageValidators: Record<string, TransactionValidator<F>>,
+  ): Promise<ValidationOutcome<F>> {
     // Gossip validation stays exhaustive within each stage because peer scoring uses the harshest failure severity;
     // failing fast would make the penalty depend on validator order. The stage boundaries themselves fail fast.
     const validationPromises = Object.entries(messageValidators).map(async ([name, { validator, severity }]) => {
@@ -1911,7 +1931,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     const failures = allValidations.filter(x => !x.isValid);
     if (failures.length > 0) {
       // Pick the most severe failure (lowest tolerance = harshest penalty)
-      const failed = maxBy(failures, f => PeerErrorSeverityByHarshness.indexOf(f.severity))!;
+      const failed = maxBy(failures, f => GossipValidationFailureByHarshness.indexOf(f.severity))!;
       return {
         allPassed: false,
         failure: {

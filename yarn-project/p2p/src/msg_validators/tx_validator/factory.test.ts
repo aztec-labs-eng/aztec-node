@@ -26,6 +26,7 @@ import { ContractInstanceTxValidator } from './contract_instance_validator.js';
 import { DataTxValidator } from './data_validator.js';
 import { DoubleSpendTxValidator } from './double_spend_validator.js';
 import {
+  IgnoreWithoutPenalty,
   createFirstStageTxValidationsForGossipedTransactions,
   createSecondStageTxValidationsForGossipedTransactions,
   createTxValidatorForAcceptingTxsOverRPC,
@@ -112,7 +113,8 @@ describe('Validator factory functions', () => {
         'doubleSpendValidator',
         'minGasLimitsValidator',
         'maxGasLimitsValidator',
-        'gasValidator',
+        'maxFeePerGasValidator',
+        'feePayerBalanceValidator',
         'dataValidator',
         'contractInstanceValidator',
       ]);
@@ -213,7 +215,10 @@ describe('Validator factory functions', () => {
       expect(validators.doubleSpendValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.minGasLimitsValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.maxGasLimitsValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
-      expect(validators.gasValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
+      expect(validators.feePayerBalanceValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
+
+      // A tx below our next-block fee may be valid for a peer ahead of us, so the sender is not penalized.
+      expect(validators.maxFeePerGasValidator.severity).toBe(IgnoreWithoutPenalty);
       expect(validators.phasesValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
     });
 
