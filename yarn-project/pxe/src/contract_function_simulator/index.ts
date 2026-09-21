@@ -85,6 +85,7 @@ export { UtilityExecutionOracle } from './oracle/utility_execution_oracle.js';
 export { PrivateExecutionOracle } from './oracle/private_execution_oracle.js';
 export { buildACIRCallback, UnavailableOracleError } from './oracle/acir_callback.js';
 export { LEGACY_ORACLE_REGISTRY } from './oracle/legacy_oracle_registry.js';
+export { PROTOCOL_ORACLE_REGISTRY } from './oracle/protocol_oracle_registry.js';
 export { executePrivateFunction, extractPrivateCircuitPublicInputs } from './oracle/private_execution.js';
 export { generateSimulatedProvingResult } from './contract_function_simulator.js';
 export { packAsHintedNote } from './oracle/note_packing_utils.js';

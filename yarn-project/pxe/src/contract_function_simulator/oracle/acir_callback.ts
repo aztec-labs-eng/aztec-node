@@ -1,9 +1,12 @@
+import { isProtocolContract } from '@aztec-labs/protocol-contracts';
 import type { ACIRCallback, ACVMField } from '@aztec-labs/simulator/client';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
-import { ORACLE_VERSION_MAJOR, ORACLE_VERSION_MINOR } from '../../oracle_version.js';
+import { ORACLE_VERSION_MAJOR, ORACLE_VERSION_MINOR, PROTOCOL_ORACLE_VERSION } from '../../oracle_version.js';
 import type { IMiscOracle, IPrivateExecutionOracle, IUtilityExecutionOracle } from './interfaces.js';
 import { LEGACY_ORACLE_REGISTRY, type LegacyOracleEntry } from './legacy_oracle_registry.js';
 import { type NamedValue, ORACLE_REGISTRY, type OracleRegistryEntry, makeEntry } from './oracle_registry.js';
+import { PROTOCOL_ORACLE_REGISTRY, type ProtocolOracleEntry } from './protocol_oracle_registry.js';
 
 export class UnavailableOracleError extends Error {
   constructor(oracleName: string) {
@@ -20,12 +23,20 @@ export class UnavailableOracleError extends Error {
  */
 export function buildACIRCallback(
   handler: OracleHandler,
-  registries: {
+  options: {
+    /** The contract whose function the callback is built for. */
+    contractAddress?: AztecAddress;
     real?: Record<string, OracleRegistryEntry>;
     legacy?: Record<string, LegacyOracleEntry>;
+    protocol?: Record<string, ProtocolOracleEntry>;
   } = {},
 ): ACIRCallback {
-  const { real = ORACLE_REGISTRY, legacy: legacyRegistry = LEGACY_ORACLE_REGISTRY } = registries;
+  const {
+    contractAddress,
+    real = ORACLE_REGISTRY,
+    legacy: legacyRegistry = LEGACY_ORACLE_REGISTRY,
+    protocol: protocolRegistry = PROTOCOL_ORACLE_REGISTRY,
+  } = options;
   const target = {} as ACIRCallback;
   for (const [oracleKey, entry] of Object.entries(real)) {
     const { scope, methodName } = parseOracleName(oracleKey, 'Oracle');
@@ -61,7 +72,21 @@ export function buildACIRCallback(
     };
   }
 
-  return new Proxy(target, makeUnknownOracleTrap(handler));
+  // Protocol oracle names: served to protocol contracts only, each with its own wire.
+  for (const [protocolKey, protocol] of Object.entries(protocolRegistry)) {
+    if (protocolKey in target) {
+      throw new Error(`Protocol oracle "${protocolKey}" collides with another oracle of the same name`);
+    }
+    const wire = makeEntry({ params: [...protocol.params], returnType: protocol.returnType });
+    target[protocolKey] = async (...inputs: ACVMField[][]) => {
+      assertCalledByProtocolContract(protocolKey, contractAddress);
+      assertHandlerSupportsScope(handler, protocol.oracleKind);
+      const args = wire.deserializeParams(inputs).map(p => p.value);
+      return wire.serializeReturn(await protocol.serve(handler, args));
+    };
+  }
+
+  return new Proxy(target, makeUnknownOracleTrap(handler, contractAddress));
 }
 
 /** Parses an `aztec_{scope}_{method}` oracle name into its parts, throwing if it doesn't follow the convention. */
@@ -73,11 +98,21 @@ function parseOracleName(key: string, label: string): { scope: string; methodNam
   return { scope: match[1], methodName: match[2] };
 }
 
+function assertCalledByProtocolContract(oracleName: string, contractAddress: AztecAddress | undefined): void {
+  if (contractAddress === undefined || !isProtocolContract(contractAddress)) {
+    const caller = contractAddress ?? 'a caller that is not a contract';
+    throw new Error(`Oracle '${oracleName}' can only be called by protocol contracts, but was called by ${caller}`);
+  }
+}
+
 /**
  * Proxy trap for the callback table: a known oracle name passes through; an unknown one throws a diagnostic keyed on
  * the contract's oracle version (version unknown, contract newer than this environment, or a same-version mismatch).
  */
-function makeUnknownOracleTrap(handler: OracleHandler): ProxyHandler<ACIRCallback> {
+function makeUnknownOracleTrap(
+  handler: OracleHandler,
+  contractAddress: AztecAddress | undefined,
+): ProxyHandler<ACIRCallback> {
   return {
     get(obj, prop: string) {
       // Own-property check only: `in` would match inherited `Object.prototype` keys (e.g. `constructor`, `toString`)
@@ -87,6 +122,13 @@ function makeUnknownOracleTrap(handler: OracleHandler): ProxyHandler<ACIRCallbac
       }
 
       return () => {
+        if (contractAddress !== undefined && isProtocolContract(contractAddress)) {
+          throw new Error(
+            `Oracle '${prop}' not found. It was called by a protocol contract, whose oracles are those of protocol` +
+              ` oracle version ${PROTOCOL_ORACLE_VERSION}.`,
+          );
+        }
+
         let contractVersion = undefined;
         if ('nonOracleFunctionGetContractOracleVersion' in handler) {
           contractVersion = (

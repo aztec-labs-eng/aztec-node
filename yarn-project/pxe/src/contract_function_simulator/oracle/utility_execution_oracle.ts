@@ -1117,7 +1117,11 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
 
     const initialWitness = toACVMWitness(0, args);
     const acirExecutionResult = await this.simulator
-      .executeUserCircuit(initialWitness, targetArtifact, buildACIRCallback(nestedOracle))
+      .executeUserCircuit(
+        initialWitness,
+        targetArtifact,
+        buildACIRCallback(nestedOracle, { contractAddress: targetContractAddress }),
+      )
       .catch((err: Error) => {
         err.message = resolveAssertionMessageFromError(err, targetArtifact);
         throw new ExecutionError(
