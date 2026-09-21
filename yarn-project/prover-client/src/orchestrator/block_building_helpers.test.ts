@@ -2,7 +2,7 @@ import { commitmentToFields, computeBlobFieldsHash, encodeCheckpointEndMarker } 
 import { MAX_U32_VALUE } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toInlineStrArray } from '@aztec-labs/foundation/testing';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { buildBlobHints } from './block-building-helpers.js';
 
@@ -42,22 +42,22 @@ describe('buildBlobHints', () => {
     expect(yStr).toMatchInlineSnapshot(`"0x1b1e010b93e259b5f5f51a5d7d75bc99494d94bc221b867eaa938c83c82e679d"`);
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/rollup-lib/src/checkpoint_root/tests/blob_tests.nr',
       'blob_fields_from_ts',
       toInlineStrArray(blobFields),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/rollup-lib/src/checkpoint_root/tests/blob_tests.nr',
       'blob_commitment_limbs_x_from_ts',
       toInlineStrArray(blobCommitments[0].x.toNoirBigNum().limbs),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/rollup-lib/src/checkpoint_root/tests/blob_tests.nr',
       'blob_commitment_limbs_y_from_ts',
       toInlineStrArray(blobCommitments[0].y.toNoirBigNum().limbs),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/rollup-lib/src/checkpoint_root/tests/blob_tests.nr',
       'challenge_z_from_ts',
       zStr,

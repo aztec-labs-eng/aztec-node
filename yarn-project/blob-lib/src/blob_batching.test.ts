@@ -6,7 +6,7 @@ import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import { BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toInlineStrArray } from '@aztec-labs/foundation/testing';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 import { fileURLToPath } from '@aztec-labs/foundation/url';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -90,32 +90,32 @@ describe('Blob Batching', () => {
     expect(y.toString()).toMatchInlineSnapshot(`"0x4ce55c5064c1c1115988f901a3928433a4f63403f694f4e5f9341d1fc274a09c"`);
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob_batching.nr',
       'blob_fields_hash_blob_400_from_ts',
       blobFieldsHash.toString(),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob_batching.nr',
       'kzg_commitment_x_limbs_blob_400_from_ts',
       toInlineStrArray(commitment.x.toNoirBigNum().limbs),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob_batching.nr',
       'kzg_commitment_y_limbs_blob_400_from_ts',
       toInlineStrArray(commitment.y.toNoirBigNum().limbs),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob_batching.nr',
       'z_blob_400_from_ts',
       finalZ.toString(),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob_batching.nr',
       'gamma_limbs_blob_400_from_ts',
       toInlineStrArray(finalGamma.toNoirBigNum().limbs),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob_batching.nr',
       'y_limbs_blob_400_from_ts',
       toInlineStrArray(y.toNoirBigNum().limbs),
@@ -209,42 +209,42 @@ describe('Blob Batching', () => {
       function writeNoirTestData(filePath: string) {
         // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
         if (!isCheckpointRootTest) {
-          updateInlineTestData(filePath, `blob_fields_hash_${numBlobs}_blobs_from_ts`, blobFieldsHash.toString());
+          updateInlineFndTestData(filePath, `blob_fields_hash_${numBlobs}_blobs_from_ts`, blobFieldsHash.toString());
         }
         for (let i = 0; i < numBlobs; i++) {
-          updateInlineTestData(
+          updateInlineFndTestData(
             filePath,
             `kzg_commitment_x_limbs_blob_${i}_from_ts`,
             toInlineStrArray(commitments[i].x.toNoirBigNum().limbs),
           );
-          updateInlineTestData(
+          updateInlineFndTestData(
             filePath,
             `kzg_commitment_y_limbs_blob_${i}_from_ts`,
             toInlineStrArray(commitments[i].y.toNoirBigNum().limbs),
           );
         }
-        updateInlineTestData(filePath, `z_${numBlobs}_blobs_from_ts`, finalZ.toString());
-        updateInlineTestData(
+        updateInlineFndTestData(filePath, `z_${numBlobs}_blobs_from_ts`, finalZ.toString());
+        updateInlineFndTestData(
           filePath,
           `gamma_limbs_${numBlobs}_blobs_from_ts`,
           toInlineStrArray(finalGamma.toNoirBigNum().limbs),
         );
-        updateInlineTestData(
+        updateInlineFndTestData(
           filePath,
           `y_limbs_${numBlobs}_blobs_from_ts`,
           toInlineStrArray(finalY.toNoirBigNum().limbs),
         );
-        updateInlineTestData(
+        updateInlineFndTestData(
           filePath,
           `batched_c_x_limbs_${numBlobs}_blobs_from_ts`,
           toInlineStrArray(batchedC.x.toNoirBigNum().limbs),
         );
-        updateInlineTestData(
+        updateInlineFndTestData(
           filePath,
           `batched_c_y_limbs_${numBlobs}_blobs_from_ts`,
           toInlineStrArray(batchedC.y.toNoirBigNum().limbs),
         );
-        updateInlineTestData(
+        updateInlineFndTestData(
           filePath,
           `blob_commitments_hash_${numBlobs}_blobs_from_ts`,
           batchedBlob.blobCommitmentsHash.toString(),

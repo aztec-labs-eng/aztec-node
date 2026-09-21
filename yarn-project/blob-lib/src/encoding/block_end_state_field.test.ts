@@ -5,7 +5,7 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import {
   TOTAL_MANA_USED_BIT_SIZE,
@@ -28,7 +28,7 @@ describe('block end state field', () => {
     expect(decoded).toEqual(blockEndStateField);
 
     // AZTEC_GENERATE_TEST_DATA=1 yarn test block_end_state_field.test.ts
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/block_blob_data.nr',
       'block_end_state_field_from_typescript',
       encoded.toString(),
@@ -49,7 +49,7 @@ describe('block end state field', () => {
     expect(decoded).toEqual(blockEndStateField);
 
     // AZTEC_GENERATE_TEST_DATA=1 yarn test block_end_state_field.test.ts
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/block_blob_data.nr',
       'large_block_end_state_field_from_typescript',
       encoded.toString(),
