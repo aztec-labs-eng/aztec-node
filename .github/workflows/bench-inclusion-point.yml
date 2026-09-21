@@ -26,10 +26,6 @@ on:
         description: "Full aztec docker image (already deployed)"
         required: true
         type: string
-      source_ref:
-        description: "Git ref to checkout for the bench scripts"
-        required: true
-        type: string
       sweep_id:
         description: "Shared sweep id so the dashboard groups the points"
         required: true
@@ -49,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: main
           persist-credentials: false
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

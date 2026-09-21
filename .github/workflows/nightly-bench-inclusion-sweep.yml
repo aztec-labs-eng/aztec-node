@@ -6,22 +6,22 @@ name: Nightly Bench Inclusion Sweep
 # points. Each point is the reusable bench-inclusion-point.yml workflow
 # (SKIP_NETWORK_DEPLOY=1); the next point's call `needs` the previous one so they
 # don't overlap. Deploy / wait-for-first-block / teardown happen once.
+#
+# Every checkout in this file is pinned to main. These jobs hold the `deployment` environment's GCP credential,
+# so the code they run must not be selectable by whoever dispatches them; the version under test is
+# the docker image, which is what the inputs below choose.
 
 on:
   # schedule:
   #   # 06:00 UTC, matching the other nightly consumers (spartan-bench, deploy-next-net).
-  #   # The nightly git tag + docker image this sweep resolves are produced by the
-  #   # Nightly Release Tag workflow at 04:00 UTC; running earlier races that job and
-  #   # fails "Verify source git ref" with "couldn't find remote ref".
+  #   # The nightly docker image this sweep resolves is produced by the Nightly Release
+  #   # Tag workflow at 04:00 UTC; running earlier races that job and fails
+  #   # "Check if Docker image exists".
   #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       image_tag:
         description: "Docker image tag to deploy (e.g., 2.3.4-nightly.20251209). Leave empty to auto-detect the nightly."
-        required: false
-        type: string
-      source_ref:
-        description: "Git ref to checkout for the bench scripts (e.g., v5.0.0-nightly.20260529). Required when image_tag is not a standard nightly tag."
         required: false
         type: string
 
@@ -43,7 +43,6 @@ jobs:
     outputs:
       docker_image: ${{ steps.docker-image.outputs.docker_image }}
       image_tag: ${{ steps.docker-image.outputs.image_tag }}
-      source_ref: ${{ steps.docker-image.outputs.source_ref }}
       sweep_id: ${{ steps.sweep.outputs.sweep_id }}
     steps:
       - name: Checkout
@@ -64,27 +63,9 @@ jobs:
 
           docker_image="azteclabs/aztec:${image_tag}"
 
-          if [[ -n "${{ inputs.source_ref }}" ]]; then
-            source_ref="${{ inputs.source_ref }}"
-          elif [[ "$image_tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}$ ]]; then
-            source_ref="v${image_tag}"
-          else
-            echo "Could not infer git ref from image tag. Pass workflow input source_ref."
-            exit 1
-          fi
-
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
-          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
           echo "Using docker image: $docker_image"
-          echo "Using source ref: $source_ref"
-
-      - name: Verify source git ref
-        run: |
-          set -euo pipefail
-          source_ref="${{ steps.docker-image.outputs.source_ref }}"
-          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
-          git rev-parse "${source_ref}^{}"
 
       - name: Check if Docker image exists
         run: |
@@ -122,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -144,7 +125,6 @@ jobs:
       tps: "1"
       namespace: bench-inclusion-sweep
       docker_image: ${{ needs.select-image.outputs.docker_image }}
-      source_ref: ${{ needs.select-image.outputs.source_ref }}
       sweep_id: ${{ needs.select-image.outputs.sweep_id }}
     secrets: inherit
 
@@ -158,7 +138,6 @@ jobs:
       tps: "5"
       namespace: bench-inclusion-sweep
       docker_image: ${{ needs.select-image.outputs.docker_image }}
-      source_ref: ${{ needs.select-image.outputs.source_ref }}
       sweep_id: ${{ needs.select-image.outputs.sweep_id }}
     secrets: inherit
 
@@ -170,7 +149,6 @@ jobs:
       tps: "10"
       namespace: bench-inclusion-sweep
       docker_image: ${{ needs.select-image.outputs.docker_image }}
-      source_ref: ${{ needs.select-image.outputs.source_ref }}
       sweep_id: ${{ needs.select-image.outputs.sweep_id }}
     secrets: inherit
 
@@ -183,7 +161,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -213,7 +191,7 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
       - name: Notify Slack on failure
         env:

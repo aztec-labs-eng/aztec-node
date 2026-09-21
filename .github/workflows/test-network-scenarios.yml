@@ -16,18 +16,15 @@ on:
   workflow_dispatch:
     inputs:
       docker_image:
-        description: Complete docker image to use (e.g., azteclabs/aztec:some-tag)
-        required: true
-        type: string
-      ref:
-        description: Git ref to checkout for the scenario runner.
+        description: Docker image to test, e.g. azteclabs/aztec:6.0.0-nightly.20260921. Empty uses today's nightly.
         required: false
         type: string
-        default: main
+        default: ""
       namespace:
-        description: Kubernetes namespace to use (will be sanitized for k8s naming)
-        required: true
+        description: Kubernetes namespace to use (will be sanitized for k8s naming). Empty derives one from the image.
+        required: false
         type: string
+        default: ""
       env_file:
         description: Network configuration to use (local, devnet, testnet, next-scenario, tps-scenario)
         required: false
@@ -44,7 +41,7 @@ concurrency:
   cancel-in-progress: true
 
 # actions: write lets the failure handler dispatch claudebox.yml with the built-in
-# token (and covers wait_for_release's workflow-run queries on scheduled runs).
+# token (and covers wait_for_release's workflow-run queries).
 # id-token: write lets the job assume the AWS role via OIDC.
 permissions:
   contents: read
@@ -52,15 +49,14 @@ permissions:
   id-token: write
 
 jobs:
-  # Scheduled runs only: construct today's nightly tag (never "latest", so a broken
-  # tag cron fails here instead of silently re-testing an old image).
+  # Resolves the image under test: the input if given, otherwise today's nightly (never
+  # "latest", so a broken tag cron fails here instead of silently re-testing an old image).
   select-image:
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     outputs:
-      semver: ${{ steps.nightly-tag.outputs.semver }}
-      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
-      source_sha: ${{ steps.verify.outputs.source_sha }}
+      docker_image: ${{ steps.image.outputs.docker_image }}
+      semver: ${{ steps.image.outputs.semver }}
+      release_tag: ${{ steps.image.outputs.release_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -68,29 +64,54 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Determine nightly tag
-        id: nightly-tag
-        run: |
-          current_version=$(jq -r '."."' .release-please-manifest.json)
-          semver="${current_version}-nightly.$(date -u +%Y%m%d)"
-          echo "semver=$semver" >> "$GITHUB_OUTPUT"
-          echo "source_ref=v$semver" >> "$GITHUB_OUTPUT"
-          echo "Using nightly tag: v$semver"
-
-      - name: Verify source git ref
-        id: verify
+      - name: Resolve the image under test
+        id: image
+        env:
+          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
         run: |
           set -euo pipefail
-          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
-          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
-          source_sha=$(git rev-parse "${source_ref}^{}")
-          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
-          echo "Nightly source commit: $source_sha"
+          if [[ -n "$INPUT_DOCKER_IMAGE" ]]; then
+            docker_image="$INPUT_DOCKER_IMAGE"
+            semver="${docker_image##*:}"
+            release_tag=""
+          else
+            current_version=$(jq -r '."."' .release-please-manifest.json)
+            semver="${current_version}-nightly.$(date -u +%Y%m%d)"
+            docker_image="azteclabs/aztec:${semver}"
+            release_tag="v${semver}"
+          fi
+          # This value is written to $GITHUB_OUTPUT and reaches a run: script, so anything that
+          # could forge a second output line or break out of a quoted argument is refused. The
+          # rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$docker_image" =~ ^[A-Za-z0-9][A-Za-z0-9._/:-]*$ ]]; then
+            echo "::error::Invalid docker image reference rejected."
+            exit 1
+          fi
+          # An untagged reference resolves to :latest, which these runs never want and which the
+          # terraform that splits the reference on ':' cannot handle.
+          if [[ "${docker_image##*/}" != *:* ]]; then
+            echo "::error::Name the tag explicitly, e.g. azteclabs/aztec:6.0.0-nightly.20260921"
+            exit 1
+          fi
+          echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
+          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "Testing image: $docker_image"
+
+      # A named image has to exist already; a derived nightly is gated by wait-for-release instead,
+      # since its release build may still be running.
+      - name: Verify the image exists
+        if: steps.image.outputs.release_tag == ''
+        env:
+          DOCKER_IMAGE: ${{ steps.image.outputs.docker_image }}
+        run: docker manifest inspect "$DOCKER_IMAGE" >/dev/null
 
   # Block until the nightly tag's release build has published the docker image,
   # so the deploy below doesn't race the build and hit ImagePullBackOff.
   wait-for-release:
     needs: select-image
+    # Only a derived nightly needs the gate; a named image was verified above.
+    if: needs.select-image.outputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -107,12 +128,12 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.source_ref }}"
+        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.release_tag }}"
 
   deploy-and-test:
     needs: [select-image, wait-for-release]
-    # Dispatch runs skip the nightly gate jobs; scheduled runs require the gate to pass.
-    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.wait-for-release.result == 'success') }}
+    # The gate is skipped for a named image and must pass for a derived nightly.
+    if: ${{ !cancelled() && needs.select-image.result == 'success' && needs.wait-for-release.result != 'failure' }}
     runs-on: ubuntu-latest
     # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
     environment: deployment
@@ -124,8 +145,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          # Scheduled runs check out the nightly tag so the runner matches the release.
-          ref: ${{ inputs.ref || needs.select-image.outputs.source_ref }}
+          ref: main
           persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
@@ -136,25 +156,24 @@ jobs:
           role-session-name: test-network-scenarios-${{ github.run_id }}
           role-duration-seconds: 23400 # 6.5h – covers AWS_SHUTDOWN_TIME (360 min) + 30 min buffer
 
-      - name: Resolve docker image and namespace
+      - name: Resolve namespace
         env:
-          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
           INPUT_NAMESPACE: ${{ inputs.namespace }}
-          NIGHTLY_SEMVER: ${{ needs.select-image.outputs.semver }}
+          SEMVER: ${{ needs.select-image.outputs.semver }}
+          RUN_ID: ${{ github.run_id }}
+          DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
         run: |
+          set -euo pipefail
           if [[ -n "$INPUT_NAMESPACE" ]]; then
             namespace=$(echo "$INPUT_NAMESPACE" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20)
-            docker_image="$INPUT_DOCKER_IMAGE"
-          elif [[ -n "$NIGHTLY_SEMVER" ]]; then
-            major_version=$(./ci3/semver major "$NIGHTLY_SEMVER")
-            namespace="v${major_version}-scenario"
-            docker_image="azteclabs/aztec:${NIGHTLY_SEMVER}"
+          elif major=$(./ci3/semver major "$SEMVER" 2>/dev/null) && [[ -n "$major" ]]; then
+            namespace="v${major}-scenario"
           else
-            echo "No namespace input and no nightly tag context." >&2
-            exit 1
+            # A tag that is not semver (a PR image, say) has no release line to name.
+            namespace="run-${RUN_ID}-scenario"
           fi
           echo "NAMESPACE=$namespace" >> $GITHUB_ENV
-          echo "DOCKER_IMAGE=$docker_image" >> $GITHUB_ENV
+          echo "DOCKER_IMAGE=$DOCKER_IMAGE" >> $GITHUB_ENV
 
       - name: Run Network Scenarios
         timeout-minutes: 350
@@ -195,7 +214,7 @@ jobs:
       - name: Upload benchmarks
         if: env.ENABLE_DEPLOY_BENCH == '1'
         env:
-          COMMIT_SHA: ${{ needs.select-image.outputs.source_sha || github.sha }}
+          COMMIT_SHA: ${{ github.sha }}
         run: ./ci3/upload_benchmarks "Aztec Benchmarks" "bench/${BENCH_BRANCH:-}" ./bench-out/bench.json "$COMMIT_SHA"
 
       - name: Notify Slack and dispatch ClaudeBox on failure
@@ -205,7 +224,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-unset}, env ${{ inputs.env_file || 'next-scenario' }}, ref ${{ inputs.ref || needs.select-image.outputs.source_ref }}"
+          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-unset}, env ${{ inputs.env_file || 'next-scenario' }}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
             "Scenario Tests FAILED (${CONTEXT}): <${RUN_URL}|View Run> (🤖)" \
             "Scenario tests failed (${CONTEXT}). CI run: ${RUN_URL}. Investigate the scenario test failure and identify the root cause." \

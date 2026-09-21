@@ -32,7 +32,7 @@ function print_usage {
   echo_cmd "network-proving-bench" "Spin up an EC2 instance to deploy a network and run proving benchmarks. Set SKIP_NETWORK_DEPLOY=1 to skip deploy."
   echo_cmd "network-bench-10tps"   "Spin up an EC2 instance to run the 10 TPS benchmark on bench-10tps."
   echo_cmd "network-teardown"      "Spin up an EC2 instance to teardown a network deployment."
-  echo_cmd "network-tests-kind"    "Spin up an EC2 instance to run a KIND-based spartan test."
+  echo_cmd "network-tests-kind"    "Spin up an EC2 instance to run a KIND-based spartan test. Args: [docker_image]"
   echo_cmd "deploy-rollup-upgrade" "Spin up an EC2 instance to deploy a rollup upgrade."
   echo_cmd "release"               "Spin up an EC2 instance and run bootstrap release."
   echo_cmd "shell-new"             "Spin up an EC2 instance, clone the repo, and drop into a shell."
@@ -362,13 +362,15 @@ case "$cmd" in
     ;;
 
   network-tests-kind)
+    # Args: [docker_image]
     # Runs KIND-based spartan tests on a 192 CPU instance.
     export CI_DASHBOARD="network"
     export JOB_ID="x-network-kind"
     export AWS_SHUTDOWN_TIME=180 # 3 hours for KIND tests
     export CPUS=192
     export INSTANCE_POSTFIX="n-kind"
-    bootstrap_ec2 "./bootstrap.sh ci-network-kind-tests"
+    docker_image="${1:-}"
+    bootstrap_ec2 "./bootstrap.sh ci-network-kind-tests \"$docker_image\""
     ;;
   deploy-rollup-upgrade)
     # Env vars: NETWORK, GCP_PROJECT_ID (for GCP secrets)
