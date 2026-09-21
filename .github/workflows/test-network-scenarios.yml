@@ -80,6 +80,19 @@ jobs:
             docker_image="azteclabs/aztec:${semver}"
             release_tag="v${semver}"
           fi
+          # This value is written to $GITHUB_OUTPUT and reaches a run: script, so anything that
+          # could forge a second output line or break out of a quoted argument is refused. The
+          # rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$docker_image" =~ ^[A-Za-z0-9][A-Za-z0-9._/:-]*$ ]]; then
+            echo "::error::Invalid docker image reference rejected."
+            exit 1
+          fi
+          # An untagged reference resolves to :latest, which these runs never want and which the
+          # terraform that splits the reference on ':' cannot handle.
+          if [[ "${docker_image##*/}" != *:* ]]; then
+            echo "::error::Name the tag explicitly, e.g. azteclabs/aztec:6.0.0-nightly.20260921"
+            exit 1
+          fi
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
           echo "semver=$semver" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
@@ -89,7 +102,9 @@ jobs:
       # since its release build may still be running.
       - name: Verify the image exists
         if: steps.image.outputs.release_tag == ''
-        run: docker manifest inspect "${{ steps.image.outputs.docker_image }}" >/dev/null
+        env:
+          DOCKER_IMAGE: ${{ steps.image.outputs.docker_image }}
+        run: docker manifest inspect "$DOCKER_IMAGE" >/dev/null
 
   # Block until the nightly tag's release build has published the docker image,
   # so the deploy below doesn't race the build and hit ImagePullBackOff.
@@ -145,13 +160,17 @@ jobs:
         env:
           INPUT_NAMESPACE: ${{ inputs.namespace }}
           SEMVER: ${{ needs.select-image.outputs.semver }}
+          RUN_ID: ${{ github.run_id }}
           DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
         run: |
           set -euo pipefail
           if [[ -n "$INPUT_NAMESPACE" ]]; then
             namespace=$(echo "$INPUT_NAMESPACE" | sed 's/[^a-z0-9-]/-/g' | cut -c1-20)
+          elif major=$(./ci3/semver major "$SEMVER" 2>/dev/null) && [[ -n "$major" ]]; then
+            namespace="v${major}-scenario"
           else
-            namespace="v$(./ci3/semver major "$SEMVER")-scenario"
+            # A tag that is not semver (a PR image, say) has no release line to name.
+            namespace="run-${RUN_ID}-scenario"
           fi
           echo "NAMESPACE=$namespace" >> $GITHUB_ENV
           echo "DOCKER_IMAGE=$DOCKER_IMAGE" >> $GITHUB_ENV
@@ -186,7 +205,7 @@ jobs:
       # Benchmarks
       #############
       - name: Download deploy benchmarks
-        if: always()
+        if: always() && github.event_name == 'schedule'
         run: |
           if ./ci.sh gh-deploy-bench; then
             echo "ENABLE_DEPLOY_BENCH=1" >> $GITHUB_ENV

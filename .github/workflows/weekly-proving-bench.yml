@@ -1,16 +1,16 @@
 name: Weekly Real Proving Benchmark
 
-# Every job here checks out main. These jobs hold the `deployment` environment's GCP credential,
+# Every checkout in this file is pinned to main. These jobs hold the `deployment` environment's GCP credential,
 # so the code they run must not be selectable by whoever dispatches them; the version under test is
-# the docker image, which is what the input below chooses.
+# the docker image tag, which is what the input below chooses.
 
 on:
   # schedule:
   #   - cron: "0 6 * * 1" # Every Monday at 6 AM UTC
   workflow_dispatch:
     inputs:
-      docker_image:
-        description: "Docker image to benchmark, e.g. azteclabs/aztec:6.0.0-nightly.20260921. Empty uses today's nightly."
+      image_tag:
+        description: "Tag of the azteclabs/aztec image to benchmark, e.g. 6.0.0-nightly.20260921. Empty uses today's nightly."
         required: false
         type: string
         default: ""
@@ -31,7 +31,7 @@ jobs:
   select-image:
     runs-on: ubuntu-latest
     outputs:
-      nightly_tag: ${{ steps.image.outputs.nightly_tag }}
+      image_tag: ${{ steps.image.outputs.image_tag }}
       docker_image: ${{ steps.image.outputs.docker_image }}
     steps:
       - name: Checkout
@@ -43,25 +43,33 @@ jobs:
       - name: Resolve the image under test
         id: image
         env:
-          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           set -euo pipefail
-          if [[ -n "$INPUT_DOCKER_IMAGE" ]]; then
-            docker_image="$INPUT_DOCKER_IMAGE"
-            nightly_tag="${docker_image##*:}"
+          if [[ -n "$INPUT_IMAGE_TAG" ]]; then
+            image_tag="$INPUT_IMAGE_TAG"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
-            nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
-            docker_image="azteclabs/aztec:${nightly_tag}"
+            image_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
-          echo "nightly_tag=$nightly_tag" >> "$GITHUB_OUTPUT"
+          # The OCI tag grammar, as deploy-network.yml applies it: this value is written to
+          # $GITHUB_OUTPUT and reaches a run: script, so a newline in it could forge a second
+          # output line. The rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid docker image tag rejected."
+            exit 1
+          fi
+          docker_image="azteclabs/aztec:${image_tag}"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
           echo "Benchmarking image: $docker_image"
 
       # This workflow has no release gate, so a missing image must fail here rather than as an
       # ImagePullBackOff once the network deploy is already under way.
       - name: Verify the image exists
-        run: docker manifest inspect "${{ steps.image.outputs.docker_image }}" >/dev/null
+        env:
+          DOCKER_IMAGE: ${{ steps.image.outputs.docker_image }}
+        run: docker manifest inspect "$DOCKER_IMAGE" >/dev/null
 
   deploy-real-proving-network:
     needs: select-image
@@ -69,7 +77,7 @@ jobs:
     with:
       network: prove-n-tps-real
       namespace: prove-n-tps-real
-      image_tag: ${{ needs.select-image.outputs.nightly_tag }}
+      image_tag: ${{ needs.select-image.outputs.image_tag }}
       skip_notify_on_failure: true
     secrets: inherit
 
@@ -199,7 +207,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         run: |
           export CI=1
-          TAG="${{ needs.select-image.outputs.nightly_tag || 'unknown' }}"
+          TAG="${{ needs.select-image.outputs.image_tag || 'unknown' }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           ./ci3/slack_notify \
             "Weekly real proving benchmark passed (nightly tag ${TAG}) :white_check_mark: <${RUN_URL}|View Run>" \
@@ -211,7 +219,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ needs.select-image.outputs.nightly_tag || 'unknown' }}"
+          TAG="${{ needs.select-image.outputs.image_tag || 'unknown' }}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
             "Weekly Real Proving Benchmark FAILED (nightly tag ${TAG}): <${RUN_URL}|View Run> (🤖)" \

@@ -369,7 +369,8 @@ case "$cmd" in
     export AWS_SHUTDOWN_TIME=180 # 3 hours for KIND tests
     export CPUS=192
     export INSTANCE_POSTFIX="n-kind"
-    bootstrap_ec2 "./bootstrap.sh ci-network-kind-tests $*"
+    docker_image="${1:-}"
+    bootstrap_ec2 "./bootstrap.sh ci-network-kind-tests \"$docker_image\""
     ;;
   deploy-rollup-upgrade)
     # Env vars: NETWORK, GCP_PROJECT_ID (for GCP secrets)

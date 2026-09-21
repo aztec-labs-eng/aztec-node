@@ -22,11 +22,12 @@ parallel job chains; they share only image selection and the CI3 wait gate.
 
 Every benchmark follows the same phases:
 
-1. **Select image.** Resolve the nightly Docker image and the matching git ref. With no
-   `workflow_dispatch` input the tag is `<version>-nightly.<YYYYMMDD>`, where `<version>` comes from
-   `.release-please-manifest.json`, giving image `azteclabs/aztec:<tag>` and source ref `v<tag>`.
-   The workflow then verifies the git tag resolves and that `docker manifest inspect` succeeds, so a
-   missing nightly build fails fast instead of producing `ImagePullBackOff` later.
+1. **Select image.** Resolve the Docker image under test. With no `workflow_dispatch` input the tag
+   is `<version>-nightly.<YYYYMMDD>`, where `<version>` comes from `.release-please-manifest.json`,
+   giving image `azteclabs/aztec:<tag>`. The workflow then verifies `docker manifest inspect`
+   succeeds, so a missing nightly build fails fast instead of producing `ImagePullBackOff` later.
+   The benchmark code itself always comes from `main`: these jobs hold the `deployment`
+   environment's GCP credential, so the tree they run must not be selectable by the dispatcher.
 2. **Deploy.** `deploy-network.yml` deploys the environment's Helm/Terraform stack into its namespace.
 3. **Wait for first L2 block.** `spartan/bootstrap.sh wait_for_l2_block <env>`. A freshly deployed
    rollup cannot produce a committee-backed block until
@@ -81,9 +82,9 @@ changing between points.
 - Load window is 600 s per point (`TEST_DURATION_SECONDS`), with a 7200 s test timeout to absorb
   committee formation. The workflow step allows 120 minutes.
 
-The 06:00 UTC schedule is deliberate: the nightly git tag and Docker image this sweep resolves are
-produced by the nightly release-tag workflow at 04:00 UTC. Running earlier races that job and fails at
-"Verify source git ref".
+The 06:00 UTC schedule is deliberate: the nightly Docker image this sweep resolves is produced by the
+nightly release-tag workflow at 04:00 UTC. Running earlier races that job and fails at
+"Check if Docker image exists".
 
 ## Proving
 

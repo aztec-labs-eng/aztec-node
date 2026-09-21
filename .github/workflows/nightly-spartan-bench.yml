@@ -1,6 +1,6 @@
 name: Nightly Spartan Benchmarks
 
-# Every job here checks out main. These jobs hold the `deployment` environment's GCP credential,
+# Every checkout in this file is pinned to main. These jobs hold the `deployment` environment's GCP credential,
 # so the code they run must not be selectable by whoever dispatches them; the version under test is
 # the docker image, which is what the inputs below choose.
 

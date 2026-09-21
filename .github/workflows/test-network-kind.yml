@@ -1,6 +1,6 @@
 # KIND-based e2e tests that run on a local Kubernetes cluster on an EC2 instance.
 #
-# Every job checks out main. These jobs hold the `deployment` environment's GCP credential, so the
+# Every checkout in this file is pinned to main. These jobs hold the `deployment` environment's GCP credential, so the
 # code they run must not be selectable by whoever dispatches them; the version under test is the
 # docker image, which is what the input below chooses. A dispatch with no image tests today's
 # nightly, the same thing the (currently disabled) schedule does.
@@ -54,6 +54,19 @@ jobs:
             docker_image="azteclabs/aztec:${current_version}-nightly.$(date -u +%Y%m%d)"
             release_tag="v${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
+          # This value is written to $GITHUB_OUTPUT and reaches a run: script, so anything that
+          # could forge a second output line or break out of a quoted argument is refused. The
+          # rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$docker_image" =~ ^[A-Za-z0-9][A-Za-z0-9._/:-]*$ ]]; then
+            echo "::error::Invalid docker image reference rejected."
+            exit 1
+          fi
+          # An untagged reference resolves to :latest, which these runs never want and which the
+          # terraform that splits the reference on ':' cannot handle.
+          if [[ "${docker_image##*/}" != *:* ]]; then
+            echo "::error::Name the tag explicitly, e.g. azteclabs/aztec:6.0.0-nightly.20260921"
+            exit 1
+          fi
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "Testing image: $docker_image"
@@ -62,7 +75,9 @@ jobs:
       # since its release build may still be running.
       - name: Verify the image exists
         if: steps.image.outputs.release_tag == ''
-        run: docker manifest inspect "${{ steps.image.outputs.docker_image }}" >/dev/null
+        env:
+          DOCKER_IMAGE: ${{ steps.image.outputs.docker_image }}
+        run: docker manifest inspect "$DOCKER_IMAGE" >/dev/null
 
   # Block until the nightly tag's release CI has succeeded, so we only test releases
   # that actually shipped.

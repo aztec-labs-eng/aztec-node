@@ -7,16 +7,16 @@ name: Nightly Bench Inclusion Sweep
 # (SKIP_NETWORK_DEPLOY=1); the next point's call `needs` the previous one so they
 # don't overlap. Deploy / wait-for-first-block / teardown happen once.
 #
-# Every job here checks out main. These jobs hold the `deployment` environment's GCP credential,
+# Every checkout in this file is pinned to main. These jobs hold the `deployment` environment's GCP credential,
 # so the code they run must not be selectable by whoever dispatches them; the version under test is
 # the docker image, which is what the inputs below choose.
 
 on:
   # schedule:
   #   # 06:00 UTC, matching the other nightly consumers (spartan-bench, deploy-next-net).
-  #   # The nightly git tag + docker image this sweep resolves are produced by the
-  #   # Nightly Release Tag workflow at 04:00 UTC; running earlier races that job and
-  #   # fails "Verify source git ref" with "couldn't find remote ref".
+  #   # The nightly docker image this sweep resolves is produced by the Nightly Release
+  #   # Tag workflow at 04:00 UTC; running earlier races that job and fails
+  #   # "Check if Docker image exists".
   #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
