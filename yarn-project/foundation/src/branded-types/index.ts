@@ -4,5 +4,6 @@ export { CheckpointNumber, CheckpointNumberSchema, CheckpointNumberPositiveSchem
 export { EpochNumber, EpochNumberSchema } from './epoch.js';
 export { IndexWithinCheckpoint, IndexWithinCheckpointSchema } from './index_within_checkpoint.js';
 export { SlotNumber, SlotNumberSchema } from './slot.js';
+export { TreeLeafIndex, TreeLeafIndexSchema } from './tree_leaf_index.js';
 
 export type { Branded } from './types.js';

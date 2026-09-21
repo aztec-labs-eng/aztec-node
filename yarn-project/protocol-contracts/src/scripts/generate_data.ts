@@ -20,7 +20,7 @@ import {
   computeInitializationHash,
   getContractClassFromArtifact,
 } from '@aztec-labs/stdlib/contract';
-import { computeSiloedPrivateLogFirstField } from '@aztec-labs/stdlib/hash';
+import { computeSiloedPrivateLogFirstField, siloNullifier } from '@aztec-labs/stdlib/hash';
 import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import { type NoirCompiledContract } from '@aztec-labs/stdlib/noir';
 import { ProtocolContracts } from '@aztec-labs/stdlib/tx';
@@ -211,6 +211,42 @@ async function generateProtocolContractsList(names: string[], contractData: Cont
   `;
 }
 
+// Generates the siloed registration nullifiers that the protocol contracts would emit if they were published on-chain,
+// so that world-state genesis can pre-insert them into the nullifier tree. With these present from genesis, an on-chain
+// re-publish of a bundled protocol class id pushes an already-existing nullifier, making that transaction invalid
+// (duplicate nullifier) before it ever reaches the archiver. For each protocol contract we seed:
+//   - the class nullifier: siloNullifier(ContractClassRegistry, classId) — what ContractClassRegistry.publish emits;
+//   - the instance nullifier: siloNullifier(ContractInstanceRegistry, magicAddress) — the magic protocol address
+//     (1/2/3) rather than the derived address, matching the node's block-0 protocol contract preload. No on-chain
+//     deployment can produce a magic address, so this entry is unreachable from a publish; it exists so that genesis
+//     reflects the canonical protocol deployment.
+// The list is sorted ascending because the indexed nullifier tree requires its prefilled leaves to be unique and
+// strictly increasing.
+async function generateGenesisNullifiers(names: string[], contractData: ContractData[]) {
+  const classRegistry = AztecAddress.fromBigIntUnsafe(BigInt(CONTRACT_CLASS_REGISTRY_CONTRACT_ADDRESS));
+  const instanceRegistry = AztecAddress.fromBigIntUnsafe(BigInt(CONTRACT_INSTANCE_REGISTRY_CONTRACT_ADDRESS));
+
+  const nullifiers: Fr[] = [];
+  for (let i = 0; i < names.length; i++) {
+    const magicAddress = AztecAddress.fromBigIntUnsafe(BigInt(contractAddressMapping[names[i]]));
+    nullifiers.push(await siloNullifier(classRegistry, contractData[i].classId));
+    nullifiers.push(await siloNullifier(instanceRegistry, magicAddress.toField()));
+  }
+  nullifiers.sort((a, b) => (a.toBigInt() < b.toBigInt() ? -1 : 1));
+
+  for (let i = 1; i < nullifiers.length; i++) {
+    if (nullifiers[i].toBigInt() === nullifiers[i - 1].toBigInt()) {
+      throw new Error(`Duplicate protocol contract genesis nullifier: ${nullifiers[i].toString()}`);
+    }
+  }
+
+  return `
+    export const ProtocolContractGenesisNullifiers: Fr[] = [
+      ${nullifiers.map(n => `Fr.fromString('${n.toString()}')`).join(',\n')}
+    ];
+  `;
+}
+
 // Generate the siloed log tags for events emitted via private logs.
 async function generateLogTags() {
   return `
@@ -240,6 +276,8 @@ async function generateOutputFile(names: string[], contractData: ContractData[])
     ${generateClassIdPreimages(names, contractData)}
 
     ${await generateProtocolContractsList(names, contractData)}
+
+    ${await generateGenesisNullifiers(names, contractData)}
 
     ${await generateLogTags()}
   `;

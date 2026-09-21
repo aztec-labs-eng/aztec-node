@@ -5,7 +5,12 @@ import {
   NULLIFIER_SUBTREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
-import { BlockNumber, type CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  type CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { L2Block } from '@aztec-labs/stdlib/block';
@@ -64,13 +69,19 @@ export async function updateBlockState(block: L2Block, l1ToL2Messages: Fr[], for
   block.header = BlockHeader.from({
     ...block.header,
     state,
-    lastArchive: new AppendOnlyTreeSnapshot(Fr.fromBuffer(previousArchive.root), Number(previousArchive.size)),
+    lastArchive: new AppendOnlyTreeSnapshot(
+      Fr.fromBuffer(previousArchive.root),
+      TreeLeafIndex.fromBigInt(BigInt(previousArchive.size)),
+    ),
   });
   await fork.updateArchive(block.header);
 
   const archiveState = await fork.getTreeInfo(MerkleTreeId.ARCHIVE);
 
-  block.archive = new AppendOnlyTreeSnapshot(Fr.fromBuffer(archiveState.root), Number(archiveState.size));
+  block.archive = new AppendOnlyTreeSnapshot(
+    Fr.fromBuffer(archiveState.root),
+    TreeLeafIndex.fromBigInt(BigInt(archiveState.size)),
+  );
 }
 
 export function mockBlock(

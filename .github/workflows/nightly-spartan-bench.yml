@@ -1,5 +1,9 @@
 name: Nightly Spartan Benchmarks
 
+# Every checkout in this file is pinned to main. These jobs hold the `deployment` environment's GCP credential,
+# so the code they run must not be selectable by whoever dispatches them; the version under test is
+# the docker image, which is what the inputs below choose.
+
 on:
   # schedule:
   #   - cron: "0 6 * * *"
@@ -29,40 +33,52 @@ jobs:
     outputs:
       nightly_tag: ${{ steps.nightly-tag.outputs.nightly_tag }}
       docker_image: ${{ steps.nightly-tag.outputs.docker_image }}
-      source_ref: ${{ steps.nightly-tag.outputs.source_ref }}
+      release_tag: ${{ steps.nightly-tag.outputs.release_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: main
+          persist-credentials: false
 
       - name: Determine nightly tag
         id: nightly-tag
+        env:
+          INPUT_NIGHTLY_TAG: ${{ inputs.nightly_tag }}
         run: |
-          if [[ -n "${{ inputs.nightly_tag }}" ]]; then
-            nightly_tag="${{ inputs.nightly_tag }}"
+          set -euo pipefail
+          if [[ -n "$INPUT_NIGHTLY_TAG" ]]; then
+            nightly_tag="$INPUT_NIGHTLY_TAG"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
             nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
-
-          source_ref="v${nightly_tag}"
+          # The OCI tag grammar, as deploy-network.yml applies it. This value is written to
+          # $GITHUB_OUTPUT and reaches a run: script, so a newline in it could forge a second
+          # output line. The rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$nightly_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid docker image tag rejected."
+            exit 1
+          fi
+          release_tag="v${nightly_tag}"
+          # The registry and repository are fixed here: this benchmarks released images.
           docker_image="azteclabs/aztec:${nightly_tag}"
 
           echo "nightly_tag=$nightly_tag" >> "$GITHUB_OUTPUT"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
-          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "Using nightly tag: $nightly_tag"
           echo "Using image: $docker_image"
-          echo "Using source ref: $source_ref"
+          echo "Using release tag: $release_tag"
 
-      - name: Verify source git ref
+      - name: Verify the release tag exists
+        env:
+          RELEASE_TAG: ${{ steps.nightly-tag.outputs.release_tag }}
         run: |
           set -euo pipefail
-          source_ref="${{ steps.nightly-tag.outputs.source_ref }}"
-          git fetch --depth 1 origin "refs/tags/${source_ref}:refs/tags/${source_ref}"
-          source_sha=$(git rev-parse "${source_ref}^{}")
-          echo "Nightly source commit: $source_sha"
+          release_tag="$RELEASE_TAG"
+          git fetch --depth 1 origin "refs/tags/${release_tag}:refs/tags/${release_tag}"
+          echo "Nightly release commit: $(git rev-parse "${release_tag}^{}")"
 
   # Block until the nightly tag's release build has published the docker image,
   # so the deploys below don't race the build and hit ImagePullBackOff.
@@ -74,6 +90,7 @@ jobs:
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -81,7 +98,9 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.source_ref }}"
+        env:
+          RELEASE_TAG: ${{ needs.select-image.outputs.release_tag }}
+        run: spartan/scripts/wait_for_release.ts "$RELEASE_TAG"
 
   # ---------------------------------------------------------------------------
   # Proving benchmark (env prove-n-tps-fake, namespace prove-n-tps-fake)
@@ -108,7 +127,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
@@ -141,7 +161,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -160,6 +181,7 @@ jobs:
           AWS_SHUTDOWN_TIME: 180
           NO_SPOT: 1
           SKIP_NETWORK_DEPLOY: "1"
+          DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
           # Publishes to the custom network-dashboard pipeline (GCS). Fake/fixed-delay
           # proving, so it's tagged simulated-proving (distinct from the weekly
           # real-proving run).
@@ -167,7 +189,7 @@ jobs:
           BENCH_SWEEP_LABEL: simulated-proving
           BENCH_BENCHMARK_TYPE: simulated-proving
         run: |
-          ./.github/ci3.sh network-proving-bench prove-n-tps-fake prove-n-tps-fake "${{ needs.select-image.outputs.docker_image }}"
+          ./.github/ci3.sh network-proving-bench prove-n-tps-fake prove-n-tps-fake "$DOCKER_IMAGE"
 
   cleanup-proving:
     if: ${{ always() }}
@@ -184,7 +206,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Cleanup network resources
         uses: ./.github/actions/network-teardown
@@ -207,7 +230,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Notify Slack on success
         if: ${{ needs.proving-benchmark.result == 'success' }}
@@ -258,7 +282,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
@@ -291,7 +316,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -310,13 +336,14 @@ jobs:
           AWS_SHUTDOWN_TIME: 240
           NO_SPOT: 1
           SKIP_NETWORK_DEPLOY: "1"
+          DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
           # Publishes to the custom network-dashboard pipeline (GCS) tagged as the
           # block-capacity benchmark, grouped as one sweep per run.
           BENCH_SWEEP_ID: block-capacity-${{ github.run_id }}
           BENCH_SWEEP_LABEL: block-capacity
           BENCH_BENCHMARK_TYPE: block-capacity
         run: |
-          ./.github/ci3.sh network-block-capacity-bench block-capacity nightly-block-capacity "${{ needs.select-image.outputs.docker_image }}"
+          ./.github/ci3.sh network-block-capacity-bench block-capacity nightly-block-capacity "$DOCKER_IMAGE"
 
   cleanup-block-capacity:
     if: ${{ always() }}
@@ -333,7 +360,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Cleanup network resources
         uses: ./.github/actions/network-teardown
@@ -356,7 +384,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ needs.select-image.outputs.source_ref }}
+          ref: main
+          persist-credentials: false
 
       - name: Notify Slack on success
         if: ${{ needs.block-capacity-benchmark.result == 'success' }}

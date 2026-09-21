@@ -1,4 +1,9 @@
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { computeRootFromSiblingPath } from '@aztec-labs/foundation/trees';
 import { type BlockData, BlockHash } from '@aztec-labs/stdlib/block';
@@ -16,7 +21,7 @@ function buildBlockData(blockNumber: number, leaves: number, root = Fr.ZERO): Bl
   return {
     header: BlockHeader.empty({
       globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(blockNumber) }),
-      state: new StateReference(new AppendOnlyTreeSnapshot(root, leaves), PartialStateReference.empty()),
+      state: new StateReference(new AppendOnlyTreeSnapshot(root, TreeLeafIndex(leaves)), PartialStateReference.empty()),
     }),
     archive: AppendOnlyTreeSnapshot.empty(),
     blockHash: BlockHash.random(),

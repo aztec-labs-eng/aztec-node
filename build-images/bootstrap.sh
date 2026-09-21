@@ -35,10 +35,15 @@ function build_ec2 {
   local cpus=$1
   local arch=$2
 
-  # Verify that the local latest commit has been pushed.
+  # Verify that the local latest commit has been pushed. The fetch's exit status is checked
+  # separately from its output, so a failure to reach origin is not reported as an unpushed commit.
   current_commit=$(git rev-parse HEAD)
-  if [[ "$(git fetch origin --negotiate-only --negotiation-tip=$current_commit)" != *"$current_commit"* ]]; then
-    echo "Commit $current_commit is not pushed, exiting."
+  if ! common=$(git fetch origin --negotiate-only --negotiation-tip="$current_commit"); then
+    >&2 echo "Could not reach origin to check whether $current_commit is pushed."
+    exit 1
+  fi
+  if [[ "$common" != *"$current_commit"* ]]; then
+    >&2 echo "Commit $current_commit is not pushed, exiting."
     exit 1
   fi
 

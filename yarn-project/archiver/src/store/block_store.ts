@@ -209,9 +209,6 @@ export class BlockStore {
   /** Map rejected checkpoints (due to invalid attestations) by archive root */
   #rejectedCheckpoints: AztecAsyncMap<string, RejectedCheckpointStorage>;
 
-  /** Index mapping a rejected checkpoint's number to its archive root, so the latest can be read in reverse order */
-  #rejectedCheckpointsByNumber: AztecAsyncMap<number, string>;
-
   #log = createLogger('archiver:block_store');
 
   constructor(private db: AztecAsyncKVStore) {
@@ -231,7 +228,6 @@ export class BlockStore {
     this.#slotToCheckpoint = db.openMap('archiver_slot_to_checkpoint');
     this.#proposedCheckpoints = db.openMap('archiver_proposed_checkpoints');
     this.#rejectedCheckpoints = db.openMap('archiver_rejected_checkpoints');
-    this.#rejectedCheckpointsByNumber = db.openMap('archiver_rejected_checkpoints_by_number');
   }
 
   /**
@@ -1628,7 +1624,6 @@ export class BlockStore {
       l1: entry.l1.toBuffer(),
       reason: entry.reason,
     });
-    await this.#rejectedCheckpointsByNumber.set(entry.checkpointNumber, archiveRootHex);
     await this.advanceSynchedL1BlockNumber(entry.l1.blockNumber);
   }
 
@@ -1638,35 +1633,9 @@ export class BlockStore {
     return stored ? this.rejectedCheckpointFromStorage(stored) : undefined;
   }
 
-  /** Returns the rejected-checkpoint entry recorded for the given checkpoint number, or undefined if none. */
-  async getRejectedCheckpointByNumber(checkpointNumber: CheckpointNumber): Promise<RejectedCheckpoint | undefined> {
-    const archiveRootHex = await this.#rejectedCheckpointsByNumber.getAsync(checkpointNumber);
-    if (archiveRootHex === undefined) {
-      return undefined;
-    }
-    const stored = await this.#rejectedCheckpoints.getAsync(archiveRootHex);
-    return stored ? this.rejectedCheckpointFromStorage(stored) : undefined;
-  }
-
-  /** Returns the highest checkpoint number recorded across all rejected entries, or `INITIAL_CHECKPOINT_NUMBER - 1` if none. */
-  async getLatestRejectedCheckpointNumber(): Promise<CheckpointNumber> {
-    const [latest] = await toArray(this.#rejectedCheckpointsByNumber.keysAsync({ reverse: true, limit: 1 }));
-    return CheckpointNumber(latest ?? INITIAL_CHECKPOINT_NUMBER - 1);
-  }
-
   /** Removes a rejected-checkpoint entry by its archive root (used when an entry no longer matches L1). */
   async removeRejectedCheckpointByArchiveRoot(archiveRoot: Fr): Promise<void> {
-    const archiveRootHex = archiveRoot.toString();
-    const stored = await this.#rejectedCheckpoints.getAsync(archiveRootHex);
-    await this.#rejectedCheckpoints.delete(archiveRootHex);
-    if (stored) {
-      // Only clear the by-number index if it still points at this archive root, so a distinct
-      // entry that shares the checkpoint number (e.g. an L1 reorg replacement) is not dropped.
-      const indexed = await this.#rejectedCheckpointsByNumber.getAsync(stored.checkpointNumber);
-      if (indexed === archiveRootHex) {
-        await this.#rejectedCheckpointsByNumber.delete(stored.checkpointNumber);
-      }
-    }
+    await this.#rejectedCheckpoints.delete(archiveRoot.toString());
   }
 
   /**

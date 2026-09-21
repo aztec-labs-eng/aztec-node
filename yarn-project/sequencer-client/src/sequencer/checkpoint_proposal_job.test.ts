@@ -7,6 +7,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { timesAsync } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
@@ -459,7 +460,7 @@ describe('CheckpointProposalJob', () => {
         proposedCheckpointData: {
           checkpointNumber: CheckpointNumber(1),
           header: CheckpointHeader.empty(),
-          archive: new AppendOnlyTreeSnapshot(Fr.ZERO, 1),
+          archive: new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(1)),
           checkpointOutHash: Fr.ZERO,
           startBlock: BlockNumber(1),
           blockCount: 1,
@@ -862,7 +863,7 @@ describe('CheckpointProposalJob', () => {
     const proposedParent: ProposedCheckpointData = {
       checkpointNumber: CheckpointNumber(1),
       header: parentCheckpointHeader,
-      archive: new AppendOnlyTreeSnapshot(Fr.ZERO, 1),
+      archive: new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(1)),
       checkpointOutHash: Fr.ZERO,
       startBlock: BlockNumber(1),
       blockCount: 1,

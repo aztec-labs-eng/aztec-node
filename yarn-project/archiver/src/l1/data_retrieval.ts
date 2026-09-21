@@ -20,7 +20,7 @@ import {
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
-import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, IndexWithinCheckpoint, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -136,7 +136,7 @@ export async function retrievedToPublishedCheckpoint({
     const spongeBlobHash = await clonedSpongeBlob.squeeze();
 
     const header = BlockHeader.from({
-      lastArchive: new AppendOnlyTreeSnapshot(lastArchiveRoot, l2BlockNumber),
+      lastArchive: new AppendOnlyTreeSnapshot(lastArchiveRoot, TreeLeafIndex(l2BlockNumber)),
       state,
       spongeBlobHash,
       txEffectsTreeRoot,
@@ -145,7 +145,7 @@ export async function retrievedToPublishedCheckpoint({
       totalManaUsed: new Fr(blockEndStateField.totalManaUsed),
     });
 
-    const newArchive = new AppendOnlyTreeSnapshot(newArchiveRoots[i], l2BlockNumber + 1);
+    const newArchive = new AppendOnlyTreeSnapshot(newArchiveRoots[i], TreeLeafIndex(l2BlockNumber + 1));
 
     const block = new L2Block(newArchive, header, body, checkpointNumber, IndexWithinCheckpoint(i));
     l2Blocks.push(block);
@@ -153,7 +153,7 @@ export async function retrievedToPublishedCheckpoint({
 
   const lastBlock = l2Blocks.at(-1)!;
   const checkpoint = Checkpoint.from({
-    archive: new AppendOnlyTreeSnapshot(archiveRoot, lastBlock.number + 1),
+    archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(lastBlock.number + 1)),
     header: checkpointHeader,
     blocks: l2Blocks,
     number: checkpointNumber,

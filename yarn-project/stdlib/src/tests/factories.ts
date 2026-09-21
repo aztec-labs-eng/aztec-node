@@ -43,7 +43,7 @@ import {
   VK_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
-import { BlockNumber, CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { compact } from '@aztec-labs/foundation/collection';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
 import { sha256 } from '@aztec-labs/foundation/crypto/sha256';
@@ -685,9 +685,9 @@ function makeFeeRecipient(seed = 1) {
  * @returns An append only tree snapshot.
  */
 export function makeAppendOnlyTreeSnapshot(seed = 1): AppendOnlyTreeSnapshot {
-  // Constrain nextAvailableLeafIndex to u32 range
-  const nextAvailableLeafIndex = seed % 2 ** 32;
-  return new AppendOnlyTreeSnapshot(fr(seed), nextAvailableLeafIndex);
+  // Constrain nextAvailableLeafIndex to the range a 42-level tree can produce
+  const nextAvailableLeafIndex = seed % 2 ** 43;
+  return new AppendOnlyTreeSnapshot(fr(seed), TreeLeafIndex(nextAvailableLeafIndex));
 }
 
 /**

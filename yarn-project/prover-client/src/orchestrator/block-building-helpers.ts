@@ -20,7 +20,7 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Bufferable, assertLength, toFriendlyJSON } from '@aztec-labs/foundation/serialize';
@@ -283,7 +283,7 @@ export const buildHeaderFromCircuitOutputs = runInSpan(
     const globalVariables = GlobalVariables.from({
       chainId: constants.chainId,
       version: constants.version,
-      blockNumber: BlockNumber(blockRootRollupOutput.previousArchive.nextAvailableLeafIndex),
+      blockNumber: BlockNumber.fromTreeLeafIndex(blockRootRollupOutput.previousArchive.nextAvailableLeafIndex),
       timestamp: blockRootRollupOutput.timestamp,
       slotNumber: constants.slotNumber,
       coinbase: constants.coinbase,
@@ -380,7 +380,7 @@ export async function getRootTreeSiblingPath<TID extends MerkleTreeId>(treeId: T
 
 export async function getTreeSnapshot(id: MerkleTreeId, db: MerkleTreeReadOperations): Promise<AppendOnlyTreeSnapshot> {
   const treeInfo = await db.getTreeInfo(id);
-  return new AppendOnlyTreeSnapshot(Fr.fromBuffer(treeInfo.root), Number(treeInfo.size));
+  return new AppendOnlyTreeSnapshot(Fr.fromBuffer(treeInfo.root), TreeLeafIndex.fromBigInt(BigInt(treeInfo.size)));
 }
 
 export function makeEmptyMembershipWitness<N extends number>(height: N) {

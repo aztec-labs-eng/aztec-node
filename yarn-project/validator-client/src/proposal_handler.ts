@@ -534,6 +534,10 @@ export class ProposalHandler {
   /** Records a slot as having a proposal equivocation, which suppresses attested-to-invalid-proposal slashing. */
   public markProposalEquivocation(slotNumber: SlotNumber): void {
     this.slotsWithProposalEquivocation.add(slotNumber);
+    // Share the signal with the sentinel (via the common re-execution tracker) so it skips
+    // missed-attestor accounting for the slot: an honest attestor may have seen an invalid
+    // version of the equivocated proposal and correctly declined to sign.
+    this.reexecutionTracker.recordEquivocation(slotNumber);
   }
 
   /**

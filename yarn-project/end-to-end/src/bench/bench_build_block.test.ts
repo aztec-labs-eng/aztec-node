@@ -6,8 +6,8 @@ import type { EndToEndContext } from '../fixtures/utils.js';
 import { benchmarkSetup, sendTxs, waitTxs } from './utils.js';
 
 const AZTEC_SLOT_DURATION_SECONDS = 600;
-const ETHEREUM_SLOT_DURATION_SECONDS = 12;
-const BLOCK_DURATION_MS = 110_000;
+const ETHEREUM_SLOT_DURATION_SECONDS = 8;
+const BLOCK_DURATION_MS = 200_000;
 const L1_TX_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Block-building latency benchmark. Uses benchmarkSetup() (wraps setup() with telemetry override) and
@@ -21,10 +21,17 @@ describe('benchmarks/build_block', () => {
   beforeEach(async () => {
     ({ context, contract, sequencer } = await benchmarkSetup({
       maxTxsPerBlock: 1024,
-      // The production timing profile requires at least four block opportunities per slot. With
-      // S=600s, init=1s, assemble=1s, P=2s, and D=110s, the timetable derives
-      // floor((600 - 1 - (1 + 2*2 + 110)) / 110) = 4. The first build deadline is 111s into
-      // the slot, leaving ample headroom to measure the block build without deadline truncation.
+      // The timetable is now always enforced, so give the single bench block enough headroom that
+      // it never hits a sub-slot build deadline (we want to measure pure build time, not a
+      // deadline-truncated block). ethereumSlotDuration sits at FAST_PROFILE_ETHEREUM_SLOT_DURATION:
+      // the fast-profile budget clamp is strictly below it, so the production budgets still apply
+      // (init=1s, assemble=1s, P=2s), while the Inbox-backlog floor exempts it at the boundary. That
+      // floor rejects a sequencer deriving fewer than MIN_BLOCKS_FOR_INBOX_CATCHUP blocks per
+      // checkpoint, and one block per slot is exactly what this bench wants. The model requires
+      //   timeAvailableForBlocks = S - init - (assemble + 2P + D) >= D
+      //   => 600 - 1 - (1 + 4 + 200) = 394 >= 200, giving maxBlocksPerSlot = floor(394/200) = 1.
+      // The first (and only) sub-slot's build deadline is init + D = 201s into the slot, far more
+      // than 32 txs need.
       aztecSlotDuration: AZTEC_SLOT_DURATION_SECONDS,
       ethereumSlotDuration: ETHEREUM_SLOT_DURATION_SECONDS,
       blockDurationMs: BLOCK_DURATION_MS,
@@ -46,7 +53,7 @@ describe('benchmarks/build_block', () => {
   });
 
   afterEach(async () => {
-    await context?.teardown();
+    await context.teardown();
   });
 
   const TX_COUNT = 32;

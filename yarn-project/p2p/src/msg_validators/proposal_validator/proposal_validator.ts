@@ -95,13 +95,11 @@ export class ProposalValidator {
         return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
       }
 
-      // Proposer check
+      // An undefined proposer means an empty committee (anyone may propose), so skip the
+      // proposer-equality check and keep validating. A missing committee instead throws
+      // NoCommitteeError, handled as a reject below.
       const expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slotNumber);
-      if (expectedProposer === undefined) {
-        this.logger.warn(`Penalizing peer for proposal with no expected proposer for current slot ${slotNumber}`);
-        return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
-      }
-      if (!proposer.equals(expectedProposer)) {
+      if (expectedProposer !== undefined && !proposer.equals(expectedProposer)) {
         this.logger.warn(`Penalizing peer for invalid proposer for current slot ${slotNumber}`, {
           expectedProposer,
           proposer: proposer.toString(),

@@ -1,0 +1,11 @@
+ci.aztec-labs.com {
+	encode zstd gzip
+	# Long timeouts: the dashboard streams/long-polls live logs. Port 80 stays open
+	# (ACME HTTP-01 + redirect); TLS terminates here, app is plaintext on loopback.
+	reverse_proxy 127.0.0.1:8080 {
+		transport http {
+			read_timeout 3600s
+			write_timeout 3600s
+		}
+	}
+}

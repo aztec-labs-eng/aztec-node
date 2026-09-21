@@ -322,6 +322,37 @@ describe('CheckpointAttestationValidator', () => {
     expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
   });
 
+  it('ignores (no peer penalty) when a local committee lookup fails with a non-committee error', async () => {
+    const header = CheckpointHeader.random({ slotNumber: SlotNumber(100) });
+    const mockAttestation = makeCheckpointAttestation({
+      header,
+      attesterSigner: attester,
+      proposerSigner: proposer,
+    });
+
+    epochCache.getTargetAndNextSlot.mockReturnValue({
+      targetSlot: SlotNumber(100),
+      nextSlot: SlotNumber(101),
+    });
+    // Slot 100 attestation window [7116, 7248]s; now inside so the committee lookup is reached.
+    epochCache.getEpochAndSlotNow.mockReturnValue({
+      epoch: EpochNumber(1),
+      slot: SlotNumber(100),
+      ts: 7150n,
+      nowMs: 7150_000n,
+    });
+
+    // A receiver-local lookup failure must not penalize the relaying peer: validate returns a
+    // non-penalizing `ignore`, not a throw. See attestation_validator.ts.
+    epochCache.isInCommittee.mockRejectedValue(new Error('l1 rpc unavailable'));
+    expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
+
+    // Same for the proposer-lookup helper.
+    epochCache.isInCommittee.mockResolvedValue(true);
+    epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 node not synced'));
+    expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
+  });
+
   describe('clock-disparity widening of the attestation receive window', () => {
     // Attestation window for slot 100 is [buildFrameStart, attestationDeadline] = [7116, 7248]s,
     // widened by TEST_CLOCK_DISPARITY_MS (0.5s) on both ends. These pin the exact widened boundaries.

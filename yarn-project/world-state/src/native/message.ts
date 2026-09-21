@@ -1,4 +1,4 @@
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { StateReference } from '@aztec-labs/stdlib/tx';
@@ -270,7 +270,7 @@ export type TreeStateReference = readonly [Buffer, number | bigint];
 export type BlockStateReference = Map<Exclude<MerkleTreeId, MerkleTreeId.ARCHIVE>, TreeStateReference>;
 
 export function treeStateReferenceToSnapshot([root, size]: TreeStateReference): AppendOnlyTreeSnapshot {
-  return new AppendOnlyTreeSnapshot(Fr.fromBuffer(root), Number(size));
+  return new AppendOnlyTreeSnapshot(Fr.fromBuffer(root), TreeLeafIndex.fromBigInt(BigInt(size)));
 }
 
 export function treeStateReference(snapshot: AppendOnlyTreeSnapshot) {

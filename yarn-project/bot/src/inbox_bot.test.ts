@@ -15,6 +15,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -397,7 +398,10 @@ function buildBlockData(block: FakeBlock): BlockData {
   return {
     header: BlockHeader.empty({
       globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(block.number) }),
-      state: new StateReference(new AppendOnlyTreeSnapshot(block.root, block.leaves), PartialStateReference.empty()),
+      state: new StateReference(
+        new AppendOnlyTreeSnapshot(block.root, TreeLeafIndex(block.leaves)),
+        PartialStateReference.empty(),
+      ),
     }),
     archive: AppendOnlyTreeSnapshot.empty(),
     blockHash: block.blockHash,

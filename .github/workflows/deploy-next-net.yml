@@ -43,21 +43,31 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Determine image tag
         id: determine_tag
+        env:
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          if [[ -n "${{ inputs.image_tag }}" ]]; then
-            SEMVER="${{ inputs.image_tag }}"
+          set -euo pipefail
+          if [[ -n "$INPUT_IMAGE_TAG" ]]; then
+            SEMVER="$INPUT_IMAGE_TAG"
             SEMVER="${SEMVER#v}"
             SEMVER="${SEMVER%-amd64}"
-            echo "Using manually specified tag: $SEMVER"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
             echo "Current version: $current_version"
             SEMVER="${current_version}-nightly.$(date -u +%Y%m%d)"
-            echo "Using nightly tag: $SEMVER"
           fi
+          # The OCI tag grammar, checked before the value is echoed or written to $GITHUB_OUTPUT:
+          # a newline in it would otherwise forge a second output line or a workflow command. The
+          # rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$SEMVER" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid docker image tag rejected."
+            exit 1
+          fi
+          echo "Using tag: $SEMVER"
 
           echo "SEMVER=$SEMVER" >> "$GITHUB_OUTPUT"
           echo "TAG=v${SEMVER}" >> "$GITHUB_OUTPUT"
@@ -69,6 +79,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -76,7 +87,9 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.get-image-tag.outputs.tag }}"
+        env:
+          RELEASE_TAG: ${{ needs.get-image-tag.outputs.tag }}
+        run: spartan/scripts/wait_for_release.ts "$RELEASE_TAG"
 
   deploy-next-net:
     needs: [get-image-tag, wait-for-release]
@@ -111,6 +124,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       # The runner's gcloud has its component manager disabled, so the plugin has to
       # come from setup-gcloud. The teardown action installs it too, but only after

@@ -52,6 +52,11 @@ export const P2P_ARCHIVE_STORE_NAME = 'p2p-archive';
 export const P2P_PEER_STORE_NAME = 'p2p-peers';
 export const P2P_ATTESTATION_STORE_NAME = 'p2p-attestation';
 
+export const P2P_STORE_VERSION = 5;
+export const P2P_ARCHIVE_STORE_VERSION = 2;
+export const P2P_PEER_STORE_VERSION = 1;
+export const P2P_ATTESTATION_STORE_VERSION = 4;
+
 export async function createP2PClient(
   inputConfig: P2PConfig & DataStoreConfig & ChainConfig,
   archiver: L2BlockSource & ContractDataSource,
@@ -79,16 +84,15 @@ export async function createP2PClient(
   }
 
   const bindings = logger.getBindings();
-  // Schema version 4: L2 tips store resolves checkpoint tips from per-tip ids in l2_tip_checkpoints; the
-  // block->checkpoint mapping and checkpoint maps were dropped. Bumped to wipe stores whose tips predate
-  // per-tip ids, which would otherwise make getL2Tips throw on every read.
-  const store = deps.store ?? (await createStore(P2P_STORE_NAME, 4, config, bindings));
-  const archive = await createStore(P2P_ARCHIVE_STORE_NAME, 1, config, bindings);
-  const peerStore = await createStore(P2P_PEER_STORE_NAME, 1, config, bindings);
-  // Attestation store version 3: persisted proposal/attestation buffers embed the checkpoint header (which lost
-  // `inHash`) and the block-proposal wire format (which dropped its zeroed `inHash`), so pre-Fast-Inbox bytes no
-  // longer decode. Bumped to wipe stale pools; same no-migration policy as the archiver store.
-  const attestationStore = await createStore(P2P_ATTESTATION_STORE_NAME, 3, config, bindings);
+  const store = deps.store ?? (await createStore(P2P_STORE_NAME, P2P_STORE_VERSION, config, bindings));
+  const archive = await createStore(P2P_ARCHIVE_STORE_NAME, P2P_ARCHIVE_STORE_VERSION, config, bindings);
+  const peerStore = await createStore(P2P_PEER_STORE_NAME, P2P_PEER_STORE_VERSION, config, bindings);
+  const attestationStore = await createStore(
+    P2P_ATTESTATION_STORE_NAME,
+    P2P_ATTESTATION_STORE_VERSION,
+    config,
+    bindings,
+  );
   const l1Constants = await archiver.getL1Constants();
 
   const rollupAddress = inputConfig.rollupAddress.toString().toLowerCase().replace(/^0x/, '');

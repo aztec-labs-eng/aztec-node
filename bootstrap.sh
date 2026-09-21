@@ -762,11 +762,19 @@ case "$cmd" in
     spartan/bootstrap.sh network_tests "${env_file}"
     ;;
   "ci-network-kind-tests")
+    # Args: [docker_image]
+    # Without an image, the tests run against one built from this tree.
     export CI=1
+    docker_image="${1:-}"
     [ "${SKIP_BUILD:-0}" -eq 0 ] && build
-    # Set the docker image to the locally built image and load it into KIND
-    export AZTEC_DOCKER_IMAGE="azteclabs/aztec:$(git rev-parse HEAD)"
+    if [ -n "$docker_image" ]; then
+      docker pull "$docker_image"
+    else
+      docker_image="azteclabs/aztec:$(git rev-parse HEAD)"
+    fi
+    export AZTEC_DOCKER_IMAGE="$docker_image"
     spartan/bootstrap.sh kind
+    # kind load reads the local docker daemon, so the image has to be present either way.
     kind load docker-image "$AZTEC_DOCKER_IMAGE"
     # Just one test for now
     spartan/bootstrap.sh test-kind-upgrade-rollup

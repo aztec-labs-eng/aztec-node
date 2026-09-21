@@ -360,7 +360,7 @@ describe('CheckpointProposalJobTestGate', () => {
   // The stale-block scenarios release a signed block that peers still have to accept on ingress, which the
   // proposal send deadline does not bound: it is one propagation budget earlier than the consensus receive
   // deadline validators actually enforce.
-  it('reports the ingress budget separately from the proposal send budget', async () => {
+  it('reports the ingress window separately from the proposal send budget', async () => {
     const gate = makeGate();
     const receiveDeadline = timetable.getCheckpointProposalReceiveDeadline(slot);
     const sendDeadline = receiveDeadline - timetable.p2pPropagationTime;
@@ -369,11 +369,38 @@ describe('CheckpointProposalJobTestGate', () => {
       ctx => {
         const now = (sendDeadline - 1) * 1000;
         expect(ctx.remainingHoldBudgetMs(now)).toBe(1000);
-        expect(ctx.remainingIngressBudgetMs(now)).toBe(1000 + timetable.p2pPropagationTime * 1000);
+        expect(ctx.ingressWindow(now).closesInMs).toBe(1000 + timetable.p2pPropagationTime * 1000);
         return Promise.resolve();
       },
     );
     const holding = gate.hooks.onCheckpointPhase!(makeEvent({ proposalSendDeadline: new Date(sendDeadline * 1000) }));
+    await checked;
+    await holding;
+  });
+
+  // Peers gate proposal ingress on both ends of the receive window, so a release is only safe once the window has
+  // opened. A test that measured only the deadline read a healthy budget while its proposal was still too early to
+  // be accepted, and the block was dropped at gossip instead of being compared. Both bounds come from one `now`,
+  // so a caller cannot sample them either side of a clock that is moving.
+  it('reports how long the ingress window is still to open', async () => {
+    const gate = makeGate();
+    const receiveStart = timetable.getCheckpointProposalReceiveStart(slot);
+    const checked = gate.withHold(
+      () => true,
+      ctx => {
+        const receiveDeadline = timetable.getCheckpointProposalReceiveDeadline(slot);
+        const tooEarly = (receiveStart - 12) * 1000;
+        expect(ctx.ingressWindow(tooEarly).opensInMs).toBe(12_000);
+        expect(ctx.ingressWindow(tooEarly).closesInMs).toBe((receiveDeadline - receiveStart + 12) * 1000);
+        expect(ctx.ingressWindow(receiveStart * 1000).opensInMs).toBe(0);
+        expect(ctx.ingressWindow((receiveStart + 1) * 1000).opensInMs).toBe(-1000);
+        // The strict window is inclusive at the deadline, which is why the helper's contract is "<= 0 < closes"
+        // rather than a claim about what peers accept: they widen this by their clock-disparity tolerance.
+        expect(ctx.ingressWindow(receiveDeadline * 1000).closesInMs).toBe(0);
+        return Promise.resolve();
+      },
+    );
+    const holding = gate.hooks.onCheckpointPhase!(makeEvent());
     await checked;
     await holding;
   });

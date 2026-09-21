@@ -1,7 +1,7 @@
 import { BLOCK_HEADER_LENGTH } from '@aztec-labs/constants';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { makeBlockHeader } from '../tests/factories.js';
 import { BlockHeader } from './block_header.js';
@@ -31,7 +31,7 @@ describe('BlockHeader', () => {
     const header = makeBlockHeader(seed);
     const hash = await header.hash();
     expect(hash.toString()).toMatchInlineSnapshot(
-      `"0x2bc57f4ce71a821fbe04fe627cd6b17ef566160f8f25b4f6a10cc961bcaba18b"`,
+      `"0x1e79dab28d2f5be3414dcb6f177bffd2e61f258f85761cceb34eab5dbf205e1e"`,
     );
   });
 
@@ -52,7 +52,7 @@ describe('BlockHeader', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/abis/block_header.nr',
       'test_data_empty_hash',
       hash.toString(),

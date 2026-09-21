@@ -312,6 +312,40 @@ describe('sentinel', () => {
       expect(activity[committee[3].toString()]).toEqual('attestation-missed');
     });
 
+    it('does not tag honest non-signers as missed when a locally-invalid checkpoint was mined on L1', async () => {
+      // A malicious quorum mines a checkpoint this node re-executed as invalid; the honest non-signer
+      // must not be counted as a missed attestor (which would feed inactivity slashing).
+      reexecutionTracker.recordOutcome(slot, block.archive.root, 'invalid', CheckpointNumber(1));
+      const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, slotNumber: slot });
+      mineCheckpointForSlot(checkpoint);
+
+      // Attestations from validators 0-2; validator 3 is the honest non-signer.
+      p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, -1));
+
+      const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+
+      // Proposer slot stays checkpoint-mined (it was published)...
+      expect(activity[proposer.toString()]).toEqual('checkpoint-mined');
+      // ...but the honest non-signer (validator 3) is NOT marked missed.
+      expect(activity[committee[3].toString()]).not.toEqual('attestation-missed');
+    });
+
+    it('does not tag honest non-signers as missed when the slot had a proposal equivocation', async () => {
+      // Two conflicting proposals in the slot: an honest attestor may have seen an invalid one and
+      // declined. Even with a mined checkpoint, the non-signer must not count as a missed attestor.
+      reexecutionTracker.recordEquivocation(slot);
+      const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, slotNumber: slot });
+      mineCheckpointForSlot(checkpoint);
+
+      // Attestations from validators 0-2; validator 3 is the honest non-signer.
+      p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, -1));
+
+      const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+
+      expect(activity[proposer.toString()]).toEqual('checkpoint-mined');
+      expect(activity[committee[3].toString()]).not.toEqual('attestation-missed');
+    });
+
     it('identifies missed attestors when checkpoint proposal was re-executed valid', async () => {
       reexecutionTracker.recordOutcome(slot, block.archive.root, 'valid', CheckpointNumber(1));
       p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, -1));

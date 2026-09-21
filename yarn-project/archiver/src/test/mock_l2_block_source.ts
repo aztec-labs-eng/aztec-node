@@ -6,6 +6,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -110,7 +111,7 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
       return this.genesisBlock;
     }
     const archive = this.genesisArchiveRoot
-      ? new AppendOnlyTreeSnapshot(this.genesisArchiveRoot, 1)
+      ? new AppendOnlyTreeSnapshot(this.genesisArchiveRoot, TreeLeafIndex(1))
       : AppendOnlyTreeSnapshot.empty();
     return (this.genesisBlock = new L2Block(
       archive,
