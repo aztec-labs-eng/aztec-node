@@ -27,7 +27,7 @@ type OracleHandlers = {
 
 /** An oracle served to the protocol contracts. */
 export interface ProtocolOracleEntry {
-  /** Which oracle handler `serve` takes.*/
+  /** Which oracle handler `serve` takes. */
   oracleKind: keyof OracleHandlers;
   /** The ordered named parameters of the wire, with their {@link TypeMapping}s. */
   params: readonly RegistryParam[];

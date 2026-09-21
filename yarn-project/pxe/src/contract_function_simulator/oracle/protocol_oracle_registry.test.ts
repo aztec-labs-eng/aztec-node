@@ -1,5 +1,8 @@
 /* eslint-disable camelcase */
+import { L1_TO_L2_MSG_TREE_HEIGHT } from '@aztec-labs/constants';
+import { makeTuple } from '@aztec-labs/foundation/array';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { toACVMField } from '@aztec-labs/simulator/client';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -99,20 +102,33 @@ describe('protocol oracle dispatch', () => {
     const messageHash = Fr.random();
     const secret = Fr.random();
 
+    const witness = new MembershipWitness(
+      L1_TO_L2_MSG_TREE_HEIGHT,
+      7n,
+      makeTuple(L1_TO_L2_MSG_TREE_HEIGHT, () => Fr.random()),
+    );
+
     let handlerArgs: unknown[] | undefined;
     const handler = {
+      isUtility: true,
       getL1ToL2MembershipWitnessV2: (...args: unknown[]) => {
         handlerArgs = args;
+        return Promise.resolve(witness);
       },
-    };
+    } as unknown as Handler;
 
-    const entry = PROTOCOL_ORACLE_REGISTRY['aztec_protocol_utl_getL1ToL2MembershipWitness'];
-    await entry.serve(handler, [contractAddress, messageHash, secret]);
+    const callback = buildACIRCallback(handler, { contractAddress: protocolContract });
+    const wire = await callback['aztec_protocol_utl_getL1ToL2MembershipWitness'](
+      [toACVMField(contractAddress)],
+      [toACVMField(messageHash)],
+      [toACVMField(secret)],
+    );
 
     expect(handlerArgs).toEqual([
       messageHash,
       Option.some({ contractAddress, nullifier: await computeFeeJuiceMessageNullifier(messageHash, secret) }),
     ]);
+    expect(wire).toEqual([toACVMField(witness.leafIndex), witness.siblingPath.map(toACVMField)]);
   });
 
   it('names every oracle after its kind', () => {
