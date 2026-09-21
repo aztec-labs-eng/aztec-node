@@ -169,10 +169,28 @@ describe('capLogsWindow', () => {
     expect(requests.filter(r => r.method === 'eth_getBlockByNumber')).toHaveLength(1);
   });
 
-  it('leaves a query alone when its bounds already fit, without rewriting the tag', async () => {
+  it('pins a resolved moving bound even when the range already fits', async () => {
     const { request, requests } = makeCappedRequest(100, answerFromHead(24n));
     await request({ method: 'eth_getLogs', params: [{ fromBlock: '0x0', toBlock: 'latest' }] });
-    expect(logsRanges(requests)).toEqual([{ fromBlock: 0, toBlock: 'latest' }]);
+    expect(logsRanges(requests)).toEqual([{ fromBlock: 0, toBlock: 24 }]);
+  });
+
+  it('keeps a pinned single window within the cap when the chain advances mid-request', async () => {
+    let head = 9n;
+    const { request, requests } = makeCappedRequest(10, (args: Request) => {
+      if (args.method === 'eth_getBlockByNumber') {
+        return { number: `0x${head.toString(16)}` };
+      }
+      head += 1n;
+      const [{ fromBlock, toBlock }] = args.params as [{ fromBlock?: string; toBlock?: string }];
+      if (BigInt(toBlock!) - BigInt(fromBlock!) + 1n > 10n) {
+        throw new Error('query exceeds max block range');
+      }
+      return [];
+    });
+
+    await request({ method: 'eth_getLogs', params: [{ fromBlock: '0x0', toBlock: 'latest' }] });
+    expect(logsRanges(requests)).toEqual([{ fromBlock: 0, toBlock: 9 }]);
   });
 
   it('does not resolve anything when both bounds name the same moving tag', async () => {
@@ -191,6 +209,35 @@ describe('capLogsWindow', () => {
     const { request, requests } = makeCappedRequest(10, answerFromHead(undefined));
     await request({ method: 'eth_getLogs', params: [{ fromBlock: '0x0', toBlock: 'finalized' }] });
     expect(logsRanges(requests)).toEqual([{ fromBlock: 0, toBlock: 'finalized' }]);
+  });
+
+  it('passes the query through when resolving the tag fails', async () => {
+    const { request, requests } = makeCappedRequest(10, (args: Request) => {
+      if (args.method === 'eth_getBlockByNumber') {
+        throw new Error('method eth_getBlockByNumber is not available');
+      }
+      return [];
+    });
+    await request({ method: 'eth_getLogs', params: [{ fromBlock: '0x0', toBlock: 'latest' }] });
+    expect(logsRanges(requests)).toEqual([{ fromBlock: 0, toBlock: 'latest' }]);
+  });
+
+  it('concatenates windows holding far more logs than fit in an argument list', async () => {
+    const perWindow = 200_000;
+    const { request } = makeCappedRequest(10, (args: Request) => {
+      if (args.method !== 'eth_getLogs') {
+        return null;
+      }
+      const [{ fromBlock }] = args.params as [{ fromBlock: string }];
+      return new Array(perWindow).fill({ from: fromBlock });
+    });
+
+    const logs = (await request({ method: 'eth_getLogs', params: [{ fromBlock: '0x0', toBlock: '0x13' }] })) as {
+      from: string;
+    }[];
+    expect(logs).toHaveLength(perWindow * 2);
+    expect(logs[0].from).toEqual('0x0');
+    expect(logs[perWindow].from).toEqual('0xa');
   });
 
   it('passes an inverted range through for the provider to reject', async () => {

@@ -20,7 +20,7 @@ import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { createEthereumChain } from './chain.js';
-import { DEFAULT_MAX_L1_LOGS_WINDOW_SIZE, capLogsWindow } from './logs_window.js';
+import { capLogsWindow, configuredMaxL1LogsWindowSize } from './logs_window.js';
 import type { ExtendedViemWalletClient, ViemPublicClient } from './types.js';
 
 type Config = {
@@ -52,7 +52,7 @@ export class L1RpcError extends Error {
  */
 export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number; maxLogsWindowSize?: number }) {
   const transport = fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout })));
-  return wrapL1RpcTransport(capLogsWindow(transport, opts?.maxLogsWindowSize ?? DEFAULT_MAX_L1_LOGS_WINDOW_SIZE));
+  return wrapL1RpcTransport(capLogsWindow(transport, opts?.maxLogsWindowSize ?? configuredMaxL1LogsWindowSize()));
 }
 
 /** Returns the HTTP status from an L1 RPC error's cause chain, if one is available. */

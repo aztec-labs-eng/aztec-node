@@ -22,6 +22,27 @@ type LogsFilter = {
 /** Block tags whose height changes as the chain grows, so a bound naming one has to be resolved before chunking. */
 const MOVING_BLOCK_TAGS: BlockTag[] = ['latest', 'safe', 'finalized'];
 
+/** Block tags this cap can turn into a height. Anything else (`pending`) leaves the bound unknown. */
+const RESOLVABLE_BLOCK_TAGS: BlockTag[] = [...MOVING_BLOCK_TAGS, 'earliest'];
+
+/**
+ * The cap to apply when the caller supplies none: `MAX_L1_LOGS_WINDOW_SIZE` if the environment sets it, else
+ * {@link DEFAULT_MAX_L1_LOGS_WINDOW_SIZE}. Entry points that parse a config thread the value explicitly, but clients
+ * built without one -- a CLI command, the per-URL probes the archiver makes at startup -- reach the environment here
+ * rather than silently falling back to the default.
+ */
+export function configuredMaxL1LogsWindowSize(): number {
+  const fromEnv = process.env.MAX_L1_LOGS_WINDOW_SIZE;
+  if (fromEnv === undefined || fromEnv.trim() === '') {
+    return DEFAULT_MAX_L1_LOGS_WINDOW_SIZE;
+  }
+  const parsed = Number(fromEnv);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`MAX_L1_LOGS_WINDOW_SIZE must be a positive integer, got ${fromEnv}`);
+  }
+  return parsed;
+}
+
 /**
  * Splits an inclusive L1 block range into consecutive windows of at most `maxWindowSize` blocks. The windows tile
  * the range with no gap and no overlap, in ascending order.
@@ -55,7 +76,8 @@ type RequestFn = (args: { method: string; params?: unknown }) => Promise<unknown
  * The block heights a filter's bounds denote, resolving any moving tag against the chain. Returns undefined when the
  * range is not one this cap can split: a `pending` bound has no canonical height, a tag the provider cannot answer
  * (`finalized` on a chain that has none yet) leaves the bound unknown, and an inverted range is left for the
- * provider to reject as it would have without the cap.
+ * provider to reject as it would have without the cap. A resolution request that fails also yields undefined -- the
+ * probe this cap adds must never fail a query the provider would have answered.
  */
 async function resolveLogsWindow(
   filter: LogsFilter,
@@ -63,6 +85,11 @@ async function resolveLogsWindow(
 ): Promise<{ fromBlock: bigint; toBlock: bigint } | undefined> {
   const fromTag = tagOf(filter.fromBlock);
   const toTag = tagOf(filter.toBlock);
+
+  const unresolvable = (tag: BlockTag | undefined) => tag !== undefined && !RESOLVABLE_BLOCK_TAGS.includes(tag);
+  if (unresolvable(fromTag) || unresolvable(toTag)) {
+    return undefined;
+  }
 
   // Both bounds naming the same moving tag span a single block, whatever height it currently sits at.
   if (fromTag !== undefined && fromTag === toTag && MOVING_BLOCK_TAGS.includes(fromTag)) {
@@ -77,15 +104,8 @@ async function resolveLogsWindow(
     if (tag === 'earliest') {
       return 0n;
     }
-    if (!MOVING_BLOCK_TAGS.includes(tag)) {
-      return undefined;
-    }
     if (!resolved.has(tag)) {
-      const block = (await request({ method: 'eth_getBlockByNumber', params: [tag, false] })) as {
-        number?: Hex | null;
-      } | null;
-      const height = block?.number;
-      resolved.set(tag, height === undefined || height === null ? undefined : BigInt(height));
+      resolved.set(tag, await resolveTagHeight(tag, request));
     }
     return resolved.get(tag);
   };
@@ -96,6 +116,20 @@ async function resolveLogsWindow(
     return undefined;
   }
   return { fromBlock, toBlock };
+}
+
+/** The height a moving tag currently names, or undefined when the provider cannot or will not say. */
+async function resolveTagHeight(tag: BlockTag, request: RequestFn): Promise<bigint | undefined> {
+  try {
+    const block = (await request({ method: 'eth_getBlockByNumber', params: [tag, false] })) as {
+      number?: Hex | null;
+    } | null;
+    const height = block?.number;
+    return height === undefined || height === null ? undefined : BigInt(height);
+  } catch (err) {
+    logger.debug(`Could not resolve L1 block tag ${tag} to cap an eth_getLogs range`, { err });
+    return undefined;
+  }
 }
 
 /**
@@ -144,18 +178,25 @@ export function capLogsWindow(
       }
 
       const windows = splitLogsWindow(window.fromBlock, window.toBlock, maxWindowSize);
-      // Pass the original bounds through untouched when they already fit, so a tag stays a tag.
-      if (windows.length <= 1) {
-        return forward(args);
+      const requestWindow = ({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) =>
+        forward({ ...args, params: [{ ...filter, fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) }] });
+
+      // Send the resolved heights rather than the bounds as written, even for a single window: a `latest` left in
+      // place is re-read by the provider, and a block mined since it was resolved puts the range back over the cap.
+      if (windows.length === 1) {
+        return requestWindow(windows[0]);
       }
 
       logger.debug(
         `Splitting eth_getLogs over L1 blocks ${window.fromBlock}-${window.toBlock} into ${windows.length} requests of up to ${maxWindowSize} blocks`,
       );
       const logs: unknown[] = [];
-      for (const { fromBlock, toBlock } of windows) {
-        const params = [{ ...filter, fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) }];
-        logs.push(...((await forward({ ...args, params })) as unknown[]));
+      for (const currentWindow of windows) {
+        // Appended one at a time: spreading a window's logs into `push` passes them as arguments, which overflows
+        // the stack on the tens of thousands of logs a block range can hold.
+        for (const log of (await requestWindow(currentWindow)) as unknown[]) {
+          logs.push(log);
+        }
       }
       return logs;
     };
