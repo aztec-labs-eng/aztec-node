@@ -854,7 +854,7 @@ export function mapPrivateTxConstantDataToNoir(data: PrivateTxConstantData): Pri
   return {
     anchor_block_header: mapBlockHeaderToNoir(data.anchorBlockHeader),
     tx_context: mapTxContextToNoir(data.txContext),
-    tx_request_salt: mapFieldToNoir(data.txRequestSalt),
+    protocol_nullifier: mapFieldToNoir(data.protocolNullifier),
     vk_tree_root: mapFieldToNoir(data.vkTreeRoot),
     protocol_contracts: mapProtocolContractsToNoir(data.protocolContracts),
   };
@@ -864,7 +864,7 @@ export function mapPrivateTxConstantDataFromNoir(data: PrivateTxConstantDataNoir
   return new PrivateTxConstantData(
     mapBlockHeaderFromNoir(data.anchor_block_header),
     mapTxContextFromNoir(data.tx_context),
-    mapFieldFromNoir(data.tx_request_salt),
+    mapFieldFromNoir(data.protocol_nullifier),
     mapFieldFromNoir(data.vk_tree_root),
     mapProtocolContractsFromNoir(data.protocol_contracts),
   );

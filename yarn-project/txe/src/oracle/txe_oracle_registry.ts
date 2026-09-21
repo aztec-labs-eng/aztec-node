@@ -145,7 +145,7 @@ const PRIVATE_CONTEXT_INPUTS: TypeMapping<PrivateContextInputs> = STRUCT([
   { name: 'anchorBlockHeader', type: BLOCK_HEADER },
   { name: 'txContext', type: TX_CONTEXT },
   { name: 'startSideEffectCounter', type: U32 },
-  { name: 'txRequestSalt', type: FIELD },
+  { name: 'protocolNullifier', type: FIELD },
 ]);
 
 const COMPLETE_ADDRESS: TypeMapping<CompleteAddress> = STRUCT([

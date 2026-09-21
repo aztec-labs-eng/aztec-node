@@ -783,7 +783,7 @@ export class TXESession implements TXESessionStateHandler {
     this.oracleHandler = new TXEPrivateExecutionOracle({
       argsHash: Fr.ZERO,
       txContext: new TxContext(this.chainId, this.version, GasSettings.from(gasSettings)),
-      txRequestSalt: Fr.ZERO,
+      protocolNullifier,
       callContext: new CallContext(AztecAddress.ZERO, contractAddress, FunctionSelector.empty(), false),
       anchorBlockHeader: anchorBlock!,
       utilityExecutor,
