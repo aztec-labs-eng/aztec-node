@@ -319,7 +319,7 @@ export async function createAztecNodeService(
       peerProofVerifier,
       worldStateSynchronizer,
       epochCache,
-      feeProvider,
+      nextBlockPredictor,
       packageVersion,
       dateProvider,
       telemetry,

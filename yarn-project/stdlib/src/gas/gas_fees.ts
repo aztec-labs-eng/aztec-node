@@ -138,3 +138,15 @@ export class GasFees {
 export interface BlockMinFeesProvider {
   getCurrentMinFees(): Promise<GasFees>;
 }
+
+/**
+ * Provides the mana min fee the next block this node would build is going to charge, which is the fee a
+ * transaction must be able to pay to be admitted on this node. Undefined when the node cannot resolve it
+ * right now; callers pick their own policy from there.
+ *
+ * Distinct from {@link BlockMinFeesProvider}, which answers the L1-anchored price after the on-chain pending
+ * checkpoint and therefore cannot see the fee a locally proposed in-progress checkpoint already froze.
+ */
+export interface NextBlockMinFeesProvider {
+  getNextBlockMinFees(): Promise<GasFees | undefined>;
+}

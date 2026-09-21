@@ -833,7 +833,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
           ...(await getDefaultAllowedSetupFunctions()),
           ...(this.config.txPublicSetupAllowListExtend ?? []),
         ],
-        gasFees: await this.getCurrentMinFees(),
+        gasFees: skipFeeEnforcement ? GasFees.empty() : await this.getNextBlockMinFees(),
         skipFeeEnforcement,
         isSimulation,
         txsPermitted: !this.config.disableTransactions,
@@ -844,6 +844,21 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     );
 
     return await validator.validateTx(tx);
+  }
+
+  /**
+   * The fee the next block will charge, for RPC admission, which fails closed on it: a transaction has to be
+   * priced against the block it would actually enter, and the L1-forward projection cannot stand in for a fee
+   * an in-progress checkpoint already froze. Quotes rather than the relay path's cache-first read, so a single
+   * submission waits out a boundary refresh instead of being rejected. Being unable to resolve it is
+   * transient, so it surfaces as an error for the caller to retry rather than as a rejection of the tx.
+   */
+  private async getNextBlockMinFees(): Promise<GasFees> {
+    const quote = await this.nextBlockPredictor.quoteMinFees();
+    if (!quote) {
+      throw new Error(`Cannot determine the minimum fee for the next block, please retry`);
+    }
+    return quote.fees;
   }
 
   public getConfig(): Promise<AztecNodeAdminConfig> {

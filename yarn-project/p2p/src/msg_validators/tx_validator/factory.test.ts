@@ -118,6 +118,35 @@ describe('Validator factory functions', () => {
       ]);
     });
 
+    it('keeps every gossip validator, fee-payer balance included, when the next-block fee is unavailable', () => {
+      const validators = createFirstStageTxValidationsForGossipedTransactions(
+        0n,
+        BlockNumber(2),
+        synchronizer,
+        undefined,
+        1,
+        2,
+        Fr.ZERO,
+        contractSource,
+        true,
+      );
+
+      expect(Object.keys(validators)).toEqual([
+        'timestampValidator',
+        'txsPermittedValidator',
+        'txSizeValidator',
+        'metadataValidator',
+        'phasesValidator',
+        'blockHeaderValidator',
+        'doubleSpendValidator',
+        'minGasLimitsValidator',
+        'maxGasLimitsValidator',
+        'gasValidator',
+        'dataValidator',
+        'contractInstanceValidator',
+      ]);
+    });
+
     it('forwards the network admission limits to the gas limits validator', async () => {
       const maxTxL2Gas = Math.floor(MAX_PROCESSABLE_L2_GAS / 2);
       const validators = createFirstStageTxValidationsForGossipedTransactions(
@@ -535,6 +564,26 @@ describe('Validator factory functions', () => {
       );
 
       expect(synchronizer.syncImmediate).toHaveBeenCalled();
+    });
+
+    it('drops only the max-fee check when the next-block fee is unavailable', async () => {
+      const validator = await createTxValidatorForTransactionsEnteringPendingTxPool(
+        synchronizer,
+        100n,
+        BlockNumber(5),
+        {},
+        undefined,
+      );
+
+      const aggregate = validator as AggregateTxValidator<unknown>;
+      expect(getValidatorNames(aggregate)).toEqual([
+        AllowedSetupCallsMetaValidator.name,
+        TimestampTxValidator.name,
+        MinGasLimitsValidator.name,
+        MaxGasLimitsValidator.name,
+        BlockHeaderTxValidator.name,
+        DoubleSpendTxValidator.name,
+      ]);
     });
   });
 });

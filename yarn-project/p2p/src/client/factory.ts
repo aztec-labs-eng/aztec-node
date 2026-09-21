@@ -7,7 +7,7 @@ import { AztecLMDBStoreV2, createStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { BlockHash, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { type BlockMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import { type NextBlockMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   AztecNode,
   ClientProtocolCircuitVerifier,
@@ -63,7 +63,7 @@ export async function createP2PClient(
   proofVerifier: ClientProtocolCircuitVerifier,
   worldStateSynchronizer: WorldStateSynchronizer,
   epochCache: EpochCacheInterface,
-  blockMinFeesProvider: BlockMinFeesProvider,
+  nextBlockMinFeesProvider: NextBlockMinFeesProvider,
   packageVersion: string,
   dateProvider: DateProvider = new DateProvider(),
   telemetry: TelemetryClient = getTelemetryClient(),
@@ -121,7 +121,8 @@ export async function createP2PClient(
           const currentBlockNumber = await archiver.getBlockNumber();
           const { ts: nextSlotTimestamp } = epochCache.getEpochAndSlotInNextL1Slot();
           const l1Constants = await archiver.getL1Constants();
-          const gasFees = await blockMinFeesProvider.getCurrentMinFees();
+          // Undefined fails open on the max-fee check alone, so a pricing outage cannot empty the pending pool.
+          const gasFees = await nextBlockMinFeesProvider.getNextBlockMinFees();
           const networkTxGasLimits = getNetworkTxGasLimits(config, l1Constants);
           return createTxValidatorForTransactionsEnteringPendingTxPool(
             worldStateSynchronizer,
@@ -134,7 +135,7 @@ export async function createP2PClient(
             gasFees,
           );
         },
-        blockMinFeesProvider,
+        nextBlockMinFeesProvider,
       },
       telemetry,
       {
@@ -162,7 +163,7 @@ export async function createP2PClient(
     proofVerifier,
     worldStateSynchronizer,
     epochCache,
-    blockMinFeesProvider,
+    nextBlockMinFeesProvider,
     store,
     peerStore,
     mempools,
@@ -247,7 +248,7 @@ async function createP2PService(
   proofVerifier: ClientProtocolCircuitVerifier,
   worldStateSynchronizer: WorldStateSynchronizer,
   epochCache: EpochCacheInterface,
-  blockMinFeesProvider: BlockMinFeesProvider,
+  nextBlockMinFeesProvider: NextBlockMinFeesProvider,
   store: AztecAsyncKVStore,
   peerStore: AztecLMDBStoreV2,
   mempools: MemPools,
@@ -276,7 +277,7 @@ async function createP2PService(
     proofVerifier,
     worldStateSynchronizer,
     peerStore,
-    blockMinFeesProvider,
+    nextBlockMinFeesProvider,
     telemetry,
     logger: logger.createChild(`libp2p_service`),
     txValidationCache,
