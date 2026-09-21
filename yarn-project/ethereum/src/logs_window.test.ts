@@ -1,4 +1,4 @@
-import type { FallbackTransport, HttpTransport } from 'viem';
+import type { HttpTransport } from 'viem';
 
 import { capLogsWindow, splitLogsWindow } from './logs_window.js';
 
@@ -14,7 +14,7 @@ function makeRecordingTransport(handler: (args: Request) => unknown) {
       requests.push(args);
       return Promise.resolve(handler(args));
     },
-  })) as unknown as FallbackTransport<HttpTransport[]>;
+  })) as unknown as HttpTransport;
   return { transport, requests };
 }
 
@@ -38,9 +38,15 @@ function makeCappedRequest(
   return { request: args => (capped.request as (args: Request) => Promise<any>)(args), requests };
 }
 
-/** Answers `eth_getBlockByNumber` with `head` and `eth_getLogs` with one log naming the range it covered. */
+/** The methods the cap uses to turn a moving tag into a height. */
+const TAG_RESOLUTION_METHODS = ['eth_blockNumber', 'eth_getBlockByNumber'];
+
+/** Answers a tag resolution with `head` and `eth_getLogs` with one log naming the range it covered. */
 function answerFromHead(head: bigint | undefined) {
   return (args: Request) => {
+    if (args.method === 'eth_blockNumber') {
+      return head === undefined ? undefined : `0x${head.toString(16)}`;
+    }
     if (args.method === 'eth_getBlockByNumber') {
       return head === undefined ? null : { number: `0x${head.toString(16)}` };
     }
@@ -51,11 +57,11 @@ function answerFromHead(head: bigint | undefined) {
 
 describe('splitLogsWindow', () => {
   it('returns a single window for a range that fits', () => {
-    expect(splitLogsWindow(10n, 19n, 10)).toEqual([{ fromBlock: 10n, toBlock: 19n }]);
+    expect([...splitLogsWindow(10n, 19n, 10)]).toEqual([{ fromBlock: 10n, toBlock: 19n }]);
   });
 
   it('tiles a range that is an exact multiple of the window size', () => {
-    expect(splitLogsWindow(0n, 5n, 2)).toEqual([
+    expect([...splitLogsWindow(0n, 5n, 2)]).toEqual([
       { fromBlock: 0n, toBlock: 1n },
       { fromBlock: 2n, toBlock: 3n },
       { fromBlock: 4n, toBlock: 5n },
@@ -63,7 +69,7 @@ describe('splitLogsWindow', () => {
   });
 
   it('clips the last window of a range that is not a multiple of the window size', () => {
-    expect(splitLogsWindow(10n, 14n, 2)).toEqual([
+    expect([...splitLogsWindow(10n, 14n, 2)]).toEqual([
       { fromBlock: 10n, toBlock: 11n },
       { fromBlock: 12n, toBlock: 13n },
       { fromBlock: 14n, toBlock: 14n },
@@ -71,7 +77,7 @@ describe('splitLogsWindow', () => {
   });
 
   it('splits into single blocks at a window size of one', () => {
-    expect(splitLogsWindow(7n, 9n, 1)).toEqual([
+    expect([...splitLogsWindow(7n, 9n, 1)]).toEqual([
       { fromBlock: 7n, toBlock: 7n },
       { fromBlock: 8n, toBlock: 8n },
       { fromBlock: 9n, toBlock: 9n },
@@ -79,7 +85,13 @@ describe('splitLogsWindow', () => {
   });
 
   it('returns no window for an inverted range', () => {
-    expect(splitLogsWindow(10n, 9n, 5)).toEqual([]);
+    expect([...splitLogsWindow(10n, 9n, 5)]).toEqual([]);
+  });
+
+  it('yields windows without materialising them all', () => {
+    const windows = splitLogsWindow(0n, 10n ** 9n, 1);
+    expect(windows.next().value).toEqual({ fromBlock: 0n, toBlock: 0n });
+    expect(windows.next().value).toEqual({ fromBlock: 1n, toBlock: 1n });
   });
 });
 
@@ -166,7 +178,13 @@ describe('capLogsWindow', () => {
   it('resolves each distinct moving tag once for a request', async () => {
     const { request, requests } = makeCappedRequest(10, answerFromHead(30n));
     await request({ method: 'eth_getLogs', params: [{ fromBlock: '0x0', toBlock: 'latest' }] });
-    expect(requests.filter(r => r.method === 'eth_getBlockByNumber')).toHaveLength(1);
+    expect(requests.filter(r => TAG_RESOLUTION_METHODS.includes(r.method))).toHaveLength(1);
+  });
+
+  it('resolves latest without downloading the block', async () => {
+    const { request, requests } = makeCappedRequest(10, answerFromHead(30n));
+    await request({ method: 'eth_getLogs', params: [{ fromBlock: '0x0', toBlock: 'latest' }] });
+    expect(requests.filter(r => TAG_RESOLUTION_METHODS.includes(r.method))).toEqual([{ method: 'eth_blockNumber' }]);
   });
 
   it('pins a resolved moving bound even when the range already fits', async () => {
@@ -178,8 +196,8 @@ describe('capLogsWindow', () => {
   it('keeps a pinned single window within the cap when the chain advances mid-request', async () => {
     let head = 9n;
     const { request, requests } = makeCappedRequest(10, (args: Request) => {
-      if (args.method === 'eth_getBlockByNumber') {
-        return { number: `0x${head.toString(16)}` };
+      if (TAG_RESOLUTION_METHODS.includes(args.method)) {
+        return `0x${head.toString(16)}`;
       }
       head += 1n;
       const [{ fromBlock, toBlock }] = args.params as [{ fromBlock?: string; toBlock?: string }];
@@ -213,8 +231,8 @@ describe('capLogsWindow', () => {
 
   it('passes the query through when resolving the tag fails', async () => {
     const { request, requests } = makeCappedRequest(10, (args: Request) => {
-      if (args.method === 'eth_getBlockByNumber') {
-        throw new Error('method eth_getBlockByNumber is not available');
+      if (TAG_RESOLUTION_METHODS.includes(args.method)) {
+        throw new Error(`method ${args.method} is not available`);
       }
       return [];
     });

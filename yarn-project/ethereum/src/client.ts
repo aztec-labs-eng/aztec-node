@@ -48,11 +48,16 @@ export class L1RpcError extends Error {
 
 /**
  * Creates a viem fallback HTTP transport for the given L1 RPC URLs. Every L1 client in the node is built on this
- * transport, so the log-range cap it installs applies to every `eth_getLogs` the node issues.
+ * transport, so the log-range cap it installs applies to every `eth_getLogs` the node issues. The cap wraps each
+ * endpoint rather than the fallback over them, so a log query split into several requests stays on one endpoint
+ * and a failure retries the whole query on the next one.
  */
 export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number; maxLogsWindowSize?: number }) {
-  const transport = fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout })));
-  return wrapL1RpcTransport(capLogsWindow(transport, opts?.maxLogsWindowSize ?? configuredMaxL1LogsWindowSize()));
+  const maxWindowSize = opts?.maxLogsWindowSize ?? configuredMaxL1LogsWindowSize();
+  const transport = fallback(
+    rpcUrls.map(url => capLogsWindow(http(url, { batch: false, timeout: opts?.timeout }), maxWindowSize)),
+  );
+  return wrapL1RpcTransport(transport);
 }
 
 /** Returns the HTTP status from an L1 RPC error's cause chain, if one is available. */

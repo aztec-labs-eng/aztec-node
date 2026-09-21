@@ -1,5 +1,5 @@
 import { createLogger } from '@aztec-labs/foundation/log';
-import type { FallbackTransport, HttpTransport } from 'viem';
+import type { HttpTransport } from 'viem';
 import { numberToHex } from 'viem';
 
 /**
@@ -56,22 +56,26 @@ export function configuredMaxL1LogsWindowSize(): number {
   return parsed;
 }
 
+/** An inclusive range of L1 blocks. */
+type BlockRange = { fromBlock: bigint; toBlock: bigint };
+
 /**
  * Splits an inclusive L1 block range into consecutive windows of at most `maxWindowSize` blocks. The windows tile
- * the range with no gap and no overlap, in ascending order.
+ * the range with no gap and no overlap, in ascending order. Yielded one at a time: a window size of one over the
+ * history of a long-lived chain is tens of millions of windows, which must not all exist before the first request.
  */
-export function splitLogsWindow(
-  fromBlock: bigint,
-  toBlock: bigint,
-  maxWindowSize: number,
-): { fromBlock: bigint; toBlock: bigint }[] {
+export function* splitLogsWindow(fromBlock: bigint, toBlock: bigint, maxWindowSize: number): Generator<BlockRange> {
   const size = BigInt(maxWindowSize);
-  const windows: { fromBlock: bigint; toBlock: bigint }[] = [];
   for (let start = fromBlock; start <= toBlock; start += size) {
     const end = start + size - 1n;
-    windows.push({ fromBlock: start, toBlock: end < toBlock ? end : toBlock });
+    yield { fromBlock: start, toBlock: end < toBlock ? end : toBlock };
   }
-  return windows;
+}
+
+/** How many windows of `maxWindowSize` blocks an inclusive range tiles into. */
+function countLogsWindows({ fromBlock, toBlock }: BlockRange, maxWindowSize: number): bigint {
+  const size = BigInt(maxWindowSize);
+  return (toBlock - fromBlock + size) / size;
 }
 
 /** The tag a bound names, or undefined when it is a block number. An absent bound means `latest`, as in the spec. */
@@ -101,10 +105,7 @@ type RequestFn = (args: { method: string; params?: unknown }) => Promise<unknown
  * provider to reject as it would have without the cap. A resolution request that fails also yields undefined -- the
  * probe this cap adds must never fail a query the provider would have answered.
  */
-async function resolveLogsWindow(
-  filter: LogsFilter,
-  request: RequestFn,
-): Promise<{ fromBlock: bigint; toBlock: bigint } | undefined> {
+async function resolveLogsWindow(filter: LogsFilter, request: RequestFn): Promise<BlockRange | undefined> {
   const fromTag = tagOf(filter.fromBlock);
   const toTag = tagOf(filter.toBlock);
 
@@ -146,6 +147,11 @@ async function resolveLogsWindow(
 /** The height a moving tag currently names, or undefined when the provider cannot or will not say. */
 async function resolveTagHeight(tag: string, request: RequestFn): Promise<bigint | undefined> {
   try {
+    // `latest` has a method that answers with the height alone; the other tags need the block to read it off.
+    if (tag === 'latest') {
+      const height = await request({ method: 'eth_blockNumber' });
+      return typeof height === 'string' ? parseBlockHeight(height) : undefined;
+    }
     const block = await request({ method: 'eth_getBlockByNumber', params: [tag, false] });
     if (typeof block !== 'object' || block === null) {
       return undefined;
@@ -159,29 +165,31 @@ async function resolveTagHeight(tag: string, request: RequestFn): Promise<bigint
 }
 
 /**
- * Wraps a transport so no `eth_getLogs` request it carries spans more than `maxWindowSize` L1 blocks: a wider range
- * is split into consecutive requests and their logs concatenated. Capping here rather than at each call site means
- * every L1 log query in the system is bounded -- `getLogs`, `getContractEvents` and a contract's `getEvents` all
- * reach the provider through this one point -- and an operator whose provider caps ranges below what a call site
- * asks for does not have to find and configure that call site.
+ * Wraps one endpoint's transport so no `eth_getLogs` request it carries spans more than `maxWindowSize` L1 blocks:
+ * a wider range is split into consecutive requests and their logs concatenated. Capping here rather than at each
+ * call site means every L1 log query in the system is bounded -- `getLogs`, `getContractEvents` and a contract's
+ * `getEvents` all reach the provider through this one point -- and an operator whose provider caps ranges below
+ * what a call site asks for does not have to find and configure that call site.
+ *
+ * Wrapping a single endpoint, below any `fallback` over several of them, is what keeps a split query coherent:
+ * every window and the tag resolution before them go to the same endpoint, and a failure hands the whole logical
+ * query to the next endpoint rather than stitching a prefix from one and a suffix from another.
  *
  * The windows are disjoint and ascending, so their concatenation is the list a single request would have returned
  * from one view of the chain. It is several views: a reorg between two windows can yield logs that never coexisted
- * on one chain, exactly as the range chunking that already exists at several call sites can. Consumers that commit
- * results to disk check the L1 blocks they came from, so a split view is caught there rather than here.
+ * on one chain, and a log moved into an already-queried window by that reorg is not reported at all. This is
+ * inherent to chunking, which several call sites here already do; consumers that commit results to disk re-check
+ * the L1 blocks they came from, and those that do not accept the same risk they accept from the call-site chunking.
  *
  * A window that the provider rejects fails the whole request: a partial prefix of the range must never be reported
  * as the range's logs.
  */
-export function capLogsWindow(
-  transport: FallbackTransport<HttpTransport[]>,
-  maxWindowSize: number,
-): FallbackTransport<HttpTransport[]> {
+export function capLogsWindow(transport: HttpTransport, maxWindowSize: number): HttpTransport {
   if (!Number.isSafeInteger(maxWindowSize) || maxWindowSize < 1) {
     throw new Error(`Max L1 logs window size must be a positive integer, got ${maxWindowSize}`);
   }
 
-  const capped: FallbackTransport<HttpTransport[]> = parameters => {
+  const capped: HttpTransport = parameters => {
     const base = transport(parameters);
     type Request = Parameters<typeof base.request>[0];
     type RequestOptions = Parameters<typeof base.request>[1];
@@ -203,24 +211,24 @@ export function capLogsWindow(
         return forward(args);
       }
 
-      const windows = splitLogsWindow(window.fromBlock, window.toBlock, maxWindowSize);
-      const requestWindow = ({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) =>
+      const requestWindow = ({ fromBlock, toBlock }: BlockRange) =>
         forward({ ...args, params: [{ ...filter, fromBlock: numberToHex(fromBlock), toBlock: numberToHex(toBlock) }] });
 
       // Send the resolved heights rather than the bounds as written, even for a single window: a `latest` left in
       // place is re-read by the provider, and a block mined since it was resolved puts the range back over the cap.
-      if (windows.length === 1) {
-        return requestWindow(windows[0]);
+      const windowCount = countLogsWindows(window, maxWindowSize);
+      if (windowCount === 1n) {
+        return requestWindow(window);
       }
 
-      logger.debug(`Splitting eth_getLogs into ${windows.length} requests`, {
+      logger.debug(`Splitting eth_getLogs into ${windowCount} requests`, {
         fromBlock: window.fromBlock,
         toBlock: window.toBlock,
-        windowCount: windows.length,
+        windowCount,
         maxWindowSize,
       });
       const logs: unknown[] = [];
-      for (const currentWindow of windows) {
+      for (const currentWindow of splitLogsWindow(window.fromBlock, window.toBlock, maxWindowSize)) {
         const windowLogs = await requestWindow(currentWindow);
         if (!Array.isArray(windowLogs)) {
           throw new Error(`Expected an array of logs from eth_getLogs, got ${typeof windowLogs}`);

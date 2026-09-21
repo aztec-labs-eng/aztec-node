@@ -57,7 +57,11 @@ describe('makeL1HttpTransport', () => {
  * Starts an L1 endpoint that rejects any `eth_getLogs` spanning more than `maxSpan` blocks, as a provider with a
  * log-range cap does, and answers the ones it accepts with a single log naming the range it covered.
  */
-async function startRangeCappedL1Server(maxSpan: bigint): Promise<{ server: Server; url: string }> {
+async function startRangeCappedL1Server(
+  maxSpan: bigint,
+  opts: { failLogsRequestsAfter?: number } = {},
+): Promise<{ server: Server; url: string; logRanges: string[] }> {
+  const logRanges: string[] = [];
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', chunk => chunks.push(Buffer.from(chunk)));
@@ -78,6 +82,13 @@ async function startRangeCappedL1Server(maxSpan: bigint): Promise<{ server: Serv
       }
 
       const { fromBlock, toBlock } = request.params![0];
+      logRanges.push(`${fromBlock}-${toBlock}`);
+      if (opts.failLogsRequestsAfter !== undefined && logRanges.length > opts.failLogsRequestsAfter) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'endpoint down' }));
+        return;
+      }
+
       const [from, to] = [BigInt(fromBlock!), BigInt(toBlock!)];
       if (to - from + 1n > maxSpan) {
         reply({ error: { code: -32005, message: 'query exceeds max block range' } });
@@ -106,15 +117,17 @@ async function startRangeCappedL1Server(maxSpan: bigint): Promise<{ server: Serv
   if (!address || typeof address === 'string') {
     throw new Error('Expected L1 test server to listen on a TCP port');
   }
-  return { server, url: `http://127.0.0.1:${address.port}` };
+  return { server, url: `http://127.0.0.1:${address.port}`, logRanges };
 }
 
 describe('makeL1HttpTransport log range cap', () => {
   let l1Server: Server | undefined;
+  const extraServers: Server[] = [];
 
   afterEach(() => {
     l1Server?.close();
     l1Server = undefined;
+    extraServers.splice(0).forEach(server => server.close());
   });
 
   const getLogsOverRange = async (maxLogsWindowSize: number) => {
@@ -134,5 +147,37 @@ describe('makeL1HttpTransport log range cap', () => {
   it('splits the range and returns every window when the configured window fits', async () => {
     const logs = await getLogsOverRange(10);
     expect(logs.map(log => log.blockNumber)).toEqual([0n, 10n, 20n]);
+  });
+
+  it('sends every window of one split query to a single endpoint', async () => {
+    const [primary, secondary] = await Promise.all([startRangeCappedL1Server(10n), startRangeCappedL1Server(10n)]);
+    extraServers.push(primary.server, secondary.server);
+    const client = createPublicClient({
+      chain: foundry,
+      transport: makeL1HttpTransport([primary.url, secondary.url], { maxLogsWindowSize: 10 }),
+    });
+
+    await client.getLogs({ fromBlock: 0n, toBlock: 24n });
+
+    expect(primary.logRanges).toEqual(['0x0-0x9', '0xa-0x13', '0x14-0x18']);
+    expect(secondary.logRanges).toEqual([]);
+  });
+
+  it('retries the whole split query on the next endpoint when one window fails', async () => {
+    const [primary, secondary] = await Promise.all([
+      startRangeCappedL1Server(10n, { failLogsRequestsAfter: 1 }),
+      startRangeCappedL1Server(10n),
+    ]);
+    extraServers.push(primary.server, secondary.server);
+    const client = createPublicClient({
+      chain: foundry,
+      transport: makeL1HttpTransport([primary.url, secondary.url], { maxLogsWindowSize: 10 }),
+    });
+
+    const logs = await client.getLogs({ fromBlock: 0n, toBlock: 24n });
+
+    // Every window is answered by the endpoint that is up, so no window of the failed attempt reaches the result.
+    expect(logs.map(log => log.blockNumber)).toEqual([0n, 10n, 20n]);
+    expect(secondary.logRanges).toEqual(['0x0-0x9', '0xa-0x13', '0x14-0x18']);
   });
 });
