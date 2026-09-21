@@ -53,14 +53,24 @@ jobs:
 
       - name: Determine image tag
         id: docker-image
+        env:
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          if [[ -n "${{ inputs.image_tag }}" ]]; then
-            image_tag="${{ inputs.image_tag }}"
+          set -euo pipefail
+          if [[ -n "$INPUT_IMAGE_TAG" ]]; then
+            image_tag="$INPUT_IMAGE_TAG"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
             image_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
-
+          # The OCI tag grammar, as deploy-network.yml applies it. This value is written to
+          # $GITHUB_OUTPUT and reaches a run: script, so a newline in it could forge a second
+          # output line. The rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid docker image tag rejected."
+            exit 1
+          fi
+          # The registry and repository are fixed here: this sweep benchmarks released images.
           docker_image="azteclabs/aztec:${image_tag}"
 
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
@@ -68,8 +78,9 @@ jobs:
           echo "Using docker image: $docker_image"
 
       - name: Check if Docker image exists
+        env:
+          DOCKER_IMAGE: ${{ steps.docker-image.outputs.docker_image }}
         run: |
-          DOCKER_IMAGE="${{ steps.docker-image.outputs.docker_image }}"
           if docker manifest inspect "$DOCKER_IMAGE" > /dev/null 2>&1; then
             echo "Docker image exists: $DOCKER_IMAGE"
           else

@@ -15,8 +15,8 @@ on:
   #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
-      docker_image:
-        description: Docker image to test, e.g. azteclabs/aztec:6.0.0-nightly.20260921. Empty uses today's nightly.
+      image_tag:
+        description: Tag of azteclabs/aztec to test, e.g. 6.0.0-nightly.20260921. Empty uses today's nightly.
         required: false
         type: string
         default: ""
@@ -57,6 +57,8 @@ jobs:
       docker_image: ${{ steps.image.outputs.docker_image }}
       semver: ${{ steps.image.outputs.semver }}
       release_tag: ${{ steps.image.outputs.release_tag }}
+      env_file: ${{ steps.image.outputs.env_file }}
+      test_sets: ${{ steps.image.outputs.test_sets }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -67,34 +69,45 @@ jobs:
       - name: Resolve the image under test
         id: image
         env:
-          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+          INPUT_ENV_FILE: ${{ inputs.env_file }}
+          INPUT_TEST_SET: ${{ inputs.test_set }}
         run: |
           set -euo pipefail
-          if [[ -n "$INPUT_DOCKER_IMAGE" ]]; then
-            docker_image="$INPUT_DOCKER_IMAGE"
-            semver="${docker_image##*:}"
+          if [[ -n "$INPUT_IMAGE_TAG" ]]; then
+            image_tag="$INPUT_IMAGE_TAG"
             release_tag=""
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
-            semver="${current_version}-nightly.$(date -u +%Y%m%d)"
-            docker_image="azteclabs/aztec:${semver}"
-            release_tag="v${semver}"
+            image_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
+            release_tag="v${image_tag}"
           fi
-          # This value is written to $GITHUB_OUTPUT and reaches a run: script, so anything that
-          # could forge a second output line or break out of a quoted argument is refused. The
-          # rejected value is deliberately not echoed, for the same reason.
-          if [[ ! "$docker_image" =~ ^[A-Za-z0-9][A-Za-z0-9._/:-]*$ ]]; then
-            echo "::error::Invalid docker image reference rejected."
+          # The OCI tag grammar, as deploy-network.yml applies it. This value is written to
+          # $GITHUB_OUTPUT and reaches a run: script, so a newline in it could forge a second
+          # output line. The rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid docker image tag rejected."
             exit 1
           fi
-          # An untagged reference resolves to :latest, which these runs never want and which the
-          # terraform that splits the reference on ':' cannot handle.
-          if [[ "${docker_image##*/}" != *:* ]]; then
-            echo "::error::Name the tag explicitly, e.g. azteclabs/aztec:6.0.0-nightly.20260921"
+          # The registry and repository are fixed, never taken from input: only the tag varies, so
+          # no other image is expressible here.
+          docker_image="azteclabs/aztec:${image_tag}"
+          # env_file names a file under spartan/environments and test_set picks a matrix leg.
+          # Both reach a run: script, so they are checked here rather than interpolated raw.
+          env_file="${INPUT_ENV_FILE:-next-scenario}"
+          if [[ ! "$env_file" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::Invalid env_file rejected."
             exit 1
           fi
+          case "${INPUT_TEST_SET:-}" in
+            "") test_sets='["1","2"]' ;;
+            1|2) test_sets="[\"${INPUT_TEST_SET}\"]" ;;
+            *) echo "::error::test_set must be 1, 2, or empty for both."; exit 1 ;;
+          esac
+          echo "env_file=$env_file" >> "$GITHUB_OUTPUT"
+          echo "test_sets=$test_sets" >> "$GITHUB_OUTPUT"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
-          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          echo "semver=$image_tag" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "Testing image: $docker_image"
 
@@ -128,7 +141,9 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.release_tag }}"
+        env:
+          RELEASE_TAG: ${{ needs.select-image.outputs.release_tag }}
+        run: spartan/scripts/wait_for_release.ts "$RELEASE_TAG"
 
   deploy-and-test:
     needs: [select-image, wait-for-release]
@@ -140,7 +155,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test_set: ${{ fromJSON(inputs.test_set == '' && '["1","2"]' || format('["{0}"]', inputs.test_set)) }}
+        test_set: ${{ fromJSON(needs.select-image.outputs.test_sets) }}
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -187,16 +202,18 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           AWS_SHUTDOWN_TIME: 360
           NO_SPOT: 1
+          ENV_FILE: ${{ needs.select-image.outputs.env_file }}
+          TEST_SET: ${{ matrix.test_set }}
         run: |
           set -x # print next line
-          ./.github/ci3.sh network-scenarios "${{ inputs.env_file || 'next-scenario' }}" "$NAMESPACE" "$DOCKER_IMAGE" "${{ matrix.test_set }}"
+          ./.github/ci3.sh network-scenarios "$ENV_FILE" "$NAMESPACE" "$DOCKER_IMAGE" "$TEST_SET"
 
       - name: Cleanup network resources
         if: always()
         continue-on-error: true
         uses: ./.github/actions/network-teardown
         with:
-          env_file: ${{ inputs.env_file || 'next-scenario' }}
+          env_file: ${{ needs.select-image.outputs.env_file }}
           namespace: ${{ env.NAMESPACE }}-${{ matrix.test_set }}
           gcp_helm_sa_key: ${{ secrets.GCP_HELM_SA_KEY }}
           gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
@@ -222,9 +239,11 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
+          ENV_FILE: ${{ needs.select-image.outputs.env_file }}
+          TEST_SET: ${{ matrix.test_set }}
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          CONTEXT="set ${{ matrix.test_set }}, image ${DOCKER_IMAGE:-unset}, env ${{ inputs.env_file || 'next-scenario' }}"
+          CONTEXT="set ${TEST_SET}, image ${DOCKER_IMAGE:-unset}, env ${ENV_FILE}"
           ./ci3/slack_notify_with_claudebox_kickoff "#alerts-next-scenario" \
             "Scenario Tests FAILED (${CONTEXT}): <${RUN_URL}|View Run> (🤖)" \
             "Scenario tests failed (${CONTEXT}). CI run: ${RUN_URL}. Investigate the scenario test failure and identify the root cause." \

@@ -68,4 +68,7 @@ jobs:
           TARGET_TPS: ${{ inputs.tps }}
           BENCH_SWEEP_ID: ${{ inputs.sweep_id }}
           BENCH_SWEEP_LABEL: inclusion-sweep
-        run: ./.github/ci3.sh network-inclusion-sweep ${{ inputs.network }} ${{ inputs.namespace }} "${{ inputs.docker_image }}"
+          TARGET_NETWORK: ${{ inputs.network }}
+          TARGET_NAMESPACE: ${{ inputs.namespace }}
+          DOCKER_IMAGE: ${{ inputs.docker_image }}
+        run: ./.github/ci3.sh network-inclusion-sweep "$TARGET_NETWORK" "$TARGET_NAMESPACE" "$DOCKER_IMAGE"

@@ -43,15 +43,25 @@ jobs:
 
       - name: Determine nightly tag
         id: nightly-tag
+        env:
+          INPUT_NIGHTLY_TAG: ${{ inputs.nightly_tag }}
         run: |
-          if [[ -n "${{ inputs.nightly_tag }}" ]]; then
-            nightly_tag="${{ inputs.nightly_tag }}"
+          set -euo pipefail
+          if [[ -n "$INPUT_NIGHTLY_TAG" ]]; then
+            nightly_tag="$INPUT_NIGHTLY_TAG"
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
             nightly_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
           fi
-
+          # The OCI tag grammar, as deploy-network.yml applies it. This value is written to
+          # $GITHUB_OUTPUT and reaches a run: script, so a newline in it could forge a second
+          # output line. The rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$nightly_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid docker image tag rejected."
+            exit 1
+          fi
           release_tag="v${nightly_tag}"
+          # The registry and repository are fixed here: this benchmarks released images.
           docker_image="azteclabs/aztec:${nightly_tag}"
 
           echo "nightly_tag=$nightly_tag" >> "$GITHUB_OUTPUT"
@@ -62,9 +72,11 @@ jobs:
           echo "Using release tag: $release_tag"
 
       - name: Verify the release tag exists
+        env:
+          RELEASE_TAG: ${{ steps.nightly-tag.outputs.release_tag }}
         run: |
           set -euo pipefail
-          release_tag="${{ steps.nightly-tag.outputs.release_tag }}"
+          release_tag="$RELEASE_TAG"
           git fetch --depth 1 origin "refs/tags/${release_tag}:refs/tags/${release_tag}"
           echo "Nightly release commit: $(git rev-parse "${release_tag}^{}")"
 
@@ -86,7 +98,9 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.release_tag }}"
+        env:
+          RELEASE_TAG: ${{ needs.select-image.outputs.release_tag }}
+        run: spartan/scripts/wait_for_release.ts "$RELEASE_TAG"
 
   # ---------------------------------------------------------------------------
   # Proving benchmark (env prove-n-tps-fake, namespace prove-n-tps-fake)
@@ -167,6 +181,7 @@ jobs:
           AWS_SHUTDOWN_TIME: 180
           NO_SPOT: 1
           SKIP_NETWORK_DEPLOY: "1"
+          DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
           # Publishes to the custom network-dashboard pipeline (GCS). Fake/fixed-delay
           # proving, so it's tagged simulated-proving (distinct from the weekly
           # real-proving run).
@@ -174,7 +189,7 @@ jobs:
           BENCH_SWEEP_LABEL: simulated-proving
           BENCH_BENCHMARK_TYPE: simulated-proving
         run: |
-          ./.github/ci3.sh network-proving-bench prove-n-tps-fake prove-n-tps-fake "${{ needs.select-image.outputs.docker_image }}"
+          ./.github/ci3.sh network-proving-bench prove-n-tps-fake prove-n-tps-fake "$DOCKER_IMAGE"
 
   cleanup-proving:
     if: ${{ always() }}
@@ -321,13 +336,14 @@ jobs:
           AWS_SHUTDOWN_TIME: 240
           NO_SPOT: 1
           SKIP_NETWORK_DEPLOY: "1"
+          DOCKER_IMAGE: ${{ needs.select-image.outputs.docker_image }}
           # Publishes to the custom network-dashboard pipeline (GCS) tagged as the
           # block-capacity benchmark, grouped as one sweep per run.
           BENCH_SWEEP_ID: block-capacity-${{ github.run_id }}
           BENCH_SWEEP_LABEL: block-capacity
           BENCH_BENCHMARK_TYPE: block-capacity
         run: |
-          ./.github/ci3.sh network-block-capacity-bench block-capacity nightly-block-capacity "${{ needs.select-image.outputs.docker_image }}"
+          ./.github/ci3.sh network-block-capacity-bench block-capacity nightly-block-capacity "$DOCKER_IMAGE"
 
   cleanup-block-capacity:
     if: ${{ always() }}
