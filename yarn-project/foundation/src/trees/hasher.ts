@@ -1,5 +1,8 @@
+import { BarretenbergSync } from '@aztec-foundation/bb.js';
+
 import { poseidon2HashWithSeparator } from '../crypto/poseidon/index.js';
 import { sha256Trunc } from '../crypto/sha256/index.js';
+import { poseidon2HashWithSeparator as poseidon2HashWithSeparatorSync } from '../crypto/sync/poseidon/index.js';
 
 /**
  * Defines hasher interface used by Merkle trees.
@@ -49,3 +52,15 @@ export const makePoseidonMerkleHash =
   (separator: number): AsyncHasher['hash'] =>
   async (left: Buffer, right: Buffer) =>
     (await poseidon2HashWithSeparator([left, right], separator)).toBuffer() as Buffer<ArrayBuffer>;
+
+/** Creates a Poseidon2 Merkle hasher using the synchronous backend, with lazy initialization and a Promise interface. */
+export function makePoseidonMerkleHashSync(separator: number): AsyncHasher['hash'] {
+  let initialized: ReturnType<typeof BarretenbergSync.initSingleton> | undefined;
+  return async (left, right) => {
+    await (initialized ??= BarretenbergSync.initSingleton());
+    return poseidon2HashWithSeparatorSync(
+      [Buffer.from(left), Buffer.from(right)],
+      separator,
+    ).toBuffer() as Buffer<ArrayBuffer>;
+  };
+}

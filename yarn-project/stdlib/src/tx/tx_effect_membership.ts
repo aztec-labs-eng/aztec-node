@@ -3,28 +3,22 @@ import { type BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/bran
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
-  type AsyncHasher,
   SiblingPath,
   UnbalancedMerkleTreeCalculator,
   computeRootFromSiblingPath,
+  makePoseidonMerkleHashSync,
 } from '@aztec-labs/foundation/trees';
-import { makePoseidonMerkleHashSync } from '@aztec-labs/foundation/trees/sync';
 import { z } from 'zod';
 
 import { schemas } from '../schemas/schemas.js';
 import type { TxEffect } from './tx_effect.js';
 import type { TxHash } from './tx_hash.js';
 
-let txEffectsTreeNodeHasher: ReturnType<typeof makePoseidonMerkleHashSync> | undefined;
-
 /**
  * Hasher for the internal nodes of a block's tx effects tree. Must match the accumulation the rollup circuits perform
  * up the tx rollup tree.
  */
-export const txEffectsTreeNodeHash: AsyncHasher['hash'] = async (left, right) => {
-  const hash = await (txEffectsTreeNodeHasher ??= makePoseidonMerkleHashSync(DomainSeparator.TX_EFFECTS_TREE));
-  return hash(left, right);
-};
+export const txEffectsTreeNodeHash = makePoseidonMerkleHashSync(DomainSeparator.TX_EFFECTS_TREE);
 
 /**
  * Proof that a tx was included in a block and produced exactly the effects the block reports for it.
