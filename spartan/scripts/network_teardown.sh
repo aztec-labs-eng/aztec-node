@@ -7,7 +7,7 @@ remove_finalizers() {
   local namespace=$2
 
   # sometimes Chaos mesh resources become stuck when deleting. The way to work around the issue is to remove any 'finalizers'
-  kubectl get "$resource_type" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | while read -r name; do
+  kubectl get "$resource_type" -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | while read -r name || [ -n "$name" ]; do
     if [ -n "$name" ]; then
       echo "Removing finalizers from $resource_type/$name..."
       kubectl patch "$resource_type" "$name" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
