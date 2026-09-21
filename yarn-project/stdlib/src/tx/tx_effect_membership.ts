@@ -1,7 +1,6 @@
 import { DomainSeparator } from '@aztec-labs/constants';
 import { type BlockNumber, BlockNumberSchema } from '@aztec-labs/foundation/branded-types';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
-import { poseidon2HashWithSeparator as poseidon2HashWithSeparatorSync } from '@aztec-labs/foundation/crypto/sync';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type AsyncHasher,
@@ -9,23 +8,23 @@ import {
   UnbalancedMerkleTreeCalculator,
   computeRootFromSiblingPath,
 } from '@aztec-labs/foundation/trees';
+import { makePoseidonMerkleHashSync } from '@aztec-labs/foundation/trees/sync';
 import { z } from 'zod';
 
 import { schemas } from '../schemas/schemas.js';
 import type { TxEffect } from './tx_effect.js';
 import type { TxHash } from './tx_hash.js';
 
+let txEffectsTreeNodeHasher: ReturnType<typeof makePoseidonMerkleHashSync> | undefined;
+
 /**
  * Hasher for the internal nodes of a block's tx effects tree. Must match the accumulation the rollup circuits perform
  * up the tx rollup tree.
  */
-export const txEffectsTreeNodeHash: AsyncHasher['hash'] = (left, right) =>
-  Promise.resolve(
-    poseidon2HashWithSeparatorSync(
-      [Buffer.from(left), Buffer.from(right)],
-      DomainSeparator.TX_EFFECTS_TREE,
-    ).toBuffer() as Buffer<ArrayBuffer>,
-  );
+export const txEffectsTreeNodeHash: AsyncHasher['hash'] = async (left, right) => {
+  const hash = await (txEffectsTreeNodeHasher ??= makePoseidonMerkleHashSync(DomainSeparator.TX_EFFECTS_TREE));
+  return hash(left, right);
+};
 
 /**
  * Proof that a tx was included in a block and produced exactly the effects the block reports for it.

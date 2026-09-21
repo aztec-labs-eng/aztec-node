@@ -9,10 +9,16 @@ import {
   computeRootFromTxEffectMembershipWitness,
   computeTxEffectMembershipWitness,
   computeTxEffectsTreeLeaf,
+  txEffectsTreeNodeHash,
   verifyTxEffectMembershipWitness,
 } from './tx_effect_membership.js';
 
 describe('TxEffectMembershipWitness', () => {
+  it('returns a rejected promise for invalid internal-node inputs', async () => {
+    const result = txEffectsTreeNodeHash(Buffer.alloc(0), Fr.ZERO.toBuffer());
+    await expect(result).rejects.toThrow();
+  });
+
   const makeBody = (txsPerBlock: number) => Body.random({ txsPerBlock, maxEffects: 1, numPublicCallsPerTx: 1 });
 
   it('round trips through the schema', () => {
