@@ -17,14 +17,8 @@ on:
         required: false
         type: string
         default: ""
-      image_name:
-        description: Which azteclabs image to use. aztec holds releases; aztec-dev holds per-commit PR builds.
-        required: false
-        type: choice
-        options: [aztec, aztec-dev]
-        default: aztec
       image_tag:
-        description: Tag to benchmark, e.g. 6.0.0-nightly.20260921. Empty uses today's nightly of azteclabs/aztec.
+        description: Tag of azteclabs/aztec to benchmark, e.g. 6.0.0-nightly.20260921. Empty uses today's nightly.
         required: false
         type: string
         default: ""
@@ -54,17 +48,12 @@ jobs:
       - name: Resolve the image under test
         id: image
         env:
-          IMAGE_NAME: ${{ inputs.image_name }}
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           set -euo pipefail
-          image_name="${IMAGE_NAME:-aztec}"
           if [[ -n "$INPUT_IMAGE_TAG" ]]; then
             image_tag="$INPUT_IMAGE_TAG"
             release_tag=""
-          elif [[ "$image_name" != aztec ]]; then
-            echo "::error::$image_name publishes per-commit tags, not nightlies; name an image_tag."
-            exit 1
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
             image_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
@@ -77,9 +66,9 @@ jobs:
             echo "::error::Invalid docker image tag rejected."
             exit 1
           fi
-          # The registry and repository are never taken from input: image_name is a choice of the
-          # two azteclabs images, so no other image is expressible here.
-          docker_image="azteclabs/${image_name}:${image_tag}"
+          # The registry and repository are fixed, never taken from input: only the tag varies, so
+          # no other image is expressible here.
+          docker_image="azteclabs/aztec:${image_tag}"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "Benchmarking image: $docker_image"
