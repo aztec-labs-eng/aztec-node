@@ -526,8 +526,8 @@ describe('aztec node', () => {
   });
 
   describe('tx admission against the next-block fee', () => {
-    /** Above the mock tx's maxFeesPerGas on the L2 dimension, so admission must reject it. */
-    const nextBlockFees = new GasFees(3, 3000);
+    /** Above the mock tx's maxFeesPerGas on the L2 dimension, so admission must reject against it. */
+    const feesAboveTxPrice = new GasFees(3, 3000);
 
     let quoteMinFees: jest.SpiedFunction<NextBlockPredictor['quoteMinFees']>;
 
@@ -538,7 +538,7 @@ describe('aztec node', () => {
     });
 
     it('rejects a tx priced below the next-block fee but above the L1-forward fee', async () => {
-      quoteMinFees.mockResolvedValue({ fees: nextBlockFees, l1SyncPoint: undefined });
+      quoteMinFees.mockResolvedValue({ fees: feesAboveTxPrice, l1SyncPoint: undefined });
 
       expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({
         result: 'invalid',
@@ -552,14 +552,28 @@ describe('aztec node', () => {
       expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({ result: 'valid' });
     });
 
-    it('fails closed when the next-block fee is unavailable', async () => {
+    it('prices against the L1-forward fee when the next-block fee is unavailable', async () => {
       quoteMinFees.mockResolvedValue(undefined);
 
-      await expect(node.isValidTx(await mockTxForRollup(0x10000))).rejects.toThrow(/minimum fee for the next block/);
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({ result: 'valid' });
+
+      // Still a real fee check, not a skipped one: the fallback rejects a tx the L1-forward fee prices out.
+      feeProvider.getCurrentMinFees.mockResolvedValue(feesAboveTxPrice);
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({
+        result: 'invalid',
+        reason: [expect.stringContaining(TX_ERROR_INSUFFICIENT_FEE_PER_GAS)],
+      });
+    });
+
+    it('prices against the L1-forward fee when quoting the next-block fee throws', async () => {
+      quoteMinFees.mockRejectedValue(new Error('l1 unreachable'));
+
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({ result: 'valid' });
     });
 
     it('skips the next-block fee entirely when fee enforcement is skipped', async () => {
       quoteMinFees.mockResolvedValue(undefined);
+      feeProvider.getCurrentMinFees.mockResolvedValue(feesAboveTxPrice);
 
       expect(await node.isValidTx(await mockTxForRollup(0x10000), { skipFeeEnforcement: true })).toEqual({
         result: 'valid',
