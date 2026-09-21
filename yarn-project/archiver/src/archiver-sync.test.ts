@@ -1044,6 +1044,29 @@ describe('Archiver Sync', () => {
   });
 
   describe('reorg handling', () => {
+    const addValidCheckpointAndInvalidChild = async (l1Blocks: { messages: bigint; cp1: bigint; cp2: bigint }) => {
+      fake.setTargetCommitteeSize(3);
+      const signers = times(3, Secp256k1Signer.random);
+      const committee = signers.map(signer => signer.address);
+      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee, seed: 0n } as EpochCommitteeInfo);
+
+      const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: l1Blocks.cp1,
+        messagesL1BlockNumber: l1Blocks.messages,
+        numL1ToL2Messages: 3,
+        signers,
+      });
+      // Rejecting CP2 advances the sync point despite leaving the accepted checkpoint tip at CP1.
+      const { checkpoint: badCp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
+        l1BlockNumber: l1Blocks.cp2,
+        numL1ToL2Messages: 0,
+        previousArchive: cp1.blocks.at(-1)!.archive,
+        signers: times(3, Secp256k1Signer.random),
+      });
+
+      return { cp1, badCp2, signers };
+    };
+
     it('handles L2 reorg', async () => {
       const loggerSpy = jest.spyOn(syncLogger, 'debug');
 
@@ -1540,6 +1563,155 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
 
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+    }, 15_000);
+
+    it('detects a same-number replacement behind the syncpoint after a rejected checkpoint reorgs out', async () => {
+      // A rejected checkpoint advances the L1 sync point past its L1 block. If an L1 reorg then drops it and a
+      // valid checkpoint with the same number lands at an earlier L1 block, the stale rejected marker must not be
+      // counted as local progress, or the behind-syncpoint rollback never fires and the node is stuck one behind.
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
+
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      const { cp1, badCp2, signers } = await addValidCheckpointAndInvalidChild(l1Blocks);
+      const cp1Archive = cp1.blocks.at(-1)!.archive;
+
+      fake.setL1BlockNumber(82n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root)).toBeDefined();
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp2);
+
+      // L1 reorg: bad CP2 disappears and a valid CP2 lands at L1 block 75, behind the sync point.
+      fake.removeCheckpoint(CheckpointNumber(2));
+      const { checkpoint: goodCp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
+        l1BlockNumber: 75n,
+        numL1ToL2Messages: 0,
+        previousArchive: cp1Archive,
+        signers,
+      });
+
+      // First sync detects the gap and rolls back the sync point; the second one fetches the replacement.
+      fake.setL1BlockNumber(90n);
+      await archiver.syncImmediate();
+      fake.setL1BlockNumber(91n);
+      await archiver.syncImmediate();
+
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      const storedCp2 = await archiverStore.blocks.getCheckpointData(CheckpointNumber(2));
+      expect(storedCp2?.archive.root.toString()).toEqual(goodCp2.archive.root.toString());
+    }, 15_000);
+
+    it('keeps the sync point when the rejected checkpoint is still pending on L1', async () => {
+      // Control for the reorg case above: while the rejected checkpoint is still the rollup's pending tip, the
+      // archiver must not roll back its sync point on every iteration to re-fetch and re-reject it.
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      await addValidCheckpointAndInvalidChild(l1Blocks);
+
+      fake.setL1BlockNumber(82n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp2);
+
+      for (let i = 0; i < 3; i++) {
+        fake.setL1BlockNumber(83n + BigInt(i));
+        await archiver.syncImmediate();
+        expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp2);
+      }
+    }, 15_000);
+
+    it('reprocesses a rejected checkpoint when an invalid descendant is replaced behind the sync point', async () => {
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      const { badCp2 } = await addValidCheckpointAndInvalidChild(l1Blocks);
+
+      const { checkpoint: oldBadCp3 } = await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 100n,
+        numL1ToL2Messages: 0,
+        previousArchive: badCp2.blocks.at(-1)!.archive,
+        signers: times(3, Secp256k1Signer.random),
+      });
+
+      fake.setL1BlockNumber(102n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(100n);
+      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(oldBadCp3.archive.root)).toBeDefined();
+      const rejectedCp2 = await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root);
+      expect(rejectedCp2).toBeDefined();
+      const validationStatus = await archiver.getPendingChainValidationStatus();
+      expect(validationStatus).toEqual(
+        expect.objectContaining({
+          valid: false,
+          checkpoint: expect.objectContaining({ checkpointNumber: CheckpointNumber(2) }),
+        }),
+      );
+
+      // L1 reorg replaces CP3 at an earlier block, while CP2 remains on chain.
+      fake.reorgL1BlocksFrom(90n);
+      fake.removeCheckpoint(CheckpointNumber(3));
+      const { checkpoint: badCp3 } = await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 90n,
+        numL1ToL2Messages: 0,
+        previousArchive: badCp2.blocks.at(-1)!.archive,
+        signers: times(3, Secp256k1Signer.random),
+      });
+
+      expect(badCp3.archive.root.equals(oldBadCp3.archive.root)).toBe(false);
+
+      fake.setL1BlockNumber(103n);
+      await archiver.syncImmediate();
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp1);
+      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp3.archive.root)).toBeUndefined();
+
+      fake.setL1BlockNumber(104n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp2.archive.root)).toEqual(rejectedCp2);
+      expect(await archiverStore.blocks.getRejectedCheckpointByArchiveRoot(badCp3.archive.root)).toEqual(
+        expect.objectContaining({
+          checkpointNumber: CheckpointNumber(3),
+          archiveRoot: badCp3.archive.root,
+          parentArchiveRoot: badCp2.archive.root,
+          reason: 'invalid-attestations',
+        }),
+      );
+      expect(await archiver.getPendingChainValidationStatus()).toEqual(validationStatus);
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(90n);
+
+      for (let i = 0; i < 3; i++) {
+        fake.setL1BlockNumber(105n + BigInt(i));
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(90n);
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(validationStatus);
+      }
+    }, 15_000);
+
+    it('keeps the sync point when only a rejected descendant of the pending rejected checkpoint reorgs out', async () => {
+      // CP2 is rejected and CP3 is rejected as its descendant, then an L1 reorg drops only CP3. The rollup's pending
+      // tip is still the rejected CP2, so the stale higher-numbered CP3 marker must not make the archiver believe
+      // it is behind and roll back its sync point on every iteration.
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      const { badCp2, signers } = await addValidCheckpointAndInvalidChild(l1Blocks);
+      await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 82n,
+        numL1ToL2Messages: 0,
+        previousArchive: badCp2.blocks.at(-1)!.archive,
+        signers,
+      });
+
+      fake.setL1BlockNumber(84n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(82n);
+
+      fake.removeCheckpoint(CheckpointNumber(3));
+
+      for (let i = 0; i < 3; i++) {
+        fake.setL1BlockNumber(85n + BigInt(i));
+        await archiver.syncImmediate();
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(82n);
+      }
     }, 15_000);
 
     it('handles L1 reorg that moves a checkpoint to a later L1 block', async () => {
