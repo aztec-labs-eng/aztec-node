@@ -33,6 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: main
 
       - name: Determine nightly tag
@@ -94,6 +95,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: ${{ needs.select-image.outputs.source_ref }}
 
       - name: Authenticate to Google Cloud
@@ -123,6 +125,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: ${{ needs.select-image.outputs.source_ref }}
 
       - name: Configure AWS credentials (OIDC)
@@ -165,6 +168,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: ${{ needs.select-image.outputs.source_ref }}
 
       - name: Configure AWS credentials (OIDC)
@@ -196,6 +200,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           ref: ${{ needs.select-image.outputs.source_ref }}
 
       - name: Notify Slack on success
