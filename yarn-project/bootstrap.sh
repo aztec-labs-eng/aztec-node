@@ -320,6 +320,10 @@ function compile_all {
   cd txe && yarn check_txe_oracle_version
   cd ..
 
+  # Nothing sets AZTEC_GENERATE_TEST_DATA in CI, so the fixture regeneration paths are only ever walked by hand.
+  cd foundation && yarn check_test_data_targets
+  cd ..
+
   cmds=('format --check' 'yarn tsgo -b --emitDeclarationOnly')
   if [ "${CI:-0}" -eq 1 ]; then
     cmds+=('lint --check')

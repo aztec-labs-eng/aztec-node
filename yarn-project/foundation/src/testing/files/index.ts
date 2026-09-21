@@ -81,7 +81,7 @@ export function updateProtocolCircuitSampleInputs(circuitName: string, value: st
 
 /**
  * Resolves the output path for an l1-contracts test fixture. The `l1-contracts` project lives in the foundation
- * repository, which is not an ancestor of this checkout, so regenerating fixtures from here requires pointing
+ * repository, so regenerating fixtures from a checkout that is not a submodule of it requires pointing
  * `AZTEC_L1_FIXTURES_DIR` at `l1-contracts/test/fixtures` in the foundation tree. The fallback is the historical path
  * relative to the running package's working directory.
  */
