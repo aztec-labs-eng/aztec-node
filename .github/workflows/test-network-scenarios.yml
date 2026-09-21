@@ -15,8 +15,14 @@ on:
   #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
-      docker_image:
-        description: Docker image to test, e.g. azteclabs/aztec:6.0.0-nightly.20260921. Empty uses today's nightly.
+      image_name:
+        description: Which azteclabs image to use. aztec holds releases; aztec-dev holds per-commit PR builds.
+        required: false
+        type: choice
+        options: [aztec, aztec-dev]
+        default: aztec
+      image_tag:
+        description: Tag to test, e.g. 6.0.0-nightly.20260921. Empty uses today's nightly of azteclabs/aztec.
         required: false
         type: string
         default: ""
@@ -67,34 +73,34 @@ jobs:
       - name: Resolve the image under test
         id: image
         env:
-          INPUT_DOCKER_IMAGE: ${{ inputs.docker_image }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           set -euo pipefail
-          if [[ -n "$INPUT_DOCKER_IMAGE" ]]; then
-            docker_image="$INPUT_DOCKER_IMAGE"
-            semver="${docker_image##*:}"
+          image_name="${IMAGE_NAME:-aztec}"
+          if [[ -n "$INPUT_IMAGE_TAG" ]]; then
+            image_tag="$INPUT_IMAGE_TAG"
             release_tag=""
+          elif [[ "$image_name" != aztec ]]; then
+            echo "::error::$image_name publishes per-commit tags, not nightlies; name an image_tag."
+            exit 1
           else
             current_version=$(jq -r '."."' .release-please-manifest.json)
-            semver="${current_version}-nightly.$(date -u +%Y%m%d)"
-            docker_image="azteclabs/aztec:${semver}"
-            release_tag="v${semver}"
+            image_tag="${current_version}-nightly.$(date -u +%Y%m%d)"
+            release_tag="v${image_tag}"
           fi
-          # This value is written to $GITHUB_OUTPUT and reaches a run: script, so anything that
-          # could forge a second output line or break out of a quoted argument is refused. The
-          # rejected value is deliberately not echoed, for the same reason.
-          if [[ ! "$docker_image" =~ ^[A-Za-z0-9][A-Za-z0-9._/:-]*$ ]]; then
-            echo "::error::Invalid docker image reference rejected."
+          # The OCI tag grammar, as deploy-network.yml applies it. This value is written to
+          # $GITHUB_OUTPUT and reaches a run: script, so a newline in it could forge a second
+          # output line. The rejected value is deliberately not echoed, for the same reason.
+          if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::Invalid docker image tag rejected."
             exit 1
           fi
-          # An untagged reference resolves to :latest, which these runs never want and which the
-          # terraform that splits the reference on ':' cannot handle.
-          if [[ "${docker_image##*/}" != *:* ]]; then
-            echo "::error::Name the tag explicitly, e.g. azteclabs/aztec:6.0.0-nightly.20260921"
-            exit 1
-          fi
+          # The registry and repository are never taken from input: image_name is a choice of the
+          # two azteclabs images, so no other image is expressible here.
+          docker_image="azteclabs/${image_name}:${image_tag}"
           echo "docker_image=$docker_image" >> "$GITHUB_OUTPUT"
-          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          echo "semver=$image_tag" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "Testing image: $docker_image"
 
@@ -128,7 +134,9 @@ jobs:
           node-version: 22
 
       - name: Wait for release
-        run: spartan/scripts/wait_for_release.ts "${{ needs.select-image.outputs.release_tag }}"
+        env:
+          RELEASE_TAG: ${{ needs.select-image.outputs.release_tag }}
+        run: spartan/scripts/wait_for_release.ts "$RELEASE_TAG"
 
   deploy-and-test:
     needs: [select-image, wait-for-release]
