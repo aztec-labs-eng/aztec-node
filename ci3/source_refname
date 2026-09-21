@@ -30,9 +30,47 @@ if [ -z "${REF_NAME:-}" ]; then
   export REF_NAME
 fi
 
+# Resolve the repository's trunk (default branch), cached in DEFAULT_BRANCH.
+# Order: an explicit env override (cheapest — CI can pass the known value), then the
+# local origin/HEAD, then ask the remote. The remote query is what makes this work on
+# the shallow `git fetch --depth 1` clones in the build container, where origin/HEAD is
+# never set; it is also host-agnostic (GitHub, Forgejo). "main" is the last-resort
+# fallback for a repo with no reachable remote (e.g. some local runs).
+function ci_default_branch {
+  if [ -z "${DEFAULT_BRANCH:-}" ]; then
+    local d
+    d=$(git symbolic-ref --short -q refs/remotes/origin/HEAD 2>/dev/null || true)
+    d="${d#origin/}"
+    if [ -z "$d" ]; then
+      d=$(git ls-remote --symref origin HEAD 2>/dev/null \
+          | awk '/^ref:/ { sub("refs/heads/", "", $2); print $2; exit }')
+    fi
+    export DEFAULT_BRANCH="${d:-main}"
+  fi
+  echo "$DEFAULT_BRANCH"
+}
+
+# Derive the CI dashboard section from a ref (defaults to REF_NAME):
+#   - "tags" for any semver tag (a release is a semver-tag push)
+#   - the ref's own name if it is the default branch or a configured mainline branch
+#     (CI_MAINLINE_BRANCHES, an extended-regex; defaults to release lines like v5)
+#   - "prs" for everything else (feature branches, PR heads)
+# The single source of truth for the section, shared by ci.sh and log_ci_run.
+function ci_dashboard_section {
+  local ref="${1:-$REF_NAME}"
+  if semver check "$ref"; then
+    echo "tags"
+  elif [ "$ref" == "$(ci_default_branch)" ] || [[ "$ref" =~ ${CI_MAINLINE_BRANCHES:-^v[0-9]+$} ]]; then
+    echo "$ref"
+  else
+    echo "prs"
+  fi
+}
+export -f ci_default_branch ci_dashboard_section
+
 if [ -z "${CI_FULL:-}" ]; then
   export CI_FULL=0
-  if [ "$CI" -eq 1 ] && { semver check "$REF_NAME" || [ "$REF_NAME" == "master" ]; }; then
+  if [ "$CI" -eq 1 ] && { semver check "$REF_NAME" || [ "$REF_NAME" == "$(ci_default_branch)" ]; }; then
     export CI_FULL=1
   fi
 fi

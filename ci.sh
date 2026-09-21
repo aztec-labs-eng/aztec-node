@@ -123,11 +123,11 @@ export RUN_ID=${RUN_ID:-$(date +%s%3N)}
 
 function multi_job_run {
   if [[ -z "${CI_DASHBOARD:-}" ]]; then
-    if [[ "${REF_NAME:-}" == "main" ]]; then
-      export CI_DASHBOARD="main"
-    else
-      export CI_DASHBOARD="prs"
-    fi
+    # Section = a mainline branch's own name (the default branch, v5, ...), "tags" for
+    # any tag, else "prs" (see ci_dashboard_section in source_refname). log_ci_run
+    # prefixes this with the repo. The trigger sets CI_DASHBOARD from .ci3.yml's
+    # push_branches; this is the fallback for direct/local ci.sh runs.
+    export CI_DASHBOARD="$(ci_dashboard_section)"
   fi
   export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-75}
   export AWS_SHUTDOWN_TIME_ARM=${AWS_SHUTDOWN_TIME_ARM:-90}
@@ -231,7 +231,9 @@ case "$cmd" in
     # Uses same hash as run_test_cmd's test_hash for consistency
     test_cmd="${full_cmd#* }"
     test_hash=$(hash_str_orig "$test_cmd")
-    export CI_DASHBOARD="deflake"
+    # Grind is a dev tool; its runs go to the repo's "local" section (the deflake
+    # section was retired along with the /grind web endpoint).
+    export CI_DASHBOARD="local"
     export JOB_ID="grind-test-$test_hash"
     export INSTANCE_POSTFIX=$JOB_ID
     export CPUS=${CPUS:-192}
@@ -384,7 +386,7 @@ case "$cmd" in
   release)
     # Spin up ec2 instances (amd64 + arm64) and run the full release flow: build and publish.
     # Set DRY_RUN=1 to exercise the whole flow without publishing.
-    export CI_DASHBOARD="releases"
+    export CI_DASHBOARD="tags"
     # Roomier instance lifetime than a standard run: the amd64 job builds and then publishes,
     # which together exceed the default 75 min shutdown.
     export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-180}
