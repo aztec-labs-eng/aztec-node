@@ -80,6 +80,12 @@ type AddCheckpointOptions = {
    * `attestationsHash` the rollup stores at propose time covers.
    */
   spareAttestationsBitmapBit?: boolean;
+  /**
+   * Replaces the packed attestations tuple posted with the checkpoint, after it has been built from
+   * `signers`. Models an escape-hatch proposer, which L1 lets post an arbitrary tuple: the rollup only
+   * records its hash. The recorded `attestationsHash` covers whatever is set here.
+   */
+  verbatimAttestations?: ViemCommitteeAttestations;
 };
 
 /** Result from adding a checkpoint. */
@@ -263,6 +269,7 @@ export class FakeL1State {
       checkpoint,
       signers,
       options.spareAttestationsBitmapBit ?? false,
+      options.verbatimAttestations,
     );
     const blobHashes = await this.makeVersionedBlobHashes(checkpoint);
     const blobs = await this.makeBlobsFromCheckpoint(checkpoint);
@@ -776,6 +783,7 @@ export class FakeL1State {
     checkpoint: Checkpoint,
     signers: Secp256k1Signer[],
     spareAttestationsBitmapBit: boolean,
+    verbatimAttestationsOverride?: ViemCommitteeAttestations,
   ): Promise<{
     tx: Transaction;
     attestationsHash: Buffer32;
@@ -806,9 +814,11 @@ export class FakeL1State {
     );
 
     const packedAttestations = attestationsAndSigners.getPackedAttestations();
-    const verbatimAttestations = spareAttestationsBitmapBit
-      ? { ...packedAttestations, signatureIndices: setLastBitmapBit(packedAttestations.signatureIndices) }
-      : packedAttestations;
+    const verbatimAttestations =
+      verbatimAttestationsOverride ??
+      (spareAttestationsBitmapBit
+        ? { ...packedAttestations, signatureIndices: setLastBitmapBit(packedAttestations.signatureIndices) }
+        : packedAttestations);
 
     const rollupInput = encodeFunctionData({
       abi: RollupAbi,

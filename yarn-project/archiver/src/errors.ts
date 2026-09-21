@@ -302,3 +302,24 @@ export class UndecodableCheckpointAttestationsError extends Error {
     this.name = 'UndecodableCheckpointAttestationsError';
   }
 }
+
+/**
+ * Thrown when the packed attestations tuple posted with a checkpoint does not decode as its epoch
+ * committee. Outside an escape hatch the rollup requires a committee-sized tuple, and the tuple's hash has
+ * already been checked against the one the rollup recorded at propose time, so this is not a
+ * calldata-extraction mismatch.
+ */
+export class CheckpointAttestationsDecodeError extends Error {
+  constructor(
+    public readonly checkpointNumber: number,
+    public readonly epoch: number,
+    public readonly committeeSize: number,
+    public override readonly cause: unknown,
+  ) {
+    super(
+      `Attestations tuple of checkpoint ${checkpointNumber} does not decode for the committee of ${committeeSize} ` +
+        `recorded for epoch ${epoch} (${cause instanceof Error ? cause.message : String(cause)})`,
+    );
+    this.name = 'CheckpointAttestationsDecodeError';
+  }
+}

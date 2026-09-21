@@ -46,7 +46,6 @@ type RetrievedCheckpointBase = {
   l1: L1PublishedData;
   chainId: Fr;
   version: Fr;
-  attestations: CommitteeAttestation[];
   /**
    * The exact packed `CommitteeAttestations` tuple from the propose calldata, carried verbatim: it is what
    * the rollup hashed into `attestationsHash`, and repacking the decoded attestations does not reproduce it.
@@ -54,15 +53,27 @@ type RetrievedCheckpointBase = {
   verbatimAttestations: ViemCommitteeAttestations;
 };
 
-/** Checkpoint data as retrieved from L1 calldata and blob data. */
-export type RetrievedCheckpoint = RetrievedCheckpointBase & { checkpointBlobData: CheckpointBlobData };
+/** Checkpoint data as retrieved from L1 calldata and blob data, with its attestations already resolved. */
+export type RetrievedCheckpoint = RetrievedCheckpointBase & {
+  attestations: CommitteeAttestation[];
+  checkpointBlobData: CheckpointBlobData;
+};
 
-/** Checkpoint data retrieved from L1 calldata only, without blob data. */
+/**
+ * Checkpoint data retrieved from L1 calldata only, without blob data. Its attestations tuple is still
+ * packed: interpreting it needs the committee of the epoch the checkpoint falls in, which calldata
+ * retrieval does not resolve.
+ */
 export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
   /** Versioned blob hashes from the checkpoint proposed event. */
   blobHashes: Buffer[];
   /** Parent beacon block root from the L1 block, used for blob fetching. */
   parentBeaconBlockRoot: string | undefined;
+};
+
+/** A calldata-only checkpoint whose packed attestations tuple has been interpreted for its epoch. */
+export type ResolvedCheckpointFromCalldata = RetrievedCheckpointFromCalldata & {
+  attestations: CommitteeAttestation[];
 };
 
 export async function retrievedToPublishedCheckpoint({
@@ -187,7 +198,7 @@ export async function retrieveCheckpointCalldataFromRollup(
 ): Promise<RetrievedCheckpointFromCalldata[]> {
   const retrievedCheckpoints: RetrievedCheckpointFromCalldata[] = [];
 
-  let rollupConstants: { chainId: Fr; version: Fr; targetCommitteeSize: number } | undefined;
+  let rollupConstants: { chainId: Fr; version: Fr } | undefined;
 
   do {
     if (searchStartBlock > searchEndBlock) {
@@ -205,15 +216,10 @@ export async function retrieveCheckpointCalldataFromRollup(
     );
 
     if (rollupConstants === undefined) {
-      const [chainId, version, targetCommitteeSize] = await Promise.all([
-        publicClient.getChainId(),
-        rollup.getVersion(),
-        rollup.getTargetCommitteeSize(),
-      ]);
+      const [chainId, version] = await Promise.all([publicClient.getChainId(), rollup.getVersion()]);
       rollupConstants = {
         chainId: new Fr(chainId),
         version: new Fr(version),
-        targetCommitteeSize,
       };
     }
 
@@ -239,7 +245,7 @@ export async function retrieveCheckpointCalldataFromRollup(
  * @param publicClient - The viem public client to use for transaction retrieval.
  * @param debugClient - The viem debug client to use for trace/debug RPC methods (optional).
  * @param logs - CheckpointProposed logs.
- * @param rollupConstants - The rollup constants (chainId, version, targetCommitteeSize).
+ * @param rollupConstants - The rollup constants (chainId, version).
  * @param instrumentation - The archiver instrumentation instance.
  * @param logger - The logger instance.
  * @returns An array of calldata-only checkpoints.
@@ -249,7 +255,7 @@ async function processCheckpointProposedLogs(
   publicClient: ViemPublicClient,
   debugClient: ViemPublicDebugClient,
   logs: CheckpointProposedLog[],
-  { chainId, version, targetCommitteeSize }: { chainId: Fr; version: Fr; targetCommitteeSize: number },
+  { chainId, version }: { chainId: Fr; version: Fr },
   instrumentation: ArchiverInstrumentation,
   logger: Logger,
 ): Promise<RetrievedCheckpointFromCalldata[]> {
@@ -257,7 +263,6 @@ async function processCheckpointProposedLogs(
   const calldataRetriever = new CalldataRetriever(
     publicClient,
     debugClient,
-    targetCommitteeSize,
     instrumentation,
     logger,
     EthAddress.fromString(rollup.address),
@@ -297,7 +302,7 @@ async function processCheckpointProposedLogs(
         l1BlockNumber: log.l1BlockNumber,
         checkpointNumber,
         archive: archive.toString(),
-        attestations: checkpoint.attestations,
+        verbatimAttestations: checkpoint.verbatimAttestations,
       });
     } else {
       logger.warn(`Ignoring checkpoint ${checkpointNumber} due to archive root mismatch`, {
