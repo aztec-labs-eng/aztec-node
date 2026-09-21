@@ -1,4 +1,5 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
@@ -18,8 +19,14 @@ import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '@aztec-labs/stdlib/testing'
 import { type MockProxy, mock } from 'jest-mock-extended';
 import assert from 'node:assert';
 
+import { CheckpointAttestationsDecodeError } from '../errors.js';
 import { makeSignedPublishedCheckpoint } from '../test/mock_structs.js';
-import { getAttestationInfoFromPublishedCheckpoint, validateAttestations } from './validation.js';
+import {
+  type CalldataCheckpointForAttestations,
+  getAttestationInfoFromPublishedCheckpoint,
+  resolveCheckpointAttestationsFromCalldata,
+  validateAttestations,
+} from './validation.js';
 
 /**
  * Blob-path wrapper over the shared attestation validator, used only by these tests. Production
@@ -68,12 +75,12 @@ describe('validateCheckpointAttestations', () => {
     return makeSignedPublishedCheckpoint(checkpoint, signers, committee);
   };
 
-  const setCommittee = (committee: EthAddress[]) => {
+  const setCommittee = (committee: EthAddress[], isEscapeHatchOpen = false) => {
     epochCache.getCommitteeForEpoch.mockResolvedValue({
       committee,
       seed: 0n,
       epoch: EpochNumber(0),
-      isEscapeHatchOpen: false,
+      isEscapeHatchOpen,
     });
   };
 
@@ -118,8 +125,7 @@ describe('validateCheckpointAttestations', () => {
     });
 
     it('validates a checkpoint if escape hatch is open', async () => {
-      // This should already be covered by the case of empty committee
-      epochCache.isEscapeHatchOpen.mockResolvedValue(true);
+      setCommittee([], true);
       const checkpoint = await makeCheckpoint(signers, committee);
       const result = await validateCheckpointAttestations(
         checkpoint,
@@ -129,7 +135,6 @@ describe('validateCheckpointAttestations', () => {
         logger,
       );
       expect(result.valid).toBe(true);
-      expect(epochCache.isEscapeHatchOpen).not.toHaveBeenCalled();
     });
   });
 
@@ -366,7 +371,7 @@ describe('validateCheckpointAttestations', () => {
     });
 
     it('validates a checkpoint if escape hatch is open', async () => {
-      epochCache.isEscapeHatchOpen.mockResolvedValue(true);
+      setCommittee(committee, true);
       const checkpoint = await makeCheckpoint(signers, committee);
       const result = await validateCheckpointAttestations(
         checkpoint,
@@ -376,7 +381,122 @@ describe('validateCheckpointAttestations', () => {
         logger,
       );
       expect(result.valid).toBe(true);
-      expect(epochCache.isEscapeHatchOpen).toHaveBeenCalledWith(EpochNumber(0));
     });
+  });
+});
+
+describe('resolveCheckpointAttestationsFromCalldata', () => {
+  let epochCache: MockProxy<EpochCache>;
+  let signers: Secp256k1Signer[];
+  let committee: EthAddress[];
+  let logger: Logger;
+
+  const constants = { epochDuration: 10 };
+
+  beforeEach(() => {
+    epochCache = mock<EpochCache>();
+    signers = times(5, () => Secp256k1Signer.random());
+    committee = signers.map(signer => signer.address);
+    logger = createLogger('archiver:test');
+    epochCache.getCommitteeForEpoch.mockResolvedValue({
+      committee,
+      seed: 0n,
+      epoch: EpochNumber(0),
+      isEscapeHatchOpen: false,
+    });
+  });
+
+  /**
+   * Builds the calldata-only view of a checkpoint the synchronizer resolves attestations for, carrying the
+   * given packed tuple. Defaults to the tuple the given signers would have posted.
+   */
+  const makeCalldataCheckpoint = async (
+    attestationSigners: Secp256k1Signer[],
+    verbatimAttestations?: ViemCommitteeAttestations,
+  ): Promise<CalldataCheckpointForAttestations> => {
+    const checkpoint = await Checkpoint.random(CheckpointNumber(1), { slotNumber: SlotNumber(1) });
+    const { attestations } = makeSignedPublishedCheckpoint(checkpoint, attestationSigners, committee);
+    return {
+      checkpointNumber: checkpoint.number,
+      archiveRoot: checkpoint.archive.root,
+      feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
+      header: checkpoint.header,
+      verbatimAttestations: verbatimAttestations ?? CommitteeAttestationsAndSigners.packAttestations(attestations),
+    };
+  };
+
+  const resolve = (checkpoint: CalldataCheckpointForAttestations) =>
+    resolveCheckpointAttestationsFromCalldata(
+      checkpoint,
+      epochCache,
+      constants,
+      TEST_COORDINATION_SIGNATURE_CONTEXT,
+      logger,
+    );
+
+  it('decodes exactly the epoch committee length', async () => {
+    const checkpoint = await makeCalldataCheckpoint(signers);
+
+    const { attestations, validationResult } = await resolve(checkpoint);
+
+    expect(attestations).toHaveLength(committee.length);
+    expect(validationResult.valid).toBe(true);
+    expect(epochCache.getCommitteeForEpoch).toHaveBeenCalledWith(EpochNumber(0));
+  });
+
+  it('surfaces an invalid result from the decoded array', async () => {
+    // None of the signers is in the committee, so their signatures land in no committee slot and the
+    // checkpoint ends up with nothing counting towards quorum.
+    const checkpoint = await makeCalldataCheckpoint(times(5, () => Secp256k1Signer.random()));
+
+    const { attestations, validationResult } = await resolve(checkpoint);
+
+    expect(attestations).toHaveLength(committee.length);
+    assert(!validationResult.valid);
+    expect(validationResult.reason).toEqual('insufficient-attestations');
+  });
+
+  it('returns no attestations without decoding when the escape hatch is open', async () => {
+    // The tuple an escape-hatch proposer posts is arbitrary: this one promises a signature it does not
+    // carry, so any committee-sized decode of it throws.
+    epochCache.getCommitteeForEpoch.mockResolvedValue({
+      committee,
+      seed: 0n,
+      epoch: EpochNumber(0),
+      isEscapeHatchOpen: true,
+    });
+    const checkpoint = await makeCalldataCheckpoint(signers, {
+      signatureIndices: '0x80',
+      signaturesOrAddresses: '0xab',
+    });
+
+    const { attestations, validationResult } = await resolve(checkpoint);
+
+    expect(attestations).toEqual([]);
+    expect(validationResult.valid).toBe(true);
+  });
+
+  it('returns no attestations when the epoch has no committee', async () => {
+    epochCache.getCommitteeForEpoch.mockResolvedValue({
+      committee: [],
+      seed: 0n,
+      epoch: EpochNumber(0),
+      isEscapeHatchOpen: false,
+    });
+    const checkpoint = await makeCalldataCheckpoint(signers);
+
+    const { attestations, validationResult } = await resolve(checkpoint);
+
+    expect(attestations).toEqual([]);
+    expect(validationResult.valid).toBe(true);
+  });
+
+  it('throws a decode error for a non-hatch checkpoint whose tuple is too short', async () => {
+    const checkpoint = await makeCalldataCheckpoint(signers, {
+      signatureIndices: '0x80',
+      signaturesOrAddresses: '0xab',
+    });
+
+    await expect(resolve(checkpoint)).rejects.toThrow(CheckpointAttestationsDecodeError);
   });
 });

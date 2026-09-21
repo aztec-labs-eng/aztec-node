@@ -12,7 +12,6 @@ import { LruSet } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
-import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
 import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { type Hex, type Transaction, decodeFunctionData, hexToBytes, multicall3Abi, toFunctionSelector } from 'viem';
@@ -23,16 +22,21 @@ import { getCallsFromSpireProposer } from './spire_proposer.js';
 import { getSuccessfulCallsFromTrace } from './trace_tx.js';
 import type { CallInfo } from './types.js';
 
-/** Decoded checkpoint data from a propose calldata. */
-type CheckpointData = {
+/**
+ * Checkpoint data extracted from a propose calldata, with its attestations tuple still packed.
+ *
+ * The tuple is carried verbatim and is deliberately not decoded here: whether it carries committee
+ * attestations at all depends on the epoch the checkpoint belongs to, which calldata extraction does not
+ * know about. During an escape-hatch epoch the rollup accepts an arbitrary tuple that no committee-sized
+ * decode can parse. Attestation interpretation happens in the epoch-aware validation path instead.
+ */
+export type RawCheckpointFromCalldata = {
   checkpointNumber: CheckpointNumber;
   archiveRoot: Fr;
   header: CheckpointHeader;
-  attestations: CommitteeAttestation[];
   /**
-   * The exact packed `CommitteeAttestations` tuple as it appears in the propose calldata, preserved
-   * verbatim (never re-derived from {@link attestations}) so invalidation evidence stays byte-faithful to
-   * the on-chain `attestationsHash`.
+   * The exact packed `CommitteeAttestations` tuple as it appears in the propose calldata. It is what the
+   * rollup hashed into `attestationsHash`, and repacking decoded attestations does not reproduce it.
    */
   verbatimAttestations: ViemCommitteeAttestations;
   blockHash: string;
@@ -56,7 +60,6 @@ export class CalldataRetriever {
   constructor(
     private readonly publicClient: ViemPublicClient,
     private readonly debugClient: ViemPublicDebugClient,
-    private readonly targetCommitteeSize: number,
     private readonly instrumentation: ArchiverInstrumentation | undefined,
     private readonly logger: Logger,
     private readonly rollupAddress: EthAddress,
@@ -86,7 +89,7 @@ export class CalldataRetriever {
       attestationsHash: Hex;
       payloadDigest: Hex;
     },
-  ): Promise<CheckpointData> {
+  ): Promise<RawCheckpointFromCalldata> {
     this.logger.trace(`Fetching checkpoint ${checkpointNumber} from rollup tx ${txHash}`);
     const tx = await this.publicClient.getTransaction({ hash: txHash });
     return this.getCheckpointFromTx(tx, checkpointNumber, expectedHashes);
@@ -97,7 +100,7 @@ export class CalldataRetriever {
     tx: Transaction,
     checkpointNumber: CheckpointNumber,
     expectedHashes: { attestationsHash: Hex; payloadDigest: Hex },
-  ): Promise<CheckpointData> {
+  ): Promise<RawCheckpointFromCalldata> {
     // Try to decode as multicall3 with hash-verified matching
     const multicall3Result = this.tryDecodeMulticall3(tx, expectedHashes, checkpointNumber, tx.blockHash!);
     if (multicall3Result) {
@@ -155,7 +158,7 @@ export class CalldataRetriever {
     expectedHashes: { attestationsHash: Hex; payloadDigest: Hex },
     checkpointNumber: CheckpointNumber,
     blockHash: Hex,
-  ): Promise<CheckpointData | undefined> {
+  ): Promise<RawCheckpointFromCalldata | undefined> {
     // Try to decode as Spire Proposer multicall (extracts all wrapped calls)
     const spireWrappedCalls = await getCallsFromSpireProposer(tx, this.publicClient, this.logger);
     if (!spireWrappedCalls) {
@@ -202,7 +205,7 @@ export class CalldataRetriever {
     expectedHashes: { attestationsHash: Hex; payloadDigest: Hex },
     checkpointNumber: CheckpointNumber,
     blockHash: Hex,
-  ): CheckpointData | undefined {
+  ): RawCheckpointFromCalldata | undefined {
     const txHash = tx.hash;
 
     try {
@@ -256,7 +259,7 @@ export class CalldataRetriever {
       }
 
       // Decode, verify, and build for each candidate
-      const verified: CheckpointData[] = [];
+      const verified: RawCheckpointFromCalldata[] = [];
       for (const candidate of candidates) {
         const result = this.tryDecodeAndVerifyPropose(candidate, expectedHashes, checkpointNumber, blockHash);
         if (result) {
@@ -300,7 +303,7 @@ export class CalldataRetriever {
     expectedHashes: { attestationsHash: Hex; payloadDigest: Hex },
     checkpointNumber: CheckpointNumber,
     blockHash: Hex,
-  ): CheckpointData | undefined {
+  ): RawCheckpointFromCalldata | undefined {
     const txHash = tx.hash;
     try {
       // Check if transaction is to the rollup address
@@ -400,7 +403,7 @@ export class CalldataRetriever {
     expectedHashes: { attestationsHash: Hex; payloadDigest: Hex },
     checkpointNumber: CheckpointNumber,
     blockHash: Hex,
-  ): CheckpointData | undefined {
+  ): RawCheckpointFromCalldata | undefined {
     try {
       const { functionName, args } = decodeFunctionData({ abi: RollupAbi, data: proposeCalldata });
       if (functionName !== 'propose') {
@@ -442,23 +445,18 @@ export class CalldataRetriever {
         return undefined;
       }
 
-      const attestations = CommitteeAttestation.fromPacked(verbatimAttestations, this.targetCommitteeSize);
-
       this.logger.trace(`Validated and decoded propose calldata for checkpoint ${checkpointNumber}`, {
         checkpointNumber,
         archive: decodedArgs.archive,
         header: decodedArgs.header,
         l1BlockHash: blockHash,
-        attestations,
         verbatimAttestations,
-        targetCommitteeSize: this.targetCommitteeSize,
       });
 
       return {
         checkpointNumber,
         archiveRoot,
         header,
-        attestations,
         verbatimAttestations,
         blockHash,
         feeAssetPriceModifier,

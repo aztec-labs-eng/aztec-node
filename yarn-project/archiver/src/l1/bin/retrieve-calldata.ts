@@ -5,6 +5,7 @@ import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethere
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
 import { type Hex, createPublicClient, decodeEventLog, getAbiItem, http, toEventSelector } from 'viem';
 import { mainnet } from 'viem/chains';
 
@@ -93,7 +94,6 @@ async function main() {
     const retriever = new CalldataRetriever(
       publicClient as unknown as ViemPublicClient,
       publicClient as unknown as ViemPublicDebugClient,
-      targetCommitteeSize,
       undefined,
       logger,
       rollupAddress,
@@ -171,9 +171,15 @@ async function main() {
     logger.info(`  Fee Recipient: ${result.header.feeRecipient.toString()}`);
     logger.info(`  Total Mana Used: ${result.header.totalManaUsed.toString()}`);
     logger.info('');
-    logger.info('Attestations:');
-    logger.info(`  Count: ${result.attestations.length}`);
-    logger.info(`  Non-empty attestations: ${result.attestations.filter((a: any) => !a.signature.isEmpty()).length}`);
+    // The tuple is printed packed: decoding it needs the committee of the checkpoint's epoch, which this
+    // script does not resolve. `targetCommitteeSize` is used only to decode on request.
+    logger.info('Attestations (packed):');
+    logger.info(`  Signature bitmap: ${result.verbatimAttestations.signatureIndices}`);
+    logger.info(`  Signatures or addresses: ${result.verbatimAttestations.signaturesOrAddresses}`);
+    const attestations = CommitteeAttestation.fromPacked(result.verbatimAttestations, targetCommitteeSize);
+    logger.info(`  Decoded for a committee of ${targetCommitteeSize}:`);
+    logger.info(`    Count: ${attestations.length}`);
+    logger.info(`    Non-empty attestations: ${attestations.filter(a => !a.signature.isEmpty()).length}`);
 
     process.exit(0);
   } catch (error) {
