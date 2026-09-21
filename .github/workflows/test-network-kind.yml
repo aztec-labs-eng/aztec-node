@@ -39,6 +39,7 @@ jobs:
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           ref: main
+          persist-credentials: false
 
       - name: Determine nightly tag
         id: nightly-tag
@@ -67,6 +68,7 @@ jobs:
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -90,6 +92,7 @@ jobs:
         with:
           # Scheduled runs check out the nightly tag so the tests match the release.
           ref: ${{ inputs.ref || needs.select-image.outputs.source_ref }}
+          persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
