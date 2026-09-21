@@ -802,6 +802,22 @@ export class LibP2PService extends WithTracer implements P2PService {
   }
 
   /**
+   * Whether a duplicate proposal at this slot can be attributed as an equivocation offense. With an
+   * empty committee every signer is accepted, so two distinct honest proposers for the same slot look
+   * like equivocation; without an expected proposer there is no one to attribute the offense to.
+   * Mirrors the guard in checkpoint_equivocation_watcher, which refuses to slash when the slot has no
+   * proposer.
+   */
+  private async canAttributeDuplicateProposal(slot: SlotNumber): Promise<boolean> {
+    const expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slot);
+    if (expectedProposer === undefined) {
+      this.logger.warn(`Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty committee)`);
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * Registers a callback to be invoked when an oversized block proposal is stored as slashing evidence.
    */
   public registerOversizedProposalCallback(callback: P2POversizedProposalCallback): void {
@@ -1421,8 +1437,9 @@ export class LibP2PService extends WithTracer implements P2PService {
         source: peerId.toString(),
         proposer: proposer?.toString(),
       });
-      // Invoke the duplicate callback on the first duplicate spotted only
-      if (proposer && count === 2) {
+      // Invoke the duplicate callback on the first duplicate spotted only, and only when the offense
+      // can be attributed to an expected proposer (not an empty committee).
+      if (proposer && count === 2 && (await this.canAttributeDuplicateProposal(block.slotNumber))) {
         this.duplicateProposalCallback?.({ slot: block.slotNumber, proposer, type: 'block' });
       }
       return { result: TopicValidatorResult.Accept, obj: block, metadata: { isEquivocated, isOversized } };
@@ -1628,7 +1645,7 @@ export class LibP2PService extends WithTracer implements P2PService {
         proposer: proposer?.toString(),
       });
       // Invoke the duplicate callback on the first duplicate spotted only
-      if (proposer && count === 2) {
+      if (proposer && count === 2 && (await this.canAttributeDuplicateProposal(checkpoint.slotNumber))) {
         this.duplicateProposalCallback?.({ slot: checkpoint.slotNumber, proposer, type: 'checkpoint' });
       }
       return {
