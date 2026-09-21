@@ -63,9 +63,16 @@ function cleanup {
 # This causes cleanup to die silently, probably from a SIGPIPE.
 trap 'cleanup >/dev/null' SIGINT SIGTERM EXIT
 
-# Verify that the commit exists on the remote.
+# Verify that the commit exists on the remote. --negotiate-only asks origin which of these tips it
+# already has, transfers no objects, and prints the commit back when origin has it. Its exit status
+# is checked apart from its output: the runner's checkout persists no credential, so this read is
+# anonymous, and a rate-limited or unreachable origin must not be reported as an unpushed commit.
 current_commit=$(git rev-parse HEAD)
-if [[ "$(git fetch origin --negotiate-only --negotiation-tip="$current_commit")" != *"$current_commit"* ]]; then
+if ! common=$(retry "git fetch origin --negotiate-only --negotiation-tip=$current_commit"); then
+  echo "Could not reach origin to check whether $current_commit is pushed; see the error above."
+  exit 1
+fi
+if [[ "$common" != *"$current_commit"* ]]; then
   echo "Commit $current_commit is not pushed, exiting."
   exit 1
 fi
