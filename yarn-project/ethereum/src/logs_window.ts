@@ -1,5 +1,5 @@
 import { createLogger } from '@aztec-labs/foundation/log';
-import type { BlockTag, FallbackTransport, Hex, HttpTransport } from 'viem';
+import type { FallbackTransport, HttpTransport } from 'viem';
 import { numberToHex } from 'viem';
 
 /**
@@ -14,16 +14,29 @@ const logger = createLogger('ethereum:logs_window');
 
 /** The subset of an `eth_getLogs` filter this cap reasons about. */
 type LogsFilter = {
-  blockHash?: Hex;
-  fromBlock?: Hex | BlockTag;
-  toBlock?: Hex | BlockTag;
+  blockHash?: string;
+  fromBlock?: string;
+  toBlock?: string;
 };
 
+/**
+ * Whether a request parameter is a filter whose bounds this cap can read. A bound that is not a string is one this
+ * cap has no opinion on, so the filter goes to the provider exactly as the caller wrote it.
+ */
+function isLogsFilter(value: unknown): value is LogsFilter {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const { blockHash, fromBlock, toBlock } = value as Record<string, unknown>;
+  const isBound = (bound: unknown) => bound === undefined || typeof bound === 'string';
+  return isBound(blockHash) && isBound(fromBlock) && isBound(toBlock);
+}
+
 /** Block tags whose height changes as the chain grows, so a bound naming one has to be resolved before chunking. */
-const MOVING_BLOCK_TAGS: BlockTag[] = ['latest', 'safe', 'finalized'];
+const MOVING_BLOCK_TAGS: readonly string[] = ['latest', 'safe', 'finalized'];
 
 /** Block tags this cap can turn into a height. Anything else (`pending`) leaves the bound unknown. */
-const RESOLVABLE_BLOCK_TAGS: BlockTag[] = [...MOVING_BLOCK_TAGS, 'earliest'];
+const RESOLVABLE_BLOCK_TAGS: readonly string[] = [...MOVING_BLOCK_TAGS, 'earliest'];
 
 /**
  * The cap to apply when the caller supplies none: `MAX_L1_LOGS_WINDOW_SIZE` if the environment sets it, else
@@ -62,11 +75,20 @@ export function splitLogsWindow(
 }
 
 /** The tag a bound names, or undefined when it is a block number. An absent bound means `latest`, as in the spec. */
-function tagOf(bound: Hex | BlockTag | undefined): BlockTag | undefined {
+function tagOf(bound: string | undefined): string | undefined {
   if (bound === undefined) {
     return 'latest';
   }
-  return bound.startsWith('0x') ? undefined : (bound as BlockTag);
+  return bound.startsWith('0x') ? undefined : bound;
+}
+
+/** The height a `0x`-prefixed bound names, or undefined when it is not a quantity the provider would accept. */
+function parseBlockHeight(bound: string): bigint | undefined {
+  try {
+    return BigInt(bound);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Issues a request on the transport being wrapped. */
@@ -86,7 +108,7 @@ async function resolveLogsWindow(
   const fromTag = tagOf(filter.fromBlock);
   const toTag = tagOf(filter.toBlock);
 
-  const unresolvable = (tag: BlockTag | undefined) => tag !== undefined && !RESOLVABLE_BLOCK_TAGS.includes(tag);
+  const unresolvable = (tag: string | undefined) => tag !== undefined && !RESOLVABLE_BLOCK_TAGS.includes(tag);
   if (unresolvable(fromTag) || unresolvable(toTag)) {
     return undefined;
   }
@@ -96,13 +118,16 @@ async function resolveLogsWindow(
     return undefined;
   }
 
-  const resolved = new Map<BlockTag, bigint | undefined>();
-  const resolve = async (bound: Hex | BlockTag | undefined, tag: BlockTag | undefined) => {
-    if (tag === undefined) {
-      return BigInt(bound as Hex);
+  const resolved = new Map<string, bigint | undefined>();
+  const resolve = async (bound: string | undefined, tag: string | undefined) => {
+    if (typeof bound === 'string' && tag === undefined) {
+      return parseBlockHeight(bound);
     }
     if (tag === 'earliest') {
       return 0n;
+    }
+    if (tag === undefined) {
+      return undefined;
     }
     if (!resolved.has(tag)) {
       resolved.set(tag, await resolveTagHeight(tag, request));
@@ -119,15 +144,16 @@ async function resolveLogsWindow(
 }
 
 /** The height a moving tag currently names, or undefined when the provider cannot or will not say. */
-async function resolveTagHeight(tag: BlockTag, request: RequestFn): Promise<bigint | undefined> {
+async function resolveTagHeight(tag: string, request: RequestFn): Promise<bigint | undefined> {
   try {
-    const block = (await request({ method: 'eth_getBlockByNumber', params: [tag, false] })) as {
-      number?: Hex | null;
-    } | null;
-    const height = block?.number;
-    return height === undefined || height === null ? undefined : BigInt(height);
+    const block = await request({ method: 'eth_getBlockByNumber', params: [tag, false] });
+    if (typeof block !== 'object' || block === null) {
+      return undefined;
+    }
+    const { number } = block as Record<string, unknown>;
+    return typeof number === 'string' ? parseBlockHeight(number) : undefined;
   } catch (err) {
-    logger.debug(`Could not resolve L1 block tag ${tag} to cap an eth_getLogs range`, { err });
+    logger.debug(`Could not resolve L1 block tag to cap an eth_getLogs range`, { tag, err });
     return undefined;
   }
 }
@@ -166,9 +192,9 @@ export function capLogsWindow(
         return forward(args);
       }
 
-      const filter = (args.params as [LogsFilter] | undefined)?.[0];
-      // A by-hash filter names a single block, and a malformed one is the provider's to reject.
-      if (filter === undefined || filter.blockHash !== undefined) {
+      const filter = Array.isArray(args.params) ? (args.params[0] as unknown) : undefined;
+      // A by-hash filter names a single block, and one this cap cannot read is the provider's to interpret.
+      if (!isLogsFilter(filter) || filter.blockHash !== undefined) {
         return forward(args);
       }
 
@@ -187,14 +213,21 @@ export function capLogsWindow(
         return requestWindow(windows[0]);
       }
 
-      logger.debug(
-        `Splitting eth_getLogs over L1 blocks ${window.fromBlock}-${window.toBlock} into ${windows.length} requests of up to ${maxWindowSize} blocks`,
-      );
+      logger.debug(`Splitting eth_getLogs into ${windows.length} requests`, {
+        fromBlock: window.fromBlock,
+        toBlock: window.toBlock,
+        windowCount: windows.length,
+        maxWindowSize,
+      });
       const logs: unknown[] = [];
       for (const currentWindow of windows) {
+        const windowLogs = await requestWindow(currentWindow);
+        if (!Array.isArray(windowLogs)) {
+          throw new Error(`Expected an array of logs from eth_getLogs, got ${typeof windowLogs}`);
+        }
         // Appended one at a time: spreading a window's logs into `push` passes them as arguments, which overflows
         // the stack on the tens of thousands of logs a block range can hold.
-        for (const log of (await requestWindow(currentWindow)) as unknown[]) {
+        for (const log of windowLogs) {
           logs.push(log);
         }
       }

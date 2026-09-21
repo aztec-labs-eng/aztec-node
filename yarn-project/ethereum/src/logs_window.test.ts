@@ -246,6 +246,18 @@ describe('capLogsWindow', () => {
     expect(logsRanges(requests)).toEqual([{ fromBlock: 100, toBlock: 10 }]);
   });
 
+  it('passes a filter whose bounds are not strings through untouched', async () => {
+    const { request, requests } = makeCappedRequest(10, answerFromHead(undefined));
+    await request({ method: 'eth_getLogs', params: [{ fromBlock: 1, toBlock: 5 }] });
+    expect(requests).toEqual([{ method: 'eth_getLogs', params: [{ fromBlock: 1, toBlock: 5 }] }]);
+  });
+
+  it('passes a bound that is not a valid quantity through untouched', async () => {
+    const { request, requests } = makeCappedRequest(10, answerFromHead(undefined));
+    await request({ method: 'eth_getLogs', params: [{ fromBlock: '0xnope', toBlock: '0x5' }] });
+    expect(requests).toEqual([{ method: 'eth_getLogs', params: [{ fromBlock: '0xnope', toBlock: '0x5' }] }]);
+  });
+
   it('passes a by-hash filter through untouched', async () => {
     const { request, requests } = makeCappedRequest(10, answerFromHead(undefined));
     await request({ method: 'eth_getLogs', params: [{ blockHash: '0xfeed' }] });
