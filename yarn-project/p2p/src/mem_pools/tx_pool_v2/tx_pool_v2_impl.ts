@@ -607,11 +607,14 @@ export class TxPoolV2Impl {
       const txsToRestore = this.#indices.filterRestorable(expiredProtected);
       if (txsToRestore.length === 0) {
         this.#log.debug(`Preparing for slot ${slotNumber}, no txs to unprotect`);
-        return;
+      } else {
+        this.#log.info(`Preparing for slot ${slotNumber}: unprotecting ${txsToRestore.length} txs`);
+        await this.#restoreUnprotectedToPending(txsToRestore, 'during prepareForSlot');
       }
 
-      this.#log.info(`Preparing for slot ${slotNumber}: unprotecting ${txsToRestore.length} txs`);
-      await this.#restoreUnprotectedToPending(txsToRestore, 'during prepareForSlot');
+      // Step 4: Sweep pending txs that can no longer pay the next block's fee. The fee is stable
+      // across the slot, so this runs here instead of after every mined block.
+      await this.#evictionManager.evictAfterSlotPrepared(slotNumber);
     });
   }
 

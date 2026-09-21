@@ -1,4 +1,4 @@
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { GasFees } from '@aztec-labs/stdlib/gas';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
@@ -13,7 +13,7 @@ describe('InsufficientFeePerGasEvictionRule', () => {
   let rule: InsufficientFeePerGasEvictionRule;
   let deleteTxsMock: jest.MockedFunction<any>;
 
-  const blockGasFees = new GasFees(10, 20);
+  const nextBlockMinFees = new GasFees(10, 20);
 
   const createPoolOps = (pendingTxs: TxMetaData[]): PoolOperations => {
     deleteTxsMock = jest.fn(() => Promise.resolve());
@@ -29,10 +29,10 @@ describe('InsufficientFeePerGasEvictionRule', () => {
 
   beforeEach(() => {
     pool = createPoolOps([]);
-    rule = new InsufficientFeePerGasEvictionRule({ getNextBlockMinFees: () => Promise.resolve(blockGasFees) });
+    rule = new InsufficientFeePerGasEvictionRule({ getNextBlockMinFees: () => Promise.resolve(nextBlockMinFees) });
   });
 
-  describe('non-BLOCK_MINED events', () => {
+  describe('non-SLOT_PREPARED events', () => {
     it('returns empty result for TXS_ADDED event', async () => {
       const context: EvictionContext = {
         event: EvictionEvent.TXS_ADDED,
@@ -63,30 +63,44 @@ describe('InsufficientFeePerGasEvictionRule', () => {
         txsEvicted: [],
       });
     });
+
+    it('leaves underpriced txs alone on BLOCK_MINED event', async () => {
+      const blockHeader = BlockHeader.empty();
+      blockHeader.globalVariables.blockNumber = BlockNumber(100);
+      blockHeader.globalVariables.gasFees = new GasFees(10, 20);
+
+      const tx = stubTxMetaData('0x1111', { maxFeesPerGas: new GasFees(0, 0) });
+      pool = createPoolOps([tx]);
+
+      const minedContext: EvictionContext = {
+        event: EvictionEvent.BLOCK_MINED,
+        block: blockHeader,
+        newNullifiers: [],
+        feePayers: [],
+      };
+
+      const result = await rule.evict(minedContext, pool);
+
+      expect(result).toEqual({
+        reason: 'insufficient_fee_per_gas',
+        success: true,
+        txsEvicted: [],
+      });
+      expect(deleteTxsMock).not.toHaveBeenCalled();
+    });
   });
 
-  describe('BLOCK_MINED events', () => {
-    let blockHeader: BlockHeader;
-
-    beforeEach(() => {
-      blockHeader = BlockHeader.empty();
-      blockHeader.globalVariables.blockNumber = BlockNumber(100);
-      blockHeader.globalVariables.timestamp = 1000n;
-      blockHeader.globalVariables.gasFees = new GasFees(10, 20);
-    });
+  describe('SLOT_PREPARED events', () => {
+    const context: EvictionContext = {
+      event: EvictionEvent.SLOT_PREPARED,
+      slotNumber: SlotNumber(100),
+    };
 
     it('evicts txs with insufficient DA fee per gas', async () => {
       const tx1 = stubTxMetaData('0x1111', { maxFeesPerGas: new GasFees(9, 20) }); // DA too low
       const tx2 = stubTxMetaData('0x2222', { maxFeesPerGas: new GasFees(10, 20) }); // Exactly enough
 
       pool = createPoolOps([tx1, tx2]);
-
-      const context: EvictionContext = {
-        event: EvictionEvent.BLOCK_MINED,
-        block: blockHeader,
-        newNullifiers: [],
-        feePayers: [],
-      };
 
       const result = await rule.evict(context, pool);
 
@@ -101,13 +115,6 @@ describe('InsufficientFeePerGasEvictionRule', () => {
 
       pool = createPoolOps([tx1, tx2]);
 
-      const context: EvictionContext = {
-        event: EvictionEvent.BLOCK_MINED,
-        block: blockHeader,
-        newNullifiers: [],
-        feePayers: [],
-      };
-
       const result = await rule.evict(context, pool);
 
       expect(result.success).toBe(true);
@@ -121,13 +128,6 @@ describe('InsufficientFeePerGasEvictionRule', () => {
 
       pool = createPoolOps([tx1, tx2]);
 
-      const context: EvictionContext = {
-        event: EvictionEvent.BLOCK_MINED,
-        block: blockHeader,
-        newNullifiers: [],
-        feePayers: [],
-      };
-
       const result = await rule.evict(context, pool);
 
       expect(result.success).toBe(true);
@@ -137,13 +137,6 @@ describe('InsufficientFeePerGasEvictionRule', () => {
 
     it('handles empty pending list', async () => {
       pool = createPoolOps([]);
-
-      const context: EvictionContext = {
-        event: EvictionEvent.BLOCK_MINED,
-        block: blockHeader,
-        newNullifiers: [],
-        feePayers: [],
-      };
 
       const result = await rule.evict(context, pool);
 
@@ -156,7 +149,7 @@ describe('InsufficientFeePerGasEvictionRule', () => {
     });
 
     it('uses the next-block min fee to determine the eviction threshold', async () => {
-      // The next-block fee (5, 10) is lower than the block header's (10, 20).
+      // The next-block fee (5, 10) is lower than the default (10, 20) used by the other tests.
       rule = new InsufficientFeePerGasEvictionRule({ getNextBlockMinFees: () => Promise.resolve(new GasFees(5, 10)) });
 
       const tx1 = stubTxMetaData('0x1111', { maxFeesPerGas: new GasFees(5, 10) }); // Sufficient for projected fees
@@ -164,17 +157,10 @@ describe('InsufficientFeePerGasEvictionRule', () => {
 
       pool = createPoolOps([tx1, tx2]);
 
-      const context: EvictionContext = {
-        event: EvictionEvent.BLOCK_MINED,
-        block: blockHeader,
-        newNullifiers: [],
-        feePayers: [],
-      };
-
       const result = await rule.evict(context, pool);
 
       expect(result.success).toBe(true);
-      // Only tx2 is evicted (DA fee 4 < projected 5), tx1 is kept despite block header fees being higher
+      // Only tx2 is evicted (DA fee 4 < projected 5)
       expect(result.txsEvicted).toEqual([tx2.txHash]);
       expect(deleteTxsMock).toHaveBeenCalledWith([tx2.txHash], 'InsufficientFeePerGas');
     });
@@ -185,13 +171,6 @@ describe('InsufficientFeePerGasEvictionRule', () => {
       // Priced below every plausible fee, so only unavailability can save it.
       const tx = stubTxMetaData('0x1111', { maxFeesPerGas: new GasFees(0, 0) });
       pool = createPoolOps([tx]);
-
-      const context: EvictionContext = {
-        event: EvictionEvent.BLOCK_MINED,
-        block: blockHeader,
-        newNullifiers: [],
-        feePayers: [],
-      };
 
       const result = await rule.evict(context, pool);
 
