@@ -461,7 +461,8 @@ export class ReadOnlyL1TxUtils {
     // charged for their sum, so block gas can be lower than what the transaction itself needs.
     return {
       gasUsed: simulatedCall.gasUsed,
-      maxUsedGas: simulatedCall.maxUsedGas,
+      // TODO: viem exposes maxUsedGas on simulateBlocks call results from 2.56.9, drop this cast once we bump to it.
+      maxUsedGas: (simulatedCall as { maxUsedGas?: bigint }).maxUsedGas,
       result: simulatedCall.data as `0x${string}`,
     };
   }

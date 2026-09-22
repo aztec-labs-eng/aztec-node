@@ -45,7 +45,10 @@ export class L1RpcError extends Error {
 
 /** Creates a viem fallback HTTP transport for the given L1 RPC URLs. */
 export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number }) {
-  return wrapL1RpcTransport(fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout }))));
+  // viem caps response bodies at 10MB by default, which large getLogs or debug trace responses can exceed.
+  return wrapL1RpcTransport(
+    fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout, maxResponseBodySize: false }))),
+  );
 }
 
 /** Returns the HTTP status from an L1 RPC error's cause chain, if one is available. */
