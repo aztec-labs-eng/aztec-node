@@ -20,9 +20,9 @@ import {
   type TransactionReceipt,
   type TransactionSerializable,
   formatGwei,
-  serializeTransaction,
 } from 'viem';
 
+import { serializeSignedTransaction } from '../blob_tx.js';
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
@@ -219,11 +219,12 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
   private async signTransaction(txRequest: TransactionSerializable): Promise<`0x${string}`> {
     const signature = await this.signer(txRequest, this.getSenderAddress());
-    return serializeTransaction(txRequest, signature);
+    return serializeSignedTransaction(txRequest, signature);
   }
 
   protected async prepareSignedTransaction(txData: PrepareTransactionRequestRequest) {
-    const txRequest = await this.client.prepareTransactionRequest(txData);
+    // Passing the chain id keeps viem from routing a fully specified request through eth_fillTransaction.
+    const txRequest = await this.client.prepareTransactionRequest({ chainId: this.client.chain.id, ...txData });
     return await this.signTransaction(txRequest as TransactionSerializable);
   }
 

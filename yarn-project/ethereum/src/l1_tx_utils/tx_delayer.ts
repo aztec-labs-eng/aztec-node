@@ -10,13 +10,13 @@ import {
   type TransactionSerializableEIP4844,
   type TransactionSerialized,
   keccak256,
-  parseTransaction,
   publicActions,
   recoverTransactionAddress,
   serializeTransaction,
   walletActions,
 } from 'viem';
 
+import { parseSignedTransaction } from '../blob_tx.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';
 
 const MAX_WAIT_TIME_SECONDS = 180;
@@ -214,7 +214,7 @@ export function wrapClientWithDelayer<T extends ViemClient>(client: T, delayer: 
           logger.info(`Delaying tx ${txHash} until ${inspect(waitUntil)}`, {
             sender,
             argsLen: args.length,
-            ...omit(parseTransaction(serializedTransaction), 'data', 'sidecars'),
+            ...omit(parseSignedTransaction(serializedTransaction), 'data', 'sidecars'),
           });
         } else if (delayer.maxInclusionTimeIntoSlot !== undefined) {
           // Check if we need to delay txs sent too close to the end of the slot.
@@ -225,7 +225,7 @@ export function wrapClientWithDelayer<T extends ViemClient>(client: T, delayer: 
           txHash = computeTxHash(serializedTransaction);
           const logData = {
             sender,
-            ...omit(parseTransaction(serializedTransaction), 'data', 'sidecars'),
+            ...omit(parseSignedTransaction(serializedTransaction), 'data', 'sidecars'),
             lastBlockTimestamp,
             now,
             maxInclusionTimeIntoSlot: delayer.maxInclusionTimeIntoSlot,
@@ -291,7 +291,7 @@ export function wrapClientWithDelayer<T extends ViemClient>(client: T, delayer: 
  */
 function computeTxHash(serializedTransaction: Hex) {
   if (serializedTransaction.startsWith('0x03')) {
-    const parsed = parseTransaction(serializedTransaction);
+    const parsed = parseSignedTransaction(serializedTransaction);
     if (parsed.blobs || parsed.sidecars) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { blobs, sidecars, ...rest } = parsed;
