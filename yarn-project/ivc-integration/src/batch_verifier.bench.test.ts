@@ -8,7 +8,7 @@ import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -22,7 +22,6 @@ const REPO_ROOT = resolve('../..');
 const INPUTS_DIR = resolve(REPO_ROOT, 'labs-aztec-toolchain/chonk-pinned-flows');
 const BB_PATH = process.env.BB_BINARY_PATH ?? resolve(REPO_ROOT, 'labs-aztec-toolchain/bin/bb');
 const CHONK_INPUTS_SCRIPT = resolve(REPO_ROOT, 'labs-aztec-toolchain/download_chonk_inputs.sh');
-const CHONK_INPUTS_HASH_FILE = resolve(REPO_ROOT, 'labs-aztec-toolchain/chonk-inputs.hash');
 const CHONK_INPUTS_MARKER_FILE = resolve(INPUTS_DIR, '.chonk-inputs.hash');
 const CHONK_INPUTS_STATE_DIR = resolve(REPO_ROOT, '.cache/chonk-inputs');
 
@@ -39,18 +38,15 @@ function proofToFields(proofBuf: Buffer): Uint8Array[] {
   return fields;
 }
 
-async function ensurePinnedInputs(): Promise<void> {
-  const expectedHash = readFileSync(CHONK_INPUTS_HASH_FILE, 'utf8').trim();
-  const currentHash = existsSync(CHONK_INPUTS_MARKER_FILE)
-    ? readFileSync(CHONK_INPUTS_MARKER_FILE, 'utf8').trim()
-    : undefined;
-
-  if (currentHash === expectedHash) {
-    return;
-  }
-
-  logger.info(`Downloading pinned Chonk inputs ${expectedHash}...`);
+/**
+ * Extracts the pinned Chonk input flows, and reports which pin they came from.
+ *
+ * Which pin that is depends on how the toolchain provisioned bb, so the script owns the
+ * decision; it exits immediately once the extracted tree already matches.
+ */
+async function ensurePinnedInputs(): Promise<string> {
   await execFileAsync(CHONK_INPUTS_SCRIPT, [], { cwd: REPO_ROOT, timeout: 180_000 });
+  return readFileSync(CHONK_INPUTS_MARKER_FILE, 'utf8').trim();
 }
 
 describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
@@ -61,10 +57,9 @@ describe('Batch Chonk Verifier Benchmarks (Real Proofs)', () => {
   const benchResults: BenchEntry[] = [];
 
   beforeAll(async () => {
-    await ensurePinnedInputs();
+    const inputsHash = await ensurePinnedInputs();
 
-    // Use pinned IVC inputs from chonk-pinned-flows
-    logger.info(`Using local IVC inputs from ${INPUTS_DIR}...`);
+    logger.info(`Using local IVC inputs ${inputsHash} from ${INPUTS_DIR}...`);
 
     // Pick the largest flow for a realistic proof
     const flows = await readdir(INPUTS_DIR, { withFileTypes: true });
