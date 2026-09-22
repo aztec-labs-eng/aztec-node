@@ -41,9 +41,19 @@ INSTALL_URI=file://$(git rev-parse --show-toplevel)/aztec-up/bin $(git rev-parse
 ## Locked npm dependencies
 
 Each release includes `packages.tar.gz`, containing a standalone package manifest, Yarn lockfile,
-Yarn configuration, patches, and the exact Yarn CLI version declared by `yarn-project/package.json`.
-The installer downloads this artifact and runs an immutable installation. It does not require a
-user-installed Yarn and does not fall back to an unlocked npm install.
+Yarn configuration, and patches. The installer downloads the exact Yarn CLI version specified in
+that manifest directly from `repo.yarnpkg.com`, then runs an immutable installation. Yarn is not
+redistributed in the release archive, and users do not need to install it separately.
+
+To skip the release lock and the Yarn download, explicitly select the original npm installation path:
+
+```sh
+AZTEC_UP_SKIP_PACKAGE_LOCK=1 aztec-up install <version>
+```
+
+This also skips downloading the lock artifact. npm uses its normal dependency resolution and local
+configuration, so the installed dependency tree may differ from the approved release tree. Download
+or validation failures in the default path do not automatically enable this opt-out.
 
 `scripts/generate-package-lock.mjs` seeds the release lock from `yarn-project/yarn.lock`, retaining
 external dependency selections, checksums, and root resolutions. Workspace entries are replaced
@@ -67,4 +77,5 @@ node --test aztec-up/test/package_lock.test.mjs
 
 It uses a local registry fixture and downloads the pinned Yarn CLI. It checks that newer upstream
 publications cannot change the installed dependency and that unapproved resolutions, inconsistent
-manifests, and missing artifacts fail.
+manifests, and missing artifacts fail. It also checks that the archive excludes Yarn and that the
+opt-out installs through npm without downloading Yarn or the lock artifact.
