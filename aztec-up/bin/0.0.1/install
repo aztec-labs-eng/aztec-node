@@ -229,8 +229,12 @@ function install_foundry {
 function install_aztec_packages {
   set -euo pipefail
 
-  # Install npm packages to the version directory using --prefix
-  npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix "$version_path"
+  local archive
+  archive=$(mktemp)
+  curl -fsSL "$INSTALL_URI/$VERSION/packages.tar.gz" -o "$archive"
+  tar -xzf "$archive" -C "$version_path"
+  rm -f "$archive"
+  (cd "$version_path" && YARN_IGNORE_PATH=1 node yarn.cjs install --immutable)
 }
 
 # Expose every native tool in internal-bin under an aztec-<tool> symlink in bin.
