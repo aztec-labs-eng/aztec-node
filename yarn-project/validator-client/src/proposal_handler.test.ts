@@ -1770,6 +1770,22 @@ describe('ProposalHandler checkpoint validation', () => {
     // The first Inbox metadata comparison is the only place a local-view mismatch is visible as such: the helper
     // retries until its deadline, so by the time a decision exists a mismatch that recovered and one that persisted
     // look identical. A multi-node reorg test asserts on this, so it has to report the proposal it was about.
+    it('slashable set: deterministic streaming rejects are slashable, local-view ones are not', () => {
+      // Deterministic streaming-Inbox violations are computed from the block's own content, so a reject
+      // is the proposer's fault and must be slashable.
+      for (const reason of [
+        'consumption_moves_backwards',
+        'bundle_over_block_cap',
+        'checkpoint_over_msg_cap',
+      ] as const) {
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT).toContain(reason);
+      }
+      // Local-view reasons (a trailing archiver or an unfollowed reorg) must never slash an honest proposer.
+      for (const reason of ['inbox_prefix_unavailable', 'inbox_prefix_mismatch'] as const) {
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT).not.toContain(reason);
+      }
+    });
+
     describe('first metadata check observation', () => {
       it('reports a persistent mismatch on the exact proposal, and still rejects it non-punitively', async () => {
         const { seen, observers } = collectFirstChecks();

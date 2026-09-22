@@ -341,6 +341,13 @@ export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: BlockProposalValidation
   'parent_block_wrong_slot',
   'duplicate_txs',
   'invalid_embedded_txs',
+  // Deterministic streaming-Inbox violations: every honest node computes these from the block's own
+  // content, so a reject is a proposer offense. The local-view streaming reasons
+  // (inbox_prefix_unavailable, inbox_prefix_mismatch) are a trailing archiver or an unfollowed reorg,
+  // not the proposer's fault, and stay out.
+  'consumption_moves_backwards',
+  'bundle_over_block_cap',
+  'checkpoint_over_msg_cap',
 ];
 
 /** Checkpoint-proposal validation failures that constitute a slashable invalid-checkpoint offense. */
