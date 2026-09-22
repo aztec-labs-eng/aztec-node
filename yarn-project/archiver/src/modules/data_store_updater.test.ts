@@ -23,7 +23,7 @@ import { BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts
 import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts';
 import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestationsAndSigners, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
 import { ContractClassLog, ContractClassLogFields, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -837,6 +837,7 @@ describe('ArchiverDataStoreUpdater', () => {
       const promotion = updaterWithCache.addCheckpoints([], undefined, {
         l1: publishedCheckpoint.l1,
         attestations: publishedCheckpoint.attestations,
+        verbatimAttestations: publishedCheckpoint.verbatimAttestations,
         checkpoint: publishedCheckpoint,
       });
 
@@ -1135,6 +1136,7 @@ describe('ArchiverDataStoreUpdater', () => {
           CheckpointNumber(1),
           makeL1PublishedData(10),
           [],
+          CommitteeAttestationsAndSigners.packAttestations([]),
           proposed.archive.root,
         ),
       ).rejects.toThrow(NoProposedCheckpointToPromoteError);

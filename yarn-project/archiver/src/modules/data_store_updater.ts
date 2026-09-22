@@ -1,4 +1,5 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { filterAsync } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -204,6 +205,7 @@ export class ArchiverDataStoreUpdater {
     promoteProposed?: {
       l1: L1PublishedData;
       attestations: CommitteeAttestation[];
+      verbatimAttestations: ViemCommitteeAttestations;
       checkpoint: PublishedCheckpoint;
     },
     evictProposedFrom?: CheckpointNumber,
@@ -243,6 +245,7 @@ export class ArchiverDataStoreUpdater {
               promoteProposed.checkpoint.checkpoint.number,
               promoteProposed.l1,
               promoteProposed.attestations,
+              promoteProposed.verbatimAttestations,
               promoteProposed.checkpoint.checkpoint.archive.root,
             )
           : undefined,

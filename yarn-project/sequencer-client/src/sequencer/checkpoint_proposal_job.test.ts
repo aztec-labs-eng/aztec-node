@@ -25,6 +25,7 @@ import {
   type BlockData,
   type BlockHash,
   CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
   L2Block,
   type L2BlockSink,
   type L2BlockSource,
@@ -3086,6 +3087,7 @@ function toCheckpointData(checkpoint: Checkpoint): CheckpointData {
     blockCount: checkpoint.blocks.length,
     feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
     attestations: [],
+    verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
     l1: L1PublishedData.random(),
   };
 }

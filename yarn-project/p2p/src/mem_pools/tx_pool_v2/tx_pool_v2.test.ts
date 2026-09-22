@@ -20,7 +20,13 @@ import type { AztecAsyncMap } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { RevertCode } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { Body, L2Block, type L2BlockId, type L2BlockSource } from '@aztec-labs/stdlib/block';
+import {
+  Body,
+  CommitteeAttestationsAndSigners,
+  L2Block,
+  type L2BlockId,
+  type L2BlockSource,
+} from '@aztec-labs/stdlib/block';
 import { type CheckpointData, L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
 import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
@@ -3172,6 +3178,7 @@ describe('TxPoolV2', () => {
         checkpointOutHash: Fr.ZERO,
         feeAssetPriceModifier: 0n,
         attestations: [],
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
         l1: new L1PublishedData(0n, 0n, '0x0'),
       });
 

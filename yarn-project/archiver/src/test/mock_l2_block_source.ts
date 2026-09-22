@@ -23,6 +23,7 @@ import {
   Body,
   type CheckpointQuery,
   type CheckpointsQuery,
+  CommitteeAttestationsAndSigners,
   GENESIS_BLOCK_HEADER_HASH,
   GENESIS_CHECKPOINT_HEADER_HASH,
   type L1SyncPoint,
@@ -256,13 +257,28 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
     if (!checkpoint) {
       return Promise.resolve(undefined);
     }
-    return Promise.resolve(new PublishedCheckpoint(checkpoint, this.mockL1DataForCheckpoint(checkpoint), []));
+    return Promise.resolve(
+      new PublishedCheckpoint(
+        checkpoint,
+        this.mockL1DataForCheckpoint(checkpoint),
+        [],
+        CommitteeAttestationsAndSigners.packAttestations([]),
+      ),
+    );
   }
 
   public getCheckpoints(query: CheckpointsQuery): Promise<PublishedCheckpoint[]> {
     const checkpoints = this.resolveCheckpointsQuery(query);
     return Promise.resolve(
-      checkpoints.map(checkpoint => new PublishedCheckpoint(checkpoint, this.mockL1DataForCheckpoint(checkpoint), [])),
+      checkpoints.map(
+        checkpoint =>
+          new PublishedCheckpoint(
+            checkpoint,
+            this.mockL1DataForCheckpoint(checkpoint),
+            [],
+            CommitteeAttestationsAndSigners.packAttestations([]),
+          ),
+      ),
     );
   }
 
@@ -296,6 +312,7 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
       blockCount: checkpoint.blocks.length,
       feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
       attestations: [],
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
       l1: this.mockL1DataForCheckpoint(checkpoint),
     };
   }

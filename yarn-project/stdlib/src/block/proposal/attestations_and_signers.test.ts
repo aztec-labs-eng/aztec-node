@@ -101,6 +101,23 @@ describe('packAttestations is not a byte-faithful inverse of fromPacked', () => 
     expect(attestationsHash(repacked)).not.toEqual(attestationsHash(raw));
   });
 
+  it('diverges for a bitmap bit past the committee size: repack zeroes the spare bits', () => {
+    // A committee of three occupies bits 7..5 of the single bitmap byte. Bit 0 maps to no committee position,
+    // so neither AttestationLib.reconstructCommitteeFromSigners nor fromPacked reads it — but the
+    // attestationsHash the rollup stores at propose time does cover it.
+    const addresses = [EthAddress.random(), EthAddress.random(), EthAddress.random()];
+    const honest = CommitteeAttestationsAndSigners.packAttestations(addresses.map(CommitteeAttestation.fromAddress));
+    const raw: ViemCommitteeAttestations = { ...honest, signatureIndices: '0x01' };
+
+    const repacked = repack(raw, addresses.length);
+
+    expect(CommitteeAttestation.fromPacked(raw, addresses.length)).toEqual(
+      CommitteeAttestation.fromPacked(honest, addresses.length),
+    );
+    expect(repacked.signatureIndices).toEqual(honest.signatureIndices);
+    expect(attestationsHash(repacked)).not.toEqual(attestationsHash(raw));
+  });
+
   it('diverges for an all-zero signature slot: repack clears the bit and packs it as an address', () => {
     const raw: ViemCommitteeAttestations = {
       signatureIndices: '0x80', // bit set, but the 65-byte payload is all zero (v, r, s)

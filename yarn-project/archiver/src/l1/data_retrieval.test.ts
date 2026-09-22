@@ -3,7 +3,7 @@ import type { InboxContract, MessageSentLog } from '@aztec-labs/ethereum/contrac
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { Body, CommitteeAttestation } from '@aztec-labs/stdlib/block';
+import { Body, CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
 import { L1PublishedData } from '@aztec-labs/stdlib/checkpoint';
 import { updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -45,6 +45,7 @@ describe('data_retrieval', () => {
         chainId: new Fr(1),
         version: new Fr(1),
         attestations: [CommitteeAttestation.empty()],
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([CommitteeAttestation.empty()]),
       };
 
       const publishedCheckpoint = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
@@ -130,6 +131,7 @@ describe('data_retrieval', () => {
         chainId: new Fr(1),
         version: new Fr(1),
         attestations: [],
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
       };
 
       const publishedCheckpoint = await retrievedToPublishedCheckpoint(retrievedCheckpoint);
