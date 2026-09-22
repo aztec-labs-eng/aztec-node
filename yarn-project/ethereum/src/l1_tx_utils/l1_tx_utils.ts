@@ -28,7 +28,7 @@ import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
 import { MAX_L1_TX_LIMIT } from './constants.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
-import { ReadOnlyL1TxUtils } from './readonly_l1_tx_utils.js';
+import { type L1SimulationResult, ReadOnlyL1TxUtils } from './readonly_l1_tx_utils.js';
 import { Delayer, createDelayer, wrapClientWithDelayer } from './tx_delayer.js';
 import {
   DroppedTransactionError,
@@ -699,7 +699,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     stateOverrides: StateOverride = [],
     abi: Abi = RollupAbi,
     _gasConfig?: L1TxUtilsConfig & { fallbackGasEstimate?: bigint; ignoreBlockGasLimit?: boolean },
-  ): Promise<{ gasUsed: bigint; result: `0x${string}` }> {
+  ): Promise<L1SimulationResult> {
     const blockOverrides = { ..._blockOverrides };
     const gasConfig = merge(this.config, _gasConfig);
 
