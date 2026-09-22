@@ -1401,7 +1401,7 @@ export class LibP2PService extends WithTracer implements P2PService {
         // a fresh equivocation by this block. Genuine equivocation is already captured on the add
         // (duplicateProposalCallback below). capFull tells the checkpoint path, whose terminal block
         // this may be, to ignore the whole checkpoint too, rather than store and re-broadcast it while
-        // its terminal block was silently dropped.
+        // its terminal block was dropped.
         result: TopicValidatorResult.Ignore,
         obj: block,
         metadata: { isEquivocated: false, isOversized, capFull: true },
