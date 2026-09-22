@@ -2173,12 +2173,13 @@ export class ProposalHandler {
 
     // Final round of validations on the checkpoint, just in case.
     try {
+      // Only the protocol-mandated mana limit gates a received checkpoint. The VALIDATOR_MAX_* size caps
+      // are this operator's local policy, not consensus-uniform, so applying them to a peer's checkpoint
+      // would let a stricter-configured node reject a protocol-valid checkpoint - slashing the honest
+      // proposer directly, and by declining to attest, through the inactivity path too. They are not
+      // passed here: a checkpoint is valid if the protocol says so.
       validateCheckpoint(computedCheckpoint, {
         rollupManaLimit: this.checkpointsBuilder.getConfig().rollupManaLimit,
-        maxDABlockGas: this.config.validateMaxDABlockGas,
-        maxL2BlockGas: this.config.validateMaxL2BlockGas,
-        maxTxsPerBlock: this.config.validateMaxTxsPerBlock,
-        maxTxsPerCheckpoint: this.config.validateMaxTxsPerCheckpoint,
       });
     } catch (err) {
       this.log.warn(`Checkpoint validation failed: ${err}`, proposalInfo);

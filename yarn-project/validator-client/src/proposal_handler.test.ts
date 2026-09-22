@@ -724,6 +724,79 @@ describe('ProposalHandler checkpoint validation', () => {
     // The consumed bundle is derived from the committed counts alone and authenticated by the header's rolling hash;
     // no position is resolved as an L1 bucket. Whether the final position is a live bucket end is the proposer's and
     // L1's publication rule.
+    // A protocol-valid single-block checkpoint (passes validateCheckpoint) carrying one tx, some mana, and
+    // some DA gas, so any local VALIDATOR_MAX_* cap set to 0 would trip it if the caps still gated a peer's
+    // checkpoint - which they must not.
+    function makeProtocolValidCheckpoint() {
+      const block = {
+        number: 1,
+        slot: SlotNumber(1),
+        indexWithinCheckpoint: 0,
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
+        header: {
+          lastArchive: { root: Fr.ZERO },
+          globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
+          totalManaUsed: new Fr(100),
+        },
+        body: { txEffects: [{}] },
+        computeDAGasUsed: () => 1,
+      } as unknown as L2Block;
+      return { blocks: [block], toBlobFields: () => [] };
+    }
+
+    // A protocol-valid checkpoint is accepted (and therefore attested) regardless of this node's local
+    // VALIDATOR_MAX_* caps: those are the operator's own proposing policy, not consensus-uniform, so gating
+    // a peer's checkpoint on them would slash an honest proposer directly and, by withholding attestation,
+    // through the inactivity path.
+    const localCapCases = [
+      { name: 'validateMaxTxsPerBlock', apply: (h: ProposalHandler) => h.updateConfig({ validateMaxTxsPerBlock: 0 }) },
+      { name: 'validateMaxDABlockGas', apply: (h: ProposalHandler) => h.updateConfig({ validateMaxDABlockGas: 0 }) },
+      { name: 'validateMaxL2BlockGas', apply: (h: ProposalHandler) => h.updateConfig({ validateMaxL2BlockGas: 0 }) },
+      {
+        name: 'validateMaxTxsPerCheckpoint',
+        apply: (h: ProposalHandler) => h.updateConfig({ validateMaxTxsPerCheckpoint: 0 }),
+      },
+    ];
+
+    it.each(localCapCases)(
+      'accepts (and attests to) a protocol-valid checkpoint despite a local $name cap',
+      async ({ apply }) => {
+        const header = makeMatchingHeader();
+        setupDeepValidationMocks({
+          header,
+          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
+          ...makeProtocolValidCheckpoint(),
+        });
+        apply(handler);
+        const result = await handler.handleCheckpointProposal(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          proposalInfo,
+        );
+        expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
+      },
+    );
+
+    it('keeps a genuinely protocol-invalid checkpoint slashable even with a local cap set (control)', async () => {
+      const header = makeMatchingHeader();
+      // Empty blocks fail validateCheckpoint: a real protocol invalidity, not a local-cap miss.
+      setupDeepValidationMocks({
+        header,
+        archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
+        blocks: [],
+      });
+      handler.updateConfig({ validateMaxTxsPerBlock: 0 });
+      const result = await handler.handleCheckpointProposal(
+        await makeProposal({ archiveRoot, checkpointHeader: header }),
+        proposalInfo,
+      );
+      expect(result).toEqual({
+        isValid: false,
+        reason: 'checkpoint_validation_failed',
+        checkpointNumber: CheckpointNumber(1),
+      });
+      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT.checkpoint_validation_failed).toBe(true);
+    });
+
     it('reads the consumed bundle by count and authenticates it against the header rolling hash', async () => {
       const inboxRollingHash = Fr.random();
       const header = makeHeader({ inboxRollingHash });
