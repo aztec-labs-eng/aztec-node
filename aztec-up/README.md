@@ -68,14 +68,3 @@ packages are published; the binary archive is uploaded separately from the versi
 The artifact contains no installed dependencies, so native packages are selected on the user's
 platform. Node, Noir, Foundry, and downloads performed by package lifecycle scripts remain outside
 this lock.
-
-Run the package-resolution regression test after installing the monorepo dependencies:
-
-```sh
-node --test aztec-up/test/package_lock.test.mjs
-```
-
-It uses a local registry fixture and downloads the pinned Yarn CLI. It checks that newer upstream
-publications cannot change the installed dependency and that unapproved resolutions, inconsistent
-manifests, and missing artifacts fail. It also checks that the archive excludes Yarn and that the
-opt-out installs through npm without downloading Yarn or the lock artifact.
