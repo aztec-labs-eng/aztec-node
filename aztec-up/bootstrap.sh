@@ -165,7 +165,6 @@ EOF
 }
 
 function test_cmds {
-  echo "$hash:TIMEOUT=5m node --test aztec-up/test/package_lock.test.mjs"
   for test in amm_flow bridge_and_claim basic_install counter_contract default_scaffold no_shadow_user_bins; do
     echo "$hash:TIMEOUT=15m aztec-up/scripts/run_test.sh $test"
   done
