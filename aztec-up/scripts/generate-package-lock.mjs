@@ -157,7 +157,6 @@ try {
     'package.json',
     'yarn.lock',
     '.yarnrc.yml',
-    'yarn.cjs',
     '.yarn/patches',
   ]);
 } finally {
