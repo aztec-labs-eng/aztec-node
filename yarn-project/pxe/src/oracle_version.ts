@@ -20,3 +20,14 @@ export const ORACLE_VERSION_MINOR = 0;
 ///
 /// These constants must be kept in sync between this file and `noir-projects/aztec-nr/aztec/src/oracle/version.nr`.
 export const ORACLE_INTERFACE_HASH = '34050955eaba2373f10bb168a41d8ea2634cf1bb3b86048cd168fe784fc82a73';
+
+/// The oracle interface served to the protocol contracts, which is versioned separately from the Aztec.nr one above.
+/// It is a single number that must match exactly: protocol contracts are only rebuilt when they are redeployed on a
+/// protocol upgrade, so it is the protocol version of that upgrade.
+export const PROTOCOL_ORACLE_VERSION = 6;
+
+/// This hash is computed from the protocol oracles (each oracle's name, ordered parameter names and types, and return
+/// type) and is used to detect when their interface changes. Deployed protocol contracts stop working when it does, so
+/// the change can only ship with a protocol upgrade that redeploys them built against the new interface, which sets
+/// `PROTOCOL_ORACLE_VERSION` to that upgrade's protocol version.
+export const PROTOCOL_ORACLE_INTERFACE_HASH = 'b5334010e76dadd5afb21716f01c301f2023404aed526f959d55a22318f13b98';

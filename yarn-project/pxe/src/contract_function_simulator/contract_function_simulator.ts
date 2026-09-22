@@ -423,7 +423,7 @@ export class ContractFunctionSimulator {
 
       const initialWitness = toACVMWitness(0, call.args);
       const acirExecutionResult = await this.simulator
-        .executeUserCircuit(initialWitness, entryPointArtifact, buildACIRCallback(oracle))
+        .executeUserCircuit(initialWitness, entryPointArtifact, buildACIRCallback(oracle, { contractAddress: call.to }))
         .catch((err: Error) => {
           err.message = resolveAssertionMessageFromError(err, entryPointArtifact);
           throw new ExecutionError(

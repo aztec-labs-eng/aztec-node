@@ -1041,6 +1041,8 @@ export class TXESession implements TXESessionStateHandler {
           // Top-level utility entrypoint: gets a fresh store. Nested frames inherit it via UtilityExecutionOracle.
           transientArrayService: new TransientArrayService(),
         });
+        // Running utility functions of protocol contracts is not currently supported: the callback is built without a
+        // contract address, so it does not serve the protocol oracles.
         await simulator
           .executeUserCircuit(toACVMWitness(0, call.args), entryPointArtifact, buildACIRCallback(oracle))
           .catch((err: Error) => {
