@@ -122,9 +122,15 @@ test('a clean installer keeps the approved dependency after a newer publication'
   const installPackages = installer.match(/function install_aztec_packages \{[\s\S]*?\n\}/)[0];
   const destination = join(dir, 'installed');
   await mkdir(destination);
-  const install = () =>
+  const install = (overrides = {}) =>
     run('bash', ['-e', '-c', `${installPackages}\ninstall_aztec_packages`], {
-      env: { ...env, VERSION: '0.0.1', INSTALL_URI: `file://${join(dir, 'assets')}`, version_path: destination },
+      env: {
+        ...env,
+        VERSION: '0.0.1',
+        INSTALL_URI: `file://${join(dir, 'assets')}`,
+        version_path: destination,
+        ...overrides,
+      },
     });
   await install();
   assert.equal(JSON.parse(await readFile(join(destination, 'node_modules/upstream/package.json'))).version, '1.0.0');
@@ -135,6 +141,27 @@ test('a clean installer keeps the approved dependency after a newer publication'
   );
 
   assert.equal(JSON.parse(await readFile(join(destination, 'node_modules/leaf/package.json'))).version, '1.0.0');
+
+  await t.test('the release archive does not redistribute Yarn', async () => {
+    const files = await run('tar', ['-tzf', join(assets, 'packages.tar.gz')]);
+    assert(!files.split('\n').includes('yarn.cjs'));
+  });
+
+  await t.test('opting out installs through npm without artifact or Yarn downloads', async () => {
+    const unlocked = join(dir, 'unlocked');
+    await mkdir(unlocked);
+    const noDownloads = join(dir, 'no-downloads');
+    await mkdir(noDownloads);
+    await writeFile(join(noDownloads, 'curl'), '#!/bin/sh\necho "Unexpected download" >&2\nexit 1\n', { mode: 0o755 });
+    await install({
+      AZTEC_UP_SKIP_PACKAGE_LOCK: '1',
+      version_path: unlocked,
+      PATH: `${noDownloads}:${env.PATH}`,
+      INSTALL_URI: 'file:///missing-installer-assets',
+    });
+    assert.equal(JSON.parse(await readFile(join(unlocked, 'node_modules/upstream/package.json'))).version, '1.1.0');
+    await assert.rejects(readFile(join(unlocked, 'yarn.cjs')), { code: 'ENOENT' });
+  });
 
   await t.test('an unapproved resolution prevents publishing an artifact', async () => {
     await writeFile(
