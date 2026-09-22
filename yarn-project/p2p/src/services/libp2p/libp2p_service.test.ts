@@ -1184,12 +1184,14 @@ describe('LibP2PService', () => {
       expect(mockTxPool.protectTxs).toHaveBeenCalled();
     });
 
-    it('checkpoint rejected when lastBlock is equivocated', async () => {
+    it('checkpoint whose lastBlock equivocates receiver-local state: ignores, does not penalize the relayer', async () => {
       const checkpointHeader = makeCheckpointHeader(1, { slotNumber: targetSlot });
       const blockHeader = makeBlockHeader(1, { slotNumber: targetSlot });
       const indexWithinCheckpoint = IndexWithinCheckpoint(4);
 
-      // Pre-add a block at same position
+      // Pre-add a block at the same position, so the checkpoint's terminal block is a second proposal
+      // at (slot, index) as seen from OUR local cache - a receiver-local equivocation, not the
+      // relaying peer's fault.
       const existingBlock = await makeBlockProposal({
         signer,
         blockHeader,
@@ -1203,8 +1205,9 @@ describe('LibP2PService', () => {
       allNodesCheckpointReceivedCallback.mockClear();
       validatorCheckpointReceivedCallback.mockClear();
       reportMessageValidationResultSpy.mockClear();
+      mockPeerManager.penalizePeer.mockClear();
 
-      // Create checkpoint with different lastBlock at same position
+      // Create checkpoint with a different lastBlock at the same position
       const proposal = await makeCheckpointProposal({
         signer,
         checkpointHeader,
@@ -1214,10 +1217,13 @@ describe('LibP2PService', () => {
 
       await service.handleGossipedCheckpointProposal(proposal.toBuffer(), 'msg-1', mockPeerId);
 
-      // Verify message was rejected
-      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Reject);
+      // Receiver-local equivocation is dropped, not rejected: the checkpoint is ignored and the relaying
+      // peer is NOT penalized (it cannot know our cache already holds a block at this index). Any real
+      // equivocation evidence was already captured and its slash callback fired at the block level.
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
 
-      // Verify neither callback was invoked
+      // Not processed or attested to.
       expect(allNodesCheckpointReceivedCallback).not.toHaveBeenCalled();
       expect(validatorCheckpointReceivedCallback).not.toHaveBeenCalled();
       expect(blockReceivedCallback).not.toHaveBeenCalled();

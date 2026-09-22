@@ -1578,11 +1578,10 @@ export class LibP2PService extends WithTracer implements P2PService {
         blockProposalResult;
       isOversized = blockIsOversized ?? false;
 
-      if (blockProposalResult.result === TopicValidatorResult.Reject || !obj || isEquivocated) {
+      if (blockProposalResult.result === TopicValidatorResult.Reject || !obj) {
         this.logger.debug(`Rejecting checkpoint due to invalid last block proposal`, {
           [Attributes.SLOT_NUMBER]: checkpoint.slotNumber.toString(),
           [Attributes.P2P_ID]: peerId.toString(),
-          isEquivocated,
           result: blockProposalResult.result,
         });
         return {
@@ -1590,13 +1589,15 @@ export class LibP2PService extends WithTracer implements P2PService {
           severity:
             'severity' in blockProposalResult ? blockProposalResult.severity : PeerErrorSeverity.MidToleranceError,
         };
-      } else if (blockCapFull) {
-        // The terminal block hit our receiver-local per-position retention cap, so we dropped it
-        // without storing or re-broadcasting. Ignore the whole checkpoint the same way: do not add
-        // the checkpoint core, invoke no callbacks, and do not re-broadcast. Storing and accepting the
-        // checkpoint while its terminal block was silently dropped is what lets a node with a different
-        // local cache insert that block, flag the checkpoint as equivocation, and penalize this relayer.
-        this.logger.debug(`Ignoring checkpoint whose terminal block hit the per-position retention cap`, {
+      } else if (blockCapFull || isEquivocated) {
+        // The terminal block is a receiver-local drop: either our per-position cache was full, or the
+        // block is a second proposal at this (slot, index) as seen from OUR cache. Neither is the
+        // relaying peer's fault - it cannot know our local state - and any genuine equivocation was
+        // already captured and its slash callback fired at the block level. Ignore the whole checkpoint
+        // (no store, no callbacks, no re-broadcast, no scoring); do not process or attest to it.
+        // Treating receiver-local equivocation as a checkpoint Reject is what would penalize an honest
+        // relayer for a proposal already in our cache.
+        this.logger.debug(`Ignoring checkpoint whose terminal block was a receiver-local drop`, {
           [Attributes.SLOT_NUMBER]: checkpoint.slotNumber.toString(),
           [Attributes.P2P_ID]: peerId.toString(),
         });
