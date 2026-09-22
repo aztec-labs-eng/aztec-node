@@ -93,17 +93,11 @@ EOF
     docker load < aztec-up-test-base-image
   fi
 
-  if ! cache_download_stream aztec-up-test-image-$hash.zst | docker load; then
+  if ! cache_download aztec-up-package-lock-$hash.zst || ! cache_download_stream aztec-up-test-image-$hash.zst | docker load; then
     rm -rf verdaccio-storage
-    # Seed the storage with the proxied npmjs packages from a previous run, keyed on yarn.lock.
-    # The seed is captured from post-prime storage for this exact lockfile, so on a hit the prime
-    # step below is redundant and skipped — the dominant cost of this build (~1-2 min of npm
-    # resolving and extracting ~2000 packages). This freezes in-range transitive resolution between
-    # lockfile changes, which also makes the test image deterministic. The seed contains no
-    # fake-published workspace packages: those are stripped before upload below.
+    # Registry storage is only a download cache; the release lock determines dependency versions.
     local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
-    local seeded=0
-    cache_download aztec-up-verdaccio-cache-$deps_hash.zst && seeded=1
+    cache_download aztec-up-verdaccio-cache-$deps_hash.zst || true
     verdaccio --config /tmp/verdaccio-config.yaml --listen 4873 &>/dev/null &
     verdaccio_pid=$!
     trap 'kill $verdaccio_pid &>/dev/null || true' EXIT
@@ -144,19 +138,9 @@ EOF
       DRY_RUN= parallel --tag --line-buffer --halt now,fail=1 "retry 'cd {} && dump_fail \"deploy_npm $version\" >/dev/null'"
     echo "Package deploy took $((SECONDS - t))s."
 
-    # Prime the verdaccio cache by installing the packages we'll use in tests.
-    # This fetches all transitive dependencies from npmjs and caches them locally.
-    # Use --prefix to avoid modifying the host system's global npm packages.
-    # --no-audit --no-fund: nothing gates on them and audit re-scans the whole ~2000-package tree.
-    if [ "$seeded" -eq 1 ]; then
-      echo "Skipping prime: storage was seeded from cache for this yarn.lock."
-    else
-      echo "Priming verdaccio cache with all dependencies..."
-      t=$SECONDS
-      retry "npm i -g --no-audit --no-fund --prefix /tmp/npm-prime @aztec-labs/aztec@$version @aztec-labs/cli-wallet@$version"
-      rm -rf /tmp/npm-prime
-      echo "Prime took $((SECONDS - t))s."
-    fi
+    echo "Generating and fetching the locked installer dependencies..."
+    node scripts/generate-package-lock.mjs "$root/yarn-project" "$version" bin/0.0.1
+    cache_upload aztec-up-package-lock-$hash.zst bin/0.0.1/packages.tar.gz
 
     t=$SECONDS
     docker build -t aztecprotocol/aztec-up-test .
@@ -181,6 +165,7 @@ EOF
 }
 
 function test_cmds {
+  echo "$hash:TIMEOUT=5m node --test aztec-up/test/package_lock.test.mjs"
   for test in amm_flow bridge_and_claim basic_install counter_contract default_scaffold no_shadow_user_bins; do
     echo "$hash:TIMEOUT=15m aztec-up/scripts/run_test.sh $test"
   done
@@ -199,8 +184,19 @@ function release {
   # e.g. "4" from v4.1.0-nightly.20260319
   local major=$(semver major $REF_NAME)
 
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    echo "Would generate the package lock after publishing npm packages."
+  else
+    local packages_dir
+    packages_dir=$(mktemp -d)
+    node scripts/generate-package-lock.mjs "$root/yarn-project" "$version" "$packages_dir"
+    aws s3 cp "$packages_dir/packages.tar.gz" "s3://install.aztec.network/$version/packages.tar.gz"
+    rm -rf "$packages_dir"
+  fi
+
   # Upload each file in bin/0.0.1/, replacing VERSION= lines with the release version.
   for file in bin/0.0.1/*; do
+    [[ "$file" == *.tar.gz ]] && continue
     sed "s/^VERSION=.*/VERSION=$version/" "$file" | \
       do_or_dryrun aws s3 cp - "s3://install.aztec.network/$version/$(basename $file)"
   done
