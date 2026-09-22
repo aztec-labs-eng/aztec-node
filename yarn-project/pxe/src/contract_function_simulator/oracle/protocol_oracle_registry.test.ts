@@ -12,7 +12,7 @@ import { PROTOCOL_ORACLE_VERSION } from '../../oracle_version.js';
 import { Option } from '../noir-structs/option.js';
 import { UnavailableOracleError, buildACIRCallback } from './acir_callback.js';
 import { FIELD, U32, makeEntry } from './oracle_registry.js';
-import { PROTOCOL_ORACLE_REGISTRY, type ProtocolOracleEntry } from './protocol_oracle_registry.js';
+import type { ProtocolOracleEntry } from './protocol_oracle_registry.js';
 
 type Handler = Parameters<typeof buildACIRCallback>[0];
 
@@ -90,7 +90,7 @@ describe('protocol oracle dispatch', () => {
       },
     };
 
-    const callback = buildACIRCallback(handler, { contractAddress: protocolContract, protocol: protocolRegistry });
+    const callback = buildACIRCallback(handler, { contractAddress: protocolContract, protocolRegistry });
     const wire = await callback['aztec_protocol_misc_fixture']([toACVMField(new Fr(5))]);
 
     expect(handlerArgs).toEqual([5, 7]);
@@ -131,15 +131,9 @@ describe('protocol oracle dispatch', () => {
     expect(wire).toEqual([toACVMField(witness.leafIndex), witness.siblingPath.map(toACVMField)]);
   });
 
-  it('names every oracle after its kind', () => {
-    for (const [name, entry] of Object.entries(PROTOCOL_ORACLE_REGISTRY)) {
-      expect(name.startsWith(`aztec_protocol_${entry.oracleKind}_`)).toBe(true);
-    }
-  });
-
   it('rejects a protocol oracle name that collides with another oracle', () => {
     const handler = { isMisc: true } as Handler;
-    const real = { aztec_protocol_misc_getRandomField: makeEntry({ returnType: FIELD }) };
+    const currentRegistry = { aztec_protocol_misc_getRandomField: makeEntry({ returnType: FIELD }) };
     const protocolRegistry: Record<string, ProtocolOracleEntry> = {
       aztec_protocol_misc_getRandomField: {
         oracleKind: 'misc',
@@ -149,7 +143,7 @@ describe('protocol oracle dispatch', () => {
       },
     };
 
-    expect(() => buildACIRCallback(handler, { real, protocol: protocolRegistry })).toThrow('collides with another');
+    expect(() => buildACIRCallback(handler, { currentRegistry, protocolRegistry })).toThrow('collides with another');
   });
 
   describe('version check', () => {

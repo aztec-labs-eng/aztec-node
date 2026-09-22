@@ -26,19 +26,19 @@ export function buildACIRCallback(
   options: {
     /** The contract whose function the callback is built for. */
     contractAddress?: AztecAddress;
-    real?: Record<string, OracleRegistryEntry>;
-    legacy?: Record<string, LegacyOracleEntry>;
-    protocol?: Record<string, ProtocolOracleEntry>;
+    currentRegistry?: Record<string, OracleRegistryEntry>;
+    legacyRegistry?: Record<string, LegacyOracleEntry>;
+    protocolRegistry?: Record<string, ProtocolOracleEntry>;
   } = {},
 ): ACIRCallback {
   const {
     contractAddress,
-    real = ORACLE_REGISTRY,
-    legacy: legacyRegistry = LEGACY_ORACLE_REGISTRY,
-    protocol: protocolRegistry = PROTOCOL_ORACLE_REGISTRY,
+    currentRegistry = ORACLE_REGISTRY,
+    legacyRegistry = LEGACY_ORACLE_REGISTRY,
+    protocolRegistry = PROTOCOL_ORACLE_REGISTRY,
   } = options;
   const target = {} as ACIRCallback;
-  for (const [oracleKey, entry] of Object.entries(real)) {
+  for (const [oracleKey, entry] of Object.entries(currentRegistry)) {
     const { oracleKind, methodName } = parseOracleName(oracleKey, 'Oracle');
     target[oracleKey] = async (...inputs: ACVMField[][]) => {
       assertHandlerSupportsOracleKind(handler, oracleKind);
@@ -56,7 +56,7 @@ export function buildACIRCallback(
     if (legacyKey in target) {
       throw new Error(`Legacy oracle "${legacyKey}" collides with a live oracle of the same name in the registry`);
     }
-    const modernEntry = real[legacy.modernOracle];
+    const modernEntry = currentRegistry[legacy.modernOracle];
     const { methodName } = parseOracleName(legacy.modernOracle, 'Oracle');
     // Override only the side whose wire changed; inherit the other from the modern entry.
     const paramOverride = legacy.params;

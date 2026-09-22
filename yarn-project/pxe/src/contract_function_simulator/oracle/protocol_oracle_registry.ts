@@ -26,9 +26,9 @@ type OracleHandlers = {
 };
 
 /** An oracle served to the protocol contracts. */
-export interface ProtocolOracleEntry {
+export interface ProtocolOracleEntry<TOracleKind extends keyof OracleHandlers = keyof OracleHandlers> {
   /** Which oracle handler `serve` takes. */
-  oracleKind: keyof OracleHandlers;
+  oracleKind: TOracleKind;
   /** The ordered named parameters of the wire, with their {@link TypeMapping}s. */
   params: readonly RegistryParam[];
   /** The return {@link TypeMapping} of the wire, or `undefined` for oracles that return nothing. */
@@ -51,8 +51,23 @@ function protocolOracle<
       args: ParamTypes<InferDeserializedParams<TParams>>,
     ) => MaybePromise<NoInfer<TReturn>>;
   },
-): ProtocolOracleEntry {
+): ProtocolOracleEntry<TOracleKind> {
   return { oracleKind, ...entry };
+}
+
+/** The oracle kind named by an `aztec_protocol_{oracleKind}_{method}` oracle name. */
+type OracleKindOf<TName extends string> = TName extends `aztec_protocol_${infer TOracleKind}_${string}`
+  ? TOracleKind & keyof OracleHandlers
+  : never;
+
+/**
+ * Rejects at compile time any entry whose `oracleKind` is not the one its oracle name declares, e.g. if an oracle with
+ * the 'aztec_protocol_prv' prefix is declared as kind 'misc'.
+ */
+function protocolOracleRegistry<T extends { [TName in keyof T]: ProtocolOracleEntry<OracleKindOf<TName & string>> }>(
+  registry: T,
+): Record<string, ProtocolOracleEntry> {
+  return registry;
 }
 
 /**
@@ -64,7 +79,7 @@ function protocolOracle<
  * Each entry declares its full wire and how to serve it with the oracle handler, so that a change to the handler only
  * requires adapting `serve`.
  */
-export const PROTOCOL_ORACLE_REGISTRY: Record<string, ProtocolOracleEntry> = {
+export const PROTOCOL_ORACLE_REGISTRY = protocolOracleRegistry({
   aztec_protocol_misc_assertCompatibleOracleVersion: protocolOracle('misc', {
     params: [{ name: 'version', type: U32 }],
     serve: (_handler, [version]) => {
@@ -158,4 +173,4 @@ export const PROTOCOL_ORACLE_REGISTRY: Record<string, ProtocolOracleEntry> = {
     serve: (handler, [minRevertibleSideEffectCounter]) =>
       handler.notifyRevertiblePhaseStart(minRevertibleSideEffectCounter),
   }),
-};
+});
