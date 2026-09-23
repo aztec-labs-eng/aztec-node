@@ -74,6 +74,25 @@ resource "kubernetes_job_v1" "migrations" {
         node_selector = {
           "node-type" = "network"
         }
+        init_container {
+          name  = "wait-for-postgres"
+          image = "postgres:18"
+          command = ["/bin/sh", "-ec", <<-EOT
+            for attempt in $(seq 1 60); do
+              if pg_isready -h "$PGHOST" -U validator -d validator_ha -t 1; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Timed out waiting for PostgreSQL" >&2
+            exit 1
+          EOT
+          ]
+          env {
+            name  = "PGHOST"
+            value = "${var.RELEASE_NAME}-validator-ha-db-postgres.${var.NAMESPACE}.svc.cluster.local"
+          }
+        }
         container {
           name  = "migrate"
           image = var.AZTEC_DOCKER_IMAGE
