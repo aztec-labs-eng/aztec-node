@@ -522,7 +522,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     const privateExecutionOracle = new PrivateExecutionOracle({
       argsHash,
       txContext,
-      txRequestSalt: Fr.ZERO,
+      protocolNullifier,
       callContext,
       anchorBlockHeader: blockHeader,
       utilityExecutor,

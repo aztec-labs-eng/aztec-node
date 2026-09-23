@@ -24,13 +24,13 @@ export class PrivateTxConstantData {
      */
     public txContext: TxContext,
     /**
-     * Salt of the transaction request (`TxRequest.salt`).
+     * The transaction's siloed protocol nullifier.
      *
      * Bound to the user's `tx_request` by the Init circuit and kept constant by every subsequent kernel so that each
-     * app circuit's `txRequestSalt` public input can be checked against it. It is intentionally not carried into
-     * `TxConstantData`: it is dropped by the Tail circuits rather than being exposed by the final (hiding) kernel.
+     * app circuit's `protocolNullifier` public input can be checked against it. Not carried into `TxConstantData`:
+     * the value is already published as the transaction's first nullifier.
      */
-    public txRequestSalt: Fr,
+    public protocolNullifier: Fr,
     /**
      * Root of the vk tree for the protocol circuits.
      */
@@ -49,7 +49,7 @@ export class PrivateTxConstantData {
     return [
       fields.anchorBlockHeader,
       fields.txContext,
-      fields.txRequestSalt,
+      fields.protocolNullifier,
       fields.vkTreeRoot,
       fields.protocolContracts,
     ] as const;
@@ -105,7 +105,7 @@ export class PrivateTxConstantData {
     return (
       this.anchorBlockHeader.getSize() +
       this.txContext.getSize() +
-      this.txRequestSalt.size +
+      this.protocolNullifier.size +
       this.vkTreeRoot.size +
       this.protocolContracts.getSize()
     );
