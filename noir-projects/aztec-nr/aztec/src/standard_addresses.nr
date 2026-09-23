@@ -6,7 +6,7 @@ pub global STANDARD_AUTH_REGISTRY_ADDRESS: AztecAddress = AztecAddress::from_fie
 );
 
 pub global STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS: AztecAddress = AztecAddress::from_field(
-    0x2b48f1a970a1411924daef8cf51cd86ee7e79615b9240cdc40853bb5a90b83b6,
+    0x07b1ad3f7fe93d66fbb9b69e8d9254f228b84dea11c3794aed5b2ba8119917d8,
 );
 
 pub global STANDARD_PUBLIC_CHECKS_ADDRESS: AztecAddress = AztecAddress::from_field(
@@ -14,5 +14,5 @@ pub global STANDARD_PUBLIC_CHECKS_ADDRESS: AztecAddress = AztecAddress::from_fie
 );
 
 pub global STANDARD_HANDSHAKE_REGISTRY_ADDRESS: AztecAddress = AztecAddress::from_field(
-    0x06196e77f13813a124c9049d41540b6d61c010a9dea5270fbd59d1f01225bff7,
+    0x1d6cc365d8986c2111962a3460ad7a65bb06237768f334cb1ef8d9eada94a0c4,
 );
