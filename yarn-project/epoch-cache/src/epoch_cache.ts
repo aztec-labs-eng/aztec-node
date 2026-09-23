@@ -37,6 +37,12 @@ export type EpochCommitteeInfo = {
   epoch: EpochNumber;
   /** True if the epoch is within an open escape hatch window. */
   isEscapeHatchOpen: boolean;
+  /**
+   * True when the escape hatch lookup failed, so `isEscapeHatchOpen` is only a default of false. The entry is
+   * never finalized and gets fully re-fetched once stale. Callers that make a durable decision from the hatch
+   * status should retry later rather than act on the default.
+   */
+  isEscapeHatchStatusUnknown?: true;
 };
 
 export type SlotTag = 'now' | 'next' | SlotNumber;
@@ -292,9 +298,12 @@ export class EpochCache implements EpochCacheInterface {
     }
 
     // Stale non-finalized entry: do a lightweight refresh first (check block hash + finalized ts).
-    // Only fall back to a full re-fetch if the L1 block was reorged.
+    // Only fall back to a full re-fetch if the L1 block was reorged, or if the escape hatch status is
+    // unknown, since the lightweight refresh keeps the existing data.
     if (cached) {
-      const promise = this.refreshStaleEntry(cached, epoch, ts);
+      const promise = cached.data.isEscapeHatchStatusUnknown
+        ? this.fetchAndCache(epoch, ts)
+        : this.refreshStaleEntry(cached, epoch, ts);
       this.cache.set(epoch, promise);
       try {
         return (await promise).data;
@@ -424,12 +433,12 @@ export class EpochCache implements EpochCacheInterface {
     ts: bigint,
     prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: { timestamp: bigint } | undefined },
   ): Promise<CachedEpochEntry> {
-    const [committee, seedBuffer, latestBlock, finalizedBlock, isEscapeHatchOpen] = await Promise.all([
+    const [committee, seedBuffer, latestBlock, finalizedBlock, hatchStatus] = await Promise.all([
       this.rollup.getCommitteeAt(ts),
       this.rollup.getSampleSeedAt(ts),
       prefetched?.latestBlock ?? this.rollup.client.getBlock({ includeTransactions: false }),
       prefetched !== undefined ? prefetched.finalizedBlock : getFinalizedL1Block(this.rollup.client),
-      this.rollup.isEscapeHatchOpen(epoch),
+      this.tryGetEscapeHatchStatus(epoch),
     ]);
 
     const samplingTs = this.getSamplingTimestamp(epoch);
@@ -442,11 +451,19 @@ export class EpochCache implements EpochCacheInterface {
       );
     }
 
-    // Empty committees are never marked finalized so they always get re-queried after TTL.
+    // Empty committees and unknown hatch statuses are never marked finalized so they always get re-queried after TTL.
     // If L1 has no finalized block yet (devnet startup), entries stay unfinalized.
     const hasCommittee = !!(committee && committee.length > 0);
-    const finalized = hasCommittee && finalizedBlock !== undefined && samplingTs <= finalizedBlock.timestamp;
-    const data: EpochCommitteeInfo = { committee, seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen };
+    const hatchStatusKnown = hatchStatus !== undefined;
+    const finalized =
+      hasCommittee && hatchStatusKnown && finalizedBlock !== undefined && samplingTs <= finalizedBlock.timestamp;
+    const data: EpochCommitteeInfo = {
+      committee,
+      seed: seedBuffer.toBigInt(),
+      epoch,
+      isEscapeHatchOpen: hatchStatus ?? false,
+      ...(!hatchStatusKnown && { isEscapeHatchStatusUnknown: true as const }),
+    };
     const entry: CachedEpochEntry = {
       data,
       lastQueryL1BlockNumber: latestBlock.number!,
@@ -459,6 +476,22 @@ export class EpochCache implements EpochCacheInterface {
     this.purgeCache();
 
     return entry;
+  }
+
+  /**
+   * Returns whether the escape hatch is open for the epoch, or undefined if the lookup failed. A failure is not
+   * fatal to the committee fetch: callers see the hatch as closed until a later fetch gets an answer.
+   */
+  private async tryGetEscapeHatchStatus(epoch: EpochNumber): Promise<boolean | undefined> {
+    try {
+      return await this.rollup.isEscapeHatchOpen(epoch);
+    } catch (err) {
+      this.log.warn(`Escape hatch lookup for epoch ${epoch} failed, treating it as closed until re-queried`, {
+        epoch,
+        error: err,
+      });
+      return undefined;
+    }
   }
 
   /**
