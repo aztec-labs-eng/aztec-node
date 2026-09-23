@@ -234,6 +234,16 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
     });
 
+    it('ignores a proposal when the local proposer lookup fails for a non-committee reason', async () => {
+      const proposal = await factory(currentSlot, Secp256k1Signer.random());
+
+      // A receiver-local lookup failure (e.g. an L1 RPC outage or sync lag) is not the relaying peer's
+      // fault, so it must not penalize the sender: ignore rather than reject.
+      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 rpc unavailable'));
+      const result = await validator.validate(proposal);
+      expect(result).toEqual({ result: 'ignore' });
+    });
+
     it('accepts valid proposal for current slot', async () => {
       const signer = Secp256k1Signer.random();
       const proposal = await factory(currentSlot, signer);
