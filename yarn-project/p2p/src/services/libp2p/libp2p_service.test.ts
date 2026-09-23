@@ -34,6 +34,7 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 import { type P2PConfig, p2pConfigMappings } from '../../config.js';
 import {
   AttestationPool,
+  MAX_ATTESTATIONS_PER_SLOT_AND_SIGNER,
   MAX_BLOCK_PROPOSALS_PER_POSITION,
   MAX_CHECKPOINT_PROPOSALS_PER_SLOT,
 } from '../../mem_pools/attestation_pool/attestation_pool.js';
@@ -1715,6 +1716,46 @@ describe('LibP2PService', () => {
 
       expect(checkpointAttestationCallback).toHaveBeenCalledTimes(1);
     });
+
+    it('cap exceeded: ignores without penalizing the relaying peer', async () => {
+      const attesterSigner = Secp256k1Signer.random();
+      const makeDistinctAttestation = () =>
+        makeCheckpointAttestation({
+          header: makeCheckpointHeader(1, { slotNumber: targetSlot }),
+          archive: Fr.random(),
+          attesterSigner,
+          proposerSigner,
+        });
+
+      // Fill the (slot, signer) cap with distinct attestations: the second one is an equivocation.
+      for (let i = 0; i < MAX_ATTESTATIONS_PER_SLOT_AND_SIGNER; i++) {
+        await service.processCheckpointAttestationFromPeer(
+          makeDistinctAttestation().toBuffer(),
+          `msg-${i}`,
+          mockPeerId,
+        );
+        expect(reportMessageValidationResultSpy).toHaveBeenLastCalledWith(
+          `msg-${i}`,
+          MOCK_PEER_ID,
+          TopicValidatorResult.Accept,
+        );
+      }
+      expect(duplicateAttestationCallback).toHaveBeenCalledTimes(1);
+      expect(duplicateAttestationCallback).toHaveBeenCalledWith({ slot: targetSlot, attester: attesterSigner.address });
+
+      const extra = makeDistinctAttestation();
+      await service.processCheckpointAttestationFromPeer(extra.toBuffer(), 'msg-extra', mockPeerId);
+
+      // A full local cap is receiver-local state, not sender fault: do not penalize the relayer.
+      expect(reportMessageValidationResultSpy).toHaveBeenLastCalledWith(
+        'msg-extra',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Ignore,
+      );
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+      expect(duplicateAttestationCallback).toHaveBeenCalledTimes(1);
+      expect(checkpointAttestationCallback).toHaveBeenCalledTimes(MAX_ATTESTATIONS_PER_SLOT_AND_SIGNER);
+    });
   });
 
   describe('ip:changed bridge to AddressManager', () => {
@@ -1970,6 +2011,15 @@ class TestLibP2PService extends LibP2PService {
   /** Exposes the protected handleGossipedCheckpointProposal for testing. */
   public override handleGossipedCheckpointProposal(payloadData: Buffer, msgId: string, source: PeerId): Promise<void> {
     return super.handleGossipedCheckpointProposal(payloadData, msgId, source);
+  }
+
+  /** Exposes the protected processCheckpointAttestationFromPeer for testing. */
+  public override processCheckpointAttestationFromPeer(
+    payloadData: Buffer,
+    msgId: string,
+    source: PeerId,
+  ): Promise<void> {
+    return super.processCheckpointAttestationFromPeer(payloadData, msgId, source);
   }
 
   /** Exposes the protected validateAndStoreCheckpointAttestation for testing. */
