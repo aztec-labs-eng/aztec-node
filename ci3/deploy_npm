@@ -22,6 +22,14 @@ esac
 source $ci3/source_npm_auth
 
 package_name=$(jq -r '.name' package.json)
+
+# Callers iterate every workspace, so a private one (test suites, internal tooling) lands here too.
+# npm refuses to publish it, and --dry-run does not check, so skip it before touching the registry.
+if [ "$(jq -r '.private // false' package.json)" == "true" ]; then
+  echo "$package_name is private. Skipping publish."
+  exit 0
+fi
+
 echo_header "publishing $package_name"
 
 published_version=$(npm show . version --tag $npm_tag 2>/dev/null | grep -vE '^@' || true)
