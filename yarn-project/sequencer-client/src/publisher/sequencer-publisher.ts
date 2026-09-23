@@ -27,6 +27,7 @@ import {
   MAX_L1_TX_LIMIT,
   type TransactionStats,
   WEI_CONST,
+  summarizeTransactionReceipt,
 } from '@aztec-labs/ethereum/l1-tx-utils';
 import {
   FormattedViemError,
@@ -37,7 +38,7 @@ import {
 } from '@aztec-labs/ethereum/utils';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { trimmedBytesLength } from '@aztec-labs/foundation/buffer';
-import { pick } from '@aztec-labs/foundation/collection';
+import { pick, sum } from '@aztec-labs/foundation/collection';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -65,6 +66,7 @@ import {
   type TypedDataDefinition,
   encodeFunctionData,
   keccak256,
+  size,
   toHex,
 } from 'viem';
 
@@ -928,18 +930,42 @@ export class SequencerPublisher implements Disposable {
     }
   }
 
+  private summarizeTransactionResult(result?: {
+    receipt: TransactionReceipt;
+    stats?: TransactionStats;
+    errorMsg?: string;
+  }) {
+    return {
+      receipt: result?.receipt && summarizeTransactionReceipt(result.receipt),
+      stats: result?.stats,
+      errorMsg: result?.errorMsg,
+    };
+  }
+
   private callbackBundledTransactions(
     requests: RequestWithExpiry[],
     result: { receipt: TransactionReceipt; multicallData: Hex },
   ) {
-    const actionsListStr = requests.map(r => r.action).join(', ');
+    // Bound both payload sizes and entry count so the container log remains one JSON record.
+    const loggedRequests = requests.slice(0, 10);
+    const actionsListStr = loggedRequests.map(r => r.action).join(', ');
     this.log.verbose(`Published bundled transactions (${actionsListStr})`, {
-      result,
-      requests: requests.map(r => ({
-        ...r,
+      eventName: 'l1_bundle_published',
+      result: {
+        receipt: summarizeTransactionReceipt(result.receipt),
+        multicallDataBytes: size(result.multicallData),
+      },
+      requestCount: requests.length,
+      omittedRequestCount: requests.length - loggedRequests.length,
+      requests: loggedRequests.map(r => ({
+        action: r.action,
+        request: { to: r.request.to, value: r.request.value, dataBytes: size(r.request.data ?? '0x') },
+        lastValidL2Slot: r.lastValidL2Slot,
+        gasConfig: r.gasConfig,
+        blobEvaluationGas: r.blobEvaluationGas,
         // Avoid logging large blob data
         blobConfig: r.blobConfig
-          ? { ...r.blobConfig, blobs: r.blobConfig.blobs.map(b => ({ size: trimmedBytesLength(b) })) }
+          ? { blobCount: r.blobConfig.blobs.length, blobBytes: sum(r.blobConfig.blobs.map(trimmedBytesLength)) }
           : undefined,
       })),
     });
@@ -1296,7 +1322,7 @@ export class SequencerPublisher implements Disposable {
             eventName: 'SignalCast',
           });
 
-        const logData = { ...result, slotNumber, round, payload: payload.toString() };
+        const logData = { ...this.summarizeTransactionResult(result), slotNumber, round, payload: payload.toString() };
         if (!success) {
           this.log.error(
             `Signaling in ${action} for ${payload} at slot ${slotNumber} in round ${round} failed`,
@@ -1510,9 +1536,15 @@ export class SequencerPublisher implements Disposable {
             eventName: 'CheckpointInvalidated',
           });
         if (!success) {
-          this.log.warn(`Invalidate checkpoint ${request.checkpointNumber} failed`, { ...result, ...logData });
+          this.log.warn(`Invalidate checkpoint ${request.checkpointNumber} failed`, {
+            ...this.summarizeTransactionResult(result),
+            ...logData,
+          });
         } else {
-          this.log.info(`Invalidate checkpoint ${request.checkpointNumber} succeeded`, { ...result, ...logData });
+          this.log.info(`Invalidate checkpoint ${request.checkpointNumber} succeeded`, {
+            ...this.summarizeTransactionResult(result),
+            ...logData,
+          });
         }
         return !!success;
       },
@@ -1545,10 +1577,16 @@ export class SequencerPublisher implements Disposable {
       checkSuccess: (_request, result) => {
         const success = result && extractEventSuccess(result.receipt, eventOpts);
         if (!success) {
-          this.log.warn(`Action ${action} at ${slotNumber} failed`, { ...result, slotNumber });
+          this.log.warn(`Action ${action} at ${slotNumber} failed`, {
+            ...this.summarizeTransactionResult(result),
+            slotNumber,
+          });
           this.lastActions[action] = cachedLastActionSlot;
         } else {
-          this.log.info(`Action ${action} at ${slotNumber} succeeded`, { ...result, slotNumber });
+          this.log.info(`Action ${action} at ${slotNumber} succeeded`, {
+            ...this.summarizeTransactionResult(result),
+            slotNumber,
+          });
         }
         return !!success;
       },

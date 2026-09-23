@@ -42,6 +42,7 @@ import {
   TxUtilsState,
   UnknownMinedTxError,
 } from './types.js';
+import { summarizeTransactionReceipt } from './utils.js';
 
 const MAX_L1_TX_STATES = 32;
 
@@ -359,9 +360,19 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
           const account = this.getSenderAddress().toString();
           const what = isCancelTx ? 'Cancellation L1 transaction' : 'L1 transaction';
           if (receipt.status === 'reverted') {
-            this.logger.warn(`${what} ${hash} with nonce ${nonce} reverted`, { receipt, nonce, account });
+            this.logger.warn(`${what} ${hash} with nonce ${nonce} reverted`, {
+              eventName: 'l1_transaction_mined',
+              receipt: summarizeTransactionReceipt(receipt),
+              nonce,
+              account,
+            });
           } else {
-            this.logger.info(`${what} ${hash} with nonce ${nonce} mined`, { receipt, nonce, account });
+            this.logger.info(`${what} ${hash} with nonce ${nonce} mined`, {
+              eventName: 'l1_transaction_mined',
+              receipt: summarizeTransactionReceipt(receipt),
+              nonce,
+              account,
+            });
           }
           return receipt;
         }

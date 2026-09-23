@@ -325,8 +325,10 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
         // The job is re-set in the cache and about to be re-enqueued below: its start status is in-queue.
         jobStatus = { status: 'in-queue' };
       } else {
-        this.logger.warn(`Cached proving job id=${job.id} epochNumber=${job.epochNumber}. Not enqueuing again`, {
+        this.logger.debug(`Cached proving job id=${job.id} epochNumber=${job.epochNumber}. Not enqueuing again`, {
+          eventName: 'proving_job_cache_hit',
           provingJobId: job.id,
+          epochNumber: job.epochNumber,
         });
         this.instrumentation.incCachedJobs(job.type);
         // Return the job's current status. This reads the fulfilled proof value from the DB when needed;

@@ -25,6 +25,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonParseWithSchema } from '@aztec-labs/foundation/json-rpc';
+import { type Logger, logger, registerLoggingStream } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
@@ -42,6 +43,7 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Writable } from 'node:stream';
 import {
   type GetCodeReturnType,
   type GetTransactionReceiptReturnType,
@@ -108,6 +110,7 @@ describe('SequencerPublisher', () => {
   let l1Metrics: MockProxy<SequencerPublisherMetrics>;
   let forwardSpy: jest.SpiedFunction<typeof Multicall3.forward>;
   let dateProvider: TestDateProvider;
+  let log: MockProxy<Logger>;
 
   let proposeTxHash: `0x${string}`;
   let proposeTxReceipt: GetTransactionReceiptReturnType;
@@ -203,7 +206,10 @@ describe('SequencerPublisher', () => {
 
     dateProvider = new TestDateProvider();
 
+    log = mock<Logger>();
+    log.createChild.mockReturnValue(log);
     publisher = new SequencerPublisher(config, {
+      log,
       blobClient,
       rollupContract: rollup,
       l1TxUtils,
@@ -277,6 +283,120 @@ describe('SequencerPublisher', () => {
     });
     return { govPayload, voteSig };
   };
+
+  it.each([1, 20])(
+    'keeps published checkpoint logs small with large payloads and %i extra requests',
+    async extraRequests => {
+      const checkpoint = new Checkpoint(l2Block.archive, header, [l2Block], l2Block.checkpointNumber);
+      await publisher.enqueueProposeCheckpoint(
+        checkpoint,
+        CommitteeAttestationsAndSigners.empty(testSignatureContext),
+        Signature.empty(),
+        0n,
+      );
+      const data: Hex = `0x${'ab'.repeat(64 * 1024)}`;
+      proposeTxReceipt.gasUsed = 300_000n;
+      proposeTxReceipt.effectiveGasPrice = 2n;
+      proposeTxReceipt.logs = [
+        {
+          address: mockRollupAddress,
+          blockHash: '0x1234',
+          blockNumber: 1n,
+          data,
+          topics: [],
+          logIndex: 0,
+          transactionHash: proposeTxHash,
+          transactionIndex: 0,
+          removed: false,
+        },
+      ];
+      for (let i = 0; i < extraRequests; i++) {
+        publisher.addRequest({
+          action: 'vote-offenses',
+          request: { to: mockRollupAddress, data },
+          lastValidL2Slot: publisher.getCurrentL2Slot(),
+          checkSuccess: () => true,
+        });
+      }
+      const { govPayload } = mockGovernancePayload();
+      expect(
+        await publisher.enqueueGovernanceCastSignal(
+          govPayload,
+          SlotNumber(2),
+          EthAddress.fromString(testHarnessAttesterAccount.address),
+          msg => testHarnessAttesterAccount.signTypedData(msg),
+        ),
+      ).toBe(true);
+      publisher.enqueueInvalidateCheckpoint({
+        request: { to: mockRollupAddress, data: '0x' },
+        reason: 'invalid-attestation',
+        gasUsed: 100n,
+        checkpointNumber: CheckpointNumber(1),
+        forcePendingCheckpointNumber: CheckpointNumber(0),
+        lastArchive: Fr.ZERO,
+      });
+      forwardSpy.mockResolvedValue({
+        receipt: proposeTxReceipt,
+        multicallData: data,
+        stats: undefined,
+        state: mock<L1TxState>(),
+      });
+
+      await publisher.sendRequests();
+      const entries = log.verbose.mock.calls.filter(
+        ([, context]) =>
+          typeof context === 'object' &&
+          context !== null &&
+          'eventName' in context &&
+          context.eventName === 'l1_bundle_published',
+      );
+      expect(entries).toHaveLength(1);
+      const [message, context] = entries[0];
+      const lines: string[] = [];
+      registerLoggingStream(
+        new Writable({
+          write(chunk, _encoding, callback) {
+            lines.push(chunk.toString());
+            callback();
+          },
+        }),
+      );
+      logger.child({ module: 'sequencer:publisher' }, { level: 'verbose' }).verbose(context, message);
+      expect(lines).toHaveLength(1);
+      const line = lines[0];
+      expect(Buffer.byteLength(line)).toBeLessThan(16 * 1024);
+      expect(JSON.parse(line)).toMatchObject({
+        level: 25,
+        module: 'sequencer:publisher',
+        result: {
+          receipt: {
+            transactionHash: proposeTxHash,
+            blockNumber: '1',
+            status: 'success',
+            gasUsed: '300000',
+            effectiveGasPrice: '2',
+            logCount: 1,
+          },
+        },
+      });
+      expect(line).not.toContain(data);
+      expect(JSON.parse(line).result.receipt.logs).toBeUndefined();
+      for (const request of JSON.parse(line).requests) {
+        expect(request.request.data).toBeUndefined();
+      }
+      expect(JSON.parse(line).requestCount).toBe(extraRequests + 3);
+      expect(JSON.parse(line).omittedRequestCount).toBe(Math.max(0, extraRequests + 3 - 10));
+      const actionLogs = [...log.info.mock.calls, ...log.warn.mock.calls, ...log.error.mock.calls].filter(
+        ([, context]) => typeof context === 'object' && context !== null && 'receipt' in context,
+      );
+      expect(actionLogs).toHaveLength(2);
+      for (const entry of actionLogs) {
+        const actionLine = JSON.stringify(entry, (_, value) => (typeof value === 'bigint' ? value.toString() : value));
+        expect(Buffer.byteLength(actionLine)).toBeLessThan(16 * 1024);
+        expect(actionLine).not.toContain(data);
+      }
+    },
+  );
 
   it('bundles propose and vote tx to l1', async () => {
     const checkpoint = new Checkpoint(l2Block.archive, header, [l2Block], l2Block.checkpointNumber);

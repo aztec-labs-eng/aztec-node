@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
+import { AZTEC_TEST_CHAIN_ID } from '../constants.js';
 import type { ViemClient } from '../types.js';
 import {
   FeeAssetPriceOracle,
@@ -56,6 +57,59 @@ describe('Uniswap Price Oracle', () => {
     it('throws when input is 0', () => {
       expect(() => sqrtPriceX96ToEthPerFeeAssetE12(0n)).toThrow('Cannot convert zero sqrtPriceX96');
     });
+  });
+
+  describe('oracle availability', () => {
+    it.each([1, 31337, AZTEC_TEST_CHAIN_ID])('uses a deployed oracle on chain %s', async chainId => {
+      const client = mock<ViemClient>();
+      client.getChainId.mockResolvedValue(chainId);
+      client.getCode.mockResolvedValue('0x01');
+      client.readContract.mockResolvedValue([2n ** 96n, 0, 0, 0]);
+      client.getBlockNumber.mockResolvedValue(10n);
+      const rollup = mock<RollupContract>();
+      rollup.getEthPerFeeAsset.mockResolvedValue(10n ** 11n);
+      const oracle = new FeeAssetPriceOracle(client, rollup);
+      await expect(oracle.getOraclePrice()).resolves.toBe(10n ** 12n);
+      await expect(oracle.computePriceModifier()).resolves.toBe(MAX_FEE_ASSET_PRICE_MODIFIER_BPS);
+    });
+
+    it.each([11155111, 10])('disables the oracle on chain %s without probing StateView', async chainId => {
+      const client = mock<ViemClient>();
+      client.getChainId.mockResolvedValue(chainId);
+      client.getCode.mockRejectedValue(new Error('StateView must not be probed'));
+      const oracle = new FeeAssetPriceOracle(client, mock<RollupContract>());
+      await expect(oracle.computePriceModifier()).resolves.toBe(0n);
+      await expect(oracle.getOraclePrice()).resolves.toBeUndefined();
+    });
+
+    it.each(['uninitialized_pool', 'pool_query_failed'])(
+      'returns no price when the mainnet pool is unavailable (%s)',
+      async reason => {
+        const client = mock<ViemClient>();
+        client.getChainId.mockResolvedValue(1);
+        client.getCode.mockResolvedValue('0x01');
+        if (reason === 'uninitialized_pool') {
+          client.readContract.mockResolvedValue([0n, 0, 0, 0]);
+        } else {
+          client.readContract.mockRejectedValue(new Error('Pool query failed'));
+        }
+        const oracle = new FeeAssetPriceOracle(client, mock<RollupContract>());
+        await expect(oracle.computePriceModifier()).resolves.toBe(0n);
+        await expect(oracle.getOraclePrice()).resolves.toBeUndefined();
+      },
+    );
+
+    it.each([1, 31337, AZTEC_TEST_CHAIN_ID])(
+      'returns no price when StateView is missing on chain %s',
+      async chainId => {
+        const client = mock<ViemClient>();
+        client.getChainId.mockResolvedValue(chainId);
+        client.getCode.mockResolvedValue('0x');
+        const oracle = new FeeAssetPriceOracle(client, mock<RollupContract>());
+        await expect(oracle.computePriceModifier()).resolves.toBe(0n);
+        await expect(oracle.getOraclePrice()).resolves.toBeUndefined();
+      },
+    );
   });
 
   describe('computePriceModifier', () => {
