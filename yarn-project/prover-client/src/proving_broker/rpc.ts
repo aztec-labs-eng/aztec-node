@@ -41,6 +41,7 @@ export function* proverBrokerBackoff() {
 const provingRequestTypeCount = Object.values(ProvingRequestType).filter(v => typeof v === 'number').length;
 
 export const ProvingJobFilterSchema = z.object({
+  allowNewJobs: z.boolean().optional(),
   allowList: z.array(z.nativeEnum(ProvingRequestType)).max(provingRequestTypeCount),
 });
 

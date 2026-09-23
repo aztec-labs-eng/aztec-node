@@ -446,6 +446,10 @@ export class ProvingBroker implements ProvingJobProducer, ProvingJobConsumer, Pr
   async #getProvingJob(
     filter: ProvingJobFilter = { allowList: [] },
   ): Promise<{ job: ProvingJob; time: number } | undefined> {
+    if (filter.allowNewJobs === false) {
+      return undefined;
+    }
+
     const allowedProofs: ProvingRequestType[] =
       Array.isArray(filter.allowList) && filter.allowList.length > 0
         ? [...filter.allowList]
