@@ -29,10 +29,12 @@
 # identifier as the release channel — 'rc' or 'private' — where rcN would mint
 # a fresh channel per candidate.
 #
-# Multi-branch model: scheduled/dispatched runs always execute THIS file from
-# the default branch, so the token-minting code is always the reviewed code on
-# main — and the environments' deployment policy stays main-only for the same
-# reason.
+# Multi-branch model: a scheduled run executes THIS file from the default
+# branch. A dispatched run executes the copy on the ref it was dispatched from,
+# so what keeps the token-minting code reviewed is not this file. It is that
+# RELEASE_APP_PRIVATE_KEY exists only as a secret on `tagger` and
+# `release-approval`, whose deployment policies admit main alone: a copy on
+# another branch that drops the `environment:` line below mints nothing.
 #
 # To start a new release line, add it in both places below: the `branch`
 # options for on-demand tagging and the matrix list for nightlies

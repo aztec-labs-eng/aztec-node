@@ -6,9 +6,9 @@ version=$1
 dry_run=${DRY_RUN:-0}
 
 # A stable release takes 'latest'; the nightly and rc channels share 'prerelease'; every other
-# channel gets a dist-tag of its own. Sharing is a closed set on purpose: a 'commit' canary cut
-# from a pull request carries that branch's manifest version, so it can be newer than the newest
-# nightly and would otherwise repoint 'prerelease' at an unmerged build. Prerelease versions are
+# channel gets a dist-tag of its own. Sharing is a closed set on purpose: an off-mainline channel
+# carries its own manifest version, so it can be newer than the newest nightly and would otherwise
+# repoint 'prerelease' at a build that is not on the release line. Prerelease versions are
 # installed by exact version anyway.
 prerelease=$(semver prerelease $version)
 channel=${prerelease%%.*}
