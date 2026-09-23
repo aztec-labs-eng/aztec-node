@@ -40,6 +40,10 @@ describe('generated network configs', () => {
         }).getMaxBlocksPerCheckpoint();
         expect(computed).toBe(config.MAX_BLOCKS_PER_CHECKPOINT);
       });
+
+      it('caps proposers within what validators accept', () => {
+        expect(config.SEQ_MAX_TX_PER_CHECKPOINT).toBeLessThanOrEqual(config.VALIDATOR_MAX_TX_PER_CHECKPOINT);
+      });
     });
   }
 });
@@ -62,6 +66,8 @@ describe('enrichEnvironmentWithChainName', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.SEQ_BLOCK_DURATION_MS;
+    delete process.env.SEQ_MAX_TX_PER_CHECKPOINT;
+    delete process.env.VALIDATOR_MAX_TX_PER_CHECKPOINT;
     delete process.env.ALLOW_OVERRIDING_NETWORK_CONFIG;
     delete process.env.DATA_DIRECTORY;
   });
@@ -87,5 +93,24 @@ describe('enrichEnvironmentWithChainName', () => {
     process.env.SEQ_BLOCK_DURATION_MS = '6e3';
     enrichEnvironmentWithChainName('testnet');
     expect(process.env.SEQ_BLOCK_DURATION_MS).toBe('6000');
+  });
+
+  it('applies the network validator tx limit when unset', () => {
+    enrichEnvironmentWithChainName('testnet');
+    expect(process.env.VALIDATOR_MAX_TX_PER_CHECKPOINT).toBe(String(testnetConfig.VALIDATOR_MAX_TX_PER_CHECKPOINT));
+  });
+
+  it('lets an operator raise the validator tx limit but not lower it', () => {
+    process.env.VALIDATOR_MAX_TX_PER_CHECKPOINT = String(testnetConfig.VALIDATOR_MAX_TX_PER_CHECKPOINT + 1);
+    enrichEnvironmentWithChainName('testnet');
+    expect(process.env.VALIDATOR_MAX_TX_PER_CHECKPOINT).toBe(String(testnetConfig.VALIDATOR_MAX_TX_PER_CHECKPOINT + 1));
+
+    process.env.VALIDATOR_MAX_TX_PER_CHECKPOINT = String(testnetConfig.VALIDATOR_MAX_TX_PER_CHECKPOINT - 1);
+    expect(() => enrichEnvironmentWithChainName('testnet')).toThrow(/VALIDATOR_MAX_TX_PER_CHECKPOINT/);
+  });
+
+  it('throws when the proposer tx limit exceeds the network validator tx limit', () => {
+    process.env.SEQ_MAX_TX_PER_CHECKPOINT = String(testnetConfig.VALIDATOR_MAX_TX_PER_CHECKPOINT + 1);
+    expect(() => enrichEnvironmentWithChainName('testnet')).toThrow(/SEQ_MAX_TX_PER_CHECKPOINT/);
   });
 });

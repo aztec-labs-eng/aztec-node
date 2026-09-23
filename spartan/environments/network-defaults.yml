@@ -185,6 +185,15 @@ _prodlike: &prodlike
   MAX_BLOCKS_PER_CHECKPOINT: 10
   # Grace period for received checkpoint proposals to materialize locally (2 block durations).
   CHECKPOINT_PROPOSAL_SYNC_GRACE_SECONDS: 12
+  # Maximum txs per checkpoint a proposer builds: 1 TPS at 72s slots. Must not exceed VALIDATOR_MAX_TX_PER_CHECKPOINT.
+  SEQ_MAX_TX_PER_CHECKPOINT: 72
+
+  #---------------------------------------------------------------------------
+  # Validator Configuration
+  #---------------------------------------------------------------------------
+  # Maximum txs per checkpoint a validator accepts from a peer: 2 TPS at 72s slots. Consensus-critical, but
+  # operators may raise it (never lower it): a stricter validator would reject honest proposers' checkpoints.
+  VALIDATOR_MAX_TX_PER_CHECKPOINT: 144
 
   #---------------------------------------------------------------------------
   # Database Map Sizes (in KB)
@@ -247,6 +256,9 @@ networks:
     TRANSACTIONS_DISABLED: false
     # Sequencer
     SEQ_MAX_TX_PER_BLOCK: 18
+    SEQ_MAX_TX_PER_CHECKPOINT: 36 # 1 TPS at 36s slots
+    # Validator
+    VALIDATOR_MAX_TX_PER_CHECKPOINT: 72 # 2 TPS at 36s slots
     # Prover
     PROVER_REAL_PROOFS: false # Use mock proofs
     PXE_PROVER_ENABLED: false # Disable PXE proving
@@ -300,8 +312,6 @@ networks:
     TEST_ACCOUNTS: false
     SPONSORED_FPC: false
     TRANSACTIONS_DISABLED: false
-    # Sequencer
-    SEQ_MAX_TX_PER_CHECKPOINT: 72 # 1 TPS
     # Prover
     PROVER_REAL_PROOFS: true
     # P2P
@@ -354,8 +364,6 @@ networks:
     TEST_ACCOUNTS: false
     SPONSORED_FPC: false
     TRANSACTIONS_DISABLED: false
-    # Sequencer
-    SEQ_MAX_TX_PER_CHECKPOINT: 72
     # Prover
     PROVER_REAL_PROOFS: true
     # Sync
