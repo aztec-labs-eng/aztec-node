@@ -167,6 +167,7 @@ export async function createProverNode(
     telemetry.getMeter('ProverNodeL1Metrics'),
     publicClient,
     l1TxUtils.map(utils => utils.getSenderAddress()),
+    'prover',
   );
 
   // Extract the shared delayer from the first L1TxUtils instance (all instances share the same delayer)

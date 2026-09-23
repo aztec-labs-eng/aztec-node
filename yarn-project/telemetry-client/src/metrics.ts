@@ -750,6 +750,11 @@ export const VALIDATOR_INVALID_ATTESTATION_RECEIVED_COUNT: MetricDefinition = {
   valueType: ValueType.INT,
 };
 
+export const L1_PUBLISHER_LOADED_COUNT: MetricDefinition = {
+  name: 'aztec.l1_publisher.loaded_count',
+  description: 'Number of L1 publishers loaded by this node',
+  valueType: ValueType.INT,
+};
 export const L1_PUBLISHER_GAS_PRICE: MetricDefinition = {
   name: 'aztec.l1_publisher.gas_price',
   description: 'The gas price used for transactions',
@@ -1521,6 +1526,11 @@ export const VALIDATOR_ATTESTATION_FAILED_NODE_ISSUE_COUNT: MetricDefinition = {
 export const VALIDATOR_CURRENT_EPOCH: MetricDefinition = {
   name: 'aztec.validator.current_epoch',
   description: 'The current epoch number, reflecting total epochs elapsed since genesis',
+  valueType: ValueType.INT,
+};
+export const VALIDATOR_LOADED_ATTESTERS_COUNT: MetricDefinition = {
+  name: 'aztec.validator.loaded_attesters_count',
+  description: 'Number of attesters loaded by this validator',
   valueType: ValueType.INT,
 };
 export const VALIDATOR_ATTESTED_EPOCH_COUNT: MetricDefinition = {
