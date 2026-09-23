@@ -810,6 +810,15 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       return;
     }
 
+    // An invalid BLOCK proposal flags the whole slot (hasInvalidProposals), but that must not make the
+    // slot's honest checkpoint attesters slashable. Slash only an attester whose signed payload is one
+    // this node rejected as an invalid CHECKPOINT proposal, the same per-payload evidence
+    // AttestedInvalidProposalWatcher uses.
+    const invalidCheckpointHashes = new Set(this.proposalHandler.getInvalidCheckpointProposalHashes(slotNumber));
+    if (!invalidCheckpointHashes.has(attestation.getPayloadHash())) {
+      return;
+    }
+
     this.slashAttestedToInvalidCheckpointProposal(slotNumber, attester);
   }
 

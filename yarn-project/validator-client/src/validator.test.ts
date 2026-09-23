@@ -1148,6 +1148,27 @@ describe('ValidatorClient', () => {
       expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(true);
     });
 
+    it('does not slash a checkpoint attester when only a block proposal in the slot was invalid', async () => {
+      await validatorClient.registerHandlers();
+      const attestationCallback = p2pClient.registerCheckpointAttestationCallback.mock.calls[0][0];
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+      const attesterSigner = Secp256k1Signer.random();
+      const attestation = makeCheckpointAttestation({
+        header: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
+        attesterSigner,
+      });
+      blockBuildResult.block.archive.root = Fr.random();
+
+      // An invalid BLOCK flags the whole slot, but no invalid CHECKPOINT was recorded for it.
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+      attestationCallback(attestation);
+
+      expect(isValid).toBe(false);
+      expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(true);
+      // The attester signed a valid checkpoint; a bad block in the slot must not make them slashable.
+      expect(getAttestedToInvalidCheckpointProposalSlashEvents(emitSpy)).toEqual([]);
+    });
+
     it('emits invalid block proposal offense for oversized proposals, deduped per proposer and slot', async () => {
       await validatorClient.registerHandlers();
       const oversizedProposalCallback = p2pClient.registerOversizedProposalCallback.mock.calls[0][0];
@@ -1217,22 +1238,25 @@ describe('ValidatorClient', () => {
     it('emits zero-amount bad attestation offenses when the bad attestation penalty is zero', async () => {
       await validatorClient.registerHandlers();
       const attestationCallback = p2pClient.registerCheckpointAttestationCallback.mock.calls[0][0];
+      const checkpointHandler = registerAllNodesCheckpointHandler();
       validatorClient.updateConfig({
-        slashBroadcastedInvalidBlockPenalty: 0n,
+        slashBroadcastedInvalidCheckpointProposalPenalty: 0n,
         slashAttestInvalidCheckpointProposalPenalty: 0n,
       });
+      const { checkpointProposal } = await makeCheckpointProposalWithHeaderMismatch();
       const emitSpy = jest.spyOn(validatorClient, 'emit');
       const attesterSigner = Secp256k1Signer.random();
+      // Same payload as the invalid checkpoint, so the attestation's payload hash matches the recorded one.
       const attestation = makeCheckpointAttestation({
-        header: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
+        archive: proposal.archive,
+        header: checkpointProposal.checkpointHeader,
         attesterSigner,
       });
-      blockBuildResult.block.archive.root = Fr.random();
 
-      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+      // Record the invalid CHECKPOINT's payload hash, then attest to that same payload.
+      await checkpointHandler(checkpointProposal, sender);
       attestationCallback(attestation);
 
-      expect(isValid).toBe(false);
       expect(getAttestedToInvalidCheckpointProposalSlashEvents(emitSpy)).toEqual([
         [
           WANT_TO_SLASH_EVENT,
