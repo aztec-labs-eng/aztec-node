@@ -5,11 +5,16 @@
 # release-tag.yml, where every run needs a second person's approval. This file
 # is the only one that names the `tagger` environment, and its only trigger is
 # the schedule: a scheduled run always executes the default branch's copy, and
-# with no workflow_dispatch here there is nothing for a person to start. A copy
-# on another branch that adds a trigger is refused anyway, since `tagger`'s
-# deployment policy admits main alone and RELEASE_APP_PRIVATE_KEY exists only
-# as an environment secret. Keep it that way: any path through `tagger` mints a
-# tag with no second human.
+# there is no workflow_dispatch for a person to start. A copy on another branch
+# that adds a trigger is refused, since `tagger`'s deployment policy admits main
+# alone and RELEASE_APP_PRIVATE_KEY exists only as an environment secret.
+#
+# A person can still press "Re-run" on a scheduled run. That executes the
+# original run's file with its original refs/heads/main, so it passes `tagger`,
+# while the checkout and the date resolve afresh: it would cut today's nightly
+# from main's current tip at a moment of the re-runner's choosing. The job is
+# therefore skipped on any attempt after the first. Keep both properties: any
+# path through `tagger` mints a tag with no second human.
 #
 # A day the schedule missed or botched is re-cut by dispatching release-tag.yml
 # with kind=nightly, which is gated like any other dispatch.
@@ -35,6 +40,8 @@ jobs:
     # the same line queue rather than race for the same name.
     concurrency:
       group: release-tag-${{ matrix.branch }}
+    # Skipped before the job enters `tagger`, so a re-run never mints a token.
+    if: github.run_attempt == 1
     environment: tagger
     steps:
       - name: Mint App token
@@ -93,7 +100,7 @@ jobs:
             echo "No SLACK_BOT_TOKEN, skipping notification"
             exit 0
           fi
-          TEXT="Nightly release tagging FAILED (branch *${BRANCH}*): <${RUN_URL}|View Run>"
+          TEXT="Release tagging FAILED (nightly, branch *${BRANCH}*): <${RUN_URL}|View Run>"
           response=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H "Content-type: application/json" \

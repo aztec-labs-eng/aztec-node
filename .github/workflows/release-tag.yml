@@ -73,8 +73,12 @@ jobs:
     # private dispatches from computing the same number.
     concurrency:
       group: release-tag-${{ inputs.branch }}
+    # A re-run replays the original inputs against main's current tip, so an old
+    # stable dispatch re-run after a version bump would cut a release nobody asked
+    # for. Dispatch again instead, which asks for approval afresh.
+    if: github.run_attempt == 1
     # A literal, not an expression: no input or event can route this job to
-    # `tagger`, so every run of this file costs a second human, whatever its kind.
+    # `tagger`, whatever the kind.
     environment: release-approval
     steps:
       - name: Mint App token
