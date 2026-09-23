@@ -28,22 +28,26 @@ function test_cmds {
   # Tests run against the TXE server (oracle roundtrip tests against the oracle test resolver),
   # so inject those dependencies: key each flavor on its entry point's dependency closure
   # (computed by yarn-project's build). The build hash alone under-covers — a TXE behavior
-  # change must rerun these tests even though no aztec-nr source changed.
-  local txe_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts))
-  local resolver_test_hash=$(hash_str $hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/oracle_test_server.ts))
+  # change must rerun these tests even though no aztec-nr source changed. The scripts that select and
+  # run each chunk's tests are inputs too.
+  local scripts_hash
+  scripts_hash=$(cache_content_hash "^noir-projects/scripts/")
+  local test_hash=$(hash_str $hash $scripts_hash)
+  local txe_test_hash=$(hash_str $test_hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts))
+  local resolver_test_hash=$(hash_str $test_hash $($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/oracle_test_server.ts))
 
-  i=0
-  $NARGO test --list-tests --silence-warnings | grep -v __oracle_test__ | sort | while read -r package test; do
-    # We assume there are 8 txe's running.
-    port=$((14730 + (i++ % ${NUM_TXES:-1})))
-    echo "$txe_test_hash noir-projects/scripts/run_test.sh aztec-nr $package $test $port"
-  done
-
-  # Oracle roundtrip tests run against a dedicated resolver instead of TXE
+  # Oracle roundtrip tests run against a dedicated resolver instead of TXE. The rest spread over the
+  # NUM_TXES TXEs on consecutive ports.
   local resolver_port=${1:-14830}
-  { $NARGO test --list-tests --silence-warnings | grep __oracle_test__ || true; } | sort | while read -r package test; do
-    echo "$resolver_test_hash noir-projects/scripts/run_test.sh aztec-nr $package $test $resolver_port"
-  done
+  $NARGO test --list-tests --silence-warnings | $ROOT/noir-projects/scripts/test_chunks.sh |
+    while read -r package kind chunk num_chunks; do
+      local cmd="noir-projects/scripts/run_test_chunk.sh aztec-nr $package $kind $chunk $num_chunks"
+      if [ "$kind" == oracle ]; then
+        echo "$resolver_test_hash:CPUS=4 $cmd $resolver_port"
+      else
+        echo "$txe_test_hash:CPUS=4 $cmd 14730 ${NUM_TXES:-1}"
+      fi
+    done
 }
 
 function test {
@@ -75,7 +79,7 @@ function test {
   wait_for_port $resolver_port "oracle test resolver"
 
   export NARGO_FOREIGN_CALL_TIMEOUT=300000
-  test_cmds $resolver_port | filter_test_cmds | parallelize
+  NUM_TXES=1 test_cmds $resolver_port | filter_test_cmds | parallelize
 }
 
 function format {
