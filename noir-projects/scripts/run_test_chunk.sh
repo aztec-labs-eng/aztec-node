@@ -44,8 +44,10 @@ if [ -z "$list" ]; then
 fi
 mapfile -t tests <<< "$list"
 
-# Every test thread elaborates the package itself, so a thread with no test to run is pure overhead.
-threads=${CPUS:-4}
+# CPUS is the command's CPU budget: ci3/source_test_params defaults it to 2, matching the test engine
+# running one command per 2 CPUs. Every test thread elaborates the package itself, so a thread with no
+# test to run is pure overhead.
+threads=${CPUS:-2}
 [ ${#tests[@]} -lt $threads ] && threads=${#tests[@]}
 
 echo "Running ${#tests[@]} $kind tests of $package on $threads threads against port $port."

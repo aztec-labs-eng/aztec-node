@@ -43,9 +43,9 @@ function test_cmds {
     while read -r package kind chunk num_chunks; do
       local cmd="noir-projects/scripts/run_test_chunk.sh aztec-nr $package $kind $chunk $num_chunks"
       if [ "$kind" == oracle ]; then
-        echo "$resolver_test_hash:CPUS=4 $cmd $resolver_port"
+        echo "$resolver_test_hash $cmd $resolver_port"
       else
-        echo "$txe_test_hash:CPUS=4 $cmd 14730 ${NUM_TXES:-1}"
+        echo "$txe_test_hash $cmd 14730 ${NUM_TXES:-1}"
       fi
     done
 }
