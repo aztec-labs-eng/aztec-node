@@ -80,7 +80,9 @@ function apply_dist_tag {
 # `npm view` does not see it meanwhile. A publish that dies after the upload (e.g. an evicted spot
 # instance) therefore leaves a version that the retry cannot detect and cannot publish over.
 staged_error='Cannot publish over previously staged version'
-staged_poll_attempts=15
+# Callers wrap this script in `retry` (3 attempts by default), so the wait adds up across attempts:
+# 5 minutes each gives a version that never goes live about 15 minutes before the release fails.
+staged_poll_attempts=5
 staged_poll_interval=60
 
 function wait_until_live {
