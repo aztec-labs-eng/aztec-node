@@ -409,6 +409,35 @@ describe('EpochCache', () => {
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0);
     });
 
+    it('treats a failed escape hatch lookup as closed but re-queries it instead of finalizing', async () => {
+      const epoch1Slot = SlotNumber(EPOCH_DURATION);
+      const epoch1Ts = l1GenesisTime + BigInt(EPOCH_DURATION * SLOT_DURATION);
+
+      // The sampling timestamp is finalized, so a successful lookup would pin the entry for good.
+      client.getBlock.mockImplementation((args: any) => {
+        const nowSec = BigInt(Math.floor(Date.now() / 1000));
+        if (args?.blockTag === 'finalized') {
+          return Promise.resolve({ timestamp: epoch1Ts + 10000n, number: 90n, hash: '0xccc' } as any);
+        }
+        return Promise.resolve({ timestamp: nowSec, number: 100n, hash: '0xddd' } as any);
+      });
+      rollupContract.isEscapeHatchOpen.mockRejectedValueOnce(new Error('rpc unavailable'));
+      rollupContract.isEscapeHatchOpen.mockResolvedValue(true);
+
+      const first = await epochCache.getCommittee(epoch1Slot);
+      expect(first.committee).toEqual(testCommittee);
+      expect(first.isEscapeHatchOpen).toBe(false);
+      expect(first.isEscapeHatchStatusUnknown).toBe(true);
+      expect(epochCache.isFinalized(EpochNumber(1))).toBe(false);
+
+      jest.setSystemTime(Date.now() + SLOT_DURATION * 1000);
+
+      const second = await epochCache.getCommittee(epoch1Slot);
+      expect(second.isEscapeHatchOpen).toBe(true);
+      expect(second.isEscapeHatchStatusUnknown).toBeUndefined();
+      expect(epochCache.isFinalized(EpochNumber(1))).toBe(true);
+    });
+
     it('should coalesce concurrent requests for the same epoch', async () => {
       const epoch1Slot = SlotNumber(EPOCH_DURATION);
       const epoch1Ts = l1GenesisTime + BigInt(EPOCH_DURATION * SLOT_DURATION);

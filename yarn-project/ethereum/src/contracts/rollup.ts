@@ -626,26 +626,16 @@ export class RollupContract {
    * Returns whether the escape hatch is open for the given epoch.
    * If escape hatch is not configured, returns false.
    *
-   * This function is intentionally defensive: any failure to query the escape hatch
-   * (RPC issues, transient errors, etc.) is treated as "closed" to avoid callers
-   * needing to sprinkle try/catch everywhere.
+   * Throws if the lookup fails, so callers can tell a failed query apart from a closed hatch.
    */
   async isEscapeHatchOpen(epoch: EpochNumber): Promise<boolean> {
-    try {
-      const escapeHatch = await this.getEscapeHatchContract();
-      if (!escapeHatch) {
-        return false;
-      }
-
-      const [isOpen] = await escapeHatch.read.isHatchOpen([BigInt(epoch)]);
-      return isOpen;
-    } catch (err) {
-      this.logger.warn('isEscapeHatchOpen failed (treating as closed); RPC or contract error may cause liveness risk', {
-        epoch: Number(epoch),
-        error: err,
-      });
+    const escapeHatch = await this.getEscapeHatchContract();
+    if (!escapeHatch) {
       return false;
     }
+
+    const [isOpen] = await escapeHatch.read.isHatchOpen([BigInt(epoch)]);
+    return isOpen;
   }
 
   /**
