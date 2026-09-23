@@ -140,7 +140,7 @@ aztec add-l1-validator [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `--network <string>` - Network to execute against (env: NETWORK)
 - `-pk, --private-key <string>` - The private key to use sending the transaction
 - `-m, --mnemonic <string>` - The mnemonic to use sending the transaction (default: "test test test test test test test test test test test junk")
@@ -163,8 +163,8 @@ aztec advance-epoch [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
 ### aztec block-number
@@ -178,7 +178,7 @@ aztec block-number [options]
 
 **Options:**
 
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
 ### aztec codegen
@@ -248,7 +248,7 @@ aztec debug-rollup [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `--rollup <address>` - ethereum address of the rollup contract
 - `-h, --help` - display help for command
@@ -277,7 +277,7 @@ aztec deploy-l1-contracts [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-pk, --private-key <string>` - The private key to use for deployment
 - `--validators <string>` - Comma separated list of validators
 - `-m, --mnemonic <string>` - The mnemonic to use in deployment (default: "test test test test test test test test test test test junk")
@@ -302,7 +302,7 @@ aztec deploy-new-rollup [options]
 **Options:**
 
 - `-r, --registry-address <string>` - The address of the registry contract
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-pk, --private-key <string>` - The private key to use for deployment
 - `--validators <string>` - Comma separated list of validators
 - `-m, --mnemonic <string>` - The mnemonic to use in deployment (default: "test test test test test test test test test test test junk")
@@ -329,7 +329,7 @@ aztec deposit-governance-tokens [options]
 - `--recipient <string>` - The recipient of the tokens
 - `-a, --amount <string>` - The amount of tokens to deposit
 - `--mint` - Mint the tokens on L1 (default: false)
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-p, --private-key <string>` - The private key to use to deposit
 - `-m, --mnemonic <string>` - The mnemonic to use to deposit (default: "test test test test test test test test test test test junk")
@@ -350,7 +350,7 @@ aztec execute-governance-proposal [options]
 - `-p, --proposal-id <string>` - The ID of the proposal
 - `-r, --registry-address <string>` - The address of the registry contract
 - `--wait <boolean>` - Whether to wait until the proposal is executable
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The private key to use to vote
 - `-m, --mnemonic <string>` - The mnemonic to use to vote (default: "test test test test test test test test test test test junk")
@@ -447,7 +447,7 @@ aztec get-block [options] [blockNumber]
 
 **Options:**
 
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
 ### aztec get-current-min-fee
@@ -461,7 +461,7 @@ aztec get-current-min-fee [options]
 
 **Options:**
 
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
 ### aztec get-l1-addresses
@@ -476,7 +476,7 @@ aztec get-l1-addresses [options]
 **Options:**
 
 - `-r, --registry-address <string>` - The address of the registry contract
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-v, --rollup-version <number>` - The version of the rollup
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `--json` - Output the addresses in JSON format
@@ -493,7 +493,7 @@ aztec get-l1-balance [options] <who>
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-t, --token <string>` - The address of the token to check the balance of
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `--json` - Output the balance in JSON format
@@ -513,7 +513,7 @@ aztec get-l1-to-l2-message-witness [options]
 - `-ca, --contract-address <address>` - Aztec address of the contract.
 - `--message-hash <messageHash>` - The L1 to L2 message hash.
 - `--secret <secret>` - The secret used to claim the L1 to L2 message
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
 ### aztec get-logs
@@ -532,7 +532,7 @@ aztec get-logs [options]
 - `-tx, --tx-hash <txHash>` - A transaction hash to restrict the search to.
 - `-fb, --from-block <blockNum>` - Initial block number for getting logs (defaults to 1).
 - `-tb, --to-block <blockNum>` - Up to which block to fetch logs (defaults to latest). &lt;blockNumber&gt;-&lt;txIndexWithinBlock&gt;-&lt;logIndexWithinTx&gt; to resume pagination after.
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `--follow` - If set, will keep polling for new logs until interrupted.
 - `-h, --help` - display help for command
 
@@ -548,7 +548,7 @@ aztec get-node-info [options]
 **Options:**
 
 - `--json` - Emit output as json
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
 ### aztec initiate-withdraw-by-attester
@@ -562,7 +562,7 @@ aztec initiate-withdraw-by-attester [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The attester private key
 - `--attester <address>` - Attester address of the position to exit
@@ -580,7 +580,7 @@ aztec initiate-withdraw-by-attester-batch [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The relayer private key
 - `--authorizations <path>` - JSON file containing attester, decimal deadline, and signature fields
@@ -713,7 +713,7 @@ aztec propose-with-lock [options]
 
 - `-r, --registry-address <string>` - The address of the registry contract
 - `-p, --payload-address <string>` - The address of the payload contract
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The private key to use to propose
 - `-m, --mnemonic <string>` - The mnemonic to use to propose (default: "test test test test test test test test test test test junk")
@@ -784,7 +784,7 @@ aztec prune-rollup [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-pk, --private-key <string>` - The private key to use for deployment
 - `-m, --mnemonic <string>` - The mnemonic to use in deployment (default: "test test test test test test test test test test test junk")
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
@@ -802,7 +802,7 @@ aztec remove-l1-validator [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-pk, --private-key <string>` - The private key to use for deployment
 - `-m, --mnemonic <string>` - The mnemonic to use in deployment (default: "test test test test test test test test test test test junk")
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
@@ -821,10 +821,10 @@ aztec sequencers [options] <command> [who]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"])
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"])
 - `-m, --mnemonic <string>` - The mnemonic for the sender of the tx (default: "test test test test test test test test test test test junk")
 - `--block-number <number>` - Block number to query next sequencer for
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-h, --help` - display help for command
 
@@ -839,7 +839,7 @@ aztec setup-protocol-contracts [options]
 
 **Options:**
 
-- `-n, --node-url <string>` - URL of the Aztec node (default: "http://localhost:8080", env: AZTEC_NODE_URL)
+- `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `--testAccounts` - Deploy funded test accounts.
 - `--json` - Output the contract addresses in JSON format
 - `-h, --help` - display help for command
@@ -855,7 +855,7 @@ aztec sign-attester-exit [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The attester private key
 - `--attester <address>` - Attester address of the position to exit
@@ -2292,7 +2292,7 @@ aztec trigger-seed-snapshot [options]
 - `-pk, --private-key <string>` - The private key to use for deployment
 - `-m, --mnemonic <string>` - The mnemonic to use in deployment (default: "test test test test test test test test test test test junk")
 - `--rollup <address>` - ethereum address of the rollup contract
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-h, --help` - display help for command
 
@@ -2322,7 +2322,7 @@ aztec validate-attester-exits [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `--authorizations <path>` - JSON authorization array to validate
 - `--rollup <address>` - Rollup the authorizations were signed for
@@ -2348,7 +2348,7 @@ aztec vote-on-governance-proposal [options]
 - `--in-favor <boolean>` - Whether to vote in favor of the proposal. Use "yea" for true, any other value for false.
 - `--wait <boolean>` - Whether to wait until the proposal is active
 - `-r, --registry-address <string>` - The address of the registry contract
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://localhost:8545"], env: ETHEREUM_HOSTS)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The private key to use to vote
 - `-m, --mnemonic <string>` - The mnemonic to use to vote (default: "test test test test test test test test test test test junk")
