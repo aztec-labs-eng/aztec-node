@@ -110,8 +110,17 @@ cast call <REGISTRY_ADDRESS> "getGovernance()(address)" --rpc-url <L1_RPC>
 
 These addresses are stored internally in contracts with no public getter. They
 can be obtained from the Forge deployment script output
-(`l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol` prints JSON with all
+(`docs/node_modules/@aztec-foundation/l1-artifacts/l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol` prints JSON with all
 addresses). Ask the user if they have deployment output.
+
+`l1-contracts` is not in this repo — it stayed in AztecProtocol/aztec-packages
+and reaches us only as the `@aztec-foundation/l1-artifacts` npm package, which
+ships the whole Solidity tree. Read it from `docs/node_modules/` after
+`yarn install` in `docs/`. The revision you get is pinned in
+`docs/package.json` and resolved by `docs/yarn.lock` — that pair governs this
+install, not `yarn-project/package.json`, which pins the same package
+separately. They are expected to agree; if they do not at the release tag, stop
+and find out why before trusting either.
 
 - **Reward Booster** (stored in Rollup's `RewardLib` storage, no getter)
 - **Tally Slashing Proposer** (deployed alongside Slasher, no getter)

@@ -335,8 +335,30 @@ cast call <PROPOSER_ADDRESS> "SLASH_PAYLOAD_IMPLEMENTATION()(address)" --rpc-url
 #### Tier 2: From deployment output (if available)
 
 Only contracts with no public getter remain here. Obtain them from the Forge
-deployment script output (`l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol`
+deployment script output (`docs/node_modules/@aztec-foundation/l1-artifacts/l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol`
 prints JSON with all addresses); ask the user if they have it.
+
+`l1-contracts` is not in this repo — it stayed in AztecProtocol/aztec-packages
+and reaches us only as the `@aztec-foundation/l1-artifacts` npm package, which
+ships the whole Solidity tree (sources, `script/`, and compiled `out/` ABIs).
+Read it from `docs/node_modules/` after `yarn install` in `docs/` rather than
+cloning aztec-packages.
+
+The revision you get is the one pinned in `docs/package.json` and resolved by
+`docs/yarn.lock` — that pair is authoritative for this install, because the
+install happens in `docs/`. `yarn-project/package.json` pins the same package
+separately; the two are expected to agree, and have at every tag checked, but
+it is the `docs/` pin that governs what lands in `docs/node_modules/`. Check it
+at the release tag:
+
+```bash
+grep '"@aztec-foundation/l1-artifacts"' docs/package.json
+```
+
+If that disagrees with `yarn-project/package.json`, stop and find out why before
+trusting either — one of them is not the revision the tag was built against.
+Otherwise, reading from `docs/node_modules/` keeps the "everything comes from
+the tag" rule intact.
 
 - **Staking Registry**
 
@@ -403,8 +425,10 @@ transcribe one by hand. Concretely:
   - *Proposer Quorum*: `cast call <GOVERNANCE_PROPOSER> "QUORUM_SIZE()(uint256)"`
     and `"ROUND_SIZE()(uint256)"` (e.g. 600/1000 mainnet, 60/100 testnet).
   - *Voting Delay / Voting Duration / Execution Delay*:
-    `cast call <GOVERNANCE> "getConfiguration()"` and decode against the tag's
-    `IGovernance` configuration struct in `l1-contracts`. Beware: some time
+    `cast call <GOVERNANCE> "getConfiguration()"` and decode against the
+    `Configuration` struct in
+    `docs/node_modules/@aztec-foundation/l1-artifacts/l1-contracts/src/governance/interfaces/IGovernance.sol`
+    (see the Tier 2 note above on where l1-contracts lives). Beware: some time
     fields are stored compressed in 256-second units — decode via the struct
     definition, then sanity-convert to days/hours (e.g. `675 * 256s = 172800s
     = 2 days`).
