@@ -20,7 +20,7 @@ import {
 import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { join } from 'node:path';
 
-import { extractRelevantOptions, stringifyConfig } from '../util.js';
+import { extractRelevantOptions } from '../util.js';
 import { getVersions } from '../versioning.js';
 
 export async function startBot(
@@ -44,7 +44,7 @@ export async function startBot(
   const aztecNode = createAztecNodeClient(config.nodeUrl, { versions: getVersions(), fetch });
 
   const pxeConfig = extractRelevantOptions<PXEConfig & CliPXEOptions>(options, allPxeConfigMappings, 'pxe');
-  userLog(`Creating bot wallet with config ${stringifyConfig(pxeConfig)}`);
+  userLog('Creating bot wallet');
   const wallet = await EmbeddedWallet.create(aztecNode, { pxeConfig });
 
   const telemetry = await initTelemetryClient(getTelemetryClientConfig());
@@ -62,7 +62,7 @@ export async function addBot(
   userLog?: LogFn,
 ) {
   const config = extractRelevantOptions<BotConfig>(options, botConfigMappings, 'bot');
-  userLog?.(`Starting bot with config ${stringifyConfig(config)}`);
+  userLog?.('Starting bot', { botMode: config.botMode });
 
   // The bot wallet's embedded PXE syncs to this tip (see start_bot.ts/start_node.ts which build the wallet from the
   // same options). L1-to-L2 readiness checks must be evaluated at this tip rather than at 'latest', or the bot can
