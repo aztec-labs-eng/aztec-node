@@ -9,6 +9,10 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
+
+The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.
+
 ### [Protocol] The protocol nullifier is derived from the tx request's salt alone; `tx_request_salt` becomes `protocol_nullifier`
 
 The protocol nullifier, which the init kernel always inserts at index 0 of a transaction's nullifiers, is now `silo(NULL_MSG_SENDER, H(origin, chain_id, version, salt))` instead of `H(tx_request)`. Gas settings and the first call's arguments are no longer part of its preimage, so two transactions built with the same salt (a fee bump, or a cancellation) share it and at most one of them can be mined. The proof is still pinned to the full tx request by the init kernel. The kernel cannot check that the salt is random, so wallets must draw it fresh for every transaction: two requests with the same origin and salt are mutually exclusive.
