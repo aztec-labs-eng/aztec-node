@@ -211,7 +211,7 @@ function test_cmds {
   $NARGO test --list-tests --silence-warnings | $ROOT/noir-projects/scripts/test_chunks.sh |
     while read -r package kind chunk num_chunks; do
       [ -z "${cache[$package]:-}" ] && cache[$package]=$(get_contract_hash_for_testing $package $folder_name)
-      echo "${cache[$package]}:CPUS=4 noir-projects/scripts/run_test_chunk.sh noir-contracts $package $kind" \
+      echo "${cache[$package]} noir-projects/scripts/run_test_chunk.sh noir-contracts $package $kind" \
         "$chunk $num_chunks $txe_port ${NUM_TXES:-1}"
     done
 }
