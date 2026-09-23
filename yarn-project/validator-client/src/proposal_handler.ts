@@ -391,6 +391,20 @@ export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   ['checkpoint_already_published']: false,
 };
 
+/** Whether a block-proposal validation result is a rejection for a slashable reason. */
+function isSlashableBlockProposalResult(
+  result: BlockProposalValidationResult,
+): result is BlockProposalValidationFailureResult {
+  return !result.isValid && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason);
+}
+
+/** Whether a checkpoint-proposal validation result is a rejection for a slashable reason. */
+function isSlashableCheckpointProposalResult(
+  result: CheckpointProposalValidationResult,
+): result is CheckpointProposalValidationFailureResult {
+  return !result.isValid && SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason];
+}
+
 /**
  * Handles block and checkpoint proposals for both validator and non-validator nodes. Also tracks which slots
  * had a slashable invalid proposal or a proposal equivocation, exposing them via the
@@ -514,7 +528,7 @@ export class ProposalHandler {
       ...(await this.observedProposal(proposal)),
       accepted: result.isValid && !escapeHatchOpen,
       reason: result.isValid ? undefined : result.reason,
-      slashable: !result.isValid && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason),
+      slashable: isSlashableBlockProposalResult(result),
       escapeHatchOpen,
     });
   }
@@ -620,7 +634,7 @@ export class ProposalHandler {
           if (result.reason === 'checkpoint_proposal_equivocation') {
             this.markProposalEquivocation(slotNumber);
           } else if (
-            SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason) &&
+            isSlashableBlockProposalResult(result) &&
             !(await this.epochCache.isEscapeHatchOpenAtSlot(slotNumber))
           ) {
             this.markInvalidProposalSlot(slotNumber);
@@ -704,7 +718,7 @@ export class ProposalHandler {
           // Track invalid checkpoint proposals so offense observers (the attested-invalid-proposal watcher)
           // work on non-validator nodes too. This handler runs for all nodes; validators also mark via the
           // failure callback below (idempotent).
-          if (SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason]) {
+          if (isSlashableCheckpointProposalResult(result)) {
             this.markInvalidProposalSlot(proposal.slotNumber);
             this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
           }
@@ -807,11 +821,14 @@ export class ProposalHandler {
       shouldReexecute,
       proposalInfo,
     );
-    return await this.checkParentStillLocal(proposal, parentBlock, result, proposalInfo);
+    // A genesis parent cannot be pruned.
+    return parentBlock !== 'genesis' && isSlashableBlockProposalResult(result)
+      ? await this.checkParentStillLocal(proposal, result, proposalInfo)
+      : result;
   }
 
   /**
-   * Demotes a slashable block-proposal rejection when the proposal's parent is no longer found by archive. The parent is
+   * Demotes a block-proposal rejection when the proposal's parent is no longer found by archive. The parent is
    * fetched once, but later checks read the local chain by number, and the archiver can prune the parent and insert
    * other blocks at the same numbers while they run: under pipelining, when a checkpoint lands on L1 differing from the
    * version this node gossiped. A prune removes the pruned blocks' archive entries, and an archive root commits to the
@@ -820,16 +837,10 @@ export class ProposalHandler {
    */
   private async checkParentStillLocal(
     proposal: BlockProposal,
-    parentBlock: 'genesis' | BlockData,
-    result: BlockProposalValidationResult,
+    result: BlockProposalValidationFailureResult,
     proposalInfo: BlockProposalLogInfo,
-  ): Promise<BlockProposalValidationResult> {
-    if (
-      result.isValid ||
-      parentBlock === 'genesis' ||
-      !SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason) ||
-      (await this.getParentBlock(proposal, { awaitSync: false })) !== undefined
-    ) {
+  ): Promise<BlockProposalValidationFailureResult> {
+    if ((await this.getParentBlock(proposal, { awaitSync: false })) !== undefined) {
       return result;
     }
     this.log.warn(
@@ -1841,11 +1852,10 @@ export class ProposalHandler {
         );
         result = { isValid: false, reason: 'invalid_fee_asset_price_modifier' };
       } else {
-        result = await this.checkLastBlockStillLocal(
-          proposal,
-          await this.validateCheckpointProposal(proposal, proposalInfo),
-          proposalInfo,
-        );
+        const validation = await this.validateCheckpointProposal(proposal, proposalInfo);
+        result = isSlashableCheckpointProposalResult(validation)
+          ? await this.checkLastBlockStillLocal(proposal, validation, proposalInfo)
+          : validation;
       }
 
       this.lastCheckpointValidationResult = { payloadHash, result };
@@ -1991,7 +2001,7 @@ export class ProposalHandler {
   }
 
   /**
-   * Demotes a slashable checkpoint rejection when the checkpoint's last block is no longer found by the signed archive.
+   * Demotes a checkpoint rejection when the checkpoint's last block is no longer found by the signed archive.
    * Validation reads the slot's blocks once, but reads the block before the checkpoint and the parent checkpoint by
    * number afterwards, and the archiver can prune those and insert other blocks at the same numbers while the
    * checkpoint is rebuilt. A prune removes the pruned blocks' archive entries, and the last block's archive commits to
@@ -1999,14 +2009,10 @@ export class ProposalHandler {
    */
   private async checkLastBlockStillLocal(
     proposal: CheckpointProposalCore,
-    result: CheckpointProposalValidationResult,
+    result: CheckpointProposalValidationFailureResult,
     proposalInfo: LogData,
-  ): Promise<CheckpointProposalValidationResult> {
-    if (
-      result.isValid ||
-      !SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason] ||
-      (await this.blockSource.getBlockData({ archive: proposal.archive })) !== undefined
-    ) {
+  ): Promise<CheckpointProposalValidationFailureResult> {
+    if ((await this.blockSource.getBlockData({ archive: proposal.archive })) !== undefined) {
       return result;
     }
     this.log.warn(`Checkpoint's last block was pruned while validating the proposal, not attributing the rejection`, {
