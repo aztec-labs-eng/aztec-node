@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./account": "./dest/account.js",
+    "./blob-tx": "./dest/blob_tx.js",
     "./chain": "./dest/chain.js",
     "./client": "./dest/client.js",
     "./config": "./dest/config.js",
@@ -57,7 +58,7 @@
     "lodash.chunk": "^4.2.0",
     "lodash.pickby": "^4.5.0",
     "tslib": "^2.4.0",
-    "viem": "npm:@aztec/viem@2.38.3",
+    "viem": "2.56.5",
     "zod": "~4.4.3"
   },
   "devDependencies": {

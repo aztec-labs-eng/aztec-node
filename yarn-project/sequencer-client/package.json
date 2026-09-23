@@ -46,7 +46,7 @@
     "@aztec-labs/validator-ha-signer": "workspace:^",
     "lodash.chunk": "^4.2.0",
     "tslib": "^2.4.0",
-    "viem": "npm:@aztec/viem@2.38.3",
+    "viem": "2.56.5",
     "zod": "~4.4.3"
   },
   "devDependencies": {
