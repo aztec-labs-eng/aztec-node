@@ -194,21 +194,26 @@ function test_cmds {
 
   # Tests run against the TXE server, so inject that dependency: key on the TXE entry point's
   # dependency closure (computed by yarn-project's build) rather than the whole yarn-project
-  # hash, so unrelated yarn-project changes don't invalidate contract tests.
-  local txe_hash
+  # hash, so unrelated yarn-project changes don't invalidate contract tests. The scripts that select
+  # and run each chunk's tests are inputs too.
+  local txe_hash scripts_hash
   txe_hash=$($ROOT/yarn-project/bootstrap.sh require_dep_hash txe/src/bin/index.ts)
+  scripts_hash=$(cache_content_hash "^noir-projects/scripts/")
   function get_contract_hash_for_testing {
-    hash_str $txe_hash $(get_contract_hash "$1" "$2")
+    hash_str $txe_hash $scripts_hash $(get_contract_hash "$1" "$2")
   }
 
   # Test bb aztec_process command
   echo "$AZTEC_TOOLCHAIN_HASH noir-projects/noir-contracts/scripts/test_aztec_process.sh"
 
+  # Chunks spread over the NUM_TXES TXEs on consecutive ports from $txe_port.
   local -A cache
-  $NARGO test --list-tests --silence-warnings | sort | while read -r package test; do
-    [ -z "${cache[$package]:-}" ] && cache[$package]=$(get_contract_hash_for_testing $package $folder_name)
-    echo "${cache[$package]} noir-projects/scripts/run_test.sh noir-contracts $package $test $txe_port"
-  done
+  $NARGO test --list-tests --silence-warnings | $ROOT/noir-projects/scripts/test_chunks.sh |
+    while read -r package kind chunk num_chunks; do
+      [ -z "${cache[$package]:-}" ] && cache[$package]=$(get_contract_hash_for_testing $package $folder_name)
+      echo "${cache[$package]}:CPUS=4 noir-projects/scripts/run_test_chunk.sh noir-contracts $package $kind" \
+        "$chunk $num_chunks $txe_port ${NUM_TXES:-1}"
+    done
 }
 
 function start_txe {
@@ -236,7 +241,7 @@ function start_txe {
 function test {
   local txe_port=$DEFAULT_TXE_PORT
   start_txe "$txe_port"
-  test_cmds "$txe_port" | filter_test_cmds | parallelize
+  NUM_TXES=1 test_cmds "$txe_port" | filter_test_cmds | parallelize
 }
 
 function test-package {
