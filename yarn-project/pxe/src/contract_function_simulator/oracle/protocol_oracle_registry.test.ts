@@ -11,7 +11,8 @@ import { computeFeeJuiceMessageNullifier } from '@aztec-labs/stdlib/messaging';
 import { PROTOCOL_ORACLE_VERSION } from '../../oracle_version.js';
 import { Option } from '../noir-structs/option.js';
 import { UnavailableOracleError, buildACIRCallback } from './acir_callback.js';
-import { FIELD, U32, makeEntry } from './oracle_registry.js';
+import type { LegacyOracleEntry } from './legacy_oracle_registry.js';
+import { FIELD, U32 } from './oracle_registry.js';
 import type { ProtocolOracleEntry } from './protocol_oracle_registry.js';
 
 type Handler = Parameters<typeof buildACIRCallback>[0];
@@ -42,18 +43,34 @@ describe('protocol oracle dispatch', () => {
     expect(wire).toEqual([toACVMField(new Fr(1))]);
   });
 
-  it('rejects callers that are not protocol contracts', async () => {
+  it('is not served to callers that are not protocol contracts', async () => {
     const handler = { isPrivate: true, notifyCreatedNullifier: () => Promise.resolve() } as unknown as Handler;
     const inputs = [[toACVMField(Fr.random())]];
 
     const calledByAppContract = buildACIRCallback(handler, { contractAddress: await AztecAddress.random() });
-    await expect(calledByAppContract['aztec_protocol_prv_notifyCreatedNullifier'](...inputs)).rejects.toThrow(
-      'can only be called by protocol contracts',
+    expect(() => calledByAppContract['aztec_protocol_prv_notifyCreatedNullifier'](...inputs)).toThrow(
+      `Oracle 'aztec_protocol_prv_notifyCreatedNullifier' not found`,
     );
 
     const calledByNoContract = buildACIRCallback(handler);
-    await expect(calledByNoContract['aztec_protocol_prv_notifyCreatedNullifier'](...inputs)).rejects.toThrow(
-      'can only be called by protocol contracts',
+    expect(() => calledByNoContract['aztec_protocol_prv_notifyCreatedNullifier'](...inputs)).toThrow(
+      `Oracle 'aztec_protocol_prv_notifyCreatedNullifier' not found`,
+    );
+  });
+
+  it('serves protocol contracts no oracles other than the protocol oracles', () => {
+    const handler = { isMisc: true, getRandomField: () => Promise.resolve(Fr.random()) } as Handler;
+    const legacyRegistry: Record<string, LegacyOracleEntry> = {
+      aztec_misc_legacyGetRandomField: { modernOracle: 'aztec_misc_getRandomField' },
+    };
+
+    const callback = buildACIRCallback(handler, { contractAddress: protocolContract, legacyRegistry });
+
+    expect(() => callback['aztec_misc_getRandomField']()).toThrow(
+      `Oracle 'aztec_misc_getRandomField' not found. It was called by a protocol contract`,
+    );
+    expect(() => callback['aztec_misc_legacyGetRandomField']()).toThrow(
+      `Oracle 'aztec_misc_legacyGetRandomField' not found. It was called by a protocol contract`,
     );
   });
 
@@ -131,21 +148,6 @@ describe('protocol oracle dispatch', () => {
     expect(wire).toEqual([toACVMField(witness.leafIndex), witness.siblingPath.map(toACVMField)]);
   });
 
-  it('rejects a protocol oracle name that collides with another oracle', () => {
-    const handler = { isMisc: true } as Handler;
-    const currentRegistry = { aztec_protocol_misc_getRandomField: makeEntry({ returnType: FIELD }) };
-    const protocolRegistry: Record<string, ProtocolOracleEntry> = {
-      aztec_protocol_misc_getRandomField: {
-        oracleKind: 'misc',
-        params: [],
-        returnType: FIELD,
-        serve: () => new Fr(0),
-      },
-    };
-
-    expect(() => buildACIRCallback(handler, { currentRegistry, protocolRegistry })).toThrow('collides with another');
-  });
-
   describe('version check', () => {
     const handler = { isMisc: true } as Handler;
     const versionCheck = 'aztec_protocol_misc_assertCompatibleOracleVersion';
@@ -164,11 +166,11 @@ describe('protocol oracle dispatch', () => {
       );
     });
 
-    it('rejects callers that are not protocol contracts', async () => {
+    it('is not served to callers that are not protocol contracts', async () => {
       const callback = buildACIRCallback(handler, { contractAddress: await AztecAddress.random() });
 
-      await expect(callback[versionCheck]([toACVMField(new Fr(PROTOCOL_ORACLE_VERSION))])).rejects.toThrow(
-        'can only be called by protocol contracts',
+      expect(() => callback[versionCheck]([toACVMField(new Fr(PROTOCOL_ORACLE_VERSION))])).toThrow(
+        `Oracle '${versionCheck}' not found`,
       );
     });
   });
