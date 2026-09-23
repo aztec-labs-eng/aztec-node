@@ -48,8 +48,9 @@ jobs:
       # actions/checkout is pinned to v5.0.1 rather than v6 throughout this repo. v6 ("persist
       # creds to a separate file", #2286) moves a persisted credential out of a local
       # http.*.extraheader and into a temp credentials file pulled in via includeIf, which changes
-      # both where it lives and what can remove it. release-tag.yml is the only checkout that
-      # persists one, and the pin keeps its behaviour the one that has been validated here.
+      # both where it lives and what can remove it. The checkouts that persist one are those that pass
+      # their own `token:` in order to push, and the pin keeps their behaviour the one that has been
+      # validated here.
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
