@@ -82,6 +82,9 @@ export type BlockProposalValidationFailureReason =
   | 'invalid_signature'
   | 'invalid_proposal'
   | 'parent_block_not_found'
+  // The parent was found, but pruned from the local chain before validation finished, so a verdict read off the
+  // local chain may describe other blocks than the ones the proposal builds on. Never proposer misconduct.
+  | 'parent_block_pruned_during_validation'
   | 'parent_block_wrong_slot'
   // Streaming Inbox per-block acceptance failures.
   | StreamingBlockCheckReason
@@ -124,6 +127,9 @@ export type CheckpointProposalValidationFailureReason =
   | 'invalid_signature'
   | 'invalid_fee_asset_price_modifier'
   | 'last_block_not_found'
+  // The checkpoint's last block was found, but pruned from the local chain before validation finished, so a verdict
+  // read off the local chain may describe other blocks than the ones the proposal builds on. Never proposer misconduct.
+  | 'last_block_pruned_during_validation'
   | 'block_fetch_error'
   | 'world_state_not_synced'
   | 'checkpoint_already_published'
@@ -195,6 +201,7 @@ const CHECKPOINT_VALIDATION_REASON_TO_OUTCOME: Record<
   invalid_fee_asset_price_modifier: 'invalid',
   checkpoint_already_published: undefined,
   last_block_not_found: 'unvalidated',
+  last_block_pruned_during_validation: 'unvalidated',
   block_fetch_error: 'unvalidated',
   world_state_not_synced: 'unvalidated',
   initial_archive_mismatch: 'unvalidated',
@@ -240,6 +247,9 @@ type CheckpointBlocksSnapshot = { blocks: L2Block[]; lastBlockIndex: number };
 type CheckpointComputationResult =
   | { checkpointNumber: CheckpointNumber; reason?: undefined }
   | { checkpointNumber?: undefined; reason: 'invalid_proposal' | 'global_variables_mismatch' };
+
+/** A block proposal's log context, completed with its block and checkpoint numbers as validation resolves them. */
+type BlockProposalLogInfo = LogData & { blockNumber?: BlockNumber; checkpointNumber?: CheckpointNumber };
 
 type BlockProposalSlotValidationResult =
   | { isValid: true }
@@ -372,6 +382,8 @@ export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   ['inbox_endpoint_mismatch']: false,
   ['invalid_signature']: false,
   ['last_block_not_found']: false,
+  // The local chain was pruned under the validation, so a slashable verdict may describe blocks of another chain.
+  ['last_block_pruned_during_validation']: false,
   ['block_fetch_error']: false,
   ['world_state_not_synced']: false,
   // A reorg / divergent local chain, not a proposer offense (mirrors the block path's initial_state_mismatch).
@@ -735,11 +747,11 @@ export class ProposalHandler {
       return { isValid: false, reason: 'invalid_signature' };
     }
 
-    const proposalInfo = {
+    const proposalInfo: BlockProposalLogInfo = {
       ...proposal.toBlockInfo(),
       proposer: proposer.toString(),
-      blockNumber: undefined as BlockNumber | undefined,
-      checkpointNumber: undefined as CheckpointNumber | undefined,
+      blockNumber: undefined,
+      checkpointNumber: undefined,
     };
 
     this.log.info(`Processing proposal for slot ${slotNumber}`, {
@@ -787,6 +799,58 @@ export class ProposalHandler {
       this.log.warn(`Parent block for proposal not found, skipping processing`, proposalInfo);
       return { isValid: false, reason: 'parent_block_not_found' };
     }
+
+    const result = await this.validateBlockProposalOnParent(
+      proposal,
+      parentBlock,
+      proposalSender,
+      shouldReexecute,
+      proposalInfo,
+    );
+    return await this.checkParentStillLocal(proposal, parentBlock, result, proposalInfo);
+  }
+
+  /**
+   * Demotes a slashable block-proposal rejection when the proposal's parent is no longer found by archive. The parent is
+   * fetched once, but later checks read the local chain by number, and the archiver can prune the parent and insert
+   * other blocks at the same numbers while they run: under pipelining, when a checkpoint lands on L1 differing from the
+   * version this node gossiped. A prune removes the pruned blocks' archive entries, and an archive root commits to the
+   * block's whole history, so a parent still found by archive means the chain below it is still its own ancestry. A
+   * parent that is gone means the verdict may rest on another chain, which says nothing about the proposer.
+   */
+  private async checkParentStillLocal(
+    proposal: BlockProposal,
+    parentBlock: 'genesis' | BlockData,
+    result: BlockProposalValidationResult,
+    proposalInfo: BlockProposalLogInfo,
+  ): Promise<BlockProposalValidationResult> {
+    if (
+      result.isValid ||
+      parentBlock === 'genesis' ||
+      !SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason) ||
+      (await this.getParentBlock(proposal, { awaitSync: false })) !== undefined
+    ) {
+      return result;
+    }
+    this.log.warn(
+      `Parent block was pruned while validating the proposal, not attributing the rejection to its proposer`,
+      {
+        ...proposalInfo,
+        originalReason: result.reason,
+      },
+    );
+    return { ...result, reason: 'parent_block_pruned_during_validation' };
+  }
+
+  /** Validates a block proposal against the parent block it builds on, as fetched by the parent archive. */
+  private async validateBlockProposalOnParent(
+    proposal: ValidatedBlockProposal,
+    parentBlock: 'genesis' | BlockData,
+    proposalSender: PeerId,
+    shouldReexecute: boolean,
+    proposalInfo: BlockProposalLogInfo,
+  ): Promise<BlockProposalValidationResult> {
+    const slotNumber = proposal.slotNumber;
 
     // Check that the parent block's slot is not greater than the proposal's slot.
     if (parentBlock !== 'genesis' && parentBlock.header.getSlot() > slotNumber) {
@@ -1030,7 +1094,14 @@ export class ProposalHandler {
     }
   }
 
-  private async getParentBlock(proposal: BlockProposal): Promise<'genesis' | BlockData | undefined> {
+  /**
+   * Looks up the block a proposal builds on by its parent archive. Unless `awaitSync` is false, a parent that is not
+   * local yet is waited for through forced archiver syncs until the slot's attestation deadline.
+   */
+  private async getParentBlock(
+    proposal: BlockProposal,
+    { awaitSync = true }: { awaitSync?: boolean } = {},
+  ): Promise<'genesis' | BlockData | undefined> {
     const parentArchive = proposal.blockHeader.lastArchive.root;
     const { genesisArchiveRoot } = await this.blockSource.getGenesisValues();
 
@@ -1043,7 +1114,7 @@ export class ProposalHandler {
       if (parentBlock !== undefined) {
         return parentBlock;
       }
-      if (this.getReexecutionDeadline(proposal.slotNumber).getTime() - this.dateProvider.now() <= 0) {
+      if (!awaitSync || this.getReexecutionDeadline(proposal.slotNumber).getTime() - this.dateProvider.now() <= 0) {
         return undefined;
       }
       const synced = await this.awaitLocalSync(proposal.slotNumber, 'force archiver sync', () =>
@@ -1770,7 +1841,11 @@ export class ProposalHandler {
         );
         result = { isValid: false, reason: 'invalid_fee_asset_price_modifier' };
       } else {
-        result = await this.validateCheckpointProposal(proposal, proposalInfo);
+        result = await this.checkLastBlockStillLocal(
+          proposal,
+          await this.validateCheckpointProposal(proposal, proposalInfo),
+          proposalInfo,
+        );
       }
 
       this.lastCheckpointValidationResult = { payloadHash, result };
@@ -1913,6 +1988,32 @@ export class ProposalHandler {
       });
       return { accepted: false, reason };
     }
+  }
+
+  /**
+   * Demotes a slashable checkpoint rejection when the checkpoint's last block is no longer found by the signed archive.
+   * Validation reads the slot's blocks once, but reads the block before the checkpoint and the parent checkpoint by
+   * number afterwards, and the archiver can prune those and insert other blocks at the same numbers while the
+   * checkpoint is rebuilt. A prune removes the pruned blocks' archive entries, and the last block's archive commits to
+   * its whole history, so a last block still found by archive means the chain below it is still its own ancestry.
+   */
+  private async checkLastBlockStillLocal(
+    proposal: CheckpointProposalCore,
+    result: CheckpointProposalValidationResult,
+    proposalInfo: LogData,
+  ): Promise<CheckpointProposalValidationResult> {
+    if (
+      result.isValid ||
+      !SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[result.reason] ||
+      (await this.blockSource.getBlockData({ archive: proposal.archive })) !== undefined
+    ) {
+      return result;
+    }
+    this.log.warn(`Checkpoint's last block was pruned while validating the proposal, not attributing the rejection`, {
+      ...proposalInfo,
+      originalReason: result.reason,
+    });
+    return { ...result, reason: 'last_block_pruned_during_validation' };
   }
 
   /** The endpoint gate's own ceiling, narrowed by a slot whose attestation window is nearly spent. */
