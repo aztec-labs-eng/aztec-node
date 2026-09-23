@@ -1,13 +1,12 @@
-# Creates release tags via the release GitHub App — the only identity the
-# release-tags ruleset permits to create v* tags.
+# Creates release tags on demand via the release GitHub App — the only
+# identity the release-tags ruleset permits to create tags. Every run needs a
+# second person's approval; the unattended nightly lives in
+# release-tag-nightly.yml, apart from this file.
 #
-#   nightly:  cron                          -> v<ver>-nightly.<date>
-#             per branch in the nightly matrix below; the one unattended
-#             path, via the `tagger` environment. Also dispatchable, to cut a
-#             day the cron missed or botched. That path takes an optional
-#             suffix (-> v<ver>-nightly.<date>.<suffix>) so a re-cut does not
-#             collide with a tag the cron already pushed, and is gated by
-#             `release-approval` like every other dispatch.
+#   nightly:  dispatch with kind=nightly    -> v<ver>-nightly.<date>[.<suffix>]
+#             re-cuts a day the schedule missed or botched. The optional
+#             suffix keeps a re-cut from colliding with the tag the schedule
+#             already pushed.
 #   rc:       dispatch with kind=rc         -> v<ver>-rc.<n>
 #             n is derived from origin's existing rc tags for that version
 #             (max + 1, starting at 1). Gated by `release-approval` like a
@@ -29,23 +28,18 @@
 # identifier as the release channel — 'rc' or 'private' — where rcN would mint
 # a fresh channel per candidate.
 #
-# Multi-branch model: a scheduled run executes THIS file from the default
-# branch. A dispatched run executes the copy on the ref it was dispatched from,
-# so what keeps the token-minting code reviewed is not this file. It is that
-# RELEASE_APP_PRIVATE_KEY exists only as a secret on `tagger` and
-# `release-approval`, whose deployment policies admit main alone: a copy on
-# another branch that drops the `environment:` line below mints nothing.
+# A dispatched run executes the copy of this file on the ref it was dispatched
+# from, so what keeps the token-minting code reviewed is not this file. It is
+# that RELEASE_APP_PRIVATE_KEY exists only as a secret on `release-approval` and
+# `tagger`, whose deployment policies admit main alone: a copy on another branch
+# that drops the `environment:` line below mints nothing.
 #
-# To start a new release line, add it in both places below: the `branch`
-# options for on-demand tagging and the matrix list for nightlies
-# (a one-line reviewed PR each).
+# To start a new release line, add it to the `branch` options below, and to the
+# matrix in release-tag-nightly.yml for nightlies.
 
 name: Release Tag
 
 on:
-  schedule:
-    # Every night at 4:00 AM UTC.
-    - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
       kind:
@@ -74,21 +68,14 @@ on:
 jobs:
   tag:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # TO ADD A NEW RELEASE LINE to the nightly schedule: extend the LAST
-        # list in this expression, e.g. fromJSON('["main", "v6"]'). Nothing else
-        # changes — no environment, ruleset, or App-installation edits (see the
-        # multi-branch model in the header). The first arm of the expression is
-        # not a branch list: it collapses dispatch runs to the one requested branch.
-        branch: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.branch)) || fromJSON('["main"]') }}
+    # Shared with release-tag-nightly.yml, so a dispatched tag and a scheduled
+    # nightly on the same line queue rather than race; it also keeps two rc or
+    # private dispatches from computing the same number.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.repository }}-${{ matrix.branch }}
-    # Every dispatch costs a second human, a nightly re-cut included: the
-    # expression keys on the event, not the kind. The cron is the only path
-    # through `tagger`.
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'release-approval' || 'tagger' }}
+      group: release-tag-${{ inputs.branch }}
+    # A literal, not an expression: no input or event can route this job to
+    # `tagger`, so every run of this file costs a second human, whatever its kind.
+    environment: release-approval
     steps:
       - name: Mint App token
         # SHA-pinned, not @v2: this is the step the private key is passed to, so a
@@ -102,7 +89,7 @@ jobs:
       # Do NOT bump to checkout v6 (see the pinning rationale in ci3.yml).
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ matrix.branch }}
+          ref: ${{ inputs.branch }}
           token: ${{ steps.app.outputs.token }}
 
       - name: Create and push tag
@@ -110,9 +97,9 @@ jobs:
         # substituted into the script before bash parses it, so its value would
         # be executed as shell text.
         env:
-          BRANCH: ${{ matrix.branch }}
-          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
-          SUFFIX: ${{ github.event_name == 'workflow_dispatch' && inputs.suffix || '' }}
+          BRANCH: ${{ inputs.branch }}
+          KIND: ${{ inputs.kind }}
+          SUFFIX: ${{ inputs.suffix }}
         run: |
           set -euo pipefail
           # [a-z] below is a collation range: under a UTF-8 locale it also matches
@@ -204,16 +191,15 @@ jobs:
           git tag -a "$tag" -m "$tag"
           git push origin "$tag"
 
-      # Nightly tagging is unattended, so a failure here is otherwise invisible: no tag is
-      # pushed and the release run that would report it never starts. Posted inline rather
-      # than via ci3/slack_notify because two of the three steps above can fail before the
-      # repo is checked out.
+      # A failed tag pushes nothing, so the release run that would report it never starts.
+      # Posted inline rather than via ci3/slack_notify because the steps above can fail
+      # before the repo is checked out.
       - name: Notify Slack on tagging failure
         if: failure()
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
-          BRANCH: ${{ matrix.branch }}
+          KIND: ${{ inputs.kind }}
+          BRANCH: ${{ inputs.branch }}
           ACTOR: ${{ github.actor }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |

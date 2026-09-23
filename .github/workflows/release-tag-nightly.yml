@@ -1,0 +1,104 @@
+# Cuts the nightly release tag, v<ver>-nightly.<date>, for each release line in
+# the matrix below, via the release GitHub App.
+#
+# This is the one unattended path to a release tag, so it is kept apart from
+# release-tag.yml, where every run needs a second person's approval. This file
+# is the only one that names the `tagger` environment, and its only trigger is
+# the schedule: a scheduled run always executes the default branch's copy, and
+# with no workflow_dispatch here there is nothing for a person to start. A copy
+# on another branch that adds a trigger is refused anyway, since `tagger`'s
+# deployment policy admits main alone and RELEASE_APP_PRIVATE_KEY exists only
+# as an environment secret. Keep it that way: any path through `tagger` mints a
+# tag with no second human.
+#
+# A day the schedule missed or botched is re-cut by dispatching release-tag.yml
+# with kind=nightly, which is gated like any other dispatch.
+#
+# To start nightlies for a new release line, add it to the matrix list below,
+# and to the `branch` options in release-tag.yml for on-demand tagging.
+
+name: Nightly Release Tag
+
+on:
+  schedule:
+    # Every night at 4:00 AM UTC.
+    - cron: "0 4 * * *"
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [main]
+    # Shared with release-tag.yml, so a scheduled nightly and a dispatched tag on
+    # the same line queue rather than race for the same name.
+    concurrency:
+      group: release-tag-${{ matrix.branch }}
+    environment: tagger
+    steps:
+      - name: Mint App token
+        # SHA-pinned, not @v2: this is the step the private key is passed to, so a
+        # moved tag upstream would be arbitrary code beside the key.
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID || secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # Do NOT bump to checkout v6 (see the pinning rationale in ci3.yml).
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ matrix.branch }}
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Create and push tag
+        env:
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          set -euo pipefail
+          # Character ranges in the pattern below follow the locale's collation
+          # outside the C locale, and the runner's locale is not ours to assume.
+          export LC_ALL=C
+          git config --global user.email "noreply@aztec-labs.com"
+          git config --global user.name "Aztec Labs release"
+          version=$(jq -r '."."' .release-please-manifest.json)
+          # The whole tag name is built from this, so refuse anything that is not
+          # a plain X.Y.Z before it reaches a ref name.
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Manifest version on $BRANCH is not X.Y.Z: $version"
+            exit 1
+          fi
+          tag="v${version}-nightly.$(date -u +%Y%m%d)"
+          echo "Tagging $BRANCH @ $(git rev-parse --short HEAD): $tag"
+          # Refuse to move an existing tag.
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::error::Tag $tag already exists. To cut another nightly for today, dispatch release-tag.yml with kind=nightly and a suffix."
+            exit 1
+          fi
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
+
+      # Unattended, so a failure here is otherwise invisible: no tag is pushed and the
+      # release run that would report it never starts. Posted inline rather than via
+      # ci3/slack_notify because the steps above can fail before the repo is checked out.
+      - name: Notify Slack on tagging failure
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          BRANCH: ${{ matrix.branch }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "${SLACK_BOT_TOKEN:-}" ]; then
+            echo "No SLACK_BOT_TOKEN, skipping notification"
+            exit 0
+          fi
+          TEXT="Nightly release tagging FAILED (branch *${BRANCH}*): <${RUN_URL}|View Run>"
+          response=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-type: application/json" \
+            --data "$(jq -n --arg c '#team-alpha-ci' --arg t "$TEXT" '{channel:$c, text:$t}')")
+          # Slack returns 200 on errors, so surface a bad channel/token instead of dropping it.
+          if [ "$(jq -r '.ok // false' <<<"$response")" != "true" ]; then
+            echo "Failed to post to Slack: $(jq -r '.error // empty' <<<"$response")" >&2
+          fi
