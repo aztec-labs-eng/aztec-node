@@ -1228,7 +1228,7 @@ export class LibP2PService extends WithTracer implements P2PService {
    * Process a checkpoint attestation from a peer.
    * Validates the attestation and adds it to the pool.
    */
-  private async processCheckpointAttestationFromPeer(
+  protected async processCheckpointAttestationFromPeer(
     payloadData: Buffer,
     msgId: string,
     source: PeerId,
@@ -1302,16 +1302,18 @@ export class LibP2PService extends WithTracer implements P2PService {
       return { result: TopicValidatorResult.Ignore, obj: attestation };
     }
 
-    // Could not add (cap reached for signer), penalize and do not re-broadcast
+    // Local per-(slot, signer) retention cap is full. That is receiver-local state, not evidence the sender
+    // forwarded invalid data (it could not know our cache was full), so drop the extra payload without
+    // penalizing the peer. Do not re-broadcast.
     if (!added) {
-      this.logger.warn(`Rejecting checkpoint attestation due to cap`, {
+      this.logger.debug(`Ignoring checkpoint attestation exceeding per-signer cap`, {
         slot: slot.toString(),
         archive: attestation.archive.toString(),
         source: peerId.toString(),
         attester: attestation.getSender()?.toString(),
         count,
       });
-      return { result: TopicValidatorResult.Reject, severity: PeerErrorSeverity.HighToleranceError };
+      return { result: TopicValidatorResult.Ignore, obj: attestation };
     }
 
     // Check if this is a duplicate attestation (signer attested to a different proposal at the same slot)
