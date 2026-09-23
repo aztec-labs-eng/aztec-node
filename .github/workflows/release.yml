@@ -85,7 +85,7 @@ jobs:
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           # The release channel, not the tag name, decides whether this is worth reporting:
-          # a 'commit' canary is cut per commit, and nobody wants alerts for those.
+          # a 'commit' tag is a per-commit build, which nobody wants alerts for.
           channel=$(./ci3/dist_tag)
           if [ "$channel" = "commit" ]; then
             echo "Canary release ($TAG); not notifying."
