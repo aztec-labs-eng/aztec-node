@@ -172,14 +172,21 @@ async function main() {
     logger.info(`  Total Mana Used: ${result.header.totalManaUsed.toString()}`);
     logger.info('');
     // The tuple is printed packed: decoding it needs the committee of the checkpoint's epoch, which this
-    // script does not resolve. `targetCommitteeSize` is used only to decode on request.
+    // script does not resolve. `targetCommitteeSize` is only a best-effort guess at that committee's size,
+    // and an escape-hatch checkpoint may carry a tuple that decodes for no committee size at all.
     logger.info('Attestations (packed):');
     logger.info(`  Signature bitmap: ${result.verbatimAttestations.signatureIndices}`);
     logger.info(`  Signatures or addresses: ${result.verbatimAttestations.signaturesOrAddresses}`);
-    const attestations = CommitteeAttestation.fromPacked(result.verbatimAttestations, targetCommitteeSize);
-    logger.info(`  Decoded for a committee of ${targetCommitteeSize}:`);
-    logger.info(`    Count: ${attestations.length}`);
-    logger.info(`    Non-empty attestations: ${attestations.filter(a => !a.signature.isEmpty()).length}`);
+    try {
+      const attestations = CommitteeAttestation.fromPacked(result.verbatimAttestations, targetCommitteeSize);
+      logger.info(`  Decoded for a committee of ${targetCommitteeSize}:`);
+      logger.info(`    Count: ${attestations.length}`);
+      logger.info(`    Non-empty attestations: ${attestations.filter(a => !a.signature.isEmpty()).length}`);
+    } catch (err) {
+      logger.info(
+        `  Does not decode for a committee of ${targetCommitteeSize}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     process.exit(0);
   } catch (error) {
