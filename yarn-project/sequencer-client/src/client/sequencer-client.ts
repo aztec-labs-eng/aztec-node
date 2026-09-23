@@ -92,6 +92,7 @@ export class SequencerClient {
       telemetryClient.getMeter('L1PublisherMetrics'),
       publicClient,
       l1TxUtils.map(x => x.getSenderAddress()),
+      'sequencer',
     );
     const publisherManager = new PublisherManager(l1TxUtils, getPublisherConfigFromSequencerConfig(config), {
       bindings: log.getBindings(),
