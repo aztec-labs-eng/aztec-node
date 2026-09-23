@@ -145,7 +145,7 @@ export class ValidatorMetrics {
     this.currentEpoch.record(Number(epoch));
   }
 
-  public setLoadedAttestersCount(count: number) {
+  public setLoadedAttestersCount(count: number): void {
     this.loadedAttestersCount.record(count);
   }
 
