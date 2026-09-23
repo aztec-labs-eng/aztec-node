@@ -20,21 +20,27 @@ describe('computeTxExpirationTimestamp', () => {
     previousKernel.constants.anchorBlockHeader.globalVariables.timestamp = blockTimestamp;
   });
 
-  it('rounds down to the max allowed duration', () => {
+  it('publishes one second under the max for the default update delay and anything above it', () => {
     const maxTimestamp = blockTimestamp + maxTxLifetime;
+    const published = maxTimestamp - 1n;
 
-    setExpirationTimestamp(maxTimestamp + 87654n);
-    expect(computeTxExpirationTimestamp(previousKernel)).toBe(maxTimestamp);
+    // Every callee on the default update delay: the kernel emits maxTimestamp - 1.
+    setExpirationTimestamp(maxTimestamp - 1n);
+    expect(computeTxExpirationTimestamp(previousKernel)).toBe(published);
+
+    // Every callee with a delay raised above the default: the kernel emits maxTimestamp.
+    setExpirationTimestamp(maxTimestamp);
+    expect(computeTxExpirationTimestamp(previousKernel)).toBe(published);
 
     setExpirationTimestamp(maxTimestamp + 123n);
-    expect(computeTxExpirationTimestamp(previousKernel)).toBe(maxTimestamp);
+    expect(computeTxExpirationTimestamp(previousKernel)).toBe(published);
 
-    setExpirationTimestamp(maxTimestamp);
-    expect(computeTxExpirationTimestamp(previousKernel)).toBe(maxTimestamp);
+    setExpirationTimestamp(maxTimestamp + 87654n);
+    expect(computeTxExpirationTimestamp(previousKernel)).toBe(published);
   });
 
   it('rounds down to the nearest hour', () => {
-    setExpirationTimestamp(blockTimestamp + maxTxLifetime - 1n);
+    setExpirationTimestamp(blockTimestamp + maxTxLifetime - 2n);
     expect(computeTxExpirationTimestamp(previousKernel)).toBe(blockTimestamp + maxTxLifetime - secondsInHour);
 
     setExpirationTimestamp(blockTimestamp + secondsInHour * 11n + 1n);
@@ -58,12 +64,17 @@ describe('computeTxExpirationTimestamp', () => {
     expect(computeTxExpirationTimestamp(previousKernel)).toBe(blockTimestamp + secondsIn30Mins);
   });
 
-  it('rounds down to 1 seconds for duration under 30 mins', () => {
+  it('rounds down to the nearest minute for duration under 30 mins', () => {
     setExpirationTimestamp(blockTimestamp + secondsIn30Mins - 1n);
-    expect(computeTxExpirationTimestamp(previousKernel)).toBe(blockTimestamp + secondsIn30Mins - 1n);
+    expect(computeTxExpirationTimestamp(previousKernel)).toBe(blockTimestamp + secondsIn30Mins - 60n);
 
-    setExpirationTimestamp(blockTimestamp + 60n * 10n);
+    setExpirationTimestamp(blockTimestamp + 60n * 10n + 59n);
     expect(computeTxExpirationTimestamp(previousKernel)).toBe(blockTimestamp + 60n * 10n);
+  });
+
+  it('rounds down to 1 second for duration under 1 min', () => {
+    setExpirationTimestamp(blockTimestamp + 59n);
+    expect(computeTxExpirationTimestamp(previousKernel)).toBe(blockTimestamp + 59n);
 
     setExpirationTimestamp(blockTimestamp + 1n);
     expect(computeTxExpirationTimestamp(previousKernel)).toBe(blockTimestamp + 1n);
@@ -81,7 +92,7 @@ describe('computeTxExpirationTimestamp', () => {
     setExpirationTimestamp(blockTimestamp + maxTxLifetime);
     const customTxLifetime = maxTxLifetime / 2n;
     const expirationTimestamp = computeTxExpirationTimestamp(previousKernel, Number(customTxLifetime));
-    expect(expirationTimestamp).toBe(blockTimestamp + customTxLifetime);
+    expect(expirationTimestamp).toBe(blockTimestamp + customTxLifetime - 1n);
   });
 
   it('throws if custom tx lifetime is greater than the max allowed', () => {
