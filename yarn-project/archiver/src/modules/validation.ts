@@ -17,7 +17,7 @@ import { type L1RollupConstants, computeQuorum, getEpochAtSlot } from '@aztec-la
 import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import type { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 
-import { CheckpointAttestationsDecodeError } from '../errors.js';
+import { CheckpointAttestationsDecodeError, EscapeHatchStatusUnknownError } from '../errors.js';
 
 export type { ValidateCheckpointResult };
 
@@ -70,6 +70,8 @@ export type ResolvedCheckpointAttestations = {
  * @throws CheckpointAttestationsDecodeError if a non-hatch checkpoint's tuple does not decode to its
  * committee's length. Its proposal hashes have already been verified at this point, so the tuple is the one
  * the rollup accepted and the failure is not a calldata-extraction mismatch.
+ * @throws EscapeHatchStatusUnknownError if the epoch has a committee but its escape hatch status could not be
+ * looked up, rather than judging a possibly arbitrary hatch tuple against that committee.
  */
 export async function resolveCheckpointAttestationsFromCalldata(
   checkpoint: CalldataCheckpointForAttestations,
@@ -83,7 +85,8 @@ export async function resolveCheckpointAttestationsFromCalldata(
   // The hatch flag comes out of the same epoch-cache entry as the committee: reading it back through
   // `isEscapeHatchOpen` would be a second lookup that a refresh can land between, pairing one snapshot's
   // committee with another's hatch status.
-  const { committee, seed, isEscapeHatchOpen } = await epochCache.getCommitteeForEpoch(epoch);
+  const { committee, seed, isEscapeHatchOpen, isEscapeHatchStatusUnknown } =
+    await epochCache.getCommitteeForEpoch(epoch);
 
   if (isEscapeHatchOpen) {
     logger?.warn(
@@ -97,6 +100,10 @@ export async function resolveCheckpointAttestationsFromCalldata(
       `No committee found for epoch ${epoch} at slot ${slot}. Accepting checkpoint ${checkpoint.checkpointNumber} without validation.`,
     );
     return { attestations: [], validationResult: { valid: true } };
+  }
+
+  if (isEscapeHatchStatusUnknown) {
+    throw new EscapeHatchStatusUnknownError(checkpoint.checkpointNumber, epoch);
   }
 
   let attestations: CommitteeAttestation[];
@@ -148,7 +155,8 @@ export async function validateAttestations(
 ): Promise<ValidateCheckpointResult> {
   const slot = payload.header.slotNumber;
   const epoch: EpochNumber = getEpochAtSlot(slot, constants);
-  const { committee, seed, isEscapeHatchOpen } = await epochCache.getCommitteeForEpoch(epoch);
+  const { committee, seed, isEscapeHatchOpen, isEscapeHatchStatusUnknown } =
+    await epochCache.getCommitteeForEpoch(epoch);
 
   if (isEscapeHatchOpen) {
     logger?.warn(`Escape hatch open for epoch ${epoch} at slot ${slot}, skipping checkpoint validation`);
@@ -162,6 +170,10 @@ export async function validateAttestations(
       epoch,
     });
     return { valid: true };
+  }
+
+  if (isEscapeHatchStatusUnknown) {
+    throw new EscapeHatchStatusUnknownError(checkpointInfo.checkpointNumber, epoch);
   }
 
   return validateAttestationsAgainstCommittee(
