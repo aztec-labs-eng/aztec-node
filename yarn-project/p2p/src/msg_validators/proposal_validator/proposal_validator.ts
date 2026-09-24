@@ -106,11 +106,9 @@ export class ProposalValidator {
       // An undefined proposer means an empty committee (anyone may propose), so skip the
       // proposer-equality check and keep validating. A missing committee instead throws
       // NoCommitteeError, handled as a reject below.
-      // Scope the catch to just this lookup: only the epochCache proposer lookup can fail on a
-      // receiver-local cause (L1 RPC down, or this node behind), which says nothing about the relaying
-      // peer. Map such a failure to ignore rather than let it throw, since a thrown validation defaults
-      // to reject and penalize and would punish an honest relayer for our own failure. NoCommitteeError
-      // stays the peer's fault, so let it reach the reject below.
+      // Scope the catch to just this lookup: it can fail on a receiver-local cause (L1 RPC down, or this
+      // node behind) that says nothing about the relaying peer. Map that to ignore, not throw: a thrown
+      // validation defaults to reject and would penalize an honest relayer for our own failure.
       let expectedProposer;
       try {
         expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slotNumber);
