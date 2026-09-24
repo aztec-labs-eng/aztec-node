@@ -286,6 +286,24 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
       expect(retrievedProposal!.getSender()?.toString()).toBe(signers[0].address.toString());
     });
 
+    it('hasBlockProposal is true only for the exact stored payload hash at a position', async () => {
+      const slotNumber = 420;
+      const proposal = await mockBlockProposalForPool(signers[0], slotNumber);
+      const other = await mockBlockProposalForPool(signers[1], slotNumber);
+      expect(proposal.getPayloadHash()).not.toEqual(other.getPayloadHash());
+
+      await ap.tryAddBlockProposal(proposal);
+
+      // Exact accepted content is recognized...
+      expect(
+        await ap.hasBlockProposal(proposal.slotNumber, proposal.indexWithinCheckpoint, proposal.getPayloadHash()),
+      ).toBe(true);
+      // ...but a different payload hash at the same position is not, so equivocation still takes the full path.
+      expect(await ap.hasBlockProposal(other.slotNumber, other.indexWithinCheckpoint, other.getPayloadHash())).toBe(
+        false,
+      );
+    });
+
     it('should retain an exact duplicate block proposal only once', async () => {
       const slotNumber = 420;
       const proposal = await mockBlockProposalForPool(signers[0], slotNumber);
@@ -410,6 +428,19 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
       expect(retrievedProposal).toBeDefined();
       expect(retrievedProposal!.toBuffer()).toEqual(proposal.toBuffer());
       expect(retrievedProposal!.getSender()?.toString()).toBe(signers[0].address.toString());
+    });
+
+    it('hasCheckpointProposal is true only for the exact stored payload hash at a slot', async () => {
+      const slotNumber = 420;
+      const proposal = await mockCheckpointProposalForPool(signers[0], slotNumber);
+      const other = await mockCheckpointProposalForPool(signers[1], slotNumber);
+      expect(proposal.getPayloadHash()).not.toEqual(other.getPayloadHash());
+
+      await ap.tryAddCheckpointProposal(proposal);
+
+      expect(await ap.hasCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash())).toBe(true);
+      // A different payload hash at the same slot is not stored, so equivocation still takes the full path.
+      expect(await ap.hasCheckpointProposal(other.slotNumber, other.getPayloadHash())).toBe(false);
     });
 
     it('should treat distinct payloads at the same slot as equivocations (count = 2)', async () => {
