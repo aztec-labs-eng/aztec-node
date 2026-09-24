@@ -33,7 +33,7 @@ export function getAttestationInfoFromPublishedCheckpoint(
   return getAttestationInfoFromPayload(payload, attestations);
 }
 
-/** The subset of a calldata-only checkpoint needed to resolve and validate its committee attestations. */
+/** The subset of a calldata-only checkpoint needed to validate its committee attestations. */
 export type CalldataCheckpointForAttestations = {
   checkpointNumber: CheckpointNumber;
   archiveRoot: Fr;
@@ -43,33 +43,19 @@ export type CalldataCheckpointForAttestations = {
   verbatimAttestations: ViemCommitteeAttestations;
 };
 
-/** A checkpoint's packed attestations tuple interpreted against the committee of the epoch it belongs to. */
+/** A checkpoint's attestations decoded for its epoch committee, and their validation result. */
 export type ResolvedCheckpointAttestations = {
-  /**
-   * The logical committee attestations of the checkpoint. Empty for a checkpoint whose epoch has an open
-   * escape hatch or no committee at all: neither carries attestation semantics, and the tuple an escape-hatch
-   * proposer posts need not decode as a committee at all.
-   */
+  /** Empty if the epoch has an open escape hatch or no committee. */
   attestations: CommitteeAttestation[];
-  /** Whether the resolved attestations are valid and sufficient for the epoch committee. */
   validationResult: ValidateCheckpointResult;
 };
 
 /**
- * Interprets and validates the attestations of a checkpoint from L1 calldata only, without fetching or
- * decoding its blobs. The signed consensus payload (header, archive root, fee asset price modifier) is fully
- * available from calldata, so an invalid-attestation checkpoint can be rejected before any (possibly
- * malformed) blob is fetched and decoded.
+ * Decodes and validates the attestations of a checkpoint from L1 calldata only, so an invalid checkpoint can be
+ * rejected before its blobs are fetched. The tuple is decoded against the epoch's committee size, and not at all
+ * during an escape hatch, where the proposer may post an arbitrary tuple.
  *
- * The epoch's attestation policy is resolved before any byte of the packed tuple is read: during an escape
- * hatch (or with no committee at all) the rollup accepts an arbitrary tuple that carries no attestations and
- * that a committee-sized decode would throw on, so the tuple is left packed and the logical attestation list
- * is empty. Otherwise the tuple is decoded to exactly the length of the committee recorded for that epoch --
- * not the rollup's current target committee size, which may have been reconfigured since.
- *
- * @throws CheckpointAttestationsDecodeError if a non-hatch checkpoint's tuple does not decode to its
- * committee's length. Its proposal hashes have already been verified at this point, so the tuple is the one
- * the rollup accepted and the failure is not a calldata-extraction mismatch.
+ * @throws CheckpointAttestationsDecodeError if the tuple does not decode for the epoch committee.
  */
 export async function resolveCheckpointAttestationsFromCalldata(
   checkpoint: CalldataCheckpointForAttestations,
@@ -80,9 +66,7 @@ export async function resolveCheckpointAttestationsFromCalldata(
 ): Promise<ResolvedCheckpointAttestations> {
   const slot = checkpoint.header.slotNumber;
   const epoch: EpochNumber = getEpochAtSlot(slot, constants);
-  // The hatch flag comes out of the same epoch-cache entry as the committee: reading it back through
-  // `isEscapeHatchOpen` would be a second lookup that a refresh can land between, pairing one snapshot's
-  // committee with another's hatch status.
+  // Read the hatch flag from the same cache entry as the committee, so both come from one snapshot.
   const { committee, seed, isEscapeHatchOpen } = await epochCache.getCommitteeForEpoch(epoch);
 
   if (isEscapeHatchOpen) {
@@ -133,9 +117,8 @@ export async function resolveCheckpointAttestationsFromCalldata(
 
 /**
  * Core attestation validation over a consensus payload, its attestations, and checkpoint metadata --
- * independent of whether the checkpoint's blocks have been decoded from blobs. Loads the committee of the
- * epoch the checkpoint falls in and skips validation entirely for an epoch with an open escape hatch or no
- * committee. Returns true if the attestations are valid and sufficient, false otherwise.
+ * independent of whether the checkpoint's blocks have been decoded from blobs. Returns true if the
+ * attestations are valid and sufficient, false otherwise.
  */
 export async function validateAttestations(
   payload: ConsensusPayload,
@@ -174,11 +157,7 @@ export async function validateAttestations(
   );
 }
 
-/**
- * Validates already-resolved attestations against a known epoch committee: every attestation must be signed
- * by (or name) the committee member at its own index, and enough of them must carry a signature to reach
- * quorum.
- */
+/** Validates decoded attestations against a known, non-empty epoch committee. */
 function validateAttestationsAgainstCommittee(
   payload: ConsensusPayload,
   attestations: CommitteeAttestation[],

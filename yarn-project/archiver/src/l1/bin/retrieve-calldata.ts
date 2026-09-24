@@ -171,9 +171,7 @@ async function main() {
     logger.info(`  Fee Recipient: ${result.header.feeRecipient.toString()}`);
     logger.info(`  Total Mana Used: ${result.header.totalManaUsed.toString()}`);
     logger.info('');
-    // The tuple is printed packed: decoding it needs the committee of the checkpoint's epoch, which this
-    // script does not resolve. `targetCommitteeSize` is only a best-effort guess at that committee's size,
-    // and an escape-hatch checkpoint may carry a tuple that decodes for no committee size at all.
+    // The target committee size is only a guess at the epoch committee size, and escape-hatch tuples may not decode.
     logger.info('Attestations (packed):');
     logger.info(`  Signature bitmap: ${result.verbatimAttestations.signatureIndices}`);
     logger.info(`  Signatures or addresses: ${result.verbatimAttestations.signaturesOrAddresses}`);

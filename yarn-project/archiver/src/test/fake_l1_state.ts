@@ -80,11 +80,7 @@ type AddCheckpointOptions = {
    * `attestationsHash` the rollup stores at propose time covers.
    */
   spareAttestationsBitmapBit?: boolean;
-  /**
-   * Replaces the packed attestations tuple posted with the checkpoint, after it has been built from
-   * `signers`. Models an escape-hatch proposer, which L1 lets post an arbitrary tuple: the rollup only
-   * records its hash. The recorded `attestationsHash` covers whatever is set here.
-   */
+  /** Overrides the posted attestations tuple, e.g. to model an escape-hatch proposer's arbitrary tuple. */
   verbatimAttestations?: ViemCommitteeAttestations;
 };
 

@@ -1162,8 +1162,7 @@ describe('CalldataRetriever', () => {
     });
 
     it('extracts a checkpoint whose attestations tuple is empty', () => {
-      // An escape-hatch proposer may post an empty tuple. Calldata extraction verifies the proposal's
-      // hashes and must not try to read committee attestations out of it.
+      // An escape-hatch proposer may post an empty tuple.
       const attestations: ViemCommitteeAttestations = { signatureIndices: '0x', signaturesOrAddresses: '0x' };
       const proposeCalldata = makeProposeCalldata(undefined, attestations);
       const hashes = mockHashComputation();
@@ -1175,8 +1174,7 @@ describe('CalldataRetriever', () => {
     });
 
     it('extracts a checkpoint whose attestations tuple cannot be decoded as a committee', () => {
-      // A signature bit with a single payload byte behind it: `CommitteeAttestation.fromPacked` throws on
-      // this, and L1 accepts it during an escape hatch. Extraction only cares about the hashes.
+      // One signature bit but a single payload byte: undecodable, yet L1 accepts it during an escape hatch.
       const attestations: ViemCommitteeAttestations = { signatureIndices: '0x80', signaturesOrAddresses: '0xab' };
       const proposeCalldata = makeProposeCalldata(undefined, attestations);
       const hashes = mockHashComputation();

@@ -406,10 +406,7 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
     });
   });
 
-  /**
-   * Builds the calldata-only view of a checkpoint the synchronizer resolves attestations for, carrying the
-   * given packed tuple. Defaults to the tuple the given signers would have posted.
-   */
+  /** Builds a calldata-only checkpoint, defaulting its packed tuple to the one the signers would post. */
   const makeCalldataCheckpoint = async (
     attestationSigners: Secp256k1Signer[],
     verbatimAttestations?: ViemCommitteeAttestations,
@@ -445,8 +442,7 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
   });
 
   it('surfaces an invalid result from the decoded array', async () => {
-    // None of the signers is in the committee, so their signatures land in no committee slot and the
-    // checkpoint ends up with nothing counting towards quorum.
+    // None of the signers is in the committee.
     const checkpoint = await makeCalldataCheckpoint(times(5, () => Secp256k1Signer.random()));
 
     const { attestations, validationResult } = await resolve(checkpoint);
@@ -457,8 +453,7 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
   });
 
   it('returns no attestations without decoding when the escape hatch is open', async () => {
-    // The tuple an escape-hatch proposer posts is arbitrary: this one promises a signature it does not
-    // carry, so any committee-sized decode of it throws.
+    // One signature bit but no signature bytes, so any committee-sized decode throws.
     epochCache.getCommitteeForEpoch.mockResolvedValue({
       committee,
       seed: 0n,

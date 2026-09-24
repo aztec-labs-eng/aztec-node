@@ -23,12 +23,8 @@ import { getSuccessfulCallsFromTrace } from './trace_tx.js';
 import type { CallInfo } from './types.js';
 
 /**
- * Checkpoint data extracted from a propose calldata, with its attestations tuple still packed.
- *
- * The tuple is carried verbatim and is deliberately not decoded here: whether it carries committee
- * attestations at all depends on the epoch the checkpoint belongs to, which calldata extraction does not
- * know about. During an escape-hatch epoch the rollup accepts an arbitrary tuple that no committee-sized
- * decode can parse. Attestation interpretation happens in the epoch-aware validation path instead.
+ * Checkpoint data extracted from a propose calldata. The attestations tuple is left packed, since decoding it
+ * depends on the checkpoint's epoch (escape-hatch proposers may post an arbitrary tuple).
  */
 export type RawCheckpointFromCalldata = {
   checkpointNumber: CheckpointNumber;
