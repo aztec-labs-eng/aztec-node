@@ -50,6 +50,8 @@ export type AttestationPoolApi = Pick<
   | 'getCheckpointAttestationsForSlot'
   | 'getCheckpointAttestationsForSlotAndProposal'
   | 'hasBlockProposalsForSlot'
+  | 'hasBlockProposal'
+  | 'hasCheckpointProposal'
   | 'isEmpty'
 >;
 
@@ -212,6 +214,29 @@ export class AttestationPool {
   ): Promise<boolean> {
     const values = await toArray(map.getValuesAsync(key));
     return values.includes(value);
+  }
+
+  /**
+   * True if the exact signed payload hash for a block proposal at (slot, index) is already stored,
+   * i.e. this exact content was already accepted. A different payload hash at the same position
+   * returns false, so equivocation still reaches tryAddBlockProposal.
+   */
+  public async hasBlockProposal(
+    slot: number,
+    indexWithinCheckpoint: number,
+    payloadHash: BlockProposalHash,
+  ): Promise<boolean> {
+    const positionKey = this.getBlockPositionKey(slot, indexWithinCheckpoint);
+    return await this.multimapHasValue(this.blockProposalHashesPerSlotAndIndex, positionKey, payloadHash);
+  }
+
+  /**
+   * True if the exact signed payload hash for a checkpoint proposal at `slot` is already stored. A
+   * different payload hash at the same slot returns false, so equivocation still reaches
+   * tryAddCheckpointProposal.
+   */
+  public async hasCheckpointProposal(slot: number, payloadHash: CheckpointProposalHash): Promise<boolean> {
+    return await this.multimapHasValue(this.checkpointProposalHashesPerSlot, slot, payloadHash);
   }
 
   /**
