@@ -1,0 +1,139 @@
+# Builds the docs site and publishes it to Netlify.
+#
+# Netlify still hosts and serves docs.aztec.network — the domain, the
+# netlify.toml redirects, the `subscribe` function and the markdown edge
+# function are all Netlify. What it does NOT do is build the site: CI builds it
+# here and pushes the finished artifact with `netlify deploy --dir`. That keeps
+# the pipeline inside this repo (the Netlify account is owned by the Foundation,
+# this repo by Labs, so a repo-linked build would need a GitHub App installed
+# across that boundary) and puts build logs in Actions rather than behind a
+# Netlify seat.
+#
+# Manual only. Nothing here runs on a push or a pull request: you publish from
+# the Actions tab, choosing the ref and whether you want a draft or production.
+#
+# That is also what keeps the deployment token safe. This job runs `yarn` against
+# the checked-out tree, so whoever controls that tree controls what executes
+# alongside NETLIFY_AUTH_TOKEN — a `netlify` entry under `scripts` in
+# docs/package.json would shadow the CLI, and an install script could plant a
+# binary. Building pull request code in this job would therefore hand the token
+# to anyone who can open one. Dispatch only against refs you trust, and if you
+# ever add an automatic trigger, build in a job with no secrets and deploy the
+# artifact from a separate `workflow_run` job instead.
+#
+# Requires, as repository secrets:
+#   NETLIFY_AUTH_TOKEN  token for a Netlify user with access to the site.
+#                       Should be a machine user, not a person's.
+#   NETLIFY_SITE_ID     8fdf1925-267d-4897-9144-6c948bdb3e62 (aztec-docs-dev)
+#
+# Both are currently unset. A run without them fails rather than skipping: a
+# publish that cannot publish is broken, and the site sat frozen for over a
+# month precisely because the pipeline reported success while doing nothing.
+name: Publish Docs
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Draft gives a private URL to check first; production goes live on docs.aztec.network."
+        required: true
+        default: draft
+        type: choice
+        options: [draft, production]
+
+concurrency:
+  # Never cancel a publish in flight: the cancelled run may already have
+  # uploaded a partial deploy.
+  group: docs-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish docs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          # No `cache: yarn` here. That option probes the cache folder by running
+          # yarn at the repo root, which has no package.json, so it falls back to
+          # the runner's global yarn 1.22 and then fails against the yarn 4.13.0
+          # that docs/package.json demands via packageManager. Restoring the cache
+          # would mean a second setup-node call after corepack is enabled; an
+          # uncached install is ~2.5 minutes, which is not worth that.
+
+      - name: Enable corepack
+        # docs/ is on yarn 4.13.0 via the packageManager field. Must come after
+        # setup-node so the shims land on the Node this job actually uses.
+        run: corepack enable
+
+      - name: Install dependencies
+        working-directory: docs
+        run: yarn install --immutable
+
+      - name: Build
+        working-directory: docs
+        env:
+          # Netlify sets CONTEXT itself when Netlify runs the build. Nothing sets
+          # it here, so we must. docusaurus.config.js branches on it in six places
+          # and two change what the site serves: with CONTEXT != production, the
+          # operate instance's lastVersion becomes "current", so /operate/ serves
+          # the unversioned working drafts out of docs-operate/ instead of the
+          # released snapshot, and the released one moves to /operate/alpha/.
+          # A draft is checking what production would look like, so it builds the
+          # same way — the only difference is where the result is published.
+          CONTEXT: production
+        run: yarn build
+
+      - name: Check Netlify credentials
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          missing=""
+          [ -z "${NETLIFY_AUTH_TOKEN}" ] && missing="${missing} NETLIFY_AUTH_TOKEN"
+          [ -z "${NETLIFY_SITE_ID}" ] && missing="${missing} NETLIFY_SITE_ID"
+          if [ -n "${missing}" ]; then
+            echo "::error::Missing repository secret(s):${missing}. The docs built fine but cannot be published. Set them under Settings → Secrets and variables → Actions. NETLIFY_SITE_ID is 8fdf1925-267d-4897-9144-6c948bdb3e62."
+            exit 1
+          fi
+
+      - name: Publish
+        working-directory: docs
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          # Run from docs/ so the CLI reads netlify.toml — that is what carries
+          # the redirects, the functions directory and the edge functions. Deploy
+          # from the repo root and the site ships as bare HTML with no routing.
+          #
+          # `yarn exec` runs the binary directly. Plain `yarn netlify` would prefer
+          # a `netlify` script from package.json if one existed, which is the wrong
+          # thing to resolve in a step holding the token.
+          args=(deploy --dir=build --site "${NETLIFY_SITE_ID}")
+          if [ "${{ inputs.target }}" = "production" ]; then
+            args+=(--prod --message "${GITHUB_REF_NAME} @ ${GITHUB_SHA:0:7}")
+          else
+            args+=(--json --message "draft: ${GITHUB_REF_NAME} @ ${GITHUB_SHA:0:7}")
+          fi
+
+          if [ "${{ inputs.target }}" = "production" ]; then
+            yarn exec netlify "${args[@]}"
+            echo "Published ${GITHUB_REF_NAME} @ ${GITHUB_SHA:0:7} to https://docs.aztec.network" >> "$GITHUB_STEP_SUMMARY"
+          else
+            yarn exec netlify "${args[@]}" > deploy.json
+            url=$(jq -r '.deploy_url // .url // empty' deploy.json)
+            if [ -z "${url}" ]; then
+              echo "::error::Deploy succeeded but no URL could be parsed from the CLI output."
+              cat deploy.json
+              exit 1
+            fi
+            echo "Draft of ${GITHUB_REF_NAME} @ ${GITHUB_SHA:0:7}: ${url}" >> "$GITHUB_STEP_SUMMARY"
+          fi
