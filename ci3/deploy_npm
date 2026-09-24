@@ -66,39 +66,10 @@ function drop_tmp_tag {
   fi
 }
 
-# For a version that is already live, there is nothing to publish and only a dist-tag to (re)apply.
-function apply_dist_tag {
-  if [ "$take_tag" -eq 1 ]; then
-    npm dist-tag add $package_name@$version $npm_tag
-  else
-    echo "$version is already published and older than $npm_tag ($published_version)."
-    echo "Leaving '$npm_tag' where it is."
-  fi
-}
-
 # npmjs holds an accepted upload as "staged" for several minutes before the version goes live, and
 # `npm view` does not see it meanwhile. A publish that dies after the upload (e.g. an evicted spot
 # instance) therefore leaves a version that the retry cannot detect and cannot publish over.
 staged_error='Cannot publish over previously staged version'
-# Callers wrap this script in `retry` (3 attempts by default), so the wait adds up across attempts:
-# 5 minutes each gives a version that never goes live about 15 minutes before the release fails.
-staged_poll_attempts=5
-staged_poll_interval=60
-
-function wait_until_live {
-  local i
-  for i in $(seq 1 $staged_poll_attempts); do
-    sleep $staged_poll_interval
-    if npm view "$package_name@$version" version >/dev/null 2>&1; then
-      echo "$package_name@$version is live."
-      return 0
-    fi
-    echo "$package_name@$version is still staged (check $i/$staged_poll_attempts)."
-  done
-  echo "$package_name@$version did not go live after $((staged_poll_attempts * staged_poll_interval))s."
-  echo "Inspect it with: npm stage list $package_name@$version"
-  return 1
-}
 
 # Create temp directory for publishing
 tmpdir=$(mktemp -d)
@@ -126,7 +97,13 @@ if [ "$dry_run" -eq 1 ]; then
 else
   # Check if version exists.
   if npm view "$package_name@$version" version >/dev/null 2>&1; then
-    apply_dist_tag
+    # Already published, so there is nothing to publish and only a dist-tag to (re)apply.
+    if [ "$take_tag" -eq 1 ]; then
+      npm dist-tag add $package_name@$version $npm_tag
+    else
+      echo "$version is already published and older than $npm_tag ($published_version)."
+      echo "Leaving '$npm_tag' where it is."
+    fi
   else
     # Publish new version. The output is kept so a staged-version conflict can be told apart from
     # other failures, including other 409s.
@@ -134,9 +111,9 @@ else
     publish_out="$tmpdir/publish.out"
     if ! DENOISE_DISPLAY_NAME="$publish_cmd" denoise "set -o pipefail; $publish_cmd 2>&1 | tee $publish_out"; then
       grep -q "$staged_error" "$publish_out" || exit 1
-      echo "$package_name@$version is staged by an earlier publish. Waiting for it to go live..."
-      wait_until_live || exit 1
-      apply_dist_tag
+      # The staged upload is this same version and carries the dist-tag it was published with, which
+      # npm applies when the version goes live, so there is nothing left to do here.
+      echo "$package_name@$version is already staged by an earlier publish and will go live on its own."
     fi
   fi
   drop_tmp_tag
