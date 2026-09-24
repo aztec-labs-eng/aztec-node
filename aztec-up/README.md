@@ -40,31 +40,30 @@ INSTALL_URI=file://$(git rev-parse --show-toplevel)/aztec-up/bin $(git rev-parse
 
 ## Locked npm dependencies
 
-Each release includes `packages.tar.gz`, containing a standalone package manifest, Yarn lockfile,
-Yarn configuration, and patches. The installer downloads the exact Yarn CLI version specified in
-that manifest directly from `repo.yarnpkg.com`, then runs an immutable installation. Yarn is not
-redistributed in the release archive, and users do not need to install it separately.
+Each release includes `packages.tar.gz` with a standalone `package.json` and `package-lock.json`.
+The installer downloads the archive and runs `npm ci`. The lock records every installed package
+version and tarball integrity, including transitive dependencies. A later publication within a
+dependency range cannot change the installed tree for an existing release.
 
-To skip the release lock and the Yarn download, explicitly select the original npm installation path:
+To skip the release lock, explicitly select the original npm installation path:
 
 ```sh
 AZTEC_UP_SKIP_PACKAGE_LOCK=1 aztec-up install <version>
 ```
 
-This also skips downloading the lock artifact. npm uses its normal dependency resolution and local
-configuration, so the installed dependency tree may differ from the approved release tree. Download
-or validation failures in the default path do not automatically enable this opt-out.
+This also skips downloading the lock artifact. npm then resolves dependencies using its normal
+configuration, so versions can differ from those approved for the release. A failed locked install
+does not automatically enable the opt-out.
 
-`scripts/generate-package-lock.mjs` seeds the release lock from `yarn-project/yarn.lock`, retaining
-external dependency selections, checksums, and root resolutions. Workspace entries are replaced
-by metadata from the published release packages. Yarn package extensions supply non-optional
-peers that npm previously installed automatically, using versions from the approved lock.
-Generation fails if an external resolution or existing checksum differs from that lock. Update the monorepo dependencies intentionally
-before releasing a newly required external dependency.
+`scripts/generate-package-lock.mjs` uses the monorepo `yarn-project/yarn.lock` as the approved
+version list. It prepares a temporary npm-readable resolution seed and the published Aztec
+package versions, then generates an npm lock. Required peer dependencies are supplied at
+approved versions. Generation rejects packages absent from the approved graph or missing
+integrity data, and checks a clean `npm ci` before packaging the lock. The temporary seed is
+not distributed.
 
 The build generates an artifact for the fake `0.0.1` packages and fetches its dependencies into
 Verdaccio before creating the offline test image. Release generation runs after the real npm
-packages are published; the binary archive is uploaded separately from the version-stamped scripts.
-The artifact contains no installed dependencies, so native packages are selected on the user's
-platform. Node, Noir, Foundry, and downloads performed by package lifecycle scripts remain outside
-this lock.
+packages are published; the archive is uploaded separately from the version-stamped scripts.
+Native optional packages are selected by npm for the user's platform. Node, Noir, Foundry, and
+package lifecycle downloads remain outside the npm lock.
