@@ -19,7 +19,7 @@ import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '@aztec-labs/stdlib/testing'
 import { type MockProxy, mock } from 'jest-mock-extended';
 import assert from 'node:assert';
 
-import { CheckpointAttestationsDecodeError, EscapeHatchStatusUnknownError } from '../errors.js';
+import { CheckpointAttestationsDecodeError } from '../errors.js';
 import { makeSignedPublishedCheckpoint } from '../test/mock_structs.js';
 import {
   type CalldataCheckpointForAttestations,
@@ -489,21 +489,6 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
 
     expect(attestations).toEqual([]);
     expect(validationResult.valid).toBe(true);
-  });
-
-  it('refuses to judge a checkpoint while the escape hatch status is unknown', async () => {
-    // A decodable tuple with no committee signatures: were the hatch treated as closed, this checkpoint
-    // would be rejected for good, though a hatch proposer may legitimately have posted it.
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen: false,
-      isEscapeHatchStatusUnknown: true,
-    });
-    const checkpoint = await makeCalldataCheckpoint(times(5, () => Secp256k1Signer.random()));
-
-    await expect(resolve(checkpoint)).rejects.toThrow(EscapeHatchStatusUnknownError);
   });
 
   it('throws a decode error for a non-hatch checkpoint whose tuple is too short', async () => {

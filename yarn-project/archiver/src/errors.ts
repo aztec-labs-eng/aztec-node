@@ -323,18 +323,3 @@ export class CheckpointAttestationsDecodeError extends Error {
     this.name = 'CheckpointAttestationsDecodeError';
   }
 }
-
-/**
- * Thrown when the escape hatch status of a checkpoint's epoch could not be determined. A hatch checkpoint
- * carries an arbitrary attestations tuple, so judging it against the committee as if the hatch were closed
- * could durably reject a checkpoint the rollup accepted. The checkpoint is retried on a later sync instead.
- */
-export class EscapeHatchStatusUnknownError extends Error {
-  constructor(
-    public readonly checkpointNumber: number,
-    public readonly epoch: number,
-  ) {
-    super(`Cannot validate checkpoint ${checkpointNumber}: escape hatch status for epoch ${epoch} is unknown`);
-    this.name = 'EscapeHatchStatusUnknownError';
-  }
-}
