@@ -1,5 +1,6 @@
 {
   "name": "@aztec-labs/end-to-end",
+  "private": true,
   "version": "0.0.0",
   "type": "module",
   "exports": {
