@@ -5,6 +5,7 @@ function hash {
   hash_str $(cache_content_hash .rebuild_patterns) $(../yarn-project/bootstrap.sh hash)
 }
 
+mkdir -p scripts/logs
 dump_fail "flock scripts/logs/install_deps.lock retry scripts/install_deps.sh >&2"
 
 source ./scripts/source_env_basic.sh
