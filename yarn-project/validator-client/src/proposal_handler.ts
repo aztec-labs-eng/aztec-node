@@ -161,8 +161,8 @@ type CheckpointInboxPrefixReason = Extract<
  *
  * Matched on the error name rather than with `instanceof`, because the archiver package is only a dev dependency
  * here: the validator talks to its archiver through the `L2BlockSink` interface and must not take a runtime
- * dependency on the implementation to classify its errors. Both prefix outcomes are local-view disagreements, so
- * neither is in {@link SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT}.
+ * dependency on the implementation to classify its errors. Every reason returned here is a local-view disagreement,
+ * so none is in {@link SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT}.
  */
 function getInboxPrefixInsertFailureReason(err: unknown): StreamingBlockCheckReason | undefined {
   if (!(err instanceof Error)) {
@@ -174,8 +174,11 @@ function getInboxPrefixInsertFailureReason(err: unknown): StreamingBlockCheckRea
     case 'InboxPrefixNotSyncedError':
     case 'ProposedBlockParentNotFoundError':
       return 'inbox_prefix_unavailable';
+    // An insert-time consumption rewind means an L1 reorg landed between the deterministic metadata check (which
+    // already passed) and the insert, so it is a local-view disagreement, not proposer misconduct. Report it as the
+    // non-slashable prefix mismatch; the deterministic metadata check remains the only slashing evidence for a rewind.
     case 'InboxConsumptionRewindsError':
-      return 'consumption_moves_backwards';
+      return 'inbox_prefix_mismatch';
     default:
       return undefined;
   }
@@ -332,23 +335,43 @@ export type BlockProposalObservers = {
   ) => void;
 };
 
-/** Block-proposal validation failures that constitute a slashable invalid-block offense. */
-export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: BlockProposalValidationFailureReason[] = [
-  'state_mismatch',
-  'failed_txs',
-  'global_variables_mismatch',
-  'invalid_proposal',
-  'parent_block_wrong_slot',
-  'duplicate_txs',
-  'invalid_embedded_txs',
-  // Deterministic streaming-Inbox violations: every honest node computes these from the block's own
-  // content, so a reject is a proposer offense. The local-view streaming reasons
-  // (inbox_prefix_unavailable, inbox_prefix_mismatch) are a trailing archiver or an unfollowed reorg,
-  // not the proposer's fault, and stay out.
-  'consumption_moves_backwards',
-  'bundle_over_block_cap',
-  'checkpoint_over_msg_cap',
-];
+/**
+ * Block-proposal validation failures classified by whether they constitute a slashable invalid-block offense.
+ * A `Record` over the whole reason union, not a plain array, so a newly added reason - in particular one that reaches
+ * `BlockProposalValidationFailureReason` through `StreamingBlockCheckReason` - fails to compile until it is classified
+ * here, the way {@link SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT} already does for checkpoints.
+ */
+export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: Record<BlockProposalValidationFailureReason, boolean> = {
+  // enabled: deterministic offenses computed from the block's own content, so every honest node rejects them.
+  ['invalid_proposal']: true,
+  ['state_mismatch']: true,
+  ['failed_txs']: true,
+  ['global_variables_mismatch']: true,
+  ['parent_block_wrong_slot']: true,
+  ['duplicate_txs']: true,
+  ['invalid_embedded_txs']: true,
+  // Deterministic streaming-Inbox violations: computed from the block's own content by the metadata check, so a
+  // reject is the proposer's fault.
+  ['consumption_moves_backwards']: true,
+  ['bundle_over_block_cap']: true,
+  ['checkpoint_over_msg_cap']: true,
+
+  // disabled: local-view disagreements, timeouts, and this node's own inability to check - never proposer misconduct.
+  ['invalid_signature']: false,
+  ['parent_block_not_found']: false,
+  // The local-view streaming reasons: a trailing archiver or an unfollowed reorg, including an insert-time
+  // consumption rewind reported as inbox_prefix_mismatch.
+  ['inbox_prefix_unavailable']: false,
+  ['inbox_prefix_mismatch']: false,
+  ['block_number_already_exists']: false,
+  ['txs_not_available']: false,
+  ['initial_state_mismatch']: false,
+  ['timeout']: false,
+  ['block_proposal_beyond_checkpoint']: false,
+  // Equivocation has its own offense path (markProposalEquivocation), so it is not a slashable invalid-block reason.
+  ['checkpoint_proposal_equivocation']: false,
+  ['unknown_error']: false,
+};
 
 /** Checkpoint-proposal validation failures that constitute a slashable invalid-checkpoint offense. */
 export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
@@ -509,7 +532,7 @@ export class ProposalHandler {
       ...(await this.observedProposal(proposal)),
       accepted: result.isValid && !escapeHatchOpen,
       reason: result.isValid ? undefined : result.reason,
-      slashable: !result.isValid && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason),
+      slashable: !result.isValid && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[result.reason],
       escapeHatchOpen,
     });
   }
@@ -615,7 +638,7 @@ export class ProposalHandler {
           if (result.reason === 'checkpoint_proposal_equivocation') {
             this.markProposalEquivocation(slotNumber);
           } else if (
-            SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(result.reason) &&
+            SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[result.reason] &&
             !(await this.epochCache.isEscapeHatchOpenAtSlot(slotNumber))
           ) {
             this.markInvalidProposalSlot(slotNumber);
