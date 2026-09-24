@@ -11,7 +11,6 @@ import type { QueryResult, QueryResultRow } from 'pg';
 import type { SlashingProtectionDatabase, TryInsertOrGetResult } from '../types.js';
 import {
   CLEANUP_OLD_DUTIES,
-  CLEANUP_OUTDATED_ROLLUP_DUTIES,
   CLEANUP_OWN_STUCK_DUTIES,
   DELETE_DUTY,
   INSERT_OR_GET_DUTY,
@@ -112,6 +111,7 @@ export class PostgresSlashingProtectionDatabase implements SlashingProtectionDat
           params.messageHash,
           params.nodeId,
           lockToken,
+          params.retentionMs ?? null,
         ]);
 
         // Throw error if no rows to trigger retry
@@ -262,24 +262,12 @@ export class PostgresSlashingProtectionDatabase implements SlashingProtectionDat
   }
 
   /**
-   * Cleanup duties with outdated rollup address.
-   * Removes all duties where the rollup address doesn't match the current one.
-   * Used after a rollup upgrade to clean up duties for the old rollup.
+   * Cleanup expired duties.
+   * Removes expired duties across all rollups using their persisted deadlines.
    * @returns the number of duties cleaned up
    */
-  async cleanupOutdatedRollupDuties(currentRollupAddress: EthAddress): Promise<number> {
-    const result = await this.pool.query(CLEANUP_OUTDATED_ROLLUP_DUTIES, [currentRollupAddress.toString()]);
-    return result.rowCount ?? 0;
-  }
-
-  /**
-   * Cleanup old signed duties.
-   * Removes only signed duties older than the specified age.
-   * Does not remove 'signing' duties as they may be in progress.
-   * @returns the number of duties cleaned up
-   */
-  async cleanupOldDuties(maxAgeMs: number): Promise<number> {
-    const result = await this.pool.query(CLEANUP_OLD_DUTIES, [maxAgeMs]);
+  async cleanupOldDuties(): Promise<number> {
+    const result = await this.pool.query(CLEANUP_OLD_DUTIES);
     return result.rowCount ?? 0;
   }
 }

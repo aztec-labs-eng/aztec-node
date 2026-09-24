@@ -97,7 +97,13 @@ export class SlashingProtectionService {
 
     while (true) {
       // insert if not present, get existing if present
-      const { isNew, record } = await this.db.tryInsertOrGetExisting(params);
+      const { isNew, record } = await this.db.tryInsertOrGetExisting({
+        ...params,
+        retentionMs:
+          this.config.cleanupOldDutiesAfterHours === undefined
+            ? undefined
+            : this.config.cleanupOldDutiesAfterHours * 60 * 60 * 1000,
+      });
 
       if (isNew) {
         // We successfully acquired the lock
@@ -239,20 +245,12 @@ export class SlashingProtectionService {
    */
   /**
    * Start the background cleanup task.
-   * Also performs one-time cleanup of duties with outdated rollup addresses.
    */
-  async start() {
-    // One-time cleanup at startup: remove duties from previous rollup versions
-    const numOutdatedRollupDuties = await this.db.cleanupOutdatedRollupDuties(this.config.rollupAddress);
-    if (numOutdatedRollupDuties > 0) {
-      this.log.info(`Cleaned up ${numOutdatedRollupDuties} duties with outdated rollup address at startup`, {
-        currentRollupAddress: this.config.rollupAddress.toString(),
-      });
-      this.metrics.recordCleanup('outdated_rollup', numOutdatedRollupDuties);
-    }
-
+  start(): Promise<void> {
+    // Other replicas may still serve a different rollup, whose signing history must survive our startup.
     this.cleanupRunningPromise.start();
     this.log.info('Slashing protection service started', { nodeId: this.config.nodeId });
+    return Promise.resolve();
   }
 
   /**
@@ -273,7 +271,7 @@ export class SlashingProtectionService {
   }
 
   /**
-   * Periodic cleanup of stuck duties and optionally old signed duties.
+   * Periodic cleanup of stuck duties and expired records across all rollups.
    * Runs in the background via RunningPromise.
    */
   private async cleanup() {
@@ -290,23 +288,14 @@ export class SlashingProtectionService {
       this.metrics.recordCleanup('stuck', numStuckDuties);
     }
 
-    // 2. Clean up old signed duties if configured
-    // we shouldn't run this as often as stuck duty cleanup.
-    if (this.config.cleanupOldDutiesAfterHours !== undefined) {
-      const maxAgeMs = this.config.cleanupOldDutiesAfterHours * 60 * 60 * 1000;
-      const nowMs = this.dateProvider.now();
-      const shouldRun =
-        this.lastOldDutiesCleanupAtMs === undefined || nowMs - this.lastOldDutiesCleanupAtMs >= maxAgeMs;
-      if (shouldRun) {
-        const numOldDuties = await this.db.cleanupOldDuties(maxAgeMs);
-        this.lastOldDutiesCleanupAtMs = nowMs;
-        if (numOldDuties > 0) {
-          this.log.verbose(`Cleaned up ${numOldDuties} old signed duties`, {
-            cleanupOldDutiesAfterHours: this.config.cleanupOldDutiesAfterHours,
-            maxAgeMs,
-          });
-          this.metrics.recordCleanup('old', numOldDuties);
-        }
+    // Expired records from retired rollups must be collected even when this node retains its own duties indefinitely.
+    const nowMs = this.dateProvider.now();
+    if (this.lastOldDutiesCleanupAtMs === undefined || nowMs - this.lastOldDutiesCleanupAtMs >= 60 * 60 * 1000) {
+      const numOldDuties = await this.db.cleanupOldDuties();
+      this.lastOldDutiesCleanupAtMs = nowMs;
+      if (numOldDuties > 0) {
+        this.log.verbose(`Cleaned up ${numOldDuties} expired duties`);
+        this.metrics.recordCleanup('old', numOldDuties);
       }
     }
   }
