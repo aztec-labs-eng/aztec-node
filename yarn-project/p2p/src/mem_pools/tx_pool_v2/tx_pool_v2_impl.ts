@@ -466,27 +466,20 @@ export class TxPoolV2Impl {
     const missing: TxHash[] = [];
     let softDeletedHits = 0;
     let missingPreviouslyEvicted = 0;
+    const softDeleted = await this.#loadSoftDeletedTxs(txHashes);
 
     await this.#store.transactionAsync(async () => {
       for (const txHash of txHashes) {
         const txHashStr = txHash.toString();
+        const resurrectable = softDeleted.get(txHashStr);
 
         if (this.#indices.has(txHashStr)) {
           // Update protection for existing tx
           this.#indices.updateProtection(txHashStr, slotNumber);
-        } else if (this.#deletedPool.isSoftDeleted(txHashStr)) {
-          // Resurrect soft-deleted tx as protected. Load the proof too: #addTx rewrites both entries, so re-adding
-          // a proofless tx would wipe the stored proof.
-          const buffer = await this.#txsDB.getAsync(txHashStr);
-          if (buffer) {
-            const tx = await this.#loadTxWithProof(txHashStr, buffer);
-            await this.#addTx(tx, { protected: slotNumber });
-            softDeletedHits++;
-          } else {
-            // Data missing despite soft-delete flag — treat as truly missing
-            this.#indices.setProtection(txHashStr, slotNumber);
-            missing.push(txHash);
-          }
+        } else if (resurrectable) {
+          // Resurrect soft-deleted tx as protected
+          await this.#addTx(resurrectable.tx, { protected: slotNumber }, {}, resurrectable.meta);
+          softDeletedHits++;
         } else {
           // Truly missing — pre-record protection for tx we don't have yet
           this.#indices.setProtection(txHashStr, slotNumber);
@@ -546,41 +539,55 @@ export class TxPoolV2Impl {
     const txHashes = block.body.txEffects.map(tx => tx.txHash);
     const nullifiers = block.body.txEffects.flatMap(tx => tx.nullifiers.map(n => n.toString()));
 
-    // Step 3: Collect fee payers from txs we have in the pool (for balance-based eviction)
-    const feePayers: string[] = [];
+    const softDeleted = await this.#loadSoftDeletedTxs(txHashes);
     const found: TxMetaData[] = [];
-    for (const txHash of txHashes) {
-      const meta = this.#indices.getMetadata(txHash.toString());
-      if (meta) {
-        feePayers.push(meta.feePayer);
-        found.push(meta);
-      }
-    }
+    const resurrected: TxMetaData[] = [];
 
     await this.#store.transactionAsync(async () => {
-      // Step 4: Mark txs as mined (only those we have in the pool)
-      for (const meta of found) {
-        this.#indices.markAsMined(meta, blockId);
-        await this.#deletedPool.clearIfMinedHigher(meta.txHash, blockId.number);
+      // Step 3: Mark txs as mined, resurrecting soft-deleted ones. A mined tx must be kept until its block is
+      // finalized, whereas a slot-soft-deleted one is hard-deleted on the next slot.
+      for (const txHash of txHashes) {
+        const txHashStr = txHash.toString();
+        const meta = this.#indices.getMetadata(txHashStr);
+        const resurrectable = softDeleted.get(txHashStr);
+        if (meta) {
+          this.#indices.markAsMined(meta, blockId);
+          found.push(meta);
+        } else if (resurrectable) {
+          resurrected.push(await this.#addTx(resurrectable.tx, { mined: blockId }, {}, resurrectable.meta));
+        } else {
+          continue;
+        }
+        await this.#deletedPool.clearIfMinedHigher(txHashStr, blockId.number);
       }
 
-      // Step 5: Run post-event eviction rules (inside transaction for atomicity)
-      await this.#evictionManager.evictAfterNewBlock(block.header, nullifiers, feePayers);
+      // Step 4: Run post-event eviction rules (inside transaction for atomicity)
+      const feePayers = new Set([...found, ...resurrected].map(meta => meta.feePayer));
+      await this.#evictionManager.evictAfterNewBlock(block.header, nullifiers, [...feePayers]);
     });
 
-    if (found.length > 0) {
+    if (resurrected.length > 0) {
+      this.#instrumentation.recordSoftDeletedHits(resurrected.length);
+    }
+
+    if (found.length > 0 || resurrected.length > 0) {
       // receivedAt is 0 for txs hydrated from the DB on restart (true receive time lost) — leave
-      // their delay undefined so the metric isn't polluted by epoch-sized values.
+      // their delay undefined so the metric isn't polluted by epoch-sized values. A resurrected tx
+      // lost its receive time along with its metadata when it was deleted.
       const now = this.#dateProvider.now();
-      this.#callbacks.onTxsMined(
-        found.map(m => ({
+      this.#callbacks.onTxsMined([
+        ...found.map(m => ({
           txHash: m.txHash,
           minedDelayMs: m.receivedAt > 0 ? now - m.receivedAt : undefined,
         })),
-      );
+        ...resurrected.map(m => ({ txHash: m.txHash, minedDelayMs: undefined })),
+      ]);
     }
 
-    this.#log.info(`Marked ${found.length} txs as mined in block ${blockId.number}`);
+    this.#log.info(`Marked ${found.length + resurrected.length} txs as mined in block ${blockId.number}`, {
+      blockNumber: blockId.number,
+      resurrectedTxHashes: resurrected.map(m => m.txHash),
+    });
   }
 
   async prepareForSlot(slotNumber: SlotNumber): Promise<void> {
@@ -1019,6 +1026,35 @@ export class TxPoolV2Impl {
     });
 
     return meta;
+  }
+
+  /**
+   * Loads the retained data of those given txs that are soft-deleted and rebuilds their metadata, so they can be
+   * re-added to the pool. Call it before the store transaction: it does all the throwable I/O, and leaves out a tx
+   * whose data is gone or unreadable, as if it were missing.
+   */
+  async #loadSoftDeletedTxs(txHashes: TxHash[]): Promise<Map<string, { tx: Tx; meta: TxMetaData }>> {
+    const loaded = new Map<string, { tx: Tx; meta: TxMetaData }>();
+    for (const txHash of txHashes) {
+      const txHashStr = txHash.toString();
+      if (!this.#deletedPool.isSoftDeleted(txHashStr)) {
+        continue;
+      }
+      try {
+        const buffer = await this.#txsDB.getAsync(txHashStr);
+        if (!buffer) {
+          continue;
+        }
+        // Load the proof too: #addTx rewrites both entries, so re-adding a proofless tx would wipe the stored proof.
+        const tx = await this.#loadTxWithProof(txHashStr, buffer);
+        // The metadata was dropped on deletion, so recompute the setup-call flag instead of defaulting it to allowed.
+        const meta = await buildTxMetaData(tx, await this.#checkAllowedSetupCalls(tx));
+        loaded.set(txHashStr, { tx, meta });
+      } catch (err) {
+        this.#log.warn(`Failed to load soft-deleted tx ${txHashStr}`, { txHash: txHashStr, err });
+      }
+    }
+    return loaded;
   }
 
   /**

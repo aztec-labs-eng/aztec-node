@@ -163,6 +163,7 @@ export interface TxPoolV2 extends TypedEventEmitter<TxPoolV2Events> {
 
   /**
    * Handles a mined block - marks transactions as mined and evicts conflicting pending txs.
+   * Soft-deleted transactions in the block are re-added as mined from their retained data.
    * Uses nullifiers directly from the block to evict pending transactions with conflicts.
    * @param block - The complete mined block
    */
