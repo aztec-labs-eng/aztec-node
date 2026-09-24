@@ -1590,22 +1590,14 @@ export class LibP2PService extends WithTracer implements P2PService {
             'severity' in blockProposalResult ? blockProposalResult.severity : PeerErrorSeverity.MidToleranceError,
         };
       } else if (blockCapFull || isEquivocated) {
-        // The terminal block is a receiver-local drop: either our per-position cache was full, or the
-        // block is a second proposal at this (slot, index) as seen from OUR cache. Neither is the
-        // relaying peer's fault - it cannot know our local state - and any genuine equivocation was
-        // already captured and its slash callback fired at the block level. Ignore the whole checkpoint
-        // (no store, no callbacks, no re-broadcast, no scoring); do not process or attest to it.
-        // Treating receiver-local equivocation as a checkpoint Reject is what would penalize an honest
-        // relayer for a proposal already in our cache.
+        // Both cases depend on our local cache, not on anything the relaying peer could check, so do not
+        // penalize it. Genuine equivocation was already reported at the block level. Drop the checkpoint:
+        // no store, no re-broadcast, no processing or attestation.
         this.logger.debug(`Ignoring checkpoint whose terminal block was a receiver-local drop`, {
           [Attributes.SLOT_NUMBER]: checkpoint.slotNumber.toString(),
           [Attributes.P2P_ID]: peerId.toString(),
         });
-        return {
-          result: TopicValidatorResult.Ignore,
-          obj: checkpoint,
-          metadata: { isEquivocated: false, processBlock: false, isOversized },
-        };
+        return { result: TopicValidatorResult.Ignore, obj: checkpoint };
       } else if (blockProposalResult.result === TopicValidatorResult.Accept && obj && !isEquivocated && !isOversized) {
         // An oversized terminal block is re-broadcast as slashing evidence but never processed.
         processBlock = true;
