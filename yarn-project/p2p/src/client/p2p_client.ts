@@ -576,7 +576,7 @@ export class P2PClient extends WithTracer implements P2P {
   }
 
   /**
-   * Handles failed transaction execution by removing txs from the pool.
+   * Handles failed transaction execution by removing txs from the pool. Txs already mined are left in place.
    * @param txHashes - Hashes of the transactions that failed execution.
    **/
   public async handleFailedExecution(txHashes: TxHash[]): Promise<void> {
