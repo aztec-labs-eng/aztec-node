@@ -229,8 +229,41 @@ function install_foundry {
 function install_aztec_packages {
   set -euo pipefail
 
-  # Install npm packages to the version directory using --prefix
-  npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix "$version_path"
+  if [ "${AZTEC_UP_SKIP_PACKAGE_LOCK:-0}" = "1" ]; then
+    npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix "$version_path"
+    return
+  fi
+
+  local archive
+  archive=$(mktemp)
+  if ! curl -fsSL "$INSTALL_URI/$VERSION/packages.tar.gz" -o "$archive"; then
+    rm -f "$archive"
+    cat >&2 <<EOF
+Could not download the release package lock.
+To install using npm without the release lock, rerun with:
+  AZTEC_UP_SKIP_PACKAGE_LOCK=1 aztec-up install $VERSION
+Dependency versions may differ from the approved release.
+Before opting out, we recommend a seven-day minimum release age with an npm version that supports it.
+Add these settings to your user .npmrc to exempt Aztec packages while delaying third-party releases:
+  min-release-age=7
+  min-release-age-exclude[]=@aztec/*
+  min-release-age-exclude[]=@aztec-labs/*
+  min-release-age-exclude[]=@aztec-foundation/*
+EOF
+    return 1
+  fi
+  tar -xzf "$archive" -C "$version_path"
+  rm -f "$archive"
+  local yarn_version
+  yarn_version=$(node -e '
+    const fs = require("node:fs");
+    const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const version = manifest.packageManager?.match(/^yarn@(\d+\.\d+\.\d+)$/)?.[1];
+    if (!version) throw new Error("Release manifest must pin an exact Yarn version");
+    process.stdout.write(version);
+  ' "$version_path/package.json")
+  curl -fsSL "https://repo.yarnpkg.com/$yarn_version/packages/yarnpkg-cli/bin/yarn.js" -o "$version_path/yarn.cjs"
+  (cd "$version_path" && YARN_IGNORE_PATH=1 node yarn.cjs install --immutable)
 }
 
 # Expose every native tool in internal-bin under an aztec-<tool> symlink in bin.
