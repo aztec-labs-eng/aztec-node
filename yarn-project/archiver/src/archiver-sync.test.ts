@@ -1081,9 +1081,7 @@ describe('Archiver Sync', () => {
   });
 
   describe('escape hatch checkpoints', () => {
-    // A committee is registered for the epoch, so nothing here relies on the empty-committee path: the
-    // checkpoints below are accepted because their epoch's escape hatch is open, not because no committee
-    // is known.
+    // Register a committee so acceptance comes from the open hatch, not the empty-committee path.
     const HATCH_COMMITTEE_SIZE = 48;
 
     const openEscapeHatch = () => {
@@ -1098,17 +1096,11 @@ describe('Archiver Sync', () => {
 
     it.each([
       ['empty', { signatureIndices: '0x', signaturesOrAddresses: '0x' } as ViemCommitteeAttestations],
-      // One signature bit with a single payload byte behind it: far too little for the 65-byte signature
-      // the bit promises, so a committee-sized decode throws on it. Ingesting it proves the decode is
-      // bypassed for a hatch checkpoint rather than merely tolerant of an empty tuple.
+      // One signature bit but a single payload byte, so any committee-sized decode throws.
       ['undecodable', { signatureIndices: '0x80', signaturesOrAddresses: '0xab' } as ViemCommitteeAttestations],
     ])(
       'ingests a hatch checkpoint with an %s attestations tuple',
       async (_label, verbatimAttestations) => {
-        // The archiver used to decode every posted tuple as `targetCommitteeSize` attestations while
-        // extracting the propose calldata, before it knew which epoch the checkpoint belonged to. A hatch
-        // proposer's tuple decodes as no such thing, so the decode threw, the batch never committed, and the
-        // sync point was rolled back and the same L1 checkpoint re-fetched forever.
         openEscapeHatch();
 
         await fake.addCheckpoint(CheckpointNumber(1), {
@@ -1125,14 +1117,12 @@ describe('Archiver Sync', () => {
         expect((await archiver.getL1SyncPoint())?.blockNumber).toEqual(75n);
         expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
 
-        // The logical attestation list is empty, while the tuple the rollup hashed survives byte for byte:
-        // epoch-proof submission checks its hash even though hatch attestations are never validated.
+        // Attestations are empty, but the verbatim tuple is kept since epoch proofs check its hash.
         const [published] = await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 1 });
         expect(published.attestations).toEqual([]);
         expect(published.verbatimAttestations).toEqual(verbatimAttestations);
         expect(published.verbatimAttestations).toEqual(fake.getPostedAttestations(CheckpointNumber(1)));
 
-        // Re-polling the same L1 state is a no-op rather than a retry of the same checkpoint.
         for (let i = 0; i < 3; i++) {
           await expect(archiver.syncImmediate()).resolves.toBeUndefined();
           expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
@@ -1143,8 +1133,7 @@ describe('Archiver Sync', () => {
     );
 
     it('decodes against the epoch committee once the hatch closes', async () => {
-      // The hatch checkpoint must not leave the archiver permanently in a no-decode mode: a later
-      // checkpoint in a normal epoch is decoded and validated against that epoch's committee as usual.
+      // A later checkpoint in a normal epoch is still decoded and validated.
       openEscapeHatch();
 
       const { checkpoint: hatchCp } = await fake.addCheckpoint(CheckpointNumber(1), {

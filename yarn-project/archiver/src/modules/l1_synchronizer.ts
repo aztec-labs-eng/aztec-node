@@ -863,13 +863,9 @@ export class ArchiverL1Synchronizer implements Traceable {
         },
       );
 
-      // Interpret each checkpoint's packed attestations tuple against the committee of the epoch it falls
-      // in, and validate it from CALLDATA before fetching any blobs. A checkpoint with invalid attestations
-      // (or one descending from a rejected ancestor) is rejected here without fetching its blobs, so a
-      // malformed blob does not throw during decode before the rejection path runs and stall sync. The
-      // signed consensus payload (header, archive root, fee asset price modifier) is fully available from
-      // calldata. Resolution runs even when the operator disabled attestation validation, since persistence
-      // still needs the logical attestation list.
+      // Decode and validate attestations from CALLDATA before fetching any blobs, so a checkpoint with invalid
+      // attestations is rejected without decoding a possibly malformed blob. Runs even when validation is
+      // disabled, since promotion and persistence need the decoded attestations.
       const resolvedCheckpoints = await asyncPool(10, calldataCheckpoints, async calldataCheckpoint => {
         const { attestations, validationResult } = await resolveCheckpointAttestationsFromCalldata(
           calldataCheckpoint,

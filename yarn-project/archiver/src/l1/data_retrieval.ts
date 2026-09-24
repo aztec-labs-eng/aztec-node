@@ -53,17 +53,13 @@ type RetrievedCheckpointBase = {
   verbatimAttestations: ViemCommitteeAttestations;
 };
 
-/** Checkpoint data as retrieved from L1 calldata and blob data, with its attestations already resolved. */
+/** Checkpoint data as retrieved from L1 calldata and blob data. */
 export type RetrievedCheckpoint = RetrievedCheckpointBase & {
   attestations: CommitteeAttestation[];
   checkpointBlobData: CheckpointBlobData;
 };
 
-/**
- * Checkpoint data retrieved from L1 calldata only, without blob data. Its attestations tuple is still
- * packed: interpreting it needs the committee of the epoch the checkpoint falls in, which calldata
- * retrieval does not resolve.
- */
+/** Checkpoint data retrieved from L1 calldata only, without blob data or decoded attestations. */
 export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
   /** Versioned blob hashes from the checkpoint proposed event. */
   blobHashes: Buffer[];
@@ -71,7 +67,7 @@ export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
   parentBeaconBlockRoot: string | undefined;
 };
 
-/** A calldata-only checkpoint whose packed attestations tuple has been interpreted for its epoch. */
+/** A calldata-only checkpoint with its attestations decoded for its epoch committee. */
 export type ResolvedCheckpointFromCalldata = RetrievedCheckpointFromCalldata & {
   attestations: CommitteeAttestation[];
 };

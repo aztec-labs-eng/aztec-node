@@ -303,12 +303,7 @@ export class UndecodableCheckpointAttestationsError extends Error {
   }
 }
 
-/**
- * Thrown when the packed attestations tuple posted with a checkpoint does not decode as its epoch
- * committee. Outside an escape hatch the rollup requires a committee-sized tuple, and the tuple's hash has
- * already been checked against the one the rollup recorded at propose time, so this is not a
- * calldata-extraction mismatch.
- */
+/** Thrown when a checkpoint's attestations tuple does not decode for its epoch committee. */
 export class CheckpointAttestationsDecodeError extends Error {
   constructor(
     public readonly checkpointNumber: number,
