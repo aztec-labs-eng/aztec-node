@@ -466,6 +466,7 @@ export class TxPoolV2Impl {
     const missing: TxHash[] = [];
     let softDeletedHits = 0;
     let missingPreviouslyEvicted = 0;
+    // A soft-deleted tx is never in the indices, so every tx loaded here is resurrected below.
     const softDeleted = await this.#loadSoftDeletedTxs(txHashes);
 
     await this.#store.transactionAsync(async () => {
@@ -539,6 +540,7 @@ export class TxPoolV2Impl {
     const txHashes = block.body.txEffects.map(tx => tx.txHash);
     const nullifiers = block.body.txEffects.flatMap(tx => tx.nullifiers.map(n => n.toString()));
 
+    // A soft-deleted tx is never in the indices, so every tx loaded here is resurrected below.
     const softDeleted = await this.#loadSoftDeletedTxs(txHashes);
     const found: TxMetaData[] = [];
     const resurrected: TxMetaData[] = [];
