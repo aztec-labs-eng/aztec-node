@@ -473,10 +473,8 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
       this.log.warn(`Block proposal validation failed: ${reason}`, proposalInfo);
 
-      // Classify the failure: a slashable reason is a bad proposal (the proposer's fault); everything else is a node
-      // issue this node could not validate. Gate on the slashable set directly so a newly slashable reason is never
-      // left out of the bad-proposal metric and double-counted as a node issue (the set is a Record so a new reason
-      // must be classified - see SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT).
+      // A slashable reject is a bad proposal, not a node issue, so branch the metric on the slashable set. A separate
+      // reason list would need every slashable reason (e.g. global_variables_mismatch) kept in sync by hand.
       if (SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason as BlockProposalValidationFailureReason]) {
         this.metrics.incFailedAttestationsBadProposal(1, reason, partOfCommittee);
       } else {
