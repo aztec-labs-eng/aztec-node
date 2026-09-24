@@ -3328,7 +3328,24 @@ describe('TxPoolV2', () => {
       expect(await pool.getTxByHash(tx.getTxHash())).toBeDefined();
     });
 
-    it('keeps a tx that is both mined and protected', async () => {
+    it('keeps a tx that was re-mined at a lower block after a prune', async () => {
+      const tx = await mockTx(1);
+      await pool.addPendingTxs([tx]);
+      expectAddedTxs(tx);
+      await pool.handleMinedBlock(makeBlock([tx], slot2Header));
+      await pool.handlePrunedBlocks(block0Id);
+      // Re-mining at a lower block keeps the prune tracking of the original block
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+
+      await pool.handleFailedExecution([tx.getTxHash()]);
+
+      expectNoCallbacks();
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+      await pool.prepareForSlot(SlotNumber(3));
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+    });
+
+    it('keeps a tx added as mined through addProtectedTxs', async () => {
       const tx = await mockTx(1);
       const block = makeBlock([tx], slot1Header);
       mockL2BlockSource.getTxEffect.mockResolvedValue({

@@ -729,7 +729,7 @@ export class TxPoolV2Impl {
 
   async handleFailedExecution(txHashes: TxHash[]): Promise<void> {
     // A tx can be mined by a block that arrives while the sequencer is still executing it. A mined tx must be kept
-    // until its block is finalized, whereas deleting it would only slot-soft-delete it and lose it on the next slot.
+    // until its block is finalized, whereas deleting it could slot-soft-delete it and lose it on the next slot.
     const toDelete: string[] = [];
     const skippedMined: string[] = [];
     for (const txHash of txHashes) {
