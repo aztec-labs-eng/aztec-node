@@ -259,19 +259,10 @@ describe('LmdbSlashingProtectionDatabase', () => {
     });
   });
 
-  describe('cleanupOutdatedRollupDuties', () => {
-    it('is always a no-op: rollup address changes are handled at startup by DatabaseVersionManager', async () => {
-      await db.tryInsertOrGetExisting(defaultParams());
-
-      const differentRollup = EthAddress.random();
-      const count = await db.cleanupOutdatedRollupDuties(differentRollup);
-      expect(count).toBe(0);
-    });
-  });
-
   describe('cleanupOldDuties', () => {
     it('should remove old SIGNED duties', async () => {
       const { record } = await db.tryInsertOrGetExisting(defaultParams());
+      dateProvider.advanceTime(120);
       await db.updateDutySigned(
         ROLLUP_ADDRESS,
         VALIDATOR_ADDRESS,
@@ -282,17 +273,19 @@ describe('LmdbSlashingProtectionDatabase', () => {
         BLOCK_INDEX,
       );
 
-      dateProvider.advanceTime(120);
       const count = await db.cleanupOldDuties(60_000);
       expect(count).toBe(1);
     });
 
-    it('should not remove SIGNING duties', async () => {
-      await db.tryInsertOrGetExisting(defaultParams());
+    it('should remove old SIGNING duties for other rollups and nodes', async () => {
+      const params = { ...defaultParams(), rollupAddress: EthAddress.random(), nodeId: 'other-node' };
+      await db.tryInsertOrGetExisting(params);
 
       dateProvider.advanceTime(120);
       const count = await db.cleanupOldDuties(60_000);
-      expect(count).toBe(0);
+      expect(count).toBe(1);
+      const result = await db.tryInsertOrGetExisting(params);
+      expect(result.isNew).toBe(true);
     });
 
     it('should not remove fresh SIGNED duties within maxAgeMs', async () => {

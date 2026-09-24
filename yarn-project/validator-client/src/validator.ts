@@ -32,6 +32,7 @@ import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { CommitteeAttestationsAndSigners, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
 import { getEpochAtSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { BaseSignerConfigSchema, DEFAULT_SIGNED_DUTIES_RETENTION_HOURS } from '@aztec-labs/stdlib/ha-signing';
 import type {
   ITxProvider,
   Validator,
@@ -253,10 +254,18 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     );
 
     const nodeKeystoreAdapter = NodeKeystoreAdapter.fromKeyStoreManager(keyStoreManager);
+    const signerConfig = {
+      ...config,
+      cleanupOldDutiesAfterHours: Math.max(
+        BaseSignerConfigSchema.shape.cleanupOldDutiesAfterHours.parse(config.cleanupOldDutiesAfterHours) ??
+          DEFAULT_SIGNED_DUTIES_RETENTION_HOURS,
+        (epochCache.getL1Constants().slotDuration * 2) / 3600,
+      ),
+    };
     let slashingProtectionSigner: ValidatorHASigner;
     if (slashingProtectionDb) {
       // Shared database mode: use a pre-existing database (e.g. for testing HA setups).
-      ({ signer: slashingProtectionSigner } = createSignerFromSharedDb(slashingProtectionDb, config, {
+      ({ signer: slashingProtectionSigner } = createSignerFromSharedDb(slashingProtectionDb, signerConfig, {
         telemetryClient: telemetry,
         dateProvider,
       }));
@@ -264,7 +273,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       // Multi-node HA mode: use PostgreSQL-backed distributed locking.
       // If maxStuckDutiesAgeMs is not explicitly set, compute it from Aztec slot duration
       const haConfig = {
-        ...config,
+        ...signerConfig,
         maxStuckDutiesAgeMs: config.maxStuckDutiesAgeMs ?? epochCache.getL1Constants().slotDuration * 2 * 1000,
       };
       ({ signer: slashingProtectionSigner } = await createHASigner(haConfig, {
@@ -274,7 +283,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     } else {
       // Single-node mode: use LMDB-backed local signing protection.
       // This prevents double-signing if the node crashes and restarts mid-proposal.
-      ({ signer: slashingProtectionSigner } = await createLocalSignerWithProtection(config, {
+      ({ signer: slashingProtectionSigner } = await createLocalSignerWithProtection(signerConfig, {
         telemetryClient: telemetry,
         dateProvider,
       }));

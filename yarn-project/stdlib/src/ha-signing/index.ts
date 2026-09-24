@@ -1,6 +1,7 @@
 export {
   type BaseSignerConfig,
   BaseSignerConfigSchema,
+  DEFAULT_SIGNED_DUTIES_RETENTION_HOURS,
   baseSignerConfigMappings,
   type ValidatorHASignerConfig,
   ValidatorHASignerConfigSchema,
