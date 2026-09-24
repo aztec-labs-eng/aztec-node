@@ -1037,6 +1037,7 @@ export class TxPoolV2Impl {
    */
   async #loadSoftDeletedTxs(txHashes: TxHash[]): Promise<Map<string, { tx: Tx; meta: TxMetaData }>> {
     const loaded = new Map<string, { tx: Tx; meta: TxMetaData }>();
+    // Loaded sequentially: usually none of the given txs are soft-deleted, and each one that is costs only local reads.
     for (const txHash of txHashes) {
       const txHashStr = txHash.toString();
       if (!this.#deletedPool.isSoftDeleted(txHashStr)) {
