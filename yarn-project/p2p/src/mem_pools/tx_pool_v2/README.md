@@ -90,7 +90,7 @@ State is derived by TxPoolIndices:
 
 ## Soft Deletion
 
-Deleted transactions are kept in the database for a grace period before being permanently removed. There are two soft-deletion mechanisms:
+Deleted transactions are kept in the database for a grace period before being permanently removed. A soft-deleted tx that shows up in a block proposal or a mined block is resurrected from its retained data, with its metadata rebuilt as on hydration: `protectTxs` re-adds it as protected and `handleMinedBlock` re-adds it as mined. There are two soft-deletion mechanisms:
 
 ### Slot-Based Soft Deletion
 

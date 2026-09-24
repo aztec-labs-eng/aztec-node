@@ -1521,6 +1521,17 @@ describe('TxPoolV2', () => {
         await poolWithValidator.prepareForSlot(SlotNumber(3));
         expect(await poolWithValidator.getTxStatus(tx.getTxHash())).toBe('pending');
       });
+
+      it('resurrects a soft-deleted tx as mined when a block includes it', async () => {
+        const tx = await mockTx(1);
+        await softDeleteTx(tx);
+
+        await poolWithValidator.handleMinedBlock(makeBlock([tx], slot2Header));
+
+        expect(await poolWithValidator.getTxStatus(tx.getTxHash())).toBe('mined');
+        const retrieved = await poolWithValidator.getTxByHash(tx.getTxHash());
+        expect(retrieved!.toBuffer().equals(tx.toBuffer())).toBe(true);
+      });
     });
   });
 
@@ -1569,6 +1580,59 @@ describe('TxPoolV2', () => {
       // Should not throw when processing an empty block
       await pool.handleMinedBlock(makeEmptyBlock(slot1Header));
       expectNoCallbacks();
+    });
+
+    it('resurrects a tx deleted by failed execution in the same slot and keeps it past the slot', async () => {
+      const tx = await mockTx(1);
+      await pool.prepareForSlot(SlotNumber(1));
+      await pool.addPendingTxs([tx]);
+      await pool.handleFailedExecution([tx.getTxHash()]);
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('deleted');
+
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+
+      await pool.prepareForSlot(SlotNumber(2));
+
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+      expect(await pool.hasTxs([tx.getTxHash()])).toEqual([true]);
+      const retrieved = await pool.getTxByHash(tx.getTxHash());
+      expect(retrieved!.toBuffer().equals(tx.toBuffer())).toBe(true);
+    });
+
+    it('resurrects a tx evicted by a higher-fee tx in the same slot without counting it as pending', async () => {
+      await pool.prepareForSlot(SlotNumber(1));
+      await pool.updateConfig({ maxPendingTxCount: 1 });
+      const victim = await mockTxWithFee(1, 1);
+      const flood = await mockTxWithFee(2, 100);
+      await pool.addPendingTxs([victim]);
+      await pool.addPendingTxs([flood]);
+      expect(await pool.getTxStatus(victim.getTxHash())).toBe('deleted');
+
+      await pool.handleMinedBlock(makeBlock([victim], slot1Header));
+      await pool.prepareForSlot(SlotNumber(2));
+
+      expect(await pool.getTxStatus(victim.getTxHash())).toBe('mined');
+      expect(await pool.getTxByHash(victim.getTxHash())).toBeDefined();
+      expect(await pool.getTxStatus(flood.getTxHash())).toBe('pending');
+      expect(await pool.getPendingTxCount()).toBe(1);
+    });
+
+    it('keeps a resurrected tx mined while evicting the pending tx that displaced it by nullifier', async () => {
+      const txMined = await mockPublicTx(1, 5);
+      const txConflicting = await mockPublicTx(2, 10);
+      setNullifier(txConflicting, 0, getNullifier(txMined, 0));
+      await pool.prepareForSlot(SlotNumber(1));
+      await pool.addPendingTxs([txMined]);
+      await pool.addPendingTxs([txConflicting]);
+      expect(await pool.getTxStatus(txMined.getTxHash())).toBe('deleted');
+
+      await pool.handleMinedBlock(makeBlock([txMined], slot1Header));
+
+      expect(await pool.getTxStatus(txMined.getTxHash())).toBe('mined');
+      expect(await pool.getTxStatus(txConflicting.getTxHash())).toBe('deleted');
+      expect(await pool.getPendingTxCount()).toBe(0);
     });
 
     describe('pending-to-mined delay', () => {
@@ -1639,6 +1703,24 @@ describe('TxPoolV2', () => {
           const minedTxs = minedCalls[0];
           expect(minedTxs[0].txHash).toBe(hashOf(tx));
           expect(minedTxs[0].minedDelayMs).toBeUndefined();
+        } finally {
+          await cleanup();
+        }
+      });
+
+      it('leaves the delay undefined for a tx resurrected from the soft-deleted pool', async () => {
+        const minedCalls: MinedTxInfo[][] = [];
+        const dateProvider = new ManualDateProvider();
+        const { impl, cleanup } = await makeImpl(m => minedCalls.push(m), dateProvider);
+        try {
+          const tx = await mockTx(1);
+          await impl.addPendingTxs([tx], {});
+          await impl.handleFailedExecution([tx.getTxHash()]);
+          dateProvider.advanceTime(5);
+
+          await impl.handleMinedBlock(makeBlock([tx], slot1Header));
+
+          expect(minedCalls).toEqual([[{ txHash: hashOf(tx), minedDelayMs: undefined }]]);
         } finally {
           await cleanup();
         }
@@ -2579,6 +2661,60 @@ describe('TxPoolV2', () => {
       await pool2.stop();
       await sharedStore.delete();
       await sharedArchiveStore.delete();
+    });
+
+    describe('resurrected tx with disallowed setup calls', () => {
+      let disallowPool: AztecKVTxPoolV2;
+      let disallowStore: Awaited<ReturnType<typeof openTmpStore>>;
+      let disallowArchiveStore: Awaited<ReturnType<typeof openTmpStore>>;
+      let tx: Tx;
+
+      beforeEach(async () => {
+        db.findLeafIndices.mockResolvedValue([1n]); // Anchor block valid
+        disallowStore = await openTmpStore('p2p-disallow-resurrect');
+        disallowArchiveStore = await openTmpStore('archive-disallow-resurrect');
+        disallowPool = new AztecKVTxPoolV2(disallowStore, disallowArchiveStore, {
+          l2BlockSource: mockL2BlockSource,
+          worldStateSynchronizer: mockWorldState,
+          createTxValidator: () =>
+            Promise.resolve(new AggregateTxValidator(mockValidator, new AllowedSetupCallsMetaValidator<TxMetaData>())),
+          checkAllowedSetupCalls: () => Promise.resolve(false),
+          blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        });
+        await disallowPool.start();
+
+        // Rejected on unprotect for its setup calls, so it is soft-deleted at slot 2
+        tx = await mockTx(1);
+        await disallowPool.addProtectedTxs([tx], slot1Header);
+        await disallowPool.prepareForSlot(SlotNumber(2));
+        expect(await disallowPool.getTxStatus(tx.getTxHash())).toBe('deleted');
+      });
+
+      afterEach(async () => {
+        await disallowPool.stop();
+        await disallowStore.delete();
+        await disallowArchiveStore.delete();
+      });
+
+      it('is rejected again when resurrected as mined and then pruned', async () => {
+        await disallowPool.handleMinedBlock(makeBlock([tx], slot2Header));
+        expect(await disallowPool.getTxStatus(tx.getTxHash())).toBe('mined');
+
+        await disallowPool.handlePrunedBlocks(block0Id);
+
+        expect(await disallowPool.getTxStatus(tx.getTxHash())).toBe('deleted');
+        expect(await disallowPool.getPendingTxCount()).toBe(0);
+      });
+
+      it('is rejected again when resurrected as protected and then unprotected', async () => {
+        await disallowPool.protectTxs([tx.getTxHash()], slot2Header);
+        expect(await disallowPool.getTxStatus(tx.getTxHash())).toBe('protected');
+
+        await disallowPool.prepareForSlot(SlotNumber(3));
+
+        expect(await disallowPool.getTxStatus(tx.getTxHash())).toBe('deleted');
+        expect(await disallowPool.getPendingTxCount()).toBe(0);
+      });
     });
 
     it('pending tx via addPendingTxs has allowedSetupCalls=true regardless of checkAllowedSetupCalls', async () => {
