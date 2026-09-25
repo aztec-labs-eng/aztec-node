@@ -281,6 +281,12 @@ export class BlockProposal extends Gossipable implements Signable {
   static fromBuffer(buf: Buffer | BufferReader): BlockProposal {
     const reader = BufferReader.asReader(buf);
 
+    // Decoding is lenient on purpose, for forward compatibility: trailing bytes are ignored and any non-zero
+    // presence flag reads as present, so a newer version can append fields that older nodes skip over. Rejecting
+    // them would make every wire extension a coordinated upgrade. Lenient decoding does not let one proposal take
+    // several identities, since the P2P message identifier and the signature both cover the signed payload rather
+    // than the raw bytes.
+
     const blockHeader = reader.readObject(BlockHeader);
     const indexWithinCheckpoint = IndexWithinCheckpoint(reader.readNumber());
     const archiveRoot = reader.readObject(Fr);
