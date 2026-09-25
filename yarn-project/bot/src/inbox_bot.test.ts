@@ -1602,6 +1602,40 @@ describe('InboxBot', () => {
       expect(consumer.sent.length).toEqual(1);
     });
 
+    // The pending count is a reading of the past: a job dispatched by this poll does not reach the pool until its
+    // transaction is submitted, several awaits later. Dispatching on the unadjusted count floods a capped pool.
+    it('dispatches only as many attempts as the pending transaction budget allows', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 4, maxPendingTxs: 8 });
+      const messages = await produceObservedBatch(bot);
+      expect(messages.length).toEqual(4);
+      chain.node.getPendingTxCount.mockResolvedValue(7);
+
+      await consume(bot);
+
+      expect(consumer.sent.length).toEqual(1);
+    });
+
+    it('counts attempts already in flight against the pending transaction budget', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 4, maxPendingTxs: 2 });
+      await produceObservedBatch(bot);
+      chain.node.getPendingTxCount.mockResolvedValue(0);
+      const { promise, resolve } = promiseWithResolvers<void>();
+      consumer.gate = promise;
+
+      // Attempts are dispatched as un-awaited background work, so they reach the consumer shortly after
+      // consumeStep returns rather than before it. The gate then holds both of them there, filling the budget.
+      await bot.consumeStep();
+      await retryUntil(() => consumer.sent.length === 2, 'two attempts in flight', 10, 0.01);
+
+      // A second poll has no budget left: both attempts are still in flight and the cap is two. Draining the
+      // background work before counting is what makes that observable — a third attempt would otherwise land
+      // after the assertion rather than before it.
+      await bot.consumeStep();
+      resolve();
+      await bot.waitForBackgroundWork();
+      expect(consumer.sent.length).toEqual(2);
+    });
+
     it('does not resurrect a message that timed out while its consumption attempt was in flight', async () => {
       const bot = buildBot({
         inboxConsumeMode: 'public',

@@ -1234,10 +1234,17 @@ export class InboxBot implements BotLifecycle {
    *
    * `maxPendingTxs` gates the L2 submissions this makes, the way it gates the other bots through `BotRunner`; the
    * node is asked only once a message is actually about to be dispatched.
+   *
+   * The pool count is a reading of the past: a job dispatched by this poll does not appear in it until its
+   * transaction reaches the node, which is several awaits away. Availability is therefore computed once and spent
+   * as jobs are launched, with every in-flight attempt counted against the cap. Attempts that have not submitted
+   * yet are counted too, which is conservative in the only safe direction: until the code tracks submitted and
+   * unsubmitted jobs apart, undercounting availability dispatches fewer messages, while overcounting floods a pool
+   * the operator capped on purpose.
    */
   private async dispatchAttempts(candidates: InboxMessageRecord[]): Promise<void> {
     const seen = new Set<string>();
-    let pendingChecked = false;
+    let available: number | undefined;
     for (const candidate of candidates) {
       if (seen.has(candidate.messageId) || this.attemptsInFlight.has(candidate.messageId)) {
         continue;
@@ -1257,16 +1264,27 @@ export class InboxBot implements BotLifecycle {
       if (this.attemptsInFlight.size >= MAX_CONCURRENT_CONSUMPTION_ATTEMPTS) {
         return;
       }
-      if (!pendingChecked && this.config.maxPendingTxs > 0) {
-        pendingChecked = true;
-        const pendingTxCount = await this.node.getPendingTxCount();
-        if (pendingTxCount >= this.config.maxPendingTxs) {
-          this.log.debug(`Not dispatching inbox consumption attempts, the node is at its pending transaction cap`, {
-            pendingTxCount,
+      if (this.config.maxPendingTxs > 0) {
+        if (available === undefined) {
+          const pendingTxCount = await this.node.getPendingTxCount();
+          available = this.config.maxPendingTxs - pendingTxCount - this.attemptsInFlight.size;
+          if (available <= 0) {
+            this.log.debug(`Not dispatching inbox consumption attempts, the node is at its pending transaction cap`, {
+              pendingTxCount,
+              attemptsInFlight: this.attemptsInFlight.size,
+              maxPendingTxs: this.config.maxPendingTxs,
+            });
+            return;
+          }
+        }
+        if (available <= 0) {
+          this.log.debug(`Stopping inbox consumption dispatch, the pending transaction budget is spent`, {
             maxPendingTxs: this.config.maxPendingTxs,
+            attemptsInFlight: this.attemptsInFlight.size,
           });
           return;
         }
+        available--;
       }
       const job = this.runConsumptionAttempt(message)
         .catch(err => this.registerConsumptionFailure(err))
