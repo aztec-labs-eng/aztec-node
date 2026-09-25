@@ -436,34 +436,6 @@ describe('BlockStore', () => {
         txIndexInBlock: 2,
       });
     });
-
-    it('accepts a checkpoint repeating a tx of a lower local proposed block that the checkpoint replaces', async () => {
-      await blockStore.addCheckpoints([publishedCheckpoints[0]]);
-      const localBlock = await L2Block.random(BlockNumber(2), {
-        checkpointNumber: CheckpointNumber(2),
-        indexWithinCheckpoint: IndexWithinCheckpoint(0),
-        lastArchive: getBlock(0).archive,
-      });
-      await blockStore.addProposedBlock(localBlock);
-
-      const [checkpoint2] = await makeChainedCheckpoints(1, {
-        startCheckpointNumber: CheckpointNumber(2),
-        startBlockNumber: 2,
-        blocksPerCheckpoint: 2,
-        previousArchive: getBlock(0).archive,
-      });
-      const [replacementBlock, nextBlock] = checkpoint2.checkpoint.blocks;
-      expect(replacementBlock.archive.root.equals(localBlock.archive.root)).toBe(false);
-      const shared = localBlock.body.txEffects[0];
-      nextBlock.body.txEffects[1] = shared;
-
-      await expect(blockStore.addCheckpoints([checkpoint2])).resolves.toEqual([checkpoint2]);
-      expect(await blockStore.getTxLocation(shared.txHash)).toEqual({
-        blockNumber: BlockNumber(3),
-        blockHash: await nextBlock.hash(),
-        txIndexInBlock: 1,
-      });
-    });
   });
 
   describe('removeCheckpointsAfter', () => {

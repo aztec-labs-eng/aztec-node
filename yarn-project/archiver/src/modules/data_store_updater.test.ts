@@ -46,6 +46,7 @@ import { registerProtocolContracts, registerStandardContracts } from '../factory
 import { type ArchiverDataStores, createArchiverDataStores } from '../store/data_stores.js';
 import { L2FrontierCache } from '../store/l2_frontier_cache.js';
 import {
+  makeChainedCheckpoints,
   makeCheckpoint,
   makeInboxMessages,
   makeL1PublishedData,
@@ -799,6 +800,31 @@ describe('ArchiverDataStoreUpdater', () => {
         blockNumber: BlockNumber(1),
         blockHash: await l1Block.hash(),
         txIndexInBlock: 0,
+      });
+    });
+
+    it('accepts an L1 checkpoint that replaces a local proposed block and moves its tx to a later block', async () => {
+      const [chained] = await makeChainedCheckpoints(1, { blocksPerCheckpoint: 2 });
+      const [l1Block1, l1Block2] = chained.checkpoint.blocks;
+      const published = makePublishedCheckpoint(makeCheckpoint([l1Block1, l1Block2]), 10);
+      const localBlock = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: published.checkpoint.slot,
+      });
+      await updater.addProposedBlock(localBlock, emptyPrefix);
+
+      const shared = localBlock.body.txEffects[0];
+      l1Block2.body.txEffects.push(shared);
+      expect(l1Block1.archive.root.equals(localBlock.archive.root)).toBe(false);
+
+      await updater.addCheckpoints([published]);
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(2));
+      expect(await store.blocks.getTxLocation(shared.txHash)).toEqual({
+        blockNumber: BlockNumber(2),
+        blockHash: await l1Block2.hash(),
+        txIndexInBlock: l1Block2.body.txEffects.length - 1,
       });
     });
 

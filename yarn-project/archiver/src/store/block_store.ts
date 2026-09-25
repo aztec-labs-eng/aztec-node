@@ -593,16 +593,13 @@ export class BlockStore {
    * Throws if the tx is already owned by a stored block below `blockNumber`. Stored blocks below the one being inserted
    * are its ancestors (archive chaining is enforced on insert), so the tx would be included twice and the new block
    * would take over the ancestor's tx effect entry. An owner at the same or a higher height is a block being replaced
-   * (a losing local proposal, a re-presented checkpoint), and an owner that is no longer the stored block at its
-   * height was already replaced; both entries are overwritten.
+   * (a losing local proposal, a re-presented checkpoint), so its entry is overwritten. This relies on replaced blocks
+   * at lower heights having been removed via deleteBlock first (as the updater does before inserting checkpoints),
+   * which also deletes their tx effect entries.
    */
   private async assertTxNotInAncestor(txHash: TxHash, blockNumber: BlockNumber): Promise<void> {
     const existing = await this.getTxLocation(txHash);
-    if (existing === undefined || existing.blockNumber >= blockNumber) {
-      return;
-    }
-    const storedAtHeight = await this.#blocks.getAsync(existing.blockNumber);
-    if (storedAtHeight !== undefined && existing.blockHash.toBuffer().equals(storedAtHeight.blockHash)) {
+    if (existing !== undefined && existing.blockNumber < blockNumber) {
       throw new DuplicateTxHashError(txHash, blockNumber, existing.blockNumber);
     }
   }
