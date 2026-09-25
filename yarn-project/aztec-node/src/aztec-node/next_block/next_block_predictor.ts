@@ -42,7 +42,7 @@ export interface NextBlockPredictorDeps {
  * Deliberately not used by the sequencer: its slot policy is stricter (it declines to build rather than
  * predicting inclusion) and a stale fee would make L1 reject its checkpoint.
  */
-export class NextBlockPredictor implements NextBlockMinFeesProvider {
+export class NextBlockPredictor implements Pick<NextBlockMinFeesProvider, 'getNextBlockMinFees'> {
   private readonly blockSource: L2BlockSource;
   private readonly feeCache: NextBlockFeeCache;
   private readonly epochCache: EpochCacheInterface;
@@ -122,7 +122,7 @@ export class NextBlockPredictor implements NextBlockMinFeesProvider {
   /**
    * The same fee as {@link quoteMinFees}, for transaction admission rather than for a wallet, and answered
    * from what the cache already holds: this runs per gossiped transaction and per pool revalidation, where
-   * every caller fails open on an unavailable fee, so waiting on a refresh would only convert a pricing
+   * every caller has a policy for an unavailable fee, so waiting on a refresh would only convert a pricing
    * outage into gossip backpressure. A boundary miss still starts the shared refresh, so a later transaction
    * is priced from the record it populates. An archiver or L1 failure is reported as undefined rather than
    * thrown, since no admission caller can act on the exception.

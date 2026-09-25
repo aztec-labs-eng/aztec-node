@@ -81,8 +81,11 @@ export type TxPoolV2Dependencies = {
   createTxValidator: () => Promise<TxValidator<TxMetaData>>;
   /** Checks whether a tx's setup-phase calls are on the allow list. Precomputed at receipt time. */
   checkAllowedSetupCalls: (tx: Tx) => Promise<boolean>;
-  /** Provides the fee the next block will charge. Used by eviction rules instead of stale block header fees. */
-  nextBlockMinFeesProvider: NextBlockMinFeesProvider;
+  /**
+   * Provides the fee the next block will charge. Used by eviction rules instead of stale block header fees. Only the
+   * exact fee: admission pricing is applied by the validator `createTxValidator` builds.
+   */
+  nextBlockMinFeesProvider: Pick<NextBlockMinFeesProvider, 'getNextBlockMinFees'>;
 };
 
 /**

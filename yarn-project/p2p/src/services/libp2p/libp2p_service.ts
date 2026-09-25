@@ -1807,13 +1807,9 @@ export class LibP2PService extends WithTracer implements P2PService {
     }
   }
 
-  /**
-   * The fee the next block will charge, or undefined when the node cannot price it right now. Gossip fails
-   * open on this one value: the max-fee-per-gas check is dropped rather than the transaction, so a temporary
-   * pricing outage cannot stop this node from relaying otherwise valid transactions.
-   */
-  protected getGasFees(): Promise<GasFees | undefined> {
-    return this.nextBlockMinFeesProvider.getNextBlockMinFees();
+  /** The fee a gossiped transaction must be able to pay to be relayed by this node. */
+  protected getGasFees(): Promise<GasFees> {
+    return this.nextBlockMinFeesProvider.getAdmissionMinFees();
   }
 
   /**

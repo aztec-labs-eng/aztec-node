@@ -128,29 +128,6 @@ describe('GasTxValidator', () => {
     gasFees.feePerL2Gas = gasFees.feePerL2Gas + 1n;
     await expectInvalid(tx, TX_ERROR_INSUFFICIENT_FEE_PER_GAS);
   });
-
-  describe('without a resolvable min fee', () => {
-    const validateWithoutFees = (tx: Tx) =>
-      new GasTxValidator(publicStateSource, feeJuiceAddress, undefined).validateTx(tx);
-
-    it('admits a tx that could never pay the current fee', async () => {
-      tx.data.constants.txContext.gasSettings = GasSettings.fallback({
-        gasLimits: DEFAULT_GAS_LIMITS,
-        maxFeesPerGas: new GasFees(0, 0),
-      });
-      mockBalance(tx.data.constants.txContext.gasSettings.getFeeLimit().toBigInt());
-
-      await expect(validateWithoutFees(tx)).resolves.toEqual({ result: 'valid' });
-    });
-
-    it('still rejects a tx whose fee payer cannot cover its fee limit', async () => {
-      mockBalance(feeLimit - 1n);
-
-      const result = await validateWithoutFees(tx);
-      expect(result.result).toEqual('invalid');
-      expect((result as { reason: string[] }).reason[0]).toContain(TX_ERROR_INSUFFICIENT_FEE_PAYER_BALANCE);
-    });
-  });
 });
 
 describe('MaxFeePerGasValidator', () => {

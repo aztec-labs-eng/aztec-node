@@ -319,24 +319,29 @@ describe('LibP2PService', () => {
   });
 
   describe('gossip min fee resolution', () => {
-    it('validates gossiped txs against the fee the next block will charge', async () => {
+    const feesProvider = (nextBlock: GasFees | undefined, admission: GasFees): NextBlockMinFeesProvider => ({
+      getNextBlockMinFees: () => Promise.resolve(nextBlock),
+      getAdmissionMinFees: () => Promise.resolve(admission),
+    });
+
+    it('validates gossiped txs against the admission fee', async () => {
       const feeService = createTestLibP2PService({
         peerManager: mockPeerManager,
         node: mockNode,
-        nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(new GasFees(7, 70)) },
+        nextBlockMinFeesProvider: feesProvider(new GasFees(7, 70), new GasFees(7, 70)),
       });
 
       await expect(feeService.getGasFees()).resolves.toEqual(new GasFees(7, 70));
     });
 
-    it('fails open on the minimum fee when the next block cannot be priced', async () => {
+    it('still enforces a min fee when the next block cannot be priced', async () => {
       const feeService = createTestLibP2PService({
         peerManager: mockPeerManager,
         node: mockNode,
-        nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(undefined) },
+        nextBlockMinFeesProvider: feesProvider(undefined, new GasFees(3, 30)),
       });
 
-      await expect(feeService.getGasFees()).resolves.toBeUndefined();
+      await expect(feeService.getGasFees()).resolves.toEqual(new GasFees(3, 30));
     });
   });
 
@@ -1942,6 +1947,7 @@ class TestLibP2PService extends LibP2PService {
     peerDiscoveryService?: PeerDiscoveryService,
     nextBlockMinFeesProvider: NextBlockMinFeesProvider = {
       getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+      getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
     },
   ) {
     // Create minimal mock dependencies for the base class
@@ -1995,7 +2001,7 @@ class TestLibP2PService extends LibP2PService {
   }
 
   /** Exposes the protected getGasFees for testing. */
-  public override getGasFees(): Promise<GasFees | undefined> {
+  public override getGasFees(): Promise<GasFees> {
     return super.getGasFees();
   }
 

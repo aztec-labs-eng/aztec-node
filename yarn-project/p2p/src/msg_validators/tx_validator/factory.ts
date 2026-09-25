@@ -89,15 +89,12 @@ export interface TransactionValidator {
  * The `doubleSpendValidator` failure is special-cased by the caller (`handleGossipedTx`)
  * to determine severity based on how recently the nullifier appeared. The caller reports the
  * first failing entry among equally severe ones.
- *
- * `gasFees` is undefined when the node cannot price the next block: only the max-fee-per-gas comparison is
- * dropped, and every other check, fee-payer balance included, still runs.
  */
 export function createFirstStageTxValidationsForGossipedTransactions(
   timestamp: UInt64,
   blockNumber: BlockNumber,
   worldStateSynchronizer: WorldStateSynchronizer,
-  gasFees: GasFees | undefined,
+  gasFees: GasFees,
   l1ChainId: number,
   rollupVersion: number,
   protocolContractsHash: Fr,
@@ -440,16 +437,13 @@ function createTxValidatorForValidatingAgainstCurrentState(
  *
  * Operates on `TxMetaData` rather than full `Tx` since metadata is pre-built by the pool.
  * Injected into `TxPoolV2` as the `createTxValidator` factory in `TxPoolV2Dependencies`.
- *
- * `gasFees` is undefined when the node cannot price the next block; as with gossip, only the max-fee-per-gas
- * comparison is dropped.
  */
 export async function createTxValidatorForTransactionsEnteringPendingTxPool(
   worldStateSynchronizer: WorldStateSynchronizer,
   timestamp: bigint,
   blockNumber: BlockNumber,
   gasLimitOpts: { maxTxL2Gas?: number; maxTxDAGas?: number },
-  gasFees: GasFees | undefined,
+  gasFees: GasFees,
   bindings?: LoggerBindings,
 ): Promise<TxValidator<TxMetaData>> {
   await worldStateSynchronizer.syncImmediate();
@@ -470,7 +464,7 @@ export async function createTxValidatorForTransactionsEnteringPendingTxPool(
     new TimestampTxValidator<TxMetaData>({ timestamp, blockNumber }, bindings),
     new MinGasLimitsValidator<TxMetaData>(bindings),
     new MaxGasLimitsValidator<TxMetaData>({ ...gasLimitOpts, bindings }),
-    ...(gasFees ? [new MaxFeePerGasValidator<TxMetaData>(gasFees, bindings)] : []),
+    new MaxFeePerGasValidator<TxMetaData>(gasFees, bindings),
     new BlockHeaderTxValidator<TxMetaData>(archiveSource, bindings),
     new DoubleSpendTxValidator<TxMetaData>(nullifierSource, bindings),
   );

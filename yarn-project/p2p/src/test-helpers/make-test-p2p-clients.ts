@@ -103,7 +103,10 @@ export async function makeTestP2PClient(
     proofVerifier,
     mockWorldState,
     mockEpochCache,
-    { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
+    {
+      getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+      getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+    },
     'test-p2p-client',
     undefined,
     undefined,

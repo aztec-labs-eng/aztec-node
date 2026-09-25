@@ -16,7 +16,7 @@ export class InsufficientFeePerGasEvictionRule implements EvictionRule {
 
   private log = createLogger('p2p:tx_pool_v2:insufficient_fee_per_gas_eviction_rule');
 
-  constructor(private nextBlockMinFeesProvider: NextBlockMinFeesProvider) {}
+  constructor(private nextBlockMinFeesProvider: Pick<NextBlockMinFeesProvider, 'getNextBlockMinFees'>) {}
 
   async evict(context: EvictionContext, pool: PoolOperations): Promise<EvictionResult> {
     if (context.event !== EvictionEvent.BLOCK_MINED) {

@@ -76,8 +76,7 @@ export class MaxFeePerGasValidator<T extends HasMaxFeePerGasData> implements TxV
  *
  * Runs two checks in order:
  * 1. **Max fee per gas** (delegates to {@link MaxFeePerGasValidator}) — rejects the tx if its
- *    maxFeesPerGas is below the current block's gas fees. Skipped when `gasFees` is undefined, which is how
- *    relay callers fail open on a fee they could not resolve; the balance check below still runs.
+ *    maxFeesPerGas is below the current block's gas fees.
  * 2. **Fee payer balance** — reads the fee payer's FeeJuice balance from public state,
  *    adds any pending claim from a setup-phase `_increase_public_balance` call, and
  *    rejects if the total is less than the tx's fee limit (gasLimits * maxFeePerGas).
@@ -92,23 +91,23 @@ export class GasTxValidator implements TxValidator<Tx> {
   #log: Logger;
   #publicDataSource: PublicStateSource;
   #feeJuiceAddress: AztecAddress;
-  #maxFeePerGasValidator: MaxFeePerGasValidator<Tx> | undefined;
+  #maxFeePerGasValidator: MaxFeePerGasValidator<Tx>;
 
   constructor(
     publicDataSource: PublicStateSource,
     feeJuiceAddress: AztecAddress,
-    gasFees: GasFees | undefined,
+    gasFees: GasFees,
     bindings?: LoggerBindings,
   ) {
     this.#log = createLogger('sequencer:tx_validator:tx_gas', bindings);
     this.#publicDataSource = publicDataSource;
     this.#feeJuiceAddress = feeJuiceAddress;
-    this.#maxFeePerGasValidator = gasFees && new MaxFeePerGasValidator(gasFees, bindings);
+    this.#maxFeePerGasValidator = new MaxFeePerGasValidator(gasFees, bindings);
   }
 
   async validateTx(tx: Tx): Promise<TxValidationResult> {
-    const maxFeeValidation = this.#maxFeePerGasValidator?.validateMaxFeePerGas(tx);
-    if (maxFeeValidation?.result === 'invalid') {
+    const maxFeeValidation = this.#maxFeePerGasValidator.validateMaxFeePerGas(tx);
+    if (maxFeeValidation.result === 'invalid') {
       return maxFeeValidation;
     }
     return await this.validateTxFee(tx);

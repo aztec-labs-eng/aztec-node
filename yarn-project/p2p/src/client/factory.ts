@@ -121,8 +121,7 @@ export async function createP2PClient(
           const currentBlockNumber = await archiver.getBlockNumber();
           const { ts: nextSlotTimestamp } = epochCache.getEpochAndSlotInNextL1Slot();
           const l1Constants = await archiver.getL1Constants();
-          // Undefined fails open on the max-fee check alone, so a pricing outage cannot empty the pending pool.
-          const gasFees = await nextBlockMinFeesProvider.getNextBlockMinFees();
+          const gasFees = await nextBlockMinFeesProvider.getAdmissionMinFees();
           const networkTxGasLimits = getNetworkTxGasLimits(config, l1Constants);
           return createTxValidatorForTransactionsEnteringPendingTxPool(
             worldStateSynchronizer,

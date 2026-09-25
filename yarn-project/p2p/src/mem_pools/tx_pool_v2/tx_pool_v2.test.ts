@@ -2679,7 +2679,7 @@ describe('TxPoolV2', () => {
           createTxValidator: () =>
             Promise.resolve(new AggregateTxValidator(mockValidator, new AllowedSetupCallsMetaValidator<TxMetaData>())),
           checkAllowedSetupCalls: () => Promise.resolve(false),
-          blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+          nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
         });
         await disallowPool.start();
 
