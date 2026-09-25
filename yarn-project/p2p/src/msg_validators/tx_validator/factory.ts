@@ -81,6 +81,13 @@ export const IgnoreWithoutPenalty = 'ignore-without-penalty';
 export type GossipValidationFailure = PeerErrorSeverity | typeof IgnoreWithoutPenalty;
 
 /**
+ * The fees a gossiped tx is checked against. A tx below `admission` is not relayed. A tx below `penaltyFloor` as
+ * well cannot be explained by a peer pricing a different checkpoint than this node does, so its sender is penalized.
+ * `penaltyFloor` is never above `admission`.
+ */
+export type GossipMinFees = { admission: GasFees; penaltyFloor: GasFees };
+
+/**
  * A validator paired with the consequence of its failure.
  * Used for gossip validation where each validator's failure triggers a peer penalization with the associated
  * severity level. Only stages that can also fail on local policy widen `F` to include
@@ -107,7 +114,7 @@ export function createFirstStageTxValidationsForGossipedTransactions(
   timestamp: UInt64,
   blockNumber: BlockNumber,
   worldStateSynchronizer: WorldStateSynchronizer,
-  gasFees: GasFees,
+  gasFees: GossipMinFees,
   l1ChainId: number,
   rollupVersion: number,
   protocolContractsHash: Fr,
@@ -179,14 +186,19 @@ export function createFirstStageTxValidationsForGossipedTransactions(
       validator: new MaxGasLimitsValidator<Tx>({ ...gasLimitOpts, bindings }),
       severity: PeerErrorSeverity.MidToleranceError,
     },
-    // The max-fee comparison and the fee-payer balance check are separate entries because their failures mean
-    // different things. A tx below our next-block fee is only invalid against a fee this node resolved: a peer
+    // The max-fee comparisons and the fee-payer balance check are separate entries because their failures mean
+    // different things. A tx below our admission fee is only invalid against a fee this node resolved: a peer
     // ahead of us may be relaying against a lower checkpoint fee it legitimately sees, so the tx is dropped
-    // without penalizing the sender. An underfunded fee payer is invalid against shared state, so it stays
-    // penalized.
+    // without penalizing the sender. That excuse only stretches down to the penalty floor, so a tx below it is
+    // penalized too, and the harshest failure wins. An underfunded fee payer is invalid against shared state, so
+    // it stays penalized.
     maxFeePerGasValidator: {
-      validator: new MaxFeePerGasValidator<Tx>(gasFees, bindings),
+      validator: new MaxFeePerGasValidator<Tx>(gasFees.admission, bindings),
       severity: IgnoreWithoutPenalty,
+    },
+    maxFeePerGasFloorValidator: {
+      validator: new MaxFeePerGasValidator<Tx>(gasFees.penaltyFloor, bindings),
+      severity: PeerErrorSeverity.MidToleranceError,
     },
     feePayerBalanceValidator: {
       validator: new FeePayerBalanceValidator(

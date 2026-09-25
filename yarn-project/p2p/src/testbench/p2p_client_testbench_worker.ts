@@ -136,6 +136,7 @@ class TestLibP2PService extends LibP2PService {
       {
         getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
         getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+        getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
       },
       telemetry,
       logger,
@@ -431,6 +432,7 @@ process.on('message', async msg => {
         {
           getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
           getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+          getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
         },
         'test-p2p-bench-worker',
         undefined,

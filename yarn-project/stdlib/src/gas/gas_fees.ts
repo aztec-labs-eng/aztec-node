@@ -90,6 +90,14 @@ export class GasFees {
     return new GasFees(Math.floor(Math.random() * 1e9), Math.floor(Math.random() * 1e9));
   }
 
+  /** The lower of the two fees on each dimension independently. */
+  static min(a: GasFees, b: GasFees) {
+    return new GasFees(
+      a.feePerDaGas < b.feePerDaGas ? a.feePerDaGas : b.feePerDaGas,
+      a.feePerL2Gas < b.feePerL2Gas ? a.feePerL2Gas : b.feePerL2Gas,
+    );
+  }
+
   static empty() {
     return new GasFees(0, 0);
   }
@@ -161,4 +169,7 @@ export interface TxAdmissionMinFeesProvider extends NextBlockMinFeesProvider {
    * zero `maxFeesPerGas` has a zero fee limit, which a fee payer with no balance also covers.
    */
   getAdmissionMinFees(): Promise<GasFees>;
+
+  /** The L1-anchored fee projected after the on-chain pending checkpoint, as {@link BlockMinFeesProvider} reports. */
+  getL1ForwardMinFees(): Promise<GasFees>;
 }

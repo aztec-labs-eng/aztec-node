@@ -175,6 +175,7 @@ export async function createTestLibP2PService(
     {
       getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
       getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+      getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
     },
     telemetry,
   );

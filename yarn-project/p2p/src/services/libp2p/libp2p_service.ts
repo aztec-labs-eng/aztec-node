@@ -77,6 +77,7 @@ import {
 } from '../../msg_validators/index.js';
 import { MessageSeenValidator } from '../../msg_validators/msg_seen_validator/msg_seen_validator.js';
 import {
+  type GossipMinFees,
   type GossipValidationFailure,
   IgnoreWithoutPenalty,
   type TransactionValidator,
@@ -1827,9 +1828,18 @@ export class LibP2PService extends WithTracer implements P2PService {
     }
   }
 
-  /** The fee a gossiped transaction must be able to pay to be relayed by this node. */
-  protected getGasFees(): Promise<GasFees> {
-    return this.nextBlockMinFeesProvider.getAdmissionMinFees();
+  /**
+   * The fees a gossiped transaction is checked against. The penalty floor is the lower of the admission and
+   * L1-forward fees: a peer that prices the next block off a different checkpoint than we do can land below our
+   * admission fee, but the L1-forward fee does not depend on locally proposed checkpoints, so a tx below both has
+   * no such excuse.
+   */
+  protected async getGasFees(): Promise<GossipMinFees> {
+    const [admission, l1Forward] = await Promise.all([
+      this.nextBlockMinFeesProvider.getAdmissionMinFees(),
+      this.nextBlockMinFeesProvider.getL1ForwardMinFees(),
+    ]);
+    return { admission, penaltyFloor: GasFees.min(admission, l1Forward) };
   }
 
   /**

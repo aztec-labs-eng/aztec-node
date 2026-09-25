@@ -22,14 +22,14 @@ Unsolicited transactions from any peer. Fully validated in two stages with a poo
 
 | Step | What runs | On failure |
 |------|-----------|------------|
-| **Stage 1** (fast) | TxPermitted, Data, Metadata, Timestamp, DoubleSpend, MinGasLimits, MaxGasLimits, MaxFeePerGas, FeePayerBalance, Phases, BlockHeader | Penalize peer, reject tx (except MaxFeePerGas: ignore tx, no penalty) |
+| **Stage 1** (fast) | TxPermitted, Data, Metadata, Timestamp, DoubleSpend, MinGasLimits, MaxGasLimits, MaxFeePerGas, MaxFeePerGasFloor, FeePayerBalance, Phases, BlockHeader | Penalize peer, reject tx (except MaxFeePerGas: ignore tx, no penalty) |
 | **Pool pre-check** | `canAddPendingTx` — checks for duplicates, pool capacity | Ignore tx (no penalty) |
 | **Stage 2** (slow) | Proof verification | Penalize peer, reject tx |
 | **Pool add** | `addPendingTxs` | Accept, ignore, or reject |
 
 Each stage-1 and stage-2 validator is paired with a `PeerErrorSeverity`, and the sending peer is penalized with that severity when it fails. When several validators fail, the harshest consequence wins. The `doubleSpendValidator` has special handling: its severity is determined by how recently the nullifier appeared (recent = high tolerance, old = low tolerance).
 
-`maxFeePerGasValidator` is the exception, marked `IgnoreWithoutPenalty`: a tx below the fee this node resolved for the next block may be perfectly valid for a peer ahead of us, so it is dropped without propagating and the peer keeps its score. Being the mildest consequence, it never masks a penalized failure on the same tx — which is why the fee-payer balance check is a separate entry (`feePayerBalanceValidator`) that stays penalized.
+`maxFeePerGasValidator` is the exception, marked `IgnoreWithoutPenalty`: a tx below this node's admission fee (the next-block fee, or the L1-forward fee while the next block cannot be priced) may be perfectly valid for a peer ahead of us, so it is dropped without propagating and the peer keeps its score. That excuse stops at a penalty floor, the lower of the admission and L1-forward fees: `maxFeePerGasFloorValidator` checks it with a mid-tolerance penalty, since the L1-forward fee does not depend on locally proposed checkpoints. Being the mildest consequence, the ignore never masks a penalized failure on the same tx — which is also why the fee-payer balance check is a separate entry (`feePayerBalanceValidator`) that stays penalized.
 
 ### 2. JSON-RPC
 

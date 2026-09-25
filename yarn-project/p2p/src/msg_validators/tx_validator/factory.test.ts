@@ -95,7 +95,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -114,6 +114,7 @@ describe('Validator factory functions', () => {
         'minGasLimitsValidator',
         'maxGasLimitsValidator',
         'maxFeePerGasValidator',
+        'maxFeePerGasFloorValidator',
         'feePayerBalanceValidator',
         'dataValidator',
         'contractInstanceValidator',
@@ -126,7 +127,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -152,7 +153,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -180,7 +181,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -196,7 +197,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -217,8 +218,10 @@ describe('Validator factory functions', () => {
       expect(validators.maxGasLimitsValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.feePayerBalanceValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
 
-      // A tx below our next-block fee may be valid for a peer ahead of us, so the sender is not penalized.
+      // A tx below our admission fee may be valid for a peer ahead of us, so the sender is not penalized unless
+      // the tx is below the penalty floor as well.
       expect(validators.maxFeePerGasValidator.severity).toBe(IgnoreWithoutPenalty);
+      expect(validators.maxFeePerGasFloorValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.phasesValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
     });
 
@@ -227,7 +230,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
