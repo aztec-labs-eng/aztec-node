@@ -1069,8 +1069,8 @@ export class ArchiverL1Synchronizer implements Traceable {
           );
 
           const [processDuration, result] = await elapsed(() =>
-            execInSpan(this.tracer, 'Archiver.addCheckpoints', () =>
-              this.updater.addCheckpoints(
+            execInSpan(this.tracer, 'Archiver.addCheckpoints', async () => {
+              const addResult = await this.updater.addCheckpoints(
                 checkpointsToAdd,
                 updatedValidationResult,
                 maybeValidCheckpointToPromote && {
@@ -1080,10 +1080,12 @@ export class ArchiverL1Synchronizer implements Traceable {
                   checkpoint: maybeValidCheckpointToPromote,
                 },
                 evictProposedFrom,
-              ),
-            ),
+              );
+              // Set before the span wrappers finish, so a throw while closing the span doesn't count as unpersisted.
+              batchPersisted = true;
+              return addResult;
+            }),
           );
-          batchPersisted = true;
 
           if (validCheckpoints.length > 0) {
             this.instrumentation.processNewCheckpointedBlocks(
