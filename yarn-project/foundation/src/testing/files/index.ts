@@ -24,6 +24,7 @@ export function readTestData(repoPath: string): Buffer {
 
 /**
  * Looks for a variable assignment in the target file and updates the value, only if test data generation is enabled.
+ * Matches noir `let` and `pub global` declarations and Solidity `constant` declarations.
  * Note that a magic inline comment would be a cleaner approach, like `/* TEST-DATA-START *\/` and `/* TEST-DATA-END *\/`,
  * but running nargo fmt on it panics since the comment would be erased, so we roll with this for now.
  * @remarks Requires AZTEC_GENERATE_TEST_DATA=1 to be set
@@ -50,7 +51,7 @@ export function updateInlineFndTestData(targetFileFromFndRoot: string, itemName:
 function updateInlineTestDataAt(targetFile: string, itemName: string, value: string) {
   const logger = createConsoleLogger('aztec:testing:test_data');
   const contents = readFileSync(targetFile, 'utf8').toString();
-  const regex = new RegExp(`(let|pub\\s+global)\\s+${itemName}(\\s*:\\s*[^=]+)?\\s*=\\s*([\\s\\S]*?);`, 'g');
+  const regex = new RegExp(`(let|pub\\s+global|constant)\\s+${itemName}(\\s*:\\s*[^=]+)?\\s*=\\s*([\\s\\S]*?);`, 'g');
   if (!regex.exec(contents)) {
     throw new Error(`Test data marker for ${itemName} not found in ${targetFile}`);
   }

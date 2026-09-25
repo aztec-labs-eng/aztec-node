@@ -660,7 +660,7 @@ describe('L1Publisher integration', () => {
         const checkpointBlobFields = checkpoint.toBlobFields();
         const blockBlobs = await getBlobsPerL1Block(checkpointBlobFields);
 
-        let prevBlobAccumulatorHash = (await rollup.getCurrentBlobCommitmentsHash()).toBuffer();
+        const prevBlobAccumulatorHash = (await rollup.getCurrentBlobCommitmentsHash()).toBuffer();
 
         blocks.push(block);
         blobFieldsPerCheckpoint.push(checkpointBlobFields);
@@ -705,14 +705,19 @@ describe('L1Publisher integration', () => {
           thisCheckpointNumber == CheckpointNumber(1) ||
           (await rollup.getEpochNumberForCheckpoint(thisCheckpointNumber)) >
             (await rollup.getEpochNumberForCheckpoint(prevCheckpointNumber));
-        // If we are at the first blob of the epoch, we must initialize the hash:
-        prevBlobAccumulatorHash = isFirstCheckpointOfEpoch ? Buffer.alloc(0) : prevBlobAccumulatorHash;
         const currentBlobAccumulatorHash = (await rollup.getCurrentBlobCommitmentsHash()).toBuffer();
+        // The first blob of the epoch initializes the hash, and each step hashes a flag byte marking the first blob of
+        // its checkpoint (true, i.e. 0x01, for the epoch's first blob; j === 0 afterwards, 0x01 or 0x00), which binds
+        // how the blobs split into checkpoints.
         let expectedBlobAccumulatorHash = prevBlobAccumulatorHash;
         blockBlobs
           .map(b => b.commitment)
-          .forEach(c => {
-            expectedBlobAccumulatorHash = sha256ToField([expectedBlobAccumulatorHash, c]).toBuffer();
+          .forEach((c, j) => {
+            expectedBlobAccumulatorHash = (
+              isFirstCheckpointOfEpoch && j === 0
+                ? sha256ToField([true, c])
+                : sha256ToField([expectedBlobAccumulatorHash, j === 0, c])
+            ).toBuffer();
           });
         expect(currentBlobAccumulatorHash).toEqual(expectedBlobAccumulatorHash);
 
