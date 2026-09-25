@@ -7,11 +7,11 @@ import { type MockProxy, mock } from 'jest-mock-extended';
 import { type MockStreamingInbox, mockStreamingInbox } from '../test/utils.js';
 import {
   PROTOCOL_INBOX_CONSUMPTION_CAPS,
+  getEndpointLookupThreshold,
   getEndpointUpperBound,
-  getOrdinaryCeiling,
   mustQueryEndpoint,
   resolveEndpoint,
-  selectOrdinaryMessageEnd,
+  selectGreedyEnd,
   selectSafeLocalEnd,
 } from './inbox_message_selection.js';
 
@@ -154,16 +154,16 @@ describe('local selection against the final block that has to land on a bucket b
   });
 });
 
-describe('ordinary message selection', () => {
+describe('greedy message selection', () => {
   const caps = PROTOCOL_INBOX_CONSUMPTION_CAPS;
   // 1024 - 256: the last position from which one block always reaches the end of the bucket the cursor sits in.
   const threshold = 768n;
 
   it.each([0n, 5_000n])('takes everything observed within the caps from checkpoint start %s', start => {
-    expect(getOrdinaryCeiling(start, caps)).toEqual(start + threshold);
+    expect(getEndpointLookupThreshold(start, caps)).toEqual(start + threshold);
     // The greedy end is not held down to the threshold; the threshold only decides whether L1 has to be consulted.
     expect(
-      selectOrdinaryMessageEnd({
+      selectGreedyEnd({
         cursorCount: start + 700n,
         localSyncedCount: start + 1000n,
         checkpointStartCount: start,
@@ -172,7 +172,7 @@ describe('ordinary message selection', () => {
     ).toEqual(start + 956n);
     // The per-block cap and the checkpoint cap both bound it.
     expect(
-      selectOrdinaryMessageEnd({
+      selectGreedyEnd({
         cursorCount: start,
         localSyncedCount: start + 700n,
         checkpointStartCount: start,
@@ -180,7 +180,7 @@ describe('ordinary message selection', () => {
       }),
     ).toEqual(start + 256n);
     expect(
-      selectOrdinaryMessageEnd({
+      selectGreedyEnd({
         cursorCount: start + 900n,
         localSyncedCount: start + 1300n,
         checkpointStartCount: start,
@@ -207,7 +207,7 @@ describe('ordinary message selection', () => {
   });
 
   it('rejects caps whose checkpoint budget is below one bucket', () => {
-    expect(() => getOrdinaryCeiling(0n, { perCheckpointCap: 128, maxMessagesPerBucket: 256 })).toThrow(
+    expect(() => getEndpointLookupThreshold(0n, { perCheckpointCap: 128, maxMessagesPerBucket: 256 })).toThrow(
       'below the bucket size',
     );
   });
@@ -289,7 +289,7 @@ describe('protocol message-count boundaries', () => {
     [1025, 256n, 1024n],
   ])('selects at most one block and one checkpoint out of %i observed messages', (observed, firstBlock, wholeRun) => {
     const localSyncedCount = BigInt(observed);
-    const first = selectOrdinaryMessageEnd({
+    const first = selectGreedyEnd({
       cursorCount: 0n,
       localSyncedCount,
       checkpointStartCount: 0n,
@@ -301,7 +301,7 @@ describe('protocol message-count boundaries', () => {
     // Four blocks, each taking its whole cap, is the most a checkpoint may consume; past 1024 the rest waits.
     let cursorCount = 0n;
     for (let block = 0; block < 4; block++) {
-      cursorCount = selectOrdinaryMessageEnd({ cursorCount, localSyncedCount, checkpointStartCount: 0n, caps });
+      cursorCount = selectGreedyEnd({ cursorCount, localSyncedCount, checkpointStartCount: 0n, caps });
     }
     expect(cursorCount).toEqual(wholeRun);
     expect(cursorCount).toBeLessThanOrEqual(perCheckpoint);
@@ -311,22 +311,22 @@ describe('protocol message-count boundaries', () => {
   // 257 however much the archiver has observed.
   it('never lets one block consume the 257 messages of a rolled-over batch', () => {
     const selection = { cursorCount: 0n, localSyncedCount: 257n, checkpointStartCount: 0n, caps };
-    expect(selectOrdinaryMessageEnd(selection)).toEqual(256n);
+    expect(selectGreedyEnd(selection)).toEqual(256n);
     expect(selectSafeLocalEnd(selection)).toEqual(256n);
     // Ending exactly on the bucket boundary needs no L1 lookup; the next block picks up the 257th message.
     expect(mustQueryEndpoint({ prospectiveEnd: 256n, checkpointStartCount: 0n, isFinalBlock: false, caps })).toBe(
       false,
     );
-    expect(
-      selectOrdinaryMessageEnd({ cursorCount: 256n, localSyncedCount: 257n, checkpointStartCount: 0n, caps }),
-    ).toEqual(257n);
+    expect(selectGreedyEnd({ cursorCount: 256n, localSyncedCount: 257n, checkpointStartCount: 0n, caps })).toEqual(
+      257n,
+    );
   });
 
   // The cap is a hard stop, not a soft one: a cursor already at 1024 consumes nothing more in this checkpoint even
   // with a 1025th message observed.
   it('stops at the checkpoint cap with a 1025th message observed', () => {
     const atCap = { cursorCount: perCheckpoint, localSyncedCount: 1025n, checkpointStartCount: 0n, caps };
-    expect(selectOrdinaryMessageEnd(atCap)).toEqual(perCheckpoint);
+    expect(selectGreedyEnd(atCap)).toEqual(perCheckpoint);
     expect(selectSafeLocalEnd(atCap)).toEqual(perCheckpoint);
     expect(getEndpointUpperBound({ ...atCap, isFinalBlock: true, caps })).toEqual(perCheckpoint);
   });
@@ -337,7 +337,7 @@ describe('protocol message-count boundaries', () => {
     const at = (prospectiveEnd: bigint) =>
       mustQueryEndpoint({ prospectiveEnd, checkpointStartCount: start, isFinalBlock: false, caps });
 
-    expect(getOrdinaryCeiling(start, caps)).toEqual(start + 768n);
+    expect(getEndpointLookupThreshold(start, caps)).toEqual(start + 768n);
     expect(at(start + 767n)).toBe(false);
     expect(at(start + 768n)).toBe(false);
     expect(at(start + 769n)).toBe(true);

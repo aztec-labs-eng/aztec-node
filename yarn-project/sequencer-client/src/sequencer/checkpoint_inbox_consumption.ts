@@ -8,13 +8,15 @@ import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 
 import {
   type EndpointResolution,
+  type InboxConsumptionCaps,
   type InboxEndpointResolver,
+  type InboxSelectionPositions,
   PROTOCOL_INBOX_CONSUMPTION_CAPS,
   type StreamingMessageSource,
   getEndpointUpperBound,
   mustQueryEndpoint,
   resolveEndpoint,
-  selectOrdinaryMessageEnd,
+  selectGreedyEnd,
   selectSafeLocalEnd,
 } from './inbox_message_selection.js';
 
@@ -65,12 +67,9 @@ export type CheckpointInboxConsumptionDeps = {
 };
 
 /** The inputs one selection attempt decides from, read once at its start. */
-type SelectionSnapshot = {
+type SelectionSnapshot = InboxSelectionPositions & {
   cursor: InboxMessagePosition;
-  cursorCount: bigint;
-  localSyncedCount: bigint;
-  checkpointStartCount: bigint;
-  caps: typeof PROTOCOL_INBOX_CONSUMPTION_CAPS;
+  caps: InboxConsumptionCaps;
 };
 
 /**
@@ -149,7 +148,7 @@ export class CheckpointInboxConsumption {
   async selectRange(opts: { isFinalBlock: boolean; buildDeadline: number }): Promise<StreamingBundleSelection> {
     const snapshot = await this.takeSnapshot();
     const { cursor, cursorCount, localSyncedCount, checkpointStartCount, caps } = snapshot;
-    const greedyEnd = selectOrdinaryMessageEnd(snapshot);
+    const greedyEnd = selectGreedyEnd(snapshot);
 
     if (
       !mustQueryEndpoint({ prospectiveEnd: greedyEnd, checkpointStartCount, isFinalBlock: opts.isFinalBlock, caps })
