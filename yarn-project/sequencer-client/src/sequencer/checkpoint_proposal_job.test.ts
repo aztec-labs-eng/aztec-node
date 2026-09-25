@@ -2609,7 +2609,7 @@ describe('CheckpointProposalJob', () => {
         l1ToL2Messages: [],
       });
 
-      expect(result).toEqual({ failure: 'insufficient-valid-txs' });
+      expect(result).toEqual({ kind: 'skipped', reason: 'insufficient-valid-txs' });
       expect(p2p.handleFailedExecution).toHaveBeenCalledWith(failedTxs.map(ftx => ftx.tx.txHash));
     });
 
@@ -2631,7 +2631,7 @@ describe('CheckpointProposalJob', () => {
         l1ToL2Messages: [],
       });
 
-      expect(result).toEqual({ failure: 'insufficient-valid-txs' });
+      expect(result).toEqual({ kind: 'skipped', reason: 'insufficient-valid-txs' });
       expect(p2p.handleFailedExecution).toHaveBeenCalledWith(failedTxs.map(ftx => ftx.tx.txHash));
     });
   });
@@ -3069,9 +3069,7 @@ class TestCheckpointProposalJob extends CheckpointProposalJob {
       txHashesAlreadyIncluded: Set<string>;
       l1ToL2Messages: Fr[];
     },
-  ): Promise<
-    { block: L2Block; usedTxs: Tx[] } | { failure: 'insufficient-txs' | 'insufficient-valid-txs' } | { error: Error }
-  > {
+  ): ReturnType<CheckpointProposalJob['buildSingleBlock']> {
     return super.buildSingleBlock(checkpointBuilder, opts);
   }
 }
