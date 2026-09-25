@@ -937,9 +937,10 @@ describe('ProposalHandler checkpoint validation', () => {
 
       it('attests once a sync after the first consumed read brings the prefix into agreement', async () => {
         const inboxRollingHash = Fr.random();
-        const header = makeHeader({ inboxRollingHash });
-        setupDeepValidationMocks({ header });
+        const header = setupMatchingRebuild({ inboxRollingHash });
         setupCheckpointWithConsumption({ firstBlockNumber: 5, parentLeafCount: 3, lastLeafCount: 7 });
+        // The last block, as the archiver serves it by archive, ends at total 0, and so does the live bucket.
+        inbox.setBuckets([{ seq: 0n, total: 0n, rollingHash: inboxRollingHash }]);
         const consumedMessages = [new Fr(1000), new Fr(1001), new Fr(1002), new Fr(1003)];
         l1ToL2MessageSource.getL1ToL2MessageRange.mockRejectedValue(new Error('Inbox message range is not synced'));
         let syncs = 0;
@@ -951,11 +952,12 @@ describe('ProposalHandler checkpoint validation', () => {
         });
         dateProvider.setTime(SHORT_BUDGET_NOW_MS);
 
-        await handler.handleCheckpointProposal(
+        const result = await handler.handleCheckpointProposal(
           await makeProposal({ archiveRoot, checkpointHeader: header }),
           proposalInfo,
         );
 
+        expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
         expect(syncs).toBeGreaterThanOrEqual(2);
         expect(checkpointsBuilder.openCheckpoint).toHaveBeenCalledWith(
           CheckpointNumber(1),
@@ -1110,9 +1112,9 @@ describe('ProposalHandler checkpoint validation', () => {
     });
 
     /** Sets up a rebuild that matches the proposal in every comparison; returns the header the proposal signs. */
-    function setupMatchingRebuild() {
+    function setupMatchingRebuild(headerOverrides: Partial<FieldsOf<CheckpointHeader>> = {}) {
       const lastArchiveRoot = Fr.random();
-      const header = makeMatchingHeader({ lastArchiveRoot });
+      const header = makeMatchingHeader({ lastArchiveRoot, ...headerOverrides });
 
       // Block global variables must match the checkpoint header fields
       const blockHeader = makeBlockHeader(1, {

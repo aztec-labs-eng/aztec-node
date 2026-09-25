@@ -1906,11 +1906,12 @@ export class ProposalHandler {
   }
 
   /**
-   * Validates a checkpoint proposal, caches the result, and uploads blobs if configured.
-   * Returns a cached result if the same proposal (archive + slot) was already validated.
+   * Validates a checkpoint proposal's content, caches the verdict by signed-payload hash and uploads blobs if
+   * configured, then gates a valid verdict on the live Inbox endpoint and records the outcome on the re-execution
+   * tracker. A cached valid verdict is reused only while the checkpoint's last block is still local.
    * Used by both the all-nodes callback (via register) and the validator client (via delegation).
    * Expects the proposal to have already passed p2p ingress validation (expected proposer and receive-window
-   * timeliness); only deterministic properties of the signed payload are checked here.
+   * timeliness), which is not re-applied here.
    */
   public async handleCheckpointProposal(
     proposal: ValidatedCheckpointProposalCore,
