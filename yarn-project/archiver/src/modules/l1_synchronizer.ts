@@ -62,6 +62,12 @@ type RollupStatus = {
   blocksAdded: L2Block[];
 };
 
+/** How the checkpoint L1 published relates to the locally proposed checkpoint of the same number, if any. */
+type ProposedCheckpointMatch =
+  | { kind: 'promote'; checkpoint: PublishedCheckpoint }
+  | { kind: 'evict'; fromCheckpointNumber: CheckpointNumber }
+  | { kind: 'none' };
+
 /** Bounded Inbox message sync passes (a recovery step each) taken within one archiver sync iteration. */
 const MAX_MESSAGE_SYNC_PASSES_PER_ITERATION = 3;
 
@@ -904,10 +910,8 @@ export class ArchiverL1Synchronizer implements Traceable {
         // We only check the last one; if it matches, the blob fetch is skipped for that entry.
         // TODO(palla/pipelining): We may have more than a single checkpoint to promote
         const lastCalldataCheckpoint = resolvedCheckpoints[resolvedCheckpoints.length - 1].checkpoint;
-        const promoteResult = await this.tryBuildPublishedCheckpointFromProposed(lastCalldataCheckpoint);
-        const checkpointToPromote = promoteResult && !('diverged' in promoteResult) ? promoteResult : undefined;
-        const evictProposedFrom =
-          promoteResult && 'diverged' in promoteResult ? promoteResult.fromCheckpointNumber : undefined;
+        const match = await this.matchProposedCheckpoint(lastCalldataCheckpoint);
+        const checkpointToPromote = match.kind === 'promote' ? match.checkpoint : undefined;
 
         const checkpointsToIngest: ResolvedCheckpointFromCalldata[] = [];
 
@@ -1076,13 +1080,8 @@ export class ArchiverL1Synchronizer implements Traceable {
               const addResult = await this.updater.addCheckpoints(
                 checkpointsToAdd,
                 updatedValidationResult,
-                maybeValidCheckpointToPromote && {
-                  l1: lastCalldataCheckpoint.l1,
-                  attestations: lastCalldataCheckpoint.attestations,
-                  verbatimAttestations: lastCalldataCheckpoint.verbatimAttestations,
-                  checkpoint: maybeValidCheckpointToPromote,
-                },
-                evictProposedFrom,
+                maybeValidCheckpointToPromote,
+                match.kind === 'evict' ? match.fromCheckpointNumber : undefined,
               );
               // Set before the span wrappers finish, so a throw while closing the span doesn't count as unpersisted.
               batchPersisted = true;
@@ -1192,23 +1191,23 @@ export class ArchiverL1Synchronizer implements Traceable {
 
   /**
    * Checks if a specific checkpoint matches a local pending entry, and if so, loads local data to build
-   * a synthetic published checkpoint (skipping blob fetch).
+   * a synthetic published checkpoint (skipping blob fetch), returned as a `promote` match.
    *
-   * Returns { diverged: true, fromCheckpointNumber } when the L1 checkpoint does NOT match local pending
-   * data for that number, so the caller can evict the entire pending suffix >= fromCheckpointNumber
-   * (those entries chain off the now-invalid local state) within the same addCheckpoints transaction.
+   * Returns an `evict` match when the L1 checkpoint does NOT match local pending data for that number, so the
+   * caller can evict the entire pending suffix >= fromCheckpointNumber (those entries chain off the now-invalid
+   * local state) within the same addCheckpoints transaction.
    */
-  private async tryBuildPublishedCheckpointFromProposed(
+  private async matchProposedCheckpoint(
     calldataCheckpoint: ResolvedCheckpointFromCalldata | undefined,
-  ): Promise<PublishedCheckpoint | { diverged: true; fromCheckpointNumber: CheckpointNumber } | undefined> {
+  ): Promise<ProposedCheckpointMatch> {
     if (this.config.skipPromoteProposedCheckpointDuringL1Sync || !calldataCheckpoint) {
-      return undefined;
+      return { kind: 'none' };
     }
 
     // Look up the specific pending entry for the checkpoint being mined, not just the tip
     const proposed = await this.stores.blocks.getProposedCheckpointByNumber(calldataCheckpoint.checkpointNumber);
     if (!proposed) {
-      return undefined;
+      return { kind: 'none' };
     }
 
     if (
@@ -1243,7 +1242,7 @@ export class ArchiverL1Synchronizer implements Traceable {
         });
       }
       // Return a divergence signal so the caller can evict pending >= this number
-      return { diverged: true, fromCheckpointNumber: proposed.checkpointNumber };
+      return { kind: 'evict', fromCheckpointNumber: proposed.checkpointNumber };
     }
 
     this.log.debug(
@@ -1265,7 +1264,7 @@ export class ArchiverL1Synchronizer implements Traceable {
           retrievedBlocks: blocks.map(b => b.number),
         },
       );
-      return undefined;
+      return { kind: 'none' };
     }
 
     const checkpoint = Checkpoint.from({
@@ -1283,7 +1282,7 @@ export class ArchiverL1Synchronizer implements Traceable {
     });
     this.instrumentation.processCheckpointPromoted();
 
-    return promotedCheckpoint;
+    return { kind: 'promote', checkpoint: promotedCheckpoint };
   }
 
   private async checkForNewCheckpointsBeforeL1SyncPoint(
