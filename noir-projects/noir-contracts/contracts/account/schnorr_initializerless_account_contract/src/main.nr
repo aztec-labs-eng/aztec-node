@@ -1,5 +1,7 @@
 use aztec::{macros::{aztec, AztecConfig}, messages::discovery::do_sync_state_no_op};
 
+mod test;
+
 #[aztec(AztecConfig::new().custom_sync_state(do_sync_state_no_op))]
 pub contract SchnorrInitializerlessAccount {
     use aztec::{
@@ -24,7 +26,8 @@ pub contract SchnorrInitializerlessAccount {
     };
     use std::embedded_curve_ops::EmbeddedCurvePoint;
 
-    global PUB_KEY_SLOT: Field = comptime { poseidon2_hash_bytes("INITIALIZERLESS_ACCOUNT_PUB_KEY".as_bytes()) };
+    pub(crate) global PUB_KEY_SLOT: Field =
+        comptime { poseidon2_hash_bytes("INITIALIZERLESS_ACCOUNT_PUB_KEY".as_bytes()) };
 
     #[external("utility")]
     unconstrained fn constructor(signing_pub_key_x: Field, signing_pub_key_y: Field) {

@@ -55,3 +55,23 @@ unconstrained fn deploy_with_same_secret_does_not_repeat_addresses() {
 
     assert(first_contract != second_contract);
 }
+
+#[test]
+unconstrained fn deploy_with_different_immutables_hash_does_not_repeat_addresses() {
+    let mut env = TestEnvironment::new();
+
+    let first_contract = env
+        .deploy_opts(
+            DeployOptions::new().with_salt(42).with_secret(100).with_immutables_hash(1),
+            "../noir-contracts/@test_contract/Test",
+        )
+        .without_initializer();
+    let second_contract = env
+        .deploy_opts(
+            DeployOptions::new().with_salt(42).with_secret(100).with_immutables_hash(2),
+            "../noir-contracts/@test_contract/Test",
+        )
+        .without_initializer();
+
+    assert(first_contract != second_contract);
+}
