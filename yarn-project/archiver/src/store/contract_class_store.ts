@@ -28,9 +28,8 @@ export class ContractClassStore {
    * @returns True if every insert succeeded.
    */
   async addContractClasses(data: ContractClassPublicWithCommitment[], blockNumber: number): Promise<boolean> {
-    return (await Promise.all(data.map(c => this.addContractClass(c, c.publicBytecodeCommitment, blockNumber)))).every(
-      Boolean,
-    );
+    await Promise.all(data.map(c => this.addContractClass(c, c.publicBytecodeCommitment, blockNumber)));
+    return true;
   }
 
   /**
@@ -40,7 +39,8 @@ export class ContractClassStore {
    * @returns True if every delete succeeded.
    */
   async deleteContractClasses(data: ContractClassPublic[], blockNumber: number): Promise<boolean> {
-    return (await Promise.all(data.map(c => this.deleteContractClass(c, blockNumber)))).every(Boolean);
+    await Promise.all(data.map(c => this.deleteContractClass(c, blockNumber)));
+    return true;
   }
 
   async addContractClass(

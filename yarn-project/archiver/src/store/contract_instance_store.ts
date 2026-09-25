@@ -45,7 +45,8 @@ export class ContractInstanceStore {
    * @returns True if every insert succeeded.
    */
   async addContractInstances(data: ContractInstanceWithAddress[], blockNumber: number): Promise<boolean> {
-    return (await Promise.all(data.map(c => this.addContractInstance(c, blockNumber)))).every(Boolean);
+    await Promise.all(data.map(c => this.addContractInstance(c, blockNumber)));
+    return true;
   }
 
   /**
@@ -55,7 +56,8 @@ export class ContractInstanceStore {
    * @returns True if every delete succeeded.
    */
   async deleteContractInstances(data: ContractInstanceWithAddress[], blockNumber: number): Promise<boolean> {
-    return (await Promise.all(data.map(c => this.deleteContractInstance(c, blockNumber)))).every(Boolean);
+    await Promise.all(data.map(c => this.deleteContractInstance(c, blockNumber)));
+    return true;
   }
 
   /**
@@ -70,11 +72,10 @@ export class ContractInstanceStore {
     timestamp: UInt64,
     blockNumber: BlockNumber,
   ): Promise<boolean> {
-    return (
-      await Promise.all(
-        data.map((update, logIndex) => this.addContractInstanceUpdate(update, timestamp, blockNumber, logIndex)),
-      )
-    ).every(Boolean);
+    await Promise.all(
+      data.map((update, logIndex) => this.addContractInstanceUpdate(update, timestamp, blockNumber, logIndex)),
+    );
+    return true;
   }
 
   /**
@@ -89,11 +90,10 @@ export class ContractInstanceStore {
     timestamp: UInt64,
     blockNumber: BlockNumber,
   ): Promise<boolean> {
-    return (
-      await Promise.all(
-        data.map((update, logIndex) => this.deleteContractInstanceUpdate(update, timestamp, blockNumber, logIndex)),
-      )
-    ).every(Boolean);
+    await Promise.all(
+      data.map((update, logIndex) => this.deleteContractInstanceUpdate(update, timestamp, blockNumber, logIndex)),
+    );
+    return true;
   }
 
   addContractInstance(contractInstance: ContractInstanceWithAddress, blockNumber: number): Promise<void> {

@@ -441,7 +441,7 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
 
       // Remove the checkpoint
-      await updater.removeCheckpointsAfter(CheckpointNumber(0));
+      await expect(updater.removeCheckpointsAfter(CheckpointNumber(0))).resolves.toBe(true);
 
       // Verify the contract data was removed
       expect(await store.contractClasses.getContractClass(contractClassId)).toBeUndefined();

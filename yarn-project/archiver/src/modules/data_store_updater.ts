@@ -521,15 +521,15 @@ export class ArchiverDataStoreUpdater {
     const result = await this.stores.db.transactionAsync(async () => {
       const { blocksRemoved = [] } = await this.stores.blocks.removeCheckpointsAfter(checkpointNumber);
 
-      const opResults = await Promise.all([
+      const [, logsDeleted, ...contractDataRemoved] = await Promise.all([
         // Prune rolls back to the last proven block, which is by definition valid
         this.stores.blocks.setPendingChainValidationStatus({ valid: true }),
+        this.stores.logs.deleteLogs(blocksRemoved),
         // Remove contract data for all blocks being removed
         ...blocksRemoved.map(block => this.removeContractDataFromDb(block)),
-        this.stores.logs.deleteLogs(blocksRemoved),
       ]);
 
-      return opResults.every(Boolean);
+      return logsDeleted && contractDataRemoved.every(Boolean);
     });
     await this.l2FrontierCache?.refresh();
     return result;

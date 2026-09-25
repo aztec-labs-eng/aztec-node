@@ -59,6 +59,14 @@ describe('ContractInstanceStore', () => {
       ).resolves.toEqual(blockNum);
     });
 
+    it('reports success for batch adds and deletes', async () => {
+      const other = { ...(await SerializableContractInstance.random()), address: await AztecAddress.random() };
+      await expect(contractInstanceStore.addContractInstances([other], BlockNumber(blockNum))).resolves.toBe(true);
+      await expect(
+        contractInstanceStore.deleteContractInstances([contractInstance, other], BlockNumber(blockNum)),
+      ).resolves.toBe(true);
+    });
+
     it('throws when adding the same contract instance again at a different block', async () => {
       await expect(contractInstanceStore.addContractInstances([contractInstance], BlockNumber(2))).rejects.toThrow(
         /already exists/,
@@ -306,13 +314,15 @@ describe('ContractInstanceStore', () => {
       const first = Fr.random();
       const second = Fr.random();
       await addUpdate(first, { schedulingTimestamp: 1000n, blockNumber: 5 });
-      await addUpdate(second, { schedulingTimestamp: 1000n, blockNumber: 6 });
+      await expect(addUpdate(second, { schedulingTimestamp: 1000n, blockNumber: 6 })).resolves.toBe(true);
 
-      await contractInstanceStore.deleteContractInstanceUpdates(
-        [{ prevContractClassId: originalClassId, newContractClassId: second, timestampOfChange: 1000n, address }],
-        1000n,
-        BlockNumber(6),
-      );
+      await expect(
+        contractInstanceStore.deleteContractInstanceUpdates(
+          [{ prevContractClassId: originalClassId, newContractClassId: second, timestampOfChange: 1000n, address }],
+          1000n,
+          BlockNumber(6),
+        ),
+      ).resolves.toBe(true);
 
       await expect(
         contractInstanceStore.getCurrentContractInstanceClassId(address, 1001n, originalClassId),
