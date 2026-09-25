@@ -1781,6 +1781,15 @@ export class InboxBot implements BotLifecycle {
         this.log.warn(`Giving up on the replay probe for a batch whose nullifier never became visible`, {
           batchId: batch.batchId,
         });
+        // The check is recorded as failed before the batch is marked probed. Marking it probed alone would let a
+        // run whose messages all reached a terminal success close as a success, with replay protection never
+        // actually demonstrated.
+        await this.recordCheck('replay_rejection', 'failed', {
+          batchId: batch.batchId,
+          messageId: spent.messageId,
+          reason: 'probe_timeout',
+        });
+        this.recordFailure('replay_unproven', { batchId: batch.batchId, messageId: spent.messageId });
         await this.store.recordBatchProbe(batch.batchId, 'replay');
         continue;
       }
