@@ -224,6 +224,52 @@ describe('ProposalHandler checkpoint validation', () => {
       expect(result).toEqual({ isValid: false, reason: 'invalid_fee_asset_price_modifier' });
     });
 
+    it('reports an unsigned proposal as invalid_signature even when its feeAssetPriceModifier is also invalid', async () => {
+      const proposal = await makeProposal({ feeAssetPriceModifier: MAX_FEE_ASSET_PRICE_MODIFIER_BPS + 1n });
+      jest.spyOn(proposal, 'getSender').mockReturnValue(undefined);
+
+      const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+      expect(result).toEqual({ isValid: false, reason: 'invalid_signature' });
+    });
+
+    it('serves a repeated pre-check rejection from the cache without re-running the checks', async () => {
+      const proposal = await makeProposal({ feeAssetPriceModifier: MAX_FEE_ASSET_PRICE_MODIFIER_BPS + 1n });
+      // The signature check is the first thing evaluated, so its call count is the number of evaluations.
+      const getSender = jest.spyOn(proposal, 'getSender');
+
+      const first = await handler.handleCheckpointProposal(proposal, proposalInfo);
+      const second = await handler.handleCheckpointProposal(proposal, proposalInfo);
+
+      expect(second).toEqual(first);
+      expect(getSender).toHaveBeenCalledTimes(1);
+    });
+
+    // The fee modifier is checked on the signed payload alone, so whether this node holds the checkpoint's blocks has no
+    // bearing on it: the rejection is not one a prune under validation can explain.
+    it('attributes an invalid feeAssetPriceModifier even when the last block is not local', async () => {
+      blockSource.getBlockData.mockResolvedValue(undefined);
+      const failures: CheckpointProposalValidationResult[] = [];
+      handler.setCheckpointProposalValidationFailureCallback((_proposal, result) => {
+        failures.push(result);
+      });
+      const p2p = mock<P2P>();
+      let checkpointHandler: ((proposal: any, sender: any) => Promise<unknown>) | undefined;
+      p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
+        checkpointHandler = h;
+      });
+      handler.register(p2p, true);
+
+      await checkpointHandler!(
+        await makeProposal({ feeAssetPriceModifier: MAX_FEE_ASSET_PRICE_MODIFIER_BPS + 1n }),
+        {} as any,
+      );
+
+      expect(failures).toEqual([{ isValid: false, reason: 'invalid_fee_asset_price_modifier' }]);
+      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT.invalid_fee_asset_price_modifier).toBe(true);
+      expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('invalid');
+      expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(true);
+    });
+
     it('returns last_block_not_found when block is not found before timeout', async () => {
       blockSource.getBlockData.mockResolvedValue(undefined);
 
