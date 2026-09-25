@@ -36,7 +36,7 @@ describe('FeePredictor', () => {
   beforeAll(async () => {
     const privateKeyRaw = '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba';
 
-    ({ anvil, rpcUrl } = await startAnvil());
+    ({ anvil, rpcUrl } = await startAnvil({ port: 0 }));
 
     publicClient = getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: 31337 });
     cheatCodes = new EthCheatCodes([rpcUrl], new DateProvider());

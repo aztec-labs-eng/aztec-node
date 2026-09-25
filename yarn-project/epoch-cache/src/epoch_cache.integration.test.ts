@@ -50,6 +50,7 @@ describe('EpochCache integration', () => {
     // Start Anvil with slotsInAnEpoch=8 so finalized = latest - 16 blocks.
     // This keeps most epoch data non-finalized (TTL-cached) after warps.
     ({ anvil, rpcUrl } = await startAnvil({
+      port: 0,
       l1BlockTime: 1,
       slotsInAnEpoch: 8,
       dateProvider,

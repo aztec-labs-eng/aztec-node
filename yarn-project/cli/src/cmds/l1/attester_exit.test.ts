@@ -96,7 +96,7 @@ describe('attester exit through the client and CLI', () => {
   });
 
   it('deploys, exits as the attester, and pays only the withdrawer-selected recipient after both delays', async () => {
-    ({ anvil, rpcUrl } = await startAnvil());
+    ({ anvil, rpcUrl } = await startAnvil({ port: 0 }));
     const { l1ContractAddresses } = await deployAztecL1Contracts(
       rpcUrl,
       '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba',
