@@ -42,8 +42,15 @@ export type ZodNullableOptional<T extends ZodTypeAny> = ZodType<z.output<T> | un
  * optional so a missing value is accepted.
  */
 export function optional<T extends ZodTypeAny>(schema: T) {
-  const target = schema instanceof z.ZodDefault ? schema : schema.optional();
-  return z.preprocess(value => value ?? undefined, target);
+  // Both null and undefined mean "absent" and normalize to undefined. JSON has no undefined, so a
+  // skipped argument arrives as null, and a wrapped `.default(...)` must still fire on it. `.nullish()`
+  // short-circuits null before a wrapped default, so a default schema is fed the normalized value
+  // directly; the cast keeps the same caller-facing type as the plain optional case.
+  const asOptional = schema.nullish().transform(value => value ?? undefined);
+  if (schema instanceof z.ZodDefault) {
+    return z.preprocess(value => value ?? undefined, schema) as unknown as typeof asOptional;
+  }
+  return asOptional;
 }
 
 type ToJsonIs<T, TRet> = T extends { toJSON(): TRet } ? T : never;
