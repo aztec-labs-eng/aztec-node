@@ -1,4 +1,4 @@
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -163,6 +163,27 @@ describe('EvictionManager', () => {
         {
           event: EvictionEvent.CHAIN_PRUNED,
           blockNumber: BlockNumber(1),
+        },
+        pool,
+      );
+    });
+  });
+
+  describe('evictAfterSlotPrepared', () => {
+    it('calls evict on registered rules with correct context', async () => {
+      mockRule1.evict.mockResolvedValue({
+        txsEvicted: [],
+        reason: 'test',
+        success: true,
+      });
+
+      evictionManager.registerRule(mockRule1);
+      await evictionManager.evictAfterSlotPrepared(SlotNumber(7));
+
+      expect(mockRule1.evict).toHaveBeenCalledWith(
+        {
+          event: EvictionEvent.SLOT_PREPARED,
+          slotNumber: SlotNumber(7),
         },
         pool,
       );
@@ -417,6 +438,10 @@ describe('EvictionManager', () => {
 
     it('handles evictAfterChainPrune with no rules gracefully', async () => {
       await expect(evictionManager.evictAfterChainPrune(BlockNumber(1))).resolves.not.toThrow();
+    });
+
+    it('handles evictAfterSlotPrepared with no rules gracefully', async () => {
+      await expect(evictionManager.evictAfterSlotPrepared(SlotNumber(1))).resolves.not.toThrow();
     });
   });
 });

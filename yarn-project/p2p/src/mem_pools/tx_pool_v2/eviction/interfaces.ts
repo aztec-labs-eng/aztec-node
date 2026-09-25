@@ -1,4 +1,4 @@
-import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { BlockHeader, TxHash } from '@aztec-labs/stdlib/tx';
 
 import type { TxMetaData } from '../tx_metadata.js';
@@ -10,6 +10,7 @@ export const EvictionEvent = {
   TXS_ADDED: 'txs_added',
   BLOCK_MINED: 'block_mined',
   CHAIN_PRUNED: 'chain_pruned',
+  SLOT_PREPARED: 'slot_prepared',
 } as const;
 
 export type EvictionEventType = (typeof EvictionEvent)[keyof typeof EvictionEvent];
@@ -32,6 +33,10 @@ export type EvictionContext =
       block: BlockHeader;
       newNullifiers: string[];
       feePayers: string[];
+    }
+  | {
+      event: typeof EvictionEvent.SLOT_PREPARED;
+      slotNumber: SlotNumber;
     };
 
 /**

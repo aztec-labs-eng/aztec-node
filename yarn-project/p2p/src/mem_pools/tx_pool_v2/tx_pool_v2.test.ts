@@ -6477,10 +6477,10 @@ describe('TxPoolV2', () => {
     });
   });
 
-  describe('max fee per gas eviction after block mined', () => {
+  describe('max fee per gas eviction on slot preparation', () => {
     // The eviction rule reads the next-block min fee to determine the threshold.
     // We use a mutable variable so each test can set it.
-    let currentMinFees = GasFees.empty();
+    let currentMinFees: GasFees | undefined = GasFees.empty();
 
     beforeEach(async () => {
       // Re-create the pool with a provider that reports the test-controlled value
@@ -6523,7 +6523,7 @@ describe('TxPoolV2', () => {
         }),
       });
 
-    it('evicts pending txs when mined block has higher gas fees', async () => {
+    it('retains underpriced pending txs on block mined and evicts them on the next slot preparation', async () => {
       // Txs with maxFeesPerGas = (10, 10)
       const tx1 = await makeTxWithMaxFees(1, new GasFees(10, 10));
       const tx2 = await makeTxWithMaxFees(2, new GasFees(10, 10));
@@ -6533,16 +6533,36 @@ describe('TxPoolV2', () => {
 
       // Set projected min fees higher than txs' maxFeesPerGas
       currentMinFees = new GasFees(20, 20);
-      const blockHeader = headerWithGasFees(new GasFees(20, 20));
-      await pool.handleMinedBlock(makeEmptyBlock(blockHeader));
+      await pool.handleMinedBlock(makeEmptyBlock(headerWithGasFees(new GasFees(20, 20))));
 
-      // Both txs should be evicted since their maxFeesPerGas (10, 10) < block fees (20, 20)
+      // Mining alone no longer sweeps: both txs are still pending
+      expect(await pool.getTxStatus(tx1.getTxHash())).toBe('pending');
+      expect(await pool.getTxStatus(tx2.getTxHash())).toBe('pending');
+      expect(await pool.getPendingTxCount()).toBe(2);
+
+      await pool.prepareForSlot(SlotNumber(2));
+
+      // Both txs are evicted since their maxFeesPerGas (10, 10) < next-block fees (20, 20)
       expect(await pool.getTxStatus(tx1.getTxHash())).toBe('deleted');
       expect(await pool.getTxStatus(tx2.getTxHash())).toBe('deleted');
       expect(await pool.getPendingTxCount()).toBe(0);
     });
 
-    it('keeps pending txs when their maxFeesPerGas meets block gas fees', async () => {
+    it('sweeps underpriced txs even when there is nothing to unprotect', async () => {
+      const tx = await makeTxWithMaxFees(1, new GasFees(10, 10));
+
+      await pool.addPendingTxs([tx]);
+      expect(await pool.getPendingTxCount()).toBe(1);
+
+      currentMinFees = new GasFees(20, 20);
+      // No protected txs exist, so prepareForSlot has no expired protections to restore
+      await pool.prepareForSlot(SlotNumber(2));
+
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('deleted');
+      expect(await pool.getPendingTxCount()).toBe(0);
+    });
+
+    it('keeps pending txs when their maxFeesPerGas meets the next-block fees', async () => {
       // Txs with maxFeesPerGas = (50, 50)
       const tx1 = await makeTxWithMaxFees(1, new GasFees(50, 50));
       const tx2 = await makeTxWithMaxFees(2, new GasFees(50, 50));
@@ -6552,10 +6572,9 @@ describe('TxPoolV2', () => {
 
       // Set projected min fees lower than txs' maxFeesPerGas
       currentMinFees = new GasFees(20, 20);
-      const blockHeader = headerWithGasFees(new GasFees(20, 20));
-      await pool.handleMinedBlock(makeEmptyBlock(blockHeader));
+      await pool.prepareForSlot(SlotNumber(2));
 
-      // Both txs should remain pending since their maxFeesPerGas (50, 50) >= block fees (20, 20)
+      // Both txs should remain pending since their maxFeesPerGas (50, 50) >= next-block fees (20, 20)
       expect(await pool.getTxStatus(tx1.getTxHash())).toBe('pending');
       expect(await pool.getTxStatus(tx2.getTxHash())).toBe('pending');
       expect(await pool.getPendingTxCount()).toBe(2);
@@ -6571,8 +6590,7 @@ describe('TxPoolV2', () => {
 
       // Set projected min fees to (20, 20)
       currentMinFees = new GasFees(20, 20);
-      const blockHeader = headerWithGasFees(new GasFees(20, 20));
-      await pool.handleMinedBlock(makeEmptyBlock(blockHeader));
+      await pool.prepareForSlot(SlotNumber(2));
 
       // txLowFee (5, 5) < (20, 20) -> evicted
       expect(await pool.getTxStatus(txLowFee.getTxHash())).toBe('deleted');
@@ -6590,8 +6608,7 @@ describe('TxPoolV2', () => {
       expect(await pool.getPendingTxCount()).toBe(1);
 
       currentMinFees = new GasFees(20, 20);
-      const blockHeader = headerWithGasFees(new GasFees(20, 20));
-      await pool.handleMinedBlock(makeEmptyBlock(blockHeader));
+      await pool.prepareForSlot(SlotNumber(2));
 
       expect(await pool.getTxStatus(tx.getTxHash())).toBe('deleted');
     });
@@ -6603,20 +6620,31 @@ describe('TxPoolV2', () => {
       expect(await pool.getPendingTxCount()).toBe(1);
 
       currentMinFees = new GasFees(20, 20);
-      const blockHeader = headerWithGasFees(new GasFees(20, 20));
-      await pool.handleMinedBlock(makeEmptyBlock(blockHeader));
+      await pool.prepareForSlot(SlotNumber(2));
 
       expect(await pool.getTxStatus(tx.getTxHash())).toBe('deleted');
     });
 
-    it('does not evict when block gas fees are zero', async () => {
+    it('does not evict when next-block fees are zero', async () => {
       const tx = await makeTxWithMaxFees(1, new GasFees(10, 10));
 
       await pool.addPendingTxs([tx]);
       expect(await pool.getPendingTxCount()).toBe(1);
 
-      // Mine a block with zero gas fees (GasFees.empty)
-      await pool.handleMinedBlock(makeEmptyBlock(slot1Header));
+      await pool.prepareForSlot(SlotNumber(2));
+
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('pending');
+    });
+
+    it('does not evict when the next-block fees are unavailable', async () => {
+      // Priced below every plausible fee, so only unavailability can save it.
+      const tx = await makeTxWithMaxFees(1, new GasFees(0, 0));
+
+      await pool.addPendingTxs([tx]);
+      expect(await pool.getPendingTxCount()).toBe(1);
+
+      currentMinFees = undefined;
+      await pool.prepareForSlot(SlotNumber(2));
 
       expect(await pool.getTxStatus(tx.getTxHash())).toBe('pending');
     });
@@ -6630,11 +6658,32 @@ describe('TxPoolV2', () => {
 
       // Set projected min fees higher than the tx's maxFeesPerGas
       currentMinFees = new GasFees(20, 20);
-      const blockHeader = headerWithGasFees(new GasFees(20, 20));
-      await pool.handleMinedBlock(makeEmptyBlock(blockHeader));
+      // Preparing for the same slot the tx is protected for leaves the protection in place
+      await pool.prepareForSlot(SlotNumber(1));
 
       // Protected tx should not be evicted (eviction rules only check pending txs)
       expect(await pool.getTxStatus(tx.getTxHash())).toBe('protected');
+    });
+
+    it('still evicts expired txs on block mined', async () => {
+      // The other post-block rules keep their BLOCK_MINED trigger; only the fee sweep moved.
+      const txExpiring = await makeTxWithMaxFees(1, new GasFees(50, 50));
+      txExpiring.data.expirationTimestamp = 5n;
+
+      await pool.addPendingTxs([txExpiring]);
+      expect(await pool.getPendingTxCount()).toBe(1);
+
+      const blockHeader = BlockHeader.empty({
+        globalVariables: GlobalVariables.empty({
+          blockNumber: BlockNumber(1),
+          slotNumber: SlotNumber(1),
+          timestamp: 10n,
+          gasFees: new GasFees(20, 20),
+        }),
+      });
+      await pool.handleMinedBlock(makeEmptyBlock(blockHeader));
+
+      expect(await pool.getTxStatus(txExpiring.getTxHash())).toBe('deleted');
     });
   });
 });
