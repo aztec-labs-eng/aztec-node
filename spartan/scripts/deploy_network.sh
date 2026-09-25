@@ -164,7 +164,6 @@ PROVER_AGENT_KEDA_PROMETHEUS_SERVER_ADDRESS=${PROVER_AGENT_KEDA_PROMETHEUS_SERVE
 if [[ "$PROVER_ENABLED" == "true" && "$PROVER_AGENT_KEDA_ENABLED" == "true" && -z "$PROVER_AGENT_KEDA_PROMETHEUS_SERVER_ADDRESS" ]]; then
   die "PROVER_AGENT_KEDA_ENABLED=true requires PROVER_AGENT_KEDA_PROMETHEUS_SERVER_ADDRESS. Set it explicitly, for example via GCP secret replacement."
 fi
-PROVER_AGENT_REPLICA_CAPACITY=$([[ "$PROVER_ENABLED" == "true" ]] && echo "$PROVER_AGENT_KEDA_MAX_REPLICAS" || echo 0)
 PROVER_AGENTS_PER_PROVER=${PROVER_AGENTS_PER_PROVER:-1}
 R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}
 R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
@@ -287,8 +286,9 @@ if (( TOTAL_VALIDATOR_PUBLISHERS > 0 )); then
   LABS_INFRA_INDICES="${LABS_INFRA_INDICES},${VALIDATOR_PUBLISHER_RANGE}"
 fi
 
-# Add prover publishers to prefunding list
-TOTAL_PROVER_PUBLISHERS=$((PROVER_AGENT_REPLICA_CAPACITY * PUBLISHERS_PER_PROVER))
+# Add prover publishers to prefunding list, using the same sizing the funding calculation applies.
+source "${REPO_ROOT}/spartan/scripts/prover_publisher_count.sh"
+calculate_total_prover_publishers
 
 if (( TOTAL_PROVER_PUBLISHERS > 0 )); then
   PROVER_PUBLISHER_RANGE=$(seq "$PROVER_PUBLISHER_MNEMONIC_START_INDEX" $((PROVER_PUBLISHER_MNEMONIC_START_INDEX + TOTAL_PROVER_PUBLISHERS - 1)) | tr '\n' ',' | sed 's/,$//')

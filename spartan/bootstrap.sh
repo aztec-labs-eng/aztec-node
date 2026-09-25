@@ -25,6 +25,7 @@ function build {
   denoise "helm lint ./eth-devnet/"
   denoise "terraform fmt -check -recursive ./terraform/"
   denoise ./scripts/check_env_vars.sh
+  denoise ./scripts/prover_publisher_count.test.sh
 }
 
 function network_shaping {
