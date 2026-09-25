@@ -1,3 +1,4 @@
+import { MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { type EpochCache, type EpochCommitteeInfo, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
 import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
 import {
@@ -1596,8 +1597,11 @@ describe('sequencer', () => {
     it('multi block mode', async () => {
       sequencer.updateConfig({ maxTxsPerBlock: 4, blockDurationMs: 500 });
 
-      const txs = await timesParallel(8, i => makeTx(i * 0x10000));
-      block = await makeBlock(txs.slice(0, 4));
+      // Serve a block with its own tx on every build call, since a checkpoint that repeats a tx hash is invalid.
+      const txs = await timesParallel(MAX_BLOCKS_PER_CHECKPOINT, i => makeTx(i * 0x10000));
+      const blocks = await Promise.all(txs.map(tx => TestUtils.makeBlock([tx], globalVariables)));
+      let nextBlock = 0;
+      checkpointBuilder.setBlockProvider(() => (block = blocks[nextBlock++]));
       TestUtils.mockPendingTxs(p2p, txs);
 
       await sequencer.work();
