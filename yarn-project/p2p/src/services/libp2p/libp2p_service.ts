@@ -9,7 +9,7 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees, type TxAdmissionMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import { type TxAdmissionMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   P2PConnectivity,
@@ -81,6 +81,7 @@ import {
   type GossipValidationFailure,
   IgnoreWithoutPenalty,
   type TransactionValidator,
+  computeGossipMinFees,
   createFirstStageTxValidationsForGossipedTransactions,
   createSecondStageTxValidationsForGossipedTransactions,
   createTxValidatorForBlockProposalReceivedTxs,
@@ -1828,18 +1829,13 @@ export class LibP2PService extends WithTracer implements P2PService {
     }
   }
 
-  /**
-   * The fees a gossiped transaction is checked against. The penalty floor is the lower of the admission and
-   * L1-forward fees: a peer that prices the next block off a different checkpoint than we do can land below our
-   * admission fee, but the L1-forward fee does not depend on locally proposed checkpoints, so a tx below both has
-   * no such excuse.
-   */
+  /** The fees a gossiped transaction is checked against (see {@link computeGossipMinFees}). */
   protected async getGasFees(): Promise<GossipMinFees> {
     const [admission, l1Forward] = await Promise.all([
       this.nextBlockMinFeesProvider.getAdmissionMinFees(),
       this.nextBlockMinFeesProvider.getL1ForwardMinFees(),
     ]);
-    return { admission, penaltyFloor: GasFees.min(admission, l1Forward) };
+    return computeGossipMinFees(admission, l1Forward);
   }
 
   /**

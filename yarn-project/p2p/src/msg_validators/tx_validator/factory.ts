@@ -36,7 +36,7 @@ import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree'
 import { ProtocolContractAddress, protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { BlockHash } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import type { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees } from '@aztec-labs/stdlib/gas';
 import type {
   AllowedElement,
   ClientProtocolCircuitVerifier,
@@ -82,10 +82,23 @@ export type GossipValidationFailure = PeerErrorSeverity | typeof IgnoreWithoutPe
 
 /**
  * The fees a gossiped tx is checked against. A tx below `admission` is not relayed. A tx below `penaltyFloor` as
- * well cannot be explained by a peer pricing a different checkpoint than this node does, so its sender is penalized.
+ * well is priced lower than any view of the chain this node considers plausible, so its sender is penalized.
  * `penaltyFloor` is never above `admission`.
  */
 export type GossipMinFees = { admission: GasFees; penaltyFloor: GasFees };
+
+/**
+ * Fraction of the lower of the admission and L1-forward fees below which a gossiped tx gets its sender penalized.
+ * A peer can legitimately price the next block below both: one that has seen a checkpoint this node has not can
+ * see the congestion fee drop, and the L1 gas components move with every L1 block. Halving leaves room for
+ * several such steps while still penalizing zero-fee and negligible-fee spam.
+ */
+export const GOSSIP_FEE_PENALTY_FLOOR_FRACTION = 0.5;
+
+/** Derives the gossip fee thresholds from this node's admission fee and its L1-forward fee. */
+export function computeGossipMinFees(admission: GasFees, l1Forward: GasFees): GossipMinFees {
+  return { admission, penaltyFloor: GasFees.min(admission, l1Forward).mul(GOSSIP_FEE_PENALTY_FLOOR_FRACTION) };
+}
 
 /**
  * A validator paired with the consequence of its failure.
@@ -189,8 +202,8 @@ export function createFirstStageTxValidationsForGossipedTransactions(
     // The max-fee comparisons and the fee-payer balance check are separate entries because their failures mean
     // different things. A tx below our admission fee is only invalid against a fee this node resolved: a peer
     // ahead of us may be relaying against a lower checkpoint fee it legitimately sees, so the tx is dropped
-    // without penalizing the sender. That excuse only stretches down to the penalty floor, so a tx below it is
-    // penalized too, and the harshest failure wins. An underfunded fee payer is invalid against shared state, so
+    // without penalizing the sender. That excuse only stretches down to the penalty floor, so a tx below it fails
+    // both entries and the harshest failure wins. An underfunded fee payer is invalid against shared state, so
     // it stays penalized.
     maxFeePerGasValidator: {
       validator: new MaxFeePerGasValidator<Tx>(gasFees.admission, bindings),

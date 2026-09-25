@@ -48,6 +48,7 @@ import {
   type GossipMinFees,
   type GossipValidationFailure,
   type TransactionValidator,
+  computeGossipMinFees,
   createFirstStageTxValidationsForGossipedTransactions,
 } from '../../msg_validators/tx_validator/factory.js';
 import type { PubSubLibp2p } from '../../util.js';
@@ -328,11 +329,11 @@ describe('LibP2PService', () => {
 
     describe('local next-block fee policy', () => {
       const localMinFees = new GasFees(10, 10);
-      const penaltyFloor = new GasFees(5, 5);
 
       /**
-       * The real first-stage fee validators for a node admitting at `localMinFees` and penalizing below
-       * `penaltyFloor`. Only the fee entries are injected, so the gossip outcome is decided by the fee checks alone.
+       * The real first-stage fee validators for a node whose admission and L1-forward fees are both `localMinFees`,
+       * which puts the penalty floor at (5, 5). Only the fee entries are injected, so the gossip outcome is decided
+       * by the fee checks alone.
        */
       function createGossipFeeValidators(): Record<string, TransactionValidator<GossipValidationFailure>> {
         const worldState = mock<WorldStateSynchronizer>();
@@ -341,7 +342,7 @@ describe('LibP2PService', () => {
           0n,
           BlockNumber(2),
           worldState,
-          { admission: localMinFees, penaltyFloor },
+          computeGossipMinFees(localMinFees, localMinFees),
           1,
           1,
           Fr.ZERO,
@@ -373,7 +374,7 @@ describe('LibP2PService', () => {
         txService.firstStageValidatorsOverride = createGossipFeeValidators();
       });
 
-      it('ignores a tx paying below the local admission fee without penalizing the peer', async () => {
+      it('ignores a tx priced between the penalty floor and the admission fee without penalizing the peer', async () => {
         const tx = await mockTxPaying(Gas.empty(), new GasFees(6, 6));
 
         await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
@@ -384,8 +385,8 @@ describe('LibP2PService', () => {
         expect(txPool.addPendingTxs).not.toHaveBeenCalled();
       });
 
-      it('rejects and penalizes a tx paying below the penalty floor', async () => {
-        const tx = await mockTxPaying(Gas.empty(), GasFees.empty());
+      it('rejects and penalizes a zero-fee tx, whose zero fee limit passes the balance check', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), GasFees.empty());
 
         await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
 
@@ -404,8 +405,8 @@ describe('LibP2PService', () => {
         expect(txPool.addPendingTxs).not.toHaveBeenCalled();
       });
 
-      it('rejects and penalizes when a fee below the local minimum coincides with an unfunded fee payer', async () => {
-        const tx = await mockTxPaying(new Gas(100, 100), new GasFees(1, 1));
+      it('rejects and penalizes an unfunded fee payer even when its fee alone would only be ignored', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), new GasFees(6, 6));
 
         await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
 
@@ -426,16 +427,16 @@ describe('LibP2PService', () => {
       getL1ForwardMinFees: () => Promise.resolve(l1Forward),
     });
 
-    it('admits against the admission fee and penalizes below the lower of it and the L1-forward fee', async () => {
+    it('admits against the admission fee and penalizes below half the lower of it and the L1-forward fee', async () => {
       const feeService = createTestLibP2PService({
         peerManager: mockPeerManager,
         node: mockNode,
-        nextBlockMinFeesProvider: feesProvider(new GasFees(7, 70), new GasFees(7, 70), new GasFees(5, 100)),
+        nextBlockMinFeesProvider: feesProvider(new GasFees(8, 80), new GasFees(8, 80), new GasFees(6, 100)),
       });
 
       await expect(feeService.getGasFees()).resolves.toEqual({
-        admission: new GasFees(7, 70),
-        penaltyFloor: new GasFees(5, 70),
+        admission: new GasFees(8, 80),
+        penaltyFloor: new GasFees(3, 40),
       });
     });
 
@@ -443,12 +444,12 @@ describe('LibP2PService', () => {
       const feeService = createTestLibP2PService({
         peerManager: mockPeerManager,
         node: mockNode,
-        nextBlockMinFeesProvider: feesProvider(undefined, new GasFees(3, 30), new GasFees(3, 30)),
+        nextBlockMinFeesProvider: feesProvider(undefined, new GasFees(4, 40), new GasFees(4, 40)),
       });
 
       await expect(feeService.getGasFees()).resolves.toEqual({
-        admission: new GasFees(3, 30),
-        penaltyFloor: new GasFees(3, 30),
+        admission: new GasFees(4, 40),
+        penaltyFloor: new GasFees(2, 20),
       });
     });
   });
