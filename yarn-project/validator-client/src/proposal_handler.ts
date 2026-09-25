@@ -1012,24 +1012,10 @@ export class ProposalHandler {
       return { isValid: false, blockNumber, reason: 'txs_not_available' };
     }
 
-    // Collect the out hashes of all the checkpoints before this one in the same epoch.
-    // Mirror the proposer-side fallback: under pipelining the immediately-preceding cp may not
-    // yet be on L1, in which case the helper grafts the locally-known proposed cp's outHash.
-    const epoch = getEpochAtSlot(slotNumber, this.epochCache.getL1Constants());
-    const previousCheckpointOutHashes = await getPreviousCheckpointOutHashes({
-      blockSource: this.blockSource,
-      epoch,
+    const { previousCheckpointOutHashes, previousInboxRollingHash } = await this.getCheckpointAncestryInputs(
+      slotNumber,
       checkpointNumber,
-      l1Constants: this.epochCache.getL1Constants(),
-      pipeliningEnabled: true,
-      log: this.log,
-    });
-
-    const previousInboxRollingHash = await getPreviousCheckpointInboxRollingHash({
-      blockSource: this.blockSource,
-      checkpointNumber,
-      log: this.log,
-    });
+    );
 
     // Try re-executing the transactions in the proposal if needed
     let reexecutionResult;
@@ -1620,6 +1606,33 @@ export class ProposalHandler {
     }
     const preBlock = await this.blockSource.getBlockData({ number: BlockNumber(preBlockNumber) });
     return preBlock === undefined ? undefined : this.blockLeafCount(preBlock);
+  }
+
+  /**
+   * The out hashes of the checkpoints before `checkpointNumber` in its epoch, and the Inbox rolling hash the parent
+   * checkpoint ended at, which a checkpoint's rebuild starts from. Mirrors the proposer-side fallback: under
+   * pipelining the immediately-preceding checkpoint may not be on L1 yet, in which case the helpers graft in the
+   * locally-known proposed checkpoint's values.
+   */
+  private async getCheckpointAncestryInputs(
+    slot: SlotNumber,
+    checkpointNumber: CheckpointNumber,
+  ): Promise<{ previousCheckpointOutHashes: Fr[]; previousInboxRollingHash: Fr }> {
+    const epoch = getEpochAtSlot(slot, this.epochCache.getL1Constants());
+    const previousCheckpointOutHashes = await getPreviousCheckpointOutHashes({
+      blockSource: this.blockSource,
+      epoch,
+      checkpointNumber,
+      l1Constants: this.epochCache.getL1Constants(),
+      pipeliningEnabled: true,
+      log: this.log,
+    });
+    const previousInboxRollingHash = await getPreviousCheckpointInboxRollingHash({
+      blockSource: this.blockSource,
+      checkpointNumber,
+      log: this.log,
+    });
+    return { previousCheckpointOutHashes, previousInboxRollingHash };
   }
 
   /**
@@ -2355,30 +2368,11 @@ export class ProposalHandler {
       return { isValid: false, reason: consumed.reason, checkpointNumber };
     }
 
-    // Collect the out hashes of all the checkpoints before this one in the same epoch.
-    // See note on the analogous block-proposal site: the helper handles pipelining lag.
-    const epoch = getEpochAtSlot(slot, this.epochCache.getL1Constants());
-    const previousCheckpointOutHashes = await getPreviousCheckpointOutHashes({
-      blockSource: this.blockSource,
-      epoch,
-      checkpointNumber,
-      l1Constants: this.epochCache.getL1Constants(),
-      pipeliningEnabled: true,
-      log: this.log,
-    });
-
-    const previousInboxRollingHash = await getPreviousCheckpointInboxRollingHash({
-      blockSource: this.blockSource,
-      checkpointNumber,
-      log: this.log,
-    });
-
     return {
       ...located,
       constants,
       l1ToL2Messages: consumed.messages,
-      previousCheckpointOutHashes,
-      previousInboxRollingHash,
+      ...(await this.getCheckpointAncestryInputs(slot, checkpointNumber)),
     };
   }
 
@@ -2449,16 +2443,16 @@ export class ProposalHandler {
 
   /** Extracts checkpoint global variables from a block. */
   private extractCheckpointConstants(block: L2Block): CheckpointGlobalVariables {
-    const gv = block.header.globalVariables;
-    return {
-      chainId: gv.chainId,
-      version: gv.version,
-      slotNumber: gv.slotNumber,
-      timestamp: gv.timestamp,
-      coinbase: gv.coinbase,
-      feeRecipient: gv.feeRecipient,
-      gasFees: gv.gasFees,
-    };
+    return pick(
+      block.header.globalVariables,
+      'chainId',
+      'version',
+      'slotNumber',
+      'timestamp',
+      'coinbase',
+      'feeRecipient',
+      'gasFees',
+    );
   }
 
   /** Triggers blob upload for a checkpoint if the blob client can upload (fire and forget). */
