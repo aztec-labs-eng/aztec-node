@@ -908,8 +908,8 @@ describe('ValidatorClient', () => {
         },
       });
 
-      // Mock validateCheckpointProposal to pass, so handleCheckpointProposal runs its
-      // own checks (signature, fee modifier) and then proceeds to blob upload.
+      // Mock validateCheckpointProposal to pass, which also skips its signature and fee modifier checks, so
+      // handleCheckpointProposal proceeds to blob upload.
       const validateCheckpointSpy = jest
         .spyOn(validatorClient.getProposalHandler(), 'validateCheckpointProposal')
         .mockResolvedValue({ isValid: true, checkpointNumber: CheckpointNumber(1) });
