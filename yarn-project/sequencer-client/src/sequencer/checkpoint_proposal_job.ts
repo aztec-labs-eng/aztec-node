@@ -10,30 +10,22 @@ import {
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
-import {
-  flipSignature,
-  generateRecoverableSignature,
-  generateUnrecoverableSignature,
-} from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { InterruptError, TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { filter } from '@aztec-labs/foundation/iterator';
-import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { type LogData, type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { InterruptibleSleep } from '@aztec-labs/foundation/sleep';
 import { type DateProvider, Timer, executeTimeout } from '@aztec-labs/foundation/timer';
-import { type TypedEventEmitter, isErrorClass, unfreeze } from '@aztec-labs/foundation/types';
+import { type TypedEventEmitter, isErrorClass } from '@aztec-labs/foundation/types';
 import type { P2P } from '@aztec-labs/p2p';
 import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import {
-  CommitteeAttestation,
   CommitteeAttestationsAndSigners,
   L2Block,
   type L2BlockSink,
   type L2BlockSource,
-  MaliciousCommitteeAttestationsAndSigners,
-  MaliciousYParityCommitteeAttestationsAndSigners,
   type ProposedCheckpointSink,
   type ValidateCheckpointResult,
 } from '@aztec-labs/stdlib/block';
@@ -81,6 +73,7 @@ import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/val
 
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
+import { hasAttestationManipulation, manipulateAttestations } from './attestation_manipulation.js';
 import type { CheckpointProposalJobMetricsRecorder } from './checkpoint_proposal_job_metrics.js';
 import type { CheckpointProposalJobTestHooks } from './checkpoint_proposal_job_test_hooks.js';
 import { CheckpointVoter } from './checkpoint_voter.js';
@@ -340,7 +333,7 @@ export class CheckpointProposalJob implements Traceable {
   private reportCheckpointFailure(
     event: 'build-failed' | 'publish-failed' | 'block-build-failed',
     message: string,
-    context: Record<string, unknown> & { reason: string },
+    context: LogData & { reason: string },
     log: { level: 'verbose' | 'warn' } | { level: 'error'; err: unknown },
   ): void {
     const eventMessages = {
@@ -2206,14 +2199,18 @@ export class CheckpointProposalJob implements Traceable {
       });
 
       // Manipulate the attestations if we've been configured to do so
-      if (
-        this.config.injectFakeAttestation ||
-        this.config.injectHighSValueAttestation ||
-        this.config.injectUnrecoverableSignatureAttestation ||
-        this.config.injectYParityAttestation ||
-        this.config.shuffleAttestationOrdering
-      ) {
-        return this.manipulateAttestations(proposal.slotNumber, epoch, seed, committee, sorted);
+      if (hasAttestationManipulation(this.config)) {
+        return manipulateAttestations({
+          config: this.config,
+          epochCache: this.epochCache,
+          signatureContext: this.getSignatureContext(),
+          log: this.log,
+          slotNumber: proposal.slotNumber,
+          epoch,
+          seed,
+          committee,
+          attestations: sorted,
+        });
       }
 
       return new CommitteeAttestationsAndSigners(sorted, this.getSignatureContext());
@@ -2264,91 +2261,6 @@ export class CheckpointProposalJob implements Traceable {
       ...(missingValidatorCount !== undefined && { missingValidatorCount }),
       ...(opts.reason !== undefined && { reason: opts.reason }),
     });
-  }
-
-  /** Breaks the attestations before publishing based on attack configs */
-  private manipulateAttestations(
-    slotNumber: SlotNumber,
-    epoch: EpochNumber,
-    seed: bigint,
-    committee: EthAddress[],
-    attestations: CommitteeAttestation[],
-  ) {
-    // Compute the proposer index in the committee, since we dont want to tweak it.
-    // Otherwise, the L1 rollup contract will reject the block outright.
-    const proposerIndex = Number(
-      this.epochCache.computeProposerIndex(slotNumber, epoch, seed, BigInt(committee.length)),
-    );
-
-    if (
-      this.config.injectFakeAttestation ||
-      this.config.injectHighSValueAttestation ||
-      this.config.injectUnrecoverableSignatureAttestation
-    ) {
-      // Find non-empty attestations that are not from the proposer
-      const nonProposerIndices: number[] = [];
-      for (let i = 0; i < attestations.length; i++) {
-        if (!attestations[i].signature.isEmpty() && i !== proposerIndex) {
-          nonProposerIndices.push(i);
-        }
-      }
-      if (nonProposerIndices.length > 0) {
-        const targetIndex = nonProposerIndices[randomInt(nonProposerIndices.length)];
-        if (this.config.injectHighSValueAttestation) {
-          this.log.warn(
-            `Injecting high-s value attestation in checkpoint for slot ${slotNumber} at index ${targetIndex}`,
-          );
-          unfreeze(attestations[targetIndex]).signature = flipSignature(attestations[targetIndex].signature);
-        } else if (this.config.injectUnrecoverableSignatureAttestation) {
-          this.log.warn(
-            `Injecting unrecoverable signature attestation in checkpoint for slot ${slotNumber} at index ${targetIndex}`,
-          );
-          unfreeze(attestations[targetIndex]).signature = generateUnrecoverableSignature();
-        } else {
-          this.log.warn(`Injecting fake attestation in checkpoint for slot ${slotNumber} at index ${targetIndex}`);
-          unfreeze(attestations[targetIndex]).signature = generateRecoverableSignature();
-        }
-      }
-      return new CommitteeAttestationsAndSigners(attestations, this.getSignatureContext());
-    }
-
-    if (this.config.injectYParityAttestation) {
-      // Force every non-proposer signed slot's recovery byte to yParity (v ∈ {0, 1}) form in the packed L1
-      // tuple, after packAttestations has canonicalized it. The proposer's own slot is left canonical so
-      // propose() still passes verifyProposer. Models a malicious proposer landing a checkpoint L1 accepts
-      // but that can never be proven (ECDSA.recover rejects v ∉ {27, 28}).
-      this.log.warn(`Injecting yParity attestations in checkpoint for slot ${slotNumber} (proposer #${proposerIndex})`);
-      return new MaliciousYParityCommitteeAttestationsAndSigners(
-        attestations,
-        proposerIndex,
-        this.getSignatureContext(),
-      );
-    }
-
-    if (this.config.shuffleAttestationOrdering) {
-      this.log.warn(`Shuffling attestation ordering in checkpoint for slot ${slotNumber} (proposer #${proposerIndex})`);
-
-      const shuffled = [...attestations];
-
-      // Find two non-proposer positions that both have non-empty signatures to swap.
-      // This ensures the bitmap doesn't change, so the MaliciousCommitteeAttestationsAndSigners
-      // signers array stays correctly aligned with L1's committee reconstruction.
-      const swappable: number[] = [];
-      for (let k = 0; k < shuffled.length; k++) {
-        if (!shuffled[k].signature.isEmpty() && k !== proposerIndex) {
-          swappable.push(k);
-        }
-      }
-      if (swappable.length >= 2) {
-        const [i, j] = [swappable[0], swappable[1]];
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-
-      const signers = new CommitteeAttestationsAndSigners(attestations, this.getSignatureContext()).getSigners();
-      return new MaliciousCommitteeAttestationsAndSigners(shuffled, signers, this.getSignatureContext());
-    }
-
-    return new CommitteeAttestationsAndSigners(attestations, this.getSignatureContext());
   }
 
   private async dropFailedTxsFromP2P(failedTxs: FailedTx[]) {
