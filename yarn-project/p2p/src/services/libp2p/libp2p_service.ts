@@ -9,7 +9,7 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { type BlockMinFeesProvider, GasFees, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import { GasFees, type TxAdmissionMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
   P2PConnectivity,
@@ -229,7 +229,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     private epochCache: EpochCacheInterface,
     private proofVerifier: ClientProtocolCircuitVerifier,
     private worldStateSynchronizer: WorldStateSynchronizer,
-    private blockMinFeesProvider: BlockMinFeesProvider,
+    private nextBlockMinFeesProvider: TxAdmissionMinFeesProvider,
     telemetry: TelemetryClient,
     logger: Logger = createLogger('p2p:libp2p_service'),
     private txValidationCache?: TxValidationCache,
@@ -345,7 +345,7 @@ export class LibP2PService extends WithTracer implements P2PService {
       proofVerifier: ClientProtocolCircuitVerifier;
       worldStateSynchronizer: WorldStateSynchronizer;
       peerStore: AztecAsyncKVStore;
-      blockMinFeesProvider: BlockMinFeesProvider;
+      nextBlockMinFeesProvider: TxAdmissionMinFeesProvider;
       telemetry: TelemetryClient;
       logger: Logger;
       packageVersion: string;
@@ -359,7 +359,7 @@ export class LibP2PService extends WithTracer implements P2PService {
       mempools,
       proofVerifier,
       peerStore,
-      blockMinFeesProvider,
+      nextBlockMinFeesProvider,
       telemetry,
       logger,
       packageVersion,
@@ -587,7 +587,7 @@ export class LibP2PService extends WithTracer implements P2PService {
       epochCache,
       proofVerifier,
       worldStateSynchronizer,
-      blockMinFeesProvider,
+      nextBlockMinFeesProvider,
       telemetry,
       logger,
       txValidationCache,
@@ -1807,8 +1807,9 @@ export class LibP2PService extends WithTracer implements P2PService {
     }
   }
 
-  private getGasFees(): Promise<GasFees> {
-    return this.blockMinFeesProvider.getCurrentMinFees();
+  /** The fee a gossiped transaction must be able to pay to be relayed by this node. */
+  protected getGasFees(): Promise<GasFees> {
+    return this.nextBlockMinFeesProvider.getAdmissionMinFees();
   }
 
   /**

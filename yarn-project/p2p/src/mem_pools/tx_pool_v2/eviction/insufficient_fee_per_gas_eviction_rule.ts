@@ -1,21 +1,22 @@
 import { createLogger } from '@aztec-labs/foundation/log';
-import type { BlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
+import type { NextBlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
 
 import type { EvictionContext, EvictionResult, EvictionRule, PoolOperations } from './interfaces.js';
 import { EvictionEvent } from './interfaces.js';
 
 /**
- * Eviction rule that removes transactions whose maxFeesPerGas no longer meets
- * the projected minimum gas fees after a new block is mined.
- * Uses the BlockMinFeesProvider (forward-looking) to get the projected minimum fees.
- * Only triggers on BLOCK_MINED events.
+ * Eviction rule that removes transactions whose maxFeesPerGas no longer meets the fee the next block will
+ * charge, after a new block is mined. Only triggers on BLOCK_MINED events.
+ *
+ * Skips the sweep when that fee cannot be resolved, rather than evicting against a stand-in price that would
+ * drop transactions which are in fact payable.
  */
 export class InsufficientFeePerGasEvictionRule implements EvictionRule {
   public readonly name = 'InsufficientFeePerGas';
 
   private log = createLogger('p2p:tx_pool_v2:insufficient_fee_per_gas_eviction_rule');
 
-  constructor(private blockMinFeesProvider: BlockMinFeesProvider) {}
+  constructor(private nextBlockMinFeesProvider: NextBlockMinFeesProvider) {}
 
   async evict(context: EvictionContext, pool: PoolOperations): Promise<EvictionResult> {
     if (context.event !== EvictionEvent.BLOCK_MINED) {
@@ -27,7 +28,12 @@ export class InsufficientFeePerGasEvictionRule implements EvictionRule {
     }
 
     try {
-      const gasFees = await this.blockMinFeesProvider.getCurrentMinFees();
+      const gasFees = await this.nextBlockMinFeesProvider.getNextBlockMinFees();
+      if (!gasFees) {
+        this.log.verbose(`Skipping the insufficient-fee sweep: cannot resolve the next block's min fee`);
+        return { reason: 'insufficient_fee_per_gas', success: true, txsEvicted: [] };
+      }
+
       const txsToEvict: string[] = [];
       const pendingTxs = pool.getPendingTxs();
 

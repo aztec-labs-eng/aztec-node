@@ -833,7 +833,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
           ...(await getDefaultAllowedSetupFunctions()),
           ...(this.config.txPublicSetupAllowListExtend ?? []),
         ],
-        gasFees: await this.getCurrentMinFees(),
+        gasFees: skipFeeEnforcement ? GasFees.empty() : await this.getNextBlockMinFees(),
         skipFeeEnforcement,
         isSimulation,
         txsPermitted: !this.config.disableTransactions,
@@ -844,6 +844,29 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     );
 
     return await validator.validateTx(tx);
+  }
+
+  /**
+   * The fee the next block will charge, for RPC admission: a transaction has to be priced against the block it
+   * would actually enter, and the L1-forward projection cannot stand in for a fee an in-progress checkpoint
+   * already froze. Quotes rather than the relay path's cache-first read, so a single submission waits out a
+   * boundary refresh instead of being rejected.
+   *
+   * Falls back to the L1-forward fee when the next block cannot be priced, which happens whenever this node's
+   * chain has run far enough ahead of L1 that the upcoming boundary's parent state is not readable there yet.
+   * That is common enough that rejecting every submission for its duration would be worse than admitting
+   * against the looser price: the pool sweeps a transaction the next block cannot afford once the fee resolves.
+   */
+  private async getNextBlockMinFees(): Promise<GasFees> {
+    const quote = await this.nextBlockPredictor.quoteMinFees().catch((err: Error) => {
+      this.log.warn(`Failed to compute the next-block min fee for tx admission`, err);
+      return undefined;
+    });
+    if (quote) {
+      return quote.fees;
+    }
+    this.log.verbose(`Admitting txs against the L1-forward min fee: the next block's fee is unavailable`);
+    return await this.feeProvider.getCurrentMinFees();
   }
 
   public getConfig(): Promise<AztecNodeAdminConfig> {

@@ -58,7 +58,7 @@ import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/worl
 import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
-import { NextBlockPredictor } from './aztec-node/next_block/index.js';
+import { AdmissionMinFeesProvider, NextBlockPredictor } from './aztec-node/next_block/index.js';
 import { AztecNodeService } from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
 
@@ -319,7 +319,7 @@ export async function createAztecNodeService(
       peerProofVerifier,
       worldStateSynchronizer,
       epochCache,
-      feeProvider,
+      new AdmissionMinFeesProvider(nextBlockPredictor, feeProvider),
       packageVersion,
       dateProvider,
       telemetry,

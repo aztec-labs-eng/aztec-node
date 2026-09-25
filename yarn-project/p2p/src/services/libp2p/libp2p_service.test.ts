@@ -8,7 +8,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees } from '@aztec-labs/stdlib/gas';
+import { GasFees, type TxAdmissionMinFeesProvider } from '@aztec-labs/stdlib/gas';
 import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
 import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
@@ -315,6 +315,33 @@ describe('LibP2PService', () => {
         source: 'gossip',
       });
       expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Accept);
+    });
+  });
+
+  describe('gossip min fee resolution', () => {
+    const feesProvider = (nextBlock: GasFees | undefined, admission: GasFees): TxAdmissionMinFeesProvider => ({
+      getNextBlockMinFees: () => Promise.resolve(nextBlock),
+      getAdmissionMinFees: () => Promise.resolve(admission),
+    });
+
+    it('validates gossiped txs against the admission fee', async () => {
+      const feeService = createTestLibP2PService({
+        peerManager: mockPeerManager,
+        node: mockNode,
+        nextBlockMinFeesProvider: feesProvider(new GasFees(7, 70), new GasFees(7, 70)),
+      });
+
+      await expect(feeService.getGasFees()).resolves.toEqual(new GasFees(7, 70));
+    });
+
+    it('still enforces a min fee when the next block cannot be priced', async () => {
+      const feeService = createTestLibP2PService({
+        peerManager: mockPeerManager,
+        node: mockNode,
+        nextBlockMinFeesProvider: feesProvider(undefined, new GasFees(3, 30)),
+      });
+
+      await expect(feeService.getGasFees()).resolves.toEqual(new GasFees(3, 30));
     });
   });
 
@@ -1878,6 +1905,7 @@ interface CreateTestLibP2PServiceOptions {
   peerManager: MockProxy<PeerManagerInterface>;
   node: MockProxy<PubSubLibp2p>;
   archiver?: MockProxy<L2BlockSource & ContractDataSource>;
+  nextBlockMinFeesProvider?: TxAdmissionMinFeesProvider;
   attestationPool?: AttestationPool;
   txPool?: MockProxy<TxPoolV2>;
   epochCache?: MockProxy<EpochCacheInterface>;
@@ -1917,6 +1945,10 @@ class TestLibP2PService extends LibP2PService {
     logger: Logger,
     configOverrides?: Partial<P2PConfig>,
     peerDiscoveryService?: PeerDiscoveryService,
+    nextBlockMinFeesProvider: TxAdmissionMinFeesProvider = {
+      getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+      getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+    },
   ) {
     // Create minimal mock dependencies for the base class
     const mockConfig: P2PConfig = {
@@ -1948,7 +1980,7 @@ class TestLibP2PService extends LibP2PService {
       epochCache,
       mockProofVerifier,
       mockWorldStateSynchronizer,
-      { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      nextBlockMinFeesProvider,
       telemetry,
       logger,
     );
@@ -1966,6 +1998,11 @@ class TestLibP2PService extends LibP2PService {
   /** Exposes the protected handleGossipedTx for testing. */
   public override handleGossipedTx(payloadData: Buffer, msgId: string, source: PeerId): Promise<void> {
     return super.handleGossipedTx(payloadData, msgId, source);
+  }
+
+  /** Exposes the protected getGasFees for testing. */
+  public override getGasFees(): Promise<GasFees> {
+    return super.getGasFees();
   }
 
   /** Override to use test flag for first-stage validators. Returns a failing validator when firstStageValidationPasses is false. */
@@ -2044,6 +2081,7 @@ function createTestLibP2PService(options: CreateTestLibP2PServiceOptions): TestL
     epochCache = mock<EpochCacheInterface>(),
     configOverrides,
     peerDiscoveryService,
+    nextBlockMinFeesProvider,
   } = options;
 
   epochCache.getL1Constants.mockReturnValue({
@@ -2075,6 +2113,7 @@ function createTestLibP2PService(options: CreateTestLibP2PServiceOptions): TestL
     logger,
     configOverrides,
     peerDiscoveryService,
+    nextBlockMinFeesProvider,
   );
 }
 
