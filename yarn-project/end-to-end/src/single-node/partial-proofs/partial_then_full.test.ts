@@ -1,6 +1,6 @@
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
-import { CheckpointNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { TestProverNode } from '@aztec-labs/prover-node/test';
@@ -54,30 +54,24 @@ describe('single-node/partial-proofs/partial_then_full', () => {
       },
     });
 
-    // Start the partial proof while its epoch is still in progress, so no full session for it exists yet.
-    const epoch: EpochNumber = await retryUntil(
+    // Start the partial proof while its epoch is still in progress, so no full session for it exists yet. `startProof`
+    // throws until the prover node has synced a checkpoint of the epoch. Once the epoch has ended, it returns the full
+    // session's id instead, so retry on the then-current epoch until the returned id is a partial session.
+    const { epoch } = await retryUntil(
       async () => {
         const current = await rollup.getCurrentEpoch();
-        const tip = await rollup.getCheckpointNumber();
-        return tip > 0 && (await rollup.getEpochNumberForCheckpoint(tip)) === current ? current : undefined;
-      },
-      'a checkpoint in the current epoch',
-      test.L2_SLOT_DURATION_IN_S * 12,
-      0.5,
-    );
-    // `startProof` throws until the prover node has synced a checkpoint of the epoch.
-    await retryUntil(
-      async () => {
         try {
-          await prover.startProof(epoch);
-          return true;
+          const id = await prover.startProof(current);
+          const started = prover.sessionManager.allSessions().find(s => s.getId() === id);
+          // Wrapped because `retryUntil` treats a falsy result, such as epoch 0, as not done yet.
+          return started?.getKind() === 'partial' ? { epoch: current } : undefined;
         } catch (err) {
-          logger.verbose(`Cannot start partial proof of epoch ${epoch} yet: ${err}`);
-          return false;
+          logger.verbose('Cannot start a partial proof yet', { epoch: current, err });
+          return undefined;
         }
       },
-      `prover starts a partial proof of epoch ${epoch}`,
-      test.L2_SLOT_DURATION_IN_S * 6,
+      'prover starts a partial proof of the current epoch',
+      test.L2_SLOT_DURATION_IN_S * 12,
       1,
     );
 
@@ -99,12 +93,12 @@ describe('single-node/partial-proofs/partial_then_full', () => {
 
     const checkpoints = full.getCheckpoints();
     const lastCheckpoint = CheckpointNumber(checkpoints[checkpoints.length - 1].checkpoint.number);
-    logger.info(`Full session opened for epoch ${epoch} while the partial proof is held`, { epoch, lastCheckpoint });
+    logger.info('Full session opened while the partial proof is held', { epoch, lastCheckpoint });
 
     await test.waitUntilProvenCheckpointNumber(lastCheckpoint, test.L2_SLOT_DURATION_IN_S * 12);
     await expect(full.whenDone()).resolves.toEqual('completed');
 
-    logger.info(`Releasing the partial proof with the tip at ${test.monitor.provenCheckpointNumber}`);
+    logger.info('Releasing the partial proof', { provenCheckpoint: test.monitor.provenCheckpointNumber });
     gate.resolve();
 
     await expect(partial.whenDone()).resolves.toEqual('superseded');
