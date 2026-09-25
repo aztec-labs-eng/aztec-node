@@ -140,8 +140,7 @@ export interface BlockMinFeesProvider {
 }
 
 /**
- * Provides the mana min fees a transaction is held to on its way into this node: the fee the next block this node
- * would build is going to charge, and the fee transactions are admitted against.
+ * Provides the mana min fee the next block this node would build is going to charge.
  *
  * Distinct from {@link BlockMinFeesProvider}, which answers the L1-anchored price after the on-chain pending
  * checkpoint and therefore cannot see the fee a locally proposed in-progress checkpoint already froze.
@@ -152,7 +151,10 @@ export interface NextBlockMinFeesProvider {
    * must not act on a stand-in price, such as evicting transactions the next block could not include.
    */
   getNextBlockMinFees(): Promise<GasFees | undefined>;
+}
 
+/** Provides the mana min fees a transaction is held to on its way into this node, over gossip or into the pool. */
+export interface TxAdmissionMinFeesProvider extends NextBlockMinFeesProvider {
   /**
    * The fee a transaction must be able to pay to enter this node, over gossip or into the pending pool. The
    * next-block fee when it resolves, otherwise the L1-forward fee, so admission never runs without a floor: a

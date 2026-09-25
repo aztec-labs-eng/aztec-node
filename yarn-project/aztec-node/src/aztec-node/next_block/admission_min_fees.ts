@@ -1,15 +1,19 @@
-import type { BlockMinFeesProvider, GasFees, NextBlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
+import type {
+  BlockMinFeesProvider,
+  GasFees,
+  NextBlockMinFeesProvider,
+  TxAdmissionMinFeesProvider,
+} from '@aztec-labs/stdlib/gas';
 
 /**
- * The {@link NextBlockMinFeesProvider} handed to the p2p layer. Admission is priced against the next-block fee and
+ * The {@link TxAdmissionMinFeesProvider} handed to the p2p layer. Admission is priced against the next-block fee and
  * falls back to the L1-forward fee while the next block cannot be priced, such as at a checkpoint boundary before
- * the fee cache has refreshed or while L1 cannot be read. The L1-forward fee can undershoot a fee an in-progress
- * checkpoint froze, but only mid-checkpoint, where the next-block fee is read from the proposed tip's header and
- * always resolves.
+ * the fee cache has refreshed or while L1 cannot be read. The fallback is only a floor: it can sit below the fee the
+ * next block ends up charging, which the pool's insufficient-fee sweep catches once the exact fee resolves.
  */
-export class AdmissionMinFeesProvider implements NextBlockMinFeesProvider {
+export class AdmissionMinFeesProvider implements TxAdmissionMinFeesProvider {
   constructor(
-    private readonly nextBlock: Pick<NextBlockMinFeesProvider, 'getNextBlockMinFees'>,
+    private readonly nextBlock: NextBlockMinFeesProvider,
     private readonly l1Forward: BlockMinFeesProvider,
   ) {}
 

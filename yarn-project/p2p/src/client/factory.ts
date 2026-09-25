@@ -7,7 +7,7 @@ import { AztecLMDBStoreV2, createStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { BlockHash, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { type NextBlockMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
+import { type TxAdmissionMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   AztecNode,
   ClientProtocolCircuitVerifier,
@@ -63,7 +63,7 @@ export async function createP2PClient(
   proofVerifier: ClientProtocolCircuitVerifier,
   worldStateSynchronizer: WorldStateSynchronizer,
   epochCache: EpochCacheInterface,
-  nextBlockMinFeesProvider: NextBlockMinFeesProvider,
+  nextBlockMinFeesProvider: TxAdmissionMinFeesProvider,
   packageVersion: string,
   dateProvider: DateProvider = new DateProvider(),
   telemetry: TelemetryClient = getTelemetryClient(),
@@ -247,7 +247,7 @@ async function createP2PService(
   proofVerifier: ClientProtocolCircuitVerifier,
   worldStateSynchronizer: WorldStateSynchronizer,
   epochCache: EpochCacheInterface,
-  nextBlockMinFeesProvider: NextBlockMinFeesProvider,
+  nextBlockMinFeesProvider: TxAdmissionMinFeesProvider,
   store: AztecAsyncKVStore,
   peerStore: AztecLMDBStoreV2,
   mempools: MemPools,

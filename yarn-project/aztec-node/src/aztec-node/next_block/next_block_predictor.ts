@@ -42,7 +42,7 @@ export interface NextBlockPredictorDeps {
  * Deliberately not used by the sequencer: its slot policy is stricter (it declines to build rather than
  * predicting inclusion) and a stale fee would make L1 reject its checkpoint.
  */
-export class NextBlockPredictor implements Pick<NextBlockMinFeesProvider, 'getNextBlockMinFees'> {
+export class NextBlockPredictor implements NextBlockMinFeesProvider {
   private readonly blockSource: L2BlockSource;
   private readonly feeCache: NextBlockFeeCache;
   private readonly epochCache: EpochCacheInterface;

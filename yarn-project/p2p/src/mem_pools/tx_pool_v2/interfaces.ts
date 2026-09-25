@@ -85,7 +85,7 @@ export type TxPoolV2Dependencies = {
    * Provides the fee the next block will charge. Used by eviction rules instead of stale block header fees. Only the
    * exact fee: admission pricing is applied by the validator `createTxValidator` builds.
    */
-  nextBlockMinFeesProvider: Pick<NextBlockMinFeesProvider, 'getNextBlockMinFees'>;
+  nextBlockMinFeesProvider: NextBlockMinFeesProvider;
 };
 
 /**

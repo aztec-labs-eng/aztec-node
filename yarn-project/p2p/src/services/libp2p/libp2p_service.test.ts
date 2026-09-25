@@ -8,7 +8,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees, type NextBlockMinFeesProvider } from '@aztec-labs/stdlib/gas';
+import { GasFees, type TxAdmissionMinFeesProvider } from '@aztec-labs/stdlib/gas';
 import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
 import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
@@ -319,7 +319,7 @@ describe('LibP2PService', () => {
   });
 
   describe('gossip min fee resolution', () => {
-    const feesProvider = (nextBlock: GasFees | undefined, admission: GasFees): NextBlockMinFeesProvider => ({
+    const feesProvider = (nextBlock: GasFees | undefined, admission: GasFees): TxAdmissionMinFeesProvider => ({
       getNextBlockMinFees: () => Promise.resolve(nextBlock),
       getAdmissionMinFees: () => Promise.resolve(admission),
     });
@@ -1905,7 +1905,7 @@ interface CreateTestLibP2PServiceOptions {
   peerManager: MockProxy<PeerManagerInterface>;
   node: MockProxy<PubSubLibp2p>;
   archiver?: MockProxy<L2BlockSource & ContractDataSource>;
-  nextBlockMinFeesProvider?: NextBlockMinFeesProvider;
+  nextBlockMinFeesProvider?: TxAdmissionMinFeesProvider;
   attestationPool?: AttestationPool;
   txPool?: MockProxy<TxPoolV2>;
   epochCache?: MockProxy<EpochCacheInterface>;
@@ -1945,7 +1945,7 @@ class TestLibP2PService extends LibP2PService {
     logger: Logger,
     configOverrides?: Partial<P2PConfig>,
     peerDiscoveryService?: PeerDiscoveryService,
-    nextBlockMinFeesProvider: NextBlockMinFeesProvider = {
+    nextBlockMinFeesProvider: TxAdmissionMinFeesProvider = {
       getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
       getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
     },
