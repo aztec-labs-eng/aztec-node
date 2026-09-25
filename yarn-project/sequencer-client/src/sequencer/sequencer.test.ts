@@ -410,6 +410,8 @@ describe('sequencer', () => {
       // slot duration and make ProposerTimetable throw on construction.
       blockDurationMs: 2000,
       rollupAddress: signatureContext.rollupAddress,
+      // One block sub-slot is below the streaming-Inbox catch-up floor; this fixture is not a production profile.
+      allowUnsafeInboxCatchupCapacity: true,
     };
     sequencer = new TestSequencer(
       publisherFactory,
@@ -438,7 +440,13 @@ describe('sequencer', () => {
     const productionConstants = () => ({ ...l1Constants, slotDuration: 36, ethereumSlotDuration: 12 });
 
     const buildSequencer = (overrides: Partial<SequencerConfig>, constants = productionConstants()) => {
-      const sequencerConfig = { ...config, blockDurationMs: 3000, ...overrides };
+      // These cases are about the production floor, so the suite-wide fixture exemption is dropped by default.
+      const sequencerConfig = {
+        ...config,
+        blockDurationMs: 3000,
+        allowUnsafeInboxCatchupCapacity: false,
+        ...overrides,
+      };
       return new TestSequencer(
         publisherFactory,
         validatorClient,
@@ -473,26 +481,21 @@ describe('sequencer', () => {
       );
     });
 
-    it('warns rather than rejects on a fast local profile', () => {
-      expect(() => buildSequencer({ maxBlocksPerCheckpoint: 1, blockDurationMs: 2000 }, l1Constants)).not.toThrow();
+    it('warns rather than rejects for a fixture that declares its capacity unsafe', () => {
+      expect(() =>
+        buildSequencer({ maxBlocksPerCheckpoint: 1, blockDurationMs: 2000, allowUnsafeInboxCatchupCapacity: true }),
+      ).not.toThrow();
     });
 
-    // The single-node e2e default (DEFAULT_L1_BLOCK_TIME) sits at exactly this boundary, deliberately, so that
-    // those runs keep the production timing budgets. Rejecting there would fail every default-cadence e2e run.
-    it('warns rather than rejects at the fast-profile boundary', () => {
-      const atBoundary = { ...productionConstants(), ethereumSlotDuration: FAST_PROFILE_ETHEREUM_SLOT_DURATION };
-      expect(() => buildSequencer({ maxBlocksPerCheckpoint: 1 }, atBoundary)).not.toThrow();
-    });
-
-    // The exemption is a threshold on the Ethereum slot duration, not a declaration that this is a development
-    // network, so pin where it ends: the same undersized configuration one second slower is rejected outright.
-    it('rejects the same undersized configuration just above the fast-profile boundary', () => {
-      const aboveBoundary = {
-        ...productionConstants(),
-        ethereumSlotDuration: FAST_PROFILE_ETHEREUM_SLOT_DURATION + 1,
-      };
-      expect(() => buildSequencer({ maxBlocksPerCheckpoint: 1 }, aboveBoundary)).toThrow(/streaming-Inbox backlog/);
-    });
+    // Short L1 slots do not raise the per-block message cap, so a real network running them can still be unable to
+    // reach a mandatory endpoint: the floor holds for every slot duration unless the configuration opts out.
+    it.each([FAST_PROFILE_ETHEREUM_SLOT_DURATION - 4, FAST_PROFILE_ETHEREUM_SLOT_DURATION, 12])(
+      'rejects an undersized production configuration at an L1 slot duration of %is',
+      ethereumSlotDuration => {
+        const constants = { ...productionConstants(), ethereumSlotDuration };
+        expect(() => buildSequencer({ maxBlocksPerCheckpoint: 1 }, constants)).toThrow(/streaming-Inbox backlog/);
+      },
+    );
 
     it('leaves the committed config and timetable intact when an update is rejected', () => {
       const sequencer = buildSequencer({ maxBlocksPerCheckpoint: 8 });
