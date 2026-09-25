@@ -1281,7 +1281,7 @@ export class ProposalHandler {
     const parentGlobals = parentBlock.header.globalVariables;
 
     // All global variables except blockNumber should match the parent
-    // blockNumber naturally increments between blocks
+    // blockNumber naturally increments between blocks, and the caller has already compared the slot
     if (!proposalGlobals.chainId.equals(parentGlobals.chainId)) {
       this.log.warn(`Non-first block in checkpoint has mismatched chainId`, {
         ...proposalInfo,
@@ -1296,15 +1296,6 @@ export class ProposalHandler {
         ...proposalInfo,
         proposalVersion: proposalGlobals.version.toString(),
         parentVersion: parentGlobals.version.toString(),
-      });
-      return { reason: 'global_variables_mismatch' };
-    }
-
-    if (proposalGlobals.slotNumber !== parentGlobals.slotNumber) {
-      this.log.warn(`Non-first block in checkpoint has mismatched slotNumber`, {
-        ...proposalInfo,
-        proposalSlotNumber: proposalGlobals.slotNumber,
-        parentSlotNumber: parentGlobals.slotNumber,
       });
       return { reason: 'global_variables_mismatch' };
     }
@@ -2128,7 +2119,7 @@ export class ProposalHandler {
     // The deadline is passed to retryUntil as an absolute date so the remaining budget is derived from the date
     // provider; a deadline already in the past times out after a single attempt instead of looping (the
     // immediate-timeout semantics of the deadline overload).
-    let snapshot: CheckpointBlocksSnapshot | undefined;
+    let snapshot: CheckpointBlocksSnapshot;
     try {
       snapshot = await retryUntil(
         async () => {
@@ -2148,10 +2139,6 @@ export class ProposalHandler {
       return { isValid: false, reason: 'block_fetch_error' };
     }
 
-    if (!snapshot) {
-      this.log.warn(`Last block not found for checkpoint proposal`, proposalInfo);
-      return { isValid: false, reason: 'last_block_not_found' };
-    }
     const { blocks, lastBlockIndex } = snapshot;
     const lastBlock = blocks[lastBlockIndex];
 
