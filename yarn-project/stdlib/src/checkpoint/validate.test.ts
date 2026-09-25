@@ -133,6 +133,33 @@ describe('validateCheckpointStructure', () => {
     expect(() => validateCheckpointStructure(checkpoint)).not.toThrow();
   });
 
+  it('passes when every tx hash across the checkpoint is distinct', async () => {
+    const checkpoint = await makeValidCheckpoint(2);
+    const txHashes = checkpoint.blocks.flatMap(block => block.body.txEffects.map(tx => tx.txHash.toString()));
+    expect(new Set(txHashes).size).toBe(txHashes.length);
+    expect(() => validateCheckpointStructure(checkpoint)).not.toThrow();
+  });
+
+  it('throws when a tx hash repeats within a block', async () => {
+    const checkpoint = await makeValidCheckpoint(1);
+    const txEffects = checkpoint.blocks[0].body.txEffects;
+    txEffects.push(txEffects[0]);
+    expect(() => validateCheckpointStructure(checkpoint)).toThrow(CheckpointValidationError);
+    expect(() => validateCheckpointStructure(checkpoint)).toThrow(
+      `Tx ${txEffects[0].txHash} in block ${checkpoint.blocks[0].number} appears more than once in the checkpoint`,
+    );
+  });
+
+  it('throws when a tx hash repeats across blocks of the checkpoint', async () => {
+    const checkpoint = await makeValidCheckpoint(2);
+    const repeated = checkpoint.blocks[0].body.txEffects[0];
+    checkpoint.blocks[1].body.txEffects.push(repeated);
+    expect(() => validateCheckpointStructure(checkpoint)).toThrow(CheckpointValidationError);
+    expect(() => validateCheckpointStructure(checkpoint)).toThrow(
+      `Tx ${repeated.txHash} in block ${checkpoint.blocks[1].number} appears more than once in the checkpoint`,
+    );
+  });
+
   it('throws when block numbers are not sequential', async () => {
     const checkpoint = await makeValidCheckpoint(2);
     // Manually set block[1] to a non-sequential number (block[0].number + 2)

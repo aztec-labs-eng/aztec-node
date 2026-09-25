@@ -1,5 +1,6 @@
 import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import type { TxHash } from '@aztec-labs/stdlib/tx';
 
 export class NoBlobBodiesFoundError extends Error {
   constructor(l2BlockNum: number) {
@@ -77,6 +78,21 @@ export class BlockArchiveNotConsistentError extends Error {
       `Cannot insert new block number ${newBlockNumber} with archive ${newBlockArchive.toString()} previous block number is ${previousBlockNumber ?? 'undefined'}, previous archive is ${previousBlockArchive?.toString() ?? 'undefined'}`,
     );
     this.name = 'BlockArchiveNotConsistentError';
+  }
+}
+
+/**
+ * Thrown when a block lists a tx hash already included in a lower stored block. Blocks below the one being inserted
+ * are its ancestors, so the tx would be included twice (and its nullifiers repeated), which no valid chain allows.
+ */
+export class DuplicateTxHashError extends Error {
+  constructor(
+    public readonly txHash: TxHash,
+    public readonly blockNumber: BlockNumber,
+    public readonly existingBlockNumber: BlockNumber,
+  ) {
+    super(`Cannot insert block ${blockNumber}: tx ${txHash} is already included in block ${existingBlockNumber}`);
+    this.name = 'DuplicateTxHashError';
   }
 }
 

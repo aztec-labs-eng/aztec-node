@@ -84,7 +84,7 @@ Checkpoints are synced from the Rollup contract via `handleCheckpoints()`:
    - Verify archive matches (checkpoint still in chain)
    - Validate attestations (2/3 + 1 committee signatures required)
    - Skip invalid checkpoints (see "Invalid Checkpoints" in Edge Cases)
-   - Store valid checkpoints with their blocks
+   - Store valid checkpoints with their blocks, refusing the whole batch if a checkpoint repeats a tx hash, either within itself or from an ancestor block (see "Events of Pruned or Replaced Checkpoints" in Edge Cases)
 6. Update proven checkpoint again (may have advanced after storing new checkpoints)
 7. Handle epoch prune if applicable
 8. Check for checkpoints behind syncpoint (L1 reorg case)
@@ -155,6 +155,12 @@ This handles the case where an epoch's proof submission window has passed withou
 2. Archiver unwinds checkpoints 11-15
 3. Emits `L2PruneUnproven` event so subscribed subsystems can react
 4. Local state now shows checkpoint 10 as latest
+
+#### Events of Pruned or Replaced Checkpoints
+
+`CheckpointProposed` logs are never removed from L1, so any re-read of an L1 range (a syncpoint rollback, a retried batch, a fresh sync from genesis) returns logs for checkpoints that have since been pruned or replaced. Before fetching blobs or validating anything, `processCheckpointProposedLogs` compares each log's archive against the Rollup's `archiveAt(checkpointNumber)` at the current L1 head and drops mismatches. `archiveAt` returns zero above the pending tip, so a pruned checkpoint is dropped even before a replacement lands at its number.
+
+Consequently, a checkpoint the archiver refuses to ingest (for example one that fails `validateCheckpoint`, or one that repeats a tx hash already included in an ancestor block) stalls sync only while it is still canonical on L1. Once L1 prunes it, its log is filtered out on the next re-read and sync resumes. The L1 prune is lazy: it runs on the next `propose` or an explicit `prune()` call, not when the proof window closes, so `archiveAt` keeps returning the refused checkpoint's archive until the prune executes. The prune still happens when this node and every other node are stuck on the refused checkpoint: a proposer's cannot-build fallback (`tryVoteAndPruneWhenCannotBuild` in the sequencer) runs before `checkSync` once it passes the build-start deadline, and sends `prune()` whenever L1 reports `canPruneAtTime` (the escape-hatch voting path returns before this fallback, so no prune is sent from it while the escape hatch is open for the target epoch). A stuck archiver therefore does not prevent the prune, and sync resumes on the first re-read after it.
 
 #### Checkpoints Behind Syncpoint
 

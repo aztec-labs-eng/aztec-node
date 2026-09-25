@@ -266,6 +266,13 @@ async function processCheckpointProposedLogs(
   await asyncPool(10, logs, async log => {
     const checkpointNumber = log.args.checkpointNumber;
     const archive = log.args.archive;
+    // CheckpointProposed logs stay on L1 after their checkpoint is pruned or replaced, so every re-read of a range
+    // (a sync point rewind, a fresh sync from genesis) sees them. Rollup.archiveAt only answers up to the current
+    // pending tip, so a pruned or replaced checkpoint mismatches here and is dropped before its blobs are fetched or
+    // it is validated. A checkpoint the archiver refuses to ingest therefore blocks sync only while it is still
+    // canonical: the L1 prune is lazy (it runs on the next propose or an explicit prune() call), and until then
+    // archiveAt keeps returning the refused checkpoint's archive. Proposers send prune() from their cannot-build
+    // fallback even when their own sync is stuck, so the refused checkpoint is eventually dropped here.
     const archiveFromChain = await rollup.archiveAt(checkpointNumber);
     const blobHashes = log.args.versionedBlobHashes;
 
