@@ -1,13 +1,15 @@
 /**
  * Pure selection rules for streaming Inbox consumption: how far a block may consume, and when it has to ask L1.
  *
- * Every count here is one coordinate: the cumulative number of Inbox messages since the first one. It is an exclusive
- * end, so it is also the index of the next message and the L1-to-L2 tree leaf count of a block header that consumed
- * through it; {@link InboxMessagePosition} pairs it with the rolling hash. Callers spell the same unit `…Count`,
- * `…Total` or `…TotalMsgCount`. An endpoint total is a count at which a live L1 bucket ends, the only place a
- * checkpoint's final block may stop. A bucket sequence (`bucketSeq`, the `propose` hint) is an L1 bucket ordinal, not
- * a count. The archiver's message synchronizer uses "cursor" for the L1 block it scans from; here the cursor is a
- * message count.
+ * Every message count here other than the caps is one coordinate: the cumulative number of Inbox messages since the
+ * first one. It is an exclusive end, so it is also the index of the next message and the L1-to-L2 tree leaf count of a
+ * block header that consumed through it; {@link InboxMessagePosition} pairs it with the rolling hash. Callers spell
+ * the same unit `…Count`, `…Total` or `…TotalMsgCount`. An endpoint total is a count at which a live L1 bucket ends,
+ * the only place a checkpoint's final block may stop. A bucket sequence (`bucketSeq`, the `propose` hint) is an L1
+ * bucket ordinal, not a count. The archiver's message synchronizer uses "cursor" for the L1 block it scans from; here
+ * the cursor is a message position.
+ *
+ * @packageDocumentation
  */
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { InboxContract } from '@aztec-labs/ethereum/contracts';
