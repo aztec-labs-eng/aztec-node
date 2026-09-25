@@ -534,7 +534,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // Cheap proposer check first: most nodes are not the proposer for most slots, so gate the
     // expensive multi-subsystem checkSync (and the rest of the build path) behind it. Computed once
     // here and reused for the escape-hatch voting path below. No setState/timing gate on this path:
-    // the build-start deadline gate runs only on the proposer build path after a successful checkSync.
+    // the build-start deadline gate runs only on the proposer build path, before checkSync.
     const [canPropose, proposer] = await this.checkCanPropose(targetSlot);
 
     // If escape hatch is open for the target epoch, do not start checkpoint proposal work and do not attempt invalidations.
@@ -574,11 +574,10 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // Explicit build-loop entry gate: if we are past the latest useful block-building start for the
     // target slot, abandon building for this slot. The proposer prioritizes the ideal L1-publish path
     // and does not plan around the late consensus-handoff path. This is the proposer build path's
-    // timing gate; it runs only after we know we are the synced proposer, so non-proposer invalidation
-    // and escape-hatch voting (which returned above) are never gated by build timing. Vote-only paths
-    // still run when block building is abandoned.
-    // This gate deliberately runs before checkSync, so a proposer whose archiver cannot sync still reaches the prune
-    // fallback, which is what un-sticks a network where every archiver refuses the same pending checkpoint.
+    // timing gate; it runs only after we know we are the proposer, so non-proposer invalidation and escape-hatch
+    // voting (which returned above) are never gated by build timing. Vote-only paths still run when block building is
+    // abandoned. This gate deliberately runs before checkSync, so a proposer whose archiver cannot sync still reaches
+    // the prune fallback, which is what un-sticks a network where every archiver refuses the same pending checkpoint.
     const startDeadline = this.timetable.getBuildStartDeadline(targetSlot);
     const nowForStartGate = this.dateProvider.now() / 1000;
     if (nowForStartGate > startDeadline) {
