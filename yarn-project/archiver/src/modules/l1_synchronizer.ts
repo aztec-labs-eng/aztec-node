@@ -712,7 +712,7 @@ export class ArchiverL1Synchronizer implements Traceable {
       }
 
       const localPendingArchiveRoot = localPendingCheckpoint.archive.root.toString();
-      const noCheckpointSinceLast = localPendingCheckpoint && pendingArchive.toString() === localPendingArchiveRoot;
+      const noCheckpointSinceLast = pendingArchive.toString() === localPendingArchiveRoot;
       if (noCheckpointSinceLast) {
         // We believe the following line causes a problem when we encounter L1 re-orgs.
         // Basically, by setting the synched L1 block number here, we are saying that we have
@@ -744,27 +744,7 @@ export class ArchiverL1Synchronizer implements Traceable {
           { localPendingCheckpointNumber, localPendingArchiveRoot, archiveForLocalPendingCheckpointNumber },
         );
 
-        let tipAfterUnwind = localPendingCheckpointNumber;
-        while (true) {
-          const candidateCheckpoint = await this.stores.blocks.getCheckpointData(tipAfterUnwind);
-          if (candidateCheckpoint === undefined) {
-            break;
-          }
-
-          const archiveAtContract = await this.rollup.archiveAt(candidateCheckpoint.checkpointNumber);
-          this.log.trace(
-            `Checking local checkpoint ${candidateCheckpoint.checkpointNumber} with archive ${candidateCheckpoint.archive.root}`,
-            {
-              archiveAtContract,
-              archiveLocal: candidateCheckpoint.archive.root.toString(),
-            },
-          );
-          if (archiveAtContract.equals(candidateCheckpoint.archive.root)) {
-            break;
-          }
-          tipAfterUnwind--;
-        }
-
+        const tipAfterUnwind = await this.findLastCheckpointAlsoOnL1(localPendingCheckpointNumber);
         const checkpointsToRemove = localPendingCheckpointNumber - tipAfterUnwind;
         await this.updater.removeCheckpointsAfter(CheckpointNumber(tipAfterUnwind));
         if (checkpointsToRemove > 0) {
@@ -780,6 +760,34 @@ export class ArchiverL1Synchronizer implements Traceable {
     }
 
     return { rollupStatus, fetchCheckpoints: true, initialValidationStatus };
+  }
+
+  /**
+   * Walks down from the given local checkpoint to the latest one whose archive matches the rollup's, stopping early at
+   * a checkpoint missing locally.
+   */
+  private async findLastCheckpointAlsoOnL1(from: CheckpointNumber): Promise<CheckpointNumber> {
+    let tipAfterUnwind = from;
+    while (true) {
+      const candidateCheckpoint = await this.stores.blocks.getCheckpointData(tipAfterUnwind);
+      if (candidateCheckpoint === undefined) {
+        break;
+      }
+
+      const archiveAtContract = await this.rollup.archiveAt(candidateCheckpoint.checkpointNumber);
+      this.log.trace(
+        `Checking local checkpoint ${candidateCheckpoint.checkpointNumber} with archive ${candidateCheckpoint.archive.root}`,
+        {
+          archiveAtContract,
+          archiveLocal: candidateCheckpoint.archive.root.toString(),
+        },
+      );
+      if (archiveAtContract.equals(candidateCheckpoint.archive.root)) {
+        break;
+      }
+      tipAfterUnwind--;
+    }
+    return tipAfterUnwind;
   }
 
   private async updateProvenCheckpoint(provenCheckpointNumber: CheckpointNumber, provenArchive: Fr): Promise<void> {
