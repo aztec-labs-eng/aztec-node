@@ -8,6 +8,7 @@ import {
   type InboxContract,
   type OutboxContract,
   type RollupContract,
+  type ViemCommitteeAttestations,
   computeAttestationsHash,
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
@@ -221,9 +222,14 @@ describe('Archiver Sync', () => {
       // position: neither L1 nor any node decodes it, yet the attestationsHash the rollup stored at propose
       // time covers it. Anything rebuilt from the decoded attestations loses it and can never be proven.
       fake.setTargetCommitteeSize(3);
+      const signers = times(3, () => Secp256k1Signer.random());
+      epochCache.getCommitteeForEpoch.mockResolvedValue({
+        committee: signers.map(signer => signer.address),
+        seed: 0n,
+      } as EpochCommitteeInfo);
       await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: 101n,
-        signers: times(3, () => Secp256k1Signer.random()),
+        signers,
         spareAttestationsBitmapBit: true,
       });
       const posted = fake.getPostedAttestations(CheckpointNumber(1));
@@ -1071,6 +1077,96 @@ describe('Archiver Sync', () => {
       fake.setL1BlockNumber(82n);
 
       await expect(archiver.syncImmediate()).rejects.toThrow();
+    }, 20_000);
+  });
+
+  describe('escape hatch checkpoints', () => {
+    // Register a committee so acceptance comes from the open hatch, not the empty-committee path.
+    const HATCH_COMMITTEE_SIZE = 48;
+
+    const openEscapeHatch = () => {
+      fake.setTargetCommitteeSize(HATCH_COMMITTEE_SIZE);
+      const committee = times(HATCH_COMMITTEE_SIZE, () => EthAddress.random());
+      epochCache.getCommitteeForEpoch.mockResolvedValue({
+        committee,
+        seed: 0n,
+        isEscapeHatchOpen: true,
+      } as EpochCommitteeInfo);
+    };
+
+    it.each([
+      ['empty', { signatureIndices: '0x', signaturesOrAddresses: '0x' } as ViemCommitteeAttestations],
+      // One signature bit but a single payload byte, so any committee-sized decode throws.
+      ['undecodable', { signatureIndices: '0x80', signaturesOrAddresses: '0xab' } as ViemCommitteeAttestations],
+    ])(
+      'ingests a hatch checkpoint with an %s attestations tuple',
+      async (_label, verbatimAttestations) => {
+        openEscapeHatch();
+
+        await fake.addCheckpoint(CheckpointNumber(1), {
+          l1BlockNumber: 70n,
+          messagesL1BlockNumber: 50n,
+          numL1ToL2Messages: 3,
+          verbatimAttestations,
+        });
+        fake.setL1BlockNumber(75n);
+
+        await expect(archiver.syncImmediate()).resolves.toBeUndefined();
+
+        expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+        expect((await archiver.getL1SyncPoint())?.blockNumber).toEqual(75n);
+        expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
+
+        // Attestations are empty, but the verbatim tuple is kept since epoch proofs check its hash.
+        const [published] = await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 1 });
+        expect(published.attestations).toEqual([]);
+        expect(published.verbatimAttestations).toEqual(verbatimAttestations);
+        expect(published.verbatimAttestations).toEqual(fake.getPostedAttestations(CheckpointNumber(1)));
+
+        for (let i = 0; i < 3; i++) {
+          await expect(archiver.syncImmediate()).resolves.toBeUndefined();
+          expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+          expect((await archiver.getL1SyncPoint())?.blockNumber).toEqual(75n);
+        }
+      },
+      20_000,
+    );
+
+    it('decodes against the epoch committee once the hatch closes', async () => {
+      // A later checkpoint in a normal epoch is still decoded and validated.
+      openEscapeHatch();
+
+      const { checkpoint: hatchCp } = await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 70n,
+        messagesL1BlockNumber: 50n,
+        numL1ToL2Messages: 3,
+        verbatimAttestations: { signatureIndices: '0x', signaturesOrAddresses: '0x' },
+      });
+      fake.setL1BlockNumber(75n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+
+      const signers = times(3, Secp256k1Signer.random);
+      epochCache.getCommitteeForEpoch.mockResolvedValue({
+        committee: signers.map(signer => signer.address),
+        seed: 0n,
+        isEscapeHatchOpen: false,
+      } as EpochCommitteeInfo);
+
+      await fake.addCheckpoint(CheckpointNumber(2), {
+        l1BlockNumber: 80n,
+        messagesL1BlockNumber: 55n,
+        numL1ToL2Messages: 3,
+        signers,
+        previousArchive: hatchCp.blocks.at(-1)!.archive,
+      });
+      fake.setL1BlockNumber(85n);
+      await archiver.syncImmediate();
+
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      const [published] = await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 });
+      expect(published.attestations).toHaveLength(signers.length);
+      expect(await archiver.getPendingChainValidationStatus()).toEqual(expect.objectContaining({ valid: true }));
     }, 20_000);
   });
 

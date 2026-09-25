@@ -34,7 +34,7 @@ import { type Traceable, type Tracer, execInSpan, trackSpan } from '@aztec-labs/
 
 import { InitialCheckpointNumberNotSequentialError } from '../errors.js';
 import {
-  type RetrievedCheckpointFromCalldata,
+  type ResolvedCheckpointFromCalldata,
   getCheckpointBlobDataFromBlobs,
   retrieveCheckpointCalldataFromRollup,
   retrievedToPublishedCheckpoint,
@@ -45,7 +45,7 @@ import type { L2FrontierCache } from '../store/l2_frontier_cache.js';
 import { ArchiverDataStoreUpdater, blockLeafCount } from './data_store_updater.js';
 import { InboxMessageSynchronizer } from './inbox_message_synchronizer.js';
 import type { ArchiverInstrumentation } from './instrumentation.js';
-import { validateCheckpointAttestationsFromCalldata } from './validation.js';
+import { resolveCheckpointAttestationsFromCalldata } from './validation.js';
 
 type RollupStatus = {
   provenCheckpointNumber: CheckpointNumber;
@@ -863,35 +863,41 @@ export class ArchiverL1Synchronizer implements Traceable {
         },
       );
 
+      // Decode and validate attestations from CALLDATA before fetching any blobs, so a checkpoint with invalid
+      // attestations is rejected without decoding a possibly malformed blob. Runs even when validation is
+      // disabled, since promotion and persistence need the decoded attestations.
+      const resolvedCheckpoints = await asyncPool(10, calldataCheckpoints, async calldataCheckpoint => {
+        const { attestations, validationResult } = await resolveCheckpointAttestationsFromCalldata(
+          calldataCheckpoint,
+          this.epochCache,
+          this.l1Constants,
+          this.getSignatureContext(),
+          this.log,
+        );
+        return { checkpoint: { ...calldataCheckpoint, attestations }, validationResult };
+      });
+
       // Check if the last checkpoint matches a local pending entry (so we can skip blob fetch).
       // We only check the last one; if it matches, the blob fetch is skipped for that entry.
       // TODO(palla/pipelining): We may have more than a single checkpoint to promote
-      const lastCalldataCheckpoint = calldataCheckpoints[calldataCheckpoints.length - 1];
+      const lastCalldataCheckpoint = resolvedCheckpoints[resolvedCheckpoints.length - 1].checkpoint;
       const promoteResult = await this.tryBuildPublishedCheckpointFromProposed(lastCalldataCheckpoint);
       const checkpointToPromote = promoteResult && !('diverged' in promoteResult) ? promoteResult : undefined;
       const evictProposedFrom =
         promoteResult && 'diverged' in promoteResult ? promoteResult.fromCheckpointNumber : undefined;
 
-      // Validate attestations from CALLDATA before fetching any blobs. A checkpoint with invalid
-      // attestations (or one descending from a rejected ancestor) is rejected here without fetching its
-      // blobs, so a malformed blob does not throw during decode before the rejection path runs and
-      // stall sync. The signed consensus payload (header, archive root, fee asset price
-      // modifier) is fully available from calldata.
-      const checkpointsToIngest: RetrievedCheckpointFromCalldata[] = [];
+      const checkpointsToIngest: ResolvedCheckpointFromCalldata[] = [];
 
-      for (const calldataCheckpoint of calldataCheckpoints) {
+      for (const {
+        checkpoint: calldataCheckpoint,
+        validationResult: resolvedValidationResult,
+      } of resolvedCheckpoints) {
         // Check the attestations uploaded by the publisher to L1 are correct.
         // Rollup contract does not validate attestations to save on gas, so this
         // falls on the nodes to verify offchain and skip those checkpoints.
         const validationResult = this.config.skipValidateCheckpointAttestations
           ? { valid: true as const }
-          : await validateCheckpointAttestationsFromCalldata(
-              calldataCheckpoint,
-              this.epochCache,
-              this.l1Constants,
-              this.getSignatureContext(),
-              this.log,
-            );
+          : resolvedValidationResult;
 
         // Also skip the checkpoint if it builds on a previously-rejected ancestor. Without
         // this, addCheckpoints would throw InitialCheckpointNumberNotSequentialError when the
@@ -1169,7 +1175,7 @@ export class ArchiverL1Synchronizer implements Traceable {
    * (those entries chain off the now-invalid local state) within the same addCheckpoints transaction.
    */
   private async tryBuildPublishedCheckpointFromProposed(
-    calldataCheckpoint: RetrievedCheckpointFromCalldata | undefined,
+    calldataCheckpoint: ResolvedCheckpointFromCalldata | undefined,
   ): Promise<PublishedCheckpoint | { diverged: true; fromCheckpointNumber: CheckpointNumber } | undefined> {
     if (this.config.skipPromoteProposedCheckpointDuringL1Sync || !calldataCheckpoint) {
       return undefined;

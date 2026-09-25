@@ -5,6 +5,7 @@ import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethere
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
 import { type Hex, createPublicClient, decodeEventLog, getAbiItem, http, toEventSelector } from 'viem';
 import { mainnet } from 'viem/chains';
 
@@ -93,7 +94,6 @@ async function main() {
     const retriever = new CalldataRetriever(
       publicClient as unknown as ViemPublicClient,
       publicClient as unknown as ViemPublicDebugClient,
-      targetCommitteeSize,
       undefined,
       logger,
       rollupAddress,
@@ -171,9 +171,20 @@ async function main() {
     logger.info(`  Fee Recipient: ${result.header.feeRecipient.toString()}`);
     logger.info(`  Total Mana Used: ${result.header.totalManaUsed.toString()}`);
     logger.info('');
-    logger.info('Attestations:');
-    logger.info(`  Count: ${result.attestations.length}`);
-    logger.info(`  Non-empty attestations: ${result.attestations.filter((a: any) => !a.signature.isEmpty()).length}`);
+    // The target committee size is only a guess at the epoch committee size, and escape-hatch tuples may not decode.
+    logger.info('Attestations (packed):');
+    logger.info(`  Signature bitmap: ${result.verbatimAttestations.signatureIndices}`);
+    logger.info(`  Signatures or addresses: ${result.verbatimAttestations.signaturesOrAddresses}`);
+    try {
+      const attestations = CommitteeAttestation.fromPacked(result.verbatimAttestations, targetCommitteeSize);
+      logger.info(`  Decoded for a committee of ${targetCommitteeSize}:`);
+      logger.info(`    Count: ${attestations.length}`);
+      logger.info(`    Non-empty attestations: ${attestations.filter(a => !a.signature.isEmpty()).length}`);
+    } catch (err) {
+      logger.info(
+        `  Does not decode for a committee of ${targetCommitteeSize}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     process.exit(0);
   } catch (error) {

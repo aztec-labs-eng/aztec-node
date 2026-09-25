@@ -302,3 +302,19 @@ export class UndecodableCheckpointAttestationsError extends Error {
     this.name = 'UndecodableCheckpointAttestationsError';
   }
 }
+
+/** Thrown when a checkpoint's attestations tuple does not decode for its epoch committee. */
+export class CheckpointAttestationsDecodeError extends Error {
+  constructor(
+    public readonly checkpointNumber: number,
+    public readonly epoch: number,
+    public readonly committeeSize: number,
+    public override readonly cause: unknown,
+  ) {
+    super(
+      `Attestations tuple of checkpoint ${checkpointNumber} does not decode for the committee of ${committeeSize} ` +
+        `recorded for epoch ${epoch} (${cause instanceof Error ? cause.message : String(cause)})`,
+    );
+    this.name = 'CheckpointAttestationsDecodeError';
+  }
+}

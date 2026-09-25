@@ -95,14 +95,7 @@ describe('CalldataRetriever', () => {
     logger = createLogger('test:calldata_retriever');
     instrumentation = mock<ArchiverInstrumentation>();
 
-    retriever = new TestCalldataRetriever(
-      publicClient,
-      debugClient,
-      TARGET_COMMITTEE_SIZE,
-      instrumentation,
-      logger,
-      rollupAddress,
-    );
+    retriever = new TestCalldataRetriever(publicClient, debugClient, instrumentation, logger, rollupAddress);
   });
 
   function makeViemHeader(): ViemHeader {
@@ -190,7 +183,7 @@ describe('CalldataRetriever', () => {
       expect(result.checkpointNumber).toBe(checkpointNumber);
       expect(result.header).toBeInstanceOf(CheckpointHeader);
       expect(result.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result.attestations)).toBe(true);
+      expect(result.verbatimAttestations).toBeDefined();
       expect(result.blockHash).toBe(tx.blockHash);
       expect(instrumentation.recordBlockProposalTxTarget).toHaveBeenCalledWith(MULTI_CALL_3_ADDRESS, false);
     });
@@ -1153,11 +1146,11 @@ describe('CalldataRetriever', () => {
       expect(result!.checkpointNumber).toBe(checkpointNumber);
       expect(result!.header).toBeInstanceOf(CheckpointHeader);
       expect(result!.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result!.attestations)).toBe(true);
+      expect(result!.verbatimAttestations).toBeDefined();
       expect(result!.blockHash).toBe(blockHash);
     });
 
-    it('should handle attestations correctly', () => {
+    it('returns the packed attestations tuple verbatim', () => {
       const attestations = makeViemCommitteeAttestations();
       const proposeCalldata = makeProposeCalldata(undefined, attestations);
       const hashes = mockHashComputation();
@@ -1165,7 +1158,31 @@ describe('CalldataRetriever', () => {
       const result = retriever.tryDecodeAndVerifyPropose(proposeCalldata, hashes, checkpointNumber, blockHash as Hex);
 
       expect(result).toBeDefined();
-      expect(result!.attestations).toHaveLength(TARGET_COMMITTEE_SIZE);
+      expect(result!.verbatimAttestations).toEqual(attestations);
+    });
+
+    it('extracts a checkpoint whose attestations tuple is empty', () => {
+      // An escape-hatch proposer may post an empty tuple.
+      const attestations: ViemCommitteeAttestations = { signatureIndices: '0x', signaturesOrAddresses: '0x' };
+      const proposeCalldata = makeProposeCalldata(undefined, attestations);
+      const hashes = mockHashComputation();
+
+      const result = retriever.tryDecodeAndVerifyPropose(proposeCalldata, hashes, checkpointNumber, blockHash as Hex);
+
+      expect(result).toBeDefined();
+      expect(result!.verbatimAttestations).toEqual(attestations);
+    });
+
+    it('extracts a checkpoint whose attestations tuple cannot be decoded as a committee', () => {
+      // One signature bit but a single payload byte: undecodable, yet L1 accepts it during an escape hatch.
+      const attestations: ViemCommitteeAttestations = { signatureIndices: '0x80', signaturesOrAddresses: '0xab' };
+      const proposeCalldata = makeProposeCalldata(undefined, attestations);
+      const hashes = mockHashComputation();
+
+      const result = retriever.tryDecodeAndVerifyPropose(proposeCalldata, hashes, checkpointNumber, blockHash as Hex);
+
+      expect(result).toBeDefined();
+      expect(result!.verbatimAttestations).toEqual(attestations);
     });
 
     it('should return undefined when calldata is not for propose function', () => {
@@ -1244,7 +1261,7 @@ describe('CalldataRetriever', () => {
       expect(result.checkpointNumber).toBe(checkpointNumber);
       expect(result.header).toBeInstanceOf(CheckpointHeader);
       expect(result.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result.attestations)).toBe(true);
+      expect(result.verbatimAttestations).toBeDefined();
       expect(result.blockHash).toBe(tx.blockHash);
 
       // Verify all components are properly decoded
@@ -1318,7 +1335,7 @@ describe('CalldataRetriever', () => {
       expect(result.checkpointNumber).toBe(checkpointNumber);
       expect(result.header).toBeInstanceOf(CheckpointHeader);
       expect(result.archiveRoot).toBeInstanceOf(Fr);
-      expect(Array.isArray(result.attestations)).toBe(true);
+      expect(result.verbatimAttestations).toBeDefined();
       expect(result.blockHash).toBe(blockHash);
 
       // Verify all components are properly decoded
