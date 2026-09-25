@@ -1806,6 +1806,27 @@ describe('InboxBot', () => {
         expect(failures('replay_accepted')).toEqual(1);
       });
 
+      // `replayProbedAt` alone must not satisfy a successful run: the probe never demonstrated replay protection.
+      it('fails the batch when the replay probe gives up without ever seeing the nullifier', async () => {
+        const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1, l1ToL2MessageTimeoutSeconds: 60 });
+        const completed = await completeOneMessage(bot);
+        expect(completed.state).toEqual('completed');
+
+        // The spending nullifier never becomes visible, and the batch outlives the message timeout.
+        dateProvider.advanceTime(120);
+        await consume(bot);
+
+        expect(consumer.simulated).toEqual([]);
+        expect(checks('replay_rejection', 'passed')).toEqual(0);
+        expect(checks('replay_rejection', 'failed')).toEqual(1);
+        expect(failures('replay_unproven')).toEqual(1);
+        // The failed check is what stops a run whose messages all succeeded from closing as a success: the batch
+        // is marked probed, so `replayProbedAt` alone would otherwise satisfy completion.
+        const batch = await store.getBatch(completed.batchId);
+        expect(batch?.failedChecks).toContain('replay_rejection');
+        expect(batch?.replayProbedAt).toBeDefined();
+      });
+
       it('does not accept an unrelated rejection as replay protection, and tries again', async () => {
         const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1 });
         const completed = await completeOneMessage(bot);
