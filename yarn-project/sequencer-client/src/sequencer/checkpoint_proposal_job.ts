@@ -100,6 +100,13 @@ type CheckpointProposalBroadcast = {
   blockProposedAt: number;
   /** Cumulative Inbox message count the checkpoint consumed through, for the pre-publication preflight. */
   consumedTotalMsgCount: bigint;
+  /**
+   * Chain state overrides built once per slot in proposeCheckpoint. Carries the pending parent override (archive +
+   * slot + fee header) for pipelining, or the invalidation pending override when rolling back. Consumed by the
+   * pre-gossip publisher.validateCheckpointHeaderAndInbox preflight, and the source of the proven pin the
+   * pre-publication preflight keeps.
+   */
+  simulationOverridesPlan: SimulationOverridesPlan | undefined;
 };
 
 /** What proposeCheckpoint produced: a checkpoint broadcast to the committee, or, in fisherman mode, one only built. */
@@ -152,14 +159,6 @@ export class CheckpointProposalJob implements Traceable {
 
   private readonly interruptibleSleep = new InterruptibleSleep();
   private interrupted = false;
-
-  /**
-   * Chain state overrides built once per slot in proposeCheckpoint after the checkpoint is
-   * complete. Carries the pending parent override (archive + slot + fee header) for pipelining,
-   * or the invalidation pending override when rolling back. Consumed by the pre-gossip
-   * publisher.validateCheckpointHeaderAndInbox preflight.
-   */
-  private checkpointSimulationOverridesPlan?: SimulationOverridesPlan;
 
   private getSignatureContext(): CoordinationSignatureContext {
     return this.signatureContext;
@@ -367,7 +366,7 @@ export class CheckpointProposalJob implements Traceable {
     broadcast: CheckpointProposalBroadcast,
     votesPromises: Promise<unknown>[],
   ): Promise<void> {
-    const { checkpoint, consumedTotalMsgCount } = broadcast;
+    const { checkpoint, consumedTotalMsgCount, simulationOverridesPlan } = broadcast;
 
     try {
       // Wait for all votes actions, enqueued at the beginning, to resolve
@@ -390,7 +389,11 @@ export class CheckpointProposalJob implements Traceable {
         }
         // Attestation collection took seconds and L1 may have moved: re-run the integrated header and Inbox
         // preflight against L1's current state, and take the bucket hint from it.
-        const bucketHint = await this.preflightBeforePublication(checkpoint.header, consumedTotalMsgCount);
+        const bucketHint = await this.preflightBeforePublication(
+          checkpoint.header,
+          consumedTotalMsgCount,
+          simulationOverridesPlan,
+        );
         if (bucketHint !== undefined && (await this.checkpointBlocksAreStillLocal(checkpoint))) {
           await this.enqueueCheckpointForSubmission({ checkpoint, ...signedAttestations, bucketHint });
         }
@@ -472,8 +475,9 @@ export class CheckpointProposalJob implements Traceable {
   private async preflightBeforePublication(
     header: CheckpointHeader,
     consumedTotalMsgCount: bigint,
+    buildPlan: SimulationOverridesPlan | undefined,
   ): Promise<bigint | undefined> {
-    const overridesPlan = await this.getPublicationSimulationOverridesPlan();
+    const overridesPlan = await this.getPublicationSimulationOverridesPlan(buildPlan);
     try {
       return await this.preflightWithinDeadline(
         header,
@@ -580,15 +584,17 @@ export class CheckpointProposalJob implements Traceable {
    * Under the test-only `skipWaitForValidParentCheckpointOnL1` the parent was never confirmed on L1, so the build-time
    * plan describing it is reused; that keeps the hypothetical context the test asked for and is not a production path.
    */
-  private async getPublicationSimulationOverridesPlan(): Promise<SimulationOverridesPlan | undefined> {
+  private async getPublicationSimulationOverridesPlan(
+    buildPlan: SimulationOverridesPlan | undefined,
+  ): Promise<SimulationOverridesPlan | undefined> {
     if (this.config.skipWaitForValidParentCheckpointOnL1) {
-      return this.checkpointSimulationOverridesPlan;
+      return buildPlan;
     }
     const builder = new SimulationOverridesBuilder();
     if (this.invalidateCheckpoint && !this.config.skipInvalidateBlockAsProposer) {
       builder.withChainTips({ pending: this.invalidateCheckpoint.forcePendingCheckpointNumber });
     }
-    const provenPin = this.checkpointSimulationOverridesPlan?.chainTipsOverride?.proven;
+    const provenPin = buildPlan?.chainTipsOverride?.proven;
     if (provenPin !== undefined && (await this.l2BlockSource.isPruneDueAtSlot(this.targetSlot))) {
       this.log.warn(
         `Assuming proof for epoch ending at checkpoint ${provenPin} lands by target slot ${this.targetSlot} for the publication preflight`,
@@ -875,7 +881,7 @@ export class CheckpointProposalJob implements Traceable {
       // pending/archive/fee-header to "as if the proposed parent had landed", so both the
       // mana-min-fee simulation (in the globals builder) and the pre-gossip
       // validateCheckpointHeaderAndInbox preflight see the chain tip the eventual L1 send will see.
-      this.checkpointSimulationOverridesPlan = await buildCheckpointSimulationOverridesPlan({
+      const simulationOverridesPlan = await buildCheckpointSimulationOverridesPlan({
         checkpointNumber: this.checkpointNumber,
         proposedCheckpointData: this.proposedCheckpointData,
         invalidateToPendingCheckpointNumber: this.invalidateCheckpoint?.forcePendingCheckpointNumber,
@@ -889,7 +895,7 @@ export class CheckpointProposalJob implements Traceable {
         coinbase,
         feeRecipient,
         this.targetSlot,
-        this.checkpointSimulationOverridesPlan,
+        simulationOverridesPlan,
       );
 
       // Collect the out hashes of all the checkpoints before this one in the same epoch.
@@ -920,7 +926,7 @@ export class CheckpointProposalJob implements Traceable {
       // Anchor the modifier to the predicted parent fee header: L1 will apply it against
       // that, not against the latest published checkpoint (which lags by one under pipelining).
       const predictedParentEthPerFeeAssetE12 =
-        this.checkpointSimulationOverridesPlan?.pendingCheckpointState?.feeHeader?.ethPerFeeAsset;
+        simulationOverridesPlan?.pendingCheckpointState?.feeHeader?.ethPerFeeAsset;
       const feeAssetPriceModifier = await this.publisher.getFeeAssetPriceModifier(predictedParentEthPerFeeAssetE12);
 
       // Create a long-lived forked world state for the checkpoint builder
@@ -1091,7 +1097,7 @@ export class CheckpointProposalJob implements Traceable {
         await this.preflightWithinDeadline(
           checkpoint.header,
           consumption.consumedTotalMsgCount,
-          this.checkpointSimulationOverridesPlan,
+          simulationOverridesPlan,
           this.getAttestationDeadline(),
         );
       } catch (err) {
@@ -1154,6 +1160,7 @@ export class CheckpointProposalJob implements Traceable {
         proposal,
         blockProposedAt,
         consumedTotalMsgCount: consumption.consumedTotalMsgCount,
+        simulationOverridesPlan,
       };
     } catch (err) {
       if (err && (err instanceof DutyAlreadySignedError || err instanceof SlashingProtectionError)) {
