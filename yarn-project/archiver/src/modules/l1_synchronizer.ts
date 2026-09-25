@@ -995,25 +995,42 @@ export class ArchiverL1Synchronizer implements Traceable {
       // Fetch blobs in parallel only for the surviving (attestation-valid, non-descendant) checkpoints,
       // then build the full published checkpoints. The last calldata checkpoint may be promotable from a
       // local proposed block (checkpointToPromote), in which case it carries no blob to fetch. A missing or
-      // undecodable blob throws and propagates, rolling back the L1 sync point so the fetch is retried.
+      // undecodable blob throws and propagates. The rejections recorded above may already have moved the L1 sync
+      // point past these checkpoints, so before rethrowing it is capped just before the earliest checkpoint of this
+      // batch that was to be ingested (none of them are persisted), and the next iteration retries the fetch.
       const toFetchBlobs = checkpointToPromote
         ? checkpointsToIngest.filter(c => c.checkpointNumber !== checkpointToPromote.checkpoint.number)
         : checkpointsToIngest;
-      const blobFetched = await asyncPool(10, toFetchBlobs, async checkpoint =>
-        retrievedToPublishedCheckpoint({
-          ...checkpoint,
-          checkpointBlobData: await getCheckpointBlobDataFromBlobs(
-            this.blobClient,
-            checkpoint.l1.blockHash,
-            checkpoint.blobHashes,
-            checkpoint.checkpointNumber,
-            this.log,
-            !initialSyncComplete,
-            checkpoint.parentBeaconBlockRoot,
-            checkpoint.l1.timestamp,
-          ),
-        }),
-      );
+      let blobFetched: PublishedCheckpoint[];
+      try {
+        blobFetched = await asyncPool(10, toFetchBlobs, async checkpoint =>
+          retrievedToPublishedCheckpoint({
+            ...checkpoint,
+            checkpointBlobData: await getCheckpointBlobDataFromBlobs(
+              this.blobClient,
+              checkpoint.l1.blockHash,
+              checkpoint.blobHashes,
+              checkpoint.checkpointNumber,
+              this.log,
+              !initialSyncComplete,
+              checkpoint.parentBeaconBlockRoot,
+              checkpoint.l1.timestamp,
+            ),
+          }),
+        );
+      } catch (err) {
+        const retryFromL1Block = checkpointsToIngest[0].l1.blockNumber - 1n;
+        const currentSyncPoint = await this.stores.blocks.getSynchedL1BlockNumber();
+        if (currentSyncPoint !== undefined && currentSyncPoint > retryFromL1Block) {
+          this.log.warn(`Rolling back L1 sync point to ${retryFromL1Block} to retry fetching checkpoint blobs`, {
+            currentSyncPoint,
+            retryFromL1Block,
+            checkpointNumber: checkpointsToIngest[0].checkpointNumber,
+          });
+          await this.stores.blocks.setSynchedL1BlockNumber(retryFromL1Block);
+        }
+        throw err;
+      }
 
       // Index the built checkpoints by number so we can ingest them in calldata order, slotting in the
       // promoted checkpoint (built from a local proposed block rather than blobs).
