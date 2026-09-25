@@ -165,6 +165,12 @@ type StreamingBundleSelection =
       context?: Record<string, unknown>;
     };
 
+/** Outcome of building a single block: built, skipped for lack of (valid) txs, or failed with an error. */
+type BlockBuildAttempt =
+  | { kind: 'built'; block: L2Block; usedTxs: Tx[] }
+  | { kind: 'skipped'; reason: 'insufficient-txs' | 'insufficient-valid-txs' }
+  | { kind: 'failed'; error: Error };
+
 /**
  * Outcome of the block-building loop: the blocks built for the checkpoint, or an abort that discards them all. An
  * abort has already been reported (checkpoint event, warning and metric); the caller only has to give up the slot.
@@ -1285,7 +1291,7 @@ export class CheckpointProposalJob implements Traceable {
       });
 
       // If we failed to build the block due to insufficient txs, we try again if there is still time left in the slot
-      if ('failure' in buildResult) {
+      if (buildResult.kind === 'skipped') {
         // If this was the last subslot, we're done.
         if (timingInfo.isLastBlock) {
           break;
@@ -1297,7 +1303,7 @@ export class CheckpointProposalJob implements Traceable {
 
       // If there was an error building the block, we just exit the loop and give up the rest of the slot.
       // We don't want to risk building more blocks if something went wrong.
-      if ('error' in buildResult) {
+      if (buildResult.kind === 'failed') {
         if (!(buildResult.error instanceof SequencerInterruptedError)) {
           this.log.warn(`Halting block building for slot ${this.targetSlot}`, {
             slot: this.targetSlot,
@@ -1557,10 +1563,10 @@ export class CheckpointProposalJob implements Traceable {
       txHashesAlreadyIncluded: opts.txHashesAlreadyIncluded,
       l1ToL2Messages: resolved.range.messages,
     });
-    if (!('block' in buildResult)) {
+    if (buildResult.kind !== 'built') {
       this.reportStreamingAbort(streamingState, 'inbox_completion_unresolved', {
         phase: 'forced_tail_block',
-        cause: 'failure' in buildResult ? buildResult.failure : buildResult.error.message,
+        cause: buildResult.kind === 'skipped' ? buildResult.reason : buildResult.error.message,
         endpointTotalMsgCount: resolved.endpoint.totalMessageCount,
       });
       return { aborted: true };
@@ -1846,9 +1852,7 @@ export class CheckpointProposalJob implements Traceable {
       /** Streaming Inbox message bundle for this block's L1-to-L2 tree; empty when it consumes nothing. */
       l1ToL2Messages: Fr[];
     },
-  ): Promise<
-    { block: L2Block; usedTxs: Tx[] } | { failure: 'insufficient-txs' | 'insufficient-valid-txs' } | { error: Error }
-  > {
+  ): Promise<BlockBuildAttempt> {
     const {
       blockTimestamp,
       forceCreate,
@@ -1884,7 +1888,7 @@ export class CheckpointProposalJob implements Traceable {
         );
         this.eventEmitter.emit('block-tx-count-check-failed', { minTxs, slot: this.targetSlot });
         this.metrics.recordBlockProposalFailed('insufficient_txs');
-        return { failure: 'insufficient-txs' };
+        return { kind: 'skipped', reason: 'insufficient-txs' };
       }
 
       // Create iterator to pending txs. We filter out txs already included in previous blocks in the checkpoint
@@ -1964,7 +1968,7 @@ export class CheckpointProposalJob implements Traceable {
           slot: this.targetSlot,
         });
         this.metrics.recordBlockProposalFailed('insufficient_valid_txs');
-        return { failure: 'insufficient-valid-txs' };
+        return { kind: 'skipped', reason: 'insufficient-valid-txs' };
       }
 
       // Block creation succeeded, emit stats and metrics
@@ -1998,7 +2002,7 @@ export class CheckpointProposalJob implements Traceable {
       });
       this.metrics.recordBuiltBlock(blockBuildDuration, block.header.totalManaUsed.toNumberUnsafe(), this.targetSlot);
 
-      return { block, usedTxs };
+      return { kind: 'built', block, usedTxs };
     } catch (err: any) {
       this.eventEmitter.emit('block-build-failed', {
         reason: err.message,
@@ -2017,7 +2021,7 @@ export class CheckpointProposalJob implements Traceable {
       );
       this.metrics.recordBlockProposalFailed(err.name || 'unknown_error');
       this.metrics.recordFailedBlock();
-      return { error: err };
+      return { kind: 'failed', error: err };
     }
   }
 
