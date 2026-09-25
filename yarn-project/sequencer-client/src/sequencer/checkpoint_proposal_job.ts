@@ -126,6 +126,11 @@ type CheckpointProposalBroadcast = {
   streamingState: StreamingCheckpointState;
 };
 
+/** What proposeCheckpoint produced: a checkpoint broadcast to the committee, or, in fisherman mode, one only built. */
+type CheckpointProposalOutcome =
+  | ({ kind: 'broadcast' } & CheckpointProposalBroadcast)
+  | { kind: 'built-only'; checkpoint: Checkpoint };
+
 /** Result after attestation collection and signing, ready for L1 submission. */
 type CheckpointProposalResult = {
   checkpoint: Checkpoint;
@@ -378,9 +383,9 @@ export class CheckpointProposalJob implements Traceable {
 
     // Build blocks, assemble checkpoint, and broadcast proposal (BLOCKING).
     // Returns after broadcast — attestation collection is deferred.
-    const broadcast = await this.proposeCheckpoint();
+    const outcome = await this.proposeCheckpoint();
 
-    if (!broadcast) {
+    if (!outcome) {
       await Promise.all(votesPromises);
       // Still submit votes even without a checkpoint.
       // Under proposer pipelining, vote-offenses signatures are EIP-712-bound to `targetSlot`
@@ -394,17 +399,17 @@ export class CheckpointProposalJob implements Traceable {
       return undefined;
     }
 
-    const { checkpoint } = broadcast;
+    const { checkpoint } = outcome;
     this.metrics.recordCheckpointProposalSuccess();
 
     // Do not post anything to L1 if we are fishermen, but do perform L1 fee analysis
-    if (this.config.fishermanMode) {
+    if (outcome.kind === 'built-only') {
       await this.handleCheckpointEndAsFisherman(checkpoint);
       return checkpoint;
     }
 
     // Background the attestation → signing → L1 pipeline so the work loop is unblocked
-    this.submission = this.waitForAttestationsAndEnqueueSubmissionAsync(broadcast, votesPromises);
+    this.submission = this.waitForAttestationsAndEnqueueSubmissionAsync(outcome, votesPromises);
 
     // Return the built checkpoint immediately — the work loop is now unblocked
     return checkpoint;
@@ -882,7 +887,7 @@ export class CheckpointProposalJob implements Traceable {
       [Attributes.SLOT_NUMBER]: this.targetSlot,
     };
   })
-  private async proposeCheckpoint(): Promise<CheckpointProposalBroadcast | undefined> {
+  private async proposeCheckpoint(): Promise<CheckpointProposalOutcome | undefined> {
     try {
       const now = this.dateProvider.now();
       if (this.proposedCheckpointData) {
@@ -1122,9 +1127,7 @@ export class CheckpointProposalJob implements Traceable {
           },
         );
         this.metrics.recordCheckpointSuccess();
-        // Return a broadcast result with a dummy proposal — fisherman mode skips attestation collection and never
-        // publishes.
-        return { checkpoint, proposal: undefined!, blockProposedAt: this.dateProvider.now(), streamingState };
+        return { kind: 'built-only', checkpoint };
       }
 
       // Validate the header and the Inbox consumption against L1 state before broadcasting: the parent the header
@@ -1195,7 +1198,7 @@ export class CheckpointProposalJob implements Traceable {
       }
 
       // Return immediately after broadcast — attestation collection happens in the background.
-      return { checkpoint, proposal, blockProposedAt, streamingState };
+      return { kind: 'broadcast', checkpoint, proposal, blockProposedAt, streamingState };
     } catch (err) {
       if (err && (err instanceof DutyAlreadySignedError || err instanceof SlashingProtectionError)) {
         // swallow this error. It's already been logged by a function deeper in the stack
@@ -2137,11 +2140,6 @@ export class CheckpointProposalJob implements Traceable {
   private async waitForAttestations(
     proposal: CheckpointProposal,
   ): Promise<CommitteeAttestationsAndSigners | undefined> {
-    if (this.config.fishermanMode) {
-      this.log.debug('Skipping attestation collection in fisherman mode');
-      return CommitteeAttestationsAndSigners.empty(this.getSignatureContext());
-    }
-
     const slotNumber = proposal.slotNumber;
     const { committee, seed, epoch } = await this.epochCache.getCommittee(slotNumber);
 
@@ -2429,26 +2427,18 @@ export class CheckpointProposalJob implements Traceable {
   }
 
   /** Runs fee analysis and logs checkpoint outcome as fisherman */
-  private async handleCheckpointEndAsFisherman(checkpoint: Checkpoint | undefined) {
+  private async handleCheckpointEndAsFisherman(checkpoint: Checkpoint) {
     // Perform L1 fee analysis before clearing requests
     // The callback is invoked asynchronously after the next block is mined
     const feeAnalysis = await this.publisher.analyzeL1Fees(this.targetSlot, analysis =>
       this.metrics.recordFishermanFeeAnalysis(analysis),
     );
 
-    if (checkpoint) {
-      this.log.info(`Validation checkpoint building SUCCEEDED for slot ${this.targetSlot}`, {
-        ...checkpoint.toCheckpointInfo(),
-        ...checkpoint.getStats(),
-        feeAnalysisId: feeAnalysis?.id,
-      });
-    } else {
-      this.log.warn(`Validation block building FAILED for slot ${this.targetSlot}`, {
-        slot: this.targetSlot,
-        feeAnalysisId: feeAnalysis?.id,
-      });
-      this.metrics.recordCheckpointProposalFailed('block_build_failed');
-    }
+    this.log.info(`Validation checkpoint building SUCCEEDED for slot ${this.targetSlot}`, {
+      ...checkpoint.toCheckpointInfo(),
+      ...checkpoint.getStats(),
+      feeAnalysisId: feeAnalysis?.id,
+    });
 
     this.publisher.clearPendingRequests();
   }
