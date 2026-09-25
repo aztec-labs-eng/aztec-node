@@ -161,6 +161,18 @@ type CheckpointInboxPrefixReason = Extract<
   'inbox_prefix_unavailable' | 'inbox_prefix_mismatch'
 >;
 
+/** The L1-to-L2 messages a checkpoint consumed, read and authenticated against its header, or why they were not. */
+type CheckpointConsumedMessagesResult =
+  | { accepted: true; messages: Fr[] }
+  | { accepted: false; reason: CheckpointInboxPrefixReason };
+
+/** Whether a streaming-Inbox block check was rejected for a local-view reason that a forced archiver sync may clear. */
+function isRetryableStreamingBlockRejection<T extends StreamingBlockMetadataCheckResult | StreamingBlockCheckResult>(
+  result: T,
+): result is Extract<T, { accepted: false }> {
+  return !result.accepted && isRetryableStreamingBlockCheckReason(result.reason);
+}
+
 /**
  * Maps an archiver insert rejection to the matching per-block validation reason, or undefined when the error is not
  * an Inbox prefix rejection and must keep propagating.
@@ -1113,6 +1125,36 @@ export class ProposalHandler {
   }
 
   /**
+   * Given the first result of a local-view check, keeps re-running the check after forced archiver syncs while its
+   * result is a local-view outcome, until it is not or the slot's attestation deadline passes. On a timeout the
+   * caller's fallback decides what is reported; every caller builds it from the first result, so the reason it
+   * reports is the one it saw before waiting.
+   */
+  private async awaitLocalViewCheck<T extends object, R extends T>(opts: {
+    slot: SlotNumber;
+    what: string;
+    first: T;
+    check: () => Promise<T>;
+    isRetryable: (result: T) => result is R;
+    /** Logs the "awaiting archiver sync" line; called before the wait's timer starts. */
+    onWait: (first: R) => void;
+    /** Logs the timeout and returns the result to report. */
+    onTimeout: (first: R, waitedMs: number) => T;
+  }): Promise<T> {
+    const { first } = opts;
+    if (!opts.isRetryable(first)) {
+      return first;
+    }
+    opts.onWait(first);
+    const timer = new Timer();
+    const resolved = await this.awaitLocalSync(opts.slot, opts.what, async () => {
+      const result = await opts.check();
+      return opts.isRetryable(result) ? undefined : result;
+    });
+    return resolved ?? opts.onTimeout(first, timer.ms());
+  }
+
+  /**
    * Re-runs `resolve` against this node's local view, forcing an archiver L1 sync before every attempt, until it
    * yields a value or the slot's attestation deadline passes. Returns `undefined` when the deadline had already
    * passed on entry (nothing is forced in that case) or when it passes while waiting; anything other than the
@@ -1439,36 +1481,33 @@ export class ProposalHandler {
       return result;
     };
 
-    const first = await readBundle();
-    if (first.accepted || !isRetryableStreamingBlockCheckReason(first.reason)) {
-      return first;
-    }
-
     const slotNumber = proposal.slotNumber;
-    this.log.info(`Inbox bundle read did not confirm the signed prefix, awaiting archiver sync`, {
-      reason: first.reason,
-      ...proposalInfo,
+    return await this.awaitLocalViewCheck({
+      slot: slotNumber,
+      what: `inbox bundle for block ${blockNumber}`,
+      first: await readBundle(),
+      check: readBundle,
+      isRetryable: isRetryableStreamingBlockRejection<StreamingBlockCheckResult>,
+      onWait: first =>
+        this.log.info(`Inbox bundle read did not confirm the signed prefix, awaiting archiver sync`, {
+          reason: first.reason,
+          ...proposalInfo,
+        }),
+      onTimeout: (first, waitedMs) => {
+        this.log.warn(`Timed out reading a consistent Inbox bundle, rejecting proposal`, {
+          reason: 'inbox_prefix_sync_timeout',
+          firstReason: first.reason,
+          // Set only when the message source failed for a reason the checks did not anticipate, rather than sync lag.
+          // The latest such failure, since a later store fault says more about why this node gave up than the first
+          // attempt's lag does.
+          error: latestUnexpectedError,
+          slot: slotNumber,
+          waitedMs,
+          ...proposalInfo,
+        });
+        return { ...first, error: latestUnexpectedError };
+      },
     });
-    const timer = new Timer();
-    const resolved = await this.awaitLocalSync(slotNumber, `inbox bundle for block ${blockNumber}`, async () => {
-      const result = await readBundle();
-      return !result.accepted && isRetryableStreamingBlockCheckReason(result.reason) ? undefined : result;
-    });
-    if (resolved === undefined) {
-      this.log.warn(`Timed out reading a consistent Inbox bundle, rejecting proposal`, {
-        reason: 'inbox_prefix_sync_timeout',
-        firstReason: first.reason,
-        // Set only when the message source failed for a reason the checks did not anticipate, rather than sync lag.
-        // The latest such failure, since a later store fault says more about why this node gave up than the first
-        // attempt's lag does.
-        error: latestUnexpectedError,
-        slot: slotNumber,
-        waitedMs: timer.ms(),
-        ...proposalInfo,
-      });
-      return { ...first, error: latestUnexpectedError };
-    }
-    return resolved;
   }
 
   /**
@@ -1502,34 +1541,33 @@ export class ProposalHandler {
         reason: first.accepted ? undefined : first.reason,
       });
     }
-    if (first.accepted || !isRetryableStreamingBlockCheckReason(first.reason)) {
-      return first;
-    }
 
     const slotNumber = proposal.slotNumber;
     const inboxRollingHash = proposal.inboxPrefixRef.inboxRollingHash.toString();
-    this.log.info(`Referenced Inbox prefix ${inboxRollingHash} unconfirmed locally, awaiting archiver sync`, {
-      reason: first.reason,
-      inboxRollingHash,
-      ...proposalInfo,
+    return await this.awaitLocalViewCheck({
+      slot: slotNumber,
+      what: `inbox prefix ${inboxRollingHash}`,
+      first,
+      check: () => this.checkStreamingBlockMetadata(proposal, blockNumber, parentBlock),
+      isRetryable: isRetryableStreamingBlockRejection<StreamingBlockMetadataCheckResult>,
+      onWait: firstRejection =>
+        this.log.info(`Referenced Inbox prefix ${inboxRollingHash} unconfirmed locally, awaiting archiver sync`, {
+          reason: firstRejection.reason,
+          inboxRollingHash,
+          ...proposalInfo,
+        }),
+      onTimeout: (firstRejection, waitedMs) => {
+        this.log.warn(`Timed out waiting for Inbox prefix ${inboxRollingHash} to sync, rejecting proposal`, {
+          reason: 'inbox_prefix_sync_timeout',
+          firstReason: firstRejection.reason,
+          slot: slotNumber,
+          inboxRollingHash,
+          waitedMs,
+          ...proposalInfo,
+        });
+        return firstRejection;
+      },
     });
-    const timer = new Timer();
-    const resolved = await this.awaitLocalSync(slotNumber, `inbox prefix ${inboxRollingHash}`, async () => {
-      const result = await this.checkStreamingBlockMetadata(proposal, blockNumber, parentBlock);
-      return !result.accepted && isRetryableStreamingBlockCheckReason(result.reason) ? undefined : result;
-    });
-    if (resolved === undefined) {
-      this.log.warn(`Timed out waiting for Inbox prefix ${inboxRollingHash} to sync, rejecting proposal`, {
-        reason: 'inbox_prefix_sync_timeout',
-        firstReason: first.reason,
-        slot: slotNumber,
-        inboxRollingHash,
-        waitedMs: timer.ms(),
-        ...proposalInfo,
-      });
-      return first;
-    }
-    return resolved;
   }
 
   /**
@@ -1652,7 +1690,7 @@ export class ProposalHandler {
     checkpointStartTotal: bigint,
     lastBlockTotal: bigint,
     checkpointInboxRollingHash: Fr,
-  ): Promise<{ accepted: true; messages: Fr[] } | { accepted: false; reason: CheckpointInboxPrefixReason }> {
+  ): Promise<CheckpointConsumedMessagesResult> {
     if (lastBlockTotal < checkpointStartTotal) {
       return { accepted: false, reason: 'inbox_prefix_mismatch' };
     }
@@ -1709,34 +1747,34 @@ export class ProposalHandler {
     lastBlockTotal: bigint,
     checkpointInboxRollingHash: Fr,
     proposalInfo: LogData,
-  ): Promise<{ accepted: true; messages: Fr[] } | { accepted: false; reason: CheckpointInboxPrefixReason }> {
+  ): Promise<CheckpointConsumedMessagesResult> {
     const read = () =>
       this.readCheckpointConsumedMessages(checkpointStartTotal, lastBlockTotal, checkpointInboxRollingHash);
-    const first = await read();
-    if (first.accepted) {
-      return first;
-    }
-    this.log.info(`Checkpoint's consumed Inbox prefix unconfirmed locally, awaiting archiver sync`, {
-      reason: first.reason,
-      checkpointStartTotal,
-      lastBlockTotal,
-      ...proposalInfo,
+    return await this.awaitLocalViewCheck({
+      slot,
+      what: `inbox prefix for checkpoint at slot ${slot}`,
+      first: await read(),
+      check: read,
+      isRetryable: (result): result is Extract<CheckpointConsumedMessagesResult, { accepted: false }> =>
+        !result.accepted,
+      onWait: first =>
+        this.log.info(`Checkpoint's consumed Inbox prefix unconfirmed locally, awaiting archiver sync`, {
+          reason: first.reason,
+          checkpointStartTotal,
+          lastBlockTotal,
+          ...proposalInfo,
+        }),
+      onTimeout: first => {
+        this.log.warn(`Timed out waiting for the checkpoint's consumed Inbox prefix to sync, refusing to attest`, {
+          reason: 'inbox_prefix_sync_timeout',
+          firstReason: first.reason,
+          checkpointStartTotal,
+          lastBlockTotal,
+          ...proposalInfo,
+        });
+        return first;
+      },
     });
-    const resolved = await this.awaitLocalSync(slot, `inbox prefix for checkpoint at slot ${slot}`, async () => {
-      const result = await read();
-      return result.accepted ? result : undefined;
-    });
-    if (resolved === undefined) {
-      this.log.warn(`Timed out waiting for the checkpoint's consumed Inbox prefix to sync, refusing to attest`, {
-        reason: 'inbox_prefix_sync_timeout',
-        firstReason: first.reason,
-        checkpointStartTotal,
-        lastBlockTotal,
-        ...proposalInfo,
-      });
-      return first;
-    }
-    return resolved;
   }
 
   public async reexecuteTransactions(
