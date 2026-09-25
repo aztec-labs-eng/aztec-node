@@ -326,6 +326,11 @@ export class CheckpointProver {
         blockCount: this.checkpoint.blocks.length,
       });
 
+      // Structural validation of the checkpoint's message span runs before any proof work starts. Verifier jobs go
+      // into a shared cache that outlives this checkpoint's sub-tree, so a job started before the span is checked
+      // survives the cancellation that follows and keeps proving for a checkpoint nothing will accept.
+      const messagesPerBlock = this.sliceMessagesPerBlock();
+
       this.subTree = await this.deps.proverFactory.createCheckpointSubTreeOrchestrator(
         this.deps.chonkCache,
         this.epochNumber,
@@ -375,38 +380,12 @@ export class CheckpointProver {
         }
       }
 
-      // Streaming Inbox: the checkpoint's messages are consumed contiguously across its blocks, so each block's slice
-      // runs from its parent block's L1-to-L2 leaf count to its own (compact indices make leaf count equal cumulative
-      // message count). The list must cover exactly the range from the previous block to the last one, or the slices
-      // would be silently misassigned and only caught by the header mismatch after the block was fully re-executed.
-      const l1ToL2LeafCount = (header: BlockHeader) => Number(header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
-      const checkpointStartLeafCount = l1ToL2LeafCount(this.previousBlockHeader);
-      const checkpointEndLeafCount = l1ToL2LeafCount(this.checkpoint.blocks.at(-1)!.header);
-      if (this.l1ToL2Messages.length !== checkpointEndLeafCount - checkpointStartLeafCount) {
-        throw new Error(
-          `Checkpoint ${this.checkpoint.number} consumed ${checkpointEndLeafCount - checkpointStartLeafCount} L1 to L2 messages ` +
-            `(leaf counts ${checkpointStartLeafCount} to ${checkpointEndLeafCount}) but ${this.l1ToL2Messages.length} were supplied`,
-        );
-      }
-
-      let previousBlockLeafCount = checkpointStartLeafCount;
       for (let blockIndex = 0; blockIndex < this.checkpoint.blocks.length; blockIndex++) {
         const blockTimer = new Timer();
         const block = this.checkpoint.blocks[blockIndex];
         const globalVariables = block.header.globalVariables;
         const blockTxs = this.getTxsForBlock(block, txs);
-
-        const blockEndLeafCount = l1ToL2LeafCount(block.header);
-        if (blockEndLeafCount < previousBlockLeafCount) {
-          throw new Error(
-            `Block ${block.number} L1 to L2 leaf count ${blockEndLeafCount} is below its parent's ${previousBlockLeafCount}`,
-          );
-        }
-        const blockMessages = this.l1ToL2Messages.slice(
-          previousBlockLeafCount - checkpointStartLeafCount,
-          blockEndLeafCount - checkpointStartLeafCount,
-        );
-        previousBlockLeafCount = blockEndLeafCount;
+        const blockMessages = messagesPerBlock[blockIndex];
 
         await this.subTree.startNewBlock(block.number, globalVariables.timestamp, blockTxs.length, blockMessages);
         if (signal.aborted) {
@@ -465,6 +444,44 @@ export class CheckpointProver {
         this.failSubTreeProofs(new Error(`Checkpoint ${this.id} did not complete block processing`));
       }
     }
+  }
+
+  /**
+   * Splits the supplied L1-to-L2 messages into the slice each block of the checkpoint consumes, rejecting a span
+   * that does not describe this checkpoint.
+   *
+   * The messages are consumed contiguously across the checkpoint's blocks, so each block's slice runs from its
+   * parent block's L1-to-L2 leaf count to its own (compact indices make leaf count equal cumulative message count).
+   * The supplied list must cover exactly the range from the previous block to the last one and the per-block counts
+   * must not rewind, or the slices would be silently misassigned and only caught by the header mismatch after the
+   * block was fully re-executed.
+   */
+  private sliceMessagesPerBlock(): Fr[][] {
+    const l1ToL2LeafCount = (header: BlockHeader) => Number(header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
+    const checkpointStartLeafCount = l1ToL2LeafCount(this.previousBlockHeader);
+    const checkpointEndLeafCount = l1ToL2LeafCount(this.checkpoint.blocks.at(-1)!.header);
+    if (this.l1ToL2Messages.length !== checkpointEndLeafCount - checkpointStartLeafCount) {
+      throw new Error(
+        `Checkpoint ${this.checkpoint.number} consumed ${checkpointEndLeafCount - checkpointStartLeafCount} L1 to L2 messages ` +
+          `(leaf counts ${checkpointStartLeafCount} to ${checkpointEndLeafCount}) but ${this.l1ToL2Messages.length} were supplied`,
+      );
+    }
+
+    let previousBlockLeafCount = checkpointStartLeafCount;
+    return this.checkpoint.blocks.map(block => {
+      const blockEndLeafCount = l1ToL2LeafCount(block.header);
+      if (blockEndLeafCount < previousBlockLeafCount) {
+        throw new Error(
+          `Block ${block.number} L1 to L2 leaf count ${blockEndLeafCount} is below its parent's ${previousBlockLeafCount}`,
+        );
+      }
+      const blockMessages = this.l1ToL2Messages.slice(
+        previousBlockLeafCount - checkpointStartLeafCount,
+        blockEndLeafCount - checkpointStartLeafCount,
+      );
+      previousBlockLeafCount = blockEndLeafCount;
+      return blockMessages;
+    });
   }
 
   /**
