@@ -7,6 +7,7 @@ import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
+  IndexWithinCheckpoint,
   SlotNumber,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
@@ -1678,6 +1679,107 @@ describe('ProposalHandler checkpoint validation', () => {
         blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM),
         reason: 'block_number_already_exists',
       });
+    });
+  });
+
+  // A block after the first of its checkpoint repeats the checkpoint's global variables, so a proposal whose globals
+  // differ from its parent's in the same checkpoint is invalid content, however the rest of it checks out.
+  describe('handleBlockProposal non-first block global variables', () => {
+    const parentArchive = Fr.random();
+    const parentHeader = makeBlockHeader(0, { slotNumber: SlotNumber(1), blockNumber: BlockNumber(1) });
+    const parent = {
+      header: parentHeader,
+      archive: new AppendOnlyTreeSnapshot(parentArchive, TreeLeafIndex(1)),
+      checkpointNumber: CheckpointNumber(1),
+      indexWithinCheckpoint: 0,
+    } as unknown as BlockData;
+    // Another header's globals, every field of which differs from the parent's.
+    const otherGlobals = makeBlockHeader(0x55).globalVariables;
+
+    /** Block 2 at index 1 of checkpoint 1, building on `parent`, with the given global-variable overrides. */
+    async function setupNonFirstBlockProposal(overrides: Partial<FieldsOf<GlobalVariables>> = {}) {
+      const blockHeader = makeBlockHeader(0, {
+        slotNumber: SlotNumber(1),
+        blockNumber: BlockNumber(2),
+        ...overrides,
+        lastArchive: new AppendOnlyTreeSnapshot(parentArchive, TreeLeafIndex(1)),
+      });
+      const proposal = ValidatedBlockProposal(
+        await makeBlockProposal({
+          blockHeader,
+          indexWithinCheckpoint: IndexWithinCheckpoint(1),
+          archiveRoot: Fr.random(),
+          txHashes: [],
+          inboxPrefixRef: InboxMessagePrefixRef.empty(),
+        }),
+      );
+      blockSource.getGenesisValues.mockResolvedValue({ genesisArchiveRoot: Fr.random() } as any);
+      // Keyed on the archive rather than served once: a slashable verdict looks the parent up by archive again to
+      // confirm it was not pruned during validation.
+      blockSource.getBlockData.mockImplementation(query =>
+        Promise.resolve('archive' in query && query.archive.equals(parentArchive) ? parent : undefined),
+      );
+
+      const txProvider = mock<ITxProvider>();
+      txProvider.getTxsForBlockProposal.mockResolvedValue({ txs: [], missingTxs: [] } as any);
+      const blockHandler = new ProposalHandler(
+        checkpointsBuilder,
+        mock<WorldStateSynchronizer>(),
+        blockSource,
+        l1ToL2MessageSource,
+        inbox,
+        txProvider,
+        epochCache,
+        consensusTimetable,
+        config,
+        mock<BlobClientInterface>(),
+        new CheckpointReexecutionTracker(),
+        metrics,
+        dateProvider,
+      );
+      const reexecuteSpy = jest.spyOn(blockHandler, 'reexecuteTransactions').mockResolvedValue({} as any);
+      return { proposal, blockHandler, reexecuteSpy };
+    }
+
+    it('rejects a later slot than the parent in the same checkpoint as an invalid proposal', async () => {
+      const { proposal, blockHandler, reexecuteSpy } = await setupNonFirstBlockProposal({ slotNumber: SlotNumber(2) });
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toEqual({ isValid: false, blockNumber: BlockNumber(2), reason: 'invalid_proposal' });
+      expect(reexecuteSpy).not.toHaveBeenCalled();
+    });
+
+    it.each(['chainId', 'version', 'timestamp', 'coinbase', 'feeRecipient', 'gasFees'] as const)(
+      'rejects a mismatched %s as a global variables mismatch',
+      async field => {
+        const { proposal, blockHandler, reexecuteSpy } = await setupNonFirstBlockProposal({
+          [field]: otherGlobals[field],
+        });
+
+        const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+        expect(result).toEqual({ isValid: false, blockNumber: BlockNumber(2), reason: 'global_variables_mismatch' });
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.global_variables_mismatch).toBe(true);
+        expect(reexecuteSpy).not.toHaveBeenCalled();
+      },
+    );
+
+    it('re-executes a block whose global variables all match its parent', async () => {
+      const { proposal, blockHandler, reexecuteSpy } = await setupNonFirstBlockProposal();
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+      expect(result).toMatchObject({ isValid: true, blockNumber: BlockNumber(2) });
+      expect(reexecuteSpy).toHaveBeenCalledWith(
+        proposal,
+        BlockNumber(2),
+        CheckpointNumber(1),
+        [],
+        [],
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 
