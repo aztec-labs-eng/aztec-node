@@ -11,9 +11,11 @@ import { Signature } from '@aztec-labs/foundation/eth-signature';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
+
+import { atomicUpdateFile } from '../../utils/commands.js';
 
 export interface RollupCommandArgs {
   rpcUrls: string[];
@@ -256,14 +258,100 @@ export async function removeL1Validator({
   dualLog(`Transaction hash: ${receipt.transactionHash}`);
 }
 
+/** Signs an exit authorization locally and writes a JSON array accepted by the batch command. */
+export async function signAttesterExit({
+  rpcUrls,
+  chainId,
+  privateKey,
+  rollupAddress,
+  attesterAddress,
+  deadline,
+  output,
+  append = false,
+  createIfMissing = false,
+  log,
+}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> & { privateKey: string } & {
+  attesterAddress: EthAddress;
+  deadline: bigint;
+  output: string;
+  append?: boolean;
+  createIfMissing?: boolean;
+  log: LogFn;
+}) {
+  const account = getAccount(privateKey, undefined);
+  if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
+    throw new Error('The signing account must match the attester address');
+  }
+  const chain = createEthereumChain(rpcUrls, chainId);
+  const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
+  const rollup = new RollupContract(client, rollupAddress);
+  const authorization = await rollup.createAttesterExitAuthorization(attesterAddress, deadline, typedData =>
+    account.signTypedData(typedData),
+  );
+  let updateExisting = append;
+  let authorizations: unknown[] = [];
+  if (append) {
+    try {
+      authorizations = await readAttesterExitAuthorizationJson(output);
+    } catch (error) {
+      if (!createIfMissing || !isRecord(error) || error.code !== 'ENOENT') {
+        throw error;
+      }
+      updateExisting = false;
+    }
+  }
+  authorizations.push({
+    attester: authorization.attester.toString(),
+    deadline: authorization.deadline.toString(),
+    signature: Signature.fromViemSignature(authorization.signature).toString(),
+  });
+  const json = JSON.stringify(authorizations, null, 2);
+  if (updateExisting) {
+    await atomicUpdateFile(output, `${json}\n`);
+  } else {
+    await writeFile(output, `${json}\n`, { flag: 'wx' });
+  }
+  log(`Wrote attester exit authorization to ${output}`);
+}
+
+/** Checks batch structure, unique attesters, deadlines, and signatures without submitting a transaction. */
+export async function validateAttesterExits({
+  rpcUrls,
+  chainId,
+  rollupAddress,
+  authorizationsPath,
+  log,
+}: Pick<RollupCommandArgs, 'rpcUrls' | 'chainId' | 'rollupAddress'> & {
+  authorizationsPath: string;
+  log: LogFn;
+}) {
+  if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+    throw new Error('Chain ID must be a positive safe integer');
+  }
+  const client = getPublicClient({ l1RpcUrls: rpcUrls, l1ChainId: chainId });
+  const rollup = new RollupContract(client, rollupAddress);
+  const authorizations = await readAttesterExitAuthorizations(authorizationsPath);
+  await rollup.validateAttesterExitAuthorizations(authorizations);
+  log(
+    `Validated ${authorizations.length} attester exit authorizations. On-chain eligibility and capacity were not checked.`,
+  );
+}
+
 /** Reads relayed attester exit authorizations from a JSON array. */
 export async function readAttesterExitAuthorizations(path: string): Promise<AttesterExitAuthorization[]> {
-  const parsed: unknown = JSON.parse(await readFile(path, 'utf-8'));
-  if (!Array.isArray(parsed) || parsed.length === 0) {
+  const parsed = await readAttesterExitAuthorizationJson(path);
+  if (parsed.length === 0) {
     throw new Error('Attester exit authorization file must contain a non-empty JSON array');
   }
-
   return parsed.map((value, index) => parseAttesterExitAuthorization(value, index));
+}
+
+async function readAttesterExitAuthorizationJson(path: string): Promise<unknown[]> {
+  const parsed: unknown = JSON.parse(await readFile(path, 'utf-8'));
+  if (!Array.isArray(parsed)) {
+    throw new Error('Attester exit authorization file must contain a JSON array');
+  }
+  return parsed;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -282,7 +370,11 @@ function parseAttesterExitAuthorization(value: unknown, index: number): Attester
   if (typeof authorization.deadline !== 'string' || !/^\d+$/.test(authorization.deadline)) {
     throw new Error(`Attester exit authorization ${index} deadline must be a decimal string`);
   }
-  if (typeof authorization.signature !== 'string' || !isHex(authorization.signature)) {
+  if (
+    typeof authorization.signature !== 'string' ||
+    !isHex(authorization.signature) ||
+    !Signature.isValidString(authorization.signature)
+  ) {
     throw new Error(`Attester exit authorization ${index} has an invalid signature`);
   }
 
@@ -298,36 +390,39 @@ export async function initiateWithdrawByAttesterBatch({
   rpcUrls,
   chainId,
   privateKey,
-  mnemonic,
   authorizations,
   upToLimit,
   rollupAddress,
   log,
   debugLogger,
-}: Omit<RollupCommandArgs, 'withdrawerAddress'> &
-  LoggerArgs & {
+}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> & { privateKey: string } & LoggerArgs & {
     authorizations: AttesterExitAuthorization[];
     upToLimit: boolean;
   }) {
-  const account = getAccount(privateKey, mnemonic);
+  const account = getAccount(privateKey, undefined);
   const chain = createEthereumChain(rpcUrls, chainId);
   const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
   const rollup = new RollupContract(client, rollupAddress);
   const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
-  const { receipt } = upToLimit
-    ? await rollup.initiateWithdrawByAttesterBatchUpToLimit(l1TxUtils, authorizations)
-    : await rollup.initiateWithdrawByAttesterBatch(l1TxUtils, authorizations);
-
-  if (receipt.status !== 'success') {
-    throw new Error(`Attester exit batch reverted: ${receipt.transactionHash}`);
-  }
-
-  log(`Submitted ${authorizations.length} attester exit authorizations. Transaction hash: ${receipt.transactionHash}`);
-  if (upToLimit) {
-    log('The rollup processed the largest permitted prefix of the authorization list.');
-  }
-  debugLogger.info('Attester exit batch submitted', {
+  const { receipt, processedCount, remainingCount } = await rollup.submitAttesterExitBatch(
+    l1TxUtils,
+    authorizations,
+    upToLimit,
+  );
+  log(
+    `Processed ${processedCount} of ${authorizations.length} attester exit authorizations. Transaction hash: ${receipt.transactionHash}`,
+  );
+  log(
+    remainingCount > 0
+      ? `Remaining authorizations: ${remainingCount}. Zero-based JSON array indices ${processedCount} through ${authorizations.length - 1} (inclusive).`
+      : 'Remaining authorizations: 0 (none).',
+  );
+  debugLogger.info('Attester exit batch processed', {
     authorizationCount: authorizations.length,
+    processedCount,
+    remainingCount,
+    remainingStartIndex: remainingCount > 0 ? processedCount : undefined,
+    remainingEndIndexExclusive: remainingCount > 0 ? authorizations.length : undefined,
     upToLimit,
     rollup: rollupAddress.toString(),
     transactionHash: receipt.transactionHash,
@@ -340,13 +435,14 @@ export async function initiateWithdrawByAttester({
   rpcUrls,
   chainId,
   privateKey,
-  mnemonic,
   attesterAddress,
   rollupAddress,
   log,
   debugLogger,
-}: Omit<RollupCommandArgs, 'withdrawerAddress'> & LoggerArgs & { attesterAddress: EthAddress }) {
-  const account = getAccount(privateKey, mnemonic);
+}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> & { privateKey: string } & LoggerArgs & {
+    attesterAddress: EthAddress;
+  }) {
+  const account = getAccount(privateKey, undefined);
   if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
     throw new Error('The transaction signer must match the attester address');
   }
