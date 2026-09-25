@@ -26,7 +26,6 @@ import {
   type BlockHash,
   CommitteeAttestation,
   CommitteeAttestationsAndSigners,
-  L2Block,
   type L2BlockSink,
   type L2BlockSource,
   type ProposedCheckpointSink,
