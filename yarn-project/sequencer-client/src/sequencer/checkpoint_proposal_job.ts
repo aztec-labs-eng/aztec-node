@@ -325,6 +325,26 @@ export class CheckpointProposalJob implements Traceable {
     });
   }
 
+  /** Emits a failure checkpoint event followed by the operator log line for it, both carrying the same context. */
+  private reportCheckpointFailure(
+    event: 'build-failed' | 'publish-failed' | 'block-build-failed',
+    message: string,
+    context: Record<string, unknown> & { reason: string },
+    log: { level: 'verbose' | 'warn' } | { level: 'error'; err: unknown },
+  ): void {
+    const eventMessages = {
+      'build-failed': `Checkpoint build failed for slot ${this.targetSlot}`,
+      'publish-failed': `Checkpoint publish failed for slot ${this.targetSlot}`,
+      'block-build-failed': `Block build failed for slot ${this.targetSlot}`,
+    };
+    this.logCheckpointEvent(event, eventMessages[event], context);
+    if (log.level === 'error') {
+      this.log.error(message, log.err, context);
+    } else {
+      this.log[log.level](message, context);
+    }
+  }
+
   /**
    * Executes the checkpoint proposal job.
    * Builds blocks, assembles checkpoint, and broadcasts the proposal (blocking).
@@ -447,24 +467,20 @@ export class CheckpointProposalJob implements Traceable {
         const coinbase = checkpoint.header.coinbase;
         await this.metrics.incFilledSlot(this.publisher.getSenderAddress().toString(), coinbase);
       } else {
-        this.logCheckpointEvent('publish-failed', `Checkpoint publish failed for slot ${this.targetSlot}`, {
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          successfulActions: l1Response?.successfulActions,
-          failedActions: l1Response?.failedActions,
-          sentActions: l1Response?.sentActions,
-          expiredActions: l1Response?.expiredActions,
-          reason: 'propose_action_not_successful',
-        });
-        this.log.warn(`Checkpoint publish failed for slot ${this.targetSlot}`, {
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          successfulActions: l1Response?.successfulActions,
-          failedActions: l1Response?.failedActions,
-          sentActions: l1Response?.sentActions,
-          expiredActions: l1Response?.expiredActions,
-          reason: 'propose_action_not_successful',
-        });
+        this.reportCheckpointFailure(
+          'publish-failed',
+          `Checkpoint publish failed for slot ${this.targetSlot}`,
+          {
+            slot: this.targetSlot,
+            checkpointNumber: this.checkpointNumber,
+            successfulActions: l1Response?.successfulActions,
+            failedActions: l1Response?.failedActions,
+            sentActions: l1Response?.sentActions,
+            expiredActions: l1Response?.expiredActions,
+            reason: 'propose_action_not_successful',
+          },
+          { level: 'warn' },
+        );
         this.eventEmitter.emit('checkpoint-publish-failed', { ...l1Response, slot: this.targetSlot });
         this.metrics.recordPipelineDiscard();
       }
@@ -472,16 +488,16 @@ export class CheckpointProposalJob implements Traceable {
       if (err instanceof SequencerInterruptedError) {
         return;
       }
-      this.logCheckpointEvent('publish-failed', `Checkpoint publish failed for slot ${this.targetSlot}`, {
-        slot: this.targetSlot,
-        checkpointNumber: this.checkpointNumber,
-        reason: err instanceof Error ? err.message : String(err),
-      });
-      this.log.error(`Background attestation/L1 pipeline failed for slot ${this.targetSlot}`, err, {
-        slot: this.targetSlot,
-        checkpointNumber: this.checkpointNumber,
-        reason: err instanceof Error ? err.message : String(err),
-      });
+      this.reportCheckpointFailure(
+        'publish-failed',
+        `Background attestation/L1 pipeline failed for slot ${this.targetSlot}`,
+        {
+          slot: this.targetSlot,
+          checkpointNumber: this.checkpointNumber,
+          reason: err instanceof Error ? err.message : String(err),
+        },
+        { level: 'error', err },
+      );
       this.eventEmitter.emit('checkpoint-publish-failed', { slot: this.targetSlot });
       this.metrics.recordPipelineDiscard();
     }
@@ -519,10 +535,11 @@ export class CheckpointProposalJob implements Traceable {
         reason,
         error: err instanceof Error ? err.message : String(err),
       };
-      this.logCheckpointEvent('publish-failed', `Checkpoint publish failed for slot ${this.targetSlot}`, context);
-      this.log.warn(
+      this.reportCheckpointFailure(
+        'publish-failed',
         `Pre-publication header and Inbox preflight did not clear the checkpoint; abandoning slot ${this.targetSlot}`,
         context,
+        { level: 'warn' },
       );
       this.metrics.recordCheckpointProposalFailed(reason);
       this.eventEmitter.emit('checkpoint-publish-failed', { slot: this.targetSlot });
@@ -668,11 +685,12 @@ export class CheckpointProposalJob implements Traceable {
       localBlockHash: local?.blockHash.toString(),
       reason: 'checkpoint_blocks_pruned',
     };
-    this.logCheckpointEvent('publish-failed', `Checkpoint publish failed for slot ${this.targetSlot}`, context);
-    this.log.warn(
+    this.reportCheckpointFailure(
+      'publish-failed',
       `The local archiver no longer holds the blocks of this checkpoint; abandoning slot ${this.targetSlot} rather ` +
         `than publishing a checkpoint this node cannot serve`,
       context,
+      { level: 'warn' },
     );
     this.metrics.recordCheckpointProposalFailed('checkpoint_blocks_pruned');
     return false;
@@ -1009,30 +1027,20 @@ export class CheckpointProposalJob implements Traceable {
       }
 
       if (blocksInCheckpoint.length === 0) {
-        this.logCheckpointEvent('build-failed', `Checkpoint build failed for slot ${this.targetSlot}`, {
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          reason: 'no_blocks_built',
-        });
-        this.log.warn(`No blocks were built for slot ${this.targetSlot}`, {
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          reason: 'no_blocks_built',
-        });
+        this.reportCheckpointFailure(
+          'build-failed',
+          `No blocks were built for slot ${this.targetSlot}`,
+          { slot: this.targetSlot, checkpointNumber: this.checkpointNumber, reason: 'no_blocks_built' },
+          { level: 'warn' },
+        );
         this.eventEmitter.emit('checkpoint-empty', { slot: this.targetSlot });
         return undefined;
       }
 
       const minBlocksForCheckpoint = this.config.minBlocksForCheckpoint;
       if (minBlocksForCheckpoint !== undefined && blocksInCheckpoint.length < minBlocksForCheckpoint) {
-        this.logCheckpointEvent('build-failed', `Checkpoint build failed for slot ${this.targetSlot}`, {
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          blocksBuilt: blocksInCheckpoint.length,
-          minBlocksForCheckpoint,
-          reason: 'min_blocks_not_met',
-        });
-        this.log.warn(
+        this.reportCheckpointFailure(
+          'build-failed',
           `Checkpoint has fewer blocks than minimum (${blocksInCheckpoint.length} < ${minBlocksForCheckpoint}), skipping proposal`,
           {
             slot: this.targetSlot,
@@ -1041,6 +1049,7 @@ export class CheckpointProposalJob implements Traceable {
             minBlocksForCheckpoint,
             reason: 'min_blocks_not_met',
           },
+          { level: 'warn' },
         );
         return undefined;
       }
@@ -1061,20 +1070,18 @@ export class CheckpointProposalJob implements Traceable {
           maxTxsPerCheckpoint: this.config.maxTxsPerCheckpoint,
         });
       } catch (err) {
-        this.logCheckpointEvent('build-failed', `Checkpoint build failed for slot ${this.targetSlot}`, {
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          blocksBuilt: blocksInCheckpoint.length,
-          reason: 'invalid_checkpoint',
-          checkpoint: checkpoint.header.toInspect(),
-        });
-        this.log.error(`Built an invalid checkpoint at slot ${this.targetSlot} (skipping proposal)`, err, {
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          blocksBuilt: blocksInCheckpoint.length,
-          reason: 'invalid_checkpoint',
-          checkpoint: checkpoint.header.toInspect(),
-        });
+        this.reportCheckpointFailure(
+          'build-failed',
+          `Built an invalid checkpoint at slot ${this.targetSlot} (skipping proposal)`,
+          {
+            slot: this.targetSlot,
+            checkpointNumber: this.checkpointNumber,
+            blocksBuilt: blocksInCheckpoint.length,
+            reason: 'invalid_checkpoint',
+            checkpoint: checkpoint.header.toInspect(),
+          },
+          { level: 'error', err },
+        );
         return undefined;
       }
 
@@ -1795,10 +1802,11 @@ export class CheckpointProposalJob implements Traceable {
       reason,
       ...extraContext,
     };
-    this.logCheckpointEvent('build-failed', `Checkpoint build failed for slot ${this.targetSlot}`, context);
-    this.log.warn(
+    this.reportCheckpointFailure(
+      'build-failed',
       `Streaming Inbox consumption cannot complete this checkpoint; abandoning slot ${this.targetSlot}`,
       context,
+      { level: 'warn' },
     );
     this.metrics.recordCheckpointProposalFailed(reason);
     this.eventEmitter.emit('checkpoint-build-aborted', {
@@ -1861,15 +1869,8 @@ export class CheckpointProposalJob implements Traceable {
       // Wait until we have enough txs to build the block
       const { canStartBuilding, minTxs } = await this.waitForMinTxs(opts);
       if (!canStartBuilding) {
-        this.logCheckpointEvent('block-build-failed', `Block build failed for slot ${this.targetSlot}`, {
-          reason: 'insufficient_txs',
-          blockNumber,
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          indexWithinCheckpoint,
-          minTxs,
-        });
-        this.log.verbose(
+        this.reportCheckpointFailure(
+          'block-build-failed',
           `Not enough age-eligible txs to build block ${blockNumber} at index ${indexWithinCheckpoint} in slot ${this.targetSlot} (needs ${minTxs} eligible)`,
           {
             reason: 'insufficient_txs',
@@ -1879,6 +1880,7 @@ export class CheckpointProposalJob implements Traceable {
             indexWithinCheckpoint,
             minTxs,
           },
+          { level: 'verbose' },
         );
         this.eventEmitter.emit('block-tx-count-check-failed', { minTxs, slot: this.targetSlot });
         this.metrics.recordBlockProposalFailed('insufficient_txs');
@@ -1943,16 +1945,8 @@ export class CheckpointProposalJob implements Traceable {
       await this.dropFailedTxsFromP2P(buildResult.failedTxs);
 
       if (buildResult.status === 'insufficient-valid-txs') {
-        this.logCheckpointEvent('block-build-failed', `Block build failed for slot ${this.targetSlot}`, {
-          reason: 'insufficient_valid_txs',
-          slot: this.targetSlot,
-          checkpointNumber: this.checkpointNumber,
-          blockNumber,
-          numTxs: buildResult.processedCount,
-          indexWithinCheckpoint,
-          minValidTxs,
-        });
-        this.log.warn(
+        this.reportCheckpointFailure(
+          'block-build-failed',
           `Block ${blockNumber} at index ${indexWithinCheckpoint} on slot ${this.targetSlot} has too few valid txs to be proposed`,
           {
             reason: 'insufficient_valid_txs',
@@ -1963,6 +1957,7 @@ export class CheckpointProposalJob implements Traceable {
             indexWithinCheckpoint,
             minValidTxs,
           },
+          { level: 'warn' },
         );
         this.eventEmitter.emit('block-build-failed', {
           reason: `Insufficient valid txs`,
@@ -2009,18 +2004,17 @@ export class CheckpointProposalJob implements Traceable {
         reason: err.message,
         slot: this.targetSlot,
       });
-      this.logCheckpointEvent('block-build-failed', `Block build failed for slot ${this.targetSlot}`, {
-        reason: err instanceof Error ? err.message : String(err),
-        slot: this.targetSlot,
-        checkpointNumber: this.checkpointNumber,
-        blockNumber,
-      });
-      this.log.error(`Error building block`, err, {
-        reason: err instanceof Error ? err.message : String(err),
-        slot: this.targetSlot,
-        checkpointNumber: this.checkpointNumber,
-        blockNumber,
-      });
+      this.reportCheckpointFailure(
+        'block-build-failed',
+        `Error building block`,
+        {
+          reason: err instanceof Error ? err.message : String(err),
+          slot: this.targetSlot,
+          checkpointNumber: this.checkpointNumber,
+          blockNumber,
+        },
+        { level: 'error', err },
+      );
       this.metrics.recordBlockProposalFailed(err.name || 'unknown_error');
       this.metrics.recordFailedBlock();
       return { error: err };
