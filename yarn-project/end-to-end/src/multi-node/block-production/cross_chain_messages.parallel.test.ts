@@ -22,6 +22,7 @@ import {
   type L2PruneUnprovenEvent,
 } from '@aztec-labs/stdlib/block';
 import { computeQuorum, getSlotAtTimestamp, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { OffenseType } from '@aztec-labs/stdlib/slashing';
 import type { BlockProposalObservers } from '@aztec-labs/validator-client';
 import { type Hex, encodeFunctionData, parseEventLogs } from 'viem';
@@ -32,7 +33,7 @@ import {
 } from '../../fixtures/checkpoint_proposal_job_test_gate.js';
 import { sendL1ToL2Message } from '../../fixtures/l1_to_l2_messaging.js';
 import { waitForCanonicalMessageSyncpoint } from '../../fixtures/message_syncpoint.js';
-import { waitForBlockNumber, waitForTxs } from '../../fixtures/wait_helpers.js';
+import { waitForBlockNumber, waitForNodeProvenCheckpoint, waitForTxs } from '../../fixtures/wait_helpers.js';
 import { proveAndSendTxs } from '../../test-wallet/utils.js';
 import {
   type BlockProductionWithProverFixture,
@@ -741,13 +742,20 @@ describe('multi-node/block-production/cross_chain_messages', () => {
         ),
       ).toHaveLength(1);
       await waitForProvenCheckpoint(fixture, replacementCheckpoint, { expectedFailure });
+      // That wait reads the proof off L1; each node only reports it once its own archiver's next sync picks it up.
+      const waitForNodeToSeeProof = (node: AztecNode) =>
+        waitForNodeProvenCheckpoint(node, replacementCheckpoint, {
+          timeout: test.L2_SLOT_DURATION_IN_S,
+          interval: 0.1,
+        });
+      await waitForNodeToSeeProof(context.aztecNode);
 
       // The same block identity is still canonical once proven, so the convergence above was not undone by the
       // proof advancing the chain.
       for (const node of nodes) {
+        await waitForNodeToSeeProof(node);
         expect((await node.getBlockData(lastBlockNumber))!.blockHash.toString()).toEqual(lastBlockHash.toString());
       }
-      expect(await context.aztecNode.getCheckpointNumber('proven')).toBeGreaterThanOrEqual(replacementCheckpoint);
 
       // No node treated the stale proposal as proposer misconduct at any point. Asserted last, so the window it
       // covers runs from before the reorg through recovery and proving rather than stopping at the release.
