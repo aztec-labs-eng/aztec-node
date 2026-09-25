@@ -26,8 +26,7 @@ pub contract SchnorrInitializerlessAccount {
     };
     use std::embedded_curve_ops::EmbeddedCurvePoint;
 
-    pub(crate) global PUB_KEY_SLOT: Field =
-        comptime { poseidon2_hash_bytes("INITIALIZERLESS_ACCOUNT_PUB_KEY".as_bytes()) };
+    global PUB_KEY_SLOT: Field = comptime { poseidon2_hash_bytes("INITIALIZERLESS_ACCOUNT_PUB_KEY".as_bytes()) };
 
     #[external("utility")]
     unconstrained fn constructor(signing_pub_key_x: Field, signing_pub_key_y: Field) {

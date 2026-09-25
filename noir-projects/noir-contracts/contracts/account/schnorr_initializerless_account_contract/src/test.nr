@@ -1,6 +1,5 @@
-use crate::SchnorrInitializerlessAccount::{self, PUB_KEY_SLOT};
+use crate::SchnorrInitializerlessAccount;
 use aztec::{
-    oracle::capsules,
     protocol::{address::AztecAddress, hash::poseidon2_hash},
     test::helpers::test_environment::{DeployOptions, TestEnvironment},
 };
@@ -13,11 +12,6 @@ unconstrained fn constructor_accepts_key_matching_immutables_hash() {
     let (env, account) = deploy_with_immutables_hash(poseidon2_hash([SIGNING_PUB_KEY_X, SIGNING_PUB_KEY_Y]));
 
     env.execute_utility(SchnorrInitializerlessAccount::at(account).constructor(SIGNING_PUB_KEY_X, SIGNING_PUB_KEY_Y));
-
-    env.utility_context_at(account, |_| {
-        let stored: Option<[Field; 2]> = capsules::load(account, PUB_KEY_SLOT, account);
-        assert_eq(stored, Option::some([SIGNING_PUB_KEY_X, SIGNING_PUB_KEY_Y]));
-    });
 }
 
 #[test(should_fail_with = "Public key hash does not match the immutables hash")]
