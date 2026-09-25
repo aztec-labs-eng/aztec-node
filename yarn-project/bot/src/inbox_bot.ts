@@ -20,6 +20,7 @@ import {
   type BotConfig,
   MAX_INBOX_MESSAGES_PER_BATCH,
   MAX_INBOX_MESSAGES_PER_BUCKET,
+  type ResolvedBotConfig,
   applyInboxModeDefaults,
   assertValidInboxConfig,
 } from './config.js';
@@ -182,7 +183,7 @@ export interface InboxBotDeps {
   consumers: InboxL2Consumers;
   store: InboxStore;
   telemetry: TelemetryClient;
-  config: BotConfig;
+  config: ResolvedBotConfig;
   dateProvider?: DateProvider;
   syncChainTip?: BlockTag;
 }
@@ -213,7 +214,7 @@ export class InboxBot implements BotLifecycle {
   public readonly node: AztecNode;
   public readonly wallet: EmbeddedWallet;
   public readonly defaultAccountAddress: AztecAddress;
-  public config: BotConfig;
+  public config: ResolvedBotConfig;
 
   private readonly contractAddress: AztecAddress;
   private readonly producer: InboxL1Producer;
