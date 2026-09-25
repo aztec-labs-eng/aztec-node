@@ -42,7 +42,10 @@ type ProposedCheckpointMatch =
   | { kind: 'evict'; fromCheckpointNumber: CheckpointNumber }
   | { kind: 'none' };
 
-/** Everything one batch decided before touching the store: what to add, what to promote or evict, and the status to persist. */
+/**
+ * Everything one batch decided before it is persisted: what to add, what to promote or evict, and the status to
+ * persist. Screening has already recorded the batch's rejected checkpoints by then.
+ */
 type BatchPlan = {
   /** Accepted checkpoints in L1 order, blob-fetched or promoted. Drives metrics and logs. */
   published: PublishedCheckpoint[];
@@ -170,7 +173,7 @@ export class CheckpointIngestor {
 
     if (calldataCheckpoints.length === 0) {
       // We are not calling `setBlockSynchedL1BlockNumber` because it may cause sync issues if based off infura.
-      // See further details in earlier comments.
+      // See further details in the TODO(#8621) comment in ArchiverL1Synchronizer.reconcileCheckpointedChain.
       this.deps.log.trace(`Retrieved no new checkpoints from L1 block ${searchStartBlock} to ${searchEndBlock}`);
       return [];
     }
@@ -210,9 +213,7 @@ export class CheckpointIngestor {
       this.logDownloaded(plan.published);
       return { plan, added };
     } catch (err) {
-      if (!progress.persisted) {
-        await this.restoreSyncPointAfterFailedBatch(syncPointBeforeBatch, range);
-      }
+      await this.restoreSyncPointAfterFailedBatch(syncPointBeforeBatch, range, progress);
       throw err;
     }
   }
@@ -438,8 +439,9 @@ export class CheckpointIngestor {
 
   /**
    * Persists a planned batch in one store transaction, then reports its blocks and any local blocks it pruned.
-   * Marks `progress.persisted` as soon as the transaction has committed. Rewinds the L1 sync point if the batch is not
-   * consecutive with the stored chain. Returns the blocks persisted from L1 payloads.
+   * Marks `progress.persisted` once `addCheckpoints` has returned, which is after its transaction committed and the
+   * frontier cache refreshed, so a failed refresh still counts as not persisted. Rewinds the L1 sync point if the batch
+   * is not consecutive with the stored chain. Returns the blocks persisted from L1 payloads.
    */
   private async persistBatch(plan: BatchPlan, progress: { persisted: boolean }): Promise<L2Block[]> {
     try {
@@ -530,15 +532,16 @@ export class CheckpointIngestor {
     );
   }
 
-  /** Lowers the L1 sync point back to where it stood before a batch that failed before it was persisted. */
+  /** Lowers the L1 sync point back to where it stood before a failed batch, unless the batch was persisted. */
   private async restoreSyncPointAfterFailedBatch(
     syncPointBeforeBatch: bigint | undefined,
     { searchStartBlock, searchEndBlock }: { searchStartBlock: bigint; searchEndBlock: bigint },
+    progress: { persisted: boolean },
   ): Promise<void> {
     const restoreTo = syncPointBeforeBatch ?? this.deps.l1Constants.l1StartBlock;
     const currentSyncPoint = await this.deps.stores.blocks.getSynchedL1BlockNumber();
     // Only ever lower it, so a deeper rewind made while handling the error (e.g. on a checkpoint gap) is kept.
-    if (currentSyncPoint !== undefined && currentSyncPoint > restoreTo) {
+    if (!progress.persisted && currentSyncPoint !== undefined && currentSyncPoint > restoreTo) {
       this.deps.log.warn(`Restoring L1 sync point to ${restoreTo} after failing to process checkpoints`, {
         currentSyncPoint,
         restoreTo,
