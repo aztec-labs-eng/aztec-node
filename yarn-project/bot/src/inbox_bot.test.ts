@@ -41,6 +41,7 @@ import {
   type BotConfig,
   MAX_INBOX_MESSAGES_PER_BATCH,
   MAX_INBOX_MESSAGES_PER_BUCKET,
+  type ResolvedBotConfig,
   applyInboxModeDefaults,
   getBotDefaultConfig,
 } from './config.js';
@@ -467,7 +468,7 @@ describe('InboxBot', () => {
   const milestones = (milestone: string) =>
     telemetry.meter.sum(Metrics.BOT_INBOX_MESSAGE_COUNT, { [Attributes.BOT_INBOX_MILESTONE]: milestone });
 
-  const buildConfig = (overrides: Partial<BotConfig> = {}): BotConfig =>
+  const buildConfig = (overrides: Partial<BotConfig> = {}): ResolvedBotConfig =>
     applyInboxModeDefaults({
       ...getBotDefaultConfig(),
       botMode: 'inbox',

@@ -36,8 +36,11 @@ export const MAX_INBOX_MESSAGES_PER_BUCKET = MAX_L1_TO_L2_MSGS_PER_BLOCK;
 /** Largest number of messages that fit in a single Inbox bucket, plus the one that rolls it over. */
 export const MAX_INBOX_MESSAGES_PER_BATCH = MAX_INBOX_MESSAGES_PER_BUCKET + 1;
 
-/** Effective `l1ToL2SeedCount` for inbox mode when the operator left it at its default. */
+/** Effective `l1ToL2SeedCount` for inbox mode when the operator did not set one. */
 const INBOX_DEFAULT_L1_TO_L2_SEED_COUNT = 512;
+
+/** Effective `l1ToL2SeedCount` for every other mode when the operator did not set one. */
+export const DEFAULT_L1_TO_L2_SEED_COUNT = 1;
 
 export enum SupportedTokenContracts {
   TokenContract = 'TokenContract',
@@ -97,8 +100,11 @@ export type BotConfig = {
   botMode: BotMode;
   /** Number of L2→L1 messages per tx (crosschain mode). */
   l2ToL1MessagesPerTx: number;
-  /** Max L1→L2 messages to keep in-flight (crosschain mode). */
-  l1ToL2SeedCount: number;
+  /**
+   * Max L1→L2 messages to keep in-flight (crosschain and inbox modes). Optional so the mode-specific default can
+   * tell an unset value from an explicit one; {@link applyInboxModeDefaults} resolves it.
+   */
+  l1ToL2SeedCount?: number;
   /** How many L1→L2 messages the inbox bot sends per atomic L1 batch (inbox mode). */
   inboxMessagesPerBatch: number;
   /** Which L2 domain the inbox bot consumes its messages through (inbox mode). */
@@ -136,7 +142,7 @@ export const BotConfigSchema = zodFor<BotConfig>()(
       stopWhenUnhealthy: z.boolean(),
       botMode: z.enum(BotMode).default('transfer'),
       l2ToL1MessagesPerTx: z.number().int().nonnegative().default(1),
-      l1ToL2SeedCount: z.number().int().nonnegative().default(1),
+      l1ToL2SeedCount: z.number().int().nonnegative().optional(),
       inboxMessagesPerBatch: z.number().int().min(1).max(MAX_INBOX_MESSAGES_PER_BATCH).default(4),
       inboxConsumeMode: z.enum(BotInboxConsumeMode).default('mixed'),
       inboxSaturationIntervalSeconds: z.number().int().nonnegative().default(86400),
@@ -317,8 +323,10 @@ export const botConfigMappings: ConfigMappingsType<BotConfig> = {
   },
   l1ToL2SeedCount: {
     env: 'BOT_L1_TO_L2_SEED_COUNT',
-    description: 'Max L1→L2 messages to keep in-flight (crosschain and inbox modes)',
-    ...numberConfigHelper(1),
+    description:
+      'Max L1→L2 messages to keep in-flight (crosschain and inbox modes). Defaults to ' +
+      `${DEFAULT_L1_TO_L2_SEED_COUNT}, or ${INBOX_DEFAULT_L1_TO_L2_SEED_COUNT} in inbox mode.`,
+    ...optionalNumberConfigHelper(),
   },
   inboxMessagesPerBatch: {
     env: 'BOT_INBOX_MESSAGES_PER_BATCH',
@@ -354,24 +362,20 @@ export function getBotDefaultConfig(): BotConfig {
   return getDefaultConfig<BotConfig>(botConfigMappings);
 }
 
+/** A {@link BotConfig} whose mode-dependent defaults have been resolved, so consumers read plain values. */
+export type ResolvedBotConfig = BotConfig & { l1ToL2SeedCount: number };
+
 /**
- * Returns the config with inbox-mode effective defaults applied. Other modes are returned untouched, so
- * `getBotDefaultConfig()` and the transfer/amm/crosschain paths are unaffected.
+ * Returns the config with mode-dependent defaults applied.
  *
- * Inbox mode needs a far larger outstanding-message allowance than crosschain's single in-flight message.
- * `BotConfig` has no representation for "unset", so a field still equal to its `getBotDefaultConfig()` value is
- * taken to have been left alone and gets the inbox default; any other value is the operator's and wins.
+ * Inbox mode needs a far larger outstanding-message allowance than crosschain's single in-flight message. The
+ * default is applied from the absence of a value rather than from it matching the general default: an operator who
+ * explicitly asks for one in-flight message in inbox mode gets one, and is then told by
+ * {@link assertValidInboxConfig} that it cannot drive a batch, instead of silently running with 512.
  */
-export function applyInboxModeDefaults(config: BotConfig): BotConfig {
-  if (config.botMode !== 'inbox') {
-    return config;
-  }
-  const defaults = getBotDefaultConfig();
-  return {
-    ...config,
-    l1ToL2SeedCount:
-      config.l1ToL2SeedCount === defaults.l1ToL2SeedCount ? INBOX_DEFAULT_L1_TO_L2_SEED_COUNT : config.l1ToL2SeedCount,
-  };
+export function applyInboxModeDefaults(config: BotConfig): ResolvedBotConfig {
+  const modeDefault = config.botMode === 'inbox' ? INBOX_DEFAULT_L1_TO_L2_SEED_COUNT : DEFAULT_L1_TO_L2_SEED_COUNT;
+  return { ...config, l1ToL2SeedCount: config.l1ToL2SeedCount ?? modeDefault };
 }
 
 /**
@@ -399,14 +403,15 @@ export function assertValidInboxConfig(config: BotConfig): void {
       `Inbox bot requires a nonnegative integer inboxSaturationIntervalSeconds (got ${config.inboxSaturationIntervalSeconds})`,
     );
   }
-  if (config.l1ToL2SeedCount < config.inboxMessagesPerBatch) {
+  const l1ToL2SeedCount = config.l1ToL2SeedCount ?? INBOX_DEFAULT_L1_TO_L2_SEED_COUNT;
+  if (l1ToL2SeedCount < config.inboxMessagesPerBatch) {
     throw new Error(
-      `Inbox bot requires l1ToL2SeedCount (${config.l1ToL2SeedCount}) to be at least inboxMessagesPerBatch (${config.inboxMessagesPerBatch}), otherwise the outstanding-message cap blocks production`,
+      `Inbox bot requires l1ToL2SeedCount (${l1ToL2SeedCount}) to be at least inboxMessagesPerBatch (${config.inboxMessagesPerBatch}), otherwise the outstanding-message cap blocks production`,
     );
   }
-  if (config.inboxSaturationIntervalSeconds > 0 && config.l1ToL2SeedCount < MAX_INBOX_MESSAGES_PER_BATCH) {
+  if (config.inboxSaturationIntervalSeconds > 0 && l1ToL2SeedCount < MAX_INBOX_MESSAGES_PER_BATCH) {
     throw new Error(
-      `Inbox bot with saturation enabled requires l1ToL2SeedCount to be at least ${MAX_INBOX_MESSAGES_PER_BATCH} (got ${config.l1ToL2SeedCount}), otherwise a saturation batch can never fit under the outstanding-message cap`,
+      `Inbox bot with saturation enabled requires l1ToL2SeedCount to be at least ${MAX_INBOX_MESSAGES_PER_BATCH} (got ${l1ToL2SeedCount}), otherwise a saturation batch can never fit under the outstanding-message cap`,
     );
   }
 }

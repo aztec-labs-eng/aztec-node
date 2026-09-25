@@ -33,7 +33,7 @@ import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
-import { type BotConfig, SupportedTokenContracts } from './config.js';
+import { type BotConfig, DEFAULT_L1_TO_L2_SEED_COUNT, SupportedTokenContracts } from './config.js';
 import { seedL1ToL2Message } from './l1_to_l2_seeding.js';
 import type { BotStore } from './store/index.js';
 import { getBalances, getPrivateBalance, isStandardTokenContract } from './utils.js';
@@ -183,7 +183,10 @@ export class BotFactory {
 
       // Seed initial L1→L2 messages if pipeline is empty. The seeds are sent one at a time: they share the
       // bot's L1 account, so concurrent sends would race on the L1 nonce.
-      const seedCount = Math.max(0, this.config.l1ToL2SeedCount - pendingMessages.length);
+      const seedCount = Math.max(
+        0,
+        (this.config.l1ToL2SeedCount ?? DEFAULT_L1_TO_L2_SEED_COUNT) - pendingMessages.length,
+      );
       const inboxAddress = EthAddress.fromString(l1ContractAddresses.inboxAddress.toString());
       for (let i = 0; i < seedCount; i++) {
         await seedL1ToL2Message(l1Client, inboxAddress, contractAddress, rollupVersion, this.store, this.log);
