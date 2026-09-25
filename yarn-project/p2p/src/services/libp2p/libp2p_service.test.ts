@@ -8,8 +8,12 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { GasFees, type TxAdmissionMinFeesProvider } from '@aztec-labs/stdlib/gas';
-import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
+import { Gas, GasFees, GasSettings, type TxAdmissionMinFeesProvider } from '@aztec-labs/stdlib/gas';
+import type {
+  ClientProtocolCircuitVerifier,
+  MerkleTreeReadOperations,
+  WorldStateSynchronizer,
+} from '@aztec-labs/stdlib/interfaces/server';
 import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
@@ -40,7 +44,13 @@ import {
 } from '../../mem_pools/attestation_pool/attestation_pool.js';
 import type { MemPools } from '../../mem_pools/interface.js';
 import type { TxPoolV2 } from '../../mem_pools/tx_pool_v2/interfaces.js';
-import type { TransactionValidator } from '../../msg_validators/tx_validator/factory.js';
+import {
+  type GossipMinFees,
+  type GossipValidationFailure,
+  type TransactionValidator,
+  computeGossipMinFees,
+  createFirstStageTxValidationsForGossipedTransactions,
+} from '../../msg_validators/tx_validator/factory.js';
 import type { PubSubLibp2p } from '../../util.js';
 import type { PeerManagerInterface } from '../peer-manager/interface.js';
 import type { ReqRespInterface } from '../reqresp/interface.js';
@@ -316,32 +326,131 @@ describe('LibP2PService', () => {
       });
       expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Accept);
     });
+
+    describe('local next-block fee policy', () => {
+      const localMinFees = new GasFees(10, 10);
+
+      /**
+       * The real first-stage fee validators for a node whose admission and L1-forward fees are both `localMinFees`,
+       * which puts the penalty floor at (5, 5). Only the fee entries are injected, so the gossip outcome is decided
+       * by the fee checks alone.
+       */
+      function createGossipFeeValidators(): Record<string, TransactionValidator<GossipValidationFailure>> {
+        const worldState = mock<WorldStateSynchronizer>();
+        worldState.getCommitted.mockReturnValue(mock<MerkleTreeReadOperations>());
+        const validators = createFirstStageTxValidationsForGossipedTransactions(
+          0n,
+          BlockNumber(2),
+          worldState,
+          computeGossipMinFees(localMinFees, localMinFees),
+          1,
+          1,
+          Fr.ZERO,
+          mock<ContractDataSource>(),
+          true,
+        );
+        return Object.fromEntries(
+          Object.entries(validators).filter(
+            ([name]) =>
+              name === 'maxFeePerGasValidator' ||
+              name === 'maxFeePerGasFloorValidator' ||
+              name === 'feePayerBalanceValidator',
+          ),
+        );
+      }
+
+      /**
+       * A tx paying `maxFeesPerGas` over `gasLimits`. An empty gas limit means a zero fee limit, which the
+       * mock fee payer covers despite reading as unfunded.
+       */
+      async function mockTxPaying(gasLimits: Gas, maxFeesPerGas: GasFees) {
+        const tx = await mockTx();
+        tx.data.constants.txContext.gasSettings = GasSettings.fallback({ gasLimits, maxFeesPerGas });
+        await tx.recomputeHash();
+        return tx;
+      }
+
+      beforeEach(() => {
+        txService.firstStageValidatorsOverride = createGossipFeeValidators();
+      });
+
+      it('ignores a tx priced between the penalty floor and the admission fee without penalizing the peer', async () => {
+        const tx = await mockTxPaying(Gas.empty(), new GasFees(6, 6));
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+        expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
+        expect(txPool.canAddPendingTx).not.toHaveBeenCalled();
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('rejects and penalizes a zero-fee tx, whose zero fee limit passes the balance check', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), GasFees.empty());
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('rejects and penalizes a tx whose fee payer cannot cover its fee limit', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), localMinFees);
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('rejects and penalizes an unfunded fee payer even when its fee alone would only be ignored', async () => {
+        const tx = await mockTxPaying(new Gas(100, 100), new GasFees(6, 6));
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.MidToleranceError);
+      });
+    });
   });
 
   describe('gossip min fee resolution', () => {
-    const feesProvider = (nextBlock: GasFees | undefined, admission: GasFees): TxAdmissionMinFeesProvider => ({
+    const feesProvider = (
+      nextBlock: GasFees | undefined,
+      admission: GasFees,
+      l1Forward: GasFees,
+    ): TxAdmissionMinFeesProvider => ({
       getNextBlockMinFees: () => Promise.resolve(nextBlock),
       getAdmissionMinFees: () => Promise.resolve(admission),
+      getL1ForwardMinFees: () => Promise.resolve(l1Forward),
     });
 
-    it('validates gossiped txs against the admission fee', async () => {
+    it('admits against the admission fee and penalizes below half the lower of it and the L1-forward fee', async () => {
       const feeService = createTestLibP2PService({
         peerManager: mockPeerManager,
         node: mockNode,
-        nextBlockMinFeesProvider: feesProvider(new GasFees(7, 70), new GasFees(7, 70)),
+        nextBlockMinFeesProvider: feesProvider(new GasFees(8, 80), new GasFees(8, 80), new GasFees(6, 100)),
       });
 
-      await expect(feeService.getGasFees()).resolves.toEqual(new GasFees(7, 70));
+      await expect(feeService.getGasFees()).resolves.toEqual({
+        admission: new GasFees(8, 80),
+        penaltyFloor: new GasFees(3, 40),
+      });
     });
 
     it('still enforces a min fee when the next block cannot be priced', async () => {
       const feeService = createTestLibP2PService({
         peerManager: mockPeerManager,
         node: mockNode,
-        nextBlockMinFeesProvider: feesProvider(undefined, new GasFees(3, 30)),
+        nextBlockMinFeesProvider: feesProvider(undefined, new GasFees(4, 40), new GasFees(4, 40)),
       });
 
-      await expect(feeService.getGasFees()).resolves.toEqual(new GasFees(3, 30));
+      await expect(feeService.getGasFees()).resolves.toEqual({
+        admission: new GasFees(4, 40),
+        penaltyFloor: new GasFees(2, 20),
+      });
     });
   });
 
@@ -1930,6 +2039,9 @@ class TestLibP2PService extends LibP2PService {
   /** Controls the severity returned by the failing first-stage validator. */
   public firstStageSeverity: PeerErrorSeverity = PeerErrorSeverity.LowToleranceError;
 
+  /** First-stage validators to run instead of the test flags, used to exercise real validators end to end. */
+  public firstStageValidatorsOverride?: Record<string, TransactionValidator<GossipValidationFailure>>;
+
   /** Exposed epoch cache for test configuration. */
   public testEpochCache: MockProxy<EpochCacheInterface>;
 
@@ -1948,6 +2060,7 @@ class TestLibP2PService extends LibP2PService {
     nextBlockMinFeesProvider: TxAdmissionMinFeesProvider = {
       getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
       getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+      getL1ForwardMinFees: () => Promise.resolve(GasFees.empty()),
     },
   ) {
     // Create minimal mock dependencies for the base class
@@ -2001,12 +2114,17 @@ class TestLibP2PService extends LibP2PService {
   }
 
   /** Exposes the protected getGasFees for testing. */
-  public override getGasFees(): Promise<GasFees> {
+  public override getGasFees(): Promise<GossipMinFees> {
     return super.getGasFees();
   }
 
   /** Override to use test flag for first-stage validators. Returns a failing validator when firstStageValidationPasses is false. */
-  protected override createFirstStageMessageValidators(): Promise<Record<string, TransactionValidator>> {
+  protected override createFirstStageMessageValidators(): Promise<
+    Record<string, TransactionValidator<GossipValidationFailure>>
+  > {
+    if (this.firstStageValidatorsOverride) {
+      return Promise.resolve(this.firstStageValidatorsOverride);
+    }
     if (this.firstStageValidationPasses) {
       return Promise.resolve({});
     }

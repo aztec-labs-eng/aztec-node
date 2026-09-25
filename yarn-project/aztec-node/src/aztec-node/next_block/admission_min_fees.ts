@@ -24,4 +24,8 @@ export class AdmissionMinFeesProvider implements TxAdmissionMinFeesProvider {
   public async getAdmissionMinFees(): Promise<GasFees> {
     return (await this.nextBlock.getNextBlockMinFees()) ?? (await this.l1Forward.getCurrentMinFees());
   }
+
+  public getL1ForwardMinFees(): Promise<GasFees> {
+    return this.l1Forward.getCurrentMinFees();
+  }
 }
