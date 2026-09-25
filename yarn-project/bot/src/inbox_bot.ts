@@ -236,7 +236,15 @@ export class InboxBot implements BotLifecycle {
   private stepInFlight = false;
   private consumeStepInFlight = false;
   private consecutiveProductionFailures = 0;
-  private consecutiveConsumptionFailures = 0;
+  /** Consecutive consumption *polls* that threw. Reset by a poll that completes. */
+  private consecutivePollFailures = 0;
+  /**
+   * Consecutive failures of asynchronous consumption work — attempts and replay probes — counted when they settle,
+   * whichever poll started them. Kept apart from the poll streak because a poll finishes long before the jobs it
+   * dispatched do: resetting one streak for both lets a bot fail one background job per poll forever without ever
+   * reaching the unhealthy threshold.
+   */
+  private consecutiveBackgroundFailures = 0;
   /**
    * Consumption attempts running in the background, keyed by message id. Membership is what guarantees a message
    * never has two attempts in flight, whatever the persisted state says.
@@ -1000,10 +1008,12 @@ export class InboxBot implements BotLifecycle {
       await this.dispatchAttempts([...observed, ...active]);
       await this.scanReplayProbes();
 
-      this.consecutiveConsumptionFailures = 0;
-      this.consumptionHealthy = true;
+      // Only the poll's own streak: the jobs this poll dispatched have not settled, and a poll that did nothing
+      // is no evidence that the background work which has been failing has recovered.
+      this.consecutivePollFailures = 0;
+      this.updateConsumptionHealth();
     } catch (err) {
-      this.registerConsumptionFailure(err);
+      this.registerPollFailure(err);
     } finally {
       this.consumeStepInFlight = false;
     }
@@ -1287,7 +1297,7 @@ export class InboxBot implements BotLifecycle {
         available--;
       }
       const job = this.runConsumptionAttempt(message)
-        .catch(err => this.registerConsumptionFailure(err))
+        .catch(err => this.registerBackgroundFailure(err))
         .finally(() => this.attemptsInFlight.delete(message.messageId));
       this.attemptsInFlight.set(message.messageId, job);
     }
@@ -1359,6 +1369,7 @@ export class InboxBot implements BotLifecycle {
         batchId: preparing.batchId,
         txHash: txHash.toString(),
       });
+      this.registerBackgroundSuccess();
       return;
     }
     this.log.verbose(`Sent inbox consumption transaction`, {
@@ -1369,6 +1380,10 @@ export class InboxBot implements BotLifecycle {
       globalLeafIndex: sent.globalLeafIndex,
     });
     await this.checkAnchorAdvanced(sent, txHash);
+    // The job succeeds once the submission is recorded, not when its receipt later reaches the completion policy,
+    // which can take many blocks and would let failures on either side of it add up as consecutive. It is cleared
+    // only here, after every step, so a job that fails after its send still counts as failed.
+    this.registerBackgroundSuccess();
   }
 
   /**
@@ -1467,7 +1482,7 @@ export class InboxBot implements BotLifecycle {
       await this.store.transitionMessageFrom(message.messageId, ['preparing'], waiting, { attempts });
     }
     if (reason === 'rpc') {
-      this.registerConsumptionFailure(err);
+      this.registerBackgroundFailure(err);
     }
   }
 
@@ -1621,6 +1636,7 @@ export class InboxBot implements BotLifecycle {
       this.readinessBackfill.set(completed.messageId, this.dateProvider.now());
     }
     await this.recordMessageMilestone(completed, 'completed');
+    this.registerBackgroundSuccess();
   }
 
   /**
@@ -1771,7 +1787,7 @@ export class InboxBot implements BotLifecycle {
       this.probesInFlight.set(
         batch.batchId,
         this.runReplayProbe(batch.batchId, spent)
-          .catch(err => this.registerConsumptionFailure(err))
+          .catch(err => this.registerBackgroundFailure(err))
           .finally(() => this.probesInFlight.delete(batch.batchId)),
       );
     }
@@ -1823,6 +1839,7 @@ export class InboxBot implements BotLifecycle {
       if (isAlreadyNullifiedError(err)) {
         await this.recordCheck('replay_rejection', 'passed', { batchId, messageId: message.messageId, mode: opposite });
         await this.store.recordBatchProbe(batchId, 'replay');
+        this.registerBackgroundSuccess();
       } else {
         this.log.warn(`Replay probe was inconclusive; it will be tried again`, {
           batchId,
@@ -1839,17 +1856,48 @@ export class InboxBot implements BotLifecycle {
     await this.store.recordBatchProbe(batchId, 'replay');
   }
 
-  private registerConsumptionFailure(err: unknown): void {
-    this.consecutiveConsumptionFailures++;
+  /** Records a failure of the consumption poll itself, which a later completed poll clears. */
+  private registerPollFailure(err: unknown): void {
+    this.consecutivePollFailures++;
     this.log.error(`Inbox bot consumption step failed`, {
-      consecutiveFailures: this.consecutiveConsumptionFailures,
+      consecutivePollFailures: this.consecutivePollFailures,
       err,
     });
-    if (
-      this.config.maxConsecutiveErrors > 0 &&
-      this.consecutiveConsumptionFailures >= this.config.maxConsecutiveErrors
-    ) {
-      this.consumptionHealthy = false;
+    this.updateConsumptionHealth();
+  }
+
+  /**
+   * Records a failure of asynchronous consumption work. Only a background operation that actually succeeds clears
+   * this streak, so a job that fails once per poll still reaches the unhealthy threshold.
+   */
+  private registerBackgroundFailure(err: unknown): void {
+    this.consecutiveBackgroundFailures++;
+    this.log.error(`Inbox bot background consumption work failed`, {
+      consecutiveBackgroundFailures: this.consecutiveBackgroundFailures,
+      err,
+    });
+    this.updateConsumptionHealth();
+  }
+
+  /**
+   * Records that a background attempt or probe reached its expected outcome, clearing the background streak.
+   *
+   * The streak is shared by every concurrent attempt and probe on purpose, so one success clears failures from other
+   * jobs in flight. Health answers whether background consumption is making progress at all, not whether each job
+   * is: a bot with one lane succeeding still consumes messages and stays healthy, and each failure is still logged as
+   * an error.
+   */
+  private registerBackgroundSuccess(): void {
+    this.consecutiveBackgroundFailures = 0;
+    this.updateConsumptionHealth();
+  }
+
+  /** Recomputes consumption health from both streaks, and exits if the operator asked an unhealthy bot to stop. */
+  private updateConsumptionHealth(): void {
+    const limit = this.config.maxConsecutiveErrors;
+    this.consumptionHealthy =
+      limit <= 0 || (this.consecutivePollFailures < limit && this.consecutiveBackgroundFailures < limit);
+    if (!this.consumptionHealthy) {
       this.exitIfUnhealthy();
     }
   }
