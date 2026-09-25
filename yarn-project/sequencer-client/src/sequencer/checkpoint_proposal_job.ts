@@ -1182,9 +1182,6 @@ export class CheckpointProposalJob implements Traceable {
 
     // Last block in the checkpoint will usually be flagged as pending broadcast, so we send it along with the checkpoint proposal
     let blockPendingBroadcast: BlockProposal | undefined = undefined;
-    // Streaming Inbox: the loop ran out of sub-slots rather than finishing the checkpoint, so the cursor may be
-    // sitting at a prefix that is not a live L1 bucket end.
-    let ranOutOfSubslots = false;
 
     while (true) {
       const blocksBuilt = blocksInCheckpoint.length;
@@ -1209,7 +1206,26 @@ export class CheckpointProposalJob implements Traceable {
           blocksBuilt,
           nowSeconds,
         });
-        ranOutOfSubslots = true;
+        // Streaming Inbox: the sub-slot schedule ran out mid-checkpoint, so the cursor may sit at a prefix that is not
+        // a live L1 bucket end, which no checkpoint can be published on. Resolve once and, if it is not one, build one
+        // more block rather than lose the slot; this is the only place the loop overrides the timetable. A cursor
+        // still at the checkpoint start needs nothing: the parent checkpoint already ended on a live bucket end.
+        if (consumption.hasConsumedInThisCheckpoint) {
+          const forced = await this.buildForcedEndpointBlock(checkpointBuilder, consumption, {
+            blockTimestamp: timestamp,
+            blockNumber,
+            indexWithinCheckpoint,
+            txHashesAlreadyIncluded,
+            blockProposalOptions,
+          });
+          if (forced.kind === 'aborted') {
+            return { aborted: true };
+          }
+          if (forced.kind === 'built') {
+            blocksInCheckpoint.push(forced.block);
+            blockPendingBroadcast = forced.proposal;
+          }
+        }
         break;
       }
 
@@ -1319,27 +1335,6 @@ export class CheckpointProposalJob implements Traceable {
 
       // Wait until the next block's start time
       await this.waitUntilNextSubslot(timingInfo.deadline);
-    }
-
-    // Streaming Inbox: the sub-slot schedule ran out mid-checkpoint, so the cursor may sit at a prefix that is not a
-    // live L1 bucket end, which no checkpoint can be published on. Resolve once and, if it is not one, build one more
-    // block rather than lose the slot; this is the only place the loop overrides the timetable. A cursor still at the
-    // checkpoint start needs nothing: the parent checkpoint already ended on a live bucket end.
-    if (ranOutOfSubslots && blocksInCheckpoint.length > 0 && consumption.hasConsumedInThisCheckpoint) {
-      const forced = await this.buildForcedEndpointBlock(checkpointBuilder, consumption, {
-        blockTimestamp: timestamp,
-        blockNumber: BlockNumber(initialBlockNumber + blocksInCheckpoint.length),
-        indexWithinCheckpoint: IndexWithinCheckpoint(blocksInCheckpoint.length),
-        txHashesAlreadyIncluded,
-        blockProposalOptions,
-      });
-      if (forced.kind === 'aborted') {
-        return { aborted: true };
-      }
-      if (forced.kind === 'built') {
-        blocksInCheckpoint.push(forced.block);
-        blockPendingBroadcast = forced.proposal;
-      }
     }
 
     this.log.verbose(`Block building loop completed for slot ${this.targetSlot}`, {
