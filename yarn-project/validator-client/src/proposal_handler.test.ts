@@ -7,6 +7,7 @@ import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
+  IndexWithinCheckpoint,
   SlotNumber,
   TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
@@ -95,6 +96,7 @@ function makeSlotBlocks(archiveRoots: Fr[]): L2Block[] {
         archive: new AppendOnlyTreeSnapshot(root, TreeLeafIndex(i + 1)),
         number: BlockNumber(i + 1),
         checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(i),
         header: makeBlockHeader(0, {
           lastArchive: new AppendOnlyTreeSnapshot(i === 0 ? Fr.ZERO : archiveRoots[i - 1], TreeLeafIndex(i)),
           slotNumber: SlotNumber(1),
@@ -647,18 +649,27 @@ describe('ProposalHandler checkpoint validation', () => {
 
     /**
      * Sets up mocks so the handler passes all early checks and reaches the checkpoint rebuild path.
-     * `forkArchiveRoot` is the archive root the forked world state reports; it must match the proposal
-     * header's lastArchiveRoot (default Fr.ZERO, as CheckpointHeader.empty) to pass the fork archive check.
+     * `firstBlockLastArchiveRoot` is the archive the checkpoint's first block builds on, which the proposal header's
+     * lastArchiveRoot must repeat (default Fr.ZERO, as CheckpointHeader.empty). `forkArchiveRoot` is the archive root
+     * the forked world state reports, which must match the first block's to pass the fork archive check.
      */
-    function setupDeepValidationMocks(computedCheckpoint: Partial<Checkpoint>, forkArchiveRoot: Fr = Fr.ZERO) {
+    function setupDeepValidationMocks(
+      computedCheckpoint: Partial<Checkpoint>,
+      {
+        forkArchiveRoot = Fr.ZERO,
+        firstBlockLastArchiveRoot = forkArchiveRoot,
+      }: { forkArchiveRoot?: Fr; firstBlockLastArchiveRoot?: Fr } = {},
+    ) {
       // Block with matching archive so the early archive check passes
       const block = {
         archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
         number: 1,
         checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
         header: {
           globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
           state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
+          lastArchive: new AppendOnlyTreeSnapshot(firstBlockLastArchiveRoot, TreeLeafIndex(1)),
         },
       } as unknown as L2Block;
 
@@ -706,9 +717,11 @@ describe('ProposalHandler checkpoint validation', () => {
         archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
         number: firstBlockNumber,
         checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
         header: {
           globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
           state: { l1ToL2MessageTree: { nextAvailableLeafIndex: lastLeafCount } },
+          lastArchive: new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(firstBlockNumber - 1)),
         },
       } as unknown as L2Block;
       blockSource.getBlocksForSlot.mockResolvedValue([block]);
@@ -1011,7 +1024,7 @@ describe('ProposalHandler checkpoint validation', () => {
           slot: SlotNumber(1),
           toBlobFields: () => [],
         },
-        lastArchiveRoot,
+        { forkArchiveRoot: lastArchiveRoot },
       );
 
       const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
@@ -1048,21 +1061,169 @@ describe('ProposalHandler checkpoint validation', () => {
       expect(checkpointsBuilder.getFork).toHaveBeenCalledWith(parentBlockNumber, parentBlockHash);
     });
 
-    // If world state forked from a different chain than the proposal was built on (e.g. a reorg), the fork's
-    // archive root will not match the checkpoint's expected starting archive. Fail fast before rebuilding.
-    it('returns initial_archive_mismatch when the fork archive does not match the last archive', async () => {
-      // Fork reports a different archive root than the proposal header's lastArchiveRoot (Fr.ZERO).
-      setupDeepValidationMocks({ header: makeHeader() }, Fr.random());
+    // The rebuild and the checkpoint circuit both take the header's lastArchiveRoot from the archive the checkpoint's
+    // first block builds on, so a header naming any other archive is the proposer's doing. A fork whose archive
+    // disagrees with that first block is this node's world state off the archiver's chain, which is not.
+    describe('checkpoint last archive root', () => {
+      const chainArchiveRoot = Fr.random();
 
-      const proposal = await makeProposal({ archiveRoot, checkpointHeader: makeHeader() });
-      const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+      /** Runs `proposal` through the registered all-nodes checkpoint handler and returns the failures it reported. */
+      async function runAllNodesCheckpointHandler(proposal: Awaited<ReturnType<typeof makeProposal>>) {
+        const failures: CheckpointProposalValidationResult[] = [];
+        handler.setCheckpointProposalValidationFailureCallback((_proposal, result) => {
+          failures.push(result);
+        });
+        const p2p = mock<P2P>();
+        let checkpointHandler: ((proposal: any, sender: any) => Promise<unknown>) | undefined;
+        p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
+          checkpointHandler = h;
+        });
+        handler.register(p2p, true);
+        await checkpointHandler!(proposal, {} as any);
+        return failures;
+      }
 
-      expect(result).toEqual({
-        isValid: false,
-        reason: 'initial_archive_mismatch',
-        checkpointNumber: CheckpointNumber(1),
+      /** A proposal whose header claims `lastArchiveRoot`, over the deep-validation blocks. */
+      async function makeProposalClaiming(lastArchiveRoot: Fr, overrides: Partial<FieldsOf<CheckpointHeader>> = {}) {
+        return await makeProposal({ archiveRoot, checkpointHeader: makeHeader({ lastArchiveRoot, ...overrides }) });
+      }
+
+      it('rejects a last archive root other than the first block one, before any inbox wait or fork', async () => {
+        setupDeepValidationMocks(
+          { header: makeHeader({ lastArchiveRoot: chainArchiveRoot }) },
+          { forkArchiveRoot: chainArchiveRoot },
+        );
+
+        const result = await handler.handleCheckpointProposal(await makeProposalClaiming(Fr.random()), proposalInfo);
+
+        expect(result).toEqual({
+          isValid: false,
+          reason: 'last_archive_root_mismatch',
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT['last_archive_root_mismatch']).toBe(true);
+        expect(l1ToL2MessageSource.getL1ToL2MessageRange).not.toHaveBeenCalled();
+        expect(checkpointsBuilder.getFork).not.toHaveBeenCalled();
+        expect(checkpointsBuilder.openCheckpoint).not.toHaveBeenCalled();
       });
-      expect(mockDispose).toHaveBeenCalled();
+
+      it('does not let a wrong last archive root hide another falsified header field', async () => {
+        setupDeepValidationMocks(
+          { header: makeHeader({ lastArchiveRoot: chainArchiveRoot }) },
+          { forkArchiveRoot: chainArchiveRoot },
+        );
+
+        const result = await handler.handleCheckpointProposal(
+          await makeProposalClaiming(Fr.random(), { totalManaUsed: new Fr(999) }),
+          proposalInfo,
+        );
+
+        expect(result).toEqual({
+          isValid: false,
+          reason: 'last_archive_root_mismatch',
+          checkpointNumber: CheckpointNumber(1),
+        });
+      });
+
+      it('refuses without punishing when world state forks off the chain the first block builds on', async () => {
+        setupDeepValidationMocks(
+          { header: makeHeader({ lastArchiveRoot: chainArchiveRoot }) },
+          { forkArchiveRoot: Fr.random(), firstBlockLastArchiveRoot: chainArchiveRoot },
+        );
+
+        const result = await handler.handleCheckpointProposal(
+          await makeProposalClaiming(chainArchiveRoot),
+          proposalInfo,
+        );
+
+        expect(result).toEqual({
+          isValid: false,
+          reason: 'initial_archive_mismatch',
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT['initial_archive_mismatch']).toBe(false);
+        expect(mockDispose).toHaveBeenCalled();
+        expect(checkpointsBuilder.openCheckpoint).not.toHaveBeenCalled();
+      });
+
+      it('marks the slot invalid and records an invalid outcome for a wrong last archive root', async () => {
+        setupDeepValidationMocks(
+          { header: makeHeader({ lastArchiveRoot: chainArchiveRoot }) },
+          { forkArchiveRoot: chainArchiveRoot },
+        );
+        const proposal = await makeProposalClaiming(Fr.random());
+
+        const failures = await runAllNodesCheckpointHandler(proposal);
+
+        expect(failures).toEqual([
+          { isValid: false, reason: 'last_archive_root_mismatch', checkpointNumber: CheckpointNumber(1) },
+        ]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(true);
+        expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([proposal.getPayloadHash()]);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('invalid');
+      });
+
+      it('leaves the slot unmarked and unvalidated when world state forks off the archiver chain', async () => {
+        setupDeepValidationMocks(
+          { header: makeHeader({ lastArchiveRoot: chainArchiveRoot }) },
+          { forkArchiveRoot: Fr.random(), firstBlockLastArchiveRoot: chainArchiveRoot },
+        );
+
+        const failures = await runAllNodesCheckpointHandler(await makeProposalClaiming(chainArchiveRoot));
+
+        expect(failures).toEqual([
+          { isValid: false, reason: 'initial_archive_mismatch', checkpointNumber: CheckpointNumber(1) },
+        ]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
+        expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('unvalidated');
+      });
+
+      it('refuses without punishing a wrong last archive root once the last block is pruned', async () => {
+        setupDeepValidationMocks(
+          { header: makeHeader({ lastArchiveRoot: chainArchiveRoot }) },
+          { forkArchiveRoot: chainArchiveRoot },
+        );
+        blockSource.getBlockData.mockImplementation(query =>
+          Promise.resolve('archive' in query ? undefined : ({ header: makeBlockHeader() } as BlockData)),
+        );
+
+        const failures = await runAllNodesCheckpointHandler(await makeProposalClaiming(Fr.random()));
+
+        expect(failures).toEqual([
+          { isValid: false, reason: 'last_block_pruned_during_validation', checkpointNumber: CheckpointNumber(1) },
+        ]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('unvalidated');
+      });
+
+      // The archiver skips a block whose body it cannot load, so a slot read can come back as a contiguous chain
+      // that starts past the checkpoint's first block. That block builds on another archive than the honest header
+      // names, which must not be read as the proposer's lie.
+      it('does not blame the proposer when the local slot read is missing the checkpoint first block', async () => {
+        setupDeepValidationMocks(
+          { header: makeHeader({ lastArchiveRoot: chainArchiveRoot }) },
+          { forkArchiveRoot: chainArchiveRoot },
+        );
+        const secondBlock = {
+          archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(2)),
+          number: 2,
+          checkpointNumber: CheckpointNumber(1),
+          indexWithinCheckpoint: IndexWithinCheckpoint(1),
+          header: {
+            globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
+            state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
+            lastArchive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1)),
+          },
+        } as unknown as L2Block;
+        blockSource.getBlocksForSlot.mockResolvedValue([secondBlock]);
+
+        const failures = await runAllNodesCheckpointHandler(await makeProposalClaiming(chainArchiveRoot));
+
+        expect(failures).toEqual([{ isValid: false, reason: 'last_block_not_found' }]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('unvalidated');
+      });
     });
 
     // Regression: on a live node the archiver held block N (so getBlocksForSlot succeeds) while world state
@@ -1141,7 +1302,7 @@ describe('ProposalHandler checkpoint validation', () => {
           header: {
             globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
             state: { l1ToL2MessageTree: { nextAvailableLeafIndex: midLeafCount } },
-            lastArchive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(0)),
+            lastArchive: new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(0)),
             getBlockNumber: () => 5,
           },
         } as unknown as L2Block;
