@@ -36,7 +36,7 @@ import {
   getPreviousCheckpointOutHashes,
   validateCheckpoint,
 } from '@aztec-labs/stdlib/checkpoint';
-import { computeQuorum, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { computeQuorum, getLastL1SlotTimestampForL2Slot, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { Gas } from '@aztec-labs/stdlib/gas';
 import {
   type BlockBuilderOptions,
@@ -565,11 +565,7 @@ export class CheckpointProposalJob implements Traceable {
    * already expired and time out before it can mine.
    */
   private getL1PublishDeadline(): Date {
-    const lastL1BlockInTargetSlot =
-      Number(getTimestampForSlot(this.targetSlot, this.l1Constants)) +
-      this.l1Constants.slotDuration -
-      this.l1Constants.ethereumSlotDuration;
-    return new Date(lastL1BlockInTargetSlot * 1000);
+    return new Date(Number(getLastL1SlotTimestampForL2Slot(this.targetSlot, this.l1Constants)) * 1000);
   }
 
   /**
@@ -907,7 +903,7 @@ export class CheckpointProposalJob implements Traceable {
         blockSource: this.l2BlockSource,
         epoch: this.targetEpoch,
         checkpointNumber: this.checkpointNumber,
-        l1Constants: this.epochCache.getL1Constants(),
+        l1Constants: this.l1Constants,
         pipeliningEnabled: true,
         proposedCheckpointData: this.proposedCheckpointData,
         log: this.log,
