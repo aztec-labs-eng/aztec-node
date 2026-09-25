@@ -60,6 +60,9 @@ export interface BlobClientConfig extends BlobArchiveApiConfig {
   /** Timeout for HTTP requests to the L1 RPC node in ms. */
   l1HttpTimeoutMS?: number;
 
+  /** Maximum number of L1 blocks a single `eth_getLogs` request may span. */
+  maxL1LogsWindowSize?: number;
+
   /** Whether to prefer filestores over consensus clients when fetching blobs. Default: false (consensus first). */
   blobPreferFilestores?: boolean;
 
@@ -121,6 +124,11 @@ export const blobClientConfigMapping: ConfigMappingsType<BlobClientConfig> = {
   l1HttpTimeoutMS: {
     env: 'ETHEREUM_HTTP_TIMEOUT_MS',
     description: 'Timeout for HTTP requests to the L1 RPC node in ms.',
+    ...optionalNumberConfigHelper(),
+  },
+  maxL1LogsWindowSize: {
+    env: 'MAX_L1_LOGS_WINDOW_SIZE',
+    description: 'Maximum number of L1 blocks a single eth_getLogs request may span.',
     ...optionalNumberConfigHelper(),
   },
   blobPreferFilestores: {

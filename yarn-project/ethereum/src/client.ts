@@ -20,6 +20,7 @@ import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { createEthereumChain } from './chain.js';
+import { capLogsWindow, configuredMaxL1LogsWindowSize } from './logs_window.js';
 import type { ExtendedViemWalletClient, ViemPublicClient } from './types.js';
 
 type Config = {
@@ -31,6 +32,8 @@ type Config = {
   viemPollingIntervalMS?: number;
   /** Timeout for HTTP requests to the L1 RPC node in ms. */
   l1HttpTimeoutMS?: number;
+  /** Maximum number of L1 blocks a single `eth_getLogs` request may span. */
+  maxL1LogsWindowSize?: number;
 };
 
 export type { Config as EthereumClientConfig };
@@ -43,9 +46,18 @@ export class L1RpcError extends Error {
   }
 }
 
-/** Creates a viem fallback HTTP transport for the given L1 RPC URLs. */
-export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number }) {
-  return wrapL1RpcTransport(fallback(rpcUrls.map(url => http(url, { batch: false, timeout: opts?.timeout }))));
+/**
+ * Creates a viem fallback HTTP transport for the given L1 RPC URLs. Every L1 client in the node is built on this
+ * transport, so the log-range cap it installs applies to every `eth_getLogs` the node issues. The cap wraps each
+ * endpoint rather than the fallback over them, so a log query split into several requests stays on one endpoint
+ * and a failure retries the whole query on the next one.
+ */
+export function makeL1HttpTransport(rpcUrls: string[], opts?: { timeout?: number; maxLogsWindowSize?: number }) {
+  const maxWindowSize = opts?.maxLogsWindowSize ?? configuredMaxL1LogsWindowSize();
+  const transport = fallback(
+    rpcUrls.map(url => capLogsWindow(http(url, { batch: false, timeout: opts?.timeout }), maxWindowSize)),
+  );
+  return wrapL1RpcTransport(transport);
 }
 
 /** Returns the HTTP status from an L1 RPC error's cause chain, if one is available. */
@@ -66,9 +78,9 @@ export function getL1RpcErrorCode(err: unknown): number | undefined {
 function wrapL1RpcTransport(transport: FallbackTransport<HttpTransport[]>): FallbackTransport<HttpTransport[]> {
   const wrappedTransport: FallbackTransport<HttpTransport[]> = parameters => {
     const fallbackTransport = transport(parameters);
-    const request: typeof fallbackTransport.request = async args => {
+    const request: typeof fallbackTransport.request = async (args, options) => {
       try {
-        return await fallbackTransport.request(args);
+        return await fallbackTransport.request(args, options);
       } catch (err) {
         throw err instanceof L1RpcError ? err : new L1RpcError('L1 RPC request failed', { cause: err });
       }
@@ -104,7 +116,10 @@ export function getPublicClient(config: Config): ViemPublicClient {
   const chain = createEthereumChain(config.l1RpcUrls, config.l1ChainId);
   return createPublicClient({
     chain: chain.chainInfo,
-    transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
+    transport: makeL1HttpTransport(config.l1RpcUrls, {
+      timeout: config.l1HttpTimeoutMS,
+      maxLogsWindowSize: config.maxL1LogsWindowSize,
+    }),
     pollingInterval: config.viemPollingIntervalMS,
   });
 }
@@ -145,7 +160,7 @@ export function createExtendedL1Client(
   chain: Chain = foundry,
   pollingIntervalMS?: number,
   addressIndex?: number,
-  opts?: { httpTimeoutMS?: number },
+  opts?: { httpTimeoutMS?: number; maxLogsWindowSize?: number },
 ): ExtendedViemWalletClient {
   const hdAccount =
     typeof mnemonicOrPrivateKeyOrHdAccount === 'string'
@@ -157,7 +172,10 @@ export function createExtendedL1Client(
   const extendedClient = createWalletClient({
     account: hdAccount,
     chain,
-    transport: makeL1HttpTransport(rpcUrls, { timeout: opts?.httpTimeoutMS }),
+    transport: makeL1HttpTransport(rpcUrls, {
+      timeout: opts?.httpTimeoutMS,
+      maxLogsWindowSize: opts?.maxLogsWindowSize,
+    }),
     pollingInterval: pollingIntervalMS,
   }).extend(publicActions);
 

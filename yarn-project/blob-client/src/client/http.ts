@@ -616,7 +616,10 @@ export class HttpBlobClient implements BlobClientInterface {
       }
 
       const client = createPublicClient({
-        transport: makeL1HttpTransport(l1RpcUrls, { timeout: this.config.l1HttpTimeoutMS }),
+        transport: makeL1HttpTransport(l1RpcUrls, {
+          timeout: this.config.l1HttpTimeoutMS,
+          maxLogsWindowSize: this.config.maxL1LogsWindowSize,
+        }),
       });
       try {
         const res: RpcBlock = await client.request({
