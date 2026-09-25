@@ -929,6 +929,92 @@ describe('ProposalHandler checkpoint validation', () => {
       );
     });
 
+    // The snapshot wait forces a sync of its own before the consumed prefix is first read, so these hold the view back
+    // until a later sync to reach the consumed-prefix retry itself. Slot 1's attestation deadline is 40s; 0.6s of
+    // budget is one retry.
+    describe('consumed prefix sync wait', () => {
+      const SHORT_BUDGET_NOW_MS = 39_400;
+
+      it('attests once a sync after the first consumed read brings the prefix into agreement', async () => {
+        const inboxRollingHash = Fr.random();
+        const header = makeHeader({ inboxRollingHash });
+        setupDeepValidationMocks({ header });
+        setupCheckpointWithConsumption({ firstBlockNumber: 5, parentLeafCount: 3, lastLeafCount: 7 });
+        const consumedMessages = [new Fr(1000), new Fr(1001), new Fr(1002), new Fr(1003)];
+        l1ToL2MessageSource.getL1ToL2MessageRange.mockRejectedValue(new Error('Inbox message range is not synced'));
+        let syncs = 0;
+        blockSource.syncImmediate.mockImplementation(() => {
+          if (++syncs === 2) {
+            mockConsumedRange(3n, 7n, consumedMessages, inboxRollingHash);
+          }
+          return Promise.resolve();
+        });
+        dateProvider.setTime(SHORT_BUDGET_NOW_MS);
+
+        await handler.handleCheckpointProposal(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          proposalInfo,
+        );
+
+        expect(syncs).toBeGreaterThanOrEqual(2);
+        expect(checkpointsBuilder.openCheckpoint).toHaveBeenCalledWith(
+          CheckpointNumber(1),
+          expect.anything(),
+          expect.anything(),
+          consumedMessages,
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('reports the reason seen before waiting when the wait times out', async () => {
+        const header = makeHeader({ inboxRollingHash: Fr.random() });
+        setupDeepValidationMocks({ header });
+        setupCheckpointWithConsumption({ firstBlockNumber: 5, parentLeafCount: 3, lastLeafCount: 7 });
+        // Unavailable on the first read, then present but disagreeing with the header on every later one.
+        l1ToL2MessageSource.getL1ToL2MessageRange.mockRejectedValueOnce(new Error('Inbox message range is not synced'));
+        l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue({
+          messages: [new Fr(1), new Fr(2), new Fr(3), new Fr(4)],
+          start: position(3n, Fr.random()),
+          end: position(7n, Fr.random()),
+        });
+        const warn = jest.spyOn(handler['log'], 'warn');
+        dateProvider.setTime(SHORT_BUDGET_NOW_MS);
+
+        const result = await handler.handleCheckpointProposal(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          proposalInfo,
+        );
+
+        expect(result).toEqual({
+          isValid: false,
+          reason: 'inbox_prefix_unavailable',
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(l1ToL2MessageSource.getL1ToL2MessageRange.mock.calls.length).toBeGreaterThan(1);
+        expect(warn).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ reason: 'inbox_prefix_sync_timeout', firstReason: 'inbox_prefix_unavailable' }),
+        );
+      });
+
+      it('lets a failing forced sync escape rather than turning it into a verdict', async () => {
+        const header = makeHeader({ inboxRollingHash: Fr.random() });
+        setupDeepValidationMocks({ header });
+        setupCheckpointWithConsumption({ firstBlockNumber: 5, parentLeafCount: 3, lastLeafCount: 7 });
+        l1ToL2MessageSource.getL1ToL2MessageRange.mockRejectedValue(new Error('Inbox message range is not synced'));
+        blockSource.syncImmediate.mockResolvedValueOnce(undefined).mockRejectedValue(new Error('db down'));
+        dateProvider.setTime(SHORT_BUDGET_NOW_MS);
+
+        await expect(
+          handler.handleCheckpointProposal(await makeProposal({ archiveRoot, checkpointHeader: header }), proposalInfo),
+        ).rejects.toThrow('db down');
+      });
+    });
+
     it('returns checkpoint_header_mismatch when headers differ', async () => {
       const proposalHeader = makeHeader();
       const computedHeader = makeHeader({ totalManaUsed: new Fr(999) });
@@ -2413,6 +2499,31 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(warn).toHaveBeenCalledWith(
           expect.stringContaining('Timed out reading a consistent Inbox bundle'),
           expect.objectContaining({ error: 'database is closed' }),
+        );
+      });
+
+      // A proposal whose prefix first looked missing and then looked mismatched is reported as it first looked: the
+      // later look may be the stale side of a reorg this node is still following.
+      it('reports the reason seen before waiting when the metadata wait times out', async () => {
+        const log = createLogger('test:proposal-handler');
+        const warn = jest.spyOn(log, 'warn');
+        const { proposal, blockHandler } = await setupStreamingProposal(signedRef, {
+          nowMs: DEADLINE_MS - 600,
+          log,
+        });
+        mockLocalView(undefined);
+        blockSource.syncImmediate.mockImplementation(() => {
+          mockLocalView(new Fr(0xdead));
+          return Promise.resolve();
+        });
+
+        const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+        expect(result).toEqual(rejection('inbox_prefix_unavailable'));
+        expect(blockSource.syncImmediate).toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('Timed out waiting for Inbox prefix'),
+          expect.objectContaining({ reason: 'inbox_prefix_sync_timeout', firstReason: 'inbox_prefix_unavailable' }),
         );
       });
 
