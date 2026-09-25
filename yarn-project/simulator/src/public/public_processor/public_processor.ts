@@ -188,6 +188,7 @@ export class PublicProcessor implements Traceable {
     let totalPublicGas = new Gas(0, 0);
     let totalBlockGas = new Gas(0, 0);
     let totalBlobFields = 0;
+    let blockGasSkippedCount = 0;
     let silentlySkippedCount = 0;
     let totalSilentlySkippedDurationMs = 0;
 
@@ -225,12 +226,13 @@ export class PublicProcessor implements Traceable {
       // Only done during proposal building: during re-execution we must process the exact txs from the proposal.
       const txGasLimit = tx.data.constants.txContext.gasSettings.gasLimits;
       if (isBuildingProposal && maxBlockGas !== undefined && totalBlockGas.add(txGasLimit).gtAny(maxBlockGas)) {
-        this.log.warn(`Skipping processing of tx ${txHash} due to block gas limit`, {
+        this.log.debug(`Skipping processing of tx ${txHash} due to block gas limit`, {
           txHash,
           txGasLimit,
           totalBlockGas,
           maxBlockGas,
         });
+        blockGasSkippedCount++;
         continue;
       }
 
@@ -388,7 +390,8 @@ export class PublicProcessor implements Traceable {
     const silentlySkippedDurationMs = Math.round(totalSilentlySkippedDurationMs);
     this.log.info(
       `Processed ${result.length} successful txs and ${failed.length} failed txs ` +
-        `(${silentlySkippedCount} silently skipped, ${silentlySkippedDurationMs}ms wasted) ` +
+        `(${blockGasSkippedCount} skipped due to block gas limit, ` +
+        `${silentlySkippedCount} silently skipped, ${silentlySkippedDurationMs}ms wasted) ` +
         `in ${duration}s`,
       {
         blockNumber: this.globalVariables.blockNumber,
@@ -399,6 +402,7 @@ export class PublicProcessor implements Traceable {
         totalPublicGas,
         totalBlockGas,
         totalSizeInBytes,
+        blockGasSkippedCount,
         silentlySkippedCount,
         silentlySkippedDurationMs,
       },

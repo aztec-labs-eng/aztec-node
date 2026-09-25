@@ -103,6 +103,18 @@ function makeSlotBlocks(archiveRoots: Fr[]): L2Block[] {
   );
 }
 
+/** Serves `blocks` as the slot's local blocks, each also found by its archive as the archiver would serve it. */
+function mockLocalSlotBlocks(source: MockProxy<L2BlockSource & L2BlockSink>, blocks: L2Block[]) {
+  source.getBlocksForSlot.mockResolvedValue(blocks);
+  source.getBlockData.mockImplementation(query =>
+    Promise.resolve(
+      'archive' in query
+        ? (blocks.find(block => block.archive.root.equals(query.archive)) as unknown as BlockData | undefined)
+        : undefined,
+    ),
+  );
+}
+
 /** Creates a checkpoint proposal core with the given overrides. */
 async function makeProposal(overrides: Parameters<typeof makeCheckpointProposal>[0] = {}) {
   return ValidatedCheckpointProposalCore(
@@ -265,7 +277,7 @@ describe('ProposalHandler checkpoint validation', () => {
       // The checkpoint's last block is local, and so is a later block of the same slot from the same proposer: the
       // proposal leaves a signed block of its own slot out, which no local race explains.
       const archiveRoot = Fr.random();
-      blockSource.getBlocksForSlot.mockResolvedValue(makeSlotBlocks([archiveRoot, Fr.random()]));
+      mockLocalSlotBlocks(blockSource, makeSlotBlocks([archiveRoot, Fr.random()]));
 
       const result = await handler.handleCheckpointProposal(await makeProposal({ archiveRoot }), proposalInfo);
       expect(result).toEqual({
@@ -295,7 +307,7 @@ describe('ProposalHandler checkpoint validation', () => {
       );
 
       const archiveRoot = Fr.random();
-      blockSource.getBlocksForSlot.mockResolvedValue(makeSlotBlocks([Fr.random(), Fr.random(), archiveRoot]));
+      mockLocalSlotBlocks(blockSource, makeSlotBlocks([Fr.random(), Fr.random(), archiveRoot]));
 
       const proposal = await makeProposal({ archiveRoot });
       const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
@@ -313,7 +325,8 @@ describe('ProposalHandler checkpoint validation', () => {
 
       const archiveRoot = Fr.random();
       const overCap = MAX_BLOCKS_PER_CHECKPOINT + 1;
-      blockSource.getBlocksForSlot.mockResolvedValue(
+      mockLocalSlotBlocks(
+        blockSource,
         makeSlotBlocks(Array.from({ length: overCap }, (_, i) => (i === overCap - 1 ? archiveRoot : Fr.random()))),
       );
 
@@ -882,6 +895,39 @@ describe('ProposalHandler checkpoint validation', () => {
         checkpointNumber: CheckpointNumber(1),
       });
       expect(mockDispose).toHaveBeenCalled();
+    });
+
+    // The archiver can prune the checkpoint's blocks and insert the L1 version at the same numbers while the checkpoint
+    // is rebuilt, so reads of the local chain by number no longer describe the chain the proposal was built on.
+    it('refuses without punishing when its last block is pruned while the checkpoint is rebuilt', async () => {
+      setupDeepValidationMocks({ header: makeHeader({ totalManaUsed: new Fr(999) }) });
+      const rebuild = mockCheckpointBuilder.completeCheckpoint.getMockImplementation()!;
+      mockCheckpointBuilder.completeCheckpoint.mockImplementation(() => {
+        blockSource.getBlockData.mockImplementation(query =>
+          Promise.resolve('archive' in query ? undefined : ({ header: makeBlockHeader() } as BlockData)),
+        );
+        return rebuild();
+      });
+      const failures: CheckpointProposalValidationResult[] = [];
+      handler.setCheckpointProposalValidationFailureCallback((_proposal, result) => {
+        failures.push(result);
+      });
+      const p2p = mock<P2P>();
+      let checkpointHandler: ((proposal: any, sender: any) => Promise<unknown>) | undefined;
+      p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
+        checkpointHandler = h;
+      });
+      handler.register(p2p, true);
+
+      await checkpointHandler!(await makeProposal({ archiveRoot, checkpointHeader: makeHeader() }), {} as any);
+
+      expect(failures).toEqual([
+        { isValid: false, reason: 'last_block_pruned_during_validation', checkpointNumber: CheckpointNumber(1) },
+      ]);
+      expect(SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT['last_block_pruned_during_validation']).toBe(false);
+      expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
+      expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
+      expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('unvalidated');
     });
 
     it('returns archive_mismatch when computed archive differs from proposal', async () => {

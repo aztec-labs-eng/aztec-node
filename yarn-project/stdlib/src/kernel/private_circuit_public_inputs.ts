@@ -145,10 +145,12 @@ export class PrivateCircuitPublicInputs {
      */
     public contractClassLogsHashes: ClaimedLengthArray<CountedLogHash, typeof MAX_CONTRACT_CLASS_LOGS_PER_CALL>,
     /**
-     * The tx request's salt. Keeps `tx_request.hash()` (the protocol nullifier) unpredictable, and lets the init
-     * kernel bind this proof to a specific tx request (it asserts this equals `tx_request.salt`).
+     * The transaction's siloed protocol nullifier: the value the init kernel inserts at index 0 of the transaction's
+     * nullifiers, identical on every private call. The init kernel asserts the first call's value equals the one
+     * derived from the tx request, binding this proof to that request; every later kernel asserts each nested call's
+     * value equals the transaction constant.
      */
-    public txRequestSalt: Fr,
+    public protocolNullifier: Fr,
   ) {}
 
   /**
@@ -287,7 +289,7 @@ export class PrivateCircuitPublicInputs {
       this.l2ToL1Msgs.isEmpty() &&
       this.privateLogs.isEmpty() &&
       this.contractClassLogsHashes.isEmpty() &&
-      this.txRequestSalt.isZero()
+      this.protocolNullifier.isZero()
     );
   }
 
@@ -321,7 +323,7 @@ export class PrivateCircuitPublicInputs {
       fields.l2ToL1Msgs,
       fields.privateLogs,
       fields.contractClassLogsHashes,
-      fields.txRequestSalt,
+      fields.protocolNullifier,
     ] as const;
   }
 
@@ -356,7 +358,7 @@ export class PrivateCircuitPublicInputs {
       this.l2ToL1Msgs,
       this.privateLogs,
       this.contractClassLogsHashes,
-      this.txRequestSalt,
+      this.protocolNullifier,
     ]);
   }
 

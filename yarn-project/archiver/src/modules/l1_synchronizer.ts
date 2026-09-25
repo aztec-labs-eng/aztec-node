@@ -1067,6 +1067,7 @@ export class ArchiverL1Synchronizer implements Traceable {
               maybeValidCheckpointToPromote && {
                 l1: lastCalldataCheckpoint.l1,
                 attestations: lastCalldataCheckpoint.attestations,
+                verbatimAttestations: lastCalldataCheckpoint.verbatimAttestations,
                 checkpoint: maybeValidCheckpointToPromote,
               },
               evictProposedFrom,
@@ -1248,6 +1249,7 @@ export class ArchiverL1Synchronizer implements Traceable {
       checkpoint,
       l1: calldataCheckpoint.l1,
       attestations: calldataCheckpoint.attestations,
+      verbatimAttestations: calldataCheckpoint.verbatimAttestations,
     });
     this.instrumentation.processCheckpointPromoted();
 

@@ -695,7 +695,7 @@ export type InferDeserializedParams<T extends RegistryParam[]> = {
 
 // ─── Derived Handler Interfaces ─────────────────────────────────────────────
 
-/** Strips the `aztec_{scope}_` prefix from an oracle key to get the handler method name. */
+/** Strips the `aztec_{oracleKind}_` prefix from an oracle key to get the handler method name. */
 type StripOraclePrefix<K extends string> = K extends `aztec_${string}_${infer M}` ? M : never;
 
 /** Derives the handler function signature from a registry entry's deserialization/serialization types. */

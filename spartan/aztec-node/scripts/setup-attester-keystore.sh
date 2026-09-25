@@ -26,7 +26,6 @@ echo "WEB3_SIGNER_URL: ${WEB3_SIGNER_URL}"
 # Specific for validators that can hold multiple keys on one node
 echo "VALIDATORS_PER_NODE: ${VALIDATORS_PER_NODE}"
 echo "VALIDATOR_PUBLISHERS_PER_REPLICA: ${VALIDATOR_PUBLISHERS_PER_REPLICA}"
-echo "MNEMONIC: $(echo $MNEMONIC | cut -d' ' -f1-2)..."
 
 private_keys=()
 addresses=()

@@ -12,6 +12,8 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
+import { classifyReceiveWindowArrival } from '../receive_window.js';
+
 /** Validates header-level and tx-level fields of block and checkpoint proposals. */
 export class ProposalValidator {
   private epochCache: EpochCacheInterface;
@@ -74,17 +76,23 @@ export class ProposalValidator {
         const startSeconds = this.timetable.getCheckpointProposalReceiveStart(slotNumber);
         const deadlineSeconds = this.timetable.getCheckpointProposalReceiveDeadline(slotNumber);
         const nowMs = Number(this.epochCache.getEpochAndSlotNow().nowMs);
-        if (
-          nowMs < startSeconds * 1000 - this.clockDisparityMs ||
-          nowMs > deadlineSeconds * 1000 + this.clockDisparityMs
-        ) {
-          this.logger.warn(`Penalizing peer for invalid slot number ${slotNumber}`, {
-            slotNumber,
-            nowMs,
-            windowStartSeconds: startSeconds,
-            windowDeadlineSeconds: deadlineSeconds,
-          });
-          return { result: 'reject', severity: PeerErrorSeverity.HighToleranceError };
+        const windowMiss = classifyReceiveWindowArrival(
+          nowMs,
+          startSeconds * 1000 - this.clockDisparityMs,
+          deadlineSeconds * 1000 + this.clockDisparityMs,
+        );
+        if (windowMiss) {
+          this.logger.warn(
+            `Proposal for slot ${slotNumber} is outside its receive window (${windowMiss.outcome.result})`,
+            {
+              slotNumber,
+              nowMs,
+              missMs: windowMiss.missMs,
+              windowStartSeconds: startSeconds,
+              windowDeadlineSeconds: deadlineSeconds,
+            },
+          );
+          return windowMiss.outcome;
         }
       }
 

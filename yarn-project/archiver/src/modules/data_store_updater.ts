@@ -1,4 +1,5 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { filterAsync } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -204,6 +205,7 @@ export class ArchiverDataStoreUpdater {
     promoteProposed?: {
       l1: L1PublishedData;
       attestations: CommitteeAttestation[];
+      verbatimAttestations: ViemCommitteeAttestations;
       checkpoint: PublishedCheckpoint;
     },
     evictProposedFrom?: CheckpointNumber,
@@ -243,6 +245,7 @@ export class ArchiverDataStoreUpdater {
               promoteProposed.checkpoint.checkpoint.number,
               promoteProposed.l1,
               promoteProposed.attestations,
+              promoteProposed.verbatimAttestations,
               promoteProposed.checkpoint.checkpoint.archive.root,
             )
           : undefined,
@@ -592,9 +595,23 @@ export class ArchiverDataStoreUpdater {
     blockNum: BlockNumber,
     operation: Operation,
   ): Promise<boolean> {
-    const contractClassPublishedEvents = allLogs
-      .filter(log => ContractClassPublishedEvent.isContractClassPublishedEvent(log))
-      .map(log => ContractClassPublishedEvent.fromLog(log));
+    // A malformed publication log must not abort the enclosing checkpoint transaction: rolling it back
+    // would discard the canonical blocks and the sync cursor, leaving L1 sync to retry the same range
+    // forever. Skip the derived class instead and keep the rest of the batch.
+    const contractClassPublishedEvents: ContractClassPublishedEvent[] = [];
+    for (const log of allLogs) {
+      if (!ContractClassPublishedEvent.isContractClassPublishedEvent(log)) {
+        continue;
+      }
+      try {
+        contractClassPublishedEvents.push(ContractClassPublishedEvent.fromLog(log));
+      } catch (err) {
+        this.log.warn('Skipping unparseable contract class publication log', {
+          blockNum,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     if (operation == Operation.Delete) {
       const contractClasses = contractClassPublishedEvents.map(e => e.toContractClassPublic());
@@ -608,7 +625,17 @@ export class ArchiverDataStoreUpdater {
     // Compute bytecode commitments and validate class IDs in a single pass.
     const contractClasses: ContractClassPublicWithCommitment[] = [];
     for (const event of contractClassPublishedEvents) {
-      const contractClass = await event.toContractClassPublicWithBytecodeCommitment();
+      let contractClass: ContractClassPublicWithCommitment;
+      try {
+        contractClass = await event.toContractClassPublicWithBytecodeCommitment();
+      } catch (err) {
+        this.log.warn('Skipping contract class with invalid packed bytecode', {
+          blockNum,
+          contractClassId: event.contractClassId.toString(),
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
       const computedClassId = await computeContractClassId({
         artifactHash: contractClass.artifactHash,
         privateFunctionsRoot: contractClass.privateFunctionsRoot,

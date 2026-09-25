@@ -7,7 +7,7 @@ import type { TxPoolV2 } from '../../../../mem_pools/tx_pool_v2/interfaces.js';
 import type { ReqRespSubProtocolHandler } from '../../interface.js';
 import { ReqRespStatus, ReqRespStatusError } from '../../status.js';
 import { BitVector } from './bitvector.js';
-import { BlockTxsRequest, BlockTxsResponse } from './block_txs_reqresp.js';
+import { BlockTxsRequest, BlockTxsResponse, MAX_BLOCK_TXS_PER_REQUEST } from './block_txs_reqresp.js';
 
 /**
  * Handler for block txs requests
@@ -33,6 +33,13 @@ export function reqRespBlockTxsHandler(
       request = BlockTxsRequest.fromBuffer(msg);
     } catch (err: any) {
       throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST, { cause: err });
+    }
+
+    // The explicit-hash fallback is served even when the block is not found, so bound it:
+    // otherwise a peer could name many hashes (with an empty bit list) and force
+    // one response to serialize a full tx per hash.
+    if (request.txHashes.length > MAX_BLOCK_TXS_PER_REQUEST) {
+      throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST);
     }
 
     // In principle assume we haven't found the block. This is how that is signaled to the requester.

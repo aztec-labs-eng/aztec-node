@@ -24,7 +24,7 @@ describe('legacy oracle dispatch', () => {
       },
     };
 
-    const callback = buildACIRCallback(handler, { legacy: legacyRegistry });
+    const callback = buildACIRCallback(handler, { legacyRegistry });
 
     // Handler produces 41; the override maps it to the legacy value (41 + 1) the old bytecode expects.
     const wire = await callback['aztec_misc_legacyReturn']();
@@ -56,7 +56,7 @@ describe('legacy oracle dispatch', () => {
       },
     };
 
-    const callback = buildACIRCallback(handler, { legacy: legacyRegistry });
+    const callback = buildACIRCallback(handler, { legacyRegistry });
 
     // Old bytecode sends one field (major = 5); the handler must still receive the full (major, minor) tuple.
     await callback['aztec_misc_legacyParams']([toACVMField(new Fr(5))]);
@@ -83,7 +83,7 @@ describe('legacy oracle dispatch', () => {
       },
     };
 
-    const callback = buildACIRCallback(handler, { legacy: legacyRegistry });
+    const callback = buildACIRCallback(handler, { legacyRegistry });
 
     await callback['aztec_misc_legacyAsyncParams']([toACVMField(new Fr(5))]);
 
@@ -116,6 +116,6 @@ describe('legacy oracle dispatch', () => {
       },
     };
 
-    expect(() => buildACIRCallback(handler, { legacy: legacyRegistry })).toThrow('collides with a live oracle');
+    expect(() => buildACIRCallback(handler, { legacyRegistry })).toThrow('collides with a live oracle');
   });
 });

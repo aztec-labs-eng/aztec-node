@@ -13,7 +13,7 @@ import {
   type NoteStore,
 } from '@aztec-labs/pxe/server';
 import { TxResolverService } from '@aztec-labs/pxe/simulator';
-import { L2Block, type L2TipsProvider } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestationsAndSigners, L2Block, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -152,6 +152,7 @@ export class TXEStateMachine {
         block.header.globalVariables.blockNumber.toString(),
       ),
       [],
+      CommitteeAttestationsAndSigners.packAttestations([]),
     );
     // Wipe contract sync cache when anchor block changes (mirrors BlockSynchronizer behavior)
     this.contractSyncService.wipe();

@@ -9,6 +9,18 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
+
+The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.
+
+### [Protocol] The protocol nullifier is derived from the tx request's salt alone; `tx_request_salt` becomes `protocol_nullifier`
+
+The protocol nullifier, which the init kernel always inserts at index 0 of a transaction's nullifiers, is now `silo(NULL_MSG_SENDER, H(origin, chain_id, version, salt))` instead of `H(tx_request)`. Gas settings and the first call's arguments are no longer part of its preimage, so two transactions built with the same salt (a fee bump, or a cancellation) share it and at most one of them can be mined. The proof is still pinned to the full tx request by the init kernel. The kernel cannot check that the salt is random, so wallets must draw it fresh for every transaction: two requests with the same origin and salt are mutually exclusive.
+
+The `tx_request_salt` field of `PrivateCircuitPublicInputs`, `PrivateContextInputs` and `PrivateTxConstantData` is replaced by `protocol_nullifier`: the siloed protocol nullifier, kernel-checked and identical on every private call of the transaction. The raw salt no longer reaches app circuits. This is set by the framework and PXE; contracts need no changes beyond recompiling. `TxRequest` gains `computeProtocolNullifierValue()` / `computeProtocolNullifier()` in Aztec.js (`compute_protocol_nullifier_value` / `compute_protocol_nullifier` in Noir); `TxRequest.hash()` (Noir: `impl Hash for TxRequest`) and `DOM_SEP__TX_REQUEST` are removed, since computing the old protocol nullifier was their only job; and `computeProtocolNullifier(value)` in `@aztec-labs/stdlib/hash` takes the unsiloed value.
+
+Nothing in accounts, auth witnesses or wallets changes with this release; the field is only renamed and its value redefined. It is the protocol half of the design that lets accounts and auth witnesses bind to `protocol_nullifier` for replay protection, cancellation and fee bumping, which lands in the framework separately.
+
 ### [Node] `ACVM_*` config renamed to `NOIR_EXECUTE_*`
 
 Protocol circuits are now executed with noir's `noir-execute` rather than the `acvm` binary, so the

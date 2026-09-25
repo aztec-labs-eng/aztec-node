@@ -1170,6 +1170,57 @@ describe('ValidatorClient', () => {
       expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(true);
     });
 
+    // Under pipelining the archiver prunes the proposal's parent and inserts the L1 version at the same numbers when a
+    // checkpoint lands on L1 differing from the one this node gossiped. Checks that read the local chain by number then
+    // run against blocks the proposal was never built on, so their verdict says nothing about the proposer.
+    describe('when the parent is pruned during validation', () => {
+      const prunedDecision = expect.objectContaining({
+        accepted: false,
+        reason: 'parent_block_pruned_during_validation',
+        slashable: false,
+      });
+
+      /** Makes re-execution disagree with the proposal, with the parent pruned from the local chain meanwhile. */
+      const pruneParentDuringReexecution = () => {
+        let parentPruned = false;
+        blockSource.getBlockData.mockImplementation(query =>
+          Promise.resolve('number' in query || parentPruned ? undefined : parentBlockData),
+        );
+        blockBuildResult.block.archive.root = Fr.random();
+        mockCheckpointBuilder.buildBlock.mockImplementation(() => {
+          parentPruned = true;
+          return Promise.resolve(blockBuildResult);
+        });
+      };
+
+      it('rejects without raising an offense or marking the slot invalid', async () => {
+        const emitSpy = jest.spyOn(validatorClient, 'emit');
+        pruneParentDuringReexecution();
+
+        const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+        expect(isValid).toBe(false);
+        expect(observedDecisions).toEqual([prunedDecision]);
+        expect(emitSpy).not.toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, expect.anything());
+        expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
+      });
+
+      it('rejects without marking the slot invalid on a non-validator node', async () => {
+        let blockHandler: Parameters<P2P['registerBlockProposalHandler']>[0] | undefined;
+        p2pClient.registerBlockProposalHandler.mockImplementation(handler => {
+          blockHandler = handler;
+        });
+        validatorClient.getProposalHandler().register(p2pClient, true);
+        pruneParentDuringReexecution();
+
+        const accepted = await blockHandler!(proposal, sender);
+
+        expect(accepted).toBe(false);
+        expect(observedDecisions).toEqual([prunedDecision]);
+        expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
+      });
+    });
+
     it('emits invalid block proposal offense for oversized proposals, deduped per proposer and slot', async () => {
       await validatorClient.registerHandlers();
       const oversizedProposalCallback = p2pClient.registerOversizedProposalCallback.mock.calls[0][0];

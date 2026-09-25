@@ -783,7 +783,7 @@ export class TXESession implements TXESessionStateHandler {
     this.oracleHandler = new TXEPrivateExecutionOracle({
       argsHash: Fr.ZERO,
       txContext: new TxContext(this.chainId, this.version, GasSettings.from(gasSettings)),
-      txRequestSalt: Fr.ZERO,
+      protocolNullifier,
       callContext: new CallContext(AztecAddress.ZERO, contractAddress, FunctionSelector.empty(), false),
       anchorBlockHeader: anchorBlock!,
       utilityExecutor,
@@ -1041,6 +1041,8 @@ export class TXESession implements TXESessionStateHandler {
           // Top-level utility entrypoint: gets a fresh store. Nested frames inherit it via UtilityExecutionOracle.
           transientArrayService: new TransientArrayService(),
         });
+        // Running utility functions of protocol contracts is not currently supported: the callback is built without a
+        // contract address, so it does not serve the protocol oracles.
         await simulator
           .executeUserCircuit(toACVMWitness(0, call.args), entryPointArtifact, buildACIRCallback(oracle))
           .catch((err: Error) => {

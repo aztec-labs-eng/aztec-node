@@ -1,4 +1,4 @@
-import { CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE } from '@aztec-labs/constants';
+import { CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE, MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
 import { bufferFromFields } from '@aztec-labs/stdlib/abi';
@@ -37,10 +37,14 @@ export class ContractClassPublishedEvent {
     const artifactHash = reader.readField();
     const privateFunctionsRoot = reader.readField();
     const bytecodeFields = reader.readFieldArray(fieldsWithoutTag.length - reader.cursor);
-    // The fixed-size class log can hold at most this many packed-bytecode bytes (every payload field
-    // carries 31 bytes). Bound the declared length to it so a malformed log can't declare a multi-MiB
-    // length backed by a tiny payload and force a large allocation during early (pre-proof) validation.
-    const maxByteLength = (bytecodeFields.length - 1) * (Fr.SIZE_IN_BYTES - 1);
+    // Bound the declared length by both the physical capacity of this log's bytecode encoding and the
+    // protocol's maximum packed public bytecode. Both limits count one length-prefix field, with each
+    // remaining field carrying 31 bytes. The physical bound stops a malformed log declaring a multi-MiB
+    // length backed by a tiny payload and forcing a large allocation during early (pre-proof) validation;
+    // the semantic bound stops a length that decodes here only to fail later when the bytecode commitment
+    // repacks it into fields.
+    const maxByteLength =
+      (Math.min(bytecodeFields.length, MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS) - 1) * (Fr.SIZE_IN_BYTES - 1);
     const packedPublicBytecode = bufferFromFields(bytecodeFields, maxByteLength);
 
     return new ContractClassPublishedEvent(

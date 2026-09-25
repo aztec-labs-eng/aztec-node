@@ -139,6 +139,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
     this.tracer = telemetry.getTracer('Validator');
     this.metrics = new ValidatorMetrics(telemetry);
+    this.metrics.setLoadedAttestersCount(this.keyStore.getAttesterAddresses().length);
 
     this.validationService = new ValidationService(
       keyStore,
@@ -347,6 +348,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
   public reloadKeystore(newManager: KeystoreManager): void {
     const newAdapter = NodeKeystoreAdapter.fromKeyStoreManager(newManager);
     this.keyStore = new HAKeyStore(newAdapter, this.slashingProtectionSigner);
+    this.metrics.setLoadedAttestersCount(this.keyStore.getAttesterAddresses().length);
     this.validationService = new ValidationService(
       this.keyStore,
       this.getSignatureContext(),

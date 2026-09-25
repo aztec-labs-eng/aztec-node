@@ -37,6 +37,10 @@ export type SyncedOperationContext = {
  * {@link StagedWriteCoordinator}): staged writes are committed if the operation succeeds and discarded if it throws.
  */
 export class OperationQueue {
+  private static readonly WARN_QUEUE_DEPTH = 10;
+  private static readonly WARN_WAIT_MS = 30_000;
+  private static readonly WARN_INTERVAL_MS = 60_000;
+  private lastPressureWarningAt = -Infinity;
   private readonly queue = new SerialQueue();
   private readonly node: CachingAztecNode;
   private readonly synchronizer: BlockSynchronizer;
@@ -72,13 +76,40 @@ export class OperationQueue {
    */
   public run<T>(fn: () => Promise<T>): Promise<T> {
     // TODO(#12636): relax the conditions under which we forbid concurrency.
-    if (this.queue.length() != 0) {
-      this.log.warn(
-        `PXE is already processing ${this.queue.length()} operations, concurrent execution is not supported. Will run once those are complete.`,
-      );
+    const queued = new Timer();
+    const queueDepth = this.queue.length();
+    if (queueDepth >= OperationQueue.WARN_QUEUE_DEPTH) {
+      this.warnQueuePressure('depth', queueDepth, 0);
     }
+    const waitWarning = setTimeout(() => {
+      this.warnQueuePressure('wait', this.queue.length(), queued.ms());
+    }, OperationQueue.WARN_WAIT_MS);
 
-    return this.queue.put(fn);
+    return this.queue
+      .put(() => {
+        clearTimeout(waitWarning);
+        this.log.debug('Starting queued PXE operation', {
+          eventName: 'pxe_operation_started',
+          queueDepth,
+          waitMs: queued.ms(),
+        });
+        return fn();
+      })
+      .finally(() => clearTimeout(waitWarning));
+  }
+
+  private warnQueuePressure(reason: 'depth' | 'wait', queueDepth: number, waitMs: number): void {
+    const now = Date.now();
+    if (now - this.lastPressureWarningAt < OperationQueue.WARN_INTERVAL_MS) {
+      return;
+    }
+    this.lastPressureWarningAt = now;
+    this.log.warn('PXE operation queue is congested', {
+      eventName: 'pxe_operation_queue_pressure',
+      reason,
+      queueDepth,
+      waitMs,
+    });
   }
 
   /**

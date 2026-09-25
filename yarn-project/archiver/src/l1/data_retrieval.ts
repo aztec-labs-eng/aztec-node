@@ -47,6 +47,11 @@ type RetrievedCheckpointBase = {
   chainId: Fr;
   version: Fr;
   attestations: CommitteeAttestation[];
+  /**
+   * The exact packed `CommitteeAttestations` tuple from the propose calldata, carried verbatim: it is what
+   * the rollup hashed into `attestationsHash`, and repacking the decoded attestations does not reproduce it.
+   */
+  verbatimAttestations: ViemCommitteeAttestations;
 };
 
 /** Checkpoint data as retrieved from L1 calldata and blob data. */
@@ -58,11 +63,6 @@ export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
   blobHashes: Buffer[];
   /** Parent beacon block root from the L1 block, used for blob fetching. */
   parentBeaconBlockRoot: string | undefined;
-  /**
-   * The exact packed `CommitteeAttestations` tuple from the propose calldata, carried verbatim so that
-   * attestation validation can attach byte-faithful invalidation evidence to a negative result.
-   */
-  verbatimAttestations: ViemCommitteeAttestations;
 };
 
 export async function retrievedToPublishedCheckpoint({
@@ -75,6 +75,7 @@ export async function retrievedToPublishedCheckpoint({
   chainId,
   version,
   attestations,
+  verbatimAttestations,
 }: RetrievedCheckpoint): Promise<PublishedCheckpoint> {
   const { blocks: blocksBlobData } = checkpointBlobData;
 
@@ -160,7 +161,7 @@ export async function retrievedToPublishedCheckpoint({
     feeAssetPriceModifier: feeAssetPriceModifier,
   });
 
-  return PublishedCheckpoint.from({ checkpoint, l1, attestations });
+  return PublishedCheckpoint.from({ checkpoint, l1, attestations, verbatimAttestations });
 }
 
 /**

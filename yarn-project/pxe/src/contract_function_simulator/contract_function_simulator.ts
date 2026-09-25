@@ -50,7 +50,6 @@ import type { BlockParameter, L2TipsProvider } from '@aztec-labs/stdlib/block';
 import { Gas } from '@aztec-labs/stdlib/gas';
 import {
   computeNoteHashNonce,
-  computeProtocolNullifier,
   computeSiloedPrivateLogFirstField,
   computeUniqueNoteHash,
   siloNoteHash,
@@ -254,7 +253,15 @@ export class ContractFunctionSimulator {
       entryPointArtifact.isStatic,
     );
 
-    const protocolNullifier = await computeProtocolNullifier(await request.toTxRequest().hash());
+    if (request.salt.isZero()) {
+      // Zero is what an unset field looks like. The kernel accepts it, so a wallet that never set the salt would see
+      // its first transaction succeed and every later one from this origin rejected as a duplicate nullifier.
+      this.log.warn(
+        'Tx request salt is zero. The salt is the transaction nonce: draw it fresh per transaction, or every other ' +
+          `transaction from ${request.origin} with a zero salt will collide with this one on the protocol nullifier.`,
+      );
+    }
+    const protocolNullifier = await request.toTxRequest().computeProtocolNullifier();
     const noteCache = new ExecutionNoteCache(protocolNullifier);
     const taggingIndexCache = new ExecutionTaggingIndexCache();
 
@@ -266,7 +273,7 @@ export class ContractFunctionSimulator {
     const privateExecutionOracle = new PrivateExecutionOracle({
       argsHash: request.firstCallArgsHash,
       txContext: request.txContext,
-      txRequestSalt: request.salt,
+      protocolNullifier,
       callContext,
       anchorBlockHeader,
       utilityExecutor: async (call, execScopes) => {
@@ -423,7 +430,7 @@ export class ContractFunctionSimulator {
 
       const initialWitness = toACVMWitness(0, call.args);
       const acirExecutionResult = await this.simulator
-        .executeUserCircuit(initialWitness, entryPointArtifact, buildACIRCallback(oracle))
+        .executeUserCircuit(initialWitness, entryPointArtifact, buildACIRCallback(oracle, { contractAddress: call.to }))
         .catch((err: Error) => {
           err.message = resolveAssertionMessageFromError(err, entryPointArtifact);
           throw new ExecutionError(

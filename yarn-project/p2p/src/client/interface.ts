@@ -124,7 +124,7 @@ export type P2P = P2PClient & {
   sendTx(tx: Tx): Promise<void>;
 
   /**
-   * Handles failed transaction execution by removing txs from the pool.
+   * Handles failed transaction execution by removing txs from the pool. Txs already mined are left in place.
    * @param txHashes - Hashes of the transactions that failed execution.
    **/
   handleFailedExecution(txHashes: TxHash[]): Promise<void>;

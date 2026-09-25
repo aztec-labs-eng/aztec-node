@@ -331,7 +331,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       slotNumber: checkpoint.header.slotNumber,
     });
 
-    const registerData = await this.collectRegisterData(checkpoint, published.attestations);
+    const registerData = await this.collectRegisterData(checkpoint, published);
     await this.checkpointStore.addOrUpdate(checkpoint, registerData);
     await this.sessionManager?.onCheckpointAdded(epochNumber);
 
@@ -350,7 +350,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
    */
   private async collectRegisterData(
     checkpoint: Checkpoint,
-    attestations: PublishedCheckpoint['attestations'],
+    published: Pick<PublishedCheckpoint, 'attestations' | 'verbatimAttestations'>,
   ): Promise<RegisterCheckpointData> {
     const previousBlockNumber = BlockNumber(checkpoint.blocks[0].number - 1);
     const previousBlockHeader = await this.gatherPreviousBlockHeader(previousBlockNumber);
@@ -370,7 +370,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       this.worldState.getSnapshot(previousBlockNumber),
     );
     return {
-      attestations,
+      verbatimAttestations: published.verbatimAttestations,
       previousBlockHeader,
       l1ToL2Messages,
       previousInboxRollingHash,

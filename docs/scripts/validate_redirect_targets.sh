@@ -15,6 +15,10 @@ set -euo pipefail
 # Arguments:
 #   netlify_toml_path - (Optional) Path to netlify.toml. Default: netlify.toml in script's parent directory
 
+# Lowercase a string. The `${var,,}` form this replaces is bash 4 only: macOS
+# ships bash 3.2, where it aborts with "bad substitution".
+lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOCS_ROOT="$(dirname "$SCRIPT_DIR")"
 NETLIFY_TOML="${1:-$DOCS_ROOT/netlify.toml}"
@@ -67,7 +71,7 @@ echo "Operate docs dir: $OPERATE_DOCS_DIR"
 # Handles both:
 #   to = "/path"
 #   to= "/path"
-TO_PATHS=$(grep -E '^\s*to\s*=' "$NETLIFY_TOML" | sed -E 's/^\s*to\s*=\s*"([^"]+)".*/\1/' || echo "")
+TO_PATHS=$(grep -E '^[[:space:]]*to[[:space:]]*=' "$NETLIFY_TOML" | sed -E 's/^[[:space:]]*to[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/' || echo "")
 
 if [[ -z "$TO_PATHS" ]]; then
   echo "No redirect targets found."
@@ -138,7 +142,7 @@ check_file_or_id() {
       [[ -f "$file" ]] || continue
       # Extract id from YAML frontmatter (between --- markers)
       local file_id
-      file_id=$(sed -n '/^---$/,/^---$/{s/^id:[[:space:]]*//p}' "$file" | head -1)
+      file_id=$(sed -n '/^---$/,/^---$/{s/^id:[[:space:]]*//p;}' "$file" | head -1)
       if [[ "$file_id" == "$slug" ]]; then
         return 0
       fi
@@ -185,25 +189,29 @@ check_static_html() {
   for i in "${!components[@]}"; do
     local component="${components[$i]}"
     [[ -z "$component" ]] && continue
+    local component_lc
+    component_lc=$(lc "$component")
     local found=""
 
     if [[ $i -eq $last_idx ]]; then
       for candidate in "$current_dir"/*; do
         [[ -e "$candidate" ]] || continue
-        local basename
+        local basename basename_lc
         basename=$(basename "$candidate")
-        if [[ "${basename,,}" == "${component,,}" ]]; then
+        basename_lc=$(lc "$basename")
+        if [[ "$basename_lc" == "$component_lc" ]]; then
           [[ -f "$candidate" ]] && { found="$candidate"; break; }
           [[ -d "$candidate" ]] && [[ -f "$candidate/index.html" ]] && { found="$candidate/index.html"; break; }
         fi
-        [[ "${basename,,}" == "${component,,}.html" ]] && [[ -f "$candidate" ]] && { found="$candidate"; break; }
+        [[ "$basename_lc" == "${component_lc}.html" ]] && [[ -f "$candidate" ]] && { found="$candidate"; break; }
       done
     else
       for candidate in "$current_dir"/*/; do
         [[ -d "$candidate" ]] || continue
-        local basename
+        local basename basename_lc
         basename=$(basename "$candidate")
-        [[ "${basename,,}" == "${component,,}" ]] && { found="${candidate%/}"; break; }
+        basename_lc=$(lc "$basename")
+        [[ "$basename_lc" == "$component_lc" ]] && { found="${candidate%/}"; break; }
       done
     fi
 

@@ -1,10 +1,11 @@
 import { INITIAL_CHECKPOINT_NUMBER, INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toArray } from '@aztec-labs/foundation/iterable';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { BufferReader } from '@aztec-labs/foundation/serialize';
-import { bufferToHex } from '@aztec-labs/foundation/string';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { isDefined } from '@aztec-labs/foundation/types';
 import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncSingleton, Range } from '@aztec-labs/kv-store';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -55,6 +56,7 @@ import {
   ProposedCheckpointArchiveRootMismatchError,
   ProposedCheckpointNotSequentialError,
   ProposedCheckpointPromotionNotSequentialError,
+  UndecodableCheckpointAttestationsError,
 } from '../errors.js';
 import { prepareBlockTxEffectsTreeData } from './tx_effect_tree_data.js';
 
@@ -124,7 +126,17 @@ type CommonCheckpointStorage = {
 
 type CheckpointStorage = CommonCheckpointStorage & {
   l1: Buffer;
-  attestations: Buffer[];
+  /**
+   * The packed `CommitteeAttestations` tuple exactly as posted to L1. The decoded attestations are derived
+   * from it on read: they are a lossy view of these bytes, and only these bytes reproduce the
+   * `attestationsHash` the rollup stored at propose time.
+   */
+  verbatimAttestations: { signatureIndices: Buffer; signaturesOrAddresses: Buffer };
+  /**
+   * Committee size the tuple was posted for. Not derivable from the tuple: the bitmap popcount would count
+   * bits past the committee size, which are unconstrained at propose time.
+   */
+  committeeSize: number;
   feeAssetPriceModifier: string;
 };
 
@@ -398,7 +410,11 @@ export class BlockStore {
           archive: checkpoint.checkpoint.archive.toBuffer(),
           checkpointOutHash: checkpoint.checkpoint.getCheckpointOutHash().toBuffer(),
           l1: checkpoint.l1.toBuffer(),
-          attestations: checkpoint.attestations.map(attestation => attestation.toBuffer()),
+          ...this.toAttestationsStorage(
+            checkpoint.checkpoint.number,
+            checkpoint.verbatimAttestations,
+            checkpoint.attestations.length,
+          ),
           checkpointNumber: checkpoint.checkpoint.number,
           startBlock: checkpoint.checkpoint.blocks[0].number,
           blockCount: checkpoint.checkpoint.blocks.length,
@@ -454,7 +470,11 @@ export class BlockStore {
         archive: incoming.checkpoint.archive.toBuffer(),
         checkpointOutHash: incoming.checkpoint.getCheckpointOutHash().toBuffer(),
         l1: incoming.l1.toBuffer(),
-        attestations: incoming.attestations.map(a => a.toBuffer()),
+        ...this.toAttestationsStorage(
+          incoming.checkpoint.number,
+          incoming.verbatimAttestations,
+          incoming.attestations.length,
+        ),
         checkpointNumber: incoming.checkpoint.number,
         startBlock: incoming.checkpoint.blocks[0].number,
         blockCount: incoming.checkpoint.blocks.length,
@@ -749,7 +769,35 @@ export class BlockStore {
     return result;
   }
 
+  /**
+   * Serializes the packed attestations tuple for storage, failing the write if the tuple does not decode.
+   * The store keeps only the tuple and rebuilds the decoded attestations on read, so decodability has to be
+   * a precondition of being stored at all — otherwise a checkpoint could be written and never read back.
+   */
+  private toAttestationsStorage(
+    checkpointNumber: number,
+    verbatimAttestations: ViemCommitteeAttestations,
+    committeeSize: number,
+  ): Pick<CheckpointStorage, 'verbatimAttestations' | 'committeeSize'> {
+    try {
+      CommitteeAttestation.fromPacked(verbatimAttestations, committeeSize);
+    } catch (err) {
+      throw new UndecodableCheckpointAttestationsError(checkpointNumber, committeeSize, err);
+    }
+    return {
+      verbatimAttestations: {
+        signatureIndices: hexToBuffer(verbatimAttestations.signatureIndices),
+        signaturesOrAddresses: hexToBuffer(verbatimAttestations.signaturesOrAddresses),
+      },
+      committeeSize,
+    };
+  }
+
   private checkpointDataFromCheckpointStorage(checkpointStorage: CheckpointStorage): CheckpointData {
+    const verbatimAttestations: ViemCommitteeAttestations = {
+      signatureIndices: bufferToHex(checkpointStorage.verbatimAttestations.signatureIndices),
+      signaturesOrAddresses: bufferToHex(checkpointStorage.verbatimAttestations.signaturesOrAddresses),
+    };
     return {
       header: CheckpointHeader.fromBuffer(checkpointStorage.header),
       archive: AppendOnlyTreeSnapshot.fromBuffer(checkpointStorage.archive),
@@ -759,7 +807,9 @@ export class BlockStore {
       blockCount: checkpointStorage.blockCount,
       feeAssetPriceModifier: BigInt(checkpointStorage.feeAssetPriceModifier),
       l1: L1PublishedData.fromBuffer(checkpointStorage.l1),
-      attestations: checkpointStorage.attestations.map(buf => CommitteeAttestation.fromBuffer(buf)),
+      // A decode failure here is store corruption: every write path rejects a tuple that does not decode.
+      attestations: CommitteeAttestation.fromPacked(verbatimAttestations, checkpointStorage.committeeSize),
+      verbatimAttestations,
     };
   }
 
@@ -883,13 +933,15 @@ export class BlockStore {
    * Remaining pending entries (e.g. N+1, N+2) are left intact — they chain off the just-promoted one.
    * @param checkpointNumber - The checkpoint number to promote.
    * @param l1 - L1 published data for the checkpoint.
-   * @param attestations - Committee attestations.
+   * @param attestations - Committee attestations, as decoded from the packed tuple.
+   * @param verbatimAttestations - The packed attestations tuple exactly as posted to L1.
    * @param expectedArchiveRoot - Archive root guard against races.
    */
   async promoteProposedToCheckpointed(
     checkpointNumber: CheckpointNumber,
     l1: L1PublishedData,
     attestations: CommitteeAttestation[],
+    verbatimAttestations: ViemCommitteeAttestations,
     expectedArchiveRoot: Fr,
   ): Promise<void> {
     return await this.db.transactionAsync(async () => {
@@ -913,7 +965,7 @@ export class BlockStore {
         archive: proposed.archive.toBuffer(),
         checkpointOutHash: proposed.checkpointOutHash.toBuffer(),
         l1: l1.toBuffer(),
-        attestations: attestations.map(attestation => attestation.toBuffer()),
+        ...this.toAttestationsStorage(proposed.checkpointNumber, verbatimAttestations, attestations.length),
         checkpointNumber: proposed.checkpointNumber,
         startBlock: proposed.startBlock,
         blockCount: proposed.blockCount,

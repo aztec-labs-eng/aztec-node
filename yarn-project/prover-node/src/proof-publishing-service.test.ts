@@ -2,7 +2,7 @@ import { BatchedBlob } from '@aztec-labs/blob-lib/types';
 import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { DateProvider } from '@aztec-labs/foundation/timer';
-import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -97,7 +97,7 @@ describe('ProofPublishingService', () => {
       publicInputs: overrides.publicInputs ?? RootRollupPublicInputs.random(),
       proof: overrides.proof ?? Proof.empty(),
       batchedBlobInputs: overrides.batchedBlobInputs ?? makeBlob(),
-      attestations: overrides.attestations ?? [],
+      attestations: overrides.attestations ?? CommitteeAttestationsAndSigners.packAttestations([]),
       headers: overrides.headers ?? [],
     };
   }

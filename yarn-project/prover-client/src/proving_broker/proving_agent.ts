@@ -1,5 +1,6 @@
 import { AbortError } from '@aztec-labs/foundation/error';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
+import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { truncate } from '@aztec-labs/foundation/string';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
@@ -7,6 +8,7 @@ import type {
   GetProvingJobResponse,
   ProverAgentStatus,
   ProvingJobConsumer,
+  ProvingJobFilter,
   ProvingJobId,
   ProvingJobInputs,
   ProvingJobResultsMap,
@@ -24,6 +26,8 @@ export class ProvingAgent {
   private currentJobController?: ProvingJobController;
   private runningPromise: RunningPromise;
   private log: Logger;
+  private drained?: PromiseWithResolvers<void>;
+  private drainPromise?: Promise<void>;
 
   constructor(
     /** The source of proving jobs */
@@ -51,12 +55,36 @@ export class ProvingAgent {
   }
 
   public start(): void {
+    if (!this.isRunning()) {
+      this.drained = undefined;
+      this.drainPromise = undefined;
+    }
     this.runningPromise.start();
   }
 
   public async stop(): Promise<void> {
     this.currentJobController?.abort();
     await this.runningPromise.stop();
+  }
+
+  /** Finishes and reports already claimed work, keeping its lease alive, before stopping. */
+  public drain(): Promise<void> {
+    if (this.drainPromise) {
+      return this.drainPromise;
+    }
+    if (!this.isRunning()) {
+      return Promise.resolve();
+    }
+
+    const drained = (this.drained = promiseWithResolvers<void>());
+    this.log.info('Draining prover agent', { jobId: this.currentJobController?.getJobId() });
+    this.drainPromise = (async () => {
+      await this.runningPromise.trigger();
+      await drained.promise;
+      await this.runningPromise.stop();
+      this.log.info('Prover agent drained');
+    })();
+    return this.drainPromise;
   }
 
   public getStatus(): ProverAgentStatus {
@@ -92,7 +120,7 @@ export class ProvingAgent {
       const result = this.currentJobController.getResult();
 
       if (status === ProvingJobControllerStatus.RUNNING) {
-        maybeJob = await this.broker.reportProvingJobProgress(jobId, startedAt, { allowList: this.proofAllowList });
+        maybeJob = await this.broker.reportProvingJobProgress(jobId, startedAt, this.getJobFilter());
       } else if (status === ProvingJobControllerStatus.DONE) {
         if (result) {
           maybeJob = await this.reportResult(jobId, proofType, result);
@@ -116,12 +144,16 @@ export class ProvingAgent {
         });
         return;
       }
-    } else {
-      maybeJob = await this.broker.getProvingJob({ allowList: this.proofAllowList });
+    } else if (!this.drained) {
+      maybeJob = await this.broker.getProvingJob(this.getJobFilter());
     }
 
     if (maybeJob) {
       await this.startJob(maybeJob);
+    }
+
+    if (!this.currentJobController) {
+      this.drained?.resolve();
     }
   }
 
@@ -139,9 +171,12 @@ export class ProvingAgent {
     try {
       inputs = await this.proofStore.getProofInput(job.inputsUri);
     } catch {
-      const maybeJob = await this.broker.reportProvingJobError(job.id, 'Failed to load proof inputs', true, {
-        allowList: this.proofAllowList,
-      });
+      const maybeJob = await this.broker.reportProvingJobError(
+        job.id,
+        'Failed to load proof inputs',
+        true,
+        this.getJobFilter(),
+      );
 
       if (maybeJob) {
         return this.startJob(maybeJob);
@@ -181,6 +216,10 @@ export class ProvingAgent {
     this.currentJobController.start();
   }
 
+  private getJobFilter(): ProvingJobFilter {
+    return this.drained ? { allowList: this.proofAllowList, allowNewJobs: false } : { allowList: this.proofAllowList };
+  }
+
   private async reportResult<T extends ProvingRequestType>(
     jobId: ProvingJobId,
     type: T,
@@ -196,13 +235,11 @@ export class ProvingAgent {
         `Job id=${jobId} type=${ProvingRequestType[type]} failed err=${result.message} retry=${retry}`,
         result,
       );
-      maybeJob = await this.broker.reportProvingJobError(jobId, result.message, retry, {
-        allowList: this.proofAllowList,
-      });
+      maybeJob = await this.broker.reportProvingJobError(jobId, result.message, retry, this.getJobFilter());
     } else {
       const outputUri = await this.proofStore.saveProofOutput(jobId, type, result);
       this.log.info(`Job id=${jobId} type=${ProvingRequestType[type]} completed outputUri=${truncate(outputUri)}`);
-      maybeJob = await this.broker.reportProvingJobSuccess(jobId, outputUri, { allowList: this.proofAllowList });
+      maybeJob = await this.broker.reportProvingJobSuccess(jobId, outputUri, this.getJobFilter());
     }
 
     return maybeJob;

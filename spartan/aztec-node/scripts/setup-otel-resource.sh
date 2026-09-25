@@ -1,7 +1,7 @@
 
 #!/usr/bin/env bash
 
-set -ex
+set -e
 
 VERSION_FILE="/usr/src/.release-please-manifest.json"
 
@@ -29,7 +29,6 @@ if [[ -n "${NETWORK:-}" ]]; then
 fi
 
 # format the attribute map to comma-separated string
-set +x
 otel_attrs=""
 for key in "${!attrs_map[@]}"; do
   if [[ -n "$otel_attrs" ]]; then
@@ -37,7 +36,6 @@ for key in "${!attrs_map[@]}"; do
   fi
   otel_attrs="${otel_attrs}${key}=${attrs_map[$key]}"
 done
-set -x
 
 if [[ -n "$OTEL_RESOURCE_ATTRIBUTES" ]]; then
   export OTEL_RESOURCE_ATTRIBUTES="${OTEL_RESOURCE_ATTRIBUTES},${otel_attrs}"

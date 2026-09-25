@@ -83,7 +83,7 @@
     "koa": "^2.16.1",
     "koa-router": "^13.1.1",
     "tslib": "^2.4.0",
-    "viem": "npm:@aztec/viem@2.38.2"
+    "viem": "npm:@aztec/viem@2.38.3"
   },
   "devDependencies": {
     "@aztec-labs/noir-protocol-circuits-types": "workspace:^",

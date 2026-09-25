@@ -6,9 +6,9 @@ version=$1
 dry_run=${DRY_RUN:-0}
 
 # A stable release takes 'latest'; the nightly and rc channels share 'prerelease'; every other
-# channel gets a dist-tag of its own. Sharing is a closed set on purpose: a 'commit' canary cut
-# from a pull request carries that branch's manifest version, so it can be newer than the newest
-# nightly and would otherwise repoint 'prerelease' at an unmerged build. Prerelease versions are
+# channel gets a dist-tag of its own. Sharing is a closed set on purpose: an off-mainline channel
+# carries its own manifest version, so it can be newer than the newest nightly and would otherwise
+# repoint 'prerelease' at a build that is not on the release line. Prerelease versions are
 # installed by exact version anyway.
 prerelease=$(semver prerelease $version)
 channel=${prerelease%%.*}
@@ -22,6 +22,14 @@ esac
 source $ci3/source_npm_auth
 
 package_name=$(jq -r '.name' package.json)
+
+# Callers iterate every workspace, so a private one (test suites, internal tooling) lands here too.
+# npm refuses to publish it, and --dry-run does not check, so skip it before touching the registry.
+if [ "$(jq -r '.private // false' package.json)" == "true" ]; then
+  echo "$package_name is private. Skipping publish."
+  exit 0
+fi
+
 echo_header "publishing $package_name"
 
 published_version=$(npm show . version --tag $npm_tag 2>/dev/null | grep -vE '^@' || true)
@@ -66,6 +74,11 @@ function drop_tmp_tag {
   fi
 }
 
+# npmjs holds an accepted upload as "staged" for several minutes before the version goes live, and
+# `npm view` does not see it meanwhile. A publish that dies after the upload (e.g. an evicted spot
+# instance) therefore leaves a version that the retry cannot detect and cannot publish over.
+staged_error='Cannot publish over previously staged version'
+
 # Create temp directory for publishing
 tmpdir=$(mktemp -d)
 function cleanup {
@@ -100,8 +113,16 @@ else
       echo "Leaving '$npm_tag' where it is."
     fi
   else
-    # Publish new version.
-    denoise "npm publish --ignore-scripts --tag $publish_tag --access public"
+    # Publish new version. The output is kept so a staged-version conflict can be told apart from
+    # other failures, including other 409s.
+    publish_cmd="npm publish --ignore-scripts --tag $publish_tag --access public"
+    publish_out="$tmpdir/publish.out"
+    if ! DENOISE_DISPLAY_NAME="$publish_cmd" denoise "set -o pipefail; $publish_cmd 2>&1 | tee $publish_out"; then
+      grep -q "$staged_error" "$publish_out" || exit 1
+      # The staged upload is this same version and carries the dist-tag it was published with, which
+      # npm applies when the version goes live, so there is nothing left to do here.
+      echo "$package_name@$version is already staged by an earlier publish and will go live on its own."
+    fi
   fi
   drop_tmp_tag
 fi

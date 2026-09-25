@@ -7,8 +7,9 @@ import type {
   InboxContract,
   MessageSentLog,
   RollupContract,
+  ViemCommitteeAttestations,
 } from '@aztec-labs/ethereum/contracts';
-import { MULTI_CALL_3_ADDRESS, messageSentSearchWindow } from '@aztec-labs/ethereum/contracts';
+import { MULTI_CALL_3_ADDRESS, computeAttestationsHash, messageSentSearchWindow } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { type BlockNumber, CheckpointNumber, SlotNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
@@ -16,6 +17,7 @@ import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer'
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { CommitteeAttestation, CommitteeAttestationsAndSigners, L2Block } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import { getSlotAtTimestamp } from '@aztec-labs/stdlib/epoch-helpers';
@@ -28,16 +30,7 @@ import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-lab
 import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import {
-  type AbiParameter,
-  type FormattedBlock,
-  type Transaction,
-  encodeAbiParameters,
-  encodeFunctionData,
-  keccak256,
-  multicall3Abi,
-  toHex,
-} from 'viem';
+import { type FormattedBlock, type Transaction, encodeFunctionData, multicall3Abi, toHex } from 'viem';
 
 /** Configuration for the fake L1 state. */
 export type FakeL1StateConfig = {
@@ -81,6 +74,12 @@ type AddCheckpointOptions = {
   numL1ToL2Messages?: number;
   /** L1 block number where messages were sent. Default: l1BlockNumber - 3 */
   messagesL1BlockNumber?: bigint;
+  /**
+   * Sets bit 0 of the packed attestations bitmap's last byte, a position past any committee size that is not a
+   * multiple of eight. Models a proposer that flips a bit no decoder on either side reads, but which the
+   * `attestationsHash` the rollup stores at propose time covers.
+   */
+  spareAttestationsBitmapBit?: boolean;
 };
 
 /** Result from adding a checkpoint. */
@@ -102,6 +101,8 @@ type CheckpointData = {
   signers: Secp256k1Signer[];
   /** Hash of the packed attestations, matching what the L1 event emits. */
   attestationsHash: Buffer32;
+  /** The packed attestations tuple exactly as it went into the propose calldata. */
+  verbatimAttestations: ViemCommitteeAttestations;
   /** Payload digest, matching what the L1 event emits. */
   payloadDigest: Buffer32;
   /** If true, archiveAt will ignore it */
@@ -258,7 +259,11 @@ export class FakeL1State {
     this.addMessages(checkpointNumber, messagesL1BlockNumber, messages);
 
     // Create the transaction, blobs, and event hashes
-    const { tx, attestationsHash, payloadDigest } = await this.makeRollupTx(checkpoint, signers);
+    const { tx, attestationsHash, payloadDigest, verbatimAttestations } = await this.makeRollupTx(
+      checkpoint,
+      signers,
+      options.spareAttestationsBitmapBit ?? false,
+    );
     const blobHashes = await this.makeVersionedBlobHashes(checkpoint);
     const blobs = await this.makeBlobsFromCheckpoint(checkpoint);
 
@@ -273,6 +278,7 @@ export class FakeL1State {
       signers,
       attestationsHash,
       payloadDigest,
+      verbatimAttestations,
     });
 
     // Update last archive for auto-chaining
@@ -378,6 +384,24 @@ export class FakeL1State {
       return this.provenCheckpointNumber;
     }
     return CheckpointNumber(0);
+  }
+
+  /** The packed attestations tuple posted with a checkpoint, byte for byte as the propose calldata carries it. */
+  getPostedAttestations(checkpointNumber: CheckpointNumber): ViemCommitteeAttestations {
+    return this.getCheckpointData(checkpointNumber).verbatimAttestations;
+  }
+
+  /** The `attestationsHash` the rollup recorded for a checkpoint, as emitted with its CheckpointProposed log. */
+  getPostedAttestationsHash(checkpointNumber: CheckpointNumber): Buffer32 {
+    return this.getCheckpointData(checkpointNumber).attestationsHash;
+  }
+
+  private getCheckpointData(checkpointNumber: CheckpointNumber): CheckpointData {
+    const checkpoint = this.checkpoints.find(cp => cp.checkpointNumber === checkpointNumber);
+    if (!checkpoint) {
+      throw new Error(`Checkpoint ${checkpointNumber} not found in fake L1 state`);
+    }
+    return checkpoint;
   }
 
   /** Sets the target committee size for attestation validation. */
@@ -751,7 +775,13 @@ export class FakeL1State {
   private async makeRollupTx(
     checkpoint: Checkpoint,
     signers: Secp256k1Signer[],
-  ): Promise<{ tx: Transaction; attestationsHash: Buffer32; payloadDigest: Buffer32 }> {
+    spareAttestationsBitmapBit: boolean,
+  ): Promise<{
+    tx: Transaction;
+    attestationsHash: Buffer32;
+    payloadDigest: Buffer32;
+    verbatimAttestations: ViemCommitteeAttestations;
+  }> {
     const signatureContext = this.getSignatureContext();
     const consensusPayload = ConsensusPayload.fromCheckpoint(checkpoint, signatureContext);
     const attestationDigest = getHashedSignaturePayloadTypedData(consensusPayload);
@@ -775,7 +805,10 @@ export class FakeL1State {
       getHashedSignaturePayloadTypedData(attestationsAndSigners),
     );
 
-    const verbatimAttestations = attestationsAndSigners.getPackedAttestations();
+    const packedAttestations = attestationsAndSigners.getPackedAttestations();
+    const verbatimAttestations = spareAttestationsBitmapBit
+      ? { ...packedAttestations, signatureIndices: setLastBitmapBit(packedAttestations.signatureIndices) }
+      : packedAttestations;
 
     const rollupInput = encodeFunctionData({
       abi: RollupAbi,
@@ -808,10 +841,7 @@ export class FakeL1State {
       ],
     });
 
-    // Compute attestationsHash (same logic as CalldataRetriever)
-    const attestationsHash = Buffer32.fromString(
-      keccak256(encodeAbiParameters([this.getCommitteeAttestationsStructDef()], [verbatimAttestations])),
-    );
+    const attestationsHash = Buffer32.fromString(computeAttestationsHash(verbatimAttestations));
 
     // Compute payloadDigest (same logic as CalldataRetriever)
     const payloadDigest = getHashedSignaturePayloadTypedData(consensusPayload);
@@ -823,7 +853,7 @@ export class FakeL1State {
       to: MULTI_CALL_3_ADDRESS as `0x${string}`,
     } as Transaction<bigint, number>;
 
-    return { tx, attestationsHash, payloadDigest };
+    return { tx, attestationsHash, payloadDigest, verbatimAttestations };
   }
 
   private getSignatureContext() {
@@ -831,25 +861,6 @@ export class FakeL1State {
       chainId: 1,
       rollupAddress: this.config.rollupAddress,
     };
-  }
-
-  /** Extracts the CommitteeAttestations struct definition from RollupAbi for hash computation. */
-  private getCommitteeAttestationsStructDef(): AbiParameter {
-    const proposeFunction = RollupAbi.find(item => item.type === 'function' && item.name === 'propose') as
-      | { type: 'function'; name: string; inputs: readonly AbiParameter[] }
-      | undefined;
-
-    if (!proposeFunction) {
-      throw new Error('propose function not found in RollupAbi');
-    }
-
-    const attestationsParam = proposeFunction.inputs.find(param => param.name === '_attestations');
-    if (!attestationsParam) {
-      throw new Error('_attestations parameter not found in propose function');
-    }
-
-    const tupleParam = attestationsParam as unknown as { type: 'tuple'; components?: readonly AbiParameter[] };
-    return { type: 'tuple', components: tupleParam.components || [] } as AbiParameter;
   }
 
   private async makeVersionedBlobHashes(checkpoint: Checkpoint): Promise<`0x${string}`[]> {
@@ -861,4 +872,11 @@ export class FakeL1State {
   private async makeBlobsFromCheckpoint(checkpoint: Checkpoint): Promise<Blob[]> {
     return await getBlobsPerL1Block(checkpoint.toBlobFields());
   }
+}
+
+/** Sets bit 0 of a packed attestations bitmap's last byte. */
+function setLastBitmapBit(signatureIndices: `0x${string}`): `0x${string}` {
+  const bitmap = hexToBuffer(signatureIndices);
+  bitmap[bitmap.length - 1] |= 1;
+  return bufferToHex(bitmap);
 }

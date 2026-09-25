@@ -16,7 +16,6 @@ echo "KEY_INDEX_START: $KEY_INDEX_START"
 echo "PRIVATE_KEY_INDEX: $PRIVATE_KEY_INDEX"
 # Specific for validators that can hold multiple keys on one node
 echo "VALIDATORS_PER_NODE: ${VALIDATORS_PER_NODE}"
-echo "MNEMONIC: $(echo $MNEMONIC | cut -d' ' -f1-2)..."
 
 private_keys=()
 for ((i = 0; i < VALIDATORS_PER_NODE; i++)); do

@@ -28,7 +28,7 @@ import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
 import { MAX_L1_TX_LIMIT } from './constants.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
-import { ReadOnlyL1TxUtils } from './readonly_l1_tx_utils.js';
+import { type L1SimulationResult, ReadOnlyL1TxUtils } from './readonly_l1_tx_utils.js';
 import { Delayer, createDelayer, wrapClientWithDelayer } from './tx_delayer.js';
 import {
   DroppedTransactionError,
@@ -42,6 +42,7 @@ import {
   TxUtilsState,
   UnknownMinedTxError,
 } from './types.js';
+import { summarizeTransactionReceipt } from './utils.js';
 
 const MAX_L1_TX_STATES = 32;
 
@@ -359,9 +360,19 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
           const account = this.getSenderAddress().toString();
           const what = isCancelTx ? 'Cancellation L1 transaction' : 'L1 transaction';
           if (receipt.status === 'reverted') {
-            this.logger.warn(`${what} ${hash} with nonce ${nonce} reverted`, { receipt, nonce, account });
+            this.logger.warn(`${what} ${hash} with nonce ${nonce} reverted`, {
+              eventName: 'l1_transaction_mined',
+              receipt: summarizeTransactionReceipt(receipt),
+              nonce,
+              account,
+            });
           } else {
-            this.logger.info(`${what} ${hash} with nonce ${nonce} mined`, { receipt, nonce, account });
+            this.logger.info(`${what} ${hash} with nonce ${nonce} mined`, {
+              eventName: 'l1_transaction_mined',
+              receipt: summarizeTransactionReceipt(receipt),
+              nonce,
+              account,
+            });
           }
           return receipt;
         }
@@ -699,7 +710,7 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     stateOverrides: StateOverride = [],
     abi: Abi = RollupAbi,
     _gasConfig?: L1TxUtilsConfig & { fallbackGasEstimate?: bigint; ignoreBlockGasLimit?: boolean },
-  ): Promise<{ gasUsed: bigint; result: `0x${string}` }> {
+  ): Promise<L1SimulationResult> {
     const blockOverrides = { ..._blockOverrides };
     const gasConfig = merge(this.config, _gasConfig);
 

@@ -1,9 +1,12 @@
+import { isProtocolContract } from '@aztec-labs/protocol-contracts';
 import type { ACIRCallback, ACVMField } from '@aztec-labs/simulator/client';
+import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 
-import { ORACLE_VERSION_MAJOR, ORACLE_VERSION_MINOR } from '../../oracle_version.js';
+import { ORACLE_VERSION_MAJOR, ORACLE_VERSION_MINOR, PROTOCOL_ORACLE_VERSION } from '../../oracle_version.js';
 import type { IMiscOracle, IPrivateExecutionOracle, IUtilityExecutionOracle } from './interfaces.js';
 import { LEGACY_ORACLE_REGISTRY, type LegacyOracleEntry } from './legacy_oracle_registry.js';
 import { type NamedValue, ORACLE_REGISTRY, type OracleRegistryEntry, makeEntry } from './oracle_registry.js';
+import { PROTOCOL_ORACLE_REGISTRY, type ProtocolOracleEntry } from './protocol_oracle_registry.js';
 
 export class UnavailableOracleError extends Error {
   constructor(oracleName: string) {
@@ -15,22 +18,45 @@ export class UnavailableOracleError extends Error {
  * Builds an ACIR callback from the oracle registry and a handler object.
  *
  * Each oracle call is dispatched by matching the oracle name against the registry for serialization, parsing the
- * `aztec_{scope}_{methodName}` convention to resolve the handler, and calling the method directly. Unknown oracle
- * names produce enhanced error messages based on the contract's oracle version.
+ * `aztec_{oracleKind}_{methodName}` convention to resolve the handler, and calling the method directly. Unknown
+ * oracle names produce enhanced error messages based on the contract's oracle version.
  */
 export function buildACIRCallback(
   handler: OracleHandler,
-  registries: {
-    real?: Record<string, OracleRegistryEntry>;
-    legacy?: Record<string, LegacyOracleEntry>;
+  options: {
+    /**
+     * The contract whose function the callback is built for. Protocol contracts are only served the protocol oracles,
+     * which no other contract is served.
+     */
+    contractAddress?: AztecAddress;
+    currentRegistry?: Record<string, OracleRegistryEntry>;
+    legacyRegistry?: Record<string, LegacyOracleEntry>;
+    protocolRegistry?: Record<string, ProtocolOracleEntry>;
   } = {},
 ): ACIRCallback {
-  const { real = ORACLE_REGISTRY, legacy: legacyRegistry = LEGACY_ORACLE_REGISTRY } = registries;
+  const {
+    contractAddress,
+    currentRegistry = ORACLE_REGISTRY,
+    legacyRegistry = LEGACY_ORACLE_REGISTRY,
+    protocolRegistry = PROTOCOL_ORACLE_REGISTRY,
+  } = options;
+  const calledByProtocolContract = contractAddress !== undefined && isProtocolContract(contractAddress);
+  const target = calledByProtocolContract
+    ? buildProtocolOracleCallbacks(handler, protocolRegistry)
+    : buildCurrentAndLegacyOracleCallbacks(handler, currentRegistry, legacyRegistry);
+  return new Proxy(target, makeUnknownOracleTrap(handler, calledByProtocolContract));
+}
+
+function buildCurrentAndLegacyOracleCallbacks(
+  handler: OracleHandler,
+  currentRegistry: Record<string, OracleRegistryEntry>,
+  legacyRegistry: Record<string, LegacyOracleEntry>,
+): ACIRCallback {
   const target = {} as ACIRCallback;
-  for (const [oracleKey, entry] of Object.entries(real)) {
-    const { scope, methodName } = parseOracleName(oracleKey, 'Oracle');
+  for (const [oracleKey, entry] of Object.entries(currentRegistry)) {
+    const { oracleKind, methodName } = parseOracleName(oracleKey, 'Oracle');
     target[oracleKey] = async (...inputs: ACVMField[][]) => {
-      assertHandlerSupportsScope(handler, scope);
+      assertHandlerSupportsOracleKind(handler, oracleKind);
       const named = entry.deserializeParams(inputs);
       const positional = named.map((p: NamedValue) => p.value);
       const result = await (handler as any)[methodName](...positional);
@@ -41,11 +67,11 @@ export function buildACIRCallback(
   // Legacy oracle names: served for contracts compiled against a retired oracle version. Each reuses the current
   // handler of its `modernOracle` and reshapes the wire (params and/or return) back to what the old bytecode expects.
   for (const [legacyKey, legacy] of Object.entries(legacyRegistry)) {
-    const { scope } = parseOracleName(legacyKey, 'Legacy oracle');
+    const { oracleKind } = parseOracleName(legacyKey, 'Legacy oracle');
     if (legacyKey in target) {
       throw new Error(`Legacy oracle "${legacyKey}" collides with a live oracle of the same name in the registry`);
     }
-    const modernEntry = real[legacy.modernOracle];
+    const modernEntry = currentRegistry[legacy.modernOracle];
     const { methodName } = parseOracleName(legacy.modernOracle, 'Oracle');
     // Override only the side whose wire changed; inherit the other from the modern entry.
     const paramOverride = legacy.params;
@@ -53,7 +79,7 @@ export function buildACIRCallback(
     const returnOverride = legacy.returnType;
     const returnSource = returnOverride ? makeEntry({ returnType: returnOverride.legacyType }) : modernEntry;
     target[legacyKey] = async (...inputs: ACVMField[][]) => {
-      assertHandlerSupportsScope(handler, scope);
+      assertHandlerSupportsOracleKind(handler, oracleKind);
       const legacyArgs = paramSource.deserializeParams(inputs).map(p => p.value);
       const positional = paramOverride ? await paramOverride.mapping(legacyArgs) : legacyArgs;
       const result = await (handler as any)[methodName](...positional);
@@ -61,23 +87,39 @@ export function buildACIRCallback(
     };
   }
 
-  return new Proxy(target, makeUnknownOracleTrap(handler));
+  return target;
 }
 
-/** Parses an `aztec_{scope}_{method}` oracle name into its parts, throwing if it doesn't follow the convention. */
-function parseOracleName(key: string, label: string): { scope: string; methodName: string } {
+function buildProtocolOracleCallbacks(
+  handler: OracleHandler,
+  protocolRegistry: Record<string, ProtocolOracleEntry>,
+): ACIRCallback {
+  const target = {} as ACIRCallback;
+  for (const [protocolKey, protocol] of Object.entries(protocolRegistry)) {
+    const wire = makeEntry({ params: [...protocol.params], returnType: protocol.returnType });
+    target[protocolKey] = async (...inputs: ACVMField[][]) => {
+      assertHandlerSupportsOracleKind(handler, protocol.oracleKind);
+      const args = wire.deserializeParams(inputs).map(p => p.value);
+      return wire.serializeReturn(await protocol.serve(handler, args));
+    };
+  }
+  return target;
+}
+
+/** Parses an `aztec_{oracleKind}_{method}` oracle name into its parts, throwing if it doesn't follow the convention. */
+function parseOracleName(key: string, label: string): { oracleKind: string; methodName: string } {
   const match = key.match(/^aztec_(\w+?)_(.+)$/);
   if (!match) {
-    throw new Error(`${label} "${key}" does not follow the aztec_{scope}_{method} convention`);
+    throw new Error(`${label} "${key}" does not follow the aztec_{oracleKind}_{method} convention`);
   }
-  return { scope: match[1], methodName: match[2] };
+  return { oracleKind: match[1], methodName: match[2] };
 }
 
 /**
  * Proxy trap for the callback table: a known oracle name passes through; an unknown one throws a diagnostic keyed on
  * the contract's oracle version (version unknown, contract newer than this environment, or a same-version mismatch).
  */
-function makeUnknownOracleTrap(handler: OracleHandler): ProxyHandler<ACIRCallback> {
+function makeUnknownOracleTrap(handler: OracleHandler, calledByProtocolContract: boolean): ProxyHandler<ACIRCallback> {
   return {
     get(obj, prop: string) {
       // Own-property check only: `in` would match inherited `Object.prototype` keys (e.g. `constructor`, `toString`)
@@ -87,6 +129,13 @@ function makeUnknownOracleTrap(handler: OracleHandler): ProxyHandler<ACIRCallbac
       }
 
       return () => {
+        if (calledByProtocolContract) {
+          throw new Error(
+            `Oracle '${prop}' not found. It was called by a protocol contract, whose oracles are those of protocol` +
+              ` oracle version ${PROTOCOL_ORACLE_VERSION}.`,
+          );
+        }
+
         let contractVersion = undefined;
         if ('nonOracleFunctionGetContractOracleVersion' in handler) {
           contractVersion = (
@@ -131,8 +180,8 @@ type NonOracleFunctionGetContractOracleVersion = {
   nonOracleFunctionGetContractOracleVersion(): { major: number; minor: number } | undefined;
 };
 
-function assertHandlerSupportsScope(handler: OracleHandler, scope: string): void {
-  switch (scope) {
+function assertHandlerSupportsOracleKind(handler: OracleHandler, oracleKind: string): void {
+  switch (oracleKind) {
     case 'misc':
       if (!('isMisc' in handler)) {
         throw new UnavailableOracleError('Misc');
@@ -149,6 +198,6 @@ function assertHandlerSupportsScope(handler: OracleHandler, scope: string): void
       }
       break;
     default:
-      throw new Error(`Unknown oracle scope: ${scope}`);
+      throw new Error(`Unknown oracle kind: ${oracleKind}`);
   }
 }

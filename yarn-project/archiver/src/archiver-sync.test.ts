@@ -8,6 +8,7 @@ import {
   type InboxContract,
   type OutboxContract,
   type RollupContract,
+  computeAttestationsHash,
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import {
@@ -28,6 +29,7 @@ import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
+  CommitteeAttestationsAndSigners,
   GENESIS_BLOCK_HEADER_HASH,
   type L2Block,
   L2BlockSourceEvents,
@@ -212,6 +214,35 @@ describe('Archiver Sync', () => {
   const getStoredLeaves = async () =>
     (await toArray(archiverStore.messages.iterateL1ToL2Messages())).map(m => m.leaf.toString());
   const asHex = (leaves: Fr[]) => leaves.map(l => l.toString());
+
+  describe('committee attestations', () => {
+    it('stores the attestations tuple posted on L1 byte for byte, spare bitmap bits included', async () => {
+      // A committee of three occupies bits 7..5 of the single bitmap byte, so bit 0 maps to no committee
+      // position: neither L1 nor any node decodes it, yet the attestationsHash the rollup stored at propose
+      // time covers it. Anything rebuilt from the decoded attestations loses it and can never be proven.
+      fake.setTargetCommitteeSize(3);
+      await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 101n,
+        signers: times(3, () => Secp256k1Signer.random()),
+        spareAttestationsBitmapBit: true,
+      });
+      const posted = fake.getPostedAttestations(CheckpointNumber(1));
+      expect(posted.signatureIndices).toEqual('0xe1');
+
+      fake.setL1BlockNumber(200n);
+      await archiver.syncImmediate();
+
+      const published = await archiver.getCheckpoint({ number: CheckpointNumber(1) });
+      expect(published!.verbatimAttestations).toEqual(posted);
+      expect(computeAttestationsHash(published!.verbatimAttestations)).toEqual(
+        fake.getPostedAttestationsHash(CheckpointNumber(1)).toString(),
+      );
+      // The decoded view drops the spare bit, which is exactly why it cannot stand in for the tuple.
+      expect(CommitteeAttestationsAndSigners.packAttestations(published!.attestations).signatureIndices).toEqual(
+        '0xe0',
+      );
+    });
+  });
 
   describe('basic sync', () => {
     it('syncs l1 to l2 messages and checkpoints', async () => {

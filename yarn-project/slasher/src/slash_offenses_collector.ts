@@ -34,12 +34,20 @@ export class SlashOffensesCollector {
   private readonly storeMutationQueue = new SerialQueue();
 
   constructor(
-    private readonly config: SlashOffensesCollectorConfig,
+    private config: SlashOffensesCollectorConfig,
     private readonly settings: SlashOffensesCollectorSettings,
     private readonly watchers: Watcher[],
     private readonly offensesStore: SlasherOffensesStore,
     private readonly log = createLogger('slasher:offenses-collector'),
   ) {}
+
+  /**
+   * Applies a live config update (e.g. a widened slashGracePeriodL2Slots) so newly collected
+   * offenses are evaluated against the current grace window, not the value captured at startup.
+   */
+  public updateConfig(config: Partial<SlashOffensesCollectorConfig>) {
+    this.config = { ...this.config, ...config };
+  }
 
   public start() {
     this.log.debug('Starting SlashOffensesCollector...');
