@@ -287,6 +287,25 @@ describe('NextBlockFeeCache', () => {
       );
     });
 
+    it('prices on the checkpointed tip when the frontier runs more than one checkpoint ahead of L1', async () => {
+      // L1 keeps no `tempCheckpointLogs` cell for a checkpoint it has not seen, so the grandparent read the
+      // pipelined fee header derives from reverts while the checkpoints between it and the tip are in flight.
+      rollupContract.getCheckpoint.mockRejectedValue(new Error('Rollup__UnavailableTempCheckpointLog'));
+      const proposedCheckpoint = makeProposedCheckpointData({
+        checkpointNumber: CheckpointNumber(3),
+        lastBlock: BlockNumber(5),
+        slotNumber: SlotNumber(30),
+      });
+
+      await cache.refresh(makeFrontier(boundaryArgs({ checkpointed: CheckpointNumber(1), proposedCheckpoint })));
+
+      expect(overridesPlanOf()?.chainTipsOverride).toEqual({
+        pending: CheckpointNumber(1),
+        proven: CheckpointNumber(1),
+      });
+      expect(overridesPlanOf()?.pendingCheckpointState).toBeUndefined();
+    });
+
     it('pins tips to firstInvalid - 1 when the pending chain is invalid', async () => {
       await cache.refresh(
         makeFrontier(
