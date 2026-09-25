@@ -958,12 +958,27 @@ describe('ValidatorClient', () => {
         inbox.setBuckets([{ seq: 0n, total: 0n, rollingHash: checkpointProposal.checkpointHeader.inboxRollingHash }]);
 
         const deadlineMs = validatorClient.getProposalHandler().getAttestationDeadline(proposal.slotNumber).getTime();
-        return { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs };
+        const successfulAttestationsSpy = jest.spyOn(validatorClient['metrics'], 'incSuccessfulAttestations');
+        return {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        };
       }
 
+      /** Spies on the signing step, passing calls through to the real signer. */
+      const spyOnSigning = () => jest.spyOn(validatorClient['validationService'], 'attestToCheckpointProposal');
+
       it('signs a validation that finishes before the deadline', async () => {
-        const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
-          await setupLateValidation();
+        const {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        } = await setupLateValidation();
         dateProvider.setTime(deadlineMs - 1_000);
 
         const attestations = await validatorClient.attestToCheckpointProposal(
@@ -973,26 +988,41 @@ describe('ValidatorClient', () => {
 
         expect(attestations).toHaveLength(1);
         expect(addCheckpointAttestationsSpy).toHaveBeenCalledTimes(1);
+        expect(successfulAttestationsSpy).toHaveBeenCalledWith(1);
         validateCheckpointSpy.mockRestore();
       });
 
       // The proposer's own attestations are signed through the same helper, so the check has to cover that path
       // too — it does not go through `attestToCheckpointProposal` at all.
+      it('signs its own attestations before the deadline', async () => {
+        const { checkpointProposal, validateCheckpointSpy, deadlineMs } = await setupLateValidation();
+        dateProvider.setTime(deadlineMs - 1_000);
+        expect(await validatorClient.collectOwnAttestations(checkpointProposal, CheckpointNumber(1))).toHaveLength(1);
+        validateCheckpointSpy.mockRestore();
+      });
+
       it('does not sign its own attestations past the deadline either', async () => {
         const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
           await setupLateValidation();
-        dateProvider.setTime(deadlineMs - 1_000);
-        expect(await validatorClient.collectOwnAttestations(checkpointProposal, CheckpointNumber(1))).toHaveLength(1);
-
+        const signSpy = spyOnSigning();
         dateProvider.setTime(deadlineMs + 1_000);
+
         expect(await validatorClient.collectOwnAttestations(checkpointProposal, CheckpointNumber(1))).toEqual([]);
-        expect(addCheckpointAttestationsSpy).toHaveBeenCalledTimes(1);
+        expect(signSpy).not.toHaveBeenCalled();
+        expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+        signSpy.mockRestore();
         validateCheckpointSpy.mockRestore();
       });
 
       it.each([0, 1_000])('does not sign a validation that finishes %ims past the deadline', async pastMs => {
-        const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
-          await setupLateValidation();
+        const {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        } = await setupLateValidation();
+        const signSpy = spyOnSigning();
         dateProvider.setTime(deadlineMs + pastMs);
 
         const attestations = await validatorClient.attestToCheckpointProposal(
@@ -1001,15 +1031,23 @@ describe('ValidatorClient', () => {
         );
 
         expect(attestations).toBeUndefined();
+        expect(signSpy).not.toHaveBeenCalled();
         expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+        expect(successfulAttestationsSpy).not.toHaveBeenCalled();
         // The proposal was still validated: a late node keeps its own view of the checkpoint for telemetry.
         expect(validateCheckpointSpy).toHaveBeenCalled();
+        signSpy.mockRestore();
         validateCheckpointSpy.mockRestore();
       });
 
       it('discards a signature that a slow signer produces past the deadline, but still counts the slot as signed', async () => {
-        const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
-          await setupLateValidation();
+        const {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        } = await setupLateValidation();
         dateProvider.setTime(deadlineMs - 1_000);
         const validationService = validatorClient['validationService'];
         const sign = validationService.attestToCheckpointProposal.bind(validationService);
@@ -1028,6 +1066,7 @@ describe('ValidatorClient', () => {
 
         expect(attestations).toBeUndefined();
         expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+        expect(successfulAttestationsSpy).not.toHaveBeenCalled();
 
         // The attestors did sign for the slot, so equivocation protection refuses to sign for it again.
         dateProvider.setTime(deadlineMs - 1_000);

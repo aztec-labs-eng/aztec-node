@@ -2,6 +2,7 @@ import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { type Blob, getBlobsPerL1Block } from '@aztec-labs/blob-lib';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { CheckpointNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
@@ -600,19 +601,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       },
     );
 
-    this.metrics.incSuccessfulAttestations(inCommittee.length);
-
-    // Track epoch participation per attester: count each (attester, epoch) pair at most once
-    const proposalEpoch = getEpochAtSlot(proposalSlotNumber, this.epochCache.getL1Constants());
-    for (const attester of inCommittee) {
-      const key = attester.toString();
-      const lastEpoch = this.lastAttestedEpochByAttester.get(key);
-      if (lastEpoch === undefined || proposalEpoch > lastEpoch) {
-        this.lastAttestedEpochByAttester.set(key, proposalEpoch);
-        this.metrics.incAttestedEpochCount(attester);
-      }
-    }
-
     // Determine which validators should attest
     let attestors: EthAddress[];
     if (partOfCommittee) {
@@ -635,10 +623,34 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
         ...proposalInfo,
         attestors: attestors.map(a => a.toString()),
       });
+      this.recordAttestationParticipation(inCommittee, proposalSlotNumber);
       return undefined;
     }
 
-    return await this.createCheckpointAttestationsFromProposal(proposal, attestors, checkpointNumber);
+    const attestations = await this.createCheckpointAttestationsFromProposal(proposal, attestors, checkpointNumber);
+    // Counted from the attestations actually kept, so one refused for equivocation, discarded past the deadline, or
+    // signed by another HA node is not reported as this node's participation.
+    if (attestations) {
+      this.recordAttestationParticipation(
+        compactArray(attestations.map(attestation => attestation.getSender())),
+        proposalSlotNumber,
+      );
+    }
+    return attestations;
+  }
+
+  /** Records successful attestations and each attester's epoch participation, counting an (attester, epoch) once. */
+  private recordAttestationParticipation(attesters: EthAddress[], slot: SlotNumber): void {
+    this.metrics.incSuccessfulAttestations(attesters.length);
+    const epoch = getEpochAtSlot(slot, this.epochCache.getL1Constants());
+    for (const attester of attesters) {
+      const key = attester.toString();
+      const lastEpoch = this.lastAttestedEpochByAttester.get(key);
+      if (lastEpoch === undefined || epoch > lastEpoch) {
+        this.lastAttestedEpochByAttester.set(key, epoch);
+        this.metrics.incAttestedEpochCount(attester);
+      }
+    }
   }
 
   /**
