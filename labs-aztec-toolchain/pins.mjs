@@ -63,6 +63,15 @@ const LOCAL_PACKAGES = {
   "@aztec-foundation/bb-avm-sim-linux-x64":
     "portal:barretenberg/ts/bb-avm-sim/packages/bb-avm-sim-linux-x64",
   "@aztec-foundation/bb.js": "portal:barretenberg/ts/bb.js",
+  "@aztec-foundation/bb.js-api": "portal:barretenberg/ts/bb.js-api",
+  "@aztec-foundation/bb.js-api-darwin-arm64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-darwin-arm64",
+  "@aztec-foundation/bb.js-api-darwin-x64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-darwin-x64",
+  "@aztec-foundation/bb.js-api-linux-arm64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-linux-arm64",
+  "@aztec-foundation/bb.js-api-linux-x64":
+    "portal:barretenberg/ts/bb.js-api/packages/bb.js-api-linux-x64",
   "@aztec-foundation/cdb": "portal:barretenberg/ts/cdb",
   "@aztec-foundation/constants-codegen": "portal:protocol/constants-codegen",
   "@aztec-foundation/ipc-runtime": "portal:ipc-runtime/ts",
