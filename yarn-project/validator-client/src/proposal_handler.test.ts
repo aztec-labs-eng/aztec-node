@@ -1023,7 +1023,8 @@ describe('ProposalHandler checkpoint validation', () => {
       });
     });
 
-    it('returns isValid true when everything matches', async () => {
+    /** Sets up a rebuild that matches the proposal in every comparison; returns the header the proposal signs. */
+    function setupMatchingRebuild() {
       const lastArchiveRoot = Fr.random();
       const header = makeMatchingHeader({ lastArchiveRoot });
 
@@ -1060,11 +1061,183 @@ describe('ProposalHandler checkpoint validation', () => {
         },
         lastArchiveRoot,
       );
+      return header;
+    }
+
+    it('returns isValid true when everything matches', async () => {
+      const header = setupMatchingRebuild();
 
       const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
       const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
       expect(result).toEqual({ isValid: true, checkpointNumber: CheckpointNumber(1) });
       expect(mockDispose).toHaveBeenCalled();
+    });
+
+    // A local fault while validating is not a verdict about the proposal: it escapes, caches nothing, records no
+    // outcome and reaches no failure callback, so the next evaluation of the same payload starts afresh. Only the
+    // fork itself failing is a recorded (non-punitive) verdict.
+    describe('local faults during validation', () => {
+      /** Registers the all-nodes handler and collects what it reports to the failure callback. */
+      function registerCheckpointHandler() {
+        const failures: CheckpointProposalValidationResult[] = [];
+        handler.setCheckpointProposalValidationFailureCallback((_proposal, result) => {
+          failures.push(result);
+        });
+        const p2p = mock<P2P>();
+        let checkpointHandler: ((proposal: any, sender: any) => Promise<unknown>) | undefined;
+        p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
+          checkpointHandler = h;
+        });
+        handler.register(p2p, true);
+        return { checkpointHandler: checkpointHandler!, failures };
+      }
+
+      /** Asserts that validating `proposal` throws `message` and leaves no verdict behind anywhere. */
+      async function expectEscapesWithoutVerdict(proposal: ValidatedCheckpointProposalCore, message: string) {
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).rejects.toThrow(message);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toBeUndefined();
+
+        // Nothing was cached, so the all-nodes handler validates the same payload again; it absorbs the throw.
+        blockSource.getBlocksForSlot.mockClear();
+        const { checkpointHandler, failures } = registerCheckpointHandler();
+        await checkpointHandler(proposal, {});
+        expect(blockSource.getBlocksForSlot).toHaveBeenCalled();
+        expect(failures).toEqual([]);
+        expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toBeUndefined();
+      }
+
+      it('escapes when the ancestry lookup fails', async () => {
+        const header = setupMatchingRebuild();
+        blockSource.getCheckpointsData.mockRejectedValue(new Error('checkpoint store unavailable'));
+
+        await expectEscapesWithoutVerdict(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          'checkpoint store unavailable',
+        );
+      });
+
+      it('escapes when opening the checkpoint fails, still disposing the fork', async () => {
+        const header = setupMatchingRebuild();
+        checkpointsBuilder.openCheckpoint.mockRejectedValue(new Error('open failed'));
+
+        await expectEscapesWithoutVerdict(await makeProposal({ archiveRoot, checkpointHeader: header }), 'open failed');
+        expect(mockDispose).toHaveBeenCalled();
+      });
+
+      it('escapes when completing the checkpoint fails, still disposing the fork', async () => {
+        const header = setupMatchingRebuild();
+        mockCheckpointBuilder.completeCheckpoint.mockRejectedValue(new Error('complete failed'));
+
+        await expectEscapesWithoutVerdict(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          'complete failed',
+        );
+        expect(mockDispose).toHaveBeenCalled();
+      });
+
+      it('escapes when reading the fork archive fails, rather than reporting an unsynced world state', async () => {
+        const header = setupMatchingRebuild();
+        checkpointsBuilder.getFork.mockResolvedValue({
+          [Symbol.asyncDispose]: mockDispose,
+          getTreeInfo: () => Promise.reject(new Error('tree read failed')),
+        } as any);
+
+        await expectEscapesWithoutVerdict(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          'tree read failed',
+        );
+        expect(mockDispose).toHaveBeenCalled();
+      });
+
+      it('escapes when disposing the fork fails after every comparison passed', async () => {
+        const header = setupMatchingRebuild();
+        mockDispose.mockImplementation(() => Promise.reject(new Error('dispose failed')));
+
+        await expectEscapesWithoutVerdict(
+          await makeProposal({ archiveRoot, checkpointHeader: header }),
+          'dispose failed',
+        );
+      });
+
+      it('records and caches a failed fork as world_state_not_synced', async () => {
+        const header = setupMatchingRebuild();
+        checkpointsBuilder.getFork.mockRejectedValue(new Error('Unable to initialize from future block'));
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+
+        const expected = { isValid: false, reason: 'world_state_not_synced', checkpointNumber: CheckpointNumber(1) };
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).resolves.toEqual(expected);
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('unvalidated');
+
+        checkpointsBuilder.getFork.mockClear();
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).resolves.toEqual(expected);
+        expect(checkpointsBuilder.getFork).not.toHaveBeenCalled();
+      });
+
+      it('keeps the fork open until the rebuilt checkpoint has been compared', async () => {
+        const computedHeader = makeHeader({ totalManaUsed: new Fr(999) });
+        let disposalsAtComparison: number | undefined;
+        jest.spyOn(computedHeader, 'equals').mockImplementation(() => {
+          disposalsAtComparison = mockDispose.mock.calls.length;
+          return false;
+        });
+        setupDeepValidationMocks({ header: computedHeader });
+
+        const result = await handler.handleCheckpointProposal(
+          await makeProposal({ archiveRoot, checkpointHeader: makeHeader() }),
+          proposalInfo,
+        );
+
+        expect(result).toEqual({
+          isValid: false,
+          reason: 'checkpoint_header_mismatch',
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(disposalsAtComparison).toBe(0);
+        expect(mockDispose).toHaveBeenCalledTimes(1);
+      });
+
+      // The last block is read again after a fresh verdict is cached, so a fault in that read loses the call but not
+      // the verdict: the next call for the payload reuses it and goes straight to the endpoint gate.
+      it('keeps a fresh valid verdict cached when the read after it fails', async () => {
+        const header = setupMatchingRebuild();
+        let archiveReads = 0;
+        blockSource.getBlockData.mockImplementation(query =>
+          'archive' in query && ++archiveReads === 1
+            ? Promise.reject(new Error('block store unavailable'))
+            : Promise.resolve({ header: makeBlockHeader() } as BlockData),
+        );
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).rejects.toThrow(
+          'block store unavailable',
+        );
+
+        blockSource.getBlocksForSlot.mockClear();
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).resolves.toEqual({
+          isValid: true,
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(blockSource.getBlocksForSlot).not.toHaveBeenCalled();
+      });
+
+      it('leaves the cached verdict for another payload in place when a validation throws', async () => {
+        setupDeepValidationMocks({ header: makeHeader({ totalManaUsed: new Fr(999) }) });
+        const proposalA = await makeProposal({ archiveRoot, checkpointHeader: makeHeader() });
+        const verdictA = await handler.handleCheckpointProposal(proposalA, proposalInfo);
+        expect(verdictA).toMatchObject({ isValid: false, reason: 'checkpoint_header_mismatch' });
+
+        checkpointsBuilder.openCheckpoint.mockRejectedValueOnce(new Error('open failed'));
+        const proposalB = await makeProposal({
+          archiveRoot,
+          checkpointHeader: makeHeader({ totalManaUsed: new Fr(5) }),
+        });
+        await expect(handler.handleCheckpointProposal(proposalB, proposalInfo)).rejects.toThrow('open failed');
+
+        blockSource.getBlocksForSlot.mockClear();
+        await expect(handler.handleCheckpointProposal(proposalA, proposalInfo)).resolves.toEqual(verdictA);
+        expect(blockSource.getBlocksForSlot).not.toHaveBeenCalled();
+      });
     });
 
     it('disposes fork even when validation fails', async () => {
