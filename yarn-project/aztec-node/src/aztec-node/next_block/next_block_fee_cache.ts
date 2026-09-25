@@ -248,12 +248,31 @@ export class NextBlockFeeCache {
   ): Promise<SimulationOverridesPlan | undefined> {
     const { targetCheckpoint, proposedCheckpointData, checkpointedCheckpointNumber } = newCheckpoint;
     const rollup = this.rollupContract;
-    if (!rollup) {
-      return Promise.resolve(
+    const pinnedTips = () =>
+      Promise.resolve(
         new SimulationOverridesBuilder()
           .withChainTips({ pending: checkpointedCheckpointNumber, proven: checkpointedCheckpointNumber })
           .build(),
       );
+    if (!rollup) {
+      return pinnedTips();
+    }
+
+    // A pipelined plan derives the proposed parent's fee header from the grandparent's on-chain `tempCheckpointLogs`
+    // cell, so it can only be built while the parent is the checkpointed tip's immediate child. The frontier runs
+    // further ahead whenever a proposer builds on a checkpoint whose publication has not been mined yet, which every
+    // node then sees through gossip, and L1 keeps no cell for a checkpoint it has not seen: the read reverts with
+    // `Rollup__UnavailableTempCheckpointLog` and takes the whole refresh, and every simulation joined to it, down.
+    // Price that boundary on the checkpointed tip instead. The fee then lags by the checkpoints in flight (two at
+    // this depth, one more than the fee projections cover), rather than being unavailable for the rest of the window.
+    // Quoting a fee that may be off is deliberate: the quote feeds simulation, and a simulation that runs on an
+    // approximate fee is more useful than one that fails because the exact fee cannot be derived yet.
+    if (proposedCheckpointData && proposedCheckpointData.checkpointNumber !== checkpointedCheckpointNumber + 1) {
+      this.log.debug(
+        `Pricing the next-block boundary on checkpointed tip ${checkpointedCheckpointNumber}: proposed parent ` +
+          `${proposedCheckpointData.checkpointNumber} is more than one checkpoint ahead of it`,
+      );
+      return pinnedTips();
     }
 
     // The helper treats pipelining and invalidation as mutually exclusive; a proposed parent takes precedence.
