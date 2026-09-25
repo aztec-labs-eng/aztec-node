@@ -44,7 +44,7 @@ import {
   type ResolvedSequencerConfig,
   type WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
-import type { InboxMessagePrefixRef, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { InboxMessagePrefixRef, InboxMessageRange, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import type {
   BlockProposal,
   BlockProposalOptions,
@@ -1281,39 +1281,21 @@ export class CheckpointProposalJob implements Traceable {
       blocksInCheckpoint.push(block);
       usedTxs.forEach(tx => txHashesAlreadyIncluded.add(tx.txHash.toString()));
 
-      // Streaming Inbox: the block built successfully, so advance the cursor to the prefix it consumed through and
-      // sign that prefix as this block's reference. A block that consumed nothing re-signs the cursor's prefix.
-      const blockPrefixRef = consumption.commit(selection.range);
-
-      // Sign the block proposal. This will throw if HA signing fails.
-      const proposal = await this.createBlockProposal(
+      const { proposal, blockPrefixRef } = await this.commitBuiltBlock(
         block,
         usedTxs,
-        {
-          ...blockProposalOptions,
-          broadcastInvalidBlockProposal:
-            blockProposalOptions.broadcastInvalidBlockProposal ||
-            block.indexWithinCheckpoint === this.config.invalidBlockProposalIndexWithinCheckpoint,
-        },
-        blockPrefixRef,
+        selection.range,
+        consumption,
+        blockProposalOptions,
       );
-
-      // Sync the proposed block to the archiver to make it available, only after we've managed to sign the proposal,
-      // so we avoid polluting our archive with a block that would fail.
-      // We wait for the sync to succeed, as this helps catch consistency errors, even if it means we lose some time for block-building.
-      // If this throws, we abort the entire checkpoint.
-      await this.syncProposedBlockToArchiver(block, blockPrefixRef);
 
       await this.notifyBlockReadyToBroadcast({
         block,
         blockNumber,
         indexWithinCheckpoint,
+        timingInfo,
         inboxPrefixRef: blockPrefixRef,
         consumedMessageCount: consumption.consumedTotalMsgCount,
-        isStandalone: !timingInfo.isLastBlock,
-        remainingBuildSubslots: Math.max(0, maxBlocks - (timingInfo.index + 1)),
-        subslotIndex: timingInfo.index,
-        subslotDeadline: timingInfo.deadline,
         blocksBuiltIncludingThis: blocksInCheckpoint.length,
         maxBlocksInCheckpoint: maxBlocks,
       });
@@ -1382,12 +1364,9 @@ export class CheckpointProposalJob implements Traceable {
     block: L2Block;
     blockNumber: BlockNumber;
     indexWithinCheckpoint: IndexWithinCheckpoint;
+    timingInfo: Extract<SubslotSelection, { canStart: true }>;
     inboxPrefixRef: InboxMessagePrefixRef;
     consumedMessageCount: bigint;
-    isStandalone: boolean;
-    remainingBuildSubslots: number;
-    subslotIndex: number;
-    subslotDeadline: number;
     blocksBuiltIncludingThis: number;
     maxBlocksInCheckpoint: number;
   }): Promise<void> {
@@ -1395,6 +1374,9 @@ export class CheckpointProposalJob implements Traceable {
     if (onCheckpointPhase === undefined) {
       return;
     }
+    const { block, timingInfo } = opts;
+    const subslotIndex = timingInfo.index;
+    const subslotDeadline = timingInfo.deadline;
     const sendDeadline =
       this.timetable.getCheckpointProposalReceiveDeadline(this.targetSlot) - this.timetable.p2pPropagationTime;
     await onCheckpointPhase({
@@ -1403,22 +1385,22 @@ export class CheckpointProposalJob implements Traceable {
       checkpointNumber: this.checkpointNumber,
       blockNumber: opts.blockNumber,
       indexWithinCheckpoint: opts.indexWithinCheckpoint,
-      blockHash: await opts.block.hash(),
-      isStandalone: opts.isStandalone,
-      remainingBuildSubslots: opts.remainingBuildSubslots,
-      subslotIndex: opts.subslotIndex,
+      blockHash: await block.hash(),
+      isStandalone: !timingInfo.isLastBlock,
+      remainingBuildSubslots: Math.max(0, opts.maxBlocksInCheckpoint - (subslotIndex + 1)),
+      subslotIndex,
       proposalSendDeadline: new Date(sendDeadline * 1000),
       consumedMessageCount: opts.consumedMessageCount,
       inboxPrefixRef: opts.inboxPrefixRef,
       schedule: {
         nowMs: () => this.dateProvider.now(),
-        selectNextBuildSubslot: nowSeconds => this.selectNextBuildSubslot(nowSeconds, opts.subslotDeadline),
+        selectNextBuildSubslot: nowSeconds => this.selectNextBuildSubslot(nowSeconds, subslotDeadline),
         canBuildAnotherBlock: nowSeconds => {
           if (opts.blocksBuiltIncludingThis >= opts.maxBlocksInCheckpoint) {
             return false;
           }
-          const next = this.selectNextBuildSubslot(nowSeconds, opts.subslotDeadline);
-          return next.canStart && next.index > opts.subslotIndex;
+          const next = this.selectNextBuildSubslot(nowSeconds, subslotDeadline);
+          return next.canStart && next.index > subslotIndex;
         },
         getProposalReceiveDeadlineSeconds: () => this.timetable.getCheckpointProposalReceiveDeadline(this.targetSlot),
         getProposalReceiveStartSeconds: () => this.timetable.getCheckpointProposalReceiveStart(this.targetSlot),
@@ -1492,14 +1474,13 @@ export class CheckpointProposalJob implements Traceable {
       return { kind: 'aborted' };
     }
 
-    const blockPrefixRef = consumption.commit(decision.range);
-    const proposal = await this.createBlockProposal(
+    const { proposal } = await this.commitBuiltBlock(
       buildResult.block,
       buildResult.usedTxs,
+      decision.range,
+      consumption,
       opts.blockProposalOptions,
-      blockPrefixRef,
     );
-    await this.syncProposedBlockToArchiver(buildResult.block, blockPrefixRef);
     this.checkpointMetrics.noteCheckpointBlockBuilt(this.dateProvider.now(), {
       isFirstBlock: false,
       isLastBlock: true,
@@ -1521,6 +1502,43 @@ export class CheckpointProposalJob implements Traceable {
     const hardStop =
       this.timetable.getCheckpointProposalReceiveDeadline(this.targetSlot) - this.timetable.p2pPropagationTime;
     return { deadline: new Date(hardStop * 1000), pastLastBlockBuildTime: true };
+  }
+
+  /**
+   * Commits the Inbox range a block was built over, then signs and stores the block. The loop and the forced tail
+   * block share it; what to do with the signed proposal (gossip it or hold it for the checkpoint) stays theirs.
+   */
+  private async commitBuiltBlock(
+    block: L2Block,
+    usedTxs: Tx[],
+    range: InboxMessageRange,
+    consumption: CheckpointInboxConsumption,
+    blockProposalOptions: BlockProposalOptions,
+  ): Promise<{ proposal: BlockProposal | undefined; blockPrefixRef: InboxMessagePrefixRef }> {
+    // Streaming Inbox: the block built successfully, so advance the cursor to the prefix it consumed through and
+    // sign that prefix as this block's reference. A block that consumed nothing re-signs the cursor's prefix.
+    const blockPrefixRef = consumption.commit(range);
+
+    // Sign the block proposal. This will throw if HA signing fails.
+    const proposal = await this.createBlockProposal(
+      block,
+      usedTxs,
+      {
+        ...blockProposalOptions,
+        broadcastInvalidBlockProposal:
+          blockProposalOptions.broadcastInvalidBlockProposal ||
+          block.indexWithinCheckpoint === this.config.invalidBlockProposalIndexWithinCheckpoint,
+      },
+      blockPrefixRef,
+    );
+
+    // Sync the proposed block to the archiver to make it available, only after we've managed to sign the proposal,
+    // so we avoid polluting our archive with a block that would fail.
+    // We wait for the sync to succeed, as this helps catch consistency errors, even if it means we lose some time for block-building.
+    // If this throws, we abort the entire checkpoint.
+    await this.syncProposedBlockToArchiver(block, blockPrefixRef);
+
+    return { proposal, blockPrefixRef };
   }
 
   /** Creates a block proposal for a given block via the validator client (unless in fisherman mode) */
