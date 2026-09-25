@@ -1,3 +1,13 @@
+import {
+  CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
+  FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH,
+  MAX_L2_TO_L1_MSGS_PER_TX,
+  MAX_NOTE_HASHES_PER_TX,
+  MAX_NULLIFIERS_PER_TX,
+  MAX_PRIVATE_LOGS_PER_TX,
+  MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX,
+  PRIVATE_LOG_SIZE_IN_FIELDS,
+} from '@aztec-labs/constants';
 import { chunk } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
@@ -54,6 +64,22 @@ export function decodeTxBlobData(fields: Fr[] | FieldReader): TxBlobData {
 
   const txStartMarker = decodeTxStartMarker(reader.readField());
 
+  const checkMaxCount = (count: number, max: number, type: string) => {
+    if (count > max) {
+      throw new BlobDeserializationError(
+        `Incorrect encoding of blob fields: too many ${type}. Got ${count}, maximum is ${max}.`,
+      );
+    }
+  };
+
+  checkMaxCount(txStartMarker.numNoteHashes, MAX_NOTE_HASHES_PER_TX, 'note hashes');
+  checkMaxCount(txStartMarker.numNullifiers, MAX_NULLIFIERS_PER_TX, 'nullifiers');
+  checkMaxCount(txStartMarker.numL2ToL1Msgs, MAX_L2_TO_L1_MSGS_PER_TX, 'l2-to-l1 messages');
+  checkMaxCount(txStartMarker.numPublicDataWrites, MAX_TOTAL_PUBLIC_DATA_UPDATE_REQUESTS_PER_TX, 'public data writes');
+  checkMaxCount(txStartMarker.numPrivateLogs, MAX_PRIVATE_LOGS_PER_TX, 'private logs');
+  checkMaxCount(txStartMarker.publicLogsLength, FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH, 'public log fields');
+  checkMaxCount(txStartMarker.contractClassLogLength, CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, 'contract class log fields');
+
   const checkRemainingFields = (requiredFields: number, type: string) => {
     if (requiredFields > reader.remainingFields()) {
       throw new BlobDeserializationError(
@@ -82,6 +108,7 @@ export function decodeTxBlobData(fields: Fr[] | FieldReader): TxBlobData {
 
   const privateLogs = Array.from({ length: txStartMarker.numPrivateLogs }, () => {
     const length = reader.readU32();
+    checkMaxCount(length, PRIVATE_LOG_SIZE_IN_FIELDS, 'private log fields');
     checkRemainingFields(length, 'private log');
     return reader.readFieldArray(length);
   });
