@@ -42,15 +42,27 @@ const normalizedBlockParameterObjectSchema = z.object({
   tag: z.unknown().optional(),
 });
 
+const archiveBlockParameterObjectSchema = z.object({ archive: schemas.Fr }).strict();
+
 const normalizedBlockParameterVariants = z.union([
   z.object({ number: BlockNumberSchema }).strict(),
   z.object({ hash: BlockHash.schema }).strict(),
-  z.object({ archive: schemas.Fr }).strict(),
+  archiveBlockParameterObjectSchema,
   z.object({ tag: BlockTagWithoutLatestSchema }).strict(),
 ]);
 
 export const NormalizedBlockParameterSchema: z.ZodType<NormalizedBlockParameter, unknown> =
   normalizedBlockParameterObjectSchema.pipe(normalizedBlockParameterVariants);
+
+/** Selector naming a block by its archive tree root: the root after the block's own hash was appended. */
+export type ArchiveBlockParameter = { archive: Fr };
+
+/**
+ * Accepts only `{ archive }`, rejecting every other {@link BlockParameter} form, including an object that names another
+ * selector alongside the archive. Keys that are not selectors are dropped, as for {@link BlockParameterSchema}.
+ */
+export const ArchiveBlockParameterSchema: z.ZodType<ArchiveBlockParameter, unknown> =
+  normalizedBlockParameterObjectSchema.pipe(archiveBlockParameterObjectSchema);
 
 /**
  * Anchor naming a block by both its height and its hash.

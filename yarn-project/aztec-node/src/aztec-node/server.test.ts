@@ -1,4 +1,5 @@
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover';
+import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import {
@@ -14,6 +15,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import type { Hex } from '@aztec-labs/foundation/string';
 import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import { SiblingPath } from '@aztec-labs/foundation/trees';
 import { unfreeze } from '@aztec-labs/foundation/types';
 import { type KeyStore, KeystoreManager, RemoteSigner, type ValidatorKeyStore } from '@aztec-labs/node-keystore';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -56,6 +58,7 @@ import {
   MerkleTreeId,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
+  getTreeHeight,
 } from '@aztec-labs/stdlib/trees';
 import type { FeeProvider, IndexedTxEffect } from '@aztec-labs/stdlib/tx';
 import {
@@ -1227,6 +1230,35 @@ describe('aztec node', () => {
 
         expect(block?.number).toEqual(unseenBlockNumber);
         expect(block?.hash).toEqual(unseenBlockHash);
+      });
+
+      it('serves getBlockHashMembershipWitness anchored on a block that arrives while the query is held', async () => {
+        // makeBlockData headers commit to an empty lastArchive, so that is the archive world state must hold.
+        merkleTreeOps.getTreeInfo.mockResolvedValue({
+          treeId: MerkleTreeId.ARCHIVE,
+          root: Fr.ZERO.toBuffer(),
+          size: 0n,
+          depth: ARCHIVE_HEIGHT,
+        });
+        const index = 7n;
+        const siblings = Array.from({ length: ARCHIVE_HEIGHT }, () => Fr.random());
+        merkleTreeOps.findSiblingPaths.mockImplementation(treeId =>
+          Promise.resolve([
+            {
+              index,
+              path: new SiblingPath(
+                getTreeHeight(treeId),
+                siblings.map(f => f.toBuffer()),
+              ),
+            },
+          ]),
+        );
+        scheduleUnseenBlockArrival();
+
+        const result = await node.getBlockHashMembershipWitness(unseenAnchor(), BlockHash.random());
+
+        expect(result?.leafIndex).toEqual(index);
+        expect(result?.siblingPath).toEqual(siblings);
       });
 
       it('never reads the block source with both selectors at once', async () => {

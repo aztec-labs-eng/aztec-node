@@ -27,7 +27,13 @@ import { z } from 'zod';
 import type { AztecAddress } from '../aztec-address/index.js';
 import { type BlockData, BlockDataSchema } from '../block/block_data.js';
 import { BlockHash } from '../block/block_hash.js';
-import { type BlockParameter, BlockParameterSchema, BlockTagWithoutLatestSchema } from '../block/block_parameter.js';
+import {
+  type ArchiveBlockParameter,
+  ArchiveBlockParameterSchema,
+  type BlockParameter,
+  BlockParameterSchema,
+  BlockTagWithoutLatestSchema,
+} from '../block/block_parameter.js';
 import { type DataInBlock, dataInBlockSchemaFor } from '../block/in_block.js';
 import {
   type CheckpointsQuery,
@@ -169,19 +175,45 @@ export interface AztecNode {
   getPublicDataWitness(referenceBlock: BlockParameter, leafSlot: Fr): Promise<PublicDataWitness | undefined>;
 
   /**
-   * Returns a membership witness for a given block hash in the archive tree.
+   * Returns a membership witness for a given block hash in the archive tree, against the reference block header's
+   * `lastArchive.root`: the archive as it stood before the reference block itself was appended. This is the root a
+   * circuit anchored on that header checks archive membership proofs against.
    *
    * Block hashes are the leaves of the archive tree. Each time a new block is added to the chain,
    * its block hash is appended as a new leaf to the archive tree. This method finds the membership
    * witness (leaf index and sibling path) for a given block hash, which can be used to prove that
    * a specific block exists in the chain's history.
    *
-   * @param referenceBlock - The block parameter (block number, block hash, or 'latest') at which to get the data
-   * (which contains the root of the archive tree in which we are searching for the block hash).
+   * The reference block must exist. Every `BlockParameter` form selects that reference block, including
+   * `{ archive }`, which identifies the block by its post-block archive root, so the witness is still against the
+   * archive before that block. To prove membership against a supplied archive root itself, use
+   * `getBlockHashMembershipWitnessAtArchive`.
+   *
+   * @param referenceBlock - The block whose header's `lastArchive` the witness is computed against.
    * @param blockHash - The block hash to find in the archive tree.
+   * @returns The witness, or undefined if the block hash is not in that archive.
+   * @throws If the reference block is unknown, or the archive it commits to is not available on this node.
    */
   getBlockHashMembershipWitness(
     referenceBlock: BlockParameter,
+    blockHash: BlockHash,
+  ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined>;
+
+  /**
+   * Returns a membership witness for a given block hash in the archive tree, against exactly the supplied archive
+   * root. The root is the archive after some block's own hash was appended, so a block is a member of its own archive
+   * and no later block needs to exist.
+   *
+   * Choosing a root does not establish that it is canonical or final: a node that has not yet seen a reorg can serve
+   * a witness against a root that has been reorged away. The caller must pick a root its verifier accepts.
+   *
+   * @param reference - The archive root to prove membership against.
+   * @param blockHash - The block hash to find in the archive tree.
+   * @returns The witness, or undefined if the block hash is not in that archive.
+   * @throws If the node does not know the archive root, or cannot serve the archive state at it.
+   */
+  getBlockHashMembershipWitnessAtArchive(
+    reference: ArchiveBlockParameter,
     blockHash: BlockHash,
   ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined>;
 
@@ -629,6 +661,11 @@ export const AztecNodeApiSchema: ApiSchemaFor<AztecNode> = {
 
   getBlockHashMembershipWitness: z.function({
     input: z.tuple([BlockParameterSchema, BlockHash.schema]),
+    output: MembershipWitness.schemaFor(ARCHIVE_HEIGHT).optional(),
+  }),
+
+  getBlockHashMembershipWitnessAtArchive: z.function({
+    input: z.tuple([ArchiveBlockParameterSchema, BlockHash.schema]),
     output: MembershipWitness.schemaFor(ARCHIVE_HEIGHT).optional(),
   }),
 

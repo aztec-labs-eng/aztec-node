@@ -9,6 +9,22 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [AztecNode] `getBlockHashMembershipWitness` requires an existing reference block; new `getBlockHashMembershipWitnessAtArchive`
+
+`getBlockHashMembershipWitness(referenceBlock, blockHash)` returns a witness against the reference block header's `lastArchive.root`, the archive before the reference block was appended. v5 nodes also accepted a number-only reference one past the latest block, answering against the latest block's archive without that block existing. v6 does not: every reference, including a bare number, must name a block the node has, and a number past the tip fails once the node's hold-off for unseen blocks runs out.
+
+The node also checks that the archive it proves against is exactly the one the reference header commits to, and throws if its world state holds a different archive at that height (for instance after a reorg) instead of answering from it.
+
+To prove membership against a given archive root, including a block's own post-block archive, use the new `getBlockHashMembershipWitnessAtArchive({ archive }, blockHash)`. It accepts only an `{ archive }` selector, needs no later block to exist, and throws if the node does not know the root. Picking a root does not make it canonical or final: callers must choose a root their verifier accepts.
+
+```diff
+- // Witness against the archive after block N, via the block after it
+- const witness = await aztecNode.getBlockHashMembershipWitness(BlockNumber(n + 1), blockHash);
++ const witness = await aztecNode.getBlockHashMembershipWitnessAtArchive({ archive: blockN.archive.root }, blockHash);
+```
+
+Callers that anchor on a block header, such as PXE and its oracles, keep using `getBlockHashMembershipWitness`.
+
 ### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
 
 The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.

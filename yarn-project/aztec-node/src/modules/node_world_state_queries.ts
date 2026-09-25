@@ -7,6 +7,8 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import { MembershipWitness, type SiblingPath } from '@aztec-labs/foundation/trees';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
+  type ArchiveBlockParameter,
+  type BlockData,
   type BlockHash,
   type BlockParameter,
   type DataInBlock,
@@ -14,7 +16,7 @@ import {
   inspectBlockParameter,
 } from '@aztec-labs/stdlib/block';
 import { computePublicDataTreeLeafSlot } from '@aztec-labs/stdlib/hash';
-import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
+import type { MerkleTreeReadOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
 import {
   MerkleTreeId,
@@ -133,22 +135,56 @@ export class NodeWorldStateQueries {
     });
   }
 
+  /**
+   * Returns a witness for `blockHash` against the reference block header's `lastArchive.root`, the archive before the
+   * reference block was appended. That is the root a circuit anchored on the header checks archive membership against,
+   * and world state holds it as the snapshot at the block before the reference.
+   */
   public async getBlockHashMembershipWitness(
     referenceBlock: BlockParameter,
     blockHash: BlockHash,
   ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
-    // The Noir circuit checks the archive membership proof against `anchor_block_header.last_archive.root`,
-    // which is the archive tree root BEFORE the anchor block was added (i.e. the state after block N-1).
-    // So we need the world state at block N-1, not block N, to produce a sibling path matching that root.
-    const { blockNumber: referenceBlockNumber } = await this.#resolveBlockNumberAndHash(
-      normalizeBlockParameter(referenceBlock),
-    );
+    const { header } = await this.#resolveBlockData(normalizeBlockParameter(referenceBlock));
+    const referenceBlockNumber = header.getBlockNumber();
     if (referenceBlockNumber === BlockNumber.ZERO) {
-      // Block 0 (the initial block) has an empty archive, so no membership witness can exist.
+      // The initial header commits to an empty archive, so no block hash can be a member of it.
+      if (header.lastArchive.nextAvailableLeafIndex !== 0) {
+        throw new Error(`Initial block header commits to a non-empty archive ${header.lastArchive.root.toString()}`);
+      }
       return undefined;
     }
     const committedDb = await this.getWorldState(BlockNumber(referenceBlockNumber - 1));
-    const [pathAndIndex] = await committedDb.findSiblingPaths<MerkleTreeId.ARCHIVE>(MerkleTreeId.ARCHIVE, [blockHash]);
+    return await this.#getArchiveMembershipWitness(committedDb, header.lastArchive.root, blockHash);
+  }
+
+  /** Returns a witness for `blockHash` against exactly the archive root `reference.archive`. */
+  public async getBlockHashMembershipWitnessAtArchive(
+    reference: ArchiveBlockParameter,
+    blockHash: BlockHash,
+  ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
+    // Rebuilt rather than forwarded: an in-process caller could hand over an object carrying another selector as well,
+    // which would take precedence over the archive when the block is resolved.
+    const committedDb = await this.getWorldState({ archive: reference.archive });
+    return await this.#getArchiveMembershipWitness(committedDb, reference.archive, blockHash);
+  }
+
+  /**
+   * Looks `blockHash` up in the archive tree of `db`, once the tree is established to have exactly `expectedRoot`. A
+   * witness is only useful against the root it will be verified with, so a snapshot holding any other archive is an
+   * error rather than a reason to report the block hash as absent.
+   */
+  async #getArchiveMembershipWitness(
+    db: MerkleTreeReadOperations,
+    expectedRoot: Fr,
+    blockHash: BlockHash,
+  ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
+    const actualRoot = Fr.fromBuffer((await db.getTreeInfo(MerkleTreeId.ARCHIVE)).root);
+    if (!actualRoot.equals(expectedRoot)) {
+      throw new Error(
+        `Archive ${expectedRoot.toString()} is not available: world state holds archive ${actualRoot.toString()} at the block that should have it. A reorg may have occurred.`,
+      );
+    }
+    const [pathAndIndex] = await db.findSiblingPaths<MerkleTreeId.ARCHIVE>(MerkleTreeId.ARCHIVE, [blockHash]);
     return pathAndIndex === undefined
       ? undefined
       : MembershipWitness.fromSiblingPath(pathAndIndex.index, pathAndIndex.path);
@@ -348,11 +384,17 @@ export class NodeWorldStateQueries {
     query: HoldOffBlockQuery,
     opts: UnseenBlockHoldOffOptions = {},
   ): Promise<{ blockNumber: BlockNumber; blockHash: BlockHash }> {
+    const blockData = await this.#resolveBlockData(query, opts);
+    return { blockNumber: blockData.header.getBlockNumber(), blockHash: blockData.blockHash };
+  }
+
+  /** Resolves any {@link BlockParameter} variant to its block metadata, holding off as {@link #resolveBlockNumberAndHash} does. */
+  async #resolveBlockData(query: HoldOffBlockQuery, opts: UnseenBlockHoldOffOptions = {}): Promise<BlockData> {
     const blockData = await this.holdOff.getBlockData(query, opts);
     if (blockData === undefined) {
       this.#throwOnUndefinedBlockData(query);
     }
-    return { blockNumber: blockData.header.getBlockNumber(), blockHash: blockData.blockHash };
+    return blockData;
   }
 
   /**

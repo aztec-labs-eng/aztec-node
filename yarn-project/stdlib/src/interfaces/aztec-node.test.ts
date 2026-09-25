@@ -20,7 +20,12 @@ import type { ContractArtifact } from '../abi/abi.js';
 import { AztecAddress } from '../aztec-address/index.js';
 import type { BlockData } from '../block/block_data.js';
 import type { DataInBlock } from '../block/in_block.js';
-import { BlockHash, type BlockParameter, isAnchoredBlockParameter } from '../block/index.js';
+import {
+  type ArchiveBlockParameter,
+  BlockHash,
+  type BlockParameter,
+  isAnchoredBlockParameter,
+} from '../block/index.js';
 import type { CheckpointsQuery, L2BlockTag, L2Tips } from '../block/l2_block_source.js';
 import type { CheckpointData } from '../checkpoint/checkpoint_data.js';
 import {
@@ -188,6 +193,41 @@ describe('AztecNodeApiSchema', () => {
   it('getBlockHashMembershipWitness', async () => {
     const response = await context.client.getBlockHashMembershipWitness(BlockNumber(1), BlockHash.random());
     expect(response).toBeInstanceOf(MembershipWitness);
+  });
+
+  it('getBlockHashMembershipWitnessAtArchive', async () => {
+    const archive = Fr.random();
+    const response = await context.client.getBlockHashMembershipWitnessAtArchive({ archive }, BlockHash.random());
+    expect(response).toBeInstanceOf(MembershipWitness);
+    expect(handler.lastGetBlockHashMembershipWitnessAtArchiveArgs?.[0]).toEqual({ archive });
+
+    // A key that is not a selector is dropped on the way in, as for every other block selector.
+    await context.client.getBlockHashMembershipWitnessAtArchive(
+      { archive, futureOption: true } as unknown as ArchiveBlockParameter,
+      BlockHash.random(),
+    );
+    expect(handler.lastGetBlockHashMembershipWitnessAtArchiveArgs?.[0]).toEqual({ archive });
+
+    // Only an archive root names the archive to prove against: every other block selector is refused, including one
+    // riding alongside the archive.
+    const otherSelectors: unknown[] = [
+      BlockNumber(1),
+      BlockHash.random(),
+      'latest',
+      { number: BlockNumber(1) },
+      { hash: BlockHash.random() },
+      { tag: 'proven' },
+      { number: BlockNumber(1), hash: BlockHash.random() },
+      { archive, number: BlockNumber(1) },
+      { archive, hash: BlockHash.random() },
+      { archive, tag: 'proven' },
+      {},
+    ];
+    for (const selector of otherSelectors) {
+      await expect(
+        context.client.getBlockHashMembershipWitnessAtArchive(selector as ArchiveBlockParameter, BlockHash.random()),
+      ).rejects.toThrow();
+    }
   });
 
   it('getNoteHashMembershipWitness', async () => {
@@ -697,6 +737,8 @@ function mockTxEffectMembershipWitness(): TxEffectMembershipWitness {
 class MockAztecNode implements AztecNode {
   /** What the last `getBlock` call was handed after the schema parsed it. */
   public lastGetBlockArgs?: [BlockParameter, BlockIncludeOptions | undefined];
+  /** What the last `getBlockHashMembershipWitnessAtArchive` call was handed after the schema parsed it. */
+  public lastGetBlockHashMembershipWitnessAtArchiveArgs?: [ArchiveBlockParameter, BlockHash];
 
   public validatorStats: ValidatorsStats | undefined;
   public singleValidatorStats: SingleValidatorStats | undefined;
@@ -815,6 +857,15 @@ class MockAztecNode implements AztecNode {
       referenceBlock === 'latest' || BlockHash.isBlockHash(referenceBlock) || typeof referenceBlock === 'number',
     ).toBe(true);
     expect(blockHash).toBeInstanceOf(BlockHash);
+    return Promise.resolve(MembershipWitness.random(ARCHIVE_HEIGHT));
+  }
+  getBlockHashMembershipWitnessAtArchive(
+    reference: ArchiveBlockParameter,
+    blockHash: BlockHash,
+  ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
+    expect(reference.archive).toBeInstanceOf(Fr);
+    expect(blockHash).toBeInstanceOf(BlockHash);
+    this.lastGetBlockHashMembershipWitnessAtArchiveArgs = [reference, blockHash];
     return Promise.resolve(MembershipWitness.random(ARCHIVE_HEIGHT));
   }
   getNoteHashMembershipWitness(

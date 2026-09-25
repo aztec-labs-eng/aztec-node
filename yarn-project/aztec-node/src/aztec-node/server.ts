@@ -35,6 +35,7 @@ import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
+  type ArchiveBlockParameter,
   type BlockData,
   BlockHash,
   type BlockParameter,
@@ -715,6 +716,13 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     blockHash: BlockHash,
   ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
     return this.worldStateQueries.getBlockHashMembershipWitness(referenceBlock, blockHash);
+  }
+
+  public getBlockHashMembershipWitnessAtArchive(
+    reference: ArchiveBlockParameter,
+    blockHash: BlockHash,
+  ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
+    return this.worldStateQueries.getBlockHashMembershipWitnessAtArchive(reference, blockHash);
   }
 
   public getNoteHashMembershipWitness(
