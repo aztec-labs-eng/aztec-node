@@ -43,10 +43,20 @@ describe('ContractInstanceStore', () => {
     });
 
     it('returns undefined if previously stored contract instances was deleted', async () => {
-      await contractInstanceStore.deleteContractInstances([contractInstance]);
+      await contractInstanceStore.deleteContractInstances([contractInstance], BlockNumber(blockNum));
       await expect(
         contractInstanceStore.getContractInstance(contractInstance.address, timestamp),
       ).resolves.toBeUndefined();
+    });
+
+    it('does not delete an instance published by a different block', async () => {
+      await contractInstanceStore.deleteContractInstances([contractInstance], BlockNumber(blockNum + 1));
+      await expect(
+        contractInstanceStore.getContractInstance(contractInstance.address, timestamp),
+      ).resolves.toMatchObject(contractInstance);
+      await expect(
+        contractInstanceStore.getContractInstanceDeploymentBlockNumber(contractInstance.address),
+      ).resolves.toEqual(blockNum);
     });
 
     it('throws when adding the same contract instance again at a different block', async () => {
@@ -101,7 +111,7 @@ describe('ContractInstanceStore', () => {
     });
 
     it('does not delete a protocol instance', async () => {
-      await contractInstanceStore.deleteContractInstances([protocolInstance]);
+      await contractInstanceStore.deleteContractInstances([protocolInstance], BlockNumber(preloadBlock));
       await expect(
         contractInstanceStore.getContractInstance(protocolInstance.address, timestamp),
       ).resolves.toMatchObject(protocolInstance);

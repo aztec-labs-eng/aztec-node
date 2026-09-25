@@ -694,7 +694,7 @@ export class ArchiverDataStoreUpdater {
       if (operation == Operation.Store) {
         return await this.stores.contractInstances.addContractInstances(contractInstances, blockNum);
       } else if (operation == Operation.Delete) {
-        return await this.stores.contractInstances.deleteContractInstances(contractInstances);
+        return await this.stores.contractInstances.deleteContractInstances(contractInstances, blockNum);
       }
     }
     return true;

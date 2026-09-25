@@ -49,12 +49,13 @@ export class ContractInstanceStore {
   }
 
   /**
-   * Removes multiple contract instances from the store.
+   * Removes multiple contract instances from the store, but only those that were published at the given block.
    * @param data - Contract instances to delete.
+   * @param blockNumber - L2 block being unwound, which must be the one that published each deleted instance.
    * @returns True if every delete succeeded.
    */
-  async deleteContractInstances(data: ContractInstanceWithAddress[]): Promise<boolean> {
-    return (await Promise.all(data.map(c => this.deleteContractInstance(c)))).every(Boolean);
+  async deleteContractInstances(data: ContractInstanceWithAddress[], blockNumber: number): Promise<boolean> {
+    return (await Promise.all(data.map(c => this.deleteContractInstance(c, blockNumber)))).every(Boolean);
   }
 
   /**
@@ -119,15 +120,21 @@ export class ContractInstanceStore {
     });
   }
 
-  deleteContractInstance(contractInstance: ContractInstanceWithAddress): Promise<void> {
+  deleteContractInstance(contractInstance: ContractInstanceWithAddress, blockNumber: number): Promise<void> {
     // Protocol contracts are preloaded at block 0 and must never be deleted, even when the block that
     // (re-)published them on-chain is unwound by a reorg.
     if (isProtocolContract(contractInstance.address)) {
       return Promise.resolve();
     }
     return this.db.transactionAsync(async () => {
-      await this.#contractInstances.delete(contractInstance.address.toString());
-      await this.#contractInstancePublishedAt.delete(contractInstance.address.toString());
+      const key = contractInstance.address.toString();
+      // An unwound block can carry a log naming an address first published by a surviving block (a forged log in an
+      // unexecuted checkpoint, which the store path skipped). Deleting by address alone would erase that instance.
+      if ((await this.#contractInstancePublishedAt.getAsync(key)) !== blockNumber) {
+        return;
+      }
+      await this.#contractInstances.delete(key);
+      await this.#contractInstancePublishedAt.delete(key);
     });
   }
 

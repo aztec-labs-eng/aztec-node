@@ -448,6 +448,35 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeUndefined();
     });
 
+    it('keeps an instance from a surviving checkpoint when a pruned checkpoint forged a log for its address', async () => {
+      const block1 = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+      });
+      block1.body.txEffects[0].privateLogs = [PrivateLog.fromBuffer(getSampleContractInstancePublishedEventPayload())];
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block1]), 10)]);
+
+      // Claims the same address but with fields that derive a different one, so the store path skips it.
+      const forgedLog = PrivateLog.fromBuffer(getSampleContractInstancePublishedEventPayload());
+      forgedLog.fields[3] = Fr.random();
+      const block2 = await randomBlock(2, {
+        checkpointNumber: CheckpointNumber(2),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        lastArchive: block1.archive,
+      });
+      block2.body.txEffects[0].privateLogs = [forgedLog];
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block2], CheckpointNumber(2)), 20)]);
+
+      await updater.removeCheckpointsAfter(CheckpointNumber(1));
+
+      const timestamp = block1.header.globalVariables.timestamp + 1n;
+      expect(await store.blocks.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+      expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
+      expect(await store.contractInstances.getContractInstanceDeploymentBlockNumber(instanceAddress)).toEqual(
+        BlockNumber(1),
+      );
+    });
+
     it('accepts a re-included already-stored checkpoint carrying contract data (A-1350)', async () => {
       const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
