@@ -20,7 +20,7 @@ export function computeEthVersionedBlobHash(commitment: Buffer): Buffer {
 
 // TODO(#13430): The blobsHash is confusingly similar to blobCommitmentsHash, calculated from below blobCommitments:
 // - blobsHash := sha256([blobhash_0, ..., blobhash_m]) = a hash of all blob hashes in a block with m+1 blobs inserted into the header, exists so a user can cross check blobs.
-// - blobCommitmentsHash := sha256( ...sha256(sha256(C_0), C_1) ... C_n) = iteratively calculated hash of all blob commitments in an epoch with n+1 blobs (see calculateBlobCommitmentsHash()),
+// - blobCommitmentsHash := sha256( ...sha256(sha256(s_0, C_0), s_1, C_1) ... s_n, C_n) = iteratively calculated hash of all blob commitments in an epoch with n+1 blobs, where s_i is the byte 0x01 for each checkpoint's first blob and 0x00 otherwise (see calculateBlobCommitmentsHash()),
 //   exists so we can validate injected commitments to the rollup circuits correspond to the correct real blobs.
 // We may be able to combine these values e.g. blobCommitmentsHash := sha256( ...sha256(sha256(blobshash_0), blobshash_1) ... blobshash_l) for an epoch with l+1 blocks.
 export function computeBlobsHash(evmVersionedBlobHashes: Buffer[]): Fr {
