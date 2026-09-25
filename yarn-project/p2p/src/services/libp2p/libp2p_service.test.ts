@@ -175,6 +175,21 @@ describe('LibP2PService', () => {
       });
       // By default, canAddPendingTx returns 'accepted' so the flow proceeds to pool add
       txPool.canAddPendingTx.mockResolvedValue('accepted');
+      // By default the tx is not already in the pool, so the dedup pre-check lets it through.
+      txPool.hasTxs.mockResolvedValue([false]);
+    });
+
+    it('should Ignore before validation when the tx is already in the pool', async () => {
+      const tx = await mockTx();
+      txPool.hasTxs.mockResolvedValue([true]);
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      // Short-circuited before the validation stages and the pool add.
+      expect(txPool.canAddPendingTx).not.toHaveBeenCalled();
+      expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
     });
 
     it('should propagate (Accept) when pool accepts the transaction', async () => {
@@ -629,6 +644,26 @@ describe('LibP2PService', () => {
       service.registerDuplicateProposalCallback(duplicateProposalCallback);
     });
 
+    it('ignores an already-stored block proposal before validation and the add path', async () => {
+      const header = makeBlockHeader(1, { slotNumber: targetSlot });
+      const proposal = await makeBlockProposal({ signer, blockHeader: header });
+      // Pre-store the exact signed payload as accepted content.
+      await attestationPool.tryAddBlockProposal(proposal);
+      const addSpy = jest.spyOn(attestationPool, 'tryAddBlockProposal');
+
+      await service.processBlockFromPeer(proposal.toBuffer(), 'msg-dup', mockPeerId);
+
+      // The dedup pre-check returns before re-running validation or the pool add.
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-dup',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Ignore,
+      );
+      expect(addSpy).not.toHaveBeenCalled();
+      expect(blockReceivedCallback).not.toHaveBeenCalled();
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
     it('processes valid block: invokes callback and marks txs non-evictable', async () => {
       const header = makeBlockHeader(1, { slotNumber: targetSlot });
       const proposal = await makeBlockProposal({ signer, blockHeader: header });
@@ -970,6 +1005,23 @@ describe('LibP2PService', () => {
       service.registerValidatorCheckpointReceivedCallback(validatorCheckpointReceivedCallback as any);
       service.registerAllNodesCheckpointReceivedCallback(allNodesCheckpointReceivedCallback as any);
       service.registerDuplicateProposalCallback(duplicateProposalCallback);
+    });
+
+    it('ignores an already-stored checkpoint proposal before validation and the add path', async () => {
+      const checkpointHeader = makeCheckpointHeader(1, { slotNumber: targetSlot });
+      const proposal = await makeCheckpointProposal({ signer, checkpointHeader });
+      // Pre-store the exact signed payload as accepted content.
+      await attestationPool.tryAddCheckpointProposal(proposal.toCore());
+      const addSpy = jest.spyOn(attestationPool, 'tryAddCheckpointProposal');
+
+      await service.handleGossipedCheckpointProposal(proposal.toBuffer(), 'msg-dup', mockPeerId);
+
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
+        'msg-dup',
+        MOCK_PEER_ID,
+        TopicValidatorResult.Ignore,
+      );
+      expect(addSpy).not.toHaveBeenCalled();
     });
 
     it('processes valid checkpoint: invokes callback and propagates attestations', async () => {
@@ -1636,6 +1688,25 @@ describe('LibP2PService', () => {
     // Regression for A-1013: attestations sharing (slot, signer, archive) but differing on
     // feeAssetPriceModifier used to dedup by archive only. The pool now dedups by signed-payload
     // hash, so the equivocation surfaces.
+    it('ignores a re-encoded copy of an accepted attestation before validation and the add path', async () => {
+      const attesterSigner = Secp256k1Signer.random();
+      const attestation = makeCheckpointAttestation({
+        header: makeCheckpointHeader(1, { slotNumber: targetSlot }),
+        archive: Fr.random(),
+        attesterSigner,
+        proposerSigner,
+      });
+      const first = await service.validateAndStoreCheckpointAttestation(mockPeerId, attestation);
+      expect(first.result).toBe(TopicValidatorResult.Accept);
+
+      const addSpy = jest.spyOn(attestationPool, 'tryAddCheckpointAttestation');
+      const second = await service.validateAndStoreCheckpointAttestation(mockPeerId, attestation);
+
+      // The LRU pre-check returns before signature recovery and the pool add.
+      expect(second.result).toBe(TopicValidatorResult.Ignore);
+      expect(addSpy).not.toHaveBeenCalled();
+    });
+
     it('same signer + same archive + different feeAssetPriceModifier triggers slash callback', async () => {
       const attesterSigner = Secp256k1Signer.random();
       const sharedHeader = makeCheckpointHeader(1, { slotNumber: targetSlot });

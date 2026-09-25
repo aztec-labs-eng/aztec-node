@@ -1121,6 +1121,12 @@ export class LibP2PService extends WithTracer implements P2PService {
         return { result: TopicValidatorResult.Reject, severity: PeerErrorSeverity.LowToleranceError };
       }
 
+      // Dedup on already-accepted content before validation: a tx hash already in the pool has been
+      // validated, so a re-encoded copy carries no new work and is ignored without running the stages.
+      if ((await this.mempools.txPool.hasTxs([tx.getTxHash()]))[0]) {
+        return { result: TopicValidatorResult.Ignore, obj: tx };
+      }
+
       // Stage 1 setup: chain tip, epoch info, gas fees, and L1 constants reads
       const { currentBlockNumber, firstStageValidators } = await timed('fast_validation_setup', async () => {
         const currentBlockNumber = await this.archiver.getBlockNumber();
@@ -1264,6 +1270,24 @@ export class LibP2PService extends WithTracer implements P2PService {
     );
   }
 
+  // Bounded set of accepted checkpoint-attestation identities (slot, payload hash, signature bytes), so a
+  // re-encoded copy of an accepted attestation is ignored before the expensive signature recovery.
+  private readonly recentAcceptedAttestations = new Map<string, true>();
+  private static readonly MAX_RECENT_ATTESTATIONS = 8192;
+
+  private rememberAcceptedAttestation(key: string): void {
+    if (this.recentAcceptedAttestations.has(key)) {
+      return;
+    }
+    this.recentAcceptedAttestations.set(key, true);
+    if (this.recentAcceptedAttestations.size > LibP2PService.MAX_RECENT_ATTESTATIONS) {
+      const oldest = this.recentAcceptedAttestations.keys().next().value;
+      if (oldest !== undefined) {
+        this.recentAcceptedAttestations.delete(oldest);
+      }
+    }
+  }
+
   /** Validates a checkpoint attestation and adds it to the pool. Penalizes the peer if validation fails. */
   @trackSpan('Libp2pService.validateAndStoreCheckpointAttestation', (_peerId, attestation) => ({
     [Attributes.SLOT_NUMBER]: attestation.payload.header.slotNumber.toString(),
@@ -1272,6 +1296,15 @@ export class LibP2PService extends WithTracer implements P2PService {
     peerId: PeerId,
     attestation: CheckpointAttestation,
   ): Promise<ReceivedMessageValidationResult<CheckpointAttestation>> {
+    const attestationKey = `${attestation.payload.header.slotNumber}:${attestation
+      .getPayloadHash()
+      .toString()}:${attestation.signature.toBuffer().toString('hex')}`;
+    // Dedup on already-accepted content before validation: a re-encoded copy of an accepted attestation
+    // is ignored here, before the expensive signature recovery in validate().
+    if (this.recentAcceptedAttestations.has(attestationKey)) {
+      return { result: TopicValidatorResult.Ignore, obj: attestation };
+    }
+
     const validationResult = await this.checkpointAttestationValidator.validate(attestation);
 
     if (validationResult.result === 'reject') {
@@ -1332,6 +1365,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     }
 
     // Attestation was added successfully - accept it so other nodes can also detect the equivocation
+    this.rememberAcceptedAttestation(attestationKey);
     this.checkpointAttestationCallback?.(attestation);
     return { result: TopicValidatorResult.Accept, obj: attestation };
   }
@@ -1366,6 +1400,19 @@ export class LibP2PService extends WithTracer implements P2PService {
     peerId: PeerId,
     block: BlockProposal,
   ): Promise<ReceivedMessageValidationResult<BlockProposal, { isEquivocated: boolean; isOversized: boolean }>> {
+    // Dedup on already-accepted content before validation: an exact signed payload already stored at
+    // this (slot, index) has been validated, so a re-encoded copy is ignored without re-running it. A
+    // different payload hash at the same position is not stored, so equivocation still takes the full path.
+    if (
+      await this.mempools.attestationPool.hasBlockProposal(
+        block.slotNumber,
+        block.indexWithinCheckpoint,
+        block.getPayloadHash(),
+      )
+    ) {
+      return { result: TopicValidatorResult.Ignore, obj: block };
+    }
+
     const validationResult = await this.blockProposalValidator.validate(block);
 
     if (validationResult.result === 'reject') {
@@ -1560,6 +1607,13 @@ export class LibP2PService extends WithTracer implements P2PService {
       { isEquivocated: boolean; processBlock: boolean; isOversized: boolean }
     >
   > {
+    // Dedup on already-accepted content before validation: an exact signed checkpoint payload already
+    // stored for this slot has been validated, so a re-encoded copy is ignored without re-running it. A
+    // different payload hash at the same slot is not stored, so equivocation still takes the full path.
+    if (await this.mempools.attestationPool.hasCheckpointProposal(checkpoint.slotNumber, checkpoint.getPayloadHash())) {
+      return { result: TopicValidatorResult.Ignore, obj: checkpoint };
+    }
+
     const validationResult = await this.checkpointProposalValidator.validate(checkpoint);
 
     if (validationResult.result === 'reject') {

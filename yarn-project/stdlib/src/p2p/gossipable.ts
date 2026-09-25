@@ -26,6 +26,12 @@ export class P2PMessage {
       traceContext = reader.readString();
     }
     const payload = reader.readBuffer();
+    // Reject trailing bytes: padding leaves the same payload but a new message id, so a copy evades
+    // both the seen-message dedup and the duplicate-delivery peer scoring, letting a peer replay one
+    // valid message (e.g. a proposal it cannot forge) as fresh deliveries.
+    if (!reader.isEmpty()) {
+      throw new Error('P2PMessage has trailing bytes after its payload');
+    }
     return new P2PMessage(payload, timestamp, traceContext);
   }
 
