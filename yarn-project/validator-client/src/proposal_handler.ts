@@ -631,7 +631,7 @@ export class ProposalHandler {
    * @param archiver - Archiver reference for setting proposed checkpoints (pipelining)
    * @param getOwnValidatorAddresses - Returns current validator addresses for own-proposal detection
    */
-  register(
+  public register(
     p2pClient: P2P,
     shouldReexecute: boolean,
     archiver?: Pick<Archiver, 'addProposedCheckpoint' | 'getProposedCheckpointData'>,
@@ -779,7 +779,7 @@ export class ProposalHandler {
    * timeliness check) — none of those are re-applied here, and only deterministic properties of the payload
    * are validated before processing.
    */
-  async handleBlockProposal(
+  public async handleBlockProposal(
     proposal: ValidatedBlockProposal,
     proposalSender: PeerId,
     shouldReexecute: boolean,
@@ -1703,7 +1703,7 @@ export class ProposalHandler {
     return resolved;
   }
 
-  async reexecuteTransactions(
+  public async reexecuteTransactions(
     proposal: BlockProposal,
     blockNumber: BlockNumber,
     checkpointNumber: CheckpointNumber,
@@ -1838,7 +1838,7 @@ export class ProposalHandler {
    * Expects the proposal to have already passed p2p ingress validation (expected proposer and receive-window
    * timeliness); only deterministic properties of the signed payload are checked here.
    */
-  async handleCheckpointProposal(
+  public async handleCheckpointProposal(
     proposal: ValidatedCheckpointProposalCore,
     proposalInfo: LogData,
   ): Promise<CheckpointProposalValidationResult> {
@@ -1878,22 +1878,7 @@ export class ProposalHandler {
     }
 
     if (result === undefined) {
-      const proposer = proposal.getSender();
-      if (!proposer) {
-        this.log.warn(`Received checkpoint proposal with invalid signature for slot ${proposal.slotNumber}`);
-        result = { isValid: false as const, reason: 'invalid_signature' };
-      } else if (!validateFeeAssetPriceModifier(proposal.feeAssetPriceModifier)) {
-        this.log.warn(
-          `Received checkpoint proposal with invalid feeAssetPriceModifier ${proposal.feeAssetPriceModifier} for slot ${proposal.slotNumber}`,
-        );
-        result = { isValid: false, reason: 'invalid_fee_asset_price_modifier' };
-      } else {
-        const validation = await this.validateCheckpointProposal(proposal, proposalInfo);
-        result = isSlashableCheckpointProposalResult(validation)
-          ? await this.checkLastBlockStillLocal(proposal, validation, proposalInfo)
-          : validation;
-      }
-
+      result = await this.validateCheckpointProposal(proposal, proposalInfo);
       this.lastCheckpointValidationResult = { payloadHash, result };
       if (result.isValid) {
         lastBlock = await this.blockSource.getBlockData({ archive: proposal.archive });
@@ -2084,10 +2069,34 @@ export class ProposalHandler {
   }
 
   /**
-   * Validates a checkpoint proposal by building the full checkpoint and comparing it with the proposal.
-   * @returns Validation result with isValid flag and reason if invalid.
+   * The verdict on a checkpoint proposal's signed content, before the live Inbox endpoint gate: the signature and fee
+   * modifier checks on the payload, then the checkpoint rebuilt from this node's blocks and compared with it. A
+   * slashable rebuild verdict is demoted when the checkpoint's last block was pruned while it was computed; the two
+   * payload checks do not read the local chain, so their rejections never are.
    */
-  async validateCheckpointProposal(
+  public async validateCheckpointProposal(
+    proposal: CheckpointProposalCore,
+    proposalInfo: LogData,
+  ): Promise<CheckpointProposalValidationResult> {
+    if (!proposal.getSender()) {
+      this.log.warn(`Received checkpoint proposal with invalid signature for slot ${proposal.slotNumber}`);
+      return { isValid: false, reason: 'invalid_signature' };
+    }
+    if (!validateFeeAssetPriceModifier(proposal.feeAssetPriceModifier)) {
+      this.log.warn(
+        `Received checkpoint proposal with invalid feeAssetPriceModifier ${proposal.feeAssetPriceModifier} for slot ${proposal.slotNumber}`,
+      );
+      return { isValid: false, reason: 'invalid_fee_asset_price_modifier' };
+    }
+    // The rebuild's fork is disposed when it returns, before the demotion reads the local chain again.
+    const content = await this.validateCheckpointContent(proposal, proposalInfo);
+    return isSlashableCheckpointProposalResult(content)
+      ? await this.checkLastBlockStillLocal(proposal, content, proposalInfo)
+      : content;
+  }
+
+  /** Validates a checkpoint proposal's content by building the full checkpoint and comparing it with the proposal. */
+  private async validateCheckpointContent(
     proposal: CheckpointProposalCore,
     proposalInfo: LogData,
   ): Promise<CheckpointProposalValidationResult> {
