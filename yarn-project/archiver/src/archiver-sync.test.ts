@@ -1839,6 +1839,24 @@ describe('Archiver Sync', () => {
       expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(85n);
     }, 15_000);
 
+    it('keeps the sync point when a batch fails after it was persisted', async () => {
+      // Rewinding past a persisted batch would make the next iteration refetch blobs for checkpoints already stored
+      // (or promoted from local proposals without ever fetching them), stalling sync if those blobs are unavailable.
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      const { cp1 } = await addValidCheckpointAndInvalidChild(l1Blocks);
+
+      instrumentation.processNewCheckpointedBlocks.mockImplementationOnce(() => {
+        throw new Error('Instrumentation failure');
+      });
+
+      fake.setL1BlockNumber(82n);
+      await expect(archiver.syncImmediate()).rejects.toThrow('Instrumentation failure');
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      const [storedCp1] = await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 1 });
+      expect(storedCp1.checkpoint.archive.root.toString()).toEqual(cp1.archive.root.toString());
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp2);
+    }, 15_000);
+
     it('handles L1 reorg that moves a checkpoint to a later L1 block', async () => {
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
 

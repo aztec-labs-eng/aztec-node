@@ -865,10 +865,12 @@ export class ArchiverL1Synchronizer implements Traceable {
 
       // Screening below records rejected checkpoints as it goes, and each such write advances the L1 sync point past
       // the rejected checkpoint's L1 block before the batch's valid checkpoints are persisted. If anything in the batch
-      // throws, the sync point is restored to where it stood before the batch, so the next iteration processes the
-      // whole batch again instead of skipping its valid checkpoints. Replaying checkpoints that did get persisted is
-      // safe: rejections are keyed by archive root and already-stored checkpoints are skipped when re-added.
+      // throws before the batch is persisted, the sync point is restored to where it stood before the batch, so the
+      // next iteration processes the whole batch again instead of skipping its valid checkpoints. Once the batch is
+      // persisted the sync point is left alone: replaying it would refetch blobs for checkpoints already stored,
+      // including promoted ones this node never fetched blobs for, and stall if those blobs are unavailable.
       const syncPointBeforeBatch = await this.stores.blocks.getSynchedL1BlockNumber();
+      let batchPersisted = false;
       try {
         // Check if the last checkpoint matches a local pending entry (so we can skip blob fetch).
         // We only check the last one; if it matches, the blob fetch is skipped for that entry.
@@ -1081,6 +1083,7 @@ export class ArchiverL1Synchronizer implements Traceable {
               ),
             ),
           );
+          batchPersisted = true;
 
           if (validCheckpoints.length > 0) {
             this.instrumentation.processNewCheckpointedBlocks(
@@ -1163,7 +1166,7 @@ export class ArchiverL1Synchronizer implements Traceable {
         const restoreTo = syncPointBeforeBatch ?? this.l1Constants.l1StartBlock;
         const currentSyncPoint = await this.stores.blocks.getSynchedL1BlockNumber();
         // Only ever lower it, so a deeper rewind made while handling the error (e.g. on a checkpoint gap) is kept.
-        if (currentSyncPoint !== undefined && currentSyncPoint > restoreTo) {
+        if (!batchPersisted && currentSyncPoint !== undefined && currentSyncPoint > restoreTo) {
           this.log.warn(`Restoring L1 sync point to ${restoreTo} after failing to process checkpoints`, {
             currentSyncPoint,
             restoreTo,
