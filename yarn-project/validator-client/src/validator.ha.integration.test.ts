@@ -412,6 +412,10 @@ describe('ValidatorClient HA Integration', () => {
       // Create checkpoint proposal using the test helper (without HA signing)
       // This bypasses HA signing for proposal creation - we only want to test attestation HA coordination
       const testSlot = 200;
+      // Signing is gated on the slot's attestation deadline, so the clock has to sit inside the slot being
+      // attested to rather than at real wall time, which is far past a slot derived from genesis time 0.
+      const { l1GenesisTime, slotDuration } = epochCache.getL1Constants();
+      dateProvider.setTime(Number((l1GenesisTime + BigInt(testSlot) * BigInt(slotDuration)) * 1000n));
       const txHashes = [0, 1, 2, 3, 4, 5].map(() => TxHash.random());
       const checkpointProposal = await makeCheckpointProposal({
         checkpointHeader: makeCheckpointHeader(testSlot),

@@ -672,13 +672,50 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       return undefined;
     }
 
+    // Deadline check, for the same reason and in the same place. Validation can run up to the attestation deadline
+    // and past it — the archiver sync waits are bounded by the deadline, and the Inbox endpoint gate keeps a minimum
+    // window beyond it on purpose — so it is re-read here, with nothing left between it and the signature. Finishing
+    // a late validation is still worth doing for telemetry; signing on it is not. Both the peer path and the
+    // proposer's own `collectOwnAttestations` sign through here, so this is the one place that covers both.
+    //
+    // The cutoff is the deadline itself, not the deadline widened by `maxGossipClockDisparityMs`. The deadline is the
+    // sender's obligation; that tolerance is the receiver's allowance for clock skew and propagation delay on
+    // messages sent in time, and a sender that spends it leaves none for the network. Signing late for the sake of
+    // inactivity-slashing credit is a poor trade too: a late attestation only counts if it still reaches peers inside
+    // their tolerance, and one further out is dropped, or penalized as stale, by every peer.
+    if (this.isPastAttestationDeadline(proposal, 'validation')) {
+      return undefined;
+    }
+
     const attestations = await this.validationService.attestToCheckpointProposal(proposal, attestors, checkpointNumber);
 
-    // Track the proposal we attested to (to prevent equivocation)
+    // Track the proposal we attested to (to prevent equivocation). This is recorded even when the signature is
+    // discarded below: the attestors have signed for this slot, so a second proposal for it must still be refused.
     this.lastAttestedProposal = proposal;
+
+    // Signing is not instant: a remote signer or HA coordination can take seconds. A signature produced past the
+    // deadline is discarded rather than stored and gossiped, for the reasons above.
+    if (this.isPastAttestationDeadline(proposal, 'signing')) {
+      return undefined;
+    }
 
     await this.p2pClient.addOwnCheckpointAttestations(attestations);
     return attestations;
+  }
+
+  /** Whether the attestation deadline for the proposal's slot has passed, logging which step overran it if so. */
+  private isPastAttestationDeadline(proposal: CheckpointProposalCore, step: 'validation' | 'signing'): boolean {
+    const attestationDeadline = this.proposalHandler.getAttestationDeadline(proposal.slotNumber);
+    if (+attestationDeadline > this.dateProvider.now()) {
+      return false;
+    }
+    this.log.warn(`Attestation deadline for slot ${proposal.slotNumber} passed during ${step}, not attesting`, {
+      slot: proposal.slotNumber,
+      archive: proposal.archive.toString(),
+      attestationDeadline: attestationDeadline.toISOString(),
+      step,
+    });
+    return true;
   }
 
   /**
