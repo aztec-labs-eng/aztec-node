@@ -1,24 +1,94 @@
+# The first owner listed on each line is the primary owner, the second is the secondary.
+# Contribution rules for the whole repository live in /CONTRIBUTING.md.
+# When several patterns match a file, the last one wins.
+
 /.devcontainer/ @charlielye
-/.github/ @charlielye
-/aztec-up/ @charlielye
-/release-image/ @charlielye
-/build-images/ @charlielye
-/ci3/ @charlielye
+/.github/ @charlielye @fcarreiro
+/aztec-up/ @charlielye @nchamo
+/release-image/ @charlielye @fcarreiro
+/build-images/ @charlielye @fcarreiro
+/ci3/ @charlielye @fcarreiro
 
 #####################################################
-# Notify the AVM team
+# Aztec Node
 #
-# on changes to public context in aztec-nr
-/noir-projects/aztec-nr/aztec/src/context/public_context.nr @MirandaWood @jeanmon @IlyasRidhuan
-# on changes to the AVM simulator and supporting modules
-/yarn-project/simulator/src/public @MirandaWood @jeanmon @IlyasRidhuan
+# Sequencer
+/yarn-project/sequencer-client/ @spalladino @alexghr
+/yarn-project/epoch-cache/ @spalladino @alexghr
+# Validator
+/yarn-project/validator-client/ @spalladino @alexghr
+/yarn-project/validator-ha-signer/ @spalladino @alexghr
+/yarn-project/node-keystore/ @spalladino @alexghr
+/yarn-project/slasher/ @spalladino @alexghr
+# Archiver
+/yarn-project/archiver/ @spalladino @alexghr
+/yarn-project/blob-client/ @spalladino @alexghr
+/yarn-project/blob-lib/ @spalladino @alexghr
+/yarn-project/ethereum/ @spalladino @alexghr
+# P2P
+/yarn-project/p2p/ @spalladino @alexghr
+/yarn-project/p2p-bootstrap/ @spalladino @alexghr
+# Prover
+/yarn-project/prover-client/ @spalladino @alexghr
+/yarn-project/prover-node/ @spalladino @alexghr
+# World State
+/yarn-project/world-state/ @spalladino @alexghr
+# Node and CLI
+/yarn-project/aztec-node/ @spalladino @alexghr
+/yarn-project/node-lib/ @spalladino @alexghr
+/yarn-project/telemetry-client/ @spalladino @alexghr
+/yarn-project/bot/ @spalladino @alexghr
+/yarn-project/cli/ @spalladino @alexghr
+/yarn-project/aztec/ @spalladino @alexghr
+# Shared libraries and tests
+/yarn-project/stdlib/ @spalladino @alexghr
+/yarn-project/foundation/ @spalladino @alexghr
+/yarn-project/kv-store/ @spalladino @alexghr
+/yarn-project/native/ @spalladino @alexghr
+/yarn-project/bb-prover/ @spalladino @alexghr
+/yarn-project/end-to-end/ @spalladino @alexghr
+# Deployments
+/spartan/ @alexghr @fcarreiro
+# Observability
+/metrics/ @alexghr @randyquaye
 #####################################################
 
-# Notify fairies of changes to playground bundler config
-/playground/vite.config.ts @Thunkar
+#####################################################
+# Aztec Framework/SDK
+#
+# aztec.nr and contracts
+/noir-projects/aztec-nr/ @nventuro @nchamo
+/noir-projects/noir-contracts/ @nventuro @nchamo
+/noir-projects/contract-snapshots/ @nventuro @nchamo
+/yarn-project/noir-contracts.js/ @nventuro @nchamo
+/yarn-project/noir-test-contracts.js/ @nventuro @nchamo
+/yarn-project/standard-contracts/ @nventuro @nchamo
+/yarn-project/accounts/ @nventuro @nchamo
+/yarn-project/entrypoints/ @nventuro @nchamo
+/yarn-project/builder/ @nventuro @nchamo
+# PXE
+/yarn-project/pxe/ @nventuro @nchamo
+/yarn-project/key-store/ @nventuro @nchamo
+/yarn-project/txe/ @nventuro @nchamo
+# aztec.js and wallets
+/yarn-project/aztec.js/ @Thunkar @nventuro
+/yarn-project/wallets/ @Thunkar @nventuro
+/yarn-project/wallet-sdk/ @Thunkar @nventuro
+/playground/ @Thunkar @nventuro
+# CLI
+/yarn-project/cli-wallet/ @nventuro @nchamo
+#####################################################
 
-# Notify nventuro of changes to aztec-nr
-/noir-projects/aztec-nr @nventuro
+#####################################################
+# Notifications
+#
+# These go last so they add to, rather than get overridden by, the owners above.
+#
+# Notify the AVM team on changes to public context in aztec-nr
+/noir-projects/aztec-nr/aztec/src/context/public_context.nr @nventuro @nchamo @IlyasRidhuan @fcarreiro
+# Notify the AVM team on changes to the AVM simulator and supporting modules
+/yarn-project/simulator/src/public @IlyasRidhuan @fcarreiro
 
 # Notify devrel of changes to docs examples
 /docs/examples @AztecProtocol/devrel
+#####################################################
