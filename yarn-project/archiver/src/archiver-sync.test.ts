@@ -1072,6 +1072,50 @@ describe('Archiver Sync', () => {
 
       await expect(archiver.syncImmediate()).rejects.toThrow();
     }, 20_000);
+
+    it('records a valid replacement after an unwind that drops the recorded invalid checkpoint', async () => {
+      fake.setTargetCommitteeSize(3);
+      const signers = times(3, Secp256k1Signer.random);
+      const committee = signers.map(signer => signer.address);
+      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee } as EpochCommitteeInfo);
+
+      const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 70n,
+        numL1ToL2Messages: 0,
+        signers,
+      });
+      await fake.addCheckpoint(CheckpointNumber(2), { l1BlockNumber: 75n, numL1ToL2Messages: 0, signers });
+      await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 80n,
+        numL1ToL2Messages: 0,
+        signers: times(3, Secp256k1Signer.random),
+      });
+
+      fake.setL1BlockNumber(82n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      const statusBefore = await archiver.getPendingChainValidationStatus();
+      assert(!statusBefore.valid);
+      expect(statusBefore.checkpoint.checkpointNumber).toEqual(3);
+
+      // L1 prunes checkpoints 2 and 3 and publishes a valid replacement for 2, so one pass reads the invalid status,
+      // unwinds past checkpoint 2, and screens the replacement.
+      fake.markCheckpointAsPruned(CheckpointNumber(2));
+      fake.markCheckpointAsPruned(CheckpointNumber(3));
+      const { checkpoint: replacementCp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
+        l1BlockNumber: 90n,
+        numL1ToL2Messages: 0,
+        previousArchive: cp1.blocks.at(-1)!.archive,
+        signers,
+      });
+
+      fake.setL1BlockNumber(92n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      const [storedCp2] = await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 });
+      expect(storedCp2.checkpoint.archive.root.toString()).toEqual(replacementCp2.archive.root.toString());
+      expect(await archiver.getPendingChainValidationStatus()).toEqual({ valid: true });
+    }, 15_000);
   });
 
   describe('reorg handling', () => {
@@ -1158,6 +1202,26 @@ describe('Archiver Sync', () => {
       expect(await archiver.getTxEffect(txHash)).toBeUndefined();
       expect(await archiver.getCheckpoints({ from: CheckpointNumber(2), limit: 1 })).toEqual([]);
     }, 10_000);
+
+    it('does not fetch checkpoint logs while L1 pending tip is still the local one', async () => {
+      await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 70n,
+        messagesL1BlockNumber: 50n,
+        numL1ToL2Messages: 3,
+      });
+      fake.setL1BlockNumber(80n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      const syncPoint = await archiverStore.blocks.getSynchedL1BlockNumber();
+
+      rollupContract.getCheckpointProposedEvents.mockClear();
+      fake.setL1BlockNumber(90n);
+      await archiver.syncImmediate();
+
+      expect(rollupContract.getCheckpointProposedEvents).not.toHaveBeenCalled();
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(syncPoint);
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+    });
 
     it('handles updated messages due to L1 reorg', async () => {
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
