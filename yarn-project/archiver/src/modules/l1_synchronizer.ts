@@ -863,295 +863,322 @@ export class ArchiverL1Synchronizer implements Traceable {
         },
       );
 
-      // Check if the last checkpoint matches a local pending entry (so we can skip blob fetch).
-      // We only check the last one; if it matches, the blob fetch is skipped for that entry.
-      // TODO(palla/pipelining): We may have more than a single checkpoint to promote
-      const lastCalldataCheckpoint = calldataCheckpoints[calldataCheckpoints.length - 1];
-      const promoteResult = await this.tryBuildPublishedCheckpointFromProposed(lastCalldataCheckpoint);
-      const checkpointToPromote = promoteResult && !('diverged' in promoteResult) ? promoteResult : undefined;
-      const evictProposedFrom =
-        promoteResult && 'diverged' in promoteResult ? promoteResult.fromCheckpointNumber : undefined;
+      // Screening below records rejected checkpoints as it goes, and each such write advances the L1 sync point past
+      // the rejected checkpoint's L1 block before the batch's valid checkpoints are persisted. If anything in the batch
+      // throws before the batch is persisted, the sync point is restored to where it stood before the batch, so the
+      // next iteration processes the whole batch again instead of skipping its valid checkpoints. Once the batch is
+      // persisted the sync point is left alone: replaying it would refetch blobs for checkpoints already stored,
+      // including promoted ones this node never fetched blobs for, and stall if those blobs are unavailable.
+      const syncPointBeforeBatch = await this.stores.blocks.getSynchedL1BlockNumber();
+      let batchPersisted = false;
+      try {
+        // Check if the last checkpoint matches a local pending entry (so we can skip blob fetch).
+        // We only check the last one; if it matches, the blob fetch is skipped for that entry.
+        // TODO(palla/pipelining): We may have more than a single checkpoint to promote
+        const lastCalldataCheckpoint = calldataCheckpoints[calldataCheckpoints.length - 1];
+        const promoteResult = await this.tryBuildPublishedCheckpointFromProposed(lastCalldataCheckpoint);
+        const checkpointToPromote = promoteResult && !('diverged' in promoteResult) ? promoteResult : undefined;
+        const evictProposedFrom =
+          promoteResult && 'diverged' in promoteResult ? promoteResult.fromCheckpointNumber : undefined;
 
-      // Validate attestations from CALLDATA before fetching any blobs. A checkpoint with invalid
-      // attestations (or one descending from a rejected ancestor) is rejected here without fetching its
-      // blobs, so a malformed blob does not throw during decode before the rejection path runs and
-      // stall sync. The signed consensus payload (header, archive root, fee asset price
-      // modifier) is fully available from calldata.
-      const checkpointsToIngest: RetrievedCheckpointFromCalldata[] = [];
+        // Validate attestations from CALLDATA before fetching any blobs. A checkpoint with invalid
+        // attestations (or one descending from a rejected ancestor) is rejected here without fetching its
+        // blobs, so a malformed blob does not throw during decode before the rejection path runs and
+        // stall sync. The signed consensus payload (header, archive root, fee asset price
+        // modifier) is fully available from calldata.
+        const checkpointsToIngest: RetrievedCheckpointFromCalldata[] = [];
 
-      for (const calldataCheckpoint of calldataCheckpoints) {
-        // Check the attestations uploaded by the publisher to L1 are correct.
-        // Rollup contract does not validate attestations to save on gas, so this
-        // falls on the nodes to verify offchain and skip those checkpoints.
-        const validationResult = this.config.skipValidateCheckpointAttestations
-          ? { valid: true as const }
-          : await validateCheckpointAttestationsFromCalldata(
-              calldataCheckpoint,
-              this.epochCache,
-              this.l1Constants,
-              this.getSignatureContext(),
-              this.log,
-            );
+        for (const calldataCheckpoint of calldataCheckpoints) {
+          // Check the attestations uploaded by the publisher to L1 are correct.
+          // Rollup contract does not validate attestations to save on gas, so this
+          // falls on the nodes to verify offchain and skip those checkpoints.
+          const validationResult = this.config.skipValidateCheckpointAttestations
+            ? { valid: true as const }
+            : await validateCheckpointAttestationsFromCalldata(
+                calldataCheckpoint,
+                this.epochCache,
+                this.l1Constants,
+                this.getSignatureContext(),
+                this.log,
+              );
 
-        // Also skip the checkpoint if it builds on a previously-rejected ancestor. Without
-        // this, addCheckpoints would throw InitialCheckpointNumberNotSequentialError when the
-        // ancestor was skipped earlier (e.g. due to invalid attestations), the catch handler
-        // would roll back the L1 sync point, and the next iteration would re-fetch and re-throw.
-        const rejectedAncestor = await this.stores.blocks.getRejectedCheckpointByArchiveRoot(
-          calldataCheckpoint.header.lastArchiveRoot,
-        );
+          // Also skip the checkpoint if it builds on a previously-rejected ancestor. Without
+          // this, addCheckpoints would throw InitialCheckpointNumberNotSequentialError when the
+          // ancestor was skipped earlier (e.g. due to invalid attestations), the catch handler
+          // would roll back the L1 sync point, and the next iteration would re-fetch and re-throw.
+          const rejectedAncestor = await this.stores.blocks.getRejectedCheckpointByArchiveRoot(
+            calldataCheckpoint.header.lastArchiveRoot,
+          );
 
-        // Update the validation result if it has changed, so we can keep track of the first invalid checkpoint
-        // in case there is a sequence of more than one invalid checkpoint, as we need to invalidate the first one.
-        // There is an exception though: if a checkpoint is invalidated and replaced with another invalid checkpoint,
-        // we need to update the validation result, since we need to be able to invalidate the new one.
-        // See test 'chain progresses if an invalid checkpoint is invalidated with an invalid one' for more info.
-        // Do not update the validation result if there is a rejected ancestor, since in that case we want to keep the
-        // original invalidation, as the new checkpoint is extending from a previous invalid one.
-        const validStatusChanged = rollupStatus.validationResult?.valid !== validationResult.valid;
-        const invalidStatusWithSameCheckpointNumber =
-          !validationResult.valid &&
-          rollupStatus.validationResult &&
-          !rollupStatus.validationResult.valid &&
-          rollupStatus.validationResult.checkpoint.checkpointNumber === validationResult.checkpoint.checkpointNumber;
+          // Update the validation result if it has changed, so we can keep track of the first invalid checkpoint
+          // in case there is a sequence of more than one invalid checkpoint, as we need to invalidate the first one.
+          // There is an exception though: if a checkpoint is invalidated and replaced with another invalid checkpoint,
+          // we need to update the validation result, since we need to be able to invalidate the new one.
+          // See test 'chain progresses if an invalid checkpoint is invalidated with an invalid one' for more info.
+          // Do not update the validation result if there is a rejected ancestor, since in that case we want to keep the
+          // original invalidation, as the new checkpoint is extending from a previous invalid one.
+          const validStatusChanged = rollupStatus.validationResult?.valid !== validationResult.valid;
+          const invalidStatusWithSameCheckpointNumber =
+            !validationResult.valid &&
+            rollupStatus.validationResult &&
+            !rollupStatus.validationResult.valid &&
+            rollupStatus.validationResult.checkpoint.checkpointNumber === validationResult.checkpoint.checkpointNumber;
 
-        if (!rejectedAncestor && (validStatusChanged || invalidStatusWithSameCheckpointNumber)) {
-          rollupStatus.validationResult = validationResult;
-        }
+          if (!rejectedAncestor && (validStatusChanged || invalidStatusWithSameCheckpointNumber)) {
+            rollupStatus.validationResult = validationResult;
+          }
 
-        if (!validationResult.valid) {
-          this.log.warn(`Skipping checkpoint ${calldataCheckpoint.checkpointNumber} due to invalid attestations`, {
-            checkpointNumber: calldataCheckpoint.checkpointNumber,
-            l1BlockNumber: calldataCheckpoint.l1.blockNumber,
-            ...pick(validationResult, 'reason'),
-          });
-
-          // Emit event for invalid checkpoint detection
-          this.events.emit(L2BlockSourceEvents.InvalidAttestationsCheckpointDetected, {
-            type: L2BlockSourceEvents.InvalidAttestationsCheckpointDetected,
-            validationResult,
-          });
-
-          // Persist a rejected-ancestor entry so any later checkpoint that builds on this one
-          // is detected and skipped (rather than tripping the addCheckpoints consecutive-number
-          // check and causing the sync point to roll back in a loop).
-          await this.stores.blocks.addRejectedCheckpoint({
-            checkpointNumber: calldataCheckpoint.checkpointNumber,
-            archiveRoot: calldataCheckpoint.archiveRoot,
-            parentArchiveRoot: calldataCheckpoint.header.lastArchiveRoot,
-            slotNumber: calldataCheckpoint.header.slotNumber,
-            l1: calldataCheckpoint.l1,
-            reason: 'invalid-attestations' as const,
-          });
-
-          continue;
-        }
-
-        if (rejectedAncestor) {
-          const descendantInfo: CheckpointInfo = {
-            archive: calldataCheckpoint.archiveRoot,
-            lastArchive: calldataCheckpoint.header.lastArchiveRoot,
-            slotNumber: calldataCheckpoint.header.slotNumber,
-            checkpointNumber: calldataCheckpoint.checkpointNumber,
-            timestamp: calldataCheckpoint.header.timestamp,
-          };
-          this.log.warn(
-            `Skipping checkpoint ${calldataCheckpoint.checkpointNumber} as it is a descendant of ` +
-              `rejected checkpoint ${rejectedAncestor.checkpointNumber} (${rejectedAncestor.reason})`,
-            {
+          if (!validationResult.valid) {
+            this.log.warn(`Skipping checkpoint ${calldataCheckpoint.checkpointNumber} due to invalid attestations`, {
               checkpointNumber: calldataCheckpoint.checkpointNumber,
               l1BlockNumber: calldataCheckpoint.l1.blockNumber,
-              l1BlockHash: calldataCheckpoint.l1.blockHash,
-              ancestorCheckpointNumber: rejectedAncestor.checkpointNumber,
-              ancestorArchiveRoot: rejectedAncestor.archiveRoot.toString(),
-              ancestorReason: rejectedAncestor.reason,
-            },
-          );
+              ...pick(validationResult, 'reason'),
+            });
 
-          this.events.emit(L2BlockSourceEvents.DescendentOfInvalidAttestationsCheckpointDetected, {
-            type: L2BlockSourceEvents.DescendentOfInvalidAttestationsCheckpointDetected,
-            checkpoint: descendantInfo,
-            ancestorArchiveRoot: rejectedAncestor.archiveRoot,
-            ancestorCheckpointNumber: rejectedAncestor.checkpointNumber,
-          });
+            // Emit event for invalid checkpoint detection
+            this.events.emit(L2BlockSourceEvents.InvalidAttestationsCheckpointDetected, {
+              type: L2BlockSourceEvents.InvalidAttestationsCheckpointDetected,
+              validationResult,
+            });
 
-          // Persist this chainpoint as rejected as well, so we can construct a chain of
-          // skipped checkpoints starting from the first one with invalid attestations.
-          await this.stores.blocks.addRejectedCheckpoint({
-            checkpointNumber: calldataCheckpoint.checkpointNumber,
-            archiveRoot: calldataCheckpoint.archiveRoot,
-            parentArchiveRoot: calldataCheckpoint.header.lastArchiveRoot,
-            slotNumber: calldataCheckpoint.header.slotNumber,
-            l1: calldataCheckpoint.l1,
-            reason: 'descends-from-invalid-attestations' as const,
-          });
+            // Persist a rejected-ancestor entry so any later checkpoint that builds on this one
+            // is detected and skipped (rather than tripping the addCheckpoints consecutive-number
+            // check and causing the sync point to roll back in a loop).
+            await this.stores.blocks.addRejectedCheckpoint({
+              checkpointNumber: calldataCheckpoint.checkpointNumber,
+              archiveRoot: calldataCheckpoint.archiveRoot,
+              parentArchiveRoot: calldataCheckpoint.header.lastArchiveRoot,
+              slotNumber: calldataCheckpoint.header.slotNumber,
+              l1: calldataCheckpoint.l1,
+              reason: 'invalid-attestations' as const,
+            });
 
-          continue;
-        }
+            continue;
+          }
 
-        checkpointsToIngest.push(calldataCheckpoint);
-      }
-
-      // Fetch blobs in parallel only for the surviving (attestation-valid, non-descendant) checkpoints,
-      // then build the full published checkpoints. The last calldata checkpoint may be promotable from a
-      // local proposed block (checkpointToPromote), in which case it carries no blob to fetch. A missing or
-      // undecodable blob throws and propagates, rolling back the L1 sync point so the fetch is retried.
-      const toFetchBlobs = checkpointToPromote
-        ? checkpointsToIngest.filter(c => c.checkpointNumber !== checkpointToPromote.checkpoint.number)
-        : checkpointsToIngest;
-      const blobFetched = await asyncPool(10, toFetchBlobs, async checkpoint =>
-        retrievedToPublishedCheckpoint({
-          ...checkpoint,
-          checkpointBlobData: await getCheckpointBlobDataFromBlobs(
-            this.blobClient,
-            checkpoint.l1.blockHash,
-            checkpoint.blobHashes,
-            checkpoint.checkpointNumber,
-            this.log,
-            !initialSyncComplete,
-            checkpoint.parentBeaconBlockRoot,
-            checkpoint.l1.timestamp,
-          ),
-        }),
-      );
-
-      // Index the built checkpoints by number so we can ingest them in calldata order, slotting in the
-      // promoted checkpoint (built from a local proposed block rather than blobs).
-      const publishedByNumber = new Map(
-        blobFetched.map(publishedCheckpoint => [publishedCheckpoint.checkpoint.number, publishedCheckpoint]),
-      );
-      if (checkpointToPromote) {
-        publishedByNumber.set(checkpointToPromote.checkpoint.number, checkpointToPromote);
-      }
-
-      const validCheckpoints: PublishedCheckpoint[] = [];
-      for (const calldataCheckpoint of checkpointsToIngest) {
-        const published = publishedByNumber.get(calldataCheckpoint.checkpointNumber)!;
-
-        validCheckpoints.push(published);
-        this.log.debug(
-          `Ingesting new checkpoint ${published.checkpoint.number} with ${published.checkpoint.blocks.length} blocks`,
-          {
-            checkpointHash: published.checkpoint.hash(),
-            l1BlockNumber: published.l1.blockNumber,
-            ...published.checkpoint.header.toInspect(),
-            blocks: published.checkpoint.blocks.map(b => b.getStats()),
-          },
-        );
-      }
-
-      for (const published of validCheckpoints) {
-        this.instrumentation.processCheckpointL1Timing({
-          slotNumber: published.checkpoint.header.slotNumber,
-          l1Timestamp: published.l1.timestamp,
-          l1Constants: this.l1Constants,
-        });
-      }
-
-      try {
-        const updatedValidationResult =
-          rollupStatus.validationResult === initialValidationResult ? undefined : rollupStatus.validationResult;
-
-        // Split valid checkpoints: the promoted one (if any) is persisted via the proposed-promotion path,
-        // the rest via addCheckpoints. Both paths run within the same store transaction for atomicity.
-        const [[maybeValidCheckpointToPromote], checkpointsToAdd] = partition(
-          validCheckpoints,
-          c => c.checkpoint.number === checkpointToPromote?.checkpoint.number,
-        );
-
-        const [processDuration, result] = await elapsed(() =>
-          execInSpan(this.tracer, 'Archiver.addCheckpoints', () =>
-            this.updater.addCheckpoints(
-              checkpointsToAdd,
-              updatedValidationResult,
-              maybeValidCheckpointToPromote && {
-                l1: lastCalldataCheckpoint.l1,
-                attestations: lastCalldataCheckpoint.attestations,
-                verbatimAttestations: lastCalldataCheckpoint.verbatimAttestations,
-                checkpoint: maybeValidCheckpointToPromote,
+          if (rejectedAncestor) {
+            const descendantInfo: CheckpointInfo = {
+              archive: calldataCheckpoint.archiveRoot,
+              lastArchive: calldataCheckpoint.header.lastArchiveRoot,
+              slotNumber: calldataCheckpoint.header.slotNumber,
+              checkpointNumber: calldataCheckpoint.checkpointNumber,
+              timestamp: calldataCheckpoint.header.timestamp,
+            };
+            this.log.warn(
+              `Skipping checkpoint ${calldataCheckpoint.checkpointNumber} as it is a descendant of ` +
+                `rejected checkpoint ${rejectedAncestor.checkpointNumber} (${rejectedAncestor.reason})`,
+              {
+                checkpointNumber: calldataCheckpoint.checkpointNumber,
+                l1BlockNumber: calldataCheckpoint.l1.blockNumber,
+                l1BlockHash: calldataCheckpoint.l1.blockHash,
+                ancestorCheckpointNumber: rejectedAncestor.checkpointNumber,
+                ancestorArchiveRoot: rejectedAncestor.archiveRoot.toString(),
+                ancestorReason: rejectedAncestor.reason,
               },
-              evictProposedFrom,
+            );
+
+            this.events.emit(L2BlockSourceEvents.DescendentOfInvalidAttestationsCheckpointDetected, {
+              type: L2BlockSourceEvents.DescendentOfInvalidAttestationsCheckpointDetected,
+              checkpoint: descendantInfo,
+              ancestorArchiveRoot: rejectedAncestor.archiveRoot,
+              ancestorCheckpointNumber: rejectedAncestor.checkpointNumber,
+            });
+
+            // Persist this chainpoint as rejected as well, so we can construct a chain of
+            // skipped checkpoints starting from the first one with invalid attestations.
+            await this.stores.blocks.addRejectedCheckpoint({
+              checkpointNumber: calldataCheckpoint.checkpointNumber,
+              archiveRoot: calldataCheckpoint.archiveRoot,
+              parentArchiveRoot: calldataCheckpoint.header.lastArchiveRoot,
+              slotNumber: calldataCheckpoint.header.slotNumber,
+              l1: calldataCheckpoint.l1,
+              reason: 'descends-from-invalid-attestations' as const,
+            });
+
+            continue;
+          }
+
+          checkpointsToIngest.push(calldataCheckpoint);
+        }
+
+        // Fetch blobs in parallel only for the surviving (attestation-valid, non-descendant) checkpoints,
+        // then build the full published checkpoints. The last calldata checkpoint may be promotable from a
+        // local proposed block (checkpointToPromote), in which case it carries no blob to fetch. A missing or
+        // undecodable blob throws and propagates, and the batch guard restores the L1 sync point so the fetch is retried.
+        const toFetchBlobs = checkpointToPromote
+          ? checkpointsToIngest.filter(c => c.checkpointNumber !== checkpointToPromote.checkpoint.number)
+          : checkpointsToIngest;
+        const blobFetched = await asyncPool(10, toFetchBlobs, async checkpoint =>
+          retrievedToPublishedCheckpoint({
+            ...checkpoint,
+            checkpointBlobData: await getCheckpointBlobDataFromBlobs(
+              this.blobClient,
+              checkpoint.l1.blockHash,
+              checkpoint.blobHashes,
+              checkpoint.checkpointNumber,
+              this.log,
+              !initialSyncComplete,
+              checkpoint.parentBeaconBlockRoot,
+              checkpoint.l1.timestamp,
             ),
-          ),
+          }),
         );
 
-        if (validCheckpoints.length > 0) {
-          this.instrumentation.processNewCheckpointedBlocks(
-            processDuration / validCheckpoints.length,
-            validCheckpoints.flatMap(c => c.checkpoint.blocks),
-          );
+        // Index the built checkpoints by number so we can ingest them in calldata order, slotting in the
+        // promoted checkpoint (built from a local proposed block rather than blobs).
+        const publishedByNumber = new Map(
+          blobFetched.map(publishedCheckpoint => [publishedCheckpoint.checkpoint.number, publishedCheckpoint]),
+        );
+        if (checkpointToPromote) {
+          publishedByNumber.set(checkpointToPromote.checkpoint.number, checkpointToPromote);
         }
 
-        // Record blocks newly fetched from L1 checkpoint payloads as added. The promoted checkpoint (if any) is
-        // excluded: its blocks were already in local archiver storage (added via the proposed-block path) so the
-        // block stream does not need them re-downloaded.
-        blocksAdded.push(...checkpointsToAdd.flatMap(c => c.checkpoint.blocks));
+        const validCheckpoints: PublishedCheckpoint[] = [];
+        for (const calldataCheckpoint of checkpointsToIngest) {
+          const published = publishedByNumber.get(calldataCheckpoint.checkpointNumber)!;
 
-        // If blocks were pruned due to conflict with L1 checkpoints, emit event
-        if (result.prunedBlocks && result.prunedBlocks.length > 0) {
-          const prunedCheckpointNumber = result.prunedBlocks[0].checkpointNumber;
-          const prunedSlotNumber = result.prunedBlocks[0].header.globalVariables.slotNumber;
-
-          this.log.info(
-            `Pruned ${result.prunedBlocks.length} mismatching blocks for checkpoint ${prunedCheckpointNumber}`,
-            { prunedBlocks: result.prunedBlocks.map(b => b.toBlockInfo()), prunedSlotNumber, prunedCheckpointNumber },
-          );
-
-          this.instrumentation.recordPrune('l1_conflict');
-
-          // Emit event for listening services to react to the prune.
-          // Note: slotNumber comes from the first pruned block. If pruned blocks theoretically spanned multiple slots,
-          // only one slot number would be reported (though in practice all blocks in a checkpoint span a single slot).
-          this.events.emit(L2BlockSourceEvents.L2PruneUncheckpointed, {
-            type: L2BlockSourceEvents.L2PruneUncheckpointed,
-            slotNumber: prunedSlotNumber,
-            blocks: result.prunedBlocks,
-          });
-        }
-      } catch (err) {
-        if (err instanceof InitialCheckpointNumberNotSequentialError) {
-          const { previousCheckpointNumber, newCheckpointNumber } = err;
-          const previousCheckpoint = previousCheckpointNumber
-            ? await this.stores.blocks.getCheckpointData(CheckpointNumber(previousCheckpointNumber))
-            : undefined;
-          const lastFinalizedCheckpoint = await this.stores.blocks.getCheckpointData(
-            await this.stores.blocks.getFinalizedCheckpointNumber(),
-          );
-          const updatedL1SyncPoint =
-            previousCheckpoint?.l1.blockNumber ??
-            lastFinalizedCheckpoint?.l1.blockNumber ??
-            this.l1Constants.l1StartBlock;
-          await this.stores.blocks.setSynchedL1BlockNumber(updatedL1SyncPoint);
-          this.log.warn(
-            `Attempting to insert checkpoint ${newCheckpointNumber} with previous block ${previousCheckpointNumber}. Rolling back L1 sync point to ${updatedL1SyncPoint} to try and fetch the missing blocks.`,
+          validCheckpoints.push(published);
+          this.log.debug(
+            `Ingesting new checkpoint ${published.checkpoint.number} with ${published.checkpoint.blocks.length} blocks`,
             {
-              previousCheckpointNumber,
-              previousCheckpoint: previousCheckpoint?.header.toInspect(),
-              lastFinalizedCheckpoint: lastFinalizedCheckpoint?.header.toInspect(),
-              l1StartBlock: this.l1Constants.l1StartBlock,
-              newCheckpointNumber,
-              updatedL1SyncPoint,
+              checkpointHash: published.checkpoint.hash(),
+              l1BlockNumber: published.l1.blockNumber,
+              ...published.checkpoint.header.toInspect(),
+              blocks: published.checkpoint.blocks.map(b => b.getStats()),
             },
           );
+        }
+
+        for (const published of validCheckpoints) {
+          this.instrumentation.processCheckpointL1Timing({
+            slotNumber: published.checkpoint.header.slotNumber,
+            l1Timestamp: published.l1.timestamp,
+            l1Constants: this.l1Constants,
+          });
+        }
+
+        try {
+          const updatedValidationResult =
+            rollupStatus.validationResult === initialValidationResult ? undefined : rollupStatus.validationResult;
+
+          // Split valid checkpoints: the promoted one (if any) is persisted via the proposed-promotion path,
+          // the rest via addCheckpoints. Both paths run within the same store transaction for atomicity.
+          const [[maybeValidCheckpointToPromote], checkpointsToAdd] = partition(
+            validCheckpoints,
+            c => c.checkpoint.number === checkpointToPromote?.checkpoint.number,
+          );
+
+          const [processDuration, result] = await elapsed(() =>
+            execInSpan(this.tracer, 'Archiver.addCheckpoints', async () => {
+              const addResult = await this.updater.addCheckpoints(
+                checkpointsToAdd,
+                updatedValidationResult,
+                maybeValidCheckpointToPromote && {
+                  l1: lastCalldataCheckpoint.l1,
+                  attestations: lastCalldataCheckpoint.attestations,
+                  verbatimAttestations: lastCalldataCheckpoint.verbatimAttestations,
+                  checkpoint: maybeValidCheckpointToPromote,
+                },
+                evictProposedFrom,
+              );
+              // Set before the span wrappers finish, so a throw while closing the span doesn't count as unpersisted.
+              batchPersisted = true;
+              return addResult;
+            }),
+          );
+
+          if (validCheckpoints.length > 0) {
+            this.instrumentation.processNewCheckpointedBlocks(
+              processDuration / validCheckpoints.length,
+              validCheckpoints.flatMap(c => c.checkpoint.blocks),
+            );
+          }
+
+          // Record blocks newly fetched from L1 checkpoint payloads as added. The promoted checkpoint (if any) is
+          // excluded: its blocks were already in local archiver storage (added via the proposed-block path) so the
+          // block stream does not need them re-downloaded.
+          blocksAdded.push(...checkpointsToAdd.flatMap(c => c.checkpoint.blocks));
+
+          // If blocks were pruned due to conflict with L1 checkpoints, emit event
+          if (result.prunedBlocks && result.prunedBlocks.length > 0) {
+            const prunedCheckpointNumber = result.prunedBlocks[0].checkpointNumber;
+            const prunedSlotNumber = result.prunedBlocks[0].header.globalVariables.slotNumber;
+
+            this.log.info(
+              `Pruned ${result.prunedBlocks.length} mismatching blocks for checkpoint ${prunedCheckpointNumber}`,
+              { prunedBlocks: result.prunedBlocks.map(b => b.toBlockInfo()), prunedSlotNumber, prunedCheckpointNumber },
+            );
+
+            this.instrumentation.recordPrune('l1_conflict');
+
+            // Emit event for listening services to react to the prune.
+            // Note: slotNumber comes from the first pruned block. If pruned blocks theoretically spanned multiple slots,
+            // only one slot number would be reported (though in practice all blocks in a checkpoint span a single slot).
+            this.events.emit(L2BlockSourceEvents.L2PruneUncheckpointed, {
+              type: L2BlockSourceEvents.L2PruneUncheckpointed,
+              slotNumber: prunedSlotNumber,
+              blocks: result.prunedBlocks,
+            });
+          }
+        } catch (err) {
+          if (err instanceof InitialCheckpointNumberNotSequentialError) {
+            const { previousCheckpointNumber, newCheckpointNumber } = err;
+            const previousCheckpoint = previousCheckpointNumber
+              ? await this.stores.blocks.getCheckpointData(CheckpointNumber(previousCheckpointNumber))
+              : undefined;
+            const lastFinalizedCheckpoint = await this.stores.blocks.getCheckpointData(
+              await this.stores.blocks.getFinalizedCheckpointNumber(),
+            );
+            const updatedL1SyncPoint =
+              previousCheckpoint?.l1.blockNumber ??
+              lastFinalizedCheckpoint?.l1.blockNumber ??
+              this.l1Constants.l1StartBlock;
+            await this.stores.blocks.setSynchedL1BlockNumber(updatedL1SyncPoint);
+            this.log.warn(
+              `Attempting to insert checkpoint ${newCheckpointNumber} with previous block ${previousCheckpointNumber}. Rolling back L1 sync point to ${updatedL1SyncPoint} to try and fetch the missing blocks.`,
+              {
+                previousCheckpointNumber,
+                previousCheckpoint: previousCheckpoint?.header.toInspect(),
+                lastFinalizedCheckpoint: lastFinalizedCheckpoint?.header.toInspect(),
+                l1StartBlock: this.l1Constants.l1StartBlock,
+                newCheckpointNumber,
+                updatedL1SyncPoint,
+              },
+            );
+          }
+          throw err;
+        }
+
+        for (const checkpoint of validCheckpoints) {
+          this.log.info(`Downloaded checkpoint ${checkpoint.checkpoint.number}`, {
+            checkpointHash: checkpoint.checkpoint.hash(),
+            checkpointNumber: checkpoint.checkpoint.number,
+            blockCount: checkpoint.checkpoint.blocks.length,
+            txCount: checkpoint.checkpoint.blocks.reduce((acc, b) => acc + b.body.txEffects.length, 0),
+            header: checkpoint.checkpoint.header.toInspect(),
+            archiveRoot: checkpoint.checkpoint.archive.root.toString(),
+            archiveNextLeafIndex: checkpoint.checkpoint.archive.nextAvailableLeafIndex,
+          });
+        }
+        lastRetrievedCheckpoint = validCheckpoints.at(-1) ?? lastRetrievedCheckpoint;
+        // The last checkpoint seen on L1 this batch (valid or rejected), tracked from calldata since
+        // rejected checkpoints are no longer built into PublishedCheckpoints.
+        lastSeenCheckpoint = lastCalldataCheckpoint;
+      } catch (err) {
+        const restoreTo = syncPointBeforeBatch ?? this.l1Constants.l1StartBlock;
+        const currentSyncPoint = await this.stores.blocks.getSynchedL1BlockNumber();
+        // Only ever lower it, so a deeper rewind made while handling the error (e.g. on a checkpoint gap) is kept.
+        if (!batchPersisted && currentSyncPoint !== undefined && currentSyncPoint > restoreTo) {
+          this.log.warn(`Restoring L1 sync point to ${restoreTo} after failing to process checkpoints`, {
+            currentSyncPoint,
+            restoreTo,
+            searchStartBlock,
+            searchEndBlock,
+          });
+          await this.stores.blocks.setSynchedL1BlockNumber(restoreTo);
         }
         throw err;
       }
-
-      for (const checkpoint of validCheckpoints) {
-        this.log.info(`Downloaded checkpoint ${checkpoint.checkpoint.number}`, {
-          checkpointHash: checkpoint.checkpoint.hash(),
-          checkpointNumber: checkpoint.checkpoint.number,
-          blockCount: checkpoint.checkpoint.blocks.length,
-          txCount: checkpoint.checkpoint.blocks.reduce((acc, b) => acc + b.body.txEffects.length, 0),
-          header: checkpoint.checkpoint.header.toInspect(),
-          archiveRoot: checkpoint.checkpoint.archive.root.toString(),
-          archiveNextLeafIndex: checkpoint.checkpoint.archive.nextAvailableLeafIndex,
-        });
-      }
-      lastRetrievedCheckpoint = validCheckpoints.at(-1) ?? lastRetrievedCheckpoint;
-      // The last checkpoint seen on L1 this batch (valid or rejected), tracked from calldata since
-      // rejected checkpoints are no longer built into PublishedCheckpoints.
-      lastSeenCheckpoint = lastCalldataCheckpoint;
     } while (searchEndBlock < currentL1BlockNumber);
 
     // Important that we update AFTER inserting the blocks.
