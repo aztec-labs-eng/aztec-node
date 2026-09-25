@@ -1462,6 +1462,32 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
       });
 
+      // p2p evaluates one proposal twice, and an archiver rollback between the two calls prunes the blocks the
+      // first verdict rested on. The second look then fails before it can name a checkpoint number at all, which
+      // by checkpoint number alone is indistinguishable from a first evaluation of an unknown checkpoint.
+      it('keeps the slot recorded as valid when the checkpoint blocks are pruned before a later call', async () => {
+        const { header, inboxRollingHash } = setupContentValidCheckpoint({ midLeafCount: 5, lastLeafCount: 7 });
+        inbox.setBuckets([{ seq: 4n, total: 7n, rollingHash: inboxRollingHash }]);
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+
+        await expect(handler.handleCheckpointProposal(proposal, proposalInfo)).resolves.toEqual({
+          isValid: true,
+          checkpointNumber: CheckpointNumber(1),
+        });
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
+
+        // The archiver rolled back and the checkpoint's blocks are gone, so revalidation cannot get far enough to
+        // name the checkpoint it is failing on.
+        blockSource.getBlockData.mockResolvedValue(undefined);
+        blockSource.getBlocksForSlot.mockResolvedValue([]);
+
+        const result = await handler.handleCheckpointProposal(proposal, proposalInfo);
+
+        expect(result.isValid).toBe(false);
+        expect((result as { checkpointNumber?: CheckpointNumber }).checkpointNumber).toBeUndefined();
+        expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
+      });
+
       // Forgetting a determination is never the safe direction, and the tracker keys its per-slot entry by slot
       // alone. An equivocating proposer whose second proposal this node cannot check must not thereby erase what
       // the first one established about the slot.
