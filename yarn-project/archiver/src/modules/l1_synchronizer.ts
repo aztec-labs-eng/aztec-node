@@ -45,6 +45,7 @@ import type { L2FrontierCache } from '../store/l2_frontier_cache.js';
 import { ArchiverDataStoreUpdater, blockLeafCount } from './data_store_updater.js';
 import { InboxMessageSynchronizer } from './inbox_message_synchronizer.js';
 import type { ArchiverInstrumentation } from './instrumentation.js';
+import { PendingChainValidationTracker } from './pending_chain_validation_tracker.js';
 import { validateCheckpointAttestationsFromCalldata } from './validation.js';
 
 type RollupStatus = {
@@ -821,6 +822,7 @@ export class ArchiverL1Synchronizer implements Traceable {
       return rollupStatus;
     }
     const { blocksAdded, validationResult: initialValidationResult } = rollupStatus;
+    const validation = new PendingChainValidationTracker(initialValidationResult);
 
     // Retrieve checkpoints in batches. Each batch is estimated to accommodate up to 'blockBatchSize' L1 blocks,
     // computed using the L2 block time vs the L1 block time.
@@ -910,23 +912,7 @@ export class ArchiverL1Synchronizer implements Traceable {
             calldataCheckpoint.header.lastArchiveRoot,
           );
 
-          // Update the validation result if it has changed, so we can keep track of the first invalid checkpoint
-          // in case there is a sequence of more than one invalid checkpoint, as we need to invalidate the first one.
-          // There is an exception though: if a checkpoint is invalidated and replaced with another invalid checkpoint,
-          // we need to update the validation result, since we need to be able to invalidate the new one.
-          // See test 'chain progresses if an invalid checkpoint is invalidated with an invalid one' for more info.
-          // Do not update the validation result if there is a rejected ancestor, since in that case we want to keep the
-          // original invalidation, as the new checkpoint is extending from a previous invalid one.
-          const validStatusChanged = rollupStatus.validationResult?.valid !== validationResult.valid;
-          const invalidStatusWithSameCheckpointNumber =
-            !validationResult.valid &&
-            rollupStatus.validationResult &&
-            !rollupStatus.validationResult.valid &&
-            rollupStatus.validationResult.checkpoint.checkpointNumber === validationResult.checkpoint.checkpointNumber;
-
-          if (!rejectedAncestor && (validStatusChanged || invalidStatusWithSameCheckpointNumber)) {
-            rollupStatus.validationResult = validationResult;
-          }
+          validation.observe(validationResult, { hasRejectedAncestor: rejectedAncestor !== undefined });
 
           if (!validationResult.valid) {
             this.log.warn(`Skipping checkpoint ${calldataCheckpoint.checkpointNumber} due to invalid attestations`, {
@@ -1058,8 +1044,7 @@ export class ArchiverL1Synchronizer implements Traceable {
         }
 
         try {
-          const updatedValidationResult =
-            rollupStatus.validationResult === initialValidationResult ? undefined : rollupStatus.validationResult;
+          const updatedValidationResult = validation.update;
 
           // Split valid checkpoints: the promoted one (if any) is persisted via the proposed-promotion path,
           // the rest via addCheckpoints. Both paths run within the same store transaction for atomicity.
