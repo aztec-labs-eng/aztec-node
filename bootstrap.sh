@@ -545,9 +545,26 @@ function release {
     )
   fi
 
+  # A public release only packs its npm packages here (deploy_npm pack mode). The bundle goes to
+  # the build cache keyed by tag, and release.yml's publish-npm job publishes it from a GitHub
+  # runner with npm trusted publishing, so this machine never holds npm credentials. A private
+  # release publishes from here as before: its registry takes no OIDC.
+  if [ "$RELEASE_TARGET" == public ]; then
+    export NPM_PACK_DIR=$root/npm-release
+    rm -rf "$NPM_PACK_DIR"
+  fi
+
   for project in "${projects[@]}"; do
     $project/bootstrap.sh release
   done
+
+  if [ -d "${NPM_PACK_DIR:-}" ]; then
+    # Uploaded directly rather than via cache_upload, which skips on an existing key and reports
+    # a failed upload without failing: a re-run must refresh the bundle, and a missing bundle must
+    # fail the release here rather than in the publish job.
+    tar -czf npm-release.tar.gz -C "$root" npm-release
+    do_or_dryrun aws s3 cp npm-release.tar.gz "s3://aztec-ci-artifacts/build-cache/npm-release-$REF_NAME.tar.gz"
+  fi
 }
 
 function release_dryrun {
