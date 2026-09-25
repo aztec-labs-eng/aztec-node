@@ -169,6 +169,22 @@ describe('CheckpointInboxConsumption', () => {
       expect(consumption.consumedTotalMsgCount).toEqual(0n);
     });
 
+    it('re-derives an uncommitted range from the current local view', async () => {
+      streamingInbox.set(leaves(10), []);
+      const consumption = await start();
+
+      const first = await consumption.selectRange({ isFinalBlock: false, buildDeadline: farDeadline() });
+      streamingInbox.append(leaves(5, 10));
+      const second = await consumption.selectRange({ isFinalBlock: false, buildDeadline: farDeadline() });
+
+      expect(first.kind === 'consume' && first.range.end).toEqual(streamingInbox.positionAt(10n));
+      expect(second.kind === 'consume' && second.range).toEqual({
+        messages: leaves(15),
+        start: streamingInbox.positionAt(0n),
+        end: streamingInbox.positionAt(15n),
+      });
+    });
+
     it('decides from one read of the local view even when it advances mid-selection', async () => {
       streamingInbox.set(leaves(10), [10n]);
       const consumption = await start();
