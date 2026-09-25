@@ -1149,6 +1149,43 @@ describe('InboxBot', () => {
       expect(bot.isHealthy()).toBe(true);
     });
 
+    // A poll finishes long before the jobs it dispatched settle, so resetting one streak for both lets a bot fail
+    // one background job per poll forever without ever crossing the threshold.
+    it('reaches the unhealthy threshold on one failing background attempt per poll', async () => {
+      const bot = buildBot({
+        inboxConsumeMode: 'public',
+        inboxMessagesPerBatch: 1,
+        maxConsecutiveErrors: 2,
+      });
+      consumer.sendError = new Error('socket hang up');
+
+      await bot.produceStep();
+      for (const message of await store.getActiveMessages()) {
+        chain.observe(message);
+      }
+
+      await bot.consumeStep();
+      await bot.waitForBackgroundWork();
+      expect(bot.isHealthy()).toBe(true);
+
+      // A poll that dispatches nothing must not clear the streak the background failure built up: the message is
+      // held in flight for the duration, so this poll has nothing to retry.
+      const { promise, resolve } = promiseWithResolvers<void>();
+      consumer.gate = promise;
+      const held = bot.consumeStep();
+      await bot.consumeStep();
+      expect(bot.isHealthy()).toBe(true);
+      resolve();
+      await held;
+      await bot.waitForBackgroundWork();
+      consumer.gate = undefined;
+
+      // The second real background failure crosses the threshold.
+      await bot.consumeStep();
+      await bot.waitForBackgroundWork();
+      expect(bot.isHealthy()).toBe(false);
+    });
+
     it('exits the process when it becomes unhealthy and the operator asked it to stop', async () => {
       const exit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
       try {
@@ -1287,6 +1324,45 @@ describe('InboxBot', () => {
       await consume(bot);
 
       expect(checks('unknown_message', 'passed')).toEqual(1);
+    });
+
+    // A submitted transaction can wait many blocks for its receipt to reach the completion policy; the submission
+    // itself is the background job succeeding, so it must clear the streak without waiting for completion.
+    it('clears the background streak when a submission succeeds, before its receipt completes', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1, maxConsecutiveErrors: 2 });
+      const [message] = await produceObservedBatch(bot);
+      consumer.sendErrors = [new Error('socket hang up'), undefined];
+
+      await consume(bot);
+      await consume(bot);
+      expect(await reload(message)).toMatchObject({ state: 'sent' });
+      expect(bot.isHealthy()).toBe(true);
+
+      await produceObservedBatch(bot);
+      consumer.sendError = new Error('socket hang up');
+      await consume(bot);
+      expect(bot.isHealthy()).toBe(true);
+    });
+
+    // Only a job that finishes counts as a success: a send the node accepted, followed by a failure recording it,
+    // is still a failed job, so jobs failing that way one after another must reach the threshold.
+    it('reaches the unhealthy threshold when every job fails after its send succeeds', async () => {
+      const bot = buildBot({ inboxConsumeMode: 'public', inboxMessagesPerBatch: 1, maxConsecutiveErrors: 2 });
+      const transition = store.transitionMessageFrom.bind(store);
+      const transitionSpy = jest
+        .spyOn(store, 'transitionMessageFrom')
+        .mockImplementation((messageId, from, to, patch) =>
+          to === 'sent' ? Promise.reject(new Error('store write failed')) : transition(messageId, from, to, patch),
+        );
+
+      await produceObservedBatch(bot);
+      await consume(bot);
+      expect(bot.isHealthy()).toBe(true);
+
+      await produceObservedBatch(bot);
+      await consume(bot);
+      expect(bot.isHealthy()).toBe(false);
+      transitionSpy.mockRestore();
     });
 
     it('retries a message that is not consumable yet without spending an attempt or reporting a failure', async () => {
