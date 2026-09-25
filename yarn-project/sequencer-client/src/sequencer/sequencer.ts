@@ -577,6 +577,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // timing gate; it runs only after we know we are the synced proposer, so non-proposer invalidation
     // and escape-hatch voting (which returned above) are never gated by build timing. Vote-only paths
     // still run when block building is abandoned.
+    // This gate deliberately runs before checkSync, so a proposer whose archiver cannot sync still reaches the prune
+    // fallback, which is what un-sticks a network where every archiver refuses the same pending checkpoint.
     const startDeadline = this.timetable.getBuildStartDeadline(targetSlot);
     const nowForStartGate = this.dateProvider.now() / 1000;
     if (nowForStartGate > startDeadline) {
