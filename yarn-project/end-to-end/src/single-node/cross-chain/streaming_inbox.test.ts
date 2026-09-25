@@ -12,6 +12,10 @@ import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { jest } from '@jest/globals';
 
 import { CheckpointProposalJobTestGate } from '../../fixtures/checkpoint_proposal_job_test_gate.js';
+import {
+  committedMessageCount as committedMessageCountHelper,
+  findInsertingBlock as findInsertingBlockHelper,
+} from '../../fixtures/find_inserting_block.js';
 import { L1_DIRECT_WRITE_ACCOUNT_INDEX, PIPELINING_SETUP_OPTS } from '../../fixtures/fixtures.js';
 import type { TestWallet } from '../../test-wallet/test_wallet.js';
 import { proveInteraction } from '../../test-wallet/utils.js';
@@ -97,92 +101,11 @@ describe('single-node/cross-chain/streaming_inbox', () => {
     return block.timestamp;
   };
 
-  /** Leaves in a block's committed L1-to-L2 message tree; genesis holds none and an unknown block reports none. */
-  const committedMessageCount = async (blockNumber: number): Promise<bigint | undefined> => {
-    if (blockNumber <= 0) {
-      return 0n;
-    }
-    const data = await aztecNode.getBlockData(BlockNumber(blockNumber));
-    return data && BigInt(data.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
-  };
+  /** Locates the block that inserted a message; see {@link findInsertingBlockHelper} for how the search works. */
+  const findInsertingBlock = (msgHash: Fr) => findInsertingBlockHelper(aztecNode, msgHash, log);
 
-  /**
-   * Finds the L2 block that inserted `msgHash` into the L1-to-L2 message tree. Under the streaming Inbox a message
-   * enters the tree at the first block the proposer builds after its archiver observed it, which need not be the
-   * first block of a checkpoint. Returns the block-data (checkpoint number + index within checkpoint) of that block.
-   *
-   * The tree is append-only, so every block built after the insertion resolves a membership witness for the message
-   * just as the inserting one does: retaining membership is not inserting it, and scanning forward from a block
-   * number sampled by the caller reports where the search started whenever the message was already inserted by then.
-   * The block is instead located by the message's compact leaf index against the committed leaf count, which grows
-   * monotonically along the chain: the inserting block is the first whose count is past the index, found by bisecting
-   * the whole chain rather than trusting any sampled bound.
-   *
-   * The result is then confirmed at both states: the block's parent has no membership witness for the message and
-   * the block itself resolves one at the message's own compact index. A chain that moves under the search (the tip
-   * advancing, a prune) fails that confirmation, which is a genuine timing miss and is retried.
-   */
-  const findInsertingBlock = async (msgHash: Fr) => {
-    const attempts = 3;
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const { leafIndex } = await retryUntil(
-        async () => {
-          const index = await aztecNode.getL1ToL2MessageIndex(msgHash);
-          return index === undefined ? undefined : { leafIndex: index };
-        },
-        `node assigns a compact index to message ${msgHash.toString()}`,
-        240,
-        0.5,
-      );
-
-      // The chain holds the message once its tip's tree has grown past the message's index.
-      const { tip } = await retryUntil(
-        async () => {
-          const tip = await aztecNode.getBlockNumber();
-          const count = await committedMessageCount(tip);
-          return count !== undefined && count > leafIndex ? { tip } : undefined;
-        },
-        `a block committing message ${msgHash.toString()}`,
-        240,
-        0.5,
-      );
-
-      // Bisect for the first block past the index: genesis holds no messages, the tip holds this one.
-      let below = 0;
-      let holding = Number(tip);
-      while (holding - below > 1) {
-        const middle = below + Math.floor((holding - below) / 2);
-        const count = await committedMessageCount(middle);
-        if (count !== undefined && count > leafIndex) {
-          holding = middle;
-        } else {
-          below = middle;
-        }
-      }
-
-      const blockNumber = BlockNumber(holding);
-      const data = await aztecNode.getBlockData(blockNumber);
-      const witness = await aztecNode.getL1ToL2MessageMembershipWitness(blockNumber, msgHash);
-      const parentWitness =
-        below === 0 ? undefined : await aztecNode.getL1ToL2MessageMembershipWitness(BlockNumber(below), msgHash);
-      if (data !== undefined && witness !== undefined && witness[0] === leafIndex && parentWitness === undefined) {
-        return {
-          blockNumber,
-          blockHash: data.blockHash,
-          checkpointNumber: data.checkpointNumber,
-          index: data.indexWithinCheckpoint,
-        };
-      }
-      log.warn(`Block ${blockNumber} did not confirm as the one inserting ${msgHash.toString()}; searching again`, {
-        attempt,
-        leafIndex,
-        hasBlockData: data !== undefined,
-        resolvedIndex: witness?.[0],
-        parentHoldsMessage: parentWitness !== undefined,
-      });
-    }
-    throw new Error(`Could not confirm which block inserted message ${msgHash.toString()} in ${attempts} attempts`);
-  };
+  /** Leaves in a block's committed L1-to-L2 message tree. */
+  const committedMessageCount = (blockNumber: number) => committedMessageCountHelper(aztecNode, blockNumber);
 
   /**
    * A read-only node view pinned to one concrete block: every message-tree question is answered at that block,
