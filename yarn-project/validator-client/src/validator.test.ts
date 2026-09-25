@@ -1073,6 +1073,28 @@ describe('ValidatorClient', () => {
       ]);
     });
 
+    it('classifies a slashable reject as a bad proposal and a non-slashable one as a node issue, never both', async () => {
+      const badProposal = jest.spyOn((validatorClient as any).metrics, 'incFailedAttestationsBadProposal');
+      const nodeIssue = jest.spyOn((validatorClient as any).metrics, 'incFailedAttestationsNodeIssue');
+      const handleSpy = jest.spyOn(validatorClient.getProposalHandler(), 'handleBlockProposal');
+
+      // global_variables_mismatch is slashable but was omitted from the old hand-maintained bad-proposal list, so it
+      // used to be miscounted as a node issue. The metric now branches on the slashable set: a bad proposal, not both.
+      handleSpy.mockResolvedValueOnce({ isValid: false, reason: 'global_variables_mismatch' } as any);
+      await validatorClient.validateBlockProposal(proposal, sender);
+      expect(badProposal).toHaveBeenCalledWith(1, 'global_variables_mismatch', expect.anything());
+      expect(nodeIssue).not.toHaveBeenCalled();
+
+      badProposal.mockClear();
+      nodeIssue.mockClear();
+
+      // timeout is this node's own inability to validate, never the proposer's fault: a node issue, not a bad proposal.
+      handleSpy.mockResolvedValueOnce({ isValid: false, reason: 'timeout' } as any);
+      await validatorClient.validateBlockProposal(proposal, sender);
+      expect(nodeIssue).toHaveBeenCalledWith(1, 'timeout', expect.anything());
+      expect(badProposal).not.toHaveBeenCalled();
+    });
+
     it('reports an accepted proposal with no reason and no offense', async () => {
       const isValid = await validatorClient.validateBlockProposal(proposal, sender);
 

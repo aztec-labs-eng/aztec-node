@@ -1816,6 +1816,27 @@ describe('ProposalHandler checkpoint validation', () => {
     // The first Inbox metadata comparison is the only place a local-view mismatch is visible as such: the helper
     // retries until its deadline, so by the time a decision exists a mismatch that recovered and one that persisted
     // look identical. A multi-node reorg test asserts on this, so it has to report the proposal it was about.
+    it('slashable set: deterministic streaming rejects are slashable, local-view ones are not, every reason classified', () => {
+      // Deterministic streaming-Inbox violations are computed from the block's own content, so a reject
+      // is the proposer's fault and must be slashable.
+      for (const reason of [
+        'consumption_moves_backwards',
+        'bundle_over_block_cap',
+        'checkpoint_over_msg_cap',
+      ] as const) {
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason]).toBe(true);
+      }
+      // Local-view reasons (a trailing archiver or an unfollowed reorg) must never slash an honest proposer.
+      for (const reason of ['inbox_prefix_unavailable', 'inbox_prefix_mismatch'] as const) {
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason]).toBe(false);
+      }
+      // The Record type is the compile-time guarantee that a new reason must be classified; this rejects an
+      // accidental undefined slipping through at runtime.
+      for (const slashable of Object.values(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT)) {
+        expect(typeof slashable).toBe('boolean');
+      }
+    });
+
     describe('first metadata check observation', () => {
       it('reports a persistent mismatch on the exact proposal, and still rejects it non-punitively', async () => {
         const { seen, observers } = collectFirstChecks();
@@ -1834,7 +1855,7 @@ describe('ProposalHandler checkpoint validation', () => {
           },
         ]);
         expect(result).toEqual(rejection('inbox_prefix_mismatch'));
-        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT).not.toContain('inbox_prefix_mismatch');
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT['inbox_prefix_mismatch']).toBe(false);
       });
 
       // The same observation has to fire when the local view was merely behind and the retry recovered: otherwise a
@@ -2116,6 +2137,22 @@ describe('ProposalHandler checkpoint validation', () => {
         const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
 
         expect(result).toMatchObject({ isValid: false, reason: 'inbox_prefix_mismatch' });
+      });
+
+      it('classifies an insert-time consumption rewind as a local disagreement, not a slashable offense', async () => {
+        const { proposal, blockHandler } = await setupStreamingProposal(signedRef, { nowMs: 50_000 });
+        mockLocalView(prefixHash);
+        jest.spyOn(blockHandler, 'reexecuteTransactions').mockResolvedValue({ block: {} } as any);
+        blockSource.addBlock.mockRejectedValue(
+          Object.assign(new Error('consumption rewinds at insert'), { name: 'InboxConsumptionRewindsError' }),
+        );
+
+        const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
+
+        // An L1 reorg between the deterministic metadata check and the insert is a local-view disagreement: reported
+        // as the non-slashable prefix mismatch, never the slashable consumption_moves_backwards.
+        expect(result).toMatchObject({ isValid: false, reason: 'inbox_prefix_mismatch' });
+        expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT['inbox_prefix_mismatch']).toBe(false);
       });
 
       it('propagates insert failures that are not prefix rejections', async () => {

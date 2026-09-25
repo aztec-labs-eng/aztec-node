@@ -475,27 +475,18 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
       this.log.warn(`Block proposal validation failed: ${reason}`, proposalInfo);
 
-      // Classify failure reason: bad proposal vs node issue
-      const badProposalReasons: BlockProposalValidationFailureReason[] = [
-        'invalid_proposal',
-        'state_mismatch',
-        'failed_txs',
-        'parent_block_wrong_slot',
-        'duplicate_txs',
-        'invalid_embedded_txs',
-      ];
-
-      if (badProposalReasons.includes(reason as BlockProposalValidationFailureReason)) {
+      // A slashable reject is a bad proposal, not a node issue, so branch the metric on the slashable set. A separate
+      // reason list would need every slashable reason (e.g. global_variables_mismatch) kept in sync by hand.
+      if (SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason as BlockProposalValidationFailureReason]) {
         this.metrics.incFailedAttestationsBadProposal(1, reason, partOfCommittee);
       } else {
-        // Node issues so we can't validate
         this.metrics.incFailedAttestationsNodeIssue(1, reason, partOfCommittee);
       }
 
       if (
         !escapeHatchOpen &&
         validationResult.reason &&
-        SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(validationResult.reason)
+        SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[validationResult.reason]
       ) {
         this.log.info(`Detected invalid block proposal offense`, {
           ...proposalInfo,
