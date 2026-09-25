@@ -286,6 +286,18 @@ describe('checkStreamingBlockProposal', () => {
       },
     );
 
+    // An unrelated failure that quotes a canonical form is not that form. Reporting it as ordinary sync lag would
+    // drop the only diagnosis a node whose retries ran out can offer.
+    it.each([
+      'database unavailable: Inbox message range [3, 7) is not fully synced',
+      'RPC error while reading Invalid Inbox leaf count range [1, 0)',
+      'Inbox message range is not fully synced',
+      'Invalid Inbox leaf count range [1, 0) while closing the store',
+    ])('keeps a failure that merely quotes an expected form unexpected: %s', async message => {
+      const result = await readStreamingBlockBundle(rejectingWith(new Error(message)), failingRange());
+      expect(result).toEqual({ accepted: false, reason: 'inbox_prefix_unavailable', error: message });
+    });
+
     it('bounds the error text so a verbose provider failure cannot blow up a log record', async () => {
       const result = await readStreamingBlockBundle(rejectingWith(new Error('x'.repeat(5000))), failingRange());
       expect(result).toEqual({
