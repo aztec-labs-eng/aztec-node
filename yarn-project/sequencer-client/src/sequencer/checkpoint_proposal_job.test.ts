@@ -1950,6 +1950,29 @@ describe('CheckpointProposalJob', () => {
       expect(preflightTotals()).toEqual([868n, 868n]);
     });
 
+    it('gossips the cap block standalone when the operator cap is below the timetable capacity', async () => {
+      // Three sub-slots on the timetable but only two blocks allowed: block two ends the checkpoint's Inbox
+      // consumption, yet the schedule does not flag it as last, so it is gossiped on its own and nothing is held.
+      mockSubslots(3);
+      job.updateConfig({ maxBlocksPerCheckpoint: 2 });
+      streamingInbox.set(leaves(300), [256n, 300n]);
+
+      const { lastBlock } = await setupMultipleBlocks(2, [1, 1]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(bundleLengths()).toEqual([256, 44]);
+      expect(inbox.getBucketAtOrBeforeTotal).toHaveBeenCalledWith(300n);
+      expect(p2p.broadcastProposal).toHaveBeenCalledTimes(2);
+      expect(validatorClient.createCheckpointProposal.mock.calls[0][4]).toBeUndefined();
+      expect(checkpointMetrics.noteCheckpointBlockBuilt).toHaveBeenLastCalledWith(expect.any(Number), {
+        isFirstBlock: false,
+        isLastBlock: false,
+      });
+    });
+
     it('builds a forced tx-less block to end the checkpoint when the timetable runs out', async () => {
       // Three sub-slots are configured but only two can start: the second block's completion overruns, so the
       // cursor is left at 512 with no block having landed on a live bucket end.
@@ -1975,6 +1998,24 @@ describe('CheckpointProposalJob', () => {
       expect(forcedDeadline!.getTime()).toBeLessThan(
         job.getTimetable().getAttestationDeadline(SlotNumber(newSlotNumber)) * 1000,
       );
+    });
+
+    it('signs the forced block with the same proposal options as every other block', async () => {
+      mockSubslotsRunningOut(2, 3);
+      job.updateConfig({ invalidBlockProposalIndexWithinCheckpoint: IndexWithinCheckpoint(2) });
+      streamingInbox.set(leaves(700), [256n, 512n, 700n]);
+
+      const { blocks, lastBlock } = await setupMultipleBlocks(3, [1, 1, 0]);
+      blocks.forEach((block, i) => (block.indexWithinCheckpoint = IndexWithinCheckpoint(i)));
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      await job.executeAndAwait();
+
+      expect(bundleLengths()).toEqual([256, 256, 188]);
+      // The forced tail block is the one at the configured index, so it is the only one flagged invalid.
+      expect(
+        validatorClient.createBlockProposal.mock.calls.map(call => call[7]?.broadcastInvalidBlockProposal),
+      ).toEqual([false, false, true]);
     });
 
     it('builds the forced block after a block that consulted L1 and ended inside a bucket', async () => {
