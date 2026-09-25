@@ -728,11 +728,24 @@ export class TxPoolV2Impl {
   }
 
   async handleFailedExecution(txHashes: TxHash[]): Promise<void> {
+    // A tx can be mined by a block that arrives while the sequencer is still executing it. A mined tx must be kept
+    // until its block is finalized, whereas deleting it could slot-soft-delete it and lose it on the next slot.
+    const toDelete: string[] = [];
+    const skippedMined: string[] = [];
+    for (const txHash of txHashes) {
+      const txHashStr = txHash.toString();
+      const isMined = this.#indices.getMetadata(txHashStr)?.minedL2BlockId !== undefined;
+      (isMined ? skippedMined : toDelete).push(txHashStr);
+    }
+
     await this.#store.transactionAsync(async () => {
-      await this.#deleteTxsBatch(txHashes.map(h => h.toString()));
+      await this.#deleteTxsBatch(toDelete);
     });
 
-    this.#log.info(`Deleted ${txHashes.length} failed txs`, { txHashes: txHashes.map(h => h.toString()) });
+    this.#log.info(`Deleted ${toDelete.length} failed txs, skipped ${skippedMined.length} already mined`, {
+      txHashes: toDelete,
+      skippedMinedTxHashes: skippedMined,
+    });
   }
 
   /**

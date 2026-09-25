@@ -3257,6 +3257,140 @@ describe('TxPoolV2', () => {
       expect(pendingHashes).not.toContain(hashOf(tx2)); // deleted
       expectRemovedTxs(tx2);
     });
+
+    it('keeps a tx that was mined before its execution failed', async () => {
+      const tx = await mockTx(1);
+      await pool.prepareForSlot(SlotNumber(1));
+      await pool.addPendingTxs([tx]);
+      expectAddedTxs(tx);
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+
+      await pool.handleFailedExecution([tx.getTxHash()]);
+
+      expectNoCallbacks();
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+      expect(await pool.getMinedTxCount()).toBe(1);
+
+      // A slot-soft-deleted tx would be hard-deleted here; a mined one must survive until its block is finalized
+      await pool.prepareForSlot(SlotNumber(2));
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+      expect(await pool.getTxByHash(tx.getTxHash())).toBeDefined();
+      expect(await pool.hasTxs([tx.getTxHash()])).toEqual([true]);
+    });
+
+    it('deletes only the pending txs of a batch that also has mined ones', async () => {
+      const pendingTx = await mockTx(1);
+      const minedTx = await mockTx(2);
+      await pool.prepareForSlot(SlotNumber(1));
+      await pool.addPendingTxs([pendingTx, minedTx]);
+      expectAddedTxs(pendingTx, minedTx);
+      await pool.handleMinedBlock(makeBlock([minedTx], slot1Header));
+
+      await pool.handleFailedExecution([pendingTx.getTxHash(), minedTx.getTxHash()]);
+
+      expectRemovedTxs(pendingTx);
+      expect(await pool.getTxStatus(pendingTx.getTxHash())).toBe('deleted');
+      expect(await pool.getTxStatus(minedTx.getTxHash())).toBe('mined');
+
+      await pool.prepareForSlot(SlotNumber(2));
+      expect(await pool.getTxByHash(pendingTx.getTxHash())).toBeUndefined();
+      expect(await pool.getTxByHash(minedTx.getTxHash())).toBeDefined();
+    });
+
+    it('removes a kept mined tx once its block is finalized', async () => {
+      const tx = await mockTx(1);
+      await pool.addPendingTxs([tx]);
+      expectAddedTxs(tx);
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+      await pool.handleFailedExecution([tx.getTxHash()]);
+      expectNoCallbacks();
+
+      await pool.handleFinalizedBlock(slot1Header);
+
+      expectRemovedTxs(tx);
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('deleted');
+      expect(await pool.getMinedTxCount()).toBe(0);
+    });
+
+    it('keeps a tx that was re-mined after a prune', async () => {
+      const tx = await mockTx(1);
+      await pool.addPendingTxs([tx]);
+      expectAddedTxs(tx);
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+      await pool.handlePrunedBlocks(block0Id);
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+
+      await pool.handleFailedExecution([tx.getTxHash()]);
+
+      expectNoCallbacks();
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+      await pool.prepareForSlot(SlotNumber(2));
+      expect(await pool.getTxByHash(tx.getTxHash())).toBeDefined();
+    });
+
+    it('keeps a tx that was re-mined at a lower block after a prune', async () => {
+      const tx = await mockTx(1);
+      await pool.addPendingTxs([tx]);
+      expectAddedTxs(tx);
+      await pool.handleMinedBlock(makeBlock([tx], slot2Header));
+      await pool.handlePrunedBlocks(block0Id);
+      // Re-mining at a lower block keeps the prune tracking of the original block
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+
+      await pool.handleFailedExecution([tx.getTxHash()]);
+
+      expectNoCallbacks();
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+      await pool.prepareForSlot(SlotNumber(3));
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+    });
+
+    it('keeps a tx added as mined through addProtectedTxs', async () => {
+      const tx = await mockTx(1);
+      const block = makeBlock([tx], slot1Header);
+      mockL2BlockSource.getTxEffect.mockResolvedValue({
+        l2BlockNumber: BlockNumber(1),
+        l2BlockHash: await block.hash(),
+        data: block.body.txEffects[0],
+        txIndexInBlock: 0,
+        slotNumber: SlotNumber(1),
+      });
+      await pool.addProtectedTxs([tx], slot1Header);
+      expectAddedTxs(tx);
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+
+      await pool.handleFailedExecution([tx.getTxHash()]);
+
+      expectNoCallbacks();
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('mined');
+    });
+
+    it('deletes a protected tx whose execution failed', async () => {
+      const tx = await mockTx(1);
+      await pool.addPendingTxs([tx]);
+      expectAddedTxs(tx);
+      await pool.protectTxs([tx.getTxHash()], slot1Header);
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('protected');
+
+      await pool.handleFailedExecution([tx.getTxHash()]);
+
+      expectRemovedTxs(tx);
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('deleted');
+    });
+
+    it('deletes a tx that failed execution after its block was pruned', async () => {
+      const tx = await mockTx(1);
+      await pool.addPendingTxs([tx]);
+      expectAddedTxs(tx);
+      await pool.handleMinedBlock(makeBlock([tx], slot1Header));
+      await pool.handlePrunedBlocks(block0Id);
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('pending');
+
+      await pool.handleFailedExecution([tx.getTxHash()]);
+
+      expectRemovedTxs(tx);
+      expect(await pool.getTxStatus(tx.getTxHash())).toBe('deleted');
+    });
   });
 
   describe('handleFinalizedBlock', () => {
