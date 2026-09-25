@@ -27,7 +27,7 @@ import { DateProvider, Timer, execWithSignal } from '@aztec-labs/foundation/time
 import { isErrorClass } from '@aztec-labs/foundation/types';
 import type { P2P, PeerId } from '@aztec-labs/p2p';
 import type { BlockData, BlockHash, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
-import type { CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
+import type { Checkpoint, CheckpointReexecutionTracker, ReexecutionOutcome } from '@aztec-labs/stdlib/checkpoint';
 import {
   getPreviousCheckpointInboxRollingHash,
   getPreviousCheckpointOutHashes,
@@ -246,6 +246,29 @@ export type CheckpointProposalValidationFailureCallback = (
 
 /** The blocks of a checkpoint proposal's slot, read in one go, and the index of the block carrying the signed archive. */
 type CheckpointBlocksSnapshot = { blocks: L2Block[]; lastBlockIndex: number };
+
+/** A checkpoint proposal's blocks, from one snapshot of its slot ending at the block carrying the signed archive. */
+type LocatedCheckpointBlocks = {
+  blocks: L2Block[];
+  firstBlock: L2Block;
+  /** The first block's checkpoint number, which every failure after the blocks are located reports. */
+  checkpointNumber: CheckpointNumber;
+};
+
+/** Everything the checkpoint rebuild consumes besides the fork: the arguments `openCheckpoint` takes. */
+type CheckpointRebuildInputs = LocatedCheckpointBlocks & {
+  constants: CheckpointGlobalVariables;
+  l1ToL2Messages: Fr[];
+  previousCheckpointOutHashes: Fr[];
+  previousInboxRollingHash: Fr;
+};
+
+/** Distinguishes a checkpoint validation stage's failure result from the value it otherwise produces. */
+function isCheckpointValidationFailure<T extends object>(
+  result: T | CheckpointProposalValidationFailureResult,
+): result is CheckpointProposalValidationFailureResult {
+  return 'isValid' in result && result.isValid === false;
+}
 
 type CheckpointComputationResult =
   | { checkpointNumber: CheckpointNumber; reason?: undefined }
@@ -2095,11 +2118,97 @@ export class ProposalHandler {
       : content;
   }
 
-  /** Validates a checkpoint proposal's content by building the full checkpoint and comparing it with the proposal. */
+  /**
+   * Validates a checkpoint proposal's content by building the full checkpoint and comparing it with the proposal. The
+   * stages run in order, each on the previous one's output; the fork stays here so its disposal waits for the
+   * comparisons, and so the errors its narrow `try` turns into a verdict stay next to the ones that must escape.
+   */
   private async validateCheckpointContent(
     proposal: CheckpointProposalCore,
     proposalInfo: LogData,
   ): Promise<CheckpointProposalValidationResult> {
+    const slot = proposal.slotNumber;
+
+    const located = await this.locateCheckpointBlocks(proposal, proposalInfo);
+    if (isCheckpointValidationFailure(located)) {
+      return located;
+    }
+    const inputs = await this.awaitCheckpointRebuildInputs(proposal, located, proposalInfo);
+    if (isCheckpointValidationFailure(inputs)) {
+      return inputs;
+    }
+    const { checkpointNumber } = inputs;
+
+    // Fork world state at the block before the first block. getFork syncs world state to the parent block
+    // first (see its doc): the block source (archiver) can already hold the block while world state still
+    // trails it by one, and forking a not-yet-applied block throws a raw tree error that would otherwise
+    // escape as an uncaught gossipsub error. We pass the parent's expected block hash so the sync detects a
+    // world-state reorg (undefined for the genesis parent, where no block exists to pin). On failure we map
+    // to a clean validation result rather than letting it escape.
+    const parentBlockNumber = BlockNumber(inputs.firstBlock.number - 1);
+    let forkResult: MerkleTreeWriteOperations;
+    try {
+      const parentBlockHash = (await this.blockSource.getBlockData({ number: parentBlockNumber }))?.blockHash;
+      forkResult = await this.checkpointsBuilder.getFork(parentBlockNumber, parentBlockHash);
+    } catch (err) {
+      this.log.warn(`Failed to fork world state at block ${parentBlockNumber} for checkpoint proposal`, {
+        ...proposalInfo,
+        parentBlockNumber,
+        err,
+      });
+      return { isValid: false, reason: 'world_state_not_synced', checkpointNumber };
+    }
+    await using fork = forkResult;
+
+    // Verify the fork's archive root matches the checkpoint's expected starting archive (the archive after
+    // the parent block). A mismatch means world state forked from a different chain than the proposal was
+    // built on (e.g. a reorg), so recomputing the checkpoint against it would be meaningless. This mirrors
+    // the block-proposal re-execution check and fails fast with a clean, non-slashable result instead of a
+    // confusing downstream mismatch.
+    const forkArchiveRoot = new Fr((await fork.getTreeInfo(MerkleTreeId.ARCHIVE)).root);
+    if (!forkArchiveRoot.equals(proposal.checkpointHeader.lastArchiveRoot)) {
+      this.log.warn(`Fork archive root does not match checkpoint proposal's last archive`, {
+        ...proposalInfo,
+        forkArchiveRoot: forkArchiveRoot.toString(),
+        expectedLastArchiveRoot: proposal.checkpointHeader.lastArchiveRoot.toString(),
+      });
+      return { isValid: false, reason: 'initial_archive_mismatch', checkpointNumber };
+    }
+
+    // Create checkpoint builder with all existing blocks
+    const checkpointBuilder = await this.checkpointsBuilder.openCheckpoint(
+      checkpointNumber,
+      inputs.constants,
+      proposal.feeAssetPriceModifier,
+      inputs.l1ToL2Messages,
+      inputs.previousCheckpointOutHashes,
+      inputs.previousInboxRollingHash,
+      fork,
+      inputs.blocks,
+      this.log.getBindings(),
+    );
+
+    // Complete the checkpoint to get computed values
+    const computedCheckpoint = await checkpointBuilder.completeCheckpoint();
+
+    const mismatch = this.compareRebuiltCheckpoint(computedCheckpoint, proposal, inputs, proposalInfo);
+    if (mismatch) {
+      return mismatch;
+    }
+
+    this.log.verbose(`Checkpoint proposal validation successful for slot ${slot}`, proposalInfo);
+
+    return { isValid: true, checkpointNumber };
+  }
+
+  /**
+   * Waits for the checkpoint's blocks to sync, forcing archiver syncs until the slot's attestation deadline, then
+   * rejects a checkpoint already on L1, one that leaves later blocks of its own slot out, and one over the block cap.
+   */
+  private async locateCheckpointBlocks(
+    proposal: CheckpointProposalCore,
+    proposalInfo: LogData,
+  ): Promise<LocatedCheckpointBlocks | CheckpointProposalValidationFailureResult> {
     const slot = proposal.slotNumber;
 
     // Block-sync/validation deadline = the single consensus attestation_deadline (target_slot_start + S
@@ -2193,10 +2302,25 @@ export class ProposalHandler {
       blockNumbers: blocks.map(b => b.number),
     });
 
-    // Get checkpoint constants from first block
     const firstBlock = blocks[0];
+    return { blocks, firstBlock, checkpointNumber: firstBlock.checkpointNumber };
+  }
+
+  /**
+   * Gathers what the checkpoint rebuild consumes besides the fork: the checkpoint constants, the consumed L1-to-L2
+   * messages (waiting out a local sync lag through forced archiver syncs) and the parent checkpoints' out hashes and
+   * Inbox rolling hash. Reads that fail unexpectedly propagate.
+   */
+  private async awaitCheckpointRebuildInputs(
+    proposal: CheckpointProposalCore,
+    located: LocatedCheckpointBlocks,
+    proposalInfo: LogData,
+  ): Promise<CheckpointRebuildInputs | CheckpointProposalValidationFailureResult> {
+    const slot = proposal.slotNumber;
+    const { blocks, firstBlock, checkpointNumber } = located;
+
+    // Get checkpoint constants from first block
     const constants = this.extractCheckpointConstants(firstBlock);
-    const checkpointNumber = firstBlock.checkpointNumber;
 
     // The checkpoint's Inbox consumption starts at the leaf count of the block before its first block. Without that
     // block the consumed bundle cannot be derived; an empty bundle would make a valid proposal fail its rolling-hash
@@ -2230,7 +2354,6 @@ export class ProposalHandler {
       });
       return { isValid: false, reason: consumed.reason, checkpointNumber };
     }
-    const l1ToL2Messages = consumed.messages;
 
     // Collect the out hashes of all the checkpoints before this one in the same epoch.
     // See note on the analogous block-proposal site: the helper handles pipelining lag.
@@ -2250,57 +2373,26 @@ export class ProposalHandler {
       log: this.log,
     });
 
-    // Fork world state at the block before the first block. getFork syncs world state to the parent block
-    // first (see its doc): the block source (archiver) can already hold the block while world state still
-    // trails it by one, and forking a not-yet-applied block throws a raw tree error that would otherwise
-    // escape as an uncaught gossipsub error. We pass the parent's expected block hash so the sync detects a
-    // world-state reorg (undefined for the genesis parent, where no block exists to pin). On failure we map
-    // to a clean validation result rather than letting it escape.
-    const parentBlockNumber = BlockNumber(firstBlock.number - 1);
-    let forkResult: MerkleTreeWriteOperations;
-    try {
-      const parentBlockHash = (await this.blockSource.getBlockData({ number: parentBlockNumber }))?.blockHash;
-      forkResult = await this.checkpointsBuilder.getFork(parentBlockNumber, parentBlockHash);
-    } catch (err) {
-      this.log.warn(`Failed to fork world state at block ${parentBlockNumber} for checkpoint proposal`, {
-        ...proposalInfo,
-        parentBlockNumber,
-        err,
-      });
-      return { isValid: false, reason: 'world_state_not_synced', checkpointNumber };
-    }
-    await using fork = forkResult;
-
-    // Verify the fork's archive root matches the checkpoint's expected starting archive (the archive after
-    // the parent block). A mismatch means world state forked from a different chain than the proposal was
-    // built on (e.g. a reorg), so recomputing the checkpoint against it would be meaningless. This mirrors
-    // the block-proposal re-execution check and fails fast with a clean, non-slashable result instead of a
-    // confusing downstream mismatch.
-    const forkArchiveRoot = new Fr((await fork.getTreeInfo(MerkleTreeId.ARCHIVE)).root);
-    if (!forkArchiveRoot.equals(proposal.checkpointHeader.lastArchiveRoot)) {
-      this.log.warn(`Fork archive root does not match checkpoint proposal's last archive`, {
-        ...proposalInfo,
-        forkArchiveRoot: forkArchiveRoot.toString(),
-        expectedLastArchiveRoot: proposal.checkpointHeader.lastArchiveRoot.toString(),
-      });
-      return { isValid: false, reason: 'initial_archive_mismatch', checkpointNumber };
-    }
-
-    // Create checkpoint builder with all existing blocks
-    const checkpointBuilder = await this.checkpointsBuilder.openCheckpoint(
-      checkpointNumber,
+    return {
+      ...located,
       constants,
-      proposal.feeAssetPriceModifier,
-      l1ToL2Messages,
+      l1ToL2Messages: consumed.messages,
       previousCheckpointOutHashes,
       previousInboxRollingHash,
-      fork,
-      blocks,
-      this.log.getBindings(),
-    );
+    };
+  }
 
-    // Complete the checkpoint to get computed values
-    const computedCheckpoint = await checkpointBuilder.completeCheckpoint();
+  /**
+   * Compares the rebuilt checkpoint with the proposal: header, archive root and epoch out hash, then the checkpoint's
+   * own limits. Returns the first mismatch, or undefined when everything matches.
+   */
+  private compareRebuiltCheckpoint(
+    computedCheckpoint: Checkpoint,
+    proposal: CheckpointProposalCore,
+    inputs: CheckpointRebuildInputs,
+    proposalInfo: LogData,
+  ): CheckpointProposalValidationFailureResult | undefined {
+    const { checkpointNumber, previousCheckpointOutHashes } = inputs;
 
     // Compare checkpoint header with proposal
     if (!computedCheckpoint.header.equals(proposal.checkpointHeader)) {
@@ -2352,9 +2444,7 @@ export class ProposalHandler {
       return { isValid: false, reason: 'checkpoint_validation_failed', checkpointNumber };
     }
 
-    this.log.verbose(`Checkpoint proposal validation successful for slot ${slot}`, proposalInfo);
-
-    return { isValid: true, checkpointNumber };
+    return undefined;
   }
 
   /** Extracts checkpoint global variables from a block. */
