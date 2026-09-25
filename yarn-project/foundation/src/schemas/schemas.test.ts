@@ -1,7 +1,26 @@
+import { z } from 'zod';
+
 import { Buffer32 } from '../buffer/buffer32.js';
 import { schemas } from './schemas.js';
+import { optional } from './utils.js';
 
 describe('schemas', () => {
+  describe('optional', () => {
+    it('applies a wrapped default for both undefined and null', () => {
+      const schema = optional(z.number().gte(1).lte(50).default(50));
+      expect(schema.parse(undefined)).toEqual(50);
+      // JSON encodes a skipped leading argument as null; it must still reach the default.
+      expect(schema.parse(null)).toEqual(50);
+      expect(schema.parse(10)).toEqual(10);
+    });
+
+    it('maps null and undefined to undefined when the wrapped schema has no default', () => {
+      const schema = optional(z.string());
+      expect(schema.parse(undefined)).toBeUndefined();
+      expect(schema.parse(null)).toBeUndefined();
+      expect(schema.parse('x')).toEqual('x');
+    });
+  });
   describe('Buffer32', () => {
     it('parses a valid hex string into a Buffer32', () => {
       const buffer32 = Buffer32.random();
