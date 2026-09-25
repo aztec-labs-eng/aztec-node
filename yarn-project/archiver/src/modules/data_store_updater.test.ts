@@ -35,6 +35,7 @@ import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 import {
+  DuplicateTxHashError,
   InboxConsumptionRewindsError,
   InboxMessagePrefixChangedError,
   InboxPrefixMismatchError,
@@ -773,6 +774,61 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.blocks.getLatestL2BlockNumber()).toEqual(BlockNumber(1));
       expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
       expect(await store.logs.getPublicLogsForBlock(block.number)).toEqual(logsAfterCheckpoint);
+    });
+  });
+
+  describe('repeated tx hashes', () => {
+    it('accepts an L1 checkpoint that replaces a local proposed block and includes the same tx', async () => {
+      const blockOpts = {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+      };
+      const localBlock = await randomBlock(1, blockOpts);
+      await updater.addProposedBlock(localBlock, emptyPrefix);
+
+      const l1Block = await randomBlock(1, blockOpts);
+      const shared = localBlock.body.txEffects[0];
+      l1Block.body.txEffects[0] = shared;
+      expect(l1Block.archive.root.equals(localBlock.archive.root)).toBe(false);
+
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([l1Block]), 10)]);
+
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+      expect(await store.blocks.getTxLocation(shared.txHash)).toEqual({
+        blockNumber: BlockNumber(1),
+        blockHash: await l1Block.hash(),
+        txIndexInBlock: 0,
+      });
+    });
+
+    it('rejects a checkpoint that repeats a tx of an earlier checkpoint and stores nothing from it', async () => {
+      const block1 = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+      });
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block1]), 10)]);
+
+      const block2 = await randomBlock(2, {
+        checkpointNumber: CheckpointNumber(2),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(101),
+        lastArchive: block1.archive,
+      });
+      const repeated = block1.body.txEffects[0];
+      block2.body.txEffects.push(repeated);
+      const checkpoint2 = makePublishedCheckpoint(makeCheckpoint([block2], CheckpointNumber(2)), 11);
+
+      await expect(updater.addCheckpoints([checkpoint2])).rejects.toThrow(DuplicateTxHashError);
+
+      expect(await store.blocks.getLatestCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await store.blocks.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+      expect(await store.blocks.getTxLocation(repeated.txHash)).toEqual({
+        blockNumber: BlockNumber(1),
+        blockHash: await block1.hash(),
+        txIndexInBlock: 0,
+      });
     });
   });
 

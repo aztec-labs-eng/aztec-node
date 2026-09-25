@@ -51,6 +51,7 @@ import {
   CannotOverwriteCheckpointedBlockError,
   CheckpointNotFoundError,
   CheckpointNumberNotSequentialError,
+  DuplicateTxHashError,
   InitialCheckpointNumberNotSequentialError,
   NoProposedCheckpointToPromoteError,
   ProposedCheckpointArchiveRootMismatchError,
@@ -577,6 +578,7 @@ export class BlockStore {
         txIndexInBlock: i,
         slotNumber: block.header.globalVariables.slotNumber,
       };
+      await this.assertTxNotInAncestor(txEffect.data.txHash, block.number);
       await this.#txEffects.set(txEffect.data.txHash.toString(), serializeIndexedTxEffect(txEffect));
     }
 
@@ -585,6 +587,24 @@ export class BlockStore {
     // Update indices for block hash and archive
     await this.#blockHashIndex.set(blockHash.toString(), block.number);
     await this.#blockArchiveIndex.set(block.archive.root.toString(), block.number);
+  }
+
+  /**
+   * Throws if the tx is already owned by a stored block below `blockNumber`. Stored blocks below the one being inserted
+   * are its ancestors (archive chaining is enforced on insert), so the tx would be included twice and the new block
+   * would take over the ancestor's tx effect entry. An owner at the same or a higher height is a block being replaced
+   * (a losing local proposal, a re-presented checkpoint), and an owner that is no longer the stored block at its
+   * height was already replaced; both entries are overwritten.
+   */
+  private async assertTxNotInAncestor(txHash: TxHash, blockNumber: BlockNumber): Promise<void> {
+    const existing = await this.getTxLocation(txHash);
+    if (existing === undefined || existing.blockNumber >= blockNumber) {
+      return;
+    }
+    const storedAtHeight = await this.#blocks.getAsync(existing.blockNumber);
+    if (storedAtHeight !== undefined && existing.blockHash.toBuffer().equals(storedAtHeight.blockHash)) {
+      throw new DuplicateTxHashError(txHash, blockNumber, existing.blockNumber);
+    }
   }
 
   /** Deletes a block and all associated data (tx effects, indices). */

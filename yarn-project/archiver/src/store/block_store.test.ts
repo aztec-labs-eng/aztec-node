@@ -32,6 +32,7 @@ import {
   BlockNumberNotSequentialError,
   CannotOverwriteCheckpointedBlockError,
   CheckpointNumberNotSequentialError,
+  DuplicateTxHashError,
   InitialCheckpointNumberNotSequentialError,
   UndecodableCheckpointAttestationsError,
 } from '../errors.js';
@@ -370,6 +371,98 @@ describe('BlockStore', () => {
       expect(block2!.checkpointNumber).toBe(1);
       expect(block3!.checkpointNumber).toBe(2);
       expect(block4!.checkpointNumber).toBe(2);
+    });
+  });
+
+  describe('repeated tx hashes', () => {
+    const getBlock = (i: number) => publishedCheckpoints[i].checkpoint.blocks[0];
+
+    it('rejects a checkpoint that repeats a tx of a stored ancestor block and leaves the ancestor intact', async () => {
+      const block1 = getBlock(0);
+      const originalBody = block1.body.toBuffer();
+      const repeated = block1.body.txEffects[0];
+      getBlock(1).body.txEffects[1] = repeated;
+      await blockStore.addCheckpoints([publishedCheckpoints[0]]);
+
+      await expect(blockStore.addCheckpoints([publishedCheckpoints[1]])).rejects.toThrow(DuplicateTxHashError);
+      await expect(blockStore.addCheckpoints([publishedCheckpoints[1]])).rejects.toMatchObject({
+        txHash: repeated.txHash,
+        blockNumber: BlockNumber(2),
+        existingBlockNumber: BlockNumber(1),
+      });
+
+      expect(await blockStore.getLatestCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect((await blockStore.getBlock({ number: BlockNumber(1) }))?.body.toBuffer()).toEqual(originalBody);
+      expect(await blockStore.getTxLocation(repeated.txHash)).toEqual({
+        blockNumber: BlockNumber(1),
+        blockHash: await block1.hash(),
+        txIndexInBlock: 0,
+      });
+      expect(await blockStore.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+    });
+
+    it('rejects a whole batch when one checkpoint repeats a tx of an earlier checkpoint in the batch', async () => {
+      const repeated = getBlock(1).body.txEffects[0];
+      getBlock(2).body.txEffects[3] = repeated;
+      await blockStore.addCheckpoints([publishedCheckpoints[0]]);
+
+      await expect(blockStore.addCheckpoints(publishedCheckpoints.slice(1, 3))).rejects.toThrow(DuplicateTxHashError);
+
+      expect(await blockStore.getLatestCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await blockStore.getCheckpointData(CheckpointNumber(2))).toBeUndefined();
+      expect(await blockStore.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+      expect(await blockStore.getBlock({ number: BlockNumber(3) })).toBeUndefined();
+      expect(await blockStore.getTxEffect(repeated.txHash)).toBeUndefined();
+    });
+
+    it('accepts a checkpoint whose block replaces a local proposed block at the same height with the same tx', async () => {
+      await blockStore.addCheckpoints([publishedCheckpoints[0]]);
+      const localBlock = await L2Block.random(BlockNumber(2), {
+        checkpointNumber: CheckpointNumber(2),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        lastArchive: getBlock(0).archive,
+      });
+      await blockStore.addProposedBlock(localBlock);
+
+      const checkpointBlock = getBlock(1);
+      const shared = localBlock.body.txEffects[0];
+      checkpointBlock.body.txEffects[2] = shared;
+      expect(checkpointBlock.archive.root.equals(localBlock.archive.root)).toBe(false);
+
+      await expect(blockStore.addCheckpoints([publishedCheckpoints[1]])).resolves.toEqual([publishedCheckpoints[1]]);
+      expect(await blockStore.getTxLocation(shared.txHash)).toEqual({
+        blockNumber: BlockNumber(2),
+        blockHash: await checkpointBlock.hash(),
+        txIndexInBlock: 2,
+      });
+    });
+
+    it('accepts a checkpoint repeating a tx of a lower local proposed block that the checkpoint replaces', async () => {
+      await blockStore.addCheckpoints([publishedCheckpoints[0]]);
+      const localBlock = await L2Block.random(BlockNumber(2), {
+        checkpointNumber: CheckpointNumber(2),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        lastArchive: getBlock(0).archive,
+      });
+      await blockStore.addProposedBlock(localBlock);
+
+      const [checkpoint2] = await makeChainedCheckpoints(1, {
+        startCheckpointNumber: CheckpointNumber(2),
+        startBlockNumber: 2,
+        blocksPerCheckpoint: 2,
+        previousArchive: getBlock(0).archive,
+      });
+      const [replacementBlock, nextBlock] = checkpoint2.checkpoint.blocks;
+      expect(replacementBlock.archive.root.equals(localBlock.archive.root)).toBe(false);
+      const shared = localBlock.body.txEffects[0];
+      nextBlock.body.txEffects[1] = shared;
+
+      await expect(blockStore.addCheckpoints([checkpoint2])).resolves.toEqual([checkpoint2]);
+      expect(await blockStore.getTxLocation(shared.txHash)).toEqual({
+        blockNumber: BlockNumber(3),
+        blockHash: await nextBlock.hash(),
+        txIndexInBlock: 1,
+      });
     });
   });
 
@@ -3149,11 +3242,10 @@ describe('BlockStore', () => {
       expect(removedBlocks).toEqual([]);
     });
 
-    it('fully cleans up blocks sharing a tx effect', async () => {
-      // Two blocks carrying the same tx, as when a tx is re-included after its original proposal expired.
-      // Inserting block2 pointed the shared tx's index entry at block2, so deleting block1 must not remove it:
-      // doing so makes block2 unreadable, and a cleanup that skips unreadable blocks would then leak block2's
-      // row and tx effects to be overwritten in place by later inserts at the same number.
+    it('refuses a block sharing a tx with its ancestor and fully cleans up the ancestor', async () => {
+      // A block repeating a tx of its ancestor would take over the tx's index entry, so removing the descendant
+      // would delete the entry and leave the ancestor unreadable. The store refuses such a block instead, which
+      // keeps the ancestor the sole owner of its txs and removable without leaving stale rows behind.
       const block1 = await L2Block.random(BlockNumber(1), {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
@@ -3168,24 +3260,25 @@ describe('BlockStore', () => {
       const sharedTx = block1.body.txEffects[0];
       block2.body.txEffects[0] = sharedTx;
 
-      await addProposedBlocks(blockStore, [block1, block2]);
-      expect((await blockStore.getTxEffect(sharedTx.txHash))?.l2BlockNumber).toBe(2);
+      await addProposedBlocks(blockStore, [block1]);
+      await expect(blockStore.addProposedBlock(block2)).rejects.toThrow(DuplicateTxHashError);
+      expect(await blockStore.getLatestL2BlockNumber()).toBe(1);
+      expect((await blockStore.getTxEffect(sharedTx.txHash))?.l2BlockNumber).toBe(1);
+      expect(await blockStore.getTxEffect(block2.body.txEffects[1].txHash)).toBeUndefined();
 
       const removedBlocks = await blockStore.removeBlocksAfter(BlockNumber(0));
 
-      expect(removedBlocks.map(b => b.number)).toEqual([1, 2]);
+      expect(removedBlocks.map(b => b.number)).toEqual([1]);
       expect(await blockStore.getLatestL2BlockNumber()).toBe(0);
-      for (const tx of [sharedTx, block1.body.txEffects[1], block2.body.txEffects[1]]) {
+      for (const tx of block1.body.txEffects) {
         expect(await blockStore.getTxEffect(tx.txHash)).toBeUndefined();
       }
-      for (const block of [block1, block2]) {
-        expect(await blockStore.getBlock({ number: block.number })).toBeUndefined();
-        expect(await blockStore.getBlockNumber({ hash: await block.hash() })).toBeUndefined();
-        expect(await blockStore.getBlockNumber({ archive: block.archive.root })).toBeUndefined();
-      }
+      expect(await blockStore.getBlock({ number: block1.number })).toBeUndefined();
+      expect(await blockStore.getBlockNumber({ hash: await block1.hash() })).toBeUndefined();
+      expect(await blockStore.getBlockNumber({ archive: block1.archive.root })).toBeUndefined();
 
-      // The store accepts the same chain again: nothing stale was left behind.
-      await expect(addProposedBlocks(blockStore, [block1, block2])).resolves.toBe(true);
+      // The store accepts the same block again: nothing stale was left behind.
+      await expect(addProposedBlocks(blockStore, [block1])).resolves.toBe(true);
     });
 
     it('cleans up related data (tx effects, hash index, archive index)', async () => {
