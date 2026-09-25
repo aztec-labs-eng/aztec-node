@@ -1,3 +1,16 @@
+/**
+ * Pure selection rules for streaming Inbox consumption: how far a block may consume, and when it has to ask L1.
+ *
+ * Every message count here other than the caps is one coordinate: the cumulative number of Inbox messages since the
+ * first one. It is an exclusive end, so it is also the index of the next message and the L1-to-L2 tree leaf count of a
+ * block header that consumed through it; {@link InboxMessagePosition} pairs it with the rolling hash. Callers spell
+ * the same unit `…Count`, `…Total` or `…TotalMsgCount`. An endpoint total is a count at which a live L1 bucket ends,
+ * the only place a checkpoint's final block may stop. A bucket sequence (`bucketSeq`, the `propose` hint) is an L1
+ * bucket ordinal, not a count. The archiver's message synchronizer uses "cursor" for the L1 block it scans from; here
+ * the cursor is a message position.
+ *
+ * @packageDocumentation
+ */
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { InboxContract } from '@aztec-labs/ethereum/contracts';
 import { minBigint } from '@aztec-labs/foundation/bigint';
@@ -32,6 +45,16 @@ export type StreamingMessageSource = Pick<
   'getSyncedMessagePosition' | 'getMessagePosition' | 'getL1ToL2MessageRange'
 >;
 
+/** The observed positions a block's message selection is computed from. */
+export type InboxSelectionPositions = {
+  /** How far the checkpoint being built has consumed: where the next block's range starts. */
+  cursorCount: bigint;
+  /** How far this node's archiver has synced the Inbox. No newly selected message lies past it. */
+  localSyncedCount: bigint;
+  /** The cursor when the checkpoint began (the parent checkpoint's final count); origin of the per-checkpoint cap. */
+  checkpointStartCount: bigint;
+};
+
 /** The cumulative message count a checkpoint may consume through at most. */
 export function getCheckpointCapEnd(
   checkpointStartCount: bigint,
@@ -51,7 +74,7 @@ export function getCheckpointCapEnd(
  * step to 956 could leave 800 behind. With a cap of 1024 and buckets of 256 the threshold is the checkpoint start
  * plus 768.
  */
-export function getOrdinaryCeiling(
+export function getEndpointLookupThreshold(
   checkpointStartCount: bigint,
   caps: Pick<InboxConsumptionCaps, 'perCheckpointCap' | 'maxMessagesPerBucket'>,
 ): bigint {
@@ -69,12 +92,11 @@ export function getOrdinaryCeiling(
  * sequence. Never below the cursor, so a block consuming nothing keeps its position. This is the *prospective* end:
  * whether the block may take it without consulting L1 is {@link mustQueryEndpoint}.
  */
-export function selectOrdinaryMessageEnd(input: {
-  cursorCount: bigint;
-  localSyncedCount: bigint;
-  checkpointStartCount: bigint;
-  caps: Pick<InboxConsumptionCaps, 'perBlockCap' | 'perCheckpointCap'>;
-}): bigint {
+export function selectGreedyEnd(
+  input: InboxSelectionPositions & {
+    caps: Pick<InboxConsumptionCaps, 'perBlockCap' | 'perCheckpointCap'>;
+  },
+): bigint {
   const { cursorCount, localSyncedCount, checkpointStartCount, caps } = input;
   const end = minBigint(
     localSyncedCount,
@@ -86,25 +108,25 @@ export function selectOrdinaryMessageEnd(input: {
 
 /**
  * The furthest a block may advance on the local log alone without risking the checkpoint's last legal endpoint: the
- * greedy end held down to the threshold. A non-final block whose endpoint lookup fails or resolves short of this
- * still takes it, since ending at or below the threshold always leaves one bucket of checkpoint capacity in reserve.
+ * greedy end held down to the threshold. Never below the cursor, so a cursor already past the threshold stays where it
+ * is. A non-final block whose endpoint lookup fails or resolves short of this still takes it, since ending at or
+ * below the threshold always leaves one bucket of checkpoint capacity in reserve.
  *
  * Reused outside block building to guess what the next block will consume, this is an estimate and not a bound in
  * either direction. A checkpoint's final block has to land on a live L1 bucket boundary, which can be below this:
  * from a cursor of 0, with 400 messages observed and live buckets ending at 200 and 400, this returns 256 while the
  * final block ends at 200.
  */
-export function selectSafeLocalEnd(input: {
-  cursorCount: bigint;
-  localSyncedCount: bigint;
-  checkpointStartCount: bigint;
-  caps: Pick<InboxConsumptionCaps, 'perBlockCap' | 'perCheckpointCap' | 'maxMessagesPerBucket'>;
-}): bigint {
+export function selectSafeLocalEnd(
+  input: InboxSelectionPositions & {
+    caps: Pick<InboxConsumptionCaps, 'perBlockCap' | 'perCheckpointCap' | 'maxMessagesPerBucket'>;
+  },
+): bigint {
   const { cursorCount, localSyncedCount, checkpointStartCount, caps } = input;
   const end = minBigint(
     localSyncedCount,
     cursorCount + BigInt(caps.perBlockCap),
-    getOrdinaryCeiling(checkpointStartCount, caps),
+    getEndpointLookupThreshold(checkpointStartCount, caps),
   );
   return end < cursorCount ? cursorCount : end;
 }
@@ -122,7 +144,7 @@ export function mustQueryEndpoint(input: {
   caps: Pick<InboxConsumptionCaps, 'perCheckpointCap' | 'maxMessagesPerBucket'>;
 }): boolean {
   const { prospectiveEnd, checkpointStartCount, isFinalBlock, caps } = input;
-  return isFinalBlock || prospectiveEnd > getOrdinaryCeiling(checkpointStartCount, caps);
+  return isFinalBlock || prospectiveEnd > getEndpointLookupThreshold(checkpointStartCount, caps);
 }
 
 /**
@@ -131,13 +153,12 @@ export function mustQueryEndpoint(input: {
  * the result, so that a mandatory bucket beyond its own reach is not stranded by a nearer endpoint; the final block,
  * which has to land on the endpoint, is additionally bounded by what it alone can carry.
  */
-export function getEndpointUpperBound(input: {
-  cursorCount: bigint;
-  localSyncedCount: bigint;
-  checkpointStartCount: bigint;
-  isFinalBlock: boolean;
-  caps: Pick<InboxConsumptionCaps, 'perBlockCap' | 'perCheckpointCap'>;
-}): bigint {
+export function getEndpointUpperBound(
+  input: InboxSelectionPositions & {
+    isFinalBlock: boolean;
+    caps: Pick<InboxConsumptionCaps, 'perBlockCap' | 'perCheckpointCap'>;
+  },
+): bigint {
   const { cursorCount, localSyncedCount, checkpointStartCount, isFinalBlock, caps } = input;
   const bound = minBigint(localSyncedCount, getCheckpointCapEnd(checkpointStartCount, caps));
   return isFinalBlock ? minBigint(bound, cursorCount + BigInt(caps.perBlockCap)) : bound;
