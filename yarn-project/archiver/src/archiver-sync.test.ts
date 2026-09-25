@@ -1788,6 +1788,57 @@ describe('Archiver Sync', () => {
       expect(storedCp2.checkpoint.archive.root.toString()).toEqual(goodCp2.archive.root.toString());
     }, 15_000);
 
+    it('retries a valid checkpoint whose persistence failed after a later checkpoint in its batch was rejected', async () => {
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      const { cp1 } = await addValidCheckpointAndInvalidChild(l1Blocks);
+
+      jest.spyOn(archiverStore.blocks, 'addCheckpoints').mockRejectedValueOnce(new Error('Transient store failure'));
+
+      fake.setL1BlockNumber(82n);
+      await expect(archiver.syncImmediate()).rejects.toThrow('Transient store failure');
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
+
+      fake.setL1BlockNumber(83n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      const [storedCp1] = await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 1 });
+      expect(storedCp1.checkpoint.archive.root.toString()).toEqual(cp1.archive.root.toString());
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(l1Blocks.cp2);
+    }, 15_000);
+
+    it('retries a batch whose screening failed after an earlier checkpoint in it was rejected', async () => {
+      const l1Blocks = { messages: 50n, cp1: 70n, cp2: 80n };
+      const { cp1, badCp2, signers } = await addValidCheckpointAndInvalidChild(l1Blocks);
+      await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 85n,
+        numL1ToL2Messages: 0,
+        previousArchive: badCp2.blocks.at(-1)!.archive,
+        signers,
+      });
+
+      // Fail screening of CP3 once, after CP2 has already been recorded as rejected in the same batch.
+      const getRejected = archiverStore.blocks.getRejectedCheckpointByArchiveRoot.bind(archiverStore.blocks);
+      let failCp3Screening = true;
+      jest.spyOn(archiverStore.blocks, 'getRejectedCheckpointByArchiveRoot').mockImplementation(archiveRoot => {
+        if (failCp3Screening && archiveRoot.equals(badCp2.archive.root)) {
+          failCp3Screening = false;
+          return Promise.reject(new Error('Transient store failure'));
+        }
+        return getRejected(archiveRoot);
+      });
+
+      fake.setL1BlockNumber(87n);
+      await expect(archiver.syncImmediate()).rejects.toThrow('Transient store failure');
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
+
+      fake.setL1BlockNumber(88n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      const [storedCp1] = await archiver.getCheckpoints({ from: CheckpointNumber(1), limit: 1 });
+      expect(storedCp1.checkpoint.archive.root.toString()).toEqual(cp1.archive.root.toString());
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(85n);
+    }, 15_000);
+
     it('handles L1 reorg that moves a checkpoint to a later L1 block', async () => {
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
 
