@@ -1933,10 +1933,16 @@ export class ProposalHandler {
     // slot is a different question, and still records. A recorded `invalid` is protected for the slot outright:
     // the tracker keys its slot entry by slot alone, so an equivocating proposer whose second proposal this node
     // could not check would otherwise erase the first one's determination.
+    //
+    // The protected `valid` is matched by slot and archive as well as by checkpoint number, because the second look
+    // can fail before the blocks are loaded and then carries no checkpoint number at all: pruning the block the
+    // cached verdict rested on makes revalidation report `last_block_not_found`, which by checkpoint number alone
+    // is indistinguishable from a first evaluation and would overwrite the verdict this node reached.
     const outcome = result.isValid ? ('valid' as const) : CHECKPOINT_VALIDATION_REASON_TO_OUTCOME[result.reason];
     const wouldForgetVerdict =
       outcome === 'unvalidated' &&
       (this.reexecutionTracker.getOutcomeForSlot(slot) === 'invalid' ||
+        this.reexecutionTracker.hasValidOutcomeForSlot(slot, proposal.archive) ||
         (result.checkpointNumber !== undefined &&
           this.reexecutionTracker.hasReexecuted(result.checkpointNumber, proposal.archive)));
     if (outcome !== undefined && !wouldForgetVerdict) {
