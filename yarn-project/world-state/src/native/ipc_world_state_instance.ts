@@ -1,15 +1,4 @@
 import { IpcProcessExitedError } from '@aztec-foundation/ipc-runtime';
-import { AsyncApi, WsdbService } from '@aztec-foundation/wsdb';
-import type {
-  WorldStateDBStats as WsdbDBStats,
-  DBStats as WsdbDBStatsInner,
-  WorldStateMeta as WsdbMeta,
-  SiblingPathAndIndex as WsdbSiblingPathAndIndex,
-  WorldStateStatusFull as WsdbStatusFull,
-  WorldStateStatusSummary as WsdbStatusSummary,
-  TreeDBStats as WsdbTreeDBStats,
-  TreeMeta as WsdbTreeMeta,
-} from '@aztec-foundation/wsdb';
 
 import {
   ARCHIVE_HEIGHT,
@@ -29,6 +18,17 @@ import { Timer } from '@aztec-labs/foundation/timer';
 import type { IndexedTreeId, TreeInfo } from '@aztec-labs/stdlib/interfaces/server';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
+import { AsyncApi, WsdbService } from '@aztec-labs/wsdb';
+import type {
+  WorldStateDBStats as WsdbDBStats,
+  DBStats as WsdbDBStatsInner,
+  WorldStateMeta as WsdbMeta,
+  SiblingPathAndIndex as WsdbSiblingPathAndIndex,
+  WorldStateStatusFull as WsdbStatusFull,
+  WorldStateStatusSummary as WsdbStatusSummary,
+  TreeDBStats as WsdbTreeDBStats,
+  TreeMeta as WsdbTreeMeta,
+} from '@aztec-labs/wsdb';
 import { Buffer } from 'buffer';
 import { cpus } from 'node:os';
 

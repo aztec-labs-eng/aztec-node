@@ -1,5 +1,4 @@
-import { findNapiBinary } from '@aztec-foundation/kvdb';
-
+import { findNapiBinary } from '@aztec-labs/kvdb';
 import { createRequire } from 'module';
 
 import type { MessageReceiver } from './msgpack_channel.js';

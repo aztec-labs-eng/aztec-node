@@ -64,7 +64,7 @@
     ]
   },
   "dependencies": {
-    "@aztec-foundation/wsdb": "0.1.0-dummy",
+    "@aztec-labs/wsdb": "0.1.0-dummy",
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/protocol-contracts": "workspace:^",
