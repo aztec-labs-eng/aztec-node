@@ -312,6 +312,7 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
       parseBigint,
     )
     .option('--move-with-latest-rollup', 'Whether to move with the latest rollup', true)
+    .option('--no-move-with-latest-rollup', 'Keep the stake on this rollup after an upgrade')
     .option('--rollup <string>', 'Rollup contract address', parseEthereumAddress)
     .action(async options => {
       const { addL1ValidatorViaRollup } = await import('./update_l1_validators.js');
