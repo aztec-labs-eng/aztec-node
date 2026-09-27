@@ -30,14 +30,11 @@ for (const [descriptors, entry] of Object.entries(yarnLock)) {
   approved.get(name).add(entry.version);
   if (protocol !== '@npm:') continue;
 
-  const reference = entry.resolution.split('@npm:')[1].split('::')[0];
-  const alias = reference.match(/^(@[^/]+\/[^@]+|[^@]+)@/);
-  const packageName = alias?.[1] ?? name;
-  if (!approved.has(packageName)) approved.set(packageName, new Set());
-  approved.get(packageName).add(entry.version);
-  const tarball = `${registry}/${packageName}/-/${packageName.split('/').at(-1)}-${entry.version}.tgz`;
+  const tarball = `${registry}/${name}/-/${name.split('/').at(-1)}-${entry.version}.tgz`;
   for (const descriptor of descriptors.split(', ')) {
     if (!descriptor.includes('@npm:')) continue;
+    const reference = descriptor.slice(descriptor.indexOf('@npm:') + '@npm:'.length);
+    const alias = /^(@[^/]+\/[^@]+|[^@]+)@/.test(reference);
     const request = alias ? descriptor : descriptor.replace('@npm:', '@');
     classicLock += `${JSON.stringify(request)}:\n  version ${JSON.stringify(entry.version)}\n  resolved ${JSON.stringify(tarball)}\n\n`;
   }

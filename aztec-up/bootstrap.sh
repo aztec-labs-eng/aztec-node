@@ -188,7 +188,9 @@ function release {
   else
     local packages_dir
     packages_dir=$(mktemp -d)
-    node scripts/generate-package-lock.mjs "$root/yarn-project" "$version" "$packages_dir"
+    # npm can accept a publish before its versions become visible to installs.
+    RETRY_ATTEMPTS=20 RETRY_SLEEP=30 retry -p 'npm (ERR!|error) code (ETARGET|E404)' \
+      "node scripts/generate-package-lock.mjs \"$root/yarn-project\" \"$version\" \"$packages_dir\""
     aws s3 cp "$packages_dir/packages.tar.gz" "s3://install.aztec.network/$version/packages.tar.gz"
     rm -rf "$packages_dir"
   fi
