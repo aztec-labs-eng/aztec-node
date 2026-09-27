@@ -96,7 +96,15 @@ try {
     await writeManifest();
     await writeFile(seedPath, classicLock);
     await rm(lockPath, { force: true });
-    npm('install', '--package-lock-only', '--ignore-scripts', '--legacy-peer-deps', '--no-audit', '--no-fund');
+    npm(
+      'install',
+      '--package-lock-only',
+      '--prefer-online',
+      '--ignore-scripts',
+      '--legacy-peer-deps',
+      '--no-audit',
+      '--no-fund',
+    );
     const generated = JSON.parse(await readFile(lockPath));
     let changed = false;
     for (const entry of Object.values(generated.packages)) {
@@ -114,7 +122,15 @@ try {
   await writeManifest();
   await writeFile(seedPath, classicLock);
   await rm(lockPath, { force: true });
-  npm('install', '--package-lock-only', '--ignore-scripts', '--legacy-peer-deps=false', '--no-audit', '--no-fund');
+  npm(
+    'install',
+    '--package-lock-only',
+    '--prefer-online',
+    '--ignore-scripts',
+    '--legacy-peer-deps=false',
+    '--no-audit',
+    '--no-fund',
+  );
   const generated = JSON.parse(await readFile(lockPath));
   for (const [path, entry] of Object.entries(generated.packages)) {
     if (!path || !entry.version) continue;
