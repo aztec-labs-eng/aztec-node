@@ -14,24 +14,38 @@ import { Tx } from '@aztec-labs/stdlib/tx';
 import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { promises as fs } from 'fs';
 
-import { BBJsFactory } from '../bb/bb_js_backend.js';
+import { type BBJsApi, BBJsFactory } from '../bb/bb_js_backend.js';
 import type { BBConfig } from '../config.js';
 import { getUltraHonkFlavorForCircuit } from '../honk.js';
 
+/** Thrown when no live bb process could check a proof, so the proof was neither accepted nor rejected. */
+export class ProofVerifierUnavailableError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'ProofVerifierUnavailableError';
+  }
+}
+
 export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
+  /** bb instances a Chonk verification tries, while each one's bb dies under it, before the verifier is unavailable. */
+  private static readonly MAX_CHONK_VERIFY_ATTEMPTS = 2;
+
   private bbJsFactory: BBJsFactory;
 
-  private constructor(
+  protected constructor(
     private config: BBConfig,
     private logger: Logger,
+    bbJsFactory?: BBJsFactory,
   ) {
     // BB_NUM_IVC_VERIFIERS bounds the number of long-lived bb processes the pool keeps alive.
     // If 0, fall back to spawning a fresh bb per verification.
-    this.bbJsFactory = new BBJsFactory(config.bbBinaryPath, {
-      poolSize: config.numConcurrentIVCVerifiers > 0 ? config.numConcurrentIVCVerifiers : undefined,
-      logger,
-      debugDir: config.bbDebugOutputDir,
-    });
+    this.bbJsFactory =
+      bbJsFactory ??
+      new BBJsFactory(config.bbBinaryPath, {
+        poolSize: config.numConcurrentIVCVerifiers > 0 ? config.numConcurrentIVCVerifiers : undefined,
+        logger,
+        debugDir: config.bbDebugOutputDir,
+      });
   }
 
   public stop(): Promise<void> {
@@ -85,9 +99,13 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
     } satisfies CircuitVerificationStats);
   }
 
-  /** Verify a Chonk (IVC) proof from a transaction via bb.js API. */
+  /**
+   * Verify a Chonk (IVC) proof from a transaction via bb.js API. Returns `valid: false` when bb checked the proof and
+   * rejected it, and throws {@link ProofVerifierUnavailableError} when no live bb process could check it.
+   */
   public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const proofType = 'Chonk';
+    const txHash = tx.getTxHash().toString();
     try {
       const totalTimer = new Timer();
 
@@ -98,8 +116,11 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
       const proofWithPubInputs = tx.chonkProof.attachPublicInputs(tx.data.publicInputs().toFields());
       const fieldsAsBuffers = proofWithPubInputs.fieldsWithPublicInputs.map(f => new Uint8Array(f.toBuffer()));
 
-      await using instance = await this.bbJsFactory.getInstance();
-      const { verified, durationMs } = await instance.verifyChonkProof(fieldsAsBuffers, verificationKey.keyAsBytes);
+      const { verified, durationMs } = await this.verifyChonkProofOnLiveInstance(
+        fieldsAsBuffers,
+        verificationKey.keyAsBytes,
+        txHash,
+      );
 
       if (!verified) {
         throw new Error(`Failed to verify ${proofType} proof for ${circuit}!`);
@@ -114,8 +135,46 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
 
       return { valid: true, durationMs, totalDurationMs: totalTimer.ms() };
     } catch (err) {
-      this.logger.warn(`Failed to verify ${proofType} proof for tx ${tx.getTxHash().toString()}: ${String(err)}`);
+      if (err instanceof ProofVerifierUnavailableError) {
+        throw err;
+      }
+      this.logger.warn(`Failed to verify ${proofType} proof for tx ${txHash}: ${String(err)}`);
       return { valid: false, durationMs: 0, totalDurationMs: 0 };
+    }
+  }
+
+  /**
+   * Runs a Chonk verification on a pooled bb instance. A call that fails because the instance's bb died is retried on
+   * another instance; a call that fails while bb is alive is bb rejecting the proof, and its error is rethrown.
+   */
+  private async verifyChonkProofOnLiveInstance(
+    fieldsWithPublicInputs: Uint8Array[],
+    verificationKey: Uint8Array,
+    txHash: string,
+  ): Promise<{ verified: boolean; durationMs: number }> {
+    for (let attempt = 1; ; attempt++) {
+      await using instance = await this.borrowInstance();
+      try {
+        return await instance.verifyChonkProof(fieldsWithPublicInputs, verificationKey);
+      } catch (err) {
+        if (instance.isAlive()) {
+          throw err;
+        }
+        if (attempt >= BBCircuitVerifier.MAX_CHONK_VERIFY_ATTEMPTS) {
+          throw new ProofVerifierUnavailableError(`bb died while verifying the proof, on ${attempt} instances`, {
+            cause: err,
+          });
+        }
+        this.logger.warn('bb died while verifying a proof; retrying on another instance', { txHash, attempt });
+      }
+    }
+  }
+
+  private async borrowInstance(): Promise<BBJsApi & AsyncDisposable> {
+    try {
+      return await this.bbJsFactory.getInstance();
+    } catch (err) {
+      throw new ProofVerifierUnavailableError('No bb instance available to verify the proof', { cause: err });
     }
   }
 }
