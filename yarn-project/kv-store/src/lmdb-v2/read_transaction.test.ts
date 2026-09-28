@@ -39,6 +39,26 @@ describe('ReadTransaction', () => {
     expect(await resp).toEqual(Buffer.from('foo'));
   });
 
+  it('reads multiple keys with one database request', async () => {
+    const keys = ['b', 'missing', 'a', 'b'].map(key => Buffer.from(key));
+    channel.sendMessage.mockResolvedValue({
+      values: [[Buffer.from('B')], null, [Buffer.from('A')], [Buffer.from('B')]],
+    });
+    expect(await tx.getMany(keys)).toEqual([Buffer.from('B'), undefined, Buffer.from('A'), Buffer.from('B')]);
+    expect(channel.sendMessage).toHaveBeenCalledTimes(1);
+    expect(channel.sendMessage).toHaveBeenCalledWith(LMDBMessageType.GET, { db: Database.DATA, keys });
+  });
+
+  it('does not send a database request for an empty bulk read', async () => {
+    await expect(tx.getMany([])).resolves.toEqual([]);
+    expect(channel.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects bulk reads after the transaction closes', async () => {
+    tx.close();
+    await expect(tx.getMany([Buffer.from('a')])).rejects.toThrow('Transaction is closed');
+  });
+
   it('iterates the database', async () => {
     channel.sendMessage
       .mockResolvedValueOnce({

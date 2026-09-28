@@ -1,5 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type CheckpointProposalHash, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { P2PClient } from '@aztec-labs/stdlib/interfaces/server';
@@ -23,6 +23,7 @@ describe('AttestedInvalidProposalWatcher', () => {
   let epochCache: MockProxy<Pick<EpochCacheInterface, 'getSlotNow' | 'getL1Constants'>>;
   let invalidProposalSlots: Set<SlotNumber>;
   let proposalEquivocationSlots: Set<SlotNumber>;
+  let invalidCheckpointHashes: Map<SlotNumber, CheckpointProposalHash[]>;
   let invalidProposalSlotSource: InvalidProposalSlotSource;
   let config: SlasherConfig;
   let watcher: AttestedInvalidProposalWatcher;
@@ -40,9 +41,11 @@ describe('AttestedInvalidProposalWatcher', () => {
     >);
     invalidProposalSlots = new Set();
     proposalEquivocationSlots = new Set();
+    invalidCheckpointHashes = new Map();
     invalidProposalSlotSource = {
       hasInvalidProposals: slot => invalidProposalSlots.has(slot),
       hasProposalEquivocation: slot => proposalEquivocationSlots.has(slot),
+      getInvalidCheckpointProposalHashes: slot => invalidCheckpointHashes.get(slot) ?? [],
     };
     config = {
       ...DefaultSlasherConfig,
@@ -73,7 +76,9 @@ describe('AttestedInvalidProposalWatcher', () => {
     const slot = SlotNumber(10);
     const attesterSigner = Secp256k1Signer.random();
     invalidProposalSlots.add(slot);
-    p2pClient.getCheckpointAttestationsForSlot.mockResolvedValue([await makeAttestation(slot, attesterSigner)]);
+    const attestation = await makeAttestation(slot, attesterSigner);
+    invalidCheckpointHashes.set(slot, [attestation.getPayloadHash()]);
+    p2pClient.getCheckpointAttestationsForSlot.mockResolvedValue([attestation]);
 
     await watcher.scanSlot(slot);
 
@@ -87,12 +92,24 @@ describe('AttestedInvalidProposalWatcher', () => {
     ]);
   });
 
+  it('does not slash checkpoint attesters when only a BLOCK proposal was invalid in the slot', async () => {
+    const slot = SlotNumber(10);
+    invalidProposalSlots.add(slot); // block-invalid marks the slot, but no invalid CHECKPOINT hash is recorded
+    p2pClient.getCheckpointAttestationsForSlot.mockResolvedValue([await makeAttestation(slot)]);
+
+    await watcher.scanSlot(slot);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('emits zero-amount offenses when the penalty is zero', async () => {
     const slot = SlotNumber(10);
     const attesterSigner = Secp256k1Signer.random();
     invalidProposalSlots.add(slot);
     watcher.updateConfig({ slashAttestInvalidCheckpointProposalPenalty: 0n });
-    p2pClient.getCheckpointAttestationsForSlot.mockResolvedValue([await makeAttestation(slot, attesterSigner)]);
+    const attestation = await makeAttestation(slot, attesterSigner);
+    invalidCheckpointHashes.set(slot, [attestation.getPayloadHash()]);
+    p2pClient.getCheckpointAttestationsForSlot.mockResolvedValue([attestation]);
 
     await watcher.scanSlot(slot);
 
@@ -110,6 +127,7 @@ describe('AttestedInvalidProposalWatcher', () => {
     const slot = SlotNumber(10);
     invalidProposalSlots.add(slot);
     const attestation = await makeAttestation(slot);
+    invalidCheckpointHashes.set(slot, [attestation.getPayloadHash()]);
     p2pClient.getCheckpointAttestationsForSlot.mockResolvedValue([attestation]);
 
     await watcher.scanSlot(slot);

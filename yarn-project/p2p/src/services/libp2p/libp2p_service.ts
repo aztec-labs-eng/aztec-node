@@ -59,7 +59,6 @@ import { bootstrap } from '@libp2p/bootstrap';
 import { identify } from '@libp2p/identify';
 import { type Message, type MultiaddrConnection, type PeerId, TopicValidatorResult } from '@libp2p/interface';
 import type { AddressManager, ConnectionManager } from '@libp2p/interface-internal';
-import { mplex } from '@libp2p/mplex';
 import { tcp } from '@libp2p/tcp';
 import { multiaddr } from '@multiformats/multiaddr';
 import { ENR } from '@nethermindeth/enr';
@@ -320,8 +319,13 @@ export class LibP2PService extends WithTracer implements P2PService {
     };
   }
 
-  public updateConfig(config: Partial<P2PReqRespConfig & Pick<P2PConfig, 'skipIncomingProposals'>>) {
+  public async updateConfig(
+    config: Partial<P2PReqRespConfig & Pick<P2PConfig, 'skipIncomingProposals' | 'preferredPeers'>>,
+  ): Promise<void> {
     this.reqresp.updateConfig(config);
+    if (config.preferredPeers !== undefined) {
+      await this.peerManager.updatePreferredPeers(config.preferredPeers);
+    }
     this.config = merge(this.config, config);
   }
 
@@ -463,8 +467,9 @@ export class LibP2PService extends WithTracer implements P2PService {
       ],
       datastore,
       peerDiscovery,
-      // Pin the yamux frame size: MAX_REQRESP_REQUEST_SIZE_BYTES relies on a reqresp request fitting in one frame.
-      streamMuxers: [yamux({ maxMessageSize: YAMUX_MAX_MESSAGE_SIZE_BYTES }), mplex()],
+      // yamux is the only muxer: MAX_REQRESP_REQUEST_SIZE_BYTES relies on a reqresp request fitting in
+      // one yamux frame.
+      streamMuxers: [yamux({ maxMessageSize: YAMUX_MAX_MESSAGE_SIZE_BYTES })],
       connectionEncryption: [noise()],
       connectionManager: {
         minConnections: 0, // Disable libp2p peer dialing, we do it manually
@@ -794,6 +799,22 @@ export class LibP2PService extends WithTracer implements P2PService {
     callback: (info: { slot: SlotNumber; proposer: EthAddress; type: 'checkpoint' | 'block' }) => void,
   ): void {
     this.duplicateProposalCallback = callback;
+  }
+
+  /**
+   * Whether a duplicate proposal at this slot can be attributed as an equivocation offense. With an
+   * empty committee every signer is accepted, so two distinct honest proposers for the same slot look
+   * like equivocation; without an expected proposer there is no one to attribute the offense to.
+   * Mirrors the guard in checkpoint_equivocation_watcher, which refuses to slash when the slot has no
+   * proposer.
+   */
+  private async canAttributeDuplicateProposal(slot: SlotNumber): Promise<boolean> {
+    const expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slot);
+    if (expectedProposer === undefined) {
+      this.logger.warn(`Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty committee)`);
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -1207,7 +1228,7 @@ export class LibP2PService extends WithTracer implements P2PService {
    * Process a checkpoint attestation from a peer.
    * Validates the attestation and adds it to the pool.
    */
-  private async processCheckpointAttestationFromPeer(
+  protected async processCheckpointAttestationFromPeer(
     payloadData: Buffer,
     msgId: string,
     source: PeerId,
@@ -1281,16 +1302,18 @@ export class LibP2PService extends WithTracer implements P2PService {
       return { result: TopicValidatorResult.Ignore, obj: attestation };
     }
 
-    // Could not add (cap reached for signer), penalize and do not re-broadcast
+    // Local per-(slot, signer) retention cap is full. That is receiver-local state, not evidence the sender
+    // forwarded invalid data (it could not know our cache was full), so drop the extra payload without
+    // penalizing the peer. Do not re-broadcast.
     if (!added) {
-      this.logger.warn(`Rejecting checkpoint attestation due to cap`, {
+      this.logger.debug(`Ignoring checkpoint attestation exceeding per-signer cap`, {
         slot: slot.toString(),
         archive: attestation.archive.toString(),
         source: peerId.toString(),
         attester: attestation.getSender()?.toString(),
         count,
       });
-      return { result: TopicValidatorResult.Reject, severity: PeerErrorSeverity.HighToleranceError };
+      return { result: TopicValidatorResult.Ignore, obj: attestation };
     }
 
     // Check if this is a duplicate attestation (signer attested to a different proposal at the same slot)
@@ -1318,7 +1341,10 @@ export class LibP2PService extends WithTracer implements P2PService {
       result,
       obj: block,
       metadata: { isEquivocated, isOversized } = {},
-    } = await this.validateReceivedMessage<BlockProposal, { isEquivocated: boolean; isOversized: boolean }>(
+    } = await this.validateReceivedMessage<
+      BlockProposal,
+      { isEquivocated: boolean; isOversized: boolean; capFull?: boolean }
+    >(
       () => this.validateAndStoreBlockProposal(source, BlockProposal.fromBuffer(payloadData)),
       msgId,
       source,
@@ -1342,7 +1368,9 @@ export class LibP2PService extends WithTracer implements P2PService {
   protected async validateAndStoreBlockProposal(
     peerId: PeerId,
     block: BlockProposal,
-  ): Promise<ReceivedMessageValidationResult<BlockProposal, { isEquivocated: boolean; isOversized: boolean }>> {
+  ): Promise<
+    ReceivedMessageValidationResult<BlockProposal, { isEquivocated: boolean; isOversized: boolean; capFull?: boolean }>
+  > {
     const validationResult = await this.blockProposalValidator.validate(block);
 
     if (validationResult.result === 'reject') {
@@ -1375,9 +1403,11 @@ export class LibP2PService extends WithTracer implements P2PService {
       return { result: TopicValidatorResult.Ignore, obj: block, metadata: { isEquivocated, isOversized } };
     }
 
-    // Too many blocks received for this slot and index, penalize peer and do not re-broadcast
+    // Local per-position retention cap is full. That is receiver-local state, not evidence the
+    // sender forwarded invalid data (it could not know our cache was full), so drop the extra
+    // payload without penalizing the peer. Do not re-broadcast.
     if (!added) {
-      this.logger.warn(`Penalizing peer for block proposal exceeding per-position cap`, {
+      this.logger.debug(`Ignoring block proposal exceeding per-position cap`, {
         ...block.toBlockInfo(),
         indexWithinCheckpoint: block.indexWithinCheckpoint,
         count,
@@ -1385,9 +1415,14 @@ export class LibP2PService extends WithTracer implements P2PService {
         source: peerId.toString(),
       });
       return {
-        result: TopicValidatorResult.Reject,
-        metadata: { isEquivocated, isOversized },
-        severity: PeerErrorSeverity.HighToleranceError,
+        // isEquivocated is false here even when count > 1: a full cache is a receiver-local drop, not
+        // a fresh equivocation by this block. Genuine equivocation is already captured on the add
+        // (duplicateProposalCallback below). capFull tells the checkpoint path, whose terminal block
+        // this may be, to ignore the whole checkpoint too, rather than store and re-broadcast it while
+        // its terminal block was dropped.
+        result: TopicValidatorResult.Ignore,
+        obj: block,
+        metadata: { isEquivocated: false, isOversized, capFull: true },
       };
     }
 
@@ -1416,8 +1451,9 @@ export class LibP2PService extends WithTracer implements P2PService {
         source: peerId.toString(),
         proposer: proposer?.toString(),
       });
-      // Invoke the duplicate callback on the first duplicate spotted only
-      if (proposer && count === 2) {
+      // Invoke the duplicate callback on the first duplicate spotted only, and only when the offense
+      // can be attributed to an expected proposer (not an empty committee).
+      if (proposer && count === 2 && (await this.canAttributeDuplicateProposal(block.slotNumber))) {
         this.duplicateProposalCallback?.({ slot: block.slotNumber, proposer, type: 'block' });
       }
       return { result: TopicValidatorResult.Accept, obj: block, metadata: { isEquivocated, isOversized } };
@@ -1557,14 +1593,14 @@ export class LibP2PService extends WithTracer implements P2PService {
         [Attributes.P2P_ID]: peerId.toString(),
       });
       const blockProposalResult = await this.validateAndStoreBlockProposal(peerId, blockProposal);
-      const { obj, metadata: { isEquivocated, isOversized: blockIsOversized } = {} } = blockProposalResult;
+      const { obj, metadata: { isEquivocated, isOversized: blockIsOversized, capFull: blockCapFull } = {} } =
+        blockProposalResult;
       isOversized = blockIsOversized ?? false;
 
-      if (blockProposalResult.result === TopicValidatorResult.Reject || !obj || isEquivocated) {
+      if (blockProposalResult.result === TopicValidatorResult.Reject || !obj) {
         this.logger.debug(`Rejecting checkpoint due to invalid last block proposal`, {
           [Attributes.SLOT_NUMBER]: checkpoint.slotNumber.toString(),
           [Attributes.P2P_ID]: peerId.toString(),
-          isEquivocated,
           result: blockProposalResult.result,
         });
         return {
@@ -1572,6 +1608,15 @@ export class LibP2PService extends WithTracer implements P2PService {
           severity:
             'severity' in blockProposalResult ? blockProposalResult.severity : PeerErrorSeverity.MidToleranceError,
         };
+      } else if (blockCapFull || isEquivocated) {
+        // Both cases depend on our local cache, not on anything the relaying peer could check, so do not
+        // penalize it. Genuine equivocation was already reported at the block level. Drop the checkpoint:
+        // no store, no re-broadcast, no processing or attestation.
+        this.logger.debug(`Ignoring checkpoint whose terminal block was a receiver-local drop`, {
+          [Attributes.SLOT_NUMBER]: checkpoint.slotNumber.toString(),
+          [Attributes.P2P_ID]: peerId.toString(),
+        });
+        return { result: TopicValidatorResult.Ignore, obj: checkpoint };
       } else if (blockProposalResult.result === TopicValidatorResult.Accept && obj && !isEquivocated && !isOversized) {
         // An oversized terminal block is re-broadcast as slashing evidence but never processed.
         processBlock = true;
@@ -1597,19 +1642,19 @@ export class LibP2PService extends WithTracer implements P2PService {
       };
     }
 
-    // Too many checkpoint proposals received for this slot, penalize peer and do not re-broadcast.
-    // Note: We still return the checkpoint obj so the lastBlock can be processed if valid
+    // Local per-slot retention cap is full. That is receiver-local state, not evidence the sender
+    // forwarded invalid data, so drop the extra payload without penalizing the peer. Do not
+    // re-broadcast. We still return the checkpoint obj so the lastBlock can be processed if valid.
     if (!added) {
-      this.logger.warn(`Penalizing peer for checkpoint proposal exceeding per-slot cap`, {
+      this.logger.debug(`Ignoring checkpoint proposal exceeding per-slot cap`, {
         ...checkpoint.toCheckpointInfo(),
         count,
         source: peerId.toString(),
       });
       return {
-        result: TopicValidatorResult.Reject,
+        result: TopicValidatorResult.Ignore,
         obj: checkpoint,
         metadata: { isEquivocated, processBlock, isOversized },
-        severity: PeerErrorSeverity.HighToleranceError,
       };
     }
 
@@ -1623,7 +1668,7 @@ export class LibP2PService extends WithTracer implements P2PService {
         proposer: proposer?.toString(),
       });
       // Invoke the duplicate callback on the first duplicate spotted only
-      if (proposer && count === 2) {
+      if (proposer && count === 2 && (await this.canAttributeDuplicateProposal(checkpoint.slotNumber))) {
         this.duplicateProposalCallback?.({ slot: checkpoint.slotNumber, proposer, type: 'checkpoint' });
       }
       return {
@@ -1659,6 +1704,10 @@ export class LibP2PService extends WithTracer implements P2PService {
       source: sender.toString(),
     });
 
+    // The all-nodes callback runs first, and to completion: it is where the proposal is validated — including
+    // the check that its final message position closes a live Inbox bucket — and where a valid one becomes this
+    // node's proposed checkpoint. The validator callback below reuses that decision, so attesting can never
+    // outrun it.
     await this.allNodesCheckpointReceivedCallback(checkpoint, sender);
 
     // Call the checkpoint received callback with the core version (without lastBlock)

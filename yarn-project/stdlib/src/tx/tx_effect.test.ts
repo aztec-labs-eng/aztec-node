@@ -14,7 +14,7 @@ import {
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { PublicDataWrite } from '../avm/public_data_write.js';
 import { RevertCode } from '../avm/revert_code.js';
@@ -200,7 +200,7 @@ describe('TxEffect', () => {
       );
 
       // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-      updateInlineTestData(
+      updateInlineFndTestData(
         'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
         'test_data_tx_effect_leaf',
         leaf.toString(),
@@ -224,17 +224,17 @@ describe('TxEffect', () => {
         `"0x10aefe4df8cb37d89dc3278432c6c732c7b3740fb53d5ef128f86f9a9b4bbafb"`,
       );
 
-      updateInlineTestData(
+      updateInlineFndTestData(
         'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
         'test_data_empty_tx_effect_leaf',
         emptyLeaf.toString(),
       );
-      updateInlineTestData(
+      updateInlineFndTestData(
         'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
         'test_data_maximum_tx_effect_leaf',
         maximumLeaf.toString(),
       );
-      updateInlineTestData(
+      updateInlineFndTestData(
         'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_effect.nr',
         'test_data_three_tx_effects_tree_root',
         threeTxRoot.toString(),

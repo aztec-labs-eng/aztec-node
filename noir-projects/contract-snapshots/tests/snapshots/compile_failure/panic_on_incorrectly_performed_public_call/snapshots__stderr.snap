@@ -2,14 +2,14 @@
 source: tests/snapshots.rs
 expression: stderr
 ---
-error: Could not resolve 'ZERO' in path
+error: no associated item named `ZERO` found for `AztecAddress`
    ┌─ src/main.nr:3:1
    │
  3 │ #[aztec]
    │ -------- While running this function attribute
    ·
 12 │         PanicOnIncorrectlyPerformedPublicCall::at(AztecAddress::ZERO).arbitrary_public_function();
-   │                                                                 ----
+   │                                                                 ---- a path can only name an associated type, constant or function of `AztecAddress`
    │
 
 error: Your public call needs to be passed into the `self.call(...)`, `self.enqueue(...)` or `self.enqueue_incognito(...)` method to be executed (e.g. `self.call(MyContract::at(address).my_public_function(...args))`

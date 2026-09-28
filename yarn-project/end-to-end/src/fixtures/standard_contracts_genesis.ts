@@ -11,7 +11,8 @@ import { siloNullifier } from '@aztec-labs/stdlib/hash';
  *   `ContractInstanceRegistry.publish_for_public_execution` pushes, using the contract's real derived address (standard
  *   contracts are deployed at artifact-derived addresses, not magic protocol addresses).
  *
- * Seed these into the genesis nullifier tree (as the 5th `getGenesisValues` arg) alongside the archiver's
+ * Seed these into the genesis nullifier tree (as the 5th `getGenesisValues` arg, which adds them on top of the
+ * canonical protocol contract nullifiers that every genesis carries) alongside the archiver's
  * `testPreloadStandardContracts` preload: the store preload makes the `ensure*Published` guards short-circuit, and these
  * nullifiers make the AVM's deployment-nullifier check pass when the contracts are called. Every e2e node genesis that
  * feeds an L1 `genesisArchiveRoot` must seed the same set, or the world-state root diverges from the deployed rollup.

@@ -12,6 +12,7 @@ terraform.tfstate*
 .tsbuildinfo
 bench-out
 dumped-avm-circuit-inputs
+tmp/
 
 # Local Netlify folder
 .netlify
@@ -34,6 +35,7 @@ __pycache__
 
 *.local.md
 .claude/settings.local.json
+.codex/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/worktrees
 

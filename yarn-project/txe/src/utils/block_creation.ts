@@ -1,5 +1,10 @@
 import { MAX_NOTE_HASHES_PER_TX, MAX_NULLIFIERS_PER_TX, NULLIFIER_SUBTREE_HEIGHT } from '@aztec-labs/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Body, L2Block } from '@aztec-labs/stdlib/block';
@@ -46,7 +51,10 @@ export async function makeTXEBlockHeader(
   const archiveInfo = await worldTrees.getTreeInfo(MerkleTreeId.ARCHIVE);
 
   return BlockHeader.from({
-    lastArchive: new AppendOnlyTreeSnapshot(new Fr(archiveInfo.root), Number(archiveInfo.size)),
+    lastArchive: new AppendOnlyTreeSnapshot(
+      new Fr(archiveInfo.root),
+      TreeLeafIndex.fromBigInt(BigInt(archiveInfo.size)),
+    ),
     spongeBlobHash: Fr.ZERO,
     txEffectsTreeRoot: await new Body(txEffects).computeTxEffectsTreeRoot(),
     state: stateReference,
@@ -81,7 +89,10 @@ export async function makeTXEBlock(
 
   // Get the new archive state after updating
   const newArchiveInfo = await worldTrees.getTreeInfo(MerkleTreeId.ARCHIVE);
-  const newArchive = new AppendOnlyTreeSnapshot(new Fr(newArchiveInfo.root), Number(newArchiveInfo.size));
+  const newArchive = new AppendOnlyTreeSnapshot(
+    new Fr(newArchiveInfo.root),
+    TreeLeafIndex.fromBigInt(BigInt(newArchiveInfo.size)),
+  );
 
   // L2Block requires checkpointNumber and indexWithinCheckpoint.
   // TXE uses 1-block-per-checkpoint for testing simplicity, so we can use block number as checkpoint number.

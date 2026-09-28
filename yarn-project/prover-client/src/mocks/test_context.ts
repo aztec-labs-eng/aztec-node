@@ -7,7 +7,7 @@ import type { Logger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
-import { ProtocolContractsList } from '@aztec-labs/protocol-contracts';
+import { DEFAULT_GENESIS_DATA, ProtocolContractsList } from '@aztec-labs/protocol-contracts';
 import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
 import { PublicDataWrite } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -92,6 +92,7 @@ export class TestContext {
     const initialFeePayerBalance = new Fr(10n ** 20n);
     const feePayerSlot = await computeFeePayerBalanceLeafSlot(feePayer);
     const genesis: GenesisData = {
+      ...DEFAULT_GENESIS_DATA,
       prefilledPublicData: [new PublicDataTreeLeaf(feePayerSlot, initialFeePayerBalance)],
       genesisTimestamp: 0n,
     };
@@ -259,10 +260,12 @@ export class TestContext {
       const txs = blockTxs[i];
       const state = blockEndStates[i];
 
-      const { block } = await builder.addBlock(blockGlobalVariables[i], txs, i === 0 ? l1ToL2Messages : [], {
-        expectedEndState: state,
-        insertTxsEffects: true,
-      });
+      const { block } = await builder.applyEffectsAndSealBlock(
+        blockGlobalVariables[i],
+        txs,
+        i === 0 ? l1ToL2Messages : [],
+        { expectedEndState: state },
+      );
 
       const header = block.header;
       this.headers.set(block.number, header);
@@ -385,10 +388,12 @@ export class TestContext {
       const txs = blockTxs[i];
       const state = blockEndStates[i];
 
-      const { block } = await builder.addBlock(blockGlobalVariables[i], txs, l1ToL2MessagesPerBlock[i], {
-        expectedEndState: state,
-        insertTxsEffects: true,
-      });
+      const { block } = await builder.applyEffectsAndSealBlock(
+        blockGlobalVariables[i],
+        txs,
+        l1ToL2MessagesPerBlock[i],
+        { expectedEndState: state },
+      );
 
       const header = block.header;
       this.headers.set(block.number, header);

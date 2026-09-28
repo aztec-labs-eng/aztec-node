@@ -20,7 +20,12 @@ import type { ContractArtifact } from '../abi/abi.js';
 import { AztecAddress } from '../aztec-address/index.js';
 import type { BlockData } from '../block/block_data.js';
 import type { DataInBlock } from '../block/in_block.js';
-import { BlockHash, type BlockParameter } from '../block/index.js';
+import {
+  type ArchiveBlockParameter,
+  BlockHash,
+  type BlockParameter,
+  isAnchoredBlockParameter,
+} from '../block/index.js';
 import type { CheckpointsQuery, L2BlockTag, L2Tips } from '../block/l2_block_source.js';
 import type { CheckpointData } from '../checkpoint/checkpoint_data.js';
 import {
@@ -148,6 +153,12 @@ describe('AztecNodeApiSchema', () => {
     await expect(
       context.client.findLeavesIndexes(BlockNumber(1), MerkleTreeId.ARCHIVE, times(MAX_RPC_LEN + 1, Fr.random)),
     ).rejects.toThrow();
+
+    // An anchor naming the block by both number and hash survives the wire as one object, not as either half.
+    const anchor = { number: BlockNumber(1), hash: BlockHash.random() };
+    const anchored = await context.client.findLeavesIndexes(anchor, MerkleTreeId.ARCHIVE, [Fr.random(), Fr.random()]);
+    expect(anchored).toEqual([{ data: 1n, l2BlockNumber: 1, l2BlockHash: new BlockHash(new Fr(1)) }, undefined]);
+    expect(handler.lastFindLeavesIndexesBlock).toEqual(anchor);
   });
 
   it('getL1ToL2MessageMembershipWitness', async () => {
@@ -184,6 +195,41 @@ describe('AztecNodeApiSchema', () => {
     expect(response).toBeInstanceOf(MembershipWitness);
   });
 
+  it('getBlockHashMembershipWitnessAtArchive', async () => {
+    const archive = Fr.random();
+    const response = await context.client.getBlockHashMembershipWitnessAtArchive({ archive }, BlockHash.random());
+    expect(response).toBeInstanceOf(MembershipWitness);
+    expect(handler.lastGetBlockHashMembershipWitnessAtArchiveArgs?.[0]).toEqual({ archive });
+
+    // A key that is not a selector is dropped on the way in, as for every other block selector.
+    await context.client.getBlockHashMembershipWitnessAtArchive(
+      { archive, futureOption: true } as unknown as ArchiveBlockParameter,
+      BlockHash.random(),
+    );
+    expect(handler.lastGetBlockHashMembershipWitnessAtArchiveArgs?.[0]).toEqual({ archive });
+
+    // Only an archive root names the archive to prove against: every other block selector is refused, including one
+    // riding alongside the archive.
+    const otherSelectors: unknown[] = [
+      BlockNumber(1),
+      BlockHash.random(),
+      'latest',
+      { number: BlockNumber(1) },
+      { hash: BlockHash.random() },
+      { tag: 'proven' },
+      { number: BlockNumber(1), hash: BlockHash.random() },
+      { archive, number: BlockNumber(1) },
+      { archive, hash: BlockHash.random() },
+      { archive, tag: 'proven' },
+      {},
+    ];
+    for (const selector of otherSelectors) {
+      await expect(
+        context.client.getBlockHashMembershipWitnessAtArchive(selector as ArchiveBlockParameter, BlockHash.random()),
+      ).rejects.toThrow();
+    }
+  });
+
   it('getNoteHashMembershipWitness', async () => {
     const response = await context.client.getNoteHashMembershipWitness(BlockNumber(1), Fr.random());
     expect(response).toBeInstanceOf(MembershipWitness);
@@ -207,6 +253,24 @@ describe('AztecNodeApiSchema', () => {
   it('getBlock', async () => {
     const response = await context.client.getBlock(BlockNumber(1));
     expect(response).toBeUndefined();
+
+    // A client built against a later version of the API sends fields this one has never heard of, in the selector
+    // and in the options alike. The handler is served the request without them rather than the call being refused.
+    await context.client.getBlock(
+      { number: BlockNumber(1), futureOption: true } as unknown as BlockParameter,
+      {
+        includeTransactions: true,
+        futureOption: true,
+      } as BlockIncludeOptions,
+    );
+    expect(handler.lastGetBlockArgs).toEqual([{ number: BlockNumber(1) }, { includeTransactions: true }]);
+
+    // An invalid value for a key it does know still fails, whatever else rides along.
+    await expect(
+      context.client.getBlock({ number: -1, futureOption: true } as unknown as BlockParameter),
+    ).rejects.toThrow();
+    // So does an object left naming no block at all.
+    await expect(context.client.getBlock({ futureOption: true } as unknown as BlockParameter)).rejects.toThrow();
   });
 
   it('getBlockData', async () => {
@@ -334,6 +398,19 @@ describe('AztecNodeApiSchema', () => {
     expect(response).toHaveLength(1);
     expect(response[0]).toHaveLength(1);
     expect(response[0][0].txHash).toBeDefined();
+
+    const anchor = { number: BlockNumber(1), hash: BlockHash.random() };
+    expect(
+      await context.client.getPrivateLogsByTags({ tags: [SiloedTag.random()], referenceBlock: anchor }),
+    ).toHaveLength(1);
+
+    // An anchor that does not pin a fork is refused at the boundary rather than reaching the node.
+    await expect(
+      context.client.getPrivateLogsByTags({
+        tags: [SiloedTag.random()],
+        referenceBlock: BlockNumber(1) as unknown as BlockHash,
+      }),
+    ).rejects.toThrow();
   });
 
   it('getPublicLogsByTags', async () => {
@@ -507,6 +584,41 @@ describe('AztecNodeApiSchema', () => {
     expect(response).toEqual(handler.singleValidatorStats);
   });
 
+  it('getValidatorStatsBatch(results and null entries)', async () => {
+    const address = EthAddress.random();
+    handler.singleValidatorStats = {
+      validator: {
+        address,
+        totalSlots: 1,
+        missedAttestations: { currentStreak: 0, count: 0, total: 1 },
+        missedProposals: { currentStreak: 0, count: 0, total: 0 },
+        history: [{ slot: SlotNumber(5), status: 'attestation-sent' }],
+      },
+      allTimeEpochPerformance: [],
+      slotWindow: 10,
+    };
+    const result = await context.client.getValidatorStatsBatch(
+      [address, EthAddress.random(), address],
+      SlotNumber(0),
+      SlotNumber(10),
+    );
+    expect(result).toEqual([handler.singleValidatorStats, null, handler.singleValidatorStats]);
+  });
+
+  it('getValidatorStatsBatch(empty list)', async () => {
+    await expect(context.client.getValidatorStatsBatch([])).resolves.toEqual([]);
+  });
+
+  it('getValidatorStatsBatch(disabled)', async () => {
+    const addresses = Array.from({ length: 100 }, () => EthAddress.random());
+    await expect(context.client.getValidatorStatsBatch(addresses)).resolves.toEqual(addresses.map(() => null));
+  });
+
+  it('getValidatorStatsBatch(size limit)', async () => {
+    const address = EthAddress.random();
+    await expect(context.client.getValidatorStatsBatch(Array.from({ length: 101 }, () => address))).rejects.toThrow();
+  });
+
   it('getValidatorStats(non-existent)', async () => {
     const response = await context.client.getValidatorStats(EthAddress.random());
     expect(response).toBeUndefined();
@@ -623,9 +735,15 @@ function mockTxEffectMembershipWitness(): TxEffectMembershipWitness {
 }
 
 class MockAztecNode implements AztecNode {
+  /** What the last `getBlock` call was handed after the schema parsed it. */
+  public lastGetBlockArgs?: [BlockParameter, BlockIncludeOptions | undefined];
+  /** What the last `getBlockHashMembershipWitnessAtArchive` call was handed after the schema parsed it. */
+  public lastGetBlockHashMembershipWitnessAtArchiveArgs?: [ArchiveBlockParameter, BlockHash];
+
   public validatorStats: ValidatorsStats | undefined;
   public singleValidatorStats: SingleValidatorStats | undefined;
   public lastReferenceBlock: BlockParameter | undefined;
+  public lastFindLeavesIndexesBlock: BlockParameter | undefined;
 
   constructor(private artifact: ContractArtifact) {}
 
@@ -669,9 +787,10 @@ class MockAztecNode implements AztecNode {
   }
 
   getBlock<Opts extends BlockIncludeOptions = {}>(
-    _param: BlockParameter,
-    _options?: Opts,
+    param: BlockParameter,
+    options?: Opts,
   ): Promise<BlockResponse<Opts> | undefined> {
+    this.lastGetBlockArgs = [param, options];
     return Promise.resolve(undefined);
   }
 
@@ -711,9 +830,7 @@ class MockAztecNode implements AztecNode {
     treeId: MerkleTreeId,
     leafValues: Fr[],
   ): Promise<(DataInBlock<bigint> | undefined)[]> {
-    expect(
-      referenceBlock === 'latest' || BlockHash.isBlockHash(referenceBlock) || typeof referenceBlock === 'number',
-    ).toBe(true);
+    this.lastFindLeavesIndexesBlock = referenceBlock;
     expect(leafValues).toHaveLength(2);
     expect(leafValues[0]).toBeInstanceOf(Fr);
     expect(leafValues[1]).toBeInstanceOf(Fr);
@@ -740,6 +857,15 @@ class MockAztecNode implements AztecNode {
       referenceBlock === 'latest' || BlockHash.isBlockHash(referenceBlock) || typeof referenceBlock === 'number',
     ).toBe(true);
     expect(blockHash).toBeInstanceOf(BlockHash);
+    return Promise.resolve(MembershipWitness.random(ARCHIVE_HEIGHT));
+  }
+  getBlockHashMembershipWitnessAtArchive(
+    reference: ArchiveBlockParameter,
+    blockHash: BlockHash,
+  ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
+    expect(reference.archive).toBeInstanceOf(Fr);
+    expect(blockHash).toBeInstanceOf(BlockHash);
+    this.lastGetBlockHashMembershipWitnessAtArchiveArgs = [reference, blockHash];
     return Promise.resolve(MembershipWitness.random(ARCHIVE_HEIGHT));
   }
   getNoteHashMembershipWitness(
@@ -862,6 +988,9 @@ class MockAztecNode implements AztecNode {
   }
   getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
     expect(Array.isArray(query.tags)).toBe(true);
+    if (query.referenceBlock !== undefined) {
+      expect(isAnchoredBlockParameter(query.referenceBlock) || BlockHash.isBlockHash(query.referenceBlock)).toBe(true);
+    }
     return Promise.resolve([query.tags.map(() => randomLogResult())]);
   }
   getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {
@@ -949,6 +1078,18 @@ class MockAztecNode implements AztecNode {
       expect(typeof toSlot).toBe('number');
     }
     return Promise.resolve(this.singleValidatorStats);
+  }
+  getValidatorStatsBatch(
+    validatorAddresses: EthAddress[],
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<(SingleValidatorStats | null)[]> {
+    return Promise.all(
+      validatorAddresses.map(async address => {
+        const stats = await this.getValidatorStats(address, fromSlot, toSlot);
+        return stats?.validator.address.equals(address) ? stats : null;
+      }),
+    );
   }
   simulatePublicCalls(tx: Tx, _enforceFeePayment = false): Promise<PublicSimulationOutput> {
     expect(tx).toBeInstanceOf(Tx);

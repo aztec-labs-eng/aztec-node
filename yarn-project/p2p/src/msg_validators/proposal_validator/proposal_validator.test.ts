@@ -1,9 +1,10 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
 import { EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
+import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
 import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
@@ -17,6 +18,7 @@ import { TxHash } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
+import { BlockProposalValidator } from './block_proposal_validator.js';
 import { CheckpointProposalValidator } from './checkpoint_proposal_validator.js';
 import { ProposalValidator } from './proposal_validator.js';
 
@@ -127,9 +129,10 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
     });
 
-    it('rejects with high tolerance error if slot is outside its receive window', async () => {
-      // Proposal for slot 99 (previous). Past slot 99's checkpoint receive deadline (99*72 - E - D =
-      // 7110s) so both block and checkpoint proposals, which share that window, are rejected.
+    it('rejects a proposal well outside its receive window', async () => {
+      // Proposal for slot 99 (previous). Now is ~67s past slot 99's checkpoint receive deadline
+      // (99*72 - E - D = 7110s), far beyond the propagation grace, so the peer is relaying something
+      // clearly stale: reject and penalize rather than ignore.
       const proposal = await factory(previousSlot, Secp256k1Signer.random());
 
       epochCache.getEpochAndSlotNow.mockReturnValue({
@@ -214,12 +217,13 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.MidToleranceError });
     });
 
-    it('rejects with high tolerance error when proposer is undefined (open committee)', async () => {
+    it('accepts a valid proposal when the committee is empty (anyone may propose)', async () => {
+      // undefined proposer = empty committee (anyone may propose), so a valid proposal is accepted.
       const proposal = await factory(currentSlot, Secp256k1Signer.random());
 
       epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'accept' });
     });
 
     it('rejects with low tolerance error on NoCommitteeError', async () => {
@@ -228,6 +232,16 @@ describe('ProposalValidator', () => {
       epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new NoCommitteeError());
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
+    });
+
+    it('ignores a proposal when the local proposer lookup fails for a non-committee reason', async () => {
+      const proposal = await factory(currentSlot, Secp256k1Signer.random());
+
+      // A receiver-local lookup failure (e.g. an L1 RPC outage or sync lag) is not the relaying peer's
+      // fault, so it must not penalize the sender: ignore rather than reject.
+      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 rpc unavailable'));
+      const result = await validator.validate(proposal);
+      expect(result).toEqual({ result: 'ignore' });
     });
 
     it('accepts valid proposal for current slot', async () => {
@@ -280,9 +294,9 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'accept' });
     });
 
-    it('rejects proposal for current slot past its receive window', async () => {
-      // Past slot 100's proposal receive deadline (100*72 - E - D = 7182s) so both block and checkpoint
-      // proposals, which share that window, are rejected.
+    it('rejects a proposal for the current slot well past its receive window', async () => {
+      // ~67s past slot 100's proposal receive deadline (100*72 - E - D = 7182s), far beyond the
+      // propagation grace, so both block and checkpoint proposals, which share that window, are rejected.
       epochCache.getTargetAndNextSlot.mockReturnValue({
         targetSlot: SlotNumber(101),
         nextSlot: SlotNumber(102),
@@ -316,7 +330,7 @@ describe('ProposalValidator', () => {
       epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
     });
 
-    it('rejects a checkpoint proposal for the target slot arriving after the receive deadline', async () => {
+    it('ignores a checkpoint proposal for the target slot arriving after the receive deadline', async () => {
       const proposal = await makeCheckpointProposal({
         checkpointHeader: makeCheckpointHeader(0, { slotNumber: currentSlot }),
         signer,
@@ -331,7 +345,7 @@ describe('ProposalValidator', () => {
       });
 
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'ignore' });
     });
 
     it('accepts a checkpoint proposal for the target slot arriving within the receive window', async () => {
@@ -351,7 +365,7 @@ describe('ProposalValidator', () => {
       expect(result).toEqual({ result: 'accept' });
     });
 
-    it('rejects a block proposal for the target slot arriving after the checkpoint receive deadline', async () => {
+    it('ignores a block proposal for the target slot arriving after the checkpoint receive deadline', async () => {
       // Block proposals share the checkpoint proposal receive window [7116, 7182]s. Every block proposal
       // for the slot precedes the checkpoint proposal, so a block proposal arriving after the checkpoint
       // receive deadline (7182) is rejected at ingress just like the checkpoint proposal would be.
@@ -368,7 +382,7 @@ describe('ProposalValidator', () => {
       });
 
       const result = await validator.validate(proposal);
-      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
+      expect(result).toEqual({ result: 'ignore' });
     });
   });
 
@@ -402,19 +416,33 @@ describe('ProposalValidator', () => {
       expect(await validateAt(buildFrameStart - deltaSeconds)).toEqual({ result: 'accept' });
     });
 
-    it('rejects just before the build frame start minus the disparity', async () => {
-      expect(await validateAt(buildFrameStart - deltaSeconds - 0.001)).toEqual({
-        result: 'reject',
-        severity: PeerErrorSeverity.HighToleranceError,
-      });
+    it('ignores just before the build frame start minus the disparity', async () => {
+      expect(await validateAt(buildFrameStart - deltaSeconds - 0.001)).toEqual({ result: 'ignore' });
     });
 
     it('accepts at the receive deadline plus the disparity', async () => {
       expect(await validateAt(proposalDeadline + deltaSeconds)).toEqual({ result: 'accept' });
     });
 
-    it('rejects just after the receive deadline plus the disparity', async () => {
-      expect(await validateAt(proposalDeadline + deltaSeconds + 0.001)).toEqual({
+    it('ignores just after the receive deadline plus the disparity', async () => {
+      expect(await validateAt(proposalDeadline + deltaSeconds + 0.001)).toEqual({ result: 'ignore' });
+    });
+
+    it('ignores a proposal just past the deadline, within the propagation grace', async () => {
+      // 300ms past the widened window, under the ignore grace: a benign just-expired forward.
+      expect(await validateAt(proposalDeadline + deltaSeconds + 0.3)).toEqual({ result: 'ignore' });
+    });
+
+    it('rejects a proposal past the deadline beyond the propagation grace', async () => {
+      // 600ms past the widened window, over the ignore grace: clearly stale, so penalize.
+      expect(await validateAt(proposalDeadline + deltaSeconds + 0.6)).toEqual({
+        result: 'reject',
+        severity: PeerErrorSeverity.HighToleranceError,
+      });
+    });
+
+    it('rejects a proposal before the window beyond the propagation grace', async () => {
+      expect(await validateAt(buildFrameStart - deltaSeconds - 0.6)).toEqual({
         result: 'reject',
         severity: PeerErrorSeverity.HighToleranceError,
       });
@@ -527,12 +555,54 @@ describe('ProposalValidator', () => {
         expect(result).toEqual({ result: 'accept' });
       });
 
-      it('accepts when maxTxsPerBlock is not set (unlimited)', async () => {
+      it('accepts a small proposal when maxTxsPerBlock is not set', async () => {
         const proposal = await makeBlockProposal({ txHashes: Array.from({ length: 10 }, () => TxHash.random()) });
         const result = await validator.validateTxs(proposal);
         expect(result).toEqual({ result: 'accept' });
       });
     });
+  });
+
+  describe.each(['block', 'checkpoint'] as const)('%s proposal protocol tx-count ceiling', kind => {
+    const signer = Secp256k1Signer.random();
+
+    it.each([undefined, MAX_TXS_PER_CHECKPOINT + 100])(
+      'enforces the protocol ceiling with configured maxTxsPerBlock=%s',
+      async maxTxsPerBlock => {
+        const opts = {
+          txsPermitted: true,
+          maxTxsPerBlock,
+          signatureContext: TEST_COORDINATION_SIGNATURE_CONTEXT,
+          clockDisparityMs: TEST_CLOCK_DISPARITY_MS,
+        };
+        epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+
+        for (const count of [MAX_TXS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT + 1]) {
+          const block = {
+            blockHeader: makeBlockHeader(0, { slotNumber: currentSlot }),
+            indexWithinCheckpoint: IndexWithinCheckpoint(0),
+            txHashes: times(count, () => TxHash.random()),
+          };
+          const result =
+            kind === 'block'
+              ? await new BlockProposalValidator(epochCache, makeTimetable(), opts).validate(
+                  await makeBlockProposal({ ...block, signer }),
+                )
+              : await new CheckpointProposalValidator(epochCache, makeTimetable(), opts).validate(
+                  await makeCheckpointProposal({
+                    checkpointHeader: makeCheckpointHeader(0, { slotNumber: currentSlot }),
+                    signer,
+                    lastBlock: block,
+                  }),
+                );
+          expect(result).toEqual(
+            count === MAX_TXS_PER_CHECKPOINT
+              ? { result: 'accept' }
+              : { result: 'reject', severity: PeerErrorSeverity.MidToleranceError },
+          );
+        }
+      },
+    );
   });
 
   describe('maxBlocksPerCheckpoint', () => {
@@ -593,6 +663,19 @@ describe('ProposalValidator', () => {
       });
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'accept' });
+    });
+
+    it('rejects a structurally-invalid index even when the proposer lookup fails (structural check runs first)', async () => {
+      // A local proposer-lookup failure alone would ignore the proposal; the structural check must run
+      // before the lookup so a peer's structurally-impossible index is still rejected during an L1 outage.
+      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 rpc unavailable'));
+      const proposal = await makeBlockProposal({
+        blockHeader: makeBlockHeader(0, { slotNumber: currentSlot }),
+        indexWithinCheckpoint: IndexWithinCheckpoint(MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT),
+        signer,
+      });
+      const result = await validator.validate(proposal);
+      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.MidToleranceError });
     });
   });
 

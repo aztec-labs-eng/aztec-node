@@ -1,4 +1,5 @@
 import type { Logger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
@@ -69,6 +70,36 @@ describe('OperationQueue', () => {
 
     expect(committed).toEqual([]);
     expect(discarded).toEqual([id!]);
+  });
+
+  it('serializes concurrent work in submission order', async () => {
+    const queue = makeQueue();
+    const gate = promiseWithResolvers<void>();
+    const started = promiseWithResolvers<void>();
+    const executionOrder: number[] = [];
+    const first = queue.run(async () => {
+      executionOrder.push(1);
+      started.resolve();
+      await gate.promise;
+    });
+    await started.promise;
+    const second = queue.run(() => {
+      executionOrder.push(2);
+      return Promise.resolve(2);
+    });
+    const third = queue.run(() => {
+      executionOrder.push(3);
+      return Promise.resolve(3);
+    });
+    try {
+      await Promise.resolve();
+      expect(executionOrder).toEqual([1]);
+    } finally {
+      gate.resolve();
+      await queue.stop();
+    }
+    expect(await Promise.all([first, second, third])).toEqual([undefined, 2, 3]);
+    expect(executionOrder).toEqual([1, 2, 3]);
   });
 
   function makeQueue() {

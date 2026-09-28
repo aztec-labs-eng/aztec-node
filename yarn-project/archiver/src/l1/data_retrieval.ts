@@ -8,18 +8,19 @@ import {
   decodeCheckpointBlobDataFromBlobs,
   encodeBlockBlobData,
 } from '@aztec-labs/blob-lib';
-import type {
-  CheckpointProposedLog,
-  EpochProofPublicInputArgs,
-  InboxContract,
-  MessageSentLog,
-  RollupContract,
-  ViemCommitteeAttestations,
-  ViemHeader,
+import {
+  type CheckpointProposedLog,
+  type EpochProofPublicInputArgs,
+  type InboxContract,
+  type MessageSentLog,
+  type RollupContract,
+  type ViemCommitteeAttestations,
+  type ViemHeader,
+  fetchLogsBisectingRange,
 } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
-import { CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, IndexWithinCheckpoint, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -46,6 +47,11 @@ type RetrievedCheckpointBase = {
   chainId: Fr;
   version: Fr;
   attestations: CommitteeAttestation[];
+  /**
+   * The exact packed `CommitteeAttestations` tuple from the propose calldata, carried verbatim: it is what
+   * the rollup hashed into `attestationsHash`, and repacking the decoded attestations does not reproduce it.
+   */
+  verbatimAttestations: ViemCommitteeAttestations;
 };
 
 /** Checkpoint data as retrieved from L1 calldata and blob data. */
@@ -57,11 +63,6 @@ export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
   blobHashes: Buffer[];
   /** Parent beacon block root from the L1 block, used for blob fetching. */
   parentBeaconBlockRoot: string | undefined;
-  /**
-   * The exact packed `CommitteeAttestations` tuple from the propose calldata, carried verbatim so that
-   * attestation validation can attach byte-faithful invalidation evidence to a negative result.
-   */
-  verbatimAttestations: ViemCommitteeAttestations;
 };
 
 export async function retrievedToPublishedCheckpoint({
@@ -74,6 +75,7 @@ export async function retrievedToPublishedCheckpoint({
   chainId,
   version,
   attestations,
+  verbatimAttestations,
 }: RetrievedCheckpoint): Promise<PublishedCheckpoint> {
   const { blocks: blocksBlobData } = checkpointBlobData;
 
@@ -135,7 +137,7 @@ export async function retrievedToPublishedCheckpoint({
     const spongeBlobHash = await clonedSpongeBlob.squeeze();
 
     const header = BlockHeader.from({
-      lastArchive: new AppendOnlyTreeSnapshot(lastArchiveRoot, l2BlockNumber),
+      lastArchive: new AppendOnlyTreeSnapshot(lastArchiveRoot, TreeLeafIndex(l2BlockNumber)),
       state,
       spongeBlobHash,
       txEffectsTreeRoot,
@@ -144,7 +146,7 @@ export async function retrievedToPublishedCheckpoint({
       totalManaUsed: new Fr(blockEndStateField.totalManaUsed),
     });
 
-    const newArchive = new AppendOnlyTreeSnapshot(newArchiveRoots[i], l2BlockNumber + 1);
+    const newArchive = new AppendOnlyTreeSnapshot(newArchiveRoots[i], TreeLeafIndex(l2BlockNumber + 1));
 
     const block = new L2Block(newArchive, header, body, checkpointNumber, IndexWithinCheckpoint(i));
     l2Blocks.push(block);
@@ -152,14 +154,14 @@ export async function retrievedToPublishedCheckpoint({
 
   const lastBlock = l2Blocks.at(-1)!;
   const checkpoint = Checkpoint.from({
-    archive: new AppendOnlyTreeSnapshot(archiveRoot, lastBlock.number + 1),
+    archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(lastBlock.number + 1)),
     header: checkpointHeader,
     blocks: l2Blocks,
     number: checkpointNumber,
     feeAssetPriceModifier: feeAssetPriceModifier,
   });
 
-  return PublishedCheckpoint.from({ checkpoint, l1, attestations });
+  return PublishedCheckpoint.from({ checkpoint, l1, attestations, verbatimAttestations });
 }
 
 /**
@@ -352,12 +354,16 @@ export async function getCheckpointBlobDataFromBlobs(
   return checkpointBlobData;
 }
 
-/** Given an L1 to L2 message, retrieves its corresponding event from the Inbox within a specific block range. */
+/**
+ * Given an L1 to L2 message, retrieves its corresponding event from the Inbox around the L1 block it was observed in,
+ * never looking past `upperBound` when one is given.
+ */
 export async function retrieveL1ToL2Message(
   inbox: InboxContract,
   message: InboxMessage,
+  upperBound?: bigint,
 ): Promise<InboxMessage | undefined> {
-  const log = await inbox.getMessageSentEventByHash(message.leaf.toString(), message.l1BlockNumber);
+  const log = await inbox.getMessageSentEventByHash(message.leaf.toString(), message.l1BlockNumber, upperBound);
   return log && mapLogInboxMessage(log);
 }
 
@@ -375,7 +381,9 @@ export async function retrieveL1ToL2Messages(
 ): Promise<InboxMessage[]> {
   const retrievedL1ToL2Messages: InboxMessage[] = [];
   while (searchStartBlock <= searchEndBlock) {
-    const messageSentLogs = await inbox.getMessageSentEvents(searchStartBlock, searchEndBlock);
+    const messageSentLogs = await fetchLogsBisectingRange(searchStartBlock, searchEndBlock, (fromBlock, toBlock) =>
+      inbox.getMessageSentEvents(fromBlock, toBlock),
+    );
 
     if (messageSentLogs.length === 0) {
       break;
@@ -393,10 +401,7 @@ function mapLogInboxMessage(log: MessageSentLog): InboxMessage {
     index: log.args.index,
     leaf: log.args.leaf,
     l1BlockNumber: log.l1BlockNumber,
-    l1BlockHash: log.l1BlockHash,
     inboxRollingHash: log.args.inboxRollingHash,
-    bucketSeq: log.args.bucketSeq,
-    bucketTimestamp: log.l1BlockTimestamp,
   };
 }
 

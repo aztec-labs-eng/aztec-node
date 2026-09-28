@@ -87,12 +87,14 @@ else
 fi
 
 if [[ "${SITEMAP_RAW:0:200}" == *"<?xml"* || "${SITEMAP_RAW:0:200}" == *"<urlset"* ]]; then
-  mapfile -t SITEMAP_URLS < <(echo "$SITEMAP_RAW" \
+  SITEMAP_URLS=()
+  while IFS= read -r line; do SITEMAP_URLS+=("$line"); done < <(echo "$SITEMAP_RAW" \
     | grep -oE "<loc>[^<]+</loc>" \
     | sed -E 's|<loc>https?://[^/]+||; s|</loc>||')
 else
   # Plain list: strip blank/comment lines and any host prefix
-  mapfile -t SITEMAP_URLS < <(echo "$SITEMAP_RAW" \
+  SITEMAP_URLS=()
+  while IFS= read -r line; do SITEMAP_URLS+=("$line"); done < <(echo "$SITEMAP_RAW" \
     | sed -E 's|^https?://[^/]+||' \
     | grep -E '^/' \
     | grep -v '^[[:space:]]*#')
@@ -107,8 +109,9 @@ echo "  URLs in sitemap:  ${#SITEMAP_URLS[@]}"
 
 # Parse netlify.toml redirect `from` patterns, in declaration order.
 # (Netlify processes redirects top-to-bottom, first match wins.)
-mapfile -t REDIRECT_FROMS < <(grep -E '^\s*from\s*=' "$NETLIFY_TOML" \
-  | sed -E 's/^\s*from\s*=\s*"([^"]+)".*/\1/')
+REDIRECT_FROMS=()
+while IFS= read -r line; do REDIRECT_FROMS+=("$line"); done < <(grep -E '^[[:space:]]*from[[:space:]]*=' "$NETLIFY_TOML" \
+  | sed -E 's/^[[:space:]]*from[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
 
 echo "  Redirect rules:   ${#REDIRECT_FROMS[@]}"
 
@@ -189,7 +192,7 @@ check_file_or_id() {
     local file file_id
     for file in "$search_dir"/*.md "$search_dir"/*.mdx; do
       [[ -f "$file" ]] || continue
-      file_id=$(sed -n '/^---$/,/^---$/{s/^id:[[:space:]]*//p}' "$file" | head -1)
+      file_id=$(sed -n '/^---$/,/^---$/{s/^id:[[:space:]]*//p;}' "$file" | head -1)
       [[ "$file_id" == "$slug" ]] && return 0
     done
   fi

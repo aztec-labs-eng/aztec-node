@@ -14,7 +14,7 @@ import type { TypedDataDefinition } from 'viem';
 import type { L2BlockInfo } from '../block/l2_block_info.js';
 import { MAX_TXS_PER_BLOCK } from '../deserialization/index.js';
 import { DutyType, type SigningContext } from '../ha-signing/index.js';
-import { InboxBucketRef } from '../messaging/inbox_bucket.js';
+import { InboxMessagePrefixRef } from '../messaging/inbox_message_prefix_ref.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { BlockHeader } from '../tx/block_header.js';
 import { TxHash } from '../tx/index.js';
@@ -70,10 +70,12 @@ export type CheckpointLastBlock = Omit<CheckpointLastBlockData, 'txs'> & {
   /** The signed transactions in the last block (optional, for DA guarantees) */
   signedTxs?: SignedTxs;
   /**
-   * Reference to the Inbox bucket the last block proposes to consume. When set, its rolling hash must equal the
-   * checkpoint header's `inboxRollingHash` (enforced at construction).
+   * The signed Inbox message-prefix reference the last block proposes to have consumed through. It must equal the
+   * checkpoint header's `inboxRollingHash` (enforced at construction), which makes the last block's position the
+   * checkpoint's own: unlike an intermediate block's, that position must resolve to a live L1 bucket at publication,
+   * because L1 reads the header's hash out of the bucket the `propose` hint names.
    */
-  bucketRef?: InboxBucketRef;
+  inboxPrefixRef: InboxMessagePrefixRef;
 };
 
 /**
@@ -109,11 +111,12 @@ export class CheckpointProposal extends Gossipable implements Signable {
   ) {
     super();
 
-    // Check that last block properties match those of the checkpoint. The last block's bucket reference
-    // commits to the same rolling hash as the checkpoint header. Only enforced when the reference is set.
-    if (lastBlock?.bucketRef && !lastBlock.bucketRef.inboxRollingHash.equals(checkpointHeader.inboxRollingHash)) {
+    // Check that last block properties match those of the checkpoint. The last block's Inbox prefix reference
+    // commits to the same rolling hash as the checkpoint header, so the checkpoint's consumed position is exactly
+    // its last block's.
+    if (lastBlock && !lastBlock.inboxPrefixRef.inboxRollingHash.equals(checkpointHeader.inboxRollingHash)) {
       throw new Error(
-        `CheckpointProposal lastBlock bucketRef rolling hash ${lastBlock.bucketRef.inboxRollingHash} does not match checkpoint inboxRollingHash ${checkpointHeader.inboxRollingHash}`,
+        `CheckpointProposal lastBlock inboxPrefixRef rolling hash ${lastBlock.inboxPrefixRef.inboxRollingHash} does not match checkpoint inboxRollingHash ${checkpointHeader.inboxRollingHash}`,
       );
     }
     if (lastBlock && 'archiveRoot' in lastBlock && !lastBlock.archiveRoot.equals(archive)) {
@@ -153,8 +156,8 @@ export class CheckpointProposal extends Gossipable implements Signable {
       this.lastBlock.txHashes,
       this.lastBlock.signature,
       this.signatureContext,
+      this.lastBlock.inboxPrefixRef,
       this.lastBlock.signedTxs,
-      this.lastBlock.bucketRef,
     );
   }
 
@@ -287,17 +290,13 @@ export class CheckpointProposal extends Gossipable implements Signable {
       buffer.push(this.lastBlock.signature);
       buffer.push(this.lastBlock.txHashes.length);
       buffer.push(this.lastBlock.txHashes);
+      // Same layout as a standalone block proposal: the required reference precedes the optional transaction bundle.
+      buffer.push(this.lastBlock.inboxPrefixRef);
       if (this.lastBlock.signedTxs) {
         buffer.push(1); // hasSignedTxs = true
         buffer.push(this.lastBlock.signedTxs.toBuffer());
       } else {
         buffer.push(0); // hasSignedTxs = false
-      }
-      // Optional bucket-reference tail. Appended only when set, so a proposal without a reference
-      // serializes without the tail and a decoder that reaches EOF reads it as unset.
-      if (this.lastBlock.bucketRef) {
-        buffer.push(1); // hasBucketRef = true
-        buffer.push(this.lastBlock.bucketRef.toBuffer());
       }
     } else {
       buffer.push(0); // hasLastBlock = false
@@ -308,6 +307,12 @@ export class CheckpointProposal extends Gossipable implements Signable {
 
   static fromBuffer(buf: Buffer | BufferReader): CheckpointProposal {
     const reader = BufferReader.asReader(buf);
+
+    // Decoding is lenient on purpose, for forward compatibility: trailing bytes are ignored and any non-zero
+    // presence flag reads as present, so a newer version can append fields that older nodes skip over. Rejecting
+    // them would make every wire extension a coordinated upgrade. Lenient decoding does not let one proposal take
+    // several identities, since the P2P message identifier and the signature both cover the signed payload rather
+    // than the raw bytes.
 
     const checkpointHeader = reader.readObject(CheckpointHeader);
     const archive = reader.readObject(Fr);
@@ -326,23 +331,12 @@ export class CheckpointProposal extends Gossipable implements Signable {
         throw new Error(`txHashes count ${txHashCount} exceeds maximum ${MAX_TXS_PER_BLOCK}`);
       }
       const txHashes = reader.readArray(txHashCount, TxHash);
+      const inboxPrefixRef = reader.readObject(InboxMessagePrefixRef);
 
       let signedTxs: SignedTxs | undefined;
-      if (!reader.isEmpty()) {
-        const hasSignedTxs = reader.readNumber();
-        if (hasSignedTxs) {
-          signedTxs = SignedTxs.fromBuffer(reader);
-        }
-      }
-
-      // Optional bucket-reference tail. A buffer that ends after the signedTxs flag decodes as
-      // "no reference", so proposals written without the tail round-trip cleanly.
-      let bucketRef: InboxBucketRef | undefined;
-      if (!reader.isEmpty()) {
-        const hasBucketRef = reader.readNumber();
-        if (hasBucketRef) {
-          bucketRef = InboxBucketRef.fromBuffer(reader);
-        }
+      const hasSignedTxs = reader.readNumber();
+      if (hasSignedTxs) {
+        signedTxs = SignedTxs.fromBuffer(reader);
       }
 
       return new CheckpointProposal(checkpointHeader, archive, feeAssetPriceModifier, signature, signatureContext, {
@@ -351,7 +345,7 @@ export class CheckpointProposal extends Gossipable implements Signable {
         txHashes,
         signature: blockSignature,
         signedTxs,
-        bucketRef,
+        inboxPrefixRef,
       });
     }
 
@@ -376,8 +370,8 @@ export class CheckpointProposal extends Gossipable implements Signable {
         4 /* txHashes.length */ +
         this.lastBlock.txHashes.length * TxHash.SIZE +
         4 /* hasSignedTxs flag */ +
-        (this.lastBlock.signedTxs ? this.lastBlock.signedTxs.getSize() : 0) +
-        (this.lastBlock.bucketRef ? 4 /* hasBucketRef flag */ + this.lastBlock.bucketRef.getSize() : 0);
+        this.lastBlock.inboxPrefixRef.getSize() +
+        (this.lastBlock.signedTxs ? this.lastBlock.signedTxs.getSize() : 0);
     }
 
     return size;
@@ -394,8 +388,9 @@ export class CheckpointProposal extends Gossipable implements Signable {
   }
 
   static random(): CheckpointProposal {
+    const checkpointHeader = CheckpointHeader.random();
     return new CheckpointProposal(
-      CheckpointHeader.random(),
+      checkpointHeader,
       Fr.random(),
       0n,
       Signature.random(),
@@ -405,6 +400,7 @@ export class CheckpointProposal extends Gossipable implements Signable {
         indexWithinCheckpoint: IndexWithinCheckpoint(Math.floor(Math.random() * 5)),
         txHashes: [TxHash.random(), TxHash.random()],
         signature: Signature.random(),
+        inboxPrefixRef: new InboxMessagePrefixRef(checkpointHeader.inboxRollingHash),
       },
     );
   }
@@ -423,7 +419,7 @@ export class CheckpointProposal extends Gossipable implements Signable {
             indexWithinCheckpoint: this.lastBlock.indexWithinCheckpoint,
             txHashes: this.lastBlock.txHashes.map(h => h.toString()),
             signature: this.lastBlock.signature.toString(),
-            bucketRef: this.lastBlock.bucketRef?.toInspect(),
+            inboxPrefixRef: this.lastBlock.inboxPrefixRef.toInspect(),
           }
         : undefined,
     };

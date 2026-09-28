@@ -1,5 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { PublicKey } from './public_key.js';
 import { PublicKeys } from './public_keys.js';
@@ -34,7 +34,7 @@ describe('PublicKeys', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/public_keys.nr',
       'expected_public_keys_hash',
       hash.toString(),
@@ -50,7 +50,7 @@ describe('PublicKeys', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/public_keys.nr',
       'test_data_default_hash',
       hash.toString(),

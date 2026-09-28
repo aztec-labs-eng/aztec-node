@@ -27,6 +27,8 @@ export type ClientProtocolArtifact =
 
 // These are all circuits that should generate proofs with the `recursive` flag.
 export type ServerProtocolArtifact =
+  | 'InboxParity4Artifact'
+  | 'InboxParity16Artifact'
   | 'InboxParity64Artifact'
   | 'InboxParity256Artifact'
   | 'InboxParity1024Artifact'
@@ -58,6 +60,10 @@ export interface ArtifactProvider {
 
 export function mapProtocolArtifactNameToCircuitName(artifact: ProtocolArtifact): CircuitName {
   switch (artifact) {
+    case 'InboxParity4Artifact':
+      return 'inbox-parity-4';
+    case 'InboxParity16Artifact':
+      return 'inbox-parity-16';
     case 'InboxParity64Artifact':
       return 'inbox-parity-64';
     case 'InboxParity256Artifact':

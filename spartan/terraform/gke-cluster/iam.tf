@@ -50,7 +50,7 @@ resource "google_project_iam_member" "helm_sa_roles" {
   member   = "serviceAccount:${google_service_account.helm_sa.email}"
 }
 
-# helm-sa is the CI deploy identity (GitHub Actions secret GCP_SA_KEY). The bench
+# helm-sa is the CI deploy identity (GitHub Actions secret GCP_HELM_SA_KEY). The bench
 # scraper runs `gcloud logging read` as this account to collect block/event/
 # sequencer-state records (l2-block-handled / l2-block-built / public-processor
 # logs); without logging read the reads are permission-denied and the scraper

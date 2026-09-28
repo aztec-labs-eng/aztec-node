@@ -16,7 +16,7 @@ This highlights a key difference with how public vs private functions are writte
 :::info Writing efficiently
 
 - **Public functions** can be written intuitively - optimising for execution/gas as one would for EVM L2s
-- **Private functions** are optimized differently, as they are compiled to a circuit to be proven locally (see [Thinking in Circuits](https://noir-lang.org/docs/explainers/explainer-writing-noir))
+- **Private functions** are optimized differently, as they are compiled to a circuit to be proven locally (see [Thinking in Circuits](https://noir-lang.org/docs/guides/thinking_in_circuits))
 
 :::
 
@@ -34,7 +34,7 @@ Since proof generation is a significant local burden, being mindful of the gate-
 
 #### Noir for circuits
 
-An explanation of efficient use of Noir for circuits should be considered for each subsection under [writing efficient Noir](https://noir-lang.org/docs/explainers/explainer-writing-noir#writing-efficient-noir-for-performant-products) to avoid hitting local limits. The general theme is to use language features that favour the underlying primitives and representation of a circuit from code.
+An explanation of efficient use of Noir for circuits should be considered for each subsection under [writing efficient Noir](https://noir-lang.org/docs/guides/thinking_in_circuits#writing-efficient-noir-for-performant-products) to avoid hitting local limits. The general theme is to use language features that favour the underlying primitives and representation of a circuit from code.
 
 A couple of examples:
 
@@ -42,7 +42,7 @@ A couple of examples:
 - Unconstrained functions by definition do not constrain their operations/output, so do not contribute to gate count. Using them carefully can bring in some savings, but the results must then be constrained so that proofs are meaningful for your application.
 
 :::warning Tradeoffs and caveats
-Each optimisation technique has its own tradeoffs and caveats so should be carefully considered with the full details in the linked [section](https://noir-lang.org/docs/explainers/explainer-writing-noir#writing-efficient-noir-for-performant-products).
+Each optimisation technique has its own tradeoffs and caveats so should be carefully considered with the full details in the linked [section](https://noir-lang.org/docs/guides/thinking_in_circuits#writing-efficient-noir-for-performant-products).
 :::
 
 #### Overhead of nested private calls
@@ -167,7 +167,7 @@ So for a loop of 1000 iterations, 751 gates were saved by:
 - Replacing `>=` with a boolean equivalence check
 
 :::note Difference with Rust
-Such designs with boolean flags lend themselves well into logical comparisons too since `&&` and `||` do not exist. With booleans, using `&` and `|` can give you the required logic efficiently. For more points specific to the Noir language, see [this](https://noir-lang.org/docs/explainers/explainer-writing-noir#translating-from-rust) section.
+Such designs with boolean flags lend themselves well into logical comparisons too since `&&` and `||` do not exist. With booleans, using `&` and `|` can give you the required logic efficiently. For more points specific to the Noir language, see [this](https://noir-lang.org/docs/guides/thinking_in_circuits#translating-from-rust) section.
 
 :::
 
@@ -382,5 +382,5 @@ unconstrained fn refactor_array(array: [u32; ARRAY_SIZE]) -> [u32; ARRAY_SIZE] {
 If a struct has many fields to be read, we can design an extra variable maintained as the hash of all values within it (like a checksum). When it comes to reading, we can now do an unconstrained read (incurring no read requests), and then check the hash of the result against that stored for the struct. This final check is thus only one read request rather than one per variable.
 
 :::note Leverage unconstrained functions
-When needing to make use of large private operations (eg private execution or many read requests), use of [unconstrained functions](https://noir-lang.org/docs/explainers/explainer-writing-noir#leverage-unconstrained-execution) wisely to reduce the gate count of private functions.
+When needing to make use of large private operations (eg private execution or many read requests), use of [unconstrained functions](https://noir-lang.org/docs/guides/thinking_in_circuits#leverage-unconstrained-execution) wisely to reduce the gate count of private functions.
 :::

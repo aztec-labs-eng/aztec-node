@@ -39,7 +39,7 @@ import {
 import { NoteService } from '../../notes/note_service.js';
 import { assertAllowedScope } from '../../storage/allowed_scopes.js';
 import type { SenderTaggingStore } from '../../storage/tagging_store/sender_tagging_store.js';
-import { logQueryAnchorOf, syncSenderTaggingIndexes } from '../../tagging/index.js';
+import { syncSenderTaggingIndexes } from '../../tagging/index.js';
 import type { ExecutionNoteCache } from '../execution_note_cache.js';
 import { ExecutionTaggingIndexCache } from '../execution_tagging_index_cache.js';
 import type { HashedValuesCache } from '../hashed_values_cache.js';
@@ -57,7 +57,7 @@ import { UtilityExecutionOracle, type UtilityExecutionOracleArgs } from './utili
 export type PrivateExecutionOracleArgs = UtilityExecutionOracleArgs & {
   argsHash: Fr;
   txContext: TxContext;
-  txRequestSalt: Fr;
+  protocolNullifier: Fr;
   executionCache: HashedValuesCache;
   noteCache: ExecutionNoteCache;
   taggingIndexCache: ExecutionTaggingIndexCache;
@@ -88,7 +88,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
 
   private readonly argsHash: Fr;
   private readonly txContext: TxContext;
-  private readonly txRequestSalt: Fr;
+  private readonly protocolNullifier: Fr;
   private readonly executionCache: HashedValuesCache;
   private readonly noteCache: ExecutionNoteCache;
   private readonly taggingIndexCache: ExecutionTaggingIndexCache;
@@ -105,7 +105,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     });
     this.argsHash = args.argsHash;
     this.txContext = args.txContext;
-    this.txRequestSalt = args.txRequestSalt;
+    this.protocolNullifier = args.protocolNullifier;
     this.executionCache = args.executionCache;
     this.noteCache = args.noteCache;
     this.taggingIndexCache = args.taggingIndexCache;
@@ -121,7 +121,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       this.anchorBlockHeader,
       this.txContext,
       this.initialSideEffectCounter,
-      this.txRequestSalt,
+      this.protocolNullifier,
     );
   }
 
@@ -378,7 +378,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
       // that'd be wasteful as most tagging secrets are not used in each tx.
       const [{ finalized }, anchor] = await allToCompletion([
         this.l2TipsStore.getL2Tips(),
-        logQueryAnchorOf(this.anchorBlockHeader),
+        this.anchorBlockHeader.toBlockParameter(),
       ]);
       await syncSenderTaggingIndexes(
         secret,
@@ -693,7 +693,7 @@ export class PrivateExecutionOracle extends UtilityExecutionOracle implements IP
     const privateExecutionOracle = new PrivateExecutionOracle({
       argsHash,
       txContext: derivedTxContext,
-      txRequestSalt: this.txRequestSalt,
+      protocolNullifier: this.protocolNullifier,
       callContext: derivedCallContext,
       anchorBlockHeader: this.anchorBlockHeader,
       utilityExecutor: this.utilityExecutor,

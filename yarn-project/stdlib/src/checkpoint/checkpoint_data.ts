@@ -1,4 +1,8 @@
 import {
+  type ViemCommitteeAttestations,
+  ViemCommitteeAttestationsSchema,
+} from '@aztec-labs/ethereum/contracts/committee-attestations';
+import {
   BlockNumber,
   BlockNumberSchema,
   CheckpointNumber,
@@ -24,6 +28,11 @@ export type CommonCheckpointData = {
 /** Data stored with checkpoint data after publishing on l1 */
 export type L1EnrichedCheckpointData = {
   attestations: CommitteeAttestation[];
+  /**
+   * The packed `CommitteeAttestations` tuple exactly as posted to L1. {@link attestations} is what this tuple
+   * decodes to; only the tuple reproduces the `attestationsHash` the rollup stored at propose time.
+   */
+  verbatimAttestations: ViemCommitteeAttestations;
   l1: L1PublishedData;
 };
 
@@ -86,6 +95,7 @@ export const CheckpointDataSchema = z
     blockCount: schemas.Integer,
     feeAssetPriceModifier: schemas.BigInt,
     attestations: z.array(CommitteeAttestation.schema),
+    verbatimAttestations: ViemCommitteeAttestationsSchema,
     l1: L1PublishedData.schema,
   })
   .transform(
@@ -98,6 +108,7 @@ export const CheckpointDataSchema = z
       blockCount: obj.blockCount,
       feeAssetPriceModifier: obj.feeAssetPriceModifier,
       attestations: obj.attestations,
+      verbatimAttestations: obj.verbatimAttestations,
       l1: obj.l1,
     }),
   );

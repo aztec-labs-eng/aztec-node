@@ -12,7 +12,7 @@ import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { computeContractClassId, computePublicBytecodeCommitment } from '@aztec-labs/stdlib/contract';
 import { LogHash, ScopedLogHash } from '@aztec-labs/stdlib/kernel';
-import { ContractClassLog, ContractClassLogFields } from '@aztec-labs/stdlib/logs';
+import { ContractClassLog, ContractClassLogFields, PrivateLog } from '@aztec-labs/stdlib/logs';
 import { mockTx } from '@aztec-labs/stdlib/testing';
 import {
   TX_ERROR_CALLDATA_COUNT_MISMATCH,
@@ -23,6 +23,7 @@ import {
   TX_ERROR_INCORRECT_CALLDATA,
   TX_ERROR_INCORRECT_CONTRACT_CLASS_ID,
   TX_ERROR_MALFORMED_CONTRACT_CLASS_LOG,
+  TX_ERROR_PRIVATE_LOG_PADDING,
   type Tx,
 } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
@@ -249,6 +250,50 @@ describe('TxDataValidator', () => {
     await expectValid(goodTxs);
 
     await expectInvalid(badTxs[0], TX_ERROR_CONTRACT_CLASS_LOG_LENGTH);
+  });
+
+  describe('private log padding', () => {
+    // A log that emits 3 of its 16 fields, with non-zero values in the unpublished tail.
+    const junkPaddedLog = () => {
+      const log = PrivateLog.random();
+      log.emittedLength = 3;
+      return log;
+    };
+
+    const zeroPaddedLog = () => {
+      const log = PrivateLog.random();
+      log.emittedLength = 3;
+      for (let i = log.emittedLength; i < log.fields.length; i++) {
+        log.fields[i] = Fr.ZERO;
+      }
+      return log;
+    };
+
+    it('allows a private-only tx whose short logs are zero padded', async () => {
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: 0,
+        numberOfRevertiblePublicCallRequests: 0,
+      });
+      tx.data.forRollup!.end.privateLogs[0] = zeroPaddedLog();
+      await expectValid([tx]);
+    });
+
+    it('rejects a private-only tx with non-zero private log fields beyond the emitted length', async () => {
+      const tx = await mockTx(1, {
+        numberOfNonRevertiblePublicCallRequests: 0,
+        numberOfRevertiblePublicCallRequests: 0,
+      });
+      tx.data.forRollup!.end.privateLogs[0] = junkPaddedLog();
+      await expectInvalid(tx, TX_ERROR_PRIVATE_LOG_PADDING);
+    });
+
+    it('rejects a public tx with non-zero private log fields beyond the emitted length', async () => {
+      const [nonRevertible, revertible] = await mockTxs(2);
+      nonRevertible.data.forPublic!.nonRevertibleAccumulatedData.privateLogs[0] = junkPaddedLog();
+      revertible.data.forPublic!.revertibleAccumulatedData.privateLogs[0] = junkPaddedLog();
+      await expectInvalid(nonRevertible, TX_ERROR_PRIVATE_LOG_PADDING);
+      await expectInvalid(revertible, TX_ERROR_PRIVATE_LOG_PADDING);
+    });
   });
 
   describe('contract class id validation', () => {

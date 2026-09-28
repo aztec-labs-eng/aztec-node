@@ -5,23 +5,28 @@ version=$1
 
 dry_run=${DRY_RUN:-0}
 
-# A stable release takes 'latest'; the nightly and rc channels share 'prerelease'; every other
-# channel gets a dist-tag of its own. Sharing is a closed set on purpose: a 'commit' canary cut
-# from a pull request carries that branch's manifest version, so it can be newer than the newest
-# nightly and would otherwise repoint 'prerelease' at an unmerged build. Prerelease versions are
-# installed by exact version anyway.
+# A stable release takes 'latest', the rc channel takes 'prerelease', and every other channel takes
+# a dist-tag named after itself ('nightly', 'commit', ...), so each tag follows exactly one channel.
 prerelease=$(semver prerelease $version)
 channel=${prerelease%%.*}
 case "$channel" in
   "") npm_tag="latest" ;;
-  nightly | rc) npm_tag="prerelease" ;;
+  rc) npm_tag="prerelease" ;;
   *) npm_tag="$channel" ;;
 esac
 
-# Authenticate npm against NPM_REGISTRY with the credential in the environment.
+# Route our scopes at NPM_REGISTRY and authenticate with whatever credential the environment set.
 source $ci3/source_npm_auth
 
 package_name=$(jq -r '.name' package.json)
+
+# Callers iterate every workspace, so a private one (test suites, internal tooling) lands here too.
+# npm refuses to publish it, and --dry-run does not check, so skip it before touching the registry.
+if [ "$(jq -r '.private // false' package.json)" == "true" ]; then
+  echo "$package_name is private. Skipping publish."
+  exit 0
+fi
+
 echo_header "publishing $package_name"
 
 published_version=$(npm show . version --tag $npm_tag 2>/dev/null | grep -vE '^@' || true)
@@ -35,9 +40,9 @@ fi
 
 # A version older than what its dist-tag already points at must not take it: publishing a patch to
 # an old release line, or re-running an old tag's workflow, would otherwise repoint 'latest' (or
-# 'prerelease', or a channel's own tag) backwards for everyone. Such a version is published with no
-# dist-tag at all, which costs nothing: an exact version and a range like '@5' both resolve against
-# the published versions and consult no tag.
+# 'prerelease', or a channel's own tag) backwards for everyone. Such a version is published without
+# a dist-tag anyone reads, which costs nothing: an exact version and a range like '@5' both resolve
+# against the published versions and consult no tag.
 take_tag=1
 if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
   take_tag=0
@@ -46,10 +51,9 @@ if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$versio
 fi
 
 # npm attaches a dist-tag to every publish — omitting --tag means 'latest' — so publishing untagged
-# means taking one nothing reads and dropping it again. The name is fixed rather than derived from
-# the version, so that a tag left behind by an attempt that died between the two steps is cleaned up
-# by this package's next publish whatever version that carries. It is also not a bare 'v<major>':
-# npm rejects any dist-tag that parses as a semver range, and 'v5' is '>=5.0.0 <6.0.0-0'.
+# means taking one that nothing reads. Its name is fixed, so each package carries one such tag,
+# pointing at its most recent superseded publish, and it must not parse as a semver range, which npm
+# rejects as a dist-tag.
 tmp_tag=tmp-publish
 if [ "$take_tag" -eq 1 ]; then
   publish_tag=$npm_tag
@@ -57,14 +61,10 @@ else
   publish_tag=$tmp_tag
 fi
 
-# Called on every path that reaches the registry, so it drops the tag whether this run took it or
-# an earlier one died holding it. npm errors when the tag is absent, which is the normal case, so
-# ask first — a failure of the removal itself is then still a failure of the release.
-function drop_tmp_tag {
-  if npm dist-tag ls "$package_name" 2>/dev/null | grep -q "^$tmp_tag:"; then
-    npm dist-tag rm "$package_name" "$tmp_tag"
-  fi
-}
+# npmjs holds an accepted upload as "staged" for several minutes before the version goes live, and
+# `npm view` does not see it meanwhile. A publish that dies after the upload (e.g. an evicted spot
+# instance) therefore leaves a version that the retry cannot detect and cannot publish over.
+staged_error='Cannot publish over previously staged version'
 
 # Create temp directory for publishing
 tmpdir=$(mktemp -d)
@@ -100,8 +100,15 @@ else
       echo "Leaving '$npm_tag' where it is."
     fi
   else
-    # Publish new version.
-    denoise "npm publish --ignore-scripts --tag $publish_tag --access public"
+    # Publish new version. The output is kept so a staged-version conflict can be told apart from
+    # other failures, including other 409s.
+    publish_cmd="npm publish --ignore-scripts --tag $publish_tag --access public"
+    publish_out="$tmpdir/publish.out"
+    if ! DENOISE_DISPLAY_NAME="$publish_cmd" denoise "set -o pipefail; $publish_cmd 2>&1 | tee $publish_out"; then
+      grep -q "$staged_error" "$publish_out" || exit 1
+      # The staged upload is this same version and carries the dist-tag it was published with, which
+      # npm applies when the version goes live, so there is nothing left to do here.
+      echo "$package_name@$version is already staged by an earlier publish and will go live on its own."
+    fi
   fi
-  drop_tmp_tag
 fi

@@ -19,9 +19,17 @@ export class ReadTransaction {
   }
 
   public async get(key: Uint8Array): Promise<Uint8Array | undefined> {
+    return (await this.getMany([key]))[0];
+  }
+
+  /** Reads multiple data keys with one database request, returning values in input order. */
+  public async getMany(keys: Uint8Array[]): Promise<(Uint8Array | undefined)[]> {
     this.assertIsOpen();
-    const response = await this.channel.sendMessage(LMDBMessageType.GET, { keys: [key], db: Database.DATA });
-    return response.values[0]?.[0] ?? undefined;
+    if (keys.length === 0) {
+      return [];
+    }
+    const response = await this.channel.sendMessage(LMDBMessageType.GET, { keys, db: Database.DATA });
+    return keys.map((_, index) => response.values[index]?.[0] ?? undefined);
   }
 
   public async getIndex(key: Uint8Array): Promise<Uint8Array[]> {

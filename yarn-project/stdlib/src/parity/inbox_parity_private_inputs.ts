@@ -1,4 +1,10 @@
-import { INBOX_PARITY_SIZE_LARGE, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_SMALL } from '@aztec-labs/constants';
+import {
+  INBOX_PARITY_SIZE_LARGE,
+  INBOX_PARITY_SIZE_MEDIUM,
+  INBOX_PARITY_SIZE_SMALL,
+  INBOX_PARITY_SIZE_XSMALL,
+  INBOX_PARITY_SIZE_XXSMALL,
+} from '@aztec-labs/constants';
 import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
@@ -6,7 +12,13 @@ import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serializ
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 
 /** The InboxParity size ladder, ascending. One VK per size; the prover proves the smallest that fits. */
-export const INBOX_PARITY_SIZES = [INBOX_PARITY_SIZE_SMALL, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_LARGE] as const;
+export const INBOX_PARITY_SIZES = [
+  INBOX_PARITY_SIZE_XXSMALL,
+  INBOX_PARITY_SIZE_XSMALL,
+  INBOX_PARITY_SIZE_SMALL,
+  INBOX_PARITY_SIZE_MEDIUM,
+  INBOX_PARITY_SIZE_LARGE,
+] as const;
 
 /** A valid InboxParity ladder size. */
 export type InboxParitySize = (typeof INBOX_PARITY_SIZES)[number];

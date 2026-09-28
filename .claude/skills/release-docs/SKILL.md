@@ -8,7 +8,7 @@ argument-hint: <RPC_URL>
 
 Update the Aztec developer documentation for a new release. Queries the network
 for current info, updates version defaults, contract addresses, migration notes,
-builds the docs, cuts a versioned snapshot, and prepares changes on `next`.
+builds the docs, cuts a versioned snapshot, and prepares changes on `main`.
 
 Supports **devnet**, **testnet**, and **mainnet** releases. The release type is
 auto-detected from the version string (Step 1); if it does not self-identify, ask
@@ -83,15 +83,15 @@ state (the old version); they are still valid if the upgrade reuses the same
 contracts, but ask the user to confirm whether any addresses will change at
 upgrade time.
 
-**Run all work on the tag, not `next`.** Cut on the tag so the snapshot
-reflects what shipped. Then stash, switch to `next`, pop. Backport any newer
-docs from `next` into the snapshot as an explicit step _after_ the cut.
+**Run all work on the tag, not `main`.** Cut on the tag so the snapshot
+reflects what shipped. Then stash, switch to `main`, pop. Backport any newer
+docs from `main` into the snapshot as an explicit step _after_ the cut.
 
 ### Unversioned root pages
 
 Pages under `docs/docs/` (`networks.md`, `index.md`) are configured "no
 versioning" in `docusaurus.config.js` and aren't snapshotted. Edits land
-directly on `next` and become live. Treat them as post-release-live: if `next`
+directly on `main` and become live. Treat them as post-release-live: if `main`
 already has a newer version, port it in and bump the version field rather than
 reverting to the tag's older copy.
 
@@ -335,8 +335,30 @@ cast call <PROPOSER_ADDRESS> "SLASH_PAYLOAD_IMPLEMENTATION()(address)" --rpc-url
 #### Tier 2: From deployment output (if available)
 
 Only contracts with no public getter remain here. Obtain them from the Forge
-deployment script output (`l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol`
+deployment script output (`docs/node_modules/@aztec-foundation/l1-artifacts/l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol`
 prints JSON with all addresses); ask the user if they have it.
+
+`l1-contracts` is not in this repo — it stayed in AztecProtocol/aztec-packages
+and reaches us only as the `@aztec-foundation/l1-artifacts` npm package, which
+ships the whole Solidity tree (sources, `script/`, and compiled `out/` ABIs).
+Read it from `docs/node_modules/` after `yarn install` in `docs/` rather than
+cloning aztec-packages.
+
+The revision you get is the one pinned in `docs/package.json` and resolved by
+`docs/yarn.lock` — that pair is authoritative for this install, because the
+install happens in `docs/`. `yarn-project/package.json` pins the same package
+separately; the two are expected to agree, and have at every tag checked, but
+it is the `docs/` pin that governs what lands in `docs/node_modules/`. Check it
+at the release tag:
+
+```bash
+grep '"@aztec-foundation/l1-artifacts"' docs/package.json
+```
+
+If that disagrees with `yarn-project/package.json`, stop and find out why before
+trusting either — one of them is not the revision the tag was built against.
+Otherwise, reading from `docs/node_modules/` keeps the "everything comes from
+the tag" rule intact.
 
 - **Staking Registry**
 
@@ -403,8 +425,10 @@ transcribe one by hand. Concretely:
   - *Proposer Quorum*: `cast call <GOVERNANCE_PROPOSER> "QUORUM_SIZE()(uint256)"`
     and `"ROUND_SIZE()(uint256)"` (e.g. 600/1000 mainnet, 60/100 testnet).
   - *Voting Delay / Voting Duration / Execution Delay*:
-    `cast call <GOVERNANCE> "getConfiguration()"` and decode against the tag's
-    `IGovernance` configuration struct in `l1-contracts`. Beware: some time
+    `cast call <GOVERNANCE> "getConfiguration()"` and decode against the
+    `Configuration` struct in
+    `docs/node_modules/@aztec-foundation/l1-artifacts/l1-contracts/src/governance/interfaces/IGovernance.sol`
+    (see the Tier 2 note above on where l1-contracts lives). Beware: some time
     fields are stored compressed in 256-second units — decode via the struct
     definition, then sanity-convert to days/hours (e.g. `675 * 256s = 172800s
     = 2 days`).
@@ -476,7 +500,7 @@ from whatever code is checked out when you preprocess, so to freeze the release'
 code the working tree must be at the release tag's source (or re-resolve the
 snapshot's `#include_code` from the tag afterward — what the
 `re-resolve <prev_version> snapshot include_code from the tag` commit did).
-Cutting against `next`'s code silently freezes the wrong snippets.
+Cutting against `main`'s code silently freezes the wrong snippets.
 
 Create a versioned snapshot of the developer docs:
 
@@ -546,10 +570,10 @@ Known hits: `src/clientModules/docsgpt.js` (`heroDescription`),
 `developer_versioned_docs/version-v<new_version>/docs/aztec-js/wallet-sdk/{wallet,dapp}_integration.md`
 (`yarn add @aztec/*@<version>`).
 
-### Step 12: Reconcile `next` Docs Changes Into the New Version
+### Step 12: Reconcile `main` Docs Changes Into the New Version
 
-The new version is cut from the **release tag**, which is older than `next`. Any
-documentation work that merged into `next` after the tag was created may therefore be
+The new version is cut from the **release tag**, which is older than `main`. Any
+documentation work that merged into `main` after the tag was created may therefore be
 **absent** from the freshly cut snapshot. This is a commonly missed step,
 because the divergence is invisible if you only diff the working tree (which is
 checked out at the tag in Step 2) against the snapshot you just cut from it.
@@ -559,58 +583,58 @@ Two distinct classes of change can be missed — **check both**:
 - **Source (current) docs and sidebars** — `docs/docs-developers/` (→
   `developer_versioned_docs/`), `docs/docs-operate/` (→ `network_versioned_docs/`),
   `docs/sidebars-developer.js`, and `docs/sidebars-operate.js` are snapshot inputs.
-  Anything added on `next` since the tag may be missing from the new snapshot. A source
+  Anything added on `main` since the tag may be missing from the new snapshot. A source
   file at `docs/docs-developers/docs/X` maps to
   `developer_versioned_docs/version-v<new_version>/docs/X`. (`docs/docs-participate/`,
   `docs/src/`, and the `docs/docs/` root pages are NOT versioned; changes there land live
-  on `next` and are out of scope for this reconcile.)
-- **Existing versioned snapshots on `next`** — fixes that were applied _directly_
+  on `main` and are out of scope for this reconcile.)
+- **Existing versioned snapshots on `main`** — fixes that were applied _directly_
   to the previous version's snapshot (e.g.
   `docs/developer_versioned_docs/version-<prev_version>/...`). These were carried
-  into the previous version on `next` but will not exist in a snapshot cut from the
+  into the previous version on `main` but will not exist in a snapshot cut from the
   tag, because the tag predates them.
 
-Always compare against `origin/next`, **not** the working tree, so the divergence
+Always compare against `origin/main`, **not** the working tree, so the divergence
 is actually visible:
 
-1. List every docs commit on `next` that is **not** in the release tag — this is
+1. List every docs commit on `main` that is **not** in the release tag — this is
    the complete set of changes the new snapshot may be missing:
 
    ```bash
    git fetch origin
-   git log --oneline --no-merges v<new_version>..origin/next -- docs/
+   git log --oneline --no-merges v<new_version>..origin/main -- docs/
    ```
 
    Skip version cuts, nightly auto-cuts, and template-only changes; review the rest.
 
-2. See what `next` changed in the **source docs** relative to the tag, and port the
+2. See what `main` changed in the **source docs** relative to the tag, and port the
    relevant changes into the new versioned snapshot:
 
    ```bash
-   git diff v<new_version>..origin/next -- \
+   git diff v<new_version>..origin/main -- \
      docs/docs-developers/ docs/docs-operate/ \
      docs/sidebars-developer.js docs/sidebars-operate.js
    ```
 
-3. See what `next` changed **directly in the previous versioned snapshot with the same major version number**, and
+3. See what `main` changed **directly in the previous versioned snapshot with the same major version number**, and
    apply the equivalent fix to the same file in the new snapshot wherever that file
    also exists there. **If this release type has no previous version** (a first cut, or
    the type is absent from the version config), skip this sub-step: there is no prior
    snapshot to diff against (same first-cut guard as Step 16). Steps 5 and 11 have
    already overwritten the local version
    configs with the new version, so resolve `<prev_version>` (the previous version
-   for this release type, including its `v` prefix) from `origin/next`, **not** the
+   for this release type, including its `v` prefix) from `origin/main`, **not** the
    working tree:
 
    ```bash
-   git show origin/next:docs/developer_version_config.json
-   git show origin/next:docs/network_version_config.json
+   git show origin/main:docs/developer_version_config.json
+   git show origin/main:docs/network_version_config.json
    ```
 
    Then diff the previous snapshot against the tag:
 
    ```bash
-   git diff v<new_version>..origin/next -- \
+   git diff v<new_version>..origin/main -- \
      docs/developer_versioned_docs/version-<prev_version>/ \
      docs/network_versioned_docs/version-<prev_version>/
    ```
@@ -630,9 +654,9 @@ is actually visible:
    what was intentionally skipped, for user confirmation.
 
 6. Treat sidebar changes as part of the same backport. If you reconcile a docs layout
-   from `next`, update the matching file under `developer_versioned_sidebars/` or
+   from `main`, update the matching file under `developer_versioned_sidebars/` or
    `network_versioned_sidebars/` from the same final sidebar source. Never combine
-   reconciled `next` pages with the tag-generated sidebar. When adopting the `next`
+   reconciled `main` pages with the tag-generated sidebar. When adopting the `main`
    sidebar wholesale, load both configs in Node and assert deep semantic equality;
    a successful Docusaurus build does not catch a stale sidebar when legacy pages still exist.
 
@@ -713,7 +737,7 @@ Present a summary of the review to the user for approval.
 commands run. Before shipping, exercise the new version against a real network.
 
 **Run this in a subagent** (long-running, install-heavy). Validate the **cut snapshot**
-content (`developer_versioned_docs/version-v<new_version>/docs/...`), not `next` (except the
+content (`developer_versioned_docs/version-v<new_version>/docs/...`), not `main` (except the
 Aztec.js examples, which are source-only; see task 4). Tasks:
 
 1. **Install the release and start a local network.** `# background; wait until ready` is a
@@ -811,11 +835,11 @@ scripts/update_docs_versions.sh network
 Verify that `network_version_config.json` and `network_versions.json` no longer
 reference the old version.
 
-### Step 17: Move Changes to `next` Branch
+### Step 17: Move Changes to `main` Branch
 
 ```bash
 git stash
-git checkout next && git pull origin next
+git checkout main && git pull origin main
 git stash pop
 ```
 
@@ -848,11 +872,11 @@ Check for stash conflicts. Then report to the user:
   links and spelling, not whether the documented commands work.
 - **User confirmation required**: Ask before deleting old versioned docs and before
   adding migration note entries.
-- **Changes land on `next`**: All changes are stashed and moved to the `next` branch
+- **Changes land on `main`**: All changes are stashed and moved to the `main` branch
   at the end, ready for a PR.
-- **Reconcile against `next` after cutting**: The new version is cut from the release
-  tag, which predates docs changes merged into `next`. After the cut, diff the tag
-  against `origin/next` and backport relevant changes — both to source docs **and** to
+- **Reconcile against `main` after cutting**: The new version is cut from the release
+  tag, which predates docs changes merged into `main`. After the cut, diff the tag
+  against `origin/main` and backport relevant changes — both to source docs **and** to
   the previous versioned snapshot, including matching sidebar changes (see Step 12).
   This is the most commonly missed step.
 - **API ref docs**: Generated in Step 6 into `docs/static/typescript-api/` and

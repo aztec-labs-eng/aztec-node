@@ -1,4 +1,4 @@
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { decodeTxStartMarker, encodeTxStartMarker } from './tx_start_marker.js';
 
@@ -23,7 +23,7 @@ describe('tx start marker', () => {
     expect(decoded).toEqual(txStartMarker);
 
     // AZTEC_GENERATE_TEST_DATA=1 yarn test tx_start_marker.test.ts
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_blob_data.nr',
       'tx_start_marker_from_typescript',
       encoded.toString(),
@@ -50,7 +50,7 @@ describe('tx start marker', () => {
     expect(decoded).toEqual(txStartMarker);
 
     // AZTEC_GENERATE_TEST_DATA=1 yarn test tx_start_marker.test.ts
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/blob_data/tx_blob_data.nr',
       'large_tx_start_marker_from_typescript',
       encoded.toString(),

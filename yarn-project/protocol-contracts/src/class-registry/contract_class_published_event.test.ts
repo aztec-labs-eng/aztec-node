@@ -12,6 +12,27 @@ import { ProtocolContractAddress } from '../protocol_contract_data.js';
 import { getSampleContractClassPublishedEventPayload } from '../tests/fixtures.js';
 import { ContractClassPublishedEvent } from './contract_class_published_event.js';
 
+/**
+ * Builds a fixed-width ContractClassPublished log whose bytecode encoding declares `byteLength` bytes
+ * but carries no payload bytes, as malformed log data within the physical log width would.
+ */
+function buildPublicationLogWithDeclaredLength(byteLength: number): ContractClassLog {
+  const fields = [
+    new Fr(CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE),
+    Fr.random(), // contractClassId
+    new Fr(1), // version
+    Fr.random(), // artifactHash
+    Fr.random(), // privateFunctionsRoot
+    new Fr(byteLength),
+  ];
+  const padded = [...fields, ...Array(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - fields.length).fill(Fr.ZERO)];
+  return new ContractClassLog(
+    ProtocolContractAddress.ContractClassRegistry,
+    new ContractClassLogFields(padded),
+    fields.length,
+  );
+}
+
 describe('ContractClassPublishedEvent', () => {
   beforeAll(() => setupCustomSnapshotSerializers(expect));
 
@@ -61,5 +82,15 @@ describe('ContractClassPublishedEvent', () => {
 
     const event = ContractClassPublishedEvent.fromLog(log);
     expect(event.packedPublicBytecode).toEqual(maxBytecode);
+  });
+
+  it('rejects a declared bytecode length one byte over the packed public bytecode limit', () => {
+    const maxBytecodeBytes = (MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS - 1) * (Fr.SIZE_IN_BYTES - 1);
+    const log = buildPublicationLogWithDeclaredLength(maxBytecodeBytes + 1);
+
+    expect(ContractClassPublishedEvent.isContractClassPublishedEvent(log)).toBe(true);
+    expect(() => ContractClassPublishedEvent.fromLog(log)).toThrow(
+      `Declared byte length ${maxBytecodeBytes + 1} exceeds maximum ${maxBytecodeBytes}`,
+    );
   });
 });

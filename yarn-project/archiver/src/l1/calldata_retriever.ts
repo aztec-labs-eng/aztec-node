@@ -1,6 +1,11 @@
 import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
-import { MULTI_CALL_3_ADDRESS, type ViemCommitteeAttestations, type ViemHeader } from '@aztec-labs/ethereum/contracts';
+import {
+  MULTI_CALL_3_ADDRESS,
+  type ViemCommitteeAttestations,
+  type ViemHeader,
+  computeAttestationsHash,
+} from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { LruSet } from '@aztec-labs/foundation/collection';
@@ -10,17 +15,7 @@ import type { Logger } from '@aztec-labs/foundation/log';
 import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
 import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
-import {
-  type AbiParameter,
-  type Hex,
-  type Transaction,
-  decodeFunctionData,
-  encodeAbiParameters,
-  hexToBytes,
-  keccak256,
-  multicall3Abi,
-  toFunctionSelector,
-} from 'viem';
+import { type Hex, type Transaction, decodeFunctionData, hexToBytes, multicall3Abi, toFunctionSelector } from 'viem';
 
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
 import { getSuccessfulCallsFromDebug } from './debug_tx.js';
@@ -475,7 +470,7 @@ export class CalldataRetriever {
 
   /** Computes the keccak256 hash of ABI-encoded CommitteeAttestations. */
   private computeAttestationsHash(verbatimAttestations: ViemCommitteeAttestations): Hex {
-    return keccak256(encodeAbiParameters([this.getCommitteeAttestationsStructDef()], [verbatimAttestations]));
+    return computeAttestationsHash(verbatimAttestations);
   }
 
   /** Computes the keccak256 payload digest from the checkpoint header, archive root, and fee asset price modifier. */
@@ -486,42 +481,6 @@ export class CalldataRetriever {
       feeAssetPriceModifier,
       signatureContext: this.getSignatureContext(),
     }).toString();
-  }
-
-  /**
-   * Extracts the CommitteeAttestations struct definition from RollupAbi.
-   * Finds the _attestations parameter by name in the propose function.
-   */
-  private getCommitteeAttestationsStructDef(): AbiParameter {
-    const proposeFunction = RollupAbi.find(item => item.type === 'function' && item.name === 'propose') as
-      | { type: 'function'; name: string; inputs: readonly AbiParameter[] }
-      | undefined;
-
-    if (!proposeFunction) {
-      throw new Error('propose function not found in RollupAbi');
-    }
-
-    // Find the _attestations parameter by name, not by index
-    const attestationsParam = proposeFunction.inputs.find(param => param.name === '_attestations');
-
-    if (!attestationsParam) {
-      throw new Error('_attestations parameter not found in propose function');
-    }
-
-    if (attestationsParam.type !== 'tuple') {
-      throw new Error(`Expected _attestations parameter to be a tuple, got ${attestationsParam.type}`);
-    }
-
-    // Extract the tuple components (struct fields)
-    const tupleParam = attestationsParam as unknown as {
-      type: 'tuple';
-      components?: readonly AbiParameter[];
-    };
-
-    return {
-      type: 'tuple',
-      components: tupleParam.components || [],
-    } as AbiParameter;
   }
 }
 

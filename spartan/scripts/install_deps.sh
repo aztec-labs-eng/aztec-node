@@ -39,48 +39,13 @@ if ! command -v kind &> /dev/null; then
   sudo mv ./kind /usr/local/bin/kind
 fi
 
-function get_helm_from_cache {
-  helm_artifact="$1"
-
-  if cache_download "$helm_artifact" >/dev/null; then
-    if [ -f helm ]; then
-      sudo mv helm /usr/local/bin/helm
-    elif [ -f ./usr/local/bin/helm ]; then
-      sudo mv ./usr/local/bin/helm /usr/local/bin/helm
-    else
-      err "Could not extract helm from cache"
-      return 1
-    fi
-    sudo chmod +x /usr/local/bin/helm
-    return 0
-  fi
-  return 1 # return non-zero if cache miss
-}
-
 # Install helm if it is not installed
 if ! command -v helm &> /dev/null; then
   log "Installing helm..."
-
-  # Determine the helm artifact name based on OS and architecture
-  helm_artifact="helm-$(os)-$(arch).tar.gz"
-  helm_release_url="https://github.com/helm/helm/releases/tag/v3.19.0"
-
-  if get_helm_from_cache "$helm_artifact" >/dev/null; then
-    log "Using cached Helm binary"
-  else
-    log "Downloading Helm from get.helm.sh..."
-    # Download and run the official Helm installer script
-    curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-    chmod +x get_helm.sh
-    sudo ./get_helm.sh
-
-    if [ -f /usr/local/bin/helm ]; then
-      ( cd /usr/local/bin && cache_upload "$helm_artifact" helm )
-    fi
-
-    # Clean up installer script
-    rm get_helm.sh
-  fi
+  curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+  chmod +x get_helm.sh
+  sudo ./get_helm.sh
+  rm get_helm.sh
 fi
 
 if ! command -v gcloud &> /dev/null; then

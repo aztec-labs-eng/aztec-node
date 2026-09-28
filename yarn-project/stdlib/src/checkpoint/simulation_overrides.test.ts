@@ -1,5 +1,5 @@
 import { type FeeHeader, RollupContract } from '@aztec-labs/ethereum/contracts';
-import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -37,7 +37,7 @@ describe('computePipelinedParentFeeHeader', () => {
     manaUsed: 3000n,
     excessMana: 1000n,
     ethPerFeeAsset: 500n,
-    congestionCost: 50n,
+    protocolFee: 50n,
     proverCost: 10n,
   };
 
@@ -138,7 +138,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
     manaUsed: 3000n,
     excessMana: 1000n,
     ethPerFeeAsset: 500n,
-    congestionCost: 50n,
+    protocolFee: 50n,
     proverCost: 10n,
   };
 
@@ -151,7 +151,7 @@ describe('buildCheckpointSimulationOverridesPlan', () => {
     return {
       checkpointNumber,
       header: CheckpointHeader.empty(),
-      archive: new AppendOnlyTreeSnapshot(Fr.random(), 1),
+      archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1)),
       checkpointOutHash: Fr.random(),
       startBlock: BlockNumber(1),
       blockCount: 1,

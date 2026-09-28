@@ -1,5 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { computeAddress, computePreaddress } from './derivation.js';
 import { PublicKey, hashPublicKey } from './public_key.js';
@@ -20,7 +20,7 @@ describe('🔑', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/public_keys.nr',
       'expected_public_keys_hash',
       publicKeysHash.toString(),
@@ -35,7 +35,7 @@ describe('🔑', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/address/aztec_address.nr',
       'expected_computed_preaddress_from_partial_and_pubkey',
       address.toString(),
@@ -73,7 +73,7 @@ describe('🔑', () => {
     expect(address).toMatchInlineSnapshot(`"0x303ffc8bd456d132463b1fc3a633aeb718a7883c268f3956c05e6fe09b5a5424"`);
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/address/aztec_address.nr',
       'expected_computed_address_from_partial_and_pubkeys',
       address.toString(),

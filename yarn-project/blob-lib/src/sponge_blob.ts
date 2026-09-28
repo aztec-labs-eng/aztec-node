@@ -1,6 +1,6 @@
 import { BLOBS_PER_CHECKPOINT, FIELDS_PER_BLOB, TWO_POW_64 } from '@aztec-labs/constants';
 import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
-import { poseidon2Permutation } from '@aztec-labs/foundation/crypto/poseidon';
+import { poseidon2AbsorbChain, poseidon2Permutation } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   BufferReader,
@@ -153,15 +153,40 @@ export class Poseidon2Sponge {
     if (this.squeezeMode) {
       throw new Error(`Poseidon sponge is not able to absorb more inputs.`);
     }
-    for (const field of fields) {
-      if (this.cacheSize == this.cache.length) {
-        await this.performDuplex();
-        this.cache[0] = field;
-        this.cacheSize = 1;
-      } else {
+    if (fields.length === 0) {
+      return;
+    }
+
+    // Batching complete three-field blocks into one bb.js call reduces communication overhead for larger inputs.
+    const rate = this.cache.length;
+    const total = this.cacheSize + fields.length;
+    // Subtracting one leaves the final block cached, even when full, until the next absorb or squeeze.
+    const numChunkedFields = Math.floor((total - 1) / rate) * rate;
+    if (numChunkedFields === 0) {
+      for (const field of fields) {
         this.cache[this.cacheSize++] = field;
       }
+      return;
     }
+
+    const chain: Fr[] = new Array(numChunkedFields);
+    for (let i = 0; i < this.cacheSize; i++) {
+      chain[i] = this.cache[i];
+    }
+    for (let i = this.cacheSize; i < numChunkedFields; i++) {
+      chain[i] = fields[i - this.cacheSize];
+    }
+    const state = await poseidon2AbsorbChain(this.state, chain);
+    // ts doesn't understand that the above always gives 4
+    this.state = [state[0], state[1], state[2], state[3]];
+    // This branch processes at least one full block, so Noir's per-field absorb would have written every cache slot.
+    // Slots at or beyond the new cacheSize retain values from the previous block; circuits compare those slots too.
+    // Position i of [...cache.slice(0, cacheSize), ...fields] lands in slot i % rate. The last rate positions recover
+    // the last value written to every slot.
+    for (let i = total - rate; i < total; i++) {
+      this.cache[i % rate] = i < this.cacheSize ? chain[i] : fields[i - this.cacheSize];
+    }
+    this.cacheSize = total - numChunkedFields;
   }
 
   async squeeze(): Promise<Fr> {

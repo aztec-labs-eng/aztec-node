@@ -3,6 +3,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { mock } from 'jest-mock-extended';
 
 import type { L2BlockSource } from '../block/l2_block_source.js';
+import { CommitteeAttestationsAndSigners } from '../block/proposal/attestations_and_signers.js';
 import type { L1RollupConstants } from '../epoch-helpers/index.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
@@ -22,6 +23,7 @@ function checkpointData(number: number, outHash: Fr): CheckpointData {
     blockCount: 1,
     feeAssetPriceModifier: 0n,
     attestations: [],
+    verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
     l1: L1PublishedData.random(),
   };
 }

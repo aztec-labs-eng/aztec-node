@@ -22,11 +22,15 @@ export interface Anvil {
 //
 // `$@` is the anvil argv; `bash -c <script> bash <...args>` puts the args in `$@` and `$0` = 'bash'.
 //
-// The EXIT trap reaps anvil; INT/TERM just `exit` (which fires the EXIT trap) so a signal terminates
-// the supervisor promptly instead of being swallowed — a trapped TERM does NOT terminate the shell,
-// so trapping the kill directly on TERM would leave the poll loop running and the caller's teardown
-// hanging until its SIGKILL escalation. `sleep & wait` makes the poll interruptible, so INT/TERM are
-// handled immediately rather than after the current `sleep` returns.
+// The EXIT trap reaps anvil and then waits for it on graceful shutdown. An anvil that does not honour
+// SIGTERM holds the supervisor in that `wait` until teardown's escalation kills the group. In that
+// case the supervisor can exit first, so teardown also waits for the inherited stdio pipes to close.
+//
+// INT/TERM just `exit` (which fires the EXIT trap) so a signal terminates the supervisor promptly
+// instead of being swallowed — a trapped TERM does NOT terminate the shell, so trapping the kill
+// directly on TERM would leave the poll loop running and the caller's teardown hanging until its
+// SIGKILL escalation. `sleep & wait` makes the poll interruptible, so INT/TERM are handled
+// immediately rather than after the current `sleep` returns.
 //
 // The poll loop also exits when ANVIL itself dies: startAnvil detects a failed start via the
 // supervisor's 'close' event, so a supervisor that outlived a dead anvil (e.g. port already in use,
@@ -37,10 +41,14 @@ set -u
 parent=$PPID
 "$ANVIL_BIN" "$@" &
 anvil_pid=$!
-trap 'kill "$anvil_pid" 2>/dev/null' EXIT
+trap 'kill "$anvil_pid" 2>/dev/null; wait "$anvil_pid" 2>/dev/null' EXIT
 trap 'exit 0' INT TERM
 while kill -0 "$parent" 2>/dev/null && kill -0 "$anvil_pid" 2>/dev/null; do sleep 1 & wait $!; done
 `;
+
+// How long to wait for anvil's "Listening on" banner before giving up on a spawn. Anvil normally
+// prints it in well under a second, so this only bounds a start that neither listens nor exits.
+const ANVIL_STARTUP_TIMEOUT_MS = 30_000;
 
 /**
  * Ensures there's a running Anvil instance and returns the RPC URL.
@@ -104,17 +112,34 @@ export async function startAnvil(
 
       // Spawn the watchdog (see ANVIL_WATCHDOG). It launches anvil with these args and reaps it if we
       // die; `$0` is 'bash' and `$@` is the anvil argv.
+      // `detached` puts the watchdog and anvil in their own process group so teardown can signal both
+      // at once; the streams are not unref'd, so this does not let the pair outlive us.
       const child = spawn('bash', ['-c', ANVIL_WATCHDOG, 'bash', ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
         env: { ...process.env, ANVIL_BIN: anvilBinary, RAYON_NUM_THREADS: '1' },
       });
 
-      // Wait for "Listening on" or an early exit.
+      // Wait for "Listening on", an early exit, or the startup budget running out. Both streams are
+      // collected so the rejection carries whatever anvil managed to say about why it did not start:
+      // it reports a refused bind on stdout, and `retry` only logs the error it is handed.
       await new Promise<void>((resolve, reject) => {
-        let stderr = '';
+        let output = '';
+        let startupTimer: NodeJS.Timeout | undefined;
+
+        const stopListening = () => {
+          if (startupTimer !== undefined) {
+            clearTimeout(startupTimer);
+            startupTimer = undefined;
+          }
+          child.stdout?.removeListener('data', onStdout);
+          child.stderr?.removeListener('data', onStderr);
+          child.removeListener('close', onClose);
+        };
 
         const onStdout = (data: Buffer) => {
           const text = data.toString();
+          output += text;
           logger?.debug(text.trim());
           methodCalls?.push(...(text.match(/eth_[^\s]+/g) || []));
 
@@ -125,27 +150,35 @@ export async function startAnvil(
             }
           }
           if (detectedPort !== undefined) {
-            child.stdout?.removeListener('data', onStdout);
-            child.stderr?.removeListener('data', onStderr);
-            child.removeListener('close', onClose);
+            stopListening();
             resolve();
           }
         };
 
         const onStderr = (data: Buffer) => {
-          stderr += data.toString();
-          logger?.debug(data.toString().trim());
+          const text = data.toString();
+          output += text;
+          logger?.debug(text.trim());
         };
 
         const onClose = (code: number | null) => {
-          child.stdout?.removeListener('data', onStdout);
-          child.stderr?.removeListener('data', onStderr);
-          reject(new Error(`Anvil exited with code ${code} before listening. stderr: ${stderr}`));
+          stopListening();
+          reject(new Error(`Anvil exited with code ${code} before listening. Output: ${output}`));
         };
 
         child.stdout?.on('data', onStdout);
         child.stderr?.on('data', onStderr);
         child.once('close', onClose);
+
+        startupTimer = setTimeout(() => {
+          stopListening();
+          // Tear the spawn down before retrying, so a stuck anvil does not keep holding the port.
+          void killChild(child).finally(() =>
+            reject(
+              new Error(`Anvil did not listen within ${ANVIL_STARTUP_TIMEOUT_MS}ms of starting. Output: ${output}`),
+            ),
+          );
+        }, ANVIL_STARTUP_TIMEOUT_MS);
       });
 
       // Continue piping for logging, method-call capture, and/or dateProvider sync after startup.
@@ -184,11 +217,12 @@ export async function startAnvil(
     status = 'idle';
   });
 
+  let stopping: Promise<void> | undefined;
   const stop = async () => {
     if (status === 'idle') {
       return;
     }
-    await killChild(anvil);
+    await (stopping ??= killChild(anvil));
   };
 
   const anvilObj: Anvil = {
@@ -217,27 +251,30 @@ function syncDateProviderFromAnvilOutput(text: string, dateProvider: TestDatePro
 }
 
 /**
- * Send SIGTERM to the watchdog, wait up to 5 s, then SIGKILL. The watchdog's trap forwards the
- * signal to anvil, so terminating it tears down anvil too. All timers are always cleared.
+ * Send SIGTERM to the watchdog, wait up to 5 s, then SIGKILL the whole process group. The watchdog's
+ * trap forwards the signal to anvil, so terminating it tears down anvil too. All timers are always
+ * cleared. Callers must budget more than the 5 s escalation: a teardown that needs it takes at least
+ * that long, so a 5 s hook timeout expires exactly when the escalation is due and never survives it.
  */
 function killChild(child: ChildProcess): Promise<void> {
   return new Promise<void>(resolve => {
-    if (child.exitCode !== null || child.killed) {
-      child.stdout?.destroy();
-      child.stderr?.destroy();
+    if (
+      (child.exitCode !== null || child.signalCode !== null) &&
+      (!child.stdout || child.stdout.closed) &&
+      (!child.stderr || child.stderr.closed)
+    ) {
       resolve();
       return;
     }
 
     let killTimer: NodeJS.Timeout | undefined;
 
+    // Group termination can exit the watchdog before anvil. Keep draining the inherited pipes until
+    // all writers close them; destroying them on watchdog exit would bypass that cleanup barrier.
     const onClose = () => {
       if (killTimer !== undefined) {
         clearTimeout(killTimer);
       }
-      // Destroy stdio streams so their PipeWrap handles don't keep the event loop alive.
-      child.stdout?.destroy();
-      child.stderr?.destroy();
       resolve();
     };
 
@@ -246,7 +283,13 @@ function killChild(child: ChildProcess): Promise<void> {
 
     killTimer = setTimeout(() => {
       killTimer = undefined;
-      child.kill('SIGKILL');
+      // Signal the whole group: SIGKILL leaves the watchdog no chance to run its EXIT trap, so
+      // killing it alone would strand anvil holding the port for the rest of the run.
+      try {
+        process.kill(-child.pid!, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
     }, 5000);
 
     // Ensure the timer does not prevent Node from exiting.

@@ -1,7 +1,6 @@
 import { InboxAbi } from '@aztec-foundation/l1-artifacts/InboxAbi';
 
-import { asyncPool } from '@aztec-labs/foundation/async-pool';
-import { maxBigint } from '@aztec-labs/foundation/bigint';
+import { maxBigint, minBigint } from '@aztec-labs/foundation/bigint';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -11,8 +10,9 @@ import { getPublicClient } from '../client.js';
 import type { DeployAztecL1ContractsReturnType } from '../deploy_aztec_l1_contracts.js';
 import type { L1ReaderConfig } from '../l1_reader.js';
 import type { ViemClient } from '../types.js';
-import type { L1EventLog } from './log.js';
-import { checkBlockTag } from './utils.js';
+import { formatViemError } from '../utils.js';
+import { type L1EventLog, fetchLogsBisectingRange } from './log.js';
+import { checkBlockTag, getRevertedErrorName } from './utils.js';
 
 /** The full L1-to-L2 message emitted by the Inbox, decoded from the event. Hashing it yields `leaf`. */
 export type MessageSentMessage = {
@@ -36,11 +36,33 @@ export type MessageSentArgs = {
   message: MessageSentMessage;
 };
 
-/** Log type for MessageSent events, enriched with the emitting L1 block's timestamp (the bucket recency key). */
-export type MessageSentLog = L1EventLog<MessageSentArgs> & {
-  /** Timestamp (in seconds) of the L1 block that emitted the event; the key of the message's Inbox bucket. */
-  l1BlockTimestamp: bigint;
-};
+/** Log type for MessageSent events. */
+export type MessageSentLog = L1EventLog<MessageSentArgs>;
+
+/** Width, in L1 blocks, of the window {@link messageSentSearchWindow} searches before it is clipped. */
+export const MESSAGE_SENT_SEARCH_WINDOW_BLOCKS = 100n;
+
+/**
+ * The inclusive L1 block range a MessageSent lookup covers around the height a message was observed at: a window of
+ * {@link MESSAGE_SENT_SEARCH_WINDOW_BLOCKS} heights centred just above that height, clipped at block 1 and at
+ * `upperBound`. Clipping shortens the window rather than sliding it, so a window near genesis or near the caller's
+ * captured head never reaches blocks outside the range it was asked for. A recorded height only says where the
+ * message was first seen, so the window has to be wide enough to still place an unchanged message that a reorg
+ * re-mined some way away from it.
+ *
+ * Returns `undefined` when the bound leaves nothing to search, which callers read as a miss: a provider rejects an
+ * inverted range rather than reporting it empty, and an exception is not a miss, so the caller would otherwise retry
+ * the same lookup forever.
+ */
+export function messageSentSearchWindow(
+  aroundL1BlockNumber: bigint,
+  upperBound?: bigint,
+): { fromBlock: bigint; toBlock: bigint } | undefined {
+  const fromBlock = maxBigint(aroundL1BlockNumber - (MESSAGE_SENT_SEARCH_WINDOW_BLOCKS / 2n - 1n), 1n);
+  const windowEnd = aroundL1BlockNumber + MESSAGE_SENT_SEARCH_WINDOW_BLOCKS / 2n;
+  const toBlock = upperBound === undefined ? windowEnd : minBigint(windowEnd, upperBound);
+  return fromBlock > toBlock ? undefined : { fromBlock, toBlock };
+}
 
 export class InboxContract {
   private readonly inbox: GetContractReturnType<typeof InboxAbi, ViemClient>;
@@ -105,12 +127,29 @@ export class InboxContract {
   ): Promise<InboxContractBucket> {
     await checkBlockTag(opts.blockNumber, this.client);
     const bucket = await this.inbox.read.getBucket([seq], opts);
-    return {
-      rollingHash: Fr.fromString(bucket.rollingHash),
-      totalMsgCount: bucket.totalMsgCount,
-      timestamp: bucket.timestamp,
-      msgCount: bucket.msgCount,
-    };
+    return toInboxContractBucket(bucket);
+  }
+
+  /**
+   * Returns the live Inbox bucket with the greatest cumulative message total at or below `upperBound`, together with
+   * its sequence number. Resolves to `undefined` when even the oldest retained bucket ends past the bound, i.e. the
+   * ring has already evicted every bucket that could have matched. Totals strictly increase per bucket, so the result
+   * is the newest bucket boundary reachable from a local message count.
+   */
+  public async getBucketAtOrBeforeTotal(
+    upperBound: bigint,
+    opts: { blockTag?: BlockTag; blockNumber?: bigint } = {},
+  ): Promise<{ seq: bigint; bucket: InboxContractBucket } | undefined> {
+    await checkBlockTag(opts.blockNumber, this.client);
+    try {
+      const [seq, bucket] = await this.inbox.read.getBucketAtOrBeforeTotal([upperBound], opts);
+      return { seq, bucket: toInboxContractBucket(bucket) };
+    } catch (err) {
+      if (getRevertedErrorName(err) === 'Inbox__NoBucketAtOrBeforeTotal') {
+        return undefined;
+      }
+      throw formatViemError(err);
+    }
   }
 
   /** Fetches MessageSent events within the given block range. */
@@ -118,71 +157,59 @@ export class InboxContract {
     const logs = (await this.inbox.getEvents.MessageSent({}, { fromBlock, toBlock })).filter(
       log => log.blockNumber! >= fromBlock && log.blockNumber! <= toBlock,
     );
-    const timestamps = await this.getBlockTimestamps(logs.map(log => log.blockHash!));
-    return logs.map(log => this.mapMessageSentLog(log, timestamps.get(log.blockHash!)!));
+    return logs.map(log => this.mapMessageSentLog(log));
   }
 
-  /** Fetches MessageSent events for a specific message hash around a specific block. */
-  async getMessageSentEventByHash(msgHash: Hex, aroundL1BlockNumber: bigint): Promise<MessageSentLog> {
+  /**
+   * Fetches MessageSent events for a specific message hash around a specific block, never looking past `upperBound`
+   * when one is given. Callers comparing the result against a state read at a captured L1 head pass that head, so an
+   * event only reachable above it is not returned as evidence about the head's chain.
+   *
+   * The query spans up to {@link MESSAGE_SENT_SEARCH_WINDOW_BLOCKS} L1 blocks, which some endpoints refuse in a
+   * single `eth_getLogs`; a refused range is halved and retried rather than narrowed, so a rejection still ends as
+   * an error and never as an empty result.
+   */
+  async getMessageSentEventByHash(
+    msgHash: Hex,
+    aroundL1BlockNumber: bigint,
+    upperBound?: bigint,
+  ): Promise<MessageSentLog | undefined> {
     // We don't use blockHash here because we don't want the query to throw if the L1 block number no longer exists on chain
     // due to an L1 reorg. The use case for this method is usually checking if a message still exists on the Inbox after
     // a reorg, so it's possible the message was moved one block up or down, and that the original L1 block where we
     // saw it no longer exists, rendering the block-by-hash approach invalid.
-    const [log] = await this.inbox.getEvents.MessageSent(
-      { hash: msgHash },
-      { fromBlock: maxBigint(aroundL1BlockNumber - 5n, 1n), toBlock: aroundL1BlockNumber + 5n },
-    );
-    if (!log) {
-      return log as unknown as MessageSentLog;
+    const window = messageSentSearchWindow(aroundL1BlockNumber, upperBound);
+    if (window === undefined) {
+      return undefined;
     }
-    const [timestamp] = (await this.getBlockTimestamps([log.blockHash!])).values();
-    return this.mapMessageSentLog(log, timestamp);
+    const [log] = await fetchLogsBisectingRange(window.fromBlock, window.toBlock, (fromBlock, toBlock) =>
+      this.inbox.getEvents.MessageSent({ hash: msgHash }, { fromBlock, toBlock }),
+    );
+    return log && this.mapMessageSentLog(log);
   }
 
-  /**
-   * Fetches the timestamp of each distinct L1 block, so each MessageSent log can carry its bucket key. Blocks are
-   * resolved by hash, which pins them to the same fork the logs were read from: resolving by number would silently
-   * return the same-height block of another fork if the chain reorgs between the log query and this lookup, storing a
-   * timestamp that never applied to the message. By hash, such a reorg fails the lookup instead, and the caller
-   * retries against the reorged chain. Fetched with bounded concurrency to keep a large sync batch from fanning out
-   * unbounded RPC requests.
-   */
-  private async getBlockTimestamps(blockHashes: Hex[]): Promise<Map<Hex, bigint>> {
-    const uniqueBlockHashes = [...new Set(blockHashes)];
-    const timestamps = new Map<Hex, bigint>();
-    await asyncPool(10, uniqueBlockHashes, async blockHash => {
-      const block = await this.client.getBlock({ blockHash, includeTransactions: false });
-      timestamps.set(blockHash, block.timestamp);
-    });
-    return timestamps;
-  }
-
-  private mapMessageSentLog(
-    log: {
-      blockNumber: bigint | null;
-      blockHash: `0x${string}` | null;
-      transactionHash: `0x${string}` | null;
-      args: {
-        hash?: `0x${string}`;
-        inboxRollingHash?: `0x${string}`;
-        bucketSeq?: bigint;
-        message?: {
-          sender: { actor: `0x${string}`; chainId: bigint };
-          recipient: { actor: `0x${string}`; version: bigint };
-          content: `0x${string}`;
-          secretHash: `0x${string}`;
-          index: bigint;
-        };
+  private mapMessageSentLog(log: {
+    blockNumber: bigint | null;
+    blockHash: `0x${string}` | null;
+    transactionHash: `0x${string}` | null;
+    args: {
+      hash?: `0x${string}`;
+      inboxRollingHash?: `0x${string}`;
+      bucketSeq?: bigint;
+      message?: {
+        sender: { actor: `0x${string}`; chainId: bigint };
+        recipient: { actor: `0x${string}`; version: bigint };
+        content: `0x${string}`;
+        secretHash: `0x${string}`;
+        index: bigint;
       };
-    },
-    l1BlockTimestamp: bigint,
-  ): MessageSentLog {
+    };
+  }): MessageSentLog {
     const message = log.args.message!;
     return {
       l1BlockNumber: log.blockNumber!,
       l1BlockHash: Buffer32.fromString(log.blockHash!),
       l1TransactionHash: log.transactionHash!,
-      l1BlockTimestamp,
       args: {
         index: message.index,
         leaf: Fr.fromString(log.args.hash!),
@@ -209,6 +236,20 @@ export type InboxContractState = {
   /** Sequence number of the bucket currently accumulating messages. */
   currentBucketSeq: bigint;
 };
+
+function toInboxContractBucket(bucket: {
+  rollingHash: Hex;
+  totalMsgCount: bigint;
+  timestamp: bigint;
+  msgCount: number;
+}): InboxContractBucket {
+  return {
+    rollingHash: Fr.fromString(bucket.rollingHash),
+    totalMsgCount: bucket.totalMsgCount,
+    timestamp: bucket.timestamp,
+    msgCount: bucket.msgCount,
+  };
+}
 
 /** A snapshot of an on-chain Inbox rolling-hash bucket. */
 export type InboxContractBucket = {

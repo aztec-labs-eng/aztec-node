@@ -9,6 +9,8 @@ import {
   CHECKPOINT_ROOT_SINGLE_BLOCK_ROLLUP_VK_INDEX,
   HIDING_KERNEL_TO_PUBLIC_VK_INDEX,
   HIDING_KERNEL_TO_ROLLUP_VK_INDEX,
+  INBOX_PARITY_4_VK_INDEX,
+  INBOX_PARITY_16_VK_INDEX,
   INBOX_PARITY_64_VK_INDEX,
   INBOX_PARITY_256_VK_INDEX,
   INBOX_PARITY_1024_VK_INDEX,
@@ -31,6 +33,8 @@ import {
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 
 import PublicChonkVerifier from '../../../artifacts/chonk_verifier_public.json' with { type: 'json' };
+import InboxParity4 from '../../../artifacts/inbox_parity_4.json' with { type: 'json' };
+import InboxParity16 from '../../../artifacts/inbox_parity_16.json' with { type: 'json' };
 import InboxParity64 from '../../../artifacts/inbox_parity_64.json' with { type: 'json' };
 import InboxParity256 from '../../../artifacts/inbox_parity_256.json' with { type: 'json' };
 import InboxParity1024 from '../../../artifacts/inbox_parity_1024.json' with { type: 'json' };
@@ -55,6 +59,8 @@ import { abiToVKData } from '../../utils/vk_json.js';
 import type { ProtocolCircuitName, ServerProtocolCircuitName } from '../types.js';
 
 export const ServerCircuitVks: Record<ServerProtocolCircuitName, VerificationKeyData> = {
+  InboxParity4Artifact: abiToVKData(InboxParity4),
+  InboxParity16Artifact: abiToVKData(InboxParity16),
   InboxParity64Artifact: abiToVKData(InboxParity64),
   InboxParity256Artifact: abiToVKData(InboxParity256),
   InboxParity1024Artifact: abiToVKData(InboxParity1024),
@@ -89,6 +95,8 @@ export const ProtocolCircuitVkIndexes: Record<ProtocolCircuitName, number> = {
   HidingKernelToRollup: HIDING_KERNEL_TO_ROLLUP_VK_INDEX,
   HidingKernelToPublic: HIDING_KERNEL_TO_PUBLIC_VK_INDEX,
   PublicChonkVerifier: PUBLIC_CHONK_VERIFIER_VK_INDEX,
+  InboxParity4Artifact: INBOX_PARITY_4_VK_INDEX,
+  InboxParity16Artifact: INBOX_PARITY_16_VK_INDEX,
   InboxParity64Artifact: INBOX_PARITY_64_VK_INDEX,
   InboxParity256Artifact: INBOX_PARITY_256_VK_INDEX,
   InboxParity1024Artifact: INBOX_PARITY_1024_VK_INDEX,

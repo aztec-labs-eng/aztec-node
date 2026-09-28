@@ -12,7 +12,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import { generatePrivateKey } from 'viem/accounts';
 
-import { createL1TxUtilsFromSigners } from './l1_tx_utils.js';
+import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from './l1_tx_utils.js';
 
 describe('L1TxUtils Integration - Publisher Deduplication', () => {
   let kvStore: AztecAsyncKVStore;
@@ -94,6 +94,40 @@ describe('L1TxUtils Integration - Publisher Deduplication', () => {
     // all of the publisherSigners should deduplicate to one L1TxUtils instance
     expect(l1TxUtils).toHaveLength(1);
     expect(l1TxUtils[0].getSenderAddress().equals(expectedPublisherAddress)).toBe(true);
+  });
+
+  it('should deduplicate forwarder utils for validators sharing the same publisher key', async () => {
+    // Same shared-publisher setup as above, but through the forwarder factory: without dedup each
+    // copy keeps its own nonce count for the one account and two can collide, dropping a tx.
+    const sharedPublisherKey = generatePrivateKey() as EthPrivateKey;
+    const keystore: KeyStore = {
+      schemaVersion: 1,
+      validators: times(500, _ => {
+        const attesterKey = generatePrivateKey() as EthPrivateKey;
+        return {
+          attester: attesterKey,
+          publisher: sharedPublisherKey,
+          coinbase: EthAddress.fromString(getAddressFromPrivateKey(attesterKey)),
+          feeRecipient: AztecAddress.ZERO,
+        };
+      }),
+    };
+
+    const manager = new KeystoreManager(keystore);
+    const allPublisherSigners = manager.createAllValidatorPublisherSigners();
+    expect(allPublisherSigners).toHaveLength(keystore.validators!.length);
+
+    const forwarderAddress = EthAddress.random();
+    const forwarderUtils = await createForwarderL1TxUtilsFromSigners(
+      mockClient,
+      allPublisherSigners,
+      forwarderAddress,
+      mockConfig,
+      { telemetry: mockTelemetry, dateProvider: mockDateProvider, kzg: Blob.getViemKzgInstance() },
+    );
+
+    // all sharing one publisher should collapse to a single forwarder instance
+    expect(forwarderUtils).toHaveLength(1);
   });
 
   it('should handle validators with 3 unique publishers correctly', async () => {

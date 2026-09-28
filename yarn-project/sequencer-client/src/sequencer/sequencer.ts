@@ -1,6 +1,6 @@
 import { getKzg } from '@aztec-labs/blob-lib';
 import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
-import { NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, omit, pick } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -11,12 +11,13 @@ import type { DateProvider } from '@aztec-labs/foundation/timer';
 import type { TypedEventEmitter } from '@aztec-labs/foundation/types';
 import type { P2P } from '@aztec-labs/p2p';
 import type { SlasherClientInterface } from '@aztec-labs/slasher';
-import type {
-  BlockData,
-  L2BlockSink,
-  L2BlockSource,
-  ProposedCheckpointSink,
-  ValidateCheckpointResult,
+import {
+  type BlockData,
+  BlockHash,
+  type L2BlockSink,
+  type L2BlockSource,
+  type ProposedCheckpointSink,
+  type ValidateCheckpointResult,
 } from '@aztec-labs/stdlib/block';
 import {
   type Checkpoint,
@@ -36,7 +37,7 @@ import {
   SequencerConfigSchema,
   type WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { type L1ToL2MessageSource, MIN_BLOCKS_FOR_INBOX_CATCHUP } from '@aztec-labs/stdlib/messaging';
 import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import { pickFromSchema } from '@aztec-labs/stdlib/schemas';
 import { ProposerTimetable, buildProposerTimetable } from '@aztec-labs/stdlib/timetable';
@@ -56,6 +57,7 @@ import type { SequencerPublisherFactory } from '../publisher/sequencer-publisher
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { CheckpointProposalJob } from './checkpoint_proposal_job.js';
 import { CheckpointProposalJobMetrics } from './checkpoint_proposal_job_metrics.js';
+import type { CheckpointProposalJobTestHooks } from './checkpoint_proposal_job_test_hooks.js';
 import { CheckpointVoter } from './checkpoint_voter.js';
 import { SequencerInterruptedError } from './errors.js';
 import type { SequencerEvents } from './events.js';
@@ -149,9 +151,12 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     protected dateProvider: DateProvider,
     protected epochCache: EpochCache,
     protected rollupContract: RollupContract,
+    protected inboxContract: InboxContract,
     config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>,
     protected telemetry: TelemetryClient = getTelemetryClient(),
     protected log = createLogger('sequencer'),
+    /** Test-only checkpoint-build hooks, injected by the node factory and never read from configuration. */
+    protected checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks,
   ) {
     super();
     this.stateLog = log.createChild('state');
@@ -219,9 +224,53 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       maxNumberOfBlocks,
     });
 
+    this.assertEffectiveCapacityClearsInboxBacklog(config, maxNumberOfBlocks);
     this.assertConfigMeetsNetworkTxLimits(config, maxNumberOfBlocks);
 
     return timetable;
+  }
+
+  /**
+   * Checks the block opportunities this sequencer can actually use against {@link MIN_BLOCKS_FOR_INBOX_CATCHUP}.
+   *
+   * `validateNetworkConsensusConfig` applies the same floor to a generated network profile, but only to the
+   * configured `maxBlocksPerCheckpoint`. A running sequencer is bounded by the smaller of that cap and what its
+   * own slot timings derive (see {@link CheckpointProposalJob}), so timings that shrink the derived count below
+   * the floor leave a proposer that can never reach a mandatory endpoint: L1 keeps rejecting its publications
+   * and it loses all of its slots.
+   *
+   * Only a configuration that explicitly opts out is exempt. Sandbox and e2e profiles deliberately run one or two
+   * blocks per slot (see `PIPELINING_SETUP_OPTS`) against an Inbox nobody is filling with a cap-sized backlog, so
+   * the floor would reject every one of those runs; they set `allowUnsafeInboxCatchupCapacity` and get a warning
+   * instead. The exemption is an explicit statement about the deployment, not a threshold on the Ethereum slot
+   * duration: a real network that happens to run short L1 slots gets no more per-block message capacity out of
+   * them, so it is held to the floor like any other.
+   */
+  private assertEffectiveCapacityClearsInboxBacklog(config: ResolvedSequencerConfig, timetableMaxBlocks: number) {
+    const effectiveMaxBlocks = Math.min(config.maxBlocksPerCheckpoint, timetableMaxBlocks);
+    if (effectiveMaxBlocks >= MIN_BLOCKS_FOR_INBOX_CATCHUP) {
+      return;
+    }
+
+    const detail =
+      `this sequencer can build at most ${effectiveMaxBlocks} block(s) per checkpoint ` +
+      `(MAX_BLOCKS_PER_CHECKPOINT ${config.maxBlocksPerCheckpoint}, ${timetableMaxBlocks} derived from slot ` +
+      `timings), below the ${MIN_BLOCKS_FOR_INBOX_CATCHUP} needed to clear a mandatory streaming-Inbox backlog`;
+
+    if (config.allowUnsafeInboxCatchupCapacity) {
+      this.log.warn(`Inbox catch-up capacity below the floor: ${detail}.`, {
+        effectiveMaxBlocks,
+        maxBlocksPerCheckpoint: config.maxBlocksPerCheckpoint,
+        timetableMaxBlocks,
+        minBlocksForInboxCatchup: MIN_BLOCKS_FOR_INBOX_CATCHUP,
+      });
+      return;
+    }
+
+    throw new Error(
+      `Rejecting sequencer configuration: ${detail}. Raise MAX_BLOCKS_PER_CHECKPOINT, lower the block duration, ` +
+        `or raise the slot duration.`,
+    );
   }
 
   /**
@@ -431,7 +480,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       this.config.fishermanMode &&
       (this.lastEpochForStrategyComparison === undefined || targetEpoch > this.lastEpochForStrategyComparison)
     ) {
-      this.logStrategyComparison(targetEpoch, checkpointProposalJob.getPublisher());
+      this.logStrategyComparison(targetEpoch, checkpointProposalJob.getFeeStrategyComparison());
       this.lastEpochForStrategyComparison = targetEpoch;
     }
 
@@ -613,6 +662,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // In fisherman mode, pass undefined to use the fisherman's own keystore instead of the actual proposer's
     const proposerForPublisher = this.config.fishermanMode ? undefined : proposer;
     const { attestorAddress, publisher } = await this.publisherFactory.create(proposerForPublisher);
+    using cleanup = new DisposableStack();
+    cleanup.use(publisher);
     this.log.verbose(`Created publisher at address ${publisher.getSenderAddress()} for attestor ${attestorAddress}`);
 
     // Prepare invalidation request if the pending chain is invalid (returns undefined if no need).
@@ -744,7 +795,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     );
 
     // Create and return the checkpoint proposal job
-    return this.createCheckpointProposalJob(
+    const job = this.createCheckpointProposalJob(
       targetSlot,
       targetEpoch,
       checkpointNumber,
@@ -756,6 +807,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       invalidateCheckpoint,
       syncedTo.proposedCheckpointData,
     );
+    cleanup.move();
+    return job;
   }
 
   protected createCheckpointProposalJob(
@@ -785,6 +838,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       this.p2pClient,
       this.worldState,
       this.l1ToL2MessageSource,
+      this.inboxContract,
       this.l2BlockSource,
       this.checkpointsBuilder,
       this.l2BlockSource,
@@ -803,6 +857,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       this.tracer,
       this.log.getBindings(),
       proposedCheckpointData,
+      this.checkpointProposalJobTestHooks,
     );
   }
 
@@ -893,15 +948,14 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
         number: syncSummary.latestBlockNumber,
         hash: syncSummary.latestBlockHash,
       })),
-      this.l2BlockSource.getL2Tips().then(t => ({ proposed: t.proposed, checkpointed: t.checkpointed })),
+      this.l2BlockSource.getL2Frontier(),
       this.p2pClient.getStatus().then(p2p => p2p.syncedToL2Block),
       this.l1ToL2MessageSource.getL2Tips().then(t => ({ proposed: t.proposed, checkpointed: t.checkpointed })),
-      this.l2BlockSource.getPendingChainValidationStatus(),
-      this.l2BlockSource.getProposedCheckpointData(),
     ] as const);
 
-    const [worldState, l2Tips, p2p, l1ToL2MessageSourceTips, pendingChainValidationStatus, proposedCheckpointData] =
-      syncedBlocks;
+    const [worldState, frontier, p2p, l1ToL2MessageSourceTips] = syncedBlocks;
+    const { proposedCheckpoint: proposedCheckpointData, pendingChainValidationStatus } = frontier;
+    const l2Tips = { proposed: frontier.tips.proposed, checkpointed: frontier.tips.checkpointed };
 
     const result =
       worldState.hash === l2Tips.proposed.hash &&
@@ -920,8 +974,12 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       return undefined;
     }
 
+    // Look the tip block up by its hash rather than its number: the tips come from the cached snapshot, so
+    // after a prune-and-replace commits (but before the cache refreshes) a by-number read could return the
+    // replacement block while every hash check above still described the pruned one. A miss just fails the
+    // sync check and retries.
     const blockNumber = worldState.number;
-    const blockData = await this.l2BlockSource.getBlockData({ number: blockNumber });
+    const blockData = await this.l2BlockSource.getBlockData({ hash: BlockHash.fromString(l2Tips.proposed.hash) });
     if (!blockData) {
       this.log.warn(`Sequencer sync check failed: failed to get L2 block data ${blockNumber} from the archiver`, {
         blockNumber,
@@ -938,9 +996,9 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // matching proposed checkpoint (e.g. it crashed before assembling it). Building on this orphan block
     // would fork the chain off a tip no other node can follow. The archiver prunes these orphan blocks
     // once their build slot ends; this guard is the correctness barrier during the grace window before.
-    // `getProposedCheckpointData()` returns the latest proposed checkpoint payload, which is always
-    // the leading one (a proposed entry is only stored beyond the confirmed frontier and is deleted
-    // on confirmation). It carries no tip, so there is no tip-vs-payload split read to reconcile.
+    // The L2 frontier carries the leading proposed checkpoint payload (a proposed entry is only stored
+    // beyond the confirmed frontier and is deleted on confirmation) alongside the tips it is compared
+    // against, read atomically, so the two cannot describe different chain states.
     if (
       blockData.checkpointNumber > l2Tips.checkpointed.checkpoint.number &&
       proposedCheckpointData?.checkpointNumber !== blockData.checkpointNumber
@@ -1081,6 +1139,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
 
     // Get a publisher for voting
     const { attestorAddress, publisher } = await this.publisherFactory.create(proposer);
+    using cleanup = new DisposableStack();
+    cleanup.use(publisher);
 
     this.log.debug(`Attempting to vote despite sync failure at slot ${slot}`, {
       attestorAddress,
@@ -1124,10 +1184,14 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // expected to mine). Delay submission to the start of `targetSlot` so the tx mines in the
     // slot the votes were signed for. We fire-and-forget so we don't block the sequencer's
     // work loop while waiting for the target slot to start, but track it so stop() can drain it.
-    const send = publisher.sendRequestsAt(targetSlot).catch(err => {
-      this.log.error(`Failed to publish fallback requests despite sync failure for slot ${slot}`, err, { slot });
-    });
+    const send = publisher
+      .sendRequestsAt(targetSlot)
+      .catch(err => {
+        this.log.error(`Failed to publish fallback requests despite sync failure for slot ${slot}`, err, { slot });
+      })
+      .finally(() => publisher.dispose());
     this.pendingRequests.trackRequest(send, () => publisher.interrupt());
+    cleanup.move();
   }
 
   private async tryEnqueuePruneIfPrunable(targetSlot: SlotNumber, publisher: SequencerPublisher): Promise<boolean> {
@@ -1161,6 +1225,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     this.lastSlotForFallbackAction = slot;
 
     const { attestorAddress, publisher } = await this.publisherFactory.create(proposer);
+    using cleanup = new DisposableStack();
+    cleanup.use(publisher);
 
     this.log.debug(`Escape hatch open for slot ${slot}, attempting vote-only actions`, {
       slot,
@@ -1199,10 +1265,14 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // silently inside Multicall3. Fire-and-forget so we don't block the sequencer's work loop while
     // waiting for the target slot to start, mirroring tryVoteAndPruneWhenCannotBuild, but tracked so
     // stop() can drain it.
-    const send = publisher.sendRequestsAt(targetSlot).catch(err => {
-      this.log.error(`Failed to publish escape-hatch votes for slot ${slot}`, err, { slot, targetSlot });
-    });
+    const send = publisher
+      .sendRequestsAt(targetSlot)
+      .catch(err => {
+        this.log.error(`Failed to publish escape-hatch votes for slot ${slot}`, err, { slot, targetSlot });
+      })
+      .finally(() => publisher.dispose());
     this.pendingRequests.trackRequest(send, () => publisher.interrupt());
+    cleanup.move();
   }
 
   /**
@@ -1291,7 +1361,8 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       validatorToUse = ourValidatorAddresses[0];
     }
 
-    const { publisher } = await this.publisherFactory.create(validatorToUse);
+    const { publisher: createdPublisher } = await this.publisherFactory.create(validatorToUse);
+    using publisher = createdPublisher;
 
     const invalidateCheckpoint = await publisher.simulateInvalidateCheckpoint(pendingChainValidationStatus);
     if (!invalidateCheckpoint) {
@@ -1320,13 +1391,14 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     }
   }
 
-  private logStrategyComparison(epoch: EpochNumber, publisher: SequencerPublisher): void {
-    const feeAnalyzer = publisher.getL1FeeAnalyzer();
-    if (!feeAnalyzer) {
+  private logStrategyComparison(
+    epoch: EpochNumber,
+    comparison: ReturnType<CheckpointProposalJob['getFeeStrategyComparison']>,
+  ): void {
+    if (!comparison) {
       return;
     }
 
-    const comparison = feeAnalyzer.getStrategyComparison();
     if (comparison.length === 0) {
       this.log.debug(`No strategy data available yet for epoch ${epoch}`);
       return;

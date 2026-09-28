@@ -1,7 +1,7 @@
 
 #!/usr/bin/env bash
 
-set -ex
+set -e
 
 VERSION_FILE="/usr/src/.release-please-manifest.json"
 
@@ -24,8 +24,11 @@ attrs_map["k8s.pod.name"]="${K8S_POD_NAME:-}"
 attrs_map["k8s.pod.uid"]="${K8S_POD_UID:-}"
 attrs_map["k8s.namespace.name"]="${K8S_NAMESPACE_NAME:-}"
 
+if [[ -n "${NETWORK:-}" ]]; then
+  attrs_map["network"]="$NETWORK"
+fi
+
 # format the attribute map to comma-separated string
-set +x
 otel_attrs=""
 for key in "${!attrs_map[@]}"; do
   if [[ -n "$otel_attrs" ]]; then
@@ -33,7 +36,6 @@ for key in "${!attrs_map[@]}"; do
   fi
   otel_attrs="${otel_attrs}${key}=${attrs_map[$key]}"
 done
-set -x
 
 if [[ -n "$OTEL_RESOURCE_ATTRIBUTES" ]]; then
   export OTEL_RESOURCE_ATTRIBUTES="${OTEL_RESOURCE_ATTRIBUTES},${otel_attrs}"

@@ -1,3 +1,4 @@
+import { InboxAbi } from '@aztec-foundation/l1-artifacts/InboxAbi';
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
 import { L1RpcError, getPublicClient } from '@aztec-labs/ethereum/client';
@@ -8,21 +9,25 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
-import { type Abi, RpcRequestError, encodeErrorResult } from 'viem';
+import { type Abi, RpcRequestError, encodeErrorResult, getContract } from 'viem';
 import { foundry } from 'viem/chains';
 
 import { DefaultL1ContractsConfig } from '../config.js';
-import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
+import { type DeployAztecL1ContractsReturnType, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
+import { ReadOnlyL1TxUtils } from '../l1_tx_utils/index.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { RollupCheatCodes } from '../test/rollup_cheat_codes.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ViemClient } from '../types.js';
-import { type FeeHeader, RollupContract, TempCheckpointLogField } from './rollup.js';
+import { buildSimulationOverridesStateOverride } from './chain_state_override.js';
+import { InboxContract } from './inbox.js';
+import { type CheckpointPreflightArgs, type FeeHeader, RollupContract, TempCheckpointLogField } from './rollup.js';
 
 describe('compressFeeHeader', () => {
   /** Creates a zero fee header with the given overrides. */
   function makeFeeHeader(overrides: Partial<FeeHeader> = {}): FeeHeader {
-    return { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 0n, congestionCost: 0n, proverCost: 0n, ...overrides };
+    return { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 0n, protocolFee: 0n, proverCost: 0n, ...overrides };
   }
 
   it('sets the preheat flag (bit 255)', () => {
@@ -62,15 +67,15 @@ describe('compressFeeHeader', () => {
     expect((result >> 80n) & ((1n << 48n) - 1n)).toBe(999n);
   });
 
-  it('packs congestionCost into bits [128:191]', () => {
-    const header = makeFeeHeader({ congestionCost: 42n });
+  it('packs protocolFee into bits [128:191]', () => {
+    const header = makeFeeHeader({ protocolFee: 42n });
     const result = RollupContract.compressFeeHeader(header);
     expect((result >> 128n) & ((1n << 64n) - 1n)).toBe(42n);
   });
 
-  it('clamps congestionCost to 64 bits', () => {
+  it('clamps protocolFee to 64 bits', () => {
     const maxValue = (1n << 64n) - 1n;
-    const header = makeFeeHeader({ congestionCost: maxValue + 1n });
+    const header = makeFeeHeader({ protocolFee: maxValue + 1n });
     const result = RollupContract.compressFeeHeader(header);
     expect((result >> 128n) & maxValue).toBe(maxValue);
   });
@@ -93,7 +98,7 @@ describe('compressFeeHeader', () => {
       manaUsed: 1000n,
       excessMana: 2000n,
       ethPerFeeAsset: 3000n,
-      congestionCost: 4000n,
+      protocolFee: 4000n,
       proverCost: 5000n,
     });
     const result = RollupContract.compressFeeHeader(header);
@@ -122,7 +127,7 @@ describe('computeChildFeeHeader', () => {
     manaUsed: 5000n,
     excessMana: 3000n,
     ethPerFeeAsset: 1000n,
-    congestionCost: 100n,
+    protocolFee: 100n,
     proverCost: 200n,
   };
 
@@ -144,9 +149,9 @@ describe('computeChildFeeHeader', () => {
     expect(result.manaUsed).toBe(7777n);
   });
 
-  it('always sets congestionCost and proverCost to zero', () => {
+  it('always sets protocolFee and proverCost to zero', () => {
     const result = RollupContract.computeChildFeeHeader(baseFeeHeader, 0n, 0n, manaTarget);
-    expect(result.congestionCost).toBe(0n);
+    expect(result.protocolFee).toBe(0n);
     expect(result.proverCost).toBe(0n);
   });
 
@@ -217,14 +222,14 @@ describe('computeChildFeeHeader', () => {
       manaUsed: 8000n,
       excessMana: 15000n,
       ethPerFeeAsset: 5000n,
-      congestionCost: 999n,
+      protocolFee: 999n,
       proverCost: 888n,
     };
     const result = RollupContract.computeChildFeeHeader(parent, 42n, 250n, manaTarget);
     expect(result.excessMana).toBe(13000n);
     expect(result.manaUsed).toBe(42n);
     expect(result.ethPerFeeAsset).toBe(5125n);
-    expect(result.congestionCost).toBe(0n);
+    expect(result.protocolFee).toBe(0n);
     expect(result.proverCost).toBe(0n);
   });
 });
@@ -237,25 +242,28 @@ describe('Rollup', () => {
 
   let vkTreeRoot: Fr;
   let protocolContractsHash: Fr;
+  let genesisArchiveRoot: Fr;
   let rollupAddress: `0x${string}`;
   let rollup: RollupContract;
+  let deployed: DeployAztecL1ContractsReturnType;
 
   beforeAll(async () => {
     // this is the 6th address that gets funded by the junk mnemonic
     const privateKeyRaw = '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba';
     vkTreeRoot = Fr.random();
     protocolContractsHash = Fr.random();
+    genesisArchiveRoot = Fr.random();
 
     ({ anvil, rpcUrl } = await startAnvil());
 
     publicClient = getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: 31337 });
     cheatCodes = new EthCheatCodes([rpcUrl], new DateProvider());
 
-    const deployed = await deployAztecL1Contracts(rpcUrl, privateKeyRaw, foundry.id, {
+    deployed = await deployAztecL1Contracts(rpcUrl, privateKeyRaw, foundry.id, {
       ...DefaultL1ContractsConfig,
       vkTreeRoot,
       protocolContractsHash,
-      genesisArchiveRoot: Fr.random(),
+      genesisArchiveRoot,
       realVerifier: false,
     });
 
@@ -361,13 +369,192 @@ describe('Rollup', () => {
     });
   });
 
+  describe('validateCheckpointHeaderAndInbox', () => {
+    let l1TxUtils: ReadOnlyL1TxUtils;
+    let inbox: InboxContract;
+    let slotDuration: bigint;
+    let l1GenesisTime: bigint;
+    let liveTips: bigint;
+
+    beforeAll(async () => {
+      l1TxUtils = new ReadOnlyL1TxUtils(publicClient, undefined, new DateProvider());
+      inbox = InboxContract.getFromL1ContractsValues(deployed);
+      slotDuration = BigInt(await rollup.getSlotDuration());
+      l1GenesisTime = await rollup.getL1GenesisTime();
+      // Earlier tests rewrote the chain tips; run against the fresh chain (effective parent 0) and put them back after.
+      liveTips = await cheatCodes.load(EthAddress.fromString(rollupAddress), BigInt(RollupContract.stfStorageSlot));
+      await cheatCodes.store(EthAddress.fromString(rollupAddress), BigInt(RollupContract.stfStorageSlot), 0n);
+    });
+
+    afterAll(async () => {
+      await cheatCodes.store(EthAddress.fromString(rollupAddress), BigInt(RollupContract.stfStorageSlot), liveTips);
+    });
+
+    /** Builds an otherwise valid header for the second L2 slot after the current L1 time, and the time to simulate at. */
+    async function buildHeader(inboxRollingHash: Fr): Promise<{ args: CheckpointPreflightArgs; time: bigint }> {
+      const now = (await publicClient.getBlock()).timestamp;
+      const slot = SlotNumber(Number((now - l1GenesisTime) / slotDuration) + 2);
+      const time = await rollup.getTimestampForSlot(slot);
+      const minFee = await rollup.getManaMinFeeAt(time, true);
+      const zero = Fr.ZERO.toString();
+      const args: CheckpointPreflightArgs = {
+        header: {
+          lastArchiveRoot: genesisArchiveRoot.toString(),
+          blockHeadersHash: zero,
+          blobsHash: zero,
+          inboxRollingHash: inboxRollingHash.toString(),
+          outHash: zero,
+          slotNumber: BigInt(slot),
+          timestamp: time,
+          coinbase: EthAddress.random().toString(),
+          feeRecipient: zero,
+          gasFees: { feePerDaGas: 0n, feePerL2Gas: minFee },
+          totalManaUsed: 0n,
+          accumulatedFees: 0n,
+        },
+        attestations: { signatureIndices: '0x', signaturesOrAddresses: '0x' },
+        signers: [],
+        attestationsAndSignersSignature: { r: zero, s: zero, v: 0 },
+        digest: zero,
+        blobsHash: zero,
+        flags: { ignoreDA: true },
+        expectedTotal: 0n,
+        expectedParentCheckpointNumber: 0n,
+      };
+      return { args, time };
+    }
+
+    it('returns the genesis bucket for a checkpoint consuming nothing on a fresh chain', async () => {
+      const { args, time } = await buildHeader(Fr.ZERO);
+      await expect(rollup.validateCheckpointHeaderAndInbox(l1TxUtils, args, { time })).resolves.toBe(0n);
+    });
+
+    it('rejects a parent claim that differs from the parent propose would use', async () => {
+      const { args, time } = await buildHeader(Fr.ZERO);
+      await expect(
+        rollup.validateCheckpointHeaderAndInbox(l1TxUtils, { ...args, expectedParentCheckpointNumber: 1n }, { time }),
+      ).rejects.toThrow(/Rollup__UnexpectedParentCheckpoint/);
+    });
+
+    it('rejects a consumed total that is not a bucket boundary', async () => {
+      const { args, time } = await buildHeader(Fr.ZERO);
+      await expect(
+        rollup.validateCheckpointHeaderAndInbox(l1TxUtils, { ...args, expectedTotal: 1n }, { time }),
+      ).rejects.toThrow(/Rollup__InboxTotalNotAtBucketBoundary/);
+    });
+
+    it('runs the shared header checks against the derived parent', async () => {
+      const { args, time } = await buildHeader(Fr.ZERO);
+      const header = { ...args.header, lastArchiveRoot: Fr.random().toString() };
+      await expect(rollup.validateCheckpointHeaderAndInbox(l1TxUtils, { ...args, header }, { time })).rejects.toThrow(
+        /Rollup__InvalidArchive/,
+      );
+    });
+
+    /** Sends one message in a fresh L1 block 12 seconds after the previous one, so it opens a new bucket. */
+    async function sendMessageInNewBucket(): Promise<void> {
+      const inboxContract = getContract({
+        address: deployed.l1ContractAddresses.inboxAddress.toString(),
+        abi: InboxAbi,
+        client: deployed.l1Client,
+      });
+      const version = await rollup.getVersion();
+      const { timestamp } = await publicClient.getBlock();
+      await cheatCodes.warp(timestamp + 12n, { silent: true });
+      const hash = await inboxContract.write.sendL2Message(
+        [{ actor: Fr.random().toString(), version }, Fr.random().toString(), Fr.random().toString()],
+        { gas: 1_000_000n },
+      );
+      await deployed.l1Client.waitForTransactionReceipt({ hash });
+    }
+
+    it('resolves a consumed bucket to its sequence and rejects a stale hash for it', async () => {
+      await sendMessageInNewBucket();
+      const bucket = await inbox.getBucket(1n);
+      expect(bucket.totalMsgCount).toBe(1n);
+
+      const { args, time } = await buildHeader(bucket.rollingHash);
+      await expect(
+        rollup.validateCheckpointHeaderAndInbox(l1TxUtils, { ...args, expectedTotal: 1n }, { time }),
+      ).resolves.toBe(1n);
+
+      const stale = { ...args.header, inboxRollingHash: Fr.random().toString() };
+      await expect(
+        rollup.validateCheckpointHeaderAndInbox(l1TxUtils, { ...args, header: stale, expectedTotal: 1n }, { time }),
+      ).rejects.toThrow(/Rollup__InvalidInboxRollingHash/);
+    });
+
+    // A pipelined checkpoint is validated against a parent that has not landed: the state overrides describe that
+    // parent (tips, archive, slot, consumed total) and the call reads the parent's total from them, so the same call
+    // without the overrides has no such parent and a parent total ahead of the child rejects the child.
+    it('validates against an unpublished parent supplied through state overrides', async () => {
+      // Two fresh buckets: the parent consumed through the first, the child consumes the second.
+      await sendMessageInNewBucket();
+      const parentSeq = await inbox.getCurrentBucketSeq();
+      await sendMessageInNewBucket();
+      const childSeq = await inbox.getCurrentBucketSeq();
+      expect(childSeq).toBe(parentSeq + 1n);
+      const parentBucket = await inbox.getBucket(parentSeq);
+      const childBucket = await inbox.getBucket(childSeq);
+      expect(childBucket.totalMsgCount).toBe(parentBucket.totalMsgCount + 1n);
+
+      const { args, time } = await buildHeader(childBucket.rollingHash);
+      const parentArchive = Fr.random();
+      const parentSlot = SlotNumber(Number(args.header.slotNumber) - 1);
+      // The mana fee derivation reads the parent's fee header; the genesis one stands in for a real parent's.
+      const parentFeeHeader = await rollup.getFeeHeader(0n);
+      const overridesFor = (parentInboxMsgTotal: bigint) =>
+        buildSimulationOverridesStateOverride(rollup, {
+          chainTipsOverride: { pending: CheckpointNumber(1), proven: CheckpointNumber(0) },
+          pendingCheckpointState: {
+            archive: parentArchive,
+            slotNumber: parentSlot,
+            inboxMsgTotal: parentInboxMsgTotal,
+            inboxConsumedBucket: parentSeq,
+            feeHeader: parentFeeHeader,
+          },
+        });
+
+      const stateOverrides = await overridesFor(parentBucket.totalMsgCount);
+      const minFee = await rollup.getManaMinFeeAt(time, true, { stateOverride: stateOverrides });
+      const header = {
+        ...args.header,
+        lastArchiveRoot: parentArchive.toString(),
+        gasFees: { ...args.header.gasFees, feePerL2Gas: minFee },
+      };
+      const childArgs = {
+        ...args,
+        header,
+        expectedTotal: childBucket.totalMsgCount,
+        expectedParentCheckpointNumber: 1n,
+      };
+
+      await expect(
+        rollup.validateCheckpointHeaderAndInbox(l1TxUtils, childArgs, { time, stateOverrides }),
+      ).resolves.toBe(childSeq);
+
+      // Without the parent's state the effective parent is still checkpoint 0.
+      await expect(rollup.validateCheckpointHeaderAndInbox(l1TxUtils, childArgs, { time })).rejects.toThrow(
+        /Rollup__UnexpectedParentCheckpoint/,
+      );
+
+      // The parent's stored total, not the caller, is the consumption floor.
+      await expect(
+        rollup.validateCheckpointHeaderAndInbox(l1TxUtils, childArgs, {
+          time,
+          stateOverrides: await overridesFor(childBucket.totalMsgCount + 3n),
+        }),
+      ).rejects.toThrow(/Rollup__InboxConsumptionBehindParent/);
+    });
+  });
+
   describe('getVkTreeRoot and getProtocolContractsHash', () => {
-    it('reads vkTreeRoot from storage', async () => {
+    it('reads vkTreeRoot', async () => {
       const result = await rollup.getVkTreeRoot();
       expect(result).toEqual(vkTreeRoot);
     });
 
-    it('reads protocolContractsHash from storage', async () => {
+    it('reads protocolContractsHash', async () => {
       const result = await rollup.getProtocolContractsHash();
       expect(result).toEqual(protocolContractsHash);
     });
@@ -425,7 +612,7 @@ describe('Rollup', () => {
         manaUsed: 12345n,
         excessMana: 67890n,
         ethPerFeeAsset: 1_000_000_000_000n,
-        congestionCost: 99999n,
+        protocolFee: 99999n,
         proverCost: 55555n,
       } as FeeHeader,
     };
@@ -487,16 +674,17 @@ describe('Rollup', () => {
       );
     });
 
-    it('packs the inbox consumption count into the slot-number word', async () => {
+    it('packs the inbox consumption counts into the slot-number word', async () => {
       const checkpointNumber = CheckpointNumber(13);
       const override = await rollup.makeTempCheckpointLogOverride(checkpointNumber, {
         slotNumber: SlotNumber(7),
         inboxMsgTotal: 300n,
+        inboxConsumedBucket: 5n,
       });
       const { map, slotFor } = getDiffMap(checkpointNumber, override);
       expect(override[0].stateDiff).toHaveLength(1);
       expect(map.get(await slotFor(TempCheckpointLogField.SlotNumber))).toBe(
-        `0x${(7n | (300n << 32n)).toString(16).padStart(64, '0')}`.toLowerCase(),
+        `0x${(7n | (300n << 32n) | (5n << 96n)).toString(16).padStart(64, '0')}`.toLowerCase(),
       );
     });
 
@@ -561,7 +749,7 @@ describe('Rollup', () => {
         manaUsed: 12345n,
         excessMana: 67890n,
         ethPerFeeAsset: 1_000_000_000_000n,
-        congestionCost: 99999n,
+        protocolFee: 99999n,
         proverCost: 55555n,
       };
 
@@ -580,7 +768,7 @@ describe('Rollup', () => {
       expect(result.manaUsed).toBe(feeHeader.manaUsed);
       expect(result.excessMana).toBe(feeHeader.excessMana);
       expect(result.ethPerFeeAsset).toBe(feeHeader.ethPerFeeAsset);
-      expect(result.congestionCost).toBe(feeHeader.congestionCost);
+      expect(result.protocolFee).toBe(feeHeader.protocolFee);
       expect(result.proverCost).toBe(feeHeader.proverCost);
     });
   });
@@ -598,6 +786,22 @@ describe('Rollup', () => {
 
       expect(await rollup.getCheckpointNumber()).toBe(CheckpointNumber.fromBigInt(pending));
       expect(await rollup.getProvenCheckpointNumber()).toBe(CheckpointNumber.fromBigInt(proven));
+    });
+  });
+
+  describe('getProtocolFeeMargin', () => {
+    it('reads the margin in effect at a pinned L1 block, not the latest one', async () => {
+      const rollupCheatCodes = new RollupCheatCodes(cheatCodes, deployed.l1ContractAddresses);
+
+      await rollupCheatCodes.clearProvingCostCooldown();
+      await rollupCheatCodes.setProtocolFeeMargin(1000);
+      const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
+
+      await rollupCheatCodes.clearProvingCostCooldown();
+      await rollupCheatCodes.setProtocolFeeMargin(2000);
+
+      expect(await rollup.getProtocolFeeMargin()).toBe(2000);
+      expect(await rollup.getProtocolFeeMargin({ blockNumber: pinnedBlock })).toBe(1000);
     });
   });
 

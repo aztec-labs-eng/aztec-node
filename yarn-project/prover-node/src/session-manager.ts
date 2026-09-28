@@ -6,7 +6,7 @@ import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
-import type { L2BlockSource } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
@@ -251,11 +251,10 @@ export class SessionManager {
       const contentChanged = !this.checkpointsMatch(session.getCheckpoints(), canonical);
 
       if (session.isTerminal()) {
-        // A full session that failed on its own account is retained as a "do not re-prove" marker while
-        // its content is unchanged — this is what stops the tick re-proving a deterministically-failing
-        // epoch. When the content changes (a re-add), it is replaced so the epoch retries over the new
-        // provers. Any other terminal full session is simply dropped.
-        if (session.hasFailed() && !contentChanged) {
+        // Retain successful sessions until their canonical content changes: the archiver's proven tip
+        // can lag behind submission. Retain genuine failures too, to avoid repeating deterministic failures.
+        // A canonical change replaces either marker so the epoch can be proved over the new content.
+        if ((session.getState() === 'completed' || session.hasFailed()) && !contentChanged) {
           continue;
         }
         this.fullSessions.delete(key);
@@ -301,9 +300,9 @@ export class SessionManager {
   }
 
   private async openFullSessionIfReady(epoch: EpochNumber): Promise<void> {
-    // A session present here already covers the epoch: either live, or a retained genuinely-failed
-    // session kept by `recreateInvalidSessions` as a "do not re-prove" marker. Either way, don't open
-    // another — the retained-failed one is replaced only when its canonical content changes.
+    // A session present here already covers the epoch: either live, or a retained completed/failed
+    // session kept by `recreateInvalidSessions` as a "do not re-prove" marker. Retained sessions are
+    // replaced only when their canonical content changes.
     if (this.fullSessions.has(epoch)) {
       return;
     }
@@ -457,7 +456,7 @@ export class SessionManager {
       l1ToL2Messages,
       previousBlockHeader: checkpoints[0].previousBlockHeader,
       previousInboxRollingHash: checkpoints[0].previousInboxRollingHash,
-      attestations: [],
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
     };
   }
 

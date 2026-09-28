@@ -1,6 +1,7 @@
 import { BatchedBlob, Blob, getEthBlobEvaluationInputs, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { getL1FixturePath } from '@aztec-labs/foundation/testing/files';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { L2Block } from '@aztec-labs/stdlib/block';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -25,8 +26,7 @@ export async function writeJson(
   if (!AZTEC_GENERATE_TEST_DATA) {
     return;
   }
-  // Path relative to the package.json in the end-to-end folder
-  const path = `../../l1-contracts/test/fixtures/${fileName}.json`;
+  const path = getL1FixturePath(`${fileName}.json`);
 
   const asHex = (value: Fr | Buffer | EthAddress | AztecAddress, size = 64) => {
     const buffer = Buffer.isBuffer(value) ? value : value.toBuffer();

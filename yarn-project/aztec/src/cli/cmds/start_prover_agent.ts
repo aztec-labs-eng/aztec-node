@@ -71,7 +71,7 @@ export async function startProverAgent(
   await Promise.all(agents.map(agent => agent.start()));
 
   signalHandlers.push(async () => {
-    await Promise.all(agents.map(agent => agent.stop()));
+    await Promise.all(agents.map(agent => agent.drain()));
     await telemetry.stop();
   });
 }

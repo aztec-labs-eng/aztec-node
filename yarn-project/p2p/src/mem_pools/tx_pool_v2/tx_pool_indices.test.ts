@@ -1,3 +1,4 @@
+import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { stubTxMetaData, txHashFromBigInt } from './tx_metadata.js';
@@ -80,6 +81,31 @@ describe('TxPoolIndices', () => {
       indices.addPending(a);
 
       indices.remove('0xdeadbeef');
+      expect(indices.getPendingTxCount()).toBe(1);
+    });
+  });
+
+  describe('nullifier index ownership on eviction', () => {
+    it('evicting a same-nullifier loser keeps the surviving tx indexed', () => {
+      const shared = 'shared-nullifier';
+      const a = stubTxMetaData(new Fr(1).toString(), { priorityFee: 50n, nullifiers: [shared] });
+      const b = stubTxMetaData(new Fr(2).toString(), { priorityFee: 100n, nullifiers: [shared] });
+
+      indices.addPending(a);
+      expect(indices.getTxHashByNullifier(shared)).toBe(a.txHash);
+
+      indices.updateProtection(a.txHash, SlotNumber(1));
+
+      // A higher-fee tx spending the same nullifier is admitted while A is
+      // protected, so the nullifier key now belongs to B.
+      indices.addPending(b);
+      expect(indices.getTxHashByNullifier(shared)).toBe(b.txHash);
+
+      // A loses the conflict on restore and is evicted. Removing A must not
+      // delete the shared nullifier key that now belongs to the surviving B.
+      indices.remove(a.txHash);
+
+      expect(indices.getTxHashByNullifier(shared)).toBe(b.txHash);
       expect(indices.getPendingTxCount()).toBe(1);
     });
   });

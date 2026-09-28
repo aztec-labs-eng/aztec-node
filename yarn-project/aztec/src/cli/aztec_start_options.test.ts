@@ -157,6 +157,15 @@ describe('aztec_start_options commander integration', () => {
     expect(cmd.parse(['node', 'cli']).opts().p2pEnabled).toBe(false);
   });
 
+  it('treats --reset-admin-api-key passed without a value as true', () => {
+    const cmd = buildCommandWith(['API']);
+
+    // The flag is a boolean toggle; passed bare it must reset the key, not silently no-op.
+    expect(cmd.parse(['node', 'cli', '--reset-admin-api-key']).opts().resetAdminApiKey).toBe(true);
+    expect(cmd.parse(['node', 'cli', '--reset-admin-api-key', 'false']).opts().resetAdminApiKey).toBe(false);
+    expect(cmd.parse(['node', 'cli']).opts().resetAdminApiKey).toBe(false);
+  });
+
   it('uses numeric defaults from P2P mappings', () => {
     const cmd = buildCommandWith(['P2P SUBSYSTEM']);
     cmd.parse(['node', 'cli']);

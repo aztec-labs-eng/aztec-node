@@ -1,10 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import {
-  type CheckpointAttestation,
-  type CoordinationSignatureContext,
-  PeerErrorSeverity,
-  type ValidationResult,
-} from '@aztec-labs/stdlib/p2p';
+import type { CheckpointAttestation, CoordinationSignatureContext, ValidationResult } from '@aztec-labs/stdlib/p2p';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import {
   Attributes,
@@ -94,8 +89,13 @@ export class FishermanAttestationValidator extends CheckpointAttestationValidato
           [Attributes.ERROR_TYPE]: 'payload_mismatch',
         });
 
-        // Return error to reject the message, but LibP2PService won't penalize in fisherman mode
-        return { result: 'reject', severity: PeerErrorSeverity.LowToleranceError };
+        // Ignore, do not reject: a reject penalizes the relaying peer (the reject path has no
+        // fisherman-mode exemption), and the mismatch is not the relayer's fault. When the proposer
+        // equivocated, an honest attester may have signed the other valid proposal for this slot, and
+        // the relayer cannot know which of the equivocated proposals we retained. The mismatch is
+        // still counted above for fisherman evidence; slashing the attester is a separate on-chain
+        // path, not a gossip-relayer penalty.
+        return { result: 'ignore' };
       }
     } else {
       // We might receive attestations before proposals in some cases

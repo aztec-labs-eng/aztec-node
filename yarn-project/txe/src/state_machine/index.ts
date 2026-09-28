@@ -1,8 +1,10 @@
-import { type AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
+import { type AztecNodeConfig, AztecNodeService, NextBlockPredictor } from '@aztec-labs/aztec-node';
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { DateProvider } from '@aztec-labs/foundation/timer';
 import {
   type AnchorBlockStore,
   ContractClassService,
@@ -11,7 +13,7 @@ import {
   type NoteStore,
 } from '@aztec-labs/pxe/server';
 import { TxResolverService } from '@aztec-labs/pxe/simulator';
-import { L2Block, type L2TipsProvider } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestationsAndSigners, L2Block, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -49,6 +51,16 @@ export class TXEStateMachine {
     const aztecNodeConfig = {} as AztecNodeConfig;
 
     const log = createLogger('txe_node');
+    const globalVariableBuilder = new TXEGlobalVariablesBuilder();
+    const epochCache = new MockEpochCache();
+    // Never started: TXE has no L1 to poll, and the predictor prices inline through the same path when asked.
+    const nextBlockPredictor = NextBlockPredictor.create({
+      blockSource: archiver,
+      globalVariableBuilder,
+      epochCache,
+      signatureContext: { chainId: CHAIN_ID, rollupAddress: EthAddress.ZERO },
+      dateProvider: new DateProvider(),
+    });
     const node = new AztecNodeService({
       config: aztecNodeConfig,
       p2pClient: new DummyP2P(),
@@ -64,10 +76,11 @@ export class TXEStateMachine {
       stopStartedWatchers: async () => {},
       l1ChainId: CHAIN_ID,
       version: VERSION,
-      globalVariableBuilder: new TXEGlobalVariablesBuilder(),
+      globalVariableBuilder,
       rollupContract: undefined,
       feeProvider: new TXEFeeProvider(),
-      epochCache: new MockEpochCache(),
+      nextBlockPredictor,
+      epochCache,
       packageVersion: PACKAGE_VERSION,
       peerProofVerifier: new TestCircuitVerifier(),
       rpcProofVerifier: new TestCircuitVerifier(),
@@ -139,6 +152,7 @@ export class TXEStateMachine {
         block.header.globalVariables.blockNumber.toString(),
       ),
       [],
+      CommitteeAttestationsAndSigners.packAttestations([]),
     );
     // Wipe contract sync cache when anchor block changes (mirrors BlockSynchronizer behavior)
     this.contractSyncService.wipe();

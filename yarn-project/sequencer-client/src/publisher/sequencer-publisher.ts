@@ -5,6 +5,7 @@ import { Blob, getBlobsPerL1Block, getPrefixedEthBlobCommitments } from '@aztec-
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import type { L1ContractsConfig } from '@aztec-labs/ethereum/config';
 import {
+  type CheckpointPreflightArgs,
   FeeAssetPriceOracle,
   type GovernanceProposerContract,
   MULTI_CALL_3_ADDRESS,
@@ -26,6 +27,7 @@ import {
   MAX_L1_TX_LIMIT,
   type TransactionStats,
   WEI_CONST,
+  summarizeTransactionReceipt,
 } from '@aztec-labs/ethereum/l1-tx-utils';
 import {
   FormattedViemError,
@@ -36,7 +38,7 @@ import {
 } from '@aztec-labs/ethereum/utils';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { trimmedBytesLength } from '@aztec-labs/foundation/buffer';
-import { pick } from '@aztec-labs/foundation/collection';
+import { pick, sum } from '@aztec-labs/foundation/collection';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { TimeoutError } from '@aztec-labs/foundation/error';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -64,6 +66,7 @@ import {
   type TypedDataDefinition,
   encodeFunctionData,
   keccak256,
+  size,
   toHex,
 } from 'viem';
 
@@ -164,7 +167,9 @@ export interface RequestWithExpiry {
   ) => boolean;
 }
 
-export class SequencerPublisher {
+export class SequencerPublisher implements Disposable {
+  private readonly resources = new DisposableStack();
+
   private interrupted = false;
   private metrics: SequencerPublisherMetrics;
   private bundleSimulator: SequencerBundleSimulator;
@@ -260,11 +265,13 @@ export class SequencerPublisher {
     this.govProposerContract = deps.governanceProposerContract;
     this.slashingProposerContract = deps.slashingProposerContract;
 
-    this.rollupContract.listenToSlasherChanged(async () => {
-      this.log.info('Slashing proposer changed');
-      const newSlashingProposer = await this.rollupContract.getSlashingProposer();
-      this.slashingProposerContract = newSlashingProposer;
-    });
+    this.resources.defer(
+      this.rollupContract.listenToSlasherChanged(async () => {
+        this.log.info('Slashing proposer changed');
+        const newSlashingProposer = await this.rollupContract.getSlashingProposer();
+        this.slashingProposerContract = newSlashingProposer;
+      }),
+    );
     // Initialize L1 fee analyzer for fisherman mode
     if (config.fishermanMode) {
       this.l1FeeAnalyzer = new L1FeeAnalyzer(
@@ -290,6 +297,16 @@ export class SequencerPublisher {
       epochCache: this.epochCache,
       log: this.log.createChild('bundle-simulator'),
     });
+  }
+
+  /** Releases owned subscriptions without interrupting shared L1 senders. */
+  public dispose(): void {
+    this.resources.dispose();
+  }
+
+  /** Disposes this publisher when a using scope ends. */
+  public [Symbol.dispose](): void {
+    this.dispose();
   }
 
   /**
@@ -859,8 +876,11 @@ export class SequencerPublisher {
    * Sleeps until one L1 slot before the L2 slot boundary, and then waits for that L1 block
    * to be mined, so we don't risk being included in it. If that block never gets mined after
    * a timeout, we assume it got skipped on L1, so we send the tx anyway.
+   *
+   * Public so a caller that encodes L1 state into a request can wait for this window before building it, rather
+   * than building against a chain tip that the wait then leaves behind.
    */
-  private async waitForTargetSlot(targetSlot: SlotNumber): Promise<void> {
+  public async waitForTargetSlot(targetSlot: SlotNumber): Promise<void> {
     const l1Constants = this.epochCache.getL1Constants();
     const nowInSeconds = this.dateProvider.nowInSeconds();
     const startOfTargetSlotTs = getTimestampForSlot(targetSlot, l1Constants);
@@ -910,18 +930,42 @@ export class SequencerPublisher {
     }
   }
 
+  private summarizeTransactionResult(result?: {
+    receipt: TransactionReceipt;
+    stats?: TransactionStats;
+    errorMsg?: string;
+  }) {
+    return {
+      receipt: result?.receipt && summarizeTransactionReceipt(result.receipt),
+      stats: result?.stats,
+      errorMsg: result?.errorMsg,
+    };
+  }
+
   private callbackBundledTransactions(
     requests: RequestWithExpiry[],
     result: { receipt: TransactionReceipt; multicallData: Hex },
   ) {
-    const actionsListStr = requests.map(r => r.action).join(', ');
+    // Bound both payload sizes and entry count so the container log remains one JSON record.
+    const loggedRequests = requests.slice(0, 10);
+    const actionsListStr = loggedRequests.map(r => r.action).join(', ');
     this.log.verbose(`Published bundled transactions (${actionsListStr})`, {
-      result,
-      requests: requests.map(r => ({
-        ...r,
+      eventName: 'l1_bundle_published',
+      result: {
+        receipt: summarizeTransactionReceipt(result.receipt),
+        multicallDataBytes: size(result.multicallData),
+      },
+      requestCount: requests.length,
+      omittedRequestCount: requests.length - loggedRequests.length,
+      requests: loggedRequests.map(r => ({
+        action: r.action,
+        request: { to: r.request.to, value: r.request.value, dataBytes: size(r.request.data ?? '0x') },
+        lastValidL2Slot: r.lastValidL2Slot,
+        gasConfig: r.gasConfig,
+        blobEvaluationGas: r.blobEvaluationGas,
         // Avoid logging large blob data
         blobConfig: r.blobConfig
-          ? { ...r.blobConfig, blobs: r.blobConfig.blobs.map(b => ({ size: trimmedBytesLength(b) })) }
+          ? { blobCount: r.blobConfig.blobs.length, blobBytes: sum(r.blobConfig.blobs.map(trimmedBytesLength)) }
           : undefined,
       })),
     });
@@ -973,30 +1017,40 @@ export class SequencerPublisher {
   }
 
   /**
-   * @notice  Will simulate the rollup's `validateHeaderWithAttestations` to make sure the checkpoint header is valid
-   * @dev     This is a convenience function that can be used by the sequencer to validate a "partial" header,
-   *          skipping the DA and signature checks. It will throw if the checkpoint header is invalid.
-   * @param header - The checkpoint header to validate
+   * Simulates the rollup's integrated `validateCheckpointHeaderAndInbox` preflight for a checkpoint about to be
+   * gossiped or published, at the last L1 timestamp of the checkpoint's slot. The call derives the parent from the
+   * simulated Rollup storage the way `propose` does, checks it is the expected one, runs the shared header checks
+   * (DA and signatures skipped, as for a partial header), resolves the checkpoint's final message total to a live
+   * Inbox bucket and applies L1's settlement, cap and censorship rules to it. Throws with the decoded revert when the
+   * checkpoint would not be accepted.
+   *
+   * @param header - The checkpoint header to validate.
+   * @param inbox - The checkpoint's final consumed message total and the parent checkpoint it builds on.
+   * @param simulationOverridesPlan - Simulated L1 state for the call: the unpublished parent while pipelining before
+   *   gossip, or, before publication, the operations preceding the propose in the bundle plus the build's proven pin
+   *   while the epoch proof it assumed is still outstanding.
+   * @returns The sequence of the live Inbox bucket the final total resolved to, the unsigned `propose` bucket hint.
    */
-  @trackSpan('SequencerPublisher.validateCheckpointHeader')
-  public async validateCheckpointHeader(
+  @trackSpan('SequencerPublisher.validateCheckpointHeaderAndInbox')
+  public async validateCheckpointHeaderAndInbox(
     header: CheckpointHeader,
+    inbox: { expectedTotal: bigint; expectedParentCheckpointNumber: CheckpointNumber },
     simulationOverridesPlan?: SimulationOverridesPlan,
-  ): Promise<void> {
-    const flags = { ignoreDA: true, ignoreSignatures: true };
-
-    const args = [
-      header.toViem(),
-      CommitteeAttestationsAndSigners.packAttestations([]),
-      [], // no signers
-      Signature.empty().toViemSignature(),
-      `0x${'0'.repeat(64)}`, // 32 empty bytes
-      header.blobsHash.toString(),
-      flags,
-    ] as const;
+  ): Promise<bigint> {
+    const args: CheckpointPreflightArgs = {
+      header: header.toViem(),
+      attestations: CommitteeAttestationsAndSigners.packAttestations([]),
+      signers: [],
+      attestationsAndSignersSignature: Signature.empty().toViemSignature(),
+      digest: `0x${'0'.repeat(64)}`,
+      blobsHash: header.blobsHash.toString(),
+      flags: { ignoreDA: true },
+      expectedTotal: inbox.expectedTotal,
+      expectedParentCheckpointNumber: BigInt(inbox.expectedParentCheckpointNumber),
+    };
 
     const l1Constants = this.epochCache.getL1Constants();
-    const ts = getLastL1SlotTimestampForL2Slot(header.slotNumber, l1Constants);
+    const time = getLastL1SlotTimestampForL2Slot(header.slotNumber, l1Constants);
     const stateOverrides = await buildSimulationOverridesStateOverride(this.rollupContract, simulationOverridesPlan);
     // Balance override for compatibility with providers that apply an upfront funds check to simulated calls.
     stateOverrides.push({
@@ -1004,16 +1058,18 @@ export class SequencerPublisher {
       balance: 10n * WEI_CONST * WEI_CONST, // 10 ETH
     });
 
-    await this.l1TxUtils.simulate(
-      {
-        to: this.rollupContract.address,
-        data: encodeFunctionData({ abi: RollupAbi, functionName: 'validateHeaderWithAttestations', args }),
-        from: MULTI_CALL_3_ADDRESS,
-      },
-      { time: ts },
+    const bucketHint = await this.rollupContract.validateCheckpointHeaderAndInbox(this.l1TxUtils, args, {
+      time,
       stateOverrides,
-    );
-    this.log.debug(`Simulated validateHeader`);
+      from: MULTI_CALL_3_ADDRESS,
+    });
+    this.log.debug(`Simulated validateCheckpointHeaderAndInbox`, {
+      slot: header.slotNumber,
+      expectedTotal: inbox.expectedTotal,
+      expectedParentCheckpointNumber: inbox.expectedParentCheckpointNumber,
+      bucketHint,
+    });
+    return bucketHint;
   }
 
   /**
@@ -1266,7 +1322,7 @@ export class SequencerPublisher {
             eventName: 'SignalCast',
           });
 
-        const logData = { ...result, slotNumber, round, payload: payload.toString() };
+        const logData = { ...this.summarizeTransactionResult(result), slotNumber, round, payload: payload.toString() };
         if (!success) {
           this.log.error(
             `Signaling in ${action} for ${payload} at slot ${slotNumber} in round ${round} failed`,
@@ -1480,9 +1536,15 @@ export class SequencerPublisher {
             eventName: 'CheckpointInvalidated',
           });
         if (!success) {
-          this.log.warn(`Invalidate checkpoint ${request.checkpointNumber} failed`, { ...result, ...logData });
+          this.log.warn(`Invalidate checkpoint ${request.checkpointNumber} failed`, {
+            ...this.summarizeTransactionResult(result),
+            ...logData,
+          });
         } else {
-          this.log.info(`Invalidate checkpoint ${request.checkpointNumber} succeeded`, { ...result, ...logData });
+          this.log.info(`Invalidate checkpoint ${request.checkpointNumber} succeeded`, {
+            ...this.summarizeTransactionResult(result),
+            ...logData,
+          });
         }
         return !!success;
       },
@@ -1515,10 +1577,16 @@ export class SequencerPublisher {
       checkSuccess: (_request, result) => {
         const success = result && extractEventSuccess(result.receipt, eventOpts);
         if (!success) {
-          this.log.warn(`Action ${action} at ${slotNumber} failed`, { ...result, slotNumber });
+          this.log.warn(`Action ${action} at ${slotNumber} failed`, {
+            ...this.summarizeTransactionResult(result),
+            slotNumber,
+          });
           this.lastActions[action] = cachedLastActionSlot;
         } else {
-          this.log.info(`Action ${action} at ${slotNumber} succeeded`, { ...result, slotNumber });
+          this.log.info(`Action ${action} at ${slotNumber} succeeded`, {
+            ...this.summarizeTransactionResult(result),
+            slotNumber,
+          });
         }
         return !!success;
       },

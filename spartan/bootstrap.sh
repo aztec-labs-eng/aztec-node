@@ -5,6 +5,7 @@ function hash {
   hash_str $(cache_content_hash .rebuild_patterns) $(../yarn-project/bootstrap.sh hash)
 }
 
+mkdir -p scripts/logs
 dump_fail "flock scripts/logs/install_deps.lock retry scripts/install_deps.sh >&2"
 
 source ./scripts/source_env_basic.sh
@@ -24,6 +25,7 @@ function build {
   denoise "helm lint ./eth-devnet/"
   denoise "terraform fmt -check -recursive ./terraform/"
   denoise ./scripts/check_env_vars.sh
+  denoise ./scripts/prover_publisher_count.test.sh
 }
 
 function network_shaping {
@@ -532,9 +534,6 @@ case "$cmd" in
     ;;
   "metrics-kind")
     metrics/install-kind.sh
-    ;;
-  "metrics-prod")
-    metrics/install-prod.sh
     ;;
   "network-shaping")
     namespace="$1"

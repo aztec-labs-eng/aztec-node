@@ -38,9 +38,11 @@ describe('HttpBlobClient', () => {
 
     let latestSlotNumber: number;
     let missedSlots: number[];
+    let genesisAvailable: boolean;
 
     beforeEach(async () => {
       latestSlotNumber = 1;
+      genesisAvailable = true;
       missedSlots = [];
 
       testBlobs = await Promise.all(Array.from({ length: 2 }, () => makeRandomBlob(3)));
@@ -84,12 +86,12 @@ describe('HttpBlobClient', () => {
           return;
         }
 
-        if (req.url?.includes('/eth/v1/config/genesis')) {
+        if (genesisAvailable && req.url?.includes('/eth/v1/beacon/genesis')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ data: { genesisTime: '1000' } }));
+          res.end('{"data":{"genesis_time":"1000"}}');
         } else if (req.url?.includes('/eth/v1/config/spec')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ data: { secondsPerSlot: '12' } }));
+          res.end(JSON.stringify({ data: { SECONDS_PER_SLOT: '12' } }));
         } else if (req.url?.includes('/eth/v1/beacon/headers/')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ data: { header: { message: { slot: latestSlotNumber } } } }));
@@ -152,7 +154,8 @@ describe('HttpBlobClient', () => {
       // Call start() to fetch and cache genesis config (genesis_time=1000, SECONDS_PER_SLOT=12)
       await client.start();
 
-      const fetchBlobSpy = jest.spyOn(client as any, 'fetchBlobSidecars');
+      latestSlotNumber = 99;
+      missedSlots = [100];
 
       // slot = (l1BlockTimestamp - genesis_time) / seconds_per_slot = (1024 - 1000) / 12 = 2
       // so blobs should be fetched at slot 2
@@ -163,14 +166,6 @@ describe('HttpBlobClient', () => {
       expect(retrievedBlobs).toHaveLength(2);
       expect(retrievedBlobs[0].commitment).toEqual(testBlobs[0].commitment);
       expect(retrievedBlobs[1].commitment).toEqual(testBlobs[1].commitment);
-
-      // Blobs fetched at the computed slot (2), not via a headers call
-      expect(fetchBlobSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`localhost:${consensusHostPort}`),
-        2,
-        expect.anything(),
-        expect.anything(),
-      );
     });
 
     it('should fall back to headers call when l1BlockTimestamp is not provided', async () => {
@@ -193,6 +188,16 @@ describe('HttpBlobClient', () => {
       expect(retrievedBlobs).toHaveLength(2);
       // Headers call for slot resolution SHOULD have been made (via parentBeaconBlockRoot from execution RPC)
       expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/eth/v1/beacon/headers/'), expect.anything());
+    });
+
+    it('retrieves blobs through headers when genesis configuration is unavailable', async () => {
+      await startConsensusHostServer();
+      genesisAvailable = false;
+      const client = new HttpBlobClient({ l1ConsensusHostUrls: [`http://localhost:${consensusHostPort}`] });
+      await client.start();
+      const blobs = await client.getBlobSidecar('0x1234', testBlobsHashes, { parentBeaconBlockRoot: '0x1234' });
+      expect(blobs.map(blob => blob.commitment)).toEqual(testBlobs.map(blob => blob.commitment));
+      client.stop();
     });
 
     it('should handle when multiple consensus hosts are provided', async () => {

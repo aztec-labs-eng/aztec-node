@@ -628,12 +628,22 @@ export class HttpBlobClient implements BlobClientInterface {
           parentBeaconBlockRoot = res.parentBeaconBlockRoot;
         }
       } catch (err) {
-        this.log.error(`Error getting parent beacon block root`, err);
+        this.log.debug('Error getting parent beacon block root', {
+          eventName: 'beacon_parent_root_failed',
+          blockHash,
+          err,
+        });
       }
     }
 
     if (!parentBeaconBlockRoot) {
-      this.log.error(`No parent beacon block root found for block ${blockHash}`);
+      this.log.warn('No parent beacon block root found for slot resolution', {
+        eventName: 'beacon_slot_resolution',
+        method: 'headers',
+        success: false,
+        blockHash,
+        reason: 'missing_parent_root',
+      });
       return undefined;
     }
 
@@ -653,13 +663,32 @@ export class HttpBlobClient implements BlobClientInterface {
           const body = await res.json();
 
           // Add one to get the slot number of the original block hash
-          return Number(body.data.header.message.slot) + 1;
+          const slot = Number(body.data.header.message.slot) + 1;
+          this.log.debug('Resolved beacon slot using headers fallback', {
+            eventName: 'beacon_slot_resolution',
+            method: 'headers',
+            success: true,
+            blockHash,
+            slot,
+          });
+          return slot;
         }
       } catch (err) {
-        this.log.error(`Error getting slot number`, err);
+        this.log.debug('Error getting slot number from consensus host', {
+          eventName: 'beacon_slot_host_failed',
+          hostIndex: l1ConsensusHostIndex,
+          err,
+        });
       }
     }
 
+    this.log.warn('Could not resolve beacon slot from any consensus host', {
+      eventName: 'beacon_slot_resolution',
+      method: 'headers',
+      success: false,
+      blockHash,
+      reason: 'hosts_failed',
+    });
     return undefined;
   }
 
@@ -708,7 +737,7 @@ export class HttpBlobClient implements BlobClientInterface {
   /**
    * Fetches and caches beacon genesis time and slot duration from the first available consensus host.
    * These static values enable timestamp-based slot resolution, eliminating the per-fetch headers call.
-   * Logs a warning and leaves fields undefined if all hosts fail, callers fall back gracefully.
+   * Leaves fields undefined if all hosts fail; slot resolution reports the headers fallback outcome.
    */
   private async fetchBeaconConfig(): Promise<void> {
     const { l1ConsensusHostUrls } = this.config;
@@ -719,7 +748,7 @@ export class HttpBlobClient implements BlobClientInterface {
     for (let i = 0; i < l1ConsensusHostUrls.length; i++) {
       try {
         const { url: genesisUrl, ...genesisOptions } = getBeaconNodeFetchOptions(
-          `${l1ConsensusHostUrls[i]}/eth/v1/config/genesis`,
+          `${l1ConsensusHostUrls[i]}/eth/v1/beacon/genesis`,
           this.config,
           i,
         );
@@ -737,19 +766,27 @@ export class HttpBlobClient implements BlobClientInterface {
         if (genesisRes.ok && specRes.ok) {
           const genesis = await genesisRes.json();
           const spec = await specRes.json();
-          this.beaconGenesisTime = BigInt(genesis.data.genesisTime);
-          this.beaconSecondsPerSlot = parseInt(spec.data.secondsPerSlot);
+          this.beaconGenesisTime = BigInt(genesis.data.genesis_time);
+          this.beaconSecondsPerSlot = parseInt(spec.data.SECONDS_PER_SLOT);
           this.log.debug(`Fetched beacon genesis config`, {
+            eventName: 'beacon_config_loaded',
             genesisTime: this.beaconGenesisTime,
             secondsPerSlot: this.beaconSecondsPerSlot,
           });
           return;
         }
       } catch (err) {
-        this.log.warn(`Failed to fetch beacon config from host ${l1ConsensusHostUrls[i]}`, err);
+        this.log.debug('Failed to fetch beacon config from host', {
+          eventName: 'beacon_config_host_failed',
+          hostIndex: i,
+          err,
+        });
       }
     }
-    this.log.warn('Could not fetch beacon genesis config from any consensus host — will use headers call fallback');
+    this.log.debug('Beacon genesis config unavailable; headers fallback will be used', {
+      eventName: 'beacon_config_unavailable',
+      fallback: 'headers',
+    });
   }
 
   /**

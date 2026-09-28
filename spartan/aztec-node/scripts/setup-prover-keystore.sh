@@ -9,7 +9,6 @@ echo "KEY_INDEX_START: $KEY_INDEX_START"
 echo "PUBLISHER_KEY_INDEX_START: $PUBLISHER_KEY_INDEX_START"
 echo "PUBLISHERS_PER_PROVER: $PUBLISHERS_PER_PROVER"
 echo "WEB3_SIGNER_URL: ${WEB3_SIGNER_URL}"
-echo "MNEMONIC: $(echo $MNEMONIC | cut -d' ' -f1-2)..."
 
 # Generate prover ID key
 private_key=$(cast wallet private-key "$MNEMONIC" --mnemonic-index $KEY_INDEX_START)

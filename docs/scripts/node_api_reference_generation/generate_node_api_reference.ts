@@ -393,6 +393,7 @@ function simplifyZodType(expr: string): string {
   if (e === 'CheckpointNumberPositiveSchema') return 'number';
   if (e === 'EpochNumberSchema') return 'number';
   if (e === 'BlockParameterSchema') return 'BlockHash | number | "latest"';
+  if (e === 'ArchiveBlockParameterSchema') return '{ archive: Fr }';
 
   // Known schema objects
   if (e === 'ChainTipsSchema') return 'ChainTips';
@@ -551,6 +552,7 @@ const METHOD_GROUPS: { heading: string; namespace: string; methods: string[] }[]
       'getLowNullifierMembershipWitness',
       'getPublicDataWitness',
       'getBlockHashMembershipWitness',
+      'getBlockHashMembershipWitnessAtArchive',
       'getNoteHashMembershipWitness',
     ],
   },
@@ -646,6 +648,7 @@ function generateExampleParam(paramType: string, paramName?: string): string {
   if (t === 'string') return '"0x1234..."';
   if (t === 'boolean') return 'true';
   if (t === 'number | "latest"' || t === 'BlockHash | number | "latest"') return '"latest"';
+  if (t === '{ archive: Fr }') return '{"archive":"0x1234..."}';
   if (/['"]all['"]|['"]current['"]/.test(t)) return '"current"';
   if (t === 'Fr' || t === 'AztecAddress' || t === 'BlockHash') return '"0x1234..."';
   if (t === 'EthAddress') return '"0x1234..."';

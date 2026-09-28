@@ -1,14 +1,17 @@
 import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_NOTE_HASHES_PER_TX, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint } from '@aztec-labs/foundation/branded-types';
-import { Buffer32 } from '@aztec-labs/foundation/buffer';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { times, timesParallel } from '@aztec-labs/foundation/collection';
-import { randomBigInt } from '@aztec-labs/foundation/crypto/random';
 import type { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { CommitteeAttestation, L2Block } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestation, CommitteeAttestationsAndSigners, L2Block } from '@aztec-labs/stdlib/block';
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { PrivateLog, PublicLog, SiloedTag, Tag } from '@aztec-labs/stdlib/logs';
 import { updateInboxRollingHash } from '@aztec-labs/stdlib/messaging';
@@ -20,29 +23,22 @@ import { PartialStateReference, StateReference, TxEffect } from '@aztec-labs/std
 
 import type { InboxMessage } from '../structs/inbox_message.js';
 
+/** Deterministic L1 block number for the message at the given compact index: one L1 block per message by default. */
+export function makeL1BlockNumberForMessageIndex(index: bigint): bigint {
+  return 1000n + index;
+}
+
 export function makeInboxMessage(
   previousInboxRollingHash = Fr.ZERO,
   overrides: Partial<InboxMessage> = {},
 ): InboxMessage {
-  const { l1BlockNumber = randomBigInt(100n) + 1n } = overrides;
-  const { l1BlockHash = Buffer32.random() } = overrides;
   const { leaf = Fr.random() } = overrides;
   // Compact global insertion index: defaults to the first slot.
   const { index = 0n } = overrides;
   const { inboxRollingHash = updateInboxRollingHash(previousInboxRollingHash, leaf) } = overrides;
-  // Default each message to its own bucket, keyed monotonically off its global index.
-  const { bucketSeq = index + 1n } = overrides;
-  const { bucketTimestamp = index + 1n } = overrides;
+  const { l1BlockNumber = makeL1BlockNumberForMessageIndex(index) } = overrides;
 
-  return {
-    index,
-    leaf,
-    l1BlockNumber,
-    l1BlockHash,
-    inboxRollingHash,
-    bucketSeq,
-    bucketTimestamp,
-  };
+  return { index, leaf, l1BlockNumber, inboxRollingHash };
 }
 
 /**
@@ -78,15 +74,12 @@ export function makeInboxMessages(
 }
 
 /**
- * Creates `blockCount` full buckets of `MAX_L1_TO_L2_MSGS_PER_BLOCK` inbox messages each, with compact indices and one
- * bucket sequence per block.
+ * Creates `blockCount` L1 blocks' worth of `MAX_L1_TO_L2_MSGS_PER_BLOCK` inbox messages each, with compact indices and
+ * one L1 block per full block of messages.
  */
 export function makeInboxMessagesWithFullBlocks(blockCount: number): InboxMessage[] {
   return makeInboxMessages(MAX_L1_TO_L2_MSGS_PER_BLOCK * blockCount, {
-    overrideFn: (msg, i) => {
-      const bucketSeq = BigInt(Math.floor(i / MAX_L1_TO_L2_MSGS_PER_BLOCK)) + 1n;
-      return { ...msg, bucketSeq, bucketTimestamp: bucketSeq };
-    },
+    overrideFn: (msg, i) => ({ ...msg, l1BlockNumber: 1000n + BigInt(Math.floor(i / MAX_L1_TO_L2_MSGS_PER_BLOCK)) }),
   });
 }
 
@@ -104,7 +97,7 @@ export function makeStateForBlock(blockNumber: number, txsPerBlock: number): Sta
   return new StateReference(
     AppendOnlyTreeSnapshot.random(),
     new PartialStateReference(
-      new AppendOnlyTreeSnapshot(Fr.random(), noteHashIndex),
+      new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(noteHashIndex)),
       AppendOnlyTreeSnapshot.random(),
       AppendOnlyTreeSnapshot.random(),
     ),
@@ -135,17 +128,32 @@ export function makeCheckpoint(blocks: L2Block[], checkpointNumber = CheckpointN
   );
 }
 
+/**
+ * Wraps a Checkpoint with L1 published data and the given attestations, the way the archiver holds them: the
+ * packed tuple is what L1 carries, and the decoded attestations are derived from it — so a signing slot loses
+ * its address exactly as it does on the real ingest path.
+ */
+function makePublishedCheckpointFrom(
+  checkpoint: Checkpoint,
+  l1BlockNumber: number,
+  attestations: CommitteeAttestation[],
+): PublishedCheckpoint {
+  const verbatimAttestations = CommitteeAttestationsAndSigners.packAttestations(attestations);
+  return new PublishedCheckpoint(
+    checkpoint,
+    makeL1PublishedData(l1BlockNumber),
+    CommitteeAttestation.fromPacked(verbatimAttestations, attestations.length),
+    verbatimAttestations,
+  );
+}
+
 /** Wraps a Checkpoint with L1 published data and random attestations. */
 export function makePublishedCheckpoint(
   checkpoint: Checkpoint,
   l1BlockNumber: number,
   attestationCount = 3,
 ): PublishedCheckpoint {
-  return new PublishedCheckpoint(
-    checkpoint,
-    makeL1PublishedData(l1BlockNumber),
-    times(attestationCount, CommitteeAttestation.random),
-  );
+  return makePublishedCheckpointFrom(checkpoint, l1BlockNumber, times(attestationCount, CommitteeAttestation.random));
 }
 
 export interface MakeChainedCheckpointsOptions {
@@ -220,7 +228,7 @@ export function makeSignedPublishedCheckpoint(
 ): PublishedCheckpoint {
   const attestations = signers.map(signer => makeCheckpointAttestationFromCheckpoint(checkpoint, signer));
   const committeeAttestations = orderAttestations(attestations, committee);
-  return new PublishedCheckpoint(checkpoint, makeL1PublishedData(l1BlockNumber), committeeAttestations);
+  return makePublishedCheckpointFrom(checkpoint, l1BlockNumber, committeeAttestations);
 }
 
 /** Creates a deterministic SiloedTag for private log testing. */

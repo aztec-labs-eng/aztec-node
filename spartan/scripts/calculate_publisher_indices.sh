@@ -2,7 +2,7 @@
 
 # Helper script to calculate all publisher key indices and bot account indices for a given environment
 # This is used to determine which keys need funding
-# Includes: validator publishers, prover publishers, bot transfers, and bot swaps
+# Includes: validator publishers, prover publishers, and the transfers, swaps, cross-chain and inbox bots
 
 set -euo pipefail
 
@@ -32,8 +32,9 @@ VALIDATOR_PUBLISHERS_PER_REPLICA=${VALIDATOR_PUBLISHERS_PER_REPLICA:-4}
 VALIDATOR_PUBLISHER_MNEMONIC_START_INDEX=${VALIDATOR_PUBLISHER_MNEMONIC_START_INDEX:-5000}
 VALIDATOR_HA_REPLICAS=${VALIDATOR_HA_REPLICAS:-0}
 
-PUBLISHERS_PER_PROVER=${PUBLISHERS_PER_PROVER:-2}
+PUBLISHERS_PER_PROVER=${PUBLISHERS_PER_PROVER:-1}
 PROVER_PUBLISHER_MNEMONIC_START_INDEX=${PROVER_PUBLISHER_MNEMONIC_START_INDEX:-8000}
+PROVER_ENABLED=${PROVER_ENABLED:-true}
 
 # Calculate validator publisher indices
 TOTAL_VALIDATOR_PUBLISHERS=$((VALIDATOR_REPLICAS * VALIDATOR_PUBLISHERS_PER_REPLICA * (1 + VALIDATOR_HA_REPLICAS)))
@@ -43,8 +44,9 @@ if (( TOTAL_VALIDATOR_PUBLISHERS > 0 )); then
   VALIDATOR_PUBLISHER_INDICES=$(seq "$VALIDATOR_PUBLISHER_MNEMONIC_START_INDEX" $((VALIDATOR_PUBLISHER_MNEMONIC_START_INDEX + TOTAL_VALIDATOR_PUBLISHERS - 1)) | tr '\n' ',' | sed 's/,$//')
 fi
 
-# Calculate prover publisher indices
-TOTAL_PROVER_PUBLISHERS=$PUBLISHERS_PER_PROVER
+# Calculate prover publisher indices, using the same sizing the deployment applies.
+source "$spartan/scripts/prover_publisher_count.sh"
+calculate_total_prover_publishers
 
 PROVER_PUBLISHER_INDICES=""
 if (( TOTAL_PROVER_PUBLISHERS > 0 )); then
@@ -76,6 +78,15 @@ BOT_CROSS_CHAIN_MNEMONIC_START_INDEX=${BOT_CROSS_CHAIN_MNEMONIC_START_INDEX:-720
 BOT_CROSS_CHAIN_INDICES=""
 if (( BOT_CROSS_CHAIN_REPLICAS > 0 )); then
   BOT_CROSS_CHAIN_INDICES=$(seq "$BOT_CROSS_CHAIN_MNEMONIC_START_INDEX" $((BOT_CROSS_CHAIN_MNEMONIC_START_INDEX + BOT_CROSS_CHAIN_REPLICAS - 1)) | tr '\n' ',' | sed 's/,$//')
+fi
+
+# Calculate inbox bot indices
+BOT_INBOX_REPLICAS=${BOT_INBOX_REPLICAS:-0}
+BOT_INBOX_MNEMONIC_START_INDEX=${BOT_INBOX_MNEMONIC_START_INDEX:-7300}
+
+BOT_INBOX_INDICES=""
+if (( BOT_INBOX_REPLICAS > 0 )); then
+  BOT_INBOX_INDICES=$(seq "$BOT_INBOX_MNEMONIC_START_INDEX" $((BOT_INBOX_MNEMONIC_START_INDEX + BOT_INBOX_REPLICAS - 1)) | tr '\n' ',' | sed 's/,$//')
 fi
 
 # Combine all publisher indices
@@ -113,6 +124,14 @@ if [ -n "$BOT_CROSS_CHAIN_INDICES" ]; then
     ALL_PUBLISHER_INDICES="${ALL_PUBLISHER_INDICES},${BOT_CROSS_CHAIN_INDICES}"
   else
     ALL_PUBLISHER_INDICES="$BOT_CROSS_CHAIN_INDICES"
+  fi
+fi
+
+if [ -n "$BOT_INBOX_INDICES" ]; then
+  if [ -n "$ALL_PUBLISHER_INDICES" ]; then
+    ALL_PUBLISHER_INDICES="${ALL_PUBLISHER_INDICES},${BOT_INBOX_INDICES}"
+  else
+    ALL_PUBLISHER_INDICES="$BOT_INBOX_INDICES"
   fi
 fi
 

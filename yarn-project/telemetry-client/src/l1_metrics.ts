@@ -1,8 +1,14 @@
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Chain, type FallbackTransport, type Hex, type HttpTransport, type PublicClient, formatEther } from 'viem';
 
-import { L1_SENDER } from './attributes.js';
-import { L1_BALANCE_ETH, L1_BLOB_BASE_FEE_WEI, L1_BLOCK_HEIGHT, L1_GAS_PRICE_WEI } from './metrics.js';
+import { L1_SENDER, L1_TX_SCOPE } from './attributes.js';
+import {
+  L1_BALANCE_ETH,
+  L1_BLOB_BASE_FEE_WEI,
+  L1_BLOCK_HEIGHT,
+  L1_GAS_PRICE_WEI,
+  L1_PUBLISHER_LOADED_COUNT,
+} from './metrics.js';
 import type { BatchObservableResult, Meter, ObservableGauge } from './telemetry.js';
 
 export class L1Metrics {
@@ -16,6 +22,7 @@ export class L1Metrics {
     private meter: Meter,
     private client: PublicClient<FallbackTransport<HttpTransport[]>, Chain>,
     addresses: EthAddress[],
+    scope: 'sequencer' | 'prover',
   ) {
     this.l1BlockHeight = meter.createObservableGauge(L1_BLOCK_HEIGHT);
     this.l1BalanceEth = meter.createObservableGauge(L1_BALANCE_ETH);
@@ -23,6 +30,7 @@ export class L1Metrics {
     this.blobBaseFeeWei = meter.createObservableGauge(L1_BLOB_BASE_FEE_WEI);
 
     this.addresses = addresses.map(addr => addr.toString());
+    meter.createGauge(L1_PUBLISHER_LOADED_COUNT).record(addresses.length, { [L1_TX_SCOPE]: scope });
   }
 
   start() {

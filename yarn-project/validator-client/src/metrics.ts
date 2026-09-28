@@ -19,6 +19,7 @@ export class ValidatorMetrics {
   private failedAttestationsBadProposalCount: UpDownCounter;
   private failedAttestationsNodeIssueCount: UpDownCounter;
   private currentEpoch: Gauge;
+  private loadedAttestersCount: Gauge;
   private attestedEpochCount: UpDownCounter;
 
   private reexMana: Histogram;
@@ -72,6 +73,7 @@ export class ValidatorMetrics {
     );
 
     this.currentEpoch = meter.createGauge(Metrics.VALIDATOR_CURRENT_EPOCH);
+    this.loadedAttestersCount = meter.createGauge(Metrics.VALIDATOR_LOADED_ATTESTERS_COUNT);
 
     this.attestedEpochCount = createUpDownCounterWithDefault(meter, Metrics.VALIDATOR_ATTESTED_EPOCH_COUNT);
 
@@ -141,6 +143,10 @@ export class ValidatorMetrics {
   /** Update the gauge tracking the current epoch number (proxy for total epochs elapsed). */
   public setCurrentEpoch(epoch: EpochNumber) {
     this.currentEpoch.record(Number(epoch));
+  }
+
+  public setLoadedAttestersCount(count: number): void {
+    this.loadedAttestersCount.record(count);
   }
 
   /** Increment the count of epochs in which the given attester submitted at least one attestation. */

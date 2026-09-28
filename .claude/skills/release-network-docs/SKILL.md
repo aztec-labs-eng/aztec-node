@@ -8,7 +8,7 @@ argument-hint: <RPC_URL>
 
 Update the Aztec network/operator documentation for a new release. Queries the
 network for current info, updates contract addresses, builds the docs, cuts a
-versioned snapshot of the operator docs, and prepares changes on `next`.
+versioned snapshot of the operator docs, and prepares changes on `main`.
 
 This is a **lightweight alternative** to the full `/release-docs` skill. Use it
 when only the network/operator docs need updating (new contract addresses,
@@ -73,7 +73,7 @@ Store all values for use in subsequent steps.
 
 The version from Step 1 tells us which git tag the docs should be built from.
 The operator docs source in `docs/docs-operate/` must reflect the code at the
-release tag, not whatever happens to be on `next`.
+release tag, not whatever happens to be on `main`.
 
 ```bash
 git fetch origin
@@ -110,8 +110,17 @@ cast call <REGISTRY_ADDRESS> "getGovernance()(address)" --rpc-url <L1_RPC>
 
 These addresses are stored internally in contracts with no public getter. They
 can be obtained from the Forge deployment script output
-(`l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol` prints JSON with all
+(`docs/node_modules/@aztec-foundation/l1-artifacts/l1-contracts/script/deploy/DeployAztecL1Contracts.s.sol` prints JSON with all
 addresses). Ask the user if they have deployment output.
+
+`l1-contracts` is not in this repo — it stayed in AztecProtocol/aztec-packages
+and reaches us only as the `@aztec-foundation/l1-artifacts` npm package, which
+ships the whole Solidity tree. Read it from `docs/node_modules/` after
+`yarn install` in `docs/`. The revision you get is pinned in
+`docs/package.json` and resolved by `docs/yarn.lock` — that pair governs this
+install, not `yarn-project/package.json`, which pins the same package
+separately. They are expected to agree; if they do not at the release tag, stop
+and find out why before trusting either.
 
 - **Reward Booster** (stored in Rollup's `RewardLib` storage, no getter)
 - **Tally Slashing Proposer** (deployed alongside Slasher, no getter)
@@ -290,22 +299,22 @@ Verify the results:
 **Note:** At this point `network_versions.json` may still list the old version
 as an unmapped extra (its directory still exists). This is cleaned up in Step 8.
 
-#### Reconcile newer operator docs from `next`
+#### Reconcile newer operator docs from `main`
 
-The release tag may predate docs-only work already merged into `next`. Compare both
+The release tag may predate docs-only work already merged into `main`. Compare both
 the operator pages and their sidebar before finalizing the snapshot:
 
 ```bash
 git fetch origin
-git diff v<new_version>..origin/next -- \
+git diff v<new_version>..origin/main -- \
   docs/docs-operate/ docs/sidebars-operate.js
 ```
 
 Port release-valid page changes into `network_versioned_docs/version-v<new_version>/`.
 If a layout or navigation change is ported, update
 `network_versioned_sidebars/version-v<new_version>-sidebars.json` from the same final
-sidebar source. Never combine reconciled `next` pages with the tag-generated sidebar.
-When adopting the `next` sidebar wholesale, load both configs in Node and assert deep
+sidebar source. Never combine reconciled `main` pages with the tag-generated sidebar.
+When adopting the `main` sidebar wholesale, load both configs in Node and assert deep
 semantic equality; the build can pass with a stale sidebar while legacy pages still exist.
 
 ### Step 8: Clean Up Old Network Version
@@ -330,11 +339,11 @@ scripts/update_docs_versions.sh network
 Verify that both `network_version_config.json` and `network_versions.json` no
 longer reference the old version.
 
-### Step 9: Move Changes to `next` Branch
+### Step 9: Move Changes to `main` Branch
 
 ```bash
 git stash
-git checkout next && git pull origin next
+git checkout main && git pull origin main
 git stash pop
 ```
 
@@ -351,7 +360,7 @@ Check for stash conflicts. Then report to the user:
   releases. Network operator docs only have mainnet and testnet versions. If
   devnet is detected, abort and direct the user to `/release-docs`.
 - **Tag must be checked out**: The operator docs source in `docs/docs-operate/`
-  must reflect the release tag, not `next`. Always checkout the tag before
+  must reflect the release tag, not `main`. Always checkout the tag before
   building and cutting versioned docs.
 - **Always query the network first**: The RPC response is the source of truth
   for version and L1/L2 contract addresses.
@@ -376,10 +385,10 @@ Check for stash conflicts. Then report to the user:
   docs.
 - **User confirmation required**: Ask before deleting old versioned docs and
   before making content changes to operator docs.
-- **Changes land on `next`**: All changes are stashed and moved to the `next`
+- **Changes land on `main`**: All changes are stashed and moved to the `main`
   branch at the end, ready for a PR.
 - **Reconcile pages and sidebars together**: A tag cut can predate docs-only work on
-  `next`. If operator pages are ported after the cut, port the matching sidebar and
+  `main`. If operator pages are ported after the cut, port the matching sidebar and
   verify the versioned JSON reflects the same final structure.
 - **Network version config only**: This skill modifies
   `network_version_config.json` and `network_versions.json`. It does not touch

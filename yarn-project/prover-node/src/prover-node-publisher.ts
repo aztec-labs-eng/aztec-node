@@ -2,7 +2,11 @@ import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import { BatchedBlob, getEthBlobEvaluationInputs } from '@aztec-labs/blob-lib';
 import { MAX_CHECKPOINTS_PER_EPOCH } from '@aztec-labs/constants';
-import type { RollupContract, ViemCommitteeAttestation } from '@aztec-labs/ethereum/contracts';
+import {
+  type RollupContract,
+  type ViemCommitteeAttestations,
+  computeAttestationsHash,
+} from '@aztec-labs/ethereum/contracts';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { areArraysEqual } from '@aztec-labs/foundation/collection';
@@ -11,7 +15,6 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
-import { CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-labs/stdlib/block';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import type { L1PublishProofStats } from '@aztec-labs/stdlib/stats';
@@ -32,6 +35,12 @@ export type L1SubmitEpochProofArgs = {
   headers: CheckpointHeader[];
   proof: Proof;
 };
+
+/**
+ * Result of a proof submission attempt. `'already-submitted'` means this prover had already registered a proof of
+ * the same length for the epoch on L1, so nothing was sent; it is not a failure.
+ */
+export type SubmitEpochProofResult = 'published' | 'already-submitted' | 'failed';
 
 export class ProverNodePublisher {
   private metrics: ProverNodePublisherMetrics;
@@ -79,22 +88,39 @@ export class ProverNodePublisher {
     publicInputs: RootRollupPublicInputs;
     proof: Proof;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
+    attestations: ViemCommitteeAttestations;
     headers: CheckpointHeader[];
+    /** Whether the range covers the whole epoch. Governs whether an already-overtaken proof is still worth sending. */
+    kind: 'full' | 'partial';
     /** Wall-clock deadline (proof-submission window end) past which the L1 tx should stop retrying. */
     deadline?: Date;
-  }): Promise<boolean> {
-    const { epochNumber, fromCheckpoint, toCheckpoint } = args;
+  }): Promise<SubmitEpochProofResult> {
+    const { epochNumber, fromCheckpoint, toCheckpoint, publicInputs } = args;
     const ctx = { epochNumber, fromCheckpoint, toCheckpoint };
 
     const timer = new Timer();
-    // Validate epoch proof range and hashes are correct before submitting
-    await this.validateEpochProofSubmission(args);
 
-    const txReceipt = await this.sendSubmitEpochProofTx(args);
+    // The rollup reverts on a second submission from the same prover for the same epoch and length, so don't
+    // spend gas on one. Reachable when re-running an epoch we have already submitted a proof for, which is
+    // not a failure: our reward shares for it are already registered.
+    const proverId = EthAddress.fromField(publicInputs.constants.proverId);
+    const length = toCheckpoint - fromCheckpoint + 1;
+    if (await this.rollupContract.getHasSubmittedProof(epochNumber, length, proverId)) {
+      this.log.warn(`Skipping epoch proof submission as prover already submitted a proof for this epoch`, {
+        ...ctx,
+        proverId,
+        length,
+      });
+      return 'already-submitted';
+    }
+
+    // Validate epoch proof range and hashes are correct before submitting
+    const provenPrefixLength = await this.validateEpochProofSubmission(args);
+
+    const txReceipt = await this.sendSubmitEpochProofTx(args, provenPrefixLength);
     if (!txReceipt) {
       this.log.error(`Failed to mine submitEpochProof tx`, undefined, ctx);
-      return false;
+      return 'failed';
     }
 
     try {
@@ -122,12 +148,12 @@ export class ProverNodePublisher {
       };
       this.log.info(`Published epoch proof to L1 rollup contract`, { ...stats, ...ctx });
       this.metrics.recordSubmitProof(timer.ms(), stats);
-      return true;
+      return 'published';
     }
 
     this.metrics.recordFailedTx();
     this.log.error(`Rollup submitEpochProof tx reverted ${txReceipt.transactionHash}`, undefined, ctx);
-    return false;
+    return 'failed';
   }
 
   private async validateEpochProofSubmission(args: {
@@ -136,15 +162,20 @@ export class ProverNodePublisher {
     publicInputs: RootRollupPublicInputs;
     proof: Proof;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
+    attestations: ViemCommitteeAttestations;
     headers: CheckpointHeader[];
-  }) {
-    const { fromCheckpoint, toCheckpoint, publicInputs, batchedBlobInputs } = args;
+    kind: 'full' | 'partial';
+  }): Promise<number> {
+    const { fromCheckpoint, toCheckpoint, publicInputs, batchedBlobInputs, attestations, kind } = args;
 
     // Check that the checkpoint numbers match the expected epoch to be proven
     const { pending, proven } = await this.rollupContract.getTips();
-    // Don't publish if proven is beyond our toCheckpoint, pointless to do so
-    if (proven > toCheckpoint) {
+    // A partial proof shorter than what is already proven earns nothing: rewards go only to provers holding
+    // shares in the epoch's longest proven length, which a shorter range can never reach. A full-epoch proof
+    // always matches that length, and the rollup accepts any proof whose predecessor is proven, so it still
+    // registers our shares once the proven tip has run past this epoch entirely (another prover proving into a
+    // later one) and stays worth sending until the epoch's submission window closes.
+    if (kind === 'partial' && proven > toCheckpoint) {
       throw new Error(
         `Cannot submit epoch proof for ${fromCheckpoint}-${toCheckpoint} as proven checkpoint is ${proven}`,
       );
@@ -172,6 +203,17 @@ export class ProverNodePublisher {
       );
     }
 
+    // The rollup only checks the attestations of the last checkpoint in the range, against the hash it stored
+    // when that checkpoint was proposed. Checking it here turns a byte-level divergence into a named error
+    // instead of an opaque `Rollup__InvalidAttestations` revert once the tx is mined.
+    const submittedAttestationsHash = computeAttestationsHash(attestations);
+    if (submittedAttestationsHash !== endCheckpointLog.attestationsHash.toString()) {
+      throw new Error(
+        `Attestations hash mismatch for checkpoint ${toCheckpoint}: ` +
+          `${submittedAttestationsHash} !== ${endCheckpointLog.attestationsHash.toString()}`,
+      );
+    }
+
     // Check the batched blob inputs from the root rollup against the batched blob computed in ts
     const finalBlobAccumulator = batchedBlobInputs.toFinalBlobAccumulator();
     if (!publicInputs.blobPublicInputs.equals(finalBlobAccumulator)) {
@@ -196,6 +238,10 @@ export class ProverNodePublisher {
         log: this.log,
       });
     }
+
+    // The production rollup advances the proven tip and accounts for rewards atomically. A later proof may
+    // advance it further before inclusion; the contract accepts any already-proven prefix, including a shorter one.
+    return Math.max(0, proven - fromCheckpoint + 1);
   }
 
   /**
@@ -210,14 +256,16 @@ export class ProverNodePublisher {
     publicInputs: RootRollupPublicInputs;
     proof: Proof;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
+    attestations: ViemCommitteeAttestations;
     headers: CheckpointHeader[];
+    /** Whether the range covers the whole epoch. Governs whether an already-overtaken proof is still worth sending. */
+    kind: 'full' | 'partial';
   }): Promise<void> {
     const { epochNumber, fromCheckpoint, toCheckpoint } = args;
 
-    await this.validateEpochProofSubmission(args);
+    const provenPrefixLength = await this.validateEpochProofSubmission(args);
 
-    const data = this.encodeSubmitEpochProofCalldata(args);
+    const data = this.encodeSubmitEpochProofCalldata(args, provenPrefixLength);
     const senderAddress = this.l1TxUtils.getSenderAddress();
 
     const [gasLimit, feesPerGas, latestBlock] = await Promise.all([
@@ -252,33 +300,39 @@ export class ProverNodePublisher {
     this.metrics.recordEstimatedSubmitProof(stats);
   }
 
-  private encodeSubmitEpochProofCalldata(args: {
-    fromCheckpoint: CheckpointNumber;
-    toCheckpoint: CheckpointNumber;
-    publicInputs: RootRollupPublicInputs;
-    proof: Proof;
-    batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
-    headers: CheckpointHeader[];
-  }): Hex {
+  private encodeSubmitEpochProofCalldata(
+    args: {
+      fromCheckpoint: CheckpointNumber;
+      toCheckpoint: CheckpointNumber;
+      publicInputs: RootRollupPublicInputs;
+      proof: Proof;
+      batchedBlobInputs: BatchedBlob;
+      attestations: ViemCommitteeAttestations;
+      headers: CheckpointHeader[];
+    },
+    provenPrefixLength: number,
+  ): Hex {
     return encodeFunctionData({
       abi: RollupAbi,
       functionName: 'submitEpochRootProof',
-      args: [this.getSubmitEpochProofArgs(args)],
+      args: [this.getSubmitEpochProofArgs(args, provenPrefixLength)],
     });
   }
 
-  private async sendSubmitEpochProofTx(args: {
-    fromCheckpoint: CheckpointNumber;
-    toCheckpoint: CheckpointNumber;
-    deadline?: Date;
-    publicInputs: RootRollupPublicInputs;
-    proof: Proof;
-    batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
-    headers: CheckpointHeader[];
-  }): Promise<TransactionReceipt | undefined> {
-    const txArgs = [this.getSubmitEpochProofArgs(args)] as const;
+  private async sendSubmitEpochProofTx(
+    args: {
+      fromCheckpoint: CheckpointNumber;
+      toCheckpoint: CheckpointNumber;
+      deadline?: Date;
+      publicInputs: RootRollupPublicInputs;
+      proof: Proof;
+      batchedBlobInputs: BatchedBlob;
+      attestations: ViemCommitteeAttestations;
+      headers: CheckpointHeader[];
+    },
+    provenPrefixLength: number,
+  ): Promise<TransactionReceipt | undefined> {
+    const txArgs = [this.getSubmitEpochProofArgs(args, provenPrefixLength)] as const;
 
     this.log.info(`Submitting epoch proof to L1 rollup contract`, {
       proofSize: args.proof.withoutPublicInputs().length,
@@ -322,7 +376,7 @@ export class ProverNodePublisher {
     toCheckpoint: CheckpointNumber;
     publicInputs: RootRollupPublicInputs;
     batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
+    attestations: ViemCommitteeAttestations;
     headers: CheckpointHeader[];
   }) {
     // Returns arguments for EpochProofLib.sol -> getEpochProofPublicInputs()
@@ -342,15 +396,18 @@ export class ProverNodePublisher {
     ] as const;
   }
 
-  private getSubmitEpochProofArgs(args: {
-    fromCheckpoint: CheckpointNumber;
-    toCheckpoint: CheckpointNumber;
-    publicInputs: RootRollupPublicInputs;
-    proof: Proof;
-    batchedBlobInputs: BatchedBlob;
-    attestations: ViemCommitteeAttestation[];
-    headers: CheckpointHeader[];
-  }) {
+  private getSubmitEpochProofArgs(
+    args: {
+      fromCheckpoint: CheckpointNumber;
+      toCheckpoint: CheckpointNumber;
+      publicInputs: RootRollupPublicInputs;
+      proof: Proof;
+      batchedBlobInputs: BatchedBlob;
+      attestations: ViemCommitteeAttestations;
+      headers: CheckpointHeader[];
+    },
+    provenPrefixLength: number,
+  ) {
     // Returns arguments for EpochProofLib.sol -> submitEpochRootProof()
     const proofHex: Hex = `0x${args.proof.withoutPublicInputs().toString('hex')}`;
     const argsArray = this.getEpochProofPublicInputsArgs(args);
@@ -358,10 +415,11 @@ export class ProverNodePublisher {
       start: argsArray[0],
       end: argsArray[1],
       args: argsArray[2],
-      headers: argsArray[3],
-      attestations: CommitteeAttestationsAndSigners.packAttestations(
-        args.attestations.map(a => CommitteeAttestation.fromViem(a)),
-      ),
+      provenCheckpointFees: argsArray[3]
+        .slice(0, provenPrefixLength)
+        .map(({ coinbase, accumulatedFees }) => ({ coinbase, accumulatedFees })),
+      headers: argsArray[3].slice(provenPrefixLength),
+      attestations: args.attestations,
       blobInputs: argsArray[4],
       proof: proofHex,
     };

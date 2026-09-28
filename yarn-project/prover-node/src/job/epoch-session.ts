@@ -340,10 +340,12 @@ export class EpochSession implements Traceable {
     checkpointCount: number,
     timer: Timer,
   ): Promise<void> {
-    // Attestations come from the highest-numbered registered checkpoint — that's the one
-    // whose attestations the L1 contract checks for the proven range.
+    // Attestations come from the highest-numbered registered checkpoint — that's the one whose attestations
+    // the L1 contract checks for the proven range. They go out as the tuple that was posted to L1, byte for
+    // byte: the rollup checks the submission against the `attestationsHash` it stored at propose time, and
+    // repacking the decoded attestations does not reproduce those bytes.
     const lastCheckpoint = this.checkpoints[this.checkpoints.length - 1];
-    const attestations = lastCheckpoint.attestations.map(a => a.toViem());
+    const attestations = lastCheckpoint.verbatimAttestations;
     const epochSizeBlocks = this.checkpoints.reduce((acc, c) => acc + c.checkpoint.blocks.length, 0);
     const epochSizeTxs = this.checkpoints.reduce(
       (acc, c) => acc + c.checkpoint.blocks.reduce((bAcc, block) => bAcc + block.body.txEffects.length, 0),
@@ -385,6 +387,15 @@ export class EpochSession implements Traceable {
         );
         this.state = 'completed';
         this.deps.metrics.recordProvingJob(timer.ms(), checkpointCount, epochSizeBlocks, epochSizeTxs);
+        return;
+      case 'already-submitted':
+        // L1 already holds our proof for this epoch (e.g. a re-prove after restart), so there is nothing to
+        // retry or report as failed. Not recorded as a proving job since no new proof landed.
+        this.log.info(
+          `Proof for epoch ${this.spec.epochNumber} (checkpoints ${fromCheckpoint}..${toCheckpoint}) was already submitted`,
+          { uuid: this.uuid, ...this.spec },
+        );
+        this.state = 'completed';
         return;
       case 'superseded':
         this.log.info(`EpochSession ${this.uuid} superseded by a longer candidate`, {

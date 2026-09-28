@@ -36,7 +36,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -53,13 +53,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-          # The release target and the credentials it publishes with. NPM_REGISTRY and
-          # DOCKER_REGISTRY are deliberately unset: ci3/source_release_target defaults them to
-          # npmjs and docker.io/azteclabs and asserts as much, so no variable edit can retarget a
-          # public release. The DockerHub secrets keep their names and are read into the
-          # target-neutral names the build uses.
-          RELEASE_TARGET: public
+          NPM_REGISTRY: https://registry.npmjs.org
+          DOCKER_REGISTRY: docker.io/azteclabs
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Private half of the aztec-nr mirror repo's write deploy key, which github.token cannot
+          # push to.
+          AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY: ${{ secrets.AZTEC_NR_GITHUB_MIRROR_DEPLOY_KEY }}
           DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
           # The tag, matching what ci3_labels_to_env.sh computes for a tag push. Only read by
@@ -86,7 +85,7 @@ jobs:
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           # The release channel, not the tag name, decides whether this is worth reporting:
-          # 'commit' is a ci-release-pr canary tag, which nobody wants alerts for.
+          # a 'commit' tag is a per-commit build, which nobody wants alerts for.
           channel=$(./ci3/dist_tag)
           if [ "$channel" = "commit" ]; then
             echo "Canary release ($TAG); not notifying."

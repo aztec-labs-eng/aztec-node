@@ -33,7 +33,7 @@ import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
-import { type BotConfig, SupportedTokenContracts } from './config.js';
+import { type BotConfig, DEFAULT_L1_TO_L2_SEED_COUNT, SupportedTokenContracts } from './config.js';
 import { seedL1ToL2Message } from './l1_to_l2_seeding.js';
 import type { BotStore } from './store/index.js';
 import { getBalances, getPrivateBalance, isStandardTokenContract } from './utils.js';
@@ -128,10 +128,13 @@ export class BotFactory {
   }
 
   /**
-   * Initializes the cross-chain bot by deploying TestContract, creating an L1 client,
-   * seeding initial L1→L2 messages, and waiting for the first to be ready.
+   * Sets up the account, the L1 client and the TestContract used by the cross-chain bot modes.
+   * @param options.seedMessages - Whether to top the store up to `l1ToL2SeedCount` L1→L2 messages and block on
+   * the first one becoming ready. Inbox mode produces its own batches on its own clock, so it opts out.
+   * @param options.accountIndex - Selects an independent funded test account, or offsets the configured account
+   * salt when a private key is present. The two Inbox lanes use different indices.
    */
-  public async setupCrossChain(): Promise<{
+  public async setupCrossChain(options: { seedMessages?: boolean; accountIndex?: number } = {}): Promise<{
     wallet: EmbeddedWallet;
     defaultAccountAddress: AztecAddress;
     contract: TestContract;
@@ -139,7 +142,7 @@ export class BotFactory {
     l1Client: ExtendedViemWalletClient;
     rollupVersion: bigint;
   }> {
-    const defaultAccountAddress = await this.setupAccount();
+    const defaultAccountAddress = await this.setupAccount(options.accountIndex);
     await this.ensureFeeJuiceBalance(defaultAccountAddress);
 
     // Create L1 client (same pattern as bridgeL1FeeJuice)
@@ -169,25 +172,34 @@ export class BotFactory {
     });
     const contractAddress = (await testContractDeploy.getInstance()).address;
 
-    // Recover any pending messages from store (clean up stale ones first)
-    await this.store.cleanupOldPendingMessages();
-    const pendingMessages = await this.store.getUnconsumedL1ToL2Messages();
+    const seedMessages = options.seedMessages ?? true;
+    const seedInitialMessages = async () => {
+      if (!seedMessages) {
+        return;
+      }
+      // Recover any pending messages from store (clean up stale ones first)
+      await this.store.cleanupOldPendingMessages();
+      const pendingMessages = await this.store.getUnconsumedL1ToL2Messages();
 
-    // Seed initial L1→L2 messages if pipeline is empty. The seeds are sent one at a time: they share the
-    // bot's L1 account, so concurrent sends would race on the L1 nonce.
-    const seedCount = Math.max(0, this.config.l1ToL2SeedCount - pendingMessages.length);
-    const inboxAddress = EthAddress.fromString(l1ContractAddresses.inboxAddress.toString());
+      // Seed initial L1→L2 messages if pipeline is empty. The seeds are sent one at a time: they share the
+      // bot's L1 account, so concurrent sends would race on the L1 nonce.
+      const seedCount = Math.max(
+        0,
+        (this.config.l1ToL2SeedCount ?? DEFAULT_L1_TO_L2_SEED_COUNT) - pendingMessages.length,
+      );
+      const inboxAddress = EthAddress.fromString(l1ContractAddresses.inboxAddress.toString());
+      for (let i = 0; i < seedCount; i++) {
+        await seedL1ToL2Message(l1Client, inboxAddress, contractAddress, rollupVersion, this.store, this.log);
+      }
+    };
+
     const [contract] = await Promise.all([
       this.deployTestContract(defaultAccountAddress, testContractDeploy),
-      (async () => {
-        for (let i = 0; i < seedCount; i++) {
-          await seedL1ToL2Message(l1Client, inboxAddress, contractAddress, rollupVersion, this.store, this.log);
-        }
-      })(),
+      seedInitialMessages(),
     ]);
 
     // Block until at least one message is ready
-    const allMessages = await this.store.getUnconsumedL1ToL2Messages();
+    const allMessages = seedMessages ? await this.store.getUnconsumedL1ToL2Messages() : [];
     if (allMessages.length > 0) {
       this.log.info(`Waiting for first L1→L2 message to be ready...`);
       const firstMsg = allMessages[0];
@@ -217,26 +229,29 @@ export class BotFactory {
    * Checks if the sender account contract is initialized, and initializes it if necessary.
    * @returns The sender wallet.
    */
-  private async setupAccount() {
+  private async setupAccount(accountIndex = 0) {
     const privateKey = this.config.senderPrivateKey?.getValue();
     if (privateKey) {
       this.log.info(`Setting up account with provided private key`);
-      return await this.setupAccountWithPrivateKey(privateKey);
+      return await this.setupAccountWithPrivateKey(privateKey, accountIndex);
     } else {
       this.log.info(`Setting up test account`);
-      return await this.setupTestAccount();
+      return await this.setupTestAccount(accountIndex);
     }
   }
 
   /**
-   * Keyless fallback for tests and local dev: reuses the first genesis test account, whose address is
-   * pre-funded with fee juice via `initialFundedAccounts`. The test accounts are initializerless, so this
+   * Keyless fallback for tests and local dev: reuses a genesis test account, whose address is pre-funded with fee
+   * juice via `initialFundedAccounts`. The test accounts are initializerless, so this
    * must create an initializerless account for the address to match the funded one. Production bots set a
    * sender private key and fund the resulting initializerless account from L1 instead; see
    * setupAccountWithPrivateKey.
    */
-  private async setupTestAccount() {
-    const [initialAccountData] = await getInitialTestAccountsData();
+  private async setupTestAccount(accountIndex: number) {
+    const initialAccountData = (await getInitialTestAccountsData())[accountIndex];
+    if (!initialAccountData) {
+      throw new Error(`No initial test account exists at index ${accountIndex}`);
+    }
     const accountManager = await this.wallet.createSchnorrInitializerlessAccount(
       initialAccountData.secret,
       initialAccountData.salt,
@@ -245,8 +260,8 @@ export class BotFactory {
     return accountManager.address;
   }
 
-  private async setupAccountWithPrivateKey(privateKey: Fr) {
-    const salt = this.config.senderSalt ?? Fr.ONE;
+  private async setupAccountWithPrivateKey(privateKey: Fr, accountIndex: number) {
+    const salt = (this.config.senderSalt ?? Fr.ONE).add(new Fr(accountIndex));
     const signingKey = GrumpkinScalar.fromBuffer(privateKey.toBuffer());
     const secret = await deriveSecretKeyFromSigningKey(signingKey);
     const accountManager = await this.wallet.createSchnorrInitializerlessAccount(secret, salt, signingKey);

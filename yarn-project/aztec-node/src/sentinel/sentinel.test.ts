@@ -8,6 +8,7 @@ import type { P2PClient } from '@aztec-labs/p2p';
 import { OffenseType, WANT_TO_SLASH_EVENT, type WantToSlashArgs } from '@aztec-labs/slasher';
 import {
   CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
   GENESIS_BLOCK_HEADER_HASH,
   L2Block,
   type L2BlockSource,
@@ -143,7 +144,12 @@ describe('sentinel', () => {
      * a checkpoint that has landed on L1 covering the slot.
      */
     const mineCheckpointForSlot = (checkpoint: Checkpoint, checkpointAttestations: CommitteeAttestation[] = []) => {
-      const published = new PublishedCheckpoint(checkpoint, L1PublishedData.random(), checkpointAttestations);
+      const published = new PublishedCheckpoint(
+        checkpoint,
+        L1PublishedData.random(),
+        checkpointAttestations,
+        CommitteeAttestationsAndSigners.packAttestations(checkpointAttestations),
+      );
       const checkpointSlot = checkpoint.header.slotNumber;
       archiver.getCheckpoint.mockImplementation(query =>
         Promise.resolve('slot' in query && query.slot === checkpointSlot ? published : undefined),
@@ -312,6 +318,40 @@ describe('sentinel', () => {
       expect(activity[committee[3].toString()]).toEqual('attestation-missed');
     });
 
+    it('does not tag honest non-signers as missed when a locally-invalid checkpoint was mined on L1', async () => {
+      // A malicious quorum mines a checkpoint this node re-executed as invalid; the honest non-signer
+      // must not be counted as a missed attestor (which would feed inactivity slashing).
+      reexecutionTracker.recordOutcome(slot, block.archive.root, 'invalid', CheckpointNumber(1));
+      const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, slotNumber: slot });
+      mineCheckpointForSlot(checkpoint);
+
+      // Attestations from validators 0-2; validator 3 is the honest non-signer.
+      p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, -1));
+
+      const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+
+      // Proposer slot stays checkpoint-mined (it was published)...
+      expect(activity[proposer.toString()]).toEqual('checkpoint-mined');
+      // ...but the honest non-signer (validator 3) is NOT marked missed.
+      expect(activity[committee[3].toString()]).not.toEqual('attestation-missed');
+    });
+
+    it('does not tag honest non-signers as missed when the slot had a proposal equivocation', async () => {
+      // Two conflicting proposals in the slot: an honest attestor may have seen an invalid one and
+      // declined. Even with a mined checkpoint, the non-signer must not count as a missed attestor.
+      reexecutionTracker.recordEquivocation(slot);
+      const checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, slotNumber: slot });
+      mineCheckpointForSlot(checkpoint);
+
+      // Attestations from validators 0-2; validator 3 is the honest non-signer.
+      p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, -1));
+
+      const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+
+      expect(activity[proposer.toString()]).toEqual('checkpoint-mined');
+      expect(activity[committee[3].toString()]).not.toEqual('attestation-missed');
+    });
+
     it('identifies missed attestors when checkpoint proposal was re-executed valid', async () => {
       reexecutionTracker.recordOutcome(slot, block.archive.root, 'valid', CheckpointNumber(1));
       p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, -1));
@@ -448,15 +488,108 @@ describe('sentinel', () => {
     });
   });
 
+  describe('getValidatorStatsBatch', () => {
+    it('matches individual results, preserving order, duplicates and missing validators', async () => {
+      const validators = times(50, () => EthAddress.random());
+      const missing = EthAddress.random();
+      await store.updateValidators(
+        SlotNumber(1),
+        Object.fromEntries(validators.map(address => [address.toString(), 'attestation-sent'])),
+      );
+      const addresses = [...validators, missing, validators[0]];
+      const expected = await Promise.all(
+        addresses.map(address => sentinel.getValidatorStats(address, SlotNumber(0), SlotNumber(10))),
+      );
+      const results = await sentinel.getValidatorStatsBatch(addresses, SlotNumber(0), SlotNumber(10));
+      expect(results).toEqual(expected.map(result => result ?? null));
+    });
+
+    it('reads 50 validators with two database calls', async () => {
+      const validators = times(50, () => EthAddress.random());
+      await store.updateValidators(
+        SlotNumber(1),
+        Object.fromEntries(validators.map(address => [address.toString(), 'attestation-sent'])),
+      );
+      sentinel.setLastProcessedSlot(SlotNumber(10));
+      const reads = jest.spyOn(kvStore, 'sendMessage');
+      const results = await sentinel.getValidatorStatsBatch(validators);
+      expect(results.map(result => result?.validator.address)).toEqual(validators);
+      expect(reads).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares the fallback slot lookup across validators', async () => {
+      const validators = times(50, () => EthAddress.random());
+      await store.updateValidators(
+        SlotNumber(1),
+        Object.fromEntries(validators.map(address => [address.toString(), 'attestation-sent'])),
+      );
+      archiver.getSyncedL2SlotNumber.mockResolvedValue(SlotNumber(10));
+      const results = await sentinel.getValidatorStatsBatch(validators);
+      expect(results.map(result => result?.validator.totalSlots)).toEqual(times(50, () => 1));
+      expect(archiver.getSyncedL2SlotNumber).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not need the archiver when the processed slot is known', async () => {
+      const validator = EthAddress.random();
+      await store.updateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      sentinel.setLastProcessedSlot(SlotNumber(10));
+      archiver.getSyncedL2SlotNumber.mockRejectedValue(new Error('Archiver unavailable'));
+      const results = await sentinel.getValidatorStatsBatch([validator]);
+      expect(results[0]?.validator.totalSlots).toBe(1);
+      expect(results[0]?.lastProcessedSlot).toBe(SlotNumber(10));
+    });
+
+    it('returns an empty array for an empty request', async () => {
+      await expect(sentinel.getValidatorStatsBatch([])).resolves.toEqual([]);
+    });
+
+    it('rejects oversized ranges before reading any validator history', async () => {
+      const validators = times(100, () => EthAddress.random());
+      jest.spyOn(store, 'getHistoryBatch').mockRejectedValue(new Error('History must not be read'));
+      await expect(sentinel.getValidatorStatsBatch(validators, SlotNumber(0), SlotNumber(100_000))).rejects.toThrow(
+        'Slot range (100000) exceeds history length (10)',
+      );
+    });
+
+    it('rejects oversized ranges even for validators without history', async () => {
+      await expect(
+        sentinel.getValidatorStatsBatch([EthAddress.random()], SlotNumber(0), SlotNumber(100_000)),
+      ).rejects.toThrow('exceeds history length');
+    });
+
+    it('rejects reversed slot ranges', async () => {
+      await expect(
+        sentinel.getValidatorStatsBatch([EthAddress.random()], SlotNumber(10), SlotNumber(1)),
+      ).rejects.toThrow('fromSlot must be less than or equal to toSlot');
+    });
+
+    it('accepts the maximum slot difference', async () => {
+      const validator = EthAddress.random();
+      await store.updateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      const results = await sentinel.getValidatorStatsBatch([validator], SlotNumber(0), SlotNumber(10));
+      expect(results[0]?.validator.totalSlots).toBe(1);
+    });
+
+    it('rejects ranges exceeding the retained history', async () => {
+      const validator = EthAddress.random();
+      await store.updateValidators(SlotNumber(1), { [validator.toString()]: 'attestation-sent' });
+      await expect(sentinel.getValidatorStatsBatch([validator], SlotNumber(0), SlotNumber(11))).rejects.toThrow(
+        'exceeds history length',
+      );
+    });
+  });
+
   describe('slot range validation', () => {
     let validator: EthAddress;
 
     beforeEach(() => {
       validator = EthAddress.random();
       jest.spyOn(store, 'getHistoryLength').mockReturnValue(10);
-      jest.spyOn(store, 'getHistory').mockResolvedValue([
-        { slot: SlotNumber(1), status: 'checkpoint-mined' },
-        { slot: SlotNumber(2), status: 'attestation-sent' },
+      jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([
+        [
+          { slot: SlotNumber(1), status: 'checkpoint-mined' },
+          { slot: SlotNumber(2), status: 'attestation-sent' },
+        ],
       ]);
       jest.spyOn(store, 'getHistories').mockResolvedValue({
         [validator.toString()]: [
@@ -482,13 +615,13 @@ describe('sentinel', () => {
       });
 
       it('should return undefined when validator has no history', async () => {
-        jest.spyOn(store, 'getHistory').mockResolvedValue(undefined);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([undefined]);
         const result = await sentinel.getValidatorStats(validator, SlotNumber(1), SlotNumber(6));
         expect(result).toBeUndefined();
       });
 
       it('should return undefined when validator has empty history', async () => {
-        jest.spyOn(store, 'getHistory').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([[]]);
         const result = await sentinel.getValidatorStats(validator, SlotNumber(1), SlotNumber(6));
         expect(result).toBeUndefined();
       });
@@ -503,8 +636,8 @@ describe('sentinel', () => {
           { epoch: EpochNumber(2), missed: 1, total: 8 },
         ];
 
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue(mockProvenPerformance);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([mockProvenPerformance]);
         jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 2,
@@ -532,8 +665,8 @@ describe('sentinel', () => {
 
       it('should call computeStatsForValidator with correct parameters', async () => {
         const mockHistory: ValidatorStatusHistory = [{ slot: SlotNumber(5), status: 'checkpoint-mined' }];
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([[]]);
         const computeStatsSpy = jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 1,
@@ -549,8 +682,8 @@ describe('sentinel', () => {
 
       it('should use default slot range when not provided', async () => {
         const mockHistory: ValidatorStatusHistory = [{ slot: SlotNumber(5), status: 'checkpoint-mined' }];
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([[]]);
         const computeStatsSpy = jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 1,
@@ -571,8 +704,8 @@ describe('sentinel', () => {
 
       it('should not produce negative slot numbers when historyLength exceeds lastProcessedSlot', async () => {
         const mockHistory: ValidatorStatusHistory = [{ slot: SlotNumber(2), status: 'checkpoint-mined' }];
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
-        jest.spyOn(store, 'getEpochPerformance').mockResolvedValue([]);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
+        jest.spyOn(store, 'getEpochPerformanceBatch').mockResolvedValue([[]]);
         jest.spyOn(store, 'getHistoryLength').mockReturnValue(1000); // Large history length
 
         // Set lastProcessedSlot to a small value
@@ -604,10 +737,10 @@ describe('sentinel', () => {
           { epoch: EpochNumber(6), missed: 0, total: 15 },
         ];
 
-        jest.spyOn(store, 'getHistory').mockResolvedValue(mockHistory);
+        jest.spyOn(store, 'getHistoryBatch').mockResolvedValue([mockHistory]);
         const getEpochPerformanceSpy = jest
-          .spyOn(store, 'getEpochPerformance')
-          .mockResolvedValue(mockProvenPerformance);
+          .spyOn(store, 'getEpochPerformanceBatch')
+          .mockResolvedValue([mockProvenPerformance]);
         jest.spyOn(sentinel, 'computeStatsForValidator').mockReturnValue({
           address: validator,
           totalSlots: 1,
@@ -618,7 +751,7 @@ describe('sentinel', () => {
 
         const result = await sentinel.getValidatorStats(validator);
 
-        expect(getEpochPerformanceSpy).toHaveBeenCalledWith(validator);
+        expect(getEpochPerformanceSpy).toHaveBeenCalledWith([validator]);
         expect(result?.allTimeEpochPerformance).toEqual(mockProvenPerformance);
       });
     });

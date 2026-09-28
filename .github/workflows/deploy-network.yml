@@ -70,15 +70,15 @@ concurrency:
 # actions: write lets the failure handler dispatch claudebox.yml with the built-in token
 # (workflow_dispatch is exempt from the github.token no-retrigger rule). On workflow_call
 # these are capped by the caller's permissions, so callers must grant at least this much.
-# id-token: write lets the job assume the AWS role via OIDC.
 permissions:
   contents: read
   actions: write
-  id-token: write
 
 jobs:
   deploy-network:
     runs-on: ubuntu-latest
+    # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
     env:
       GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
     outputs:
@@ -134,11 +134,11 @@ jobs:
 
       - name: Store the GCP key in a file
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_HELM_SA_KEY: ${{ secrets.GCP_HELM_SA_KEY }}
         run: |
           set +x
           umask 077
-          printf '%s' "$GCP_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          printf '%s' "$GCP_HELM_SA_KEY" > "$GOOGLE_APPLICATION_CREDENTIALS"
           jq -e . "$GOOGLE_APPLICATION_CREDENTIALS" >/dev/null
 
       - name: Setup GCP authentication
@@ -155,14 +155,6 @@ jobs:
         with:
           terraform_version: "1.7.5"
           terraform_wrapper: false # Disable the wrapper that adds debug output, this messes with reading terraform output
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-          role-session-name: deploy-network-${{ github.run_id }}
-          role-duration-seconds: 7200 # 2h
 
       - name: Deploy network
         id: deploy-network
@@ -258,7 +250,6 @@ jobs:
     needs: deploy-network
     if: inputs.network == 'testnet' || inputs.network == 'mainnet'
     uses: ./.github/workflows/deploy-irm.yml
-    secrets: inherit
     with:
       network: ${{ inputs.network }}
       l1_network: ${{ inputs.network == 'mainnet' && 'mainnet' || 'sepolia' }}

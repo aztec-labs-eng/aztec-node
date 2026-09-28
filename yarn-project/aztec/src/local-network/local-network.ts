@@ -119,6 +119,9 @@ export async function createLocalNetwork(config: Partial<LocalNetworkConfig> = {
     // local signing protection runs against an ephemeral store. That is acceptable for this dev
     // network; production validators must persist it and fail-fast when the data directory is unset.
     allowEphemeralSigningProtection: config.allowEphemeralSigningProtection ?? true,
+    // The local network runs one or two blocks per slot against an Inbox nobody is filling with a cap-sized
+    // backlog, which is below the catch-up floor a production sequencer refuses to start under.
+    allowUnsafeInboxCatchupCapacity: config.allowUnsafeInboxCatchupCapacity ?? true,
     txPublicSetupAllowListExtend: [...tokenAllowList, ...(config.txPublicSetupAllowListExtend ?? [])],
     // The local network runs against anvil with no committee, so it defaults to the deterministic
     // AutomineSequencer, which owns L1 time control (warps the dateProvider and L1 timestamps to slot

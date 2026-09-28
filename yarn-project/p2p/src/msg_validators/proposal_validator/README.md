@@ -15,7 +15,7 @@ File: `proposal_validator.ts`
 | 1 | **Slot check**: must be `currentSlot` or `nextSlot`. Previous slot within 500ms tolerance: IGNORE. | REJECT | HighToleranceError |
 | 2 | **Signature**: `getSender()` must recover a valid address. If `signedTxs` present, its recovered sender must match. | REJECT | MidToleranceError |
 | 3 | **Txs permitted**: if `disableTransactions`, must have 0 txHashes and 0 embedded txs | REJECT | MidToleranceError |
-| 4 | **Max txs**: `txHashes.length <= maxTxsPerBlock` | REJECT | MidToleranceError |
+| 4 | **Max txs**: `txHashes.length <= MAX_TXS_PER_CHECKPOINT` (based on blob capacity), further restricted by `maxTxsPerBlock` when configured. Also applies to checkpoint-embedded blocks. | REJECT | MidToleranceError |
 | 5 | **Embedded txs in txHashes**: every embedded tx's hash must appear in `txHashes` | REJECT | MidToleranceError |
 | 6 | **Proposer check**: signer must match expected proposer for slot (skipped if committee size = 0) | REJECT | MidToleranceError |
 | 7 | **Tx hash integrity**: each embedded tx's recomputed hash must match declared hash | REJECT | LowToleranceError |
@@ -28,7 +28,7 @@ Deserialization guards: `BlockProposal.fromBuffer` and `SignedTxs.fromBuffer` bo
 | # | Rule | Consequence |
 |---|------|-------------|
 | 9 | **Duplicate**: same archive root already stored | IGNORE (no penalty) |
-| 10 | **Per-position cap**: max 2 proposals per (slot, indexWithinCheckpoint) | REJECT + HighToleranceError |
+| 10 | **Per-position cap**: max 2 proposals per (slot, indexWithinCheckpoint) | IGNORE (receiver-local drop: no penalty, no re-broadcast) |
 | 11 | **Equivocation**: >1 distinct proposal for same (slot, index) | ACCEPT (rebroadcast for detection). At count=2: `duplicateProposalCallback` fires -> slash event (`OffenseType.DUPLICATE_PROPOSAL`, configured via `slashDuplicateProposalPenalty`) |
 
 ### Stage 3: Validator-Client Processing (BlockProposalHandler)
@@ -84,7 +84,7 @@ The checkpoint's embedded `lastBlock` is extracted via `getBlockProposal()` and 
 | Rule | Consequence | File |
 |------|-------------|------|
 | Block proposal must pass `BlockProposalValidator.validate()` | If REJECT: entire checkpoint REJECTED | `libp2p_service.ts` |
-| Block proposal must not exceed per-position cap (2) | Checkpoint REJECTED + HighToleranceError | same |
+| Block proposal must not exceed per-position cap (2) | Checkpoint IGNORED (terminal block dropped as a receiver-local drop: no store, no re-broadcast, no penalty) | same |
 | Block equivocation detected (>1 proposals for same slot+index) | Checkpoint REJECTED (block itself is ACCEPT for re-broadcast) | same |
 
 ### Stage 3: Mempool (Attestation Pool)
@@ -92,7 +92,7 @@ The checkpoint's embedded `lastBlock` is extracted via `getBlockProposal()` and 
 | Rule | Consequence | File |
 |------|-------------|------|
 | Duplicate (same archive ID) | IGNORE (no penalty). Embedded block still processed if valid. | `attestation_pool.ts` |
-| Per-slot cap: `MAX_CHECKPOINT_PROPOSALS_PER_SLOT` = 2 | REJECT + HighToleranceError. Embedded block still processed. | same |
+| Per-slot cap: `MAX_CHECKPOINT_PROPOSALS_PER_SLOT` = 2 | IGNORE (receiver-local drop: no penalty, no re-broadcast). Embedded block still processed. | same |
 
 ### Stage 4: Equivocation Detection
 
@@ -120,4 +120,3 @@ Determines whether the validator signs an attestation.
 ### Gossipsub Topic Scoring
 
 P3 enabled with expected rate of 1 message per slot. P4 weight = -20, max P3 penalty = -34 per topic.
-

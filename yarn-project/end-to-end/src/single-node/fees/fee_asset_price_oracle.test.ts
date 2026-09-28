@@ -1,7 +1,7 @@
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { EthCheatCodes } from '@aztec-labs/aztec/testing';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
-import { RollupContract, STATE_VIEW_ADDRESS } from '@aztec-labs/ethereum/contracts';
+import { FeeAssetPriceOracle, RollupContract, STATE_VIEW_ADDRESS } from '@aztec-labs/ethereum/contracts';
 import type { Anvil } from '@aztec-labs/ethereum/test';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -70,6 +70,7 @@ describe('single-node/fees/fee_asset_price_oracle', () => {
 
     const l1Client = context.deployL1ContractsValues.l1Client;
     rollup = new RollupContract(l1Client, context.deployL1ContractsValues.l1ContractAddresses.rollupAddress);
+    await expect(new FeeAssetPriceOracle(l1Client, rollup).getOraclePrice()).resolves.toBeDefined();
   });
 
   afterAll(async () => {

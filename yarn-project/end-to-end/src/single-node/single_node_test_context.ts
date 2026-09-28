@@ -1,6 +1,11 @@
 import type { InitialAccountData } from '@aztec-labs/accounts/testing';
 import type { Archiver } from '@aztec-labs/archiver';
-import { type AztecNodeConfig, AztecNodeService, createAztecNodeService } from '@aztec-labs/aztec-node';
+import {
+  type AztecNodeConfig,
+  AztecNodeService,
+  type CreateAztecNodeDeps,
+  createAztecNodeService,
+} from '@aztec-labs/aztec-node';
 import { getAccountContractAddress } from '@aztec-labs/aztec.js/account';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
@@ -96,6 +101,13 @@ export type TrackedSequencerEvent = {
 
 /** A `block-proposed` sequencer event captured for the pipelining-offset assertion. */
 export type BlockProposedEvent = { blockNumber: BlockNumber; slot: SlotNumber; buildSlot: SlotNumber };
+
+/**
+ * The in-process test dependencies a node may be created with. Never part of {@link AztecNodeConfig}, so they are
+ * unreachable over RPC; each node gets its own object, which is what lets a multi-node test tell the proposer's
+ * observations apart from a named validator's.
+ */
+export type NodeTestDeps = Pick<CreateAztecNodeDeps, 'checkpointProposalJobTestHooks' | 'blockProposalObservers'>;
 
 /**
  * The 24s-slot reorg cadence shared by every reorg/prune/HA test, regardless of single-node vs
@@ -426,6 +438,7 @@ export class SingleNodeTestContext {
     opts: Partial<AztecNodeConfig> & {
       dontStartSequencer?: boolean;
       slashingProtectionDb?: SlashingProtectionDatabase;
+      testDeps?: NodeTestDeps;
     } = {},
   ) {
     const nodeIndex = this.nodes.length + 1;
@@ -453,6 +466,7 @@ export class SingleNodeTestContext {
                 : undefined,
             },
             slashingProtectionDb: opts.slashingProtectionDb,
+            ...opts.testDeps,
           },
           {
             genesis: this.context.genesis,

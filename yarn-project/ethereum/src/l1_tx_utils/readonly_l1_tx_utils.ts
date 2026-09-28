@@ -59,6 +59,20 @@ function isInsufficientFundsRpcError(err: unknown): boolean {
   return /insufficient funds/i.test(messages);
 }
 
+/** Outcome of simulating a single top-level L1 transaction. */
+export type L1SimulationResult = {
+  /** Gas used by the simulated transaction, as reported for the top-level call (not for the enclosing block). */
+  gasUsed: bigint;
+  /**
+   * Gas the node reports the call as having used before refunds, when it reports it at all (see EIP-7778).
+   * It is a better sizing basis than the refunded `gasUsed`, but it is not a guaranteed sufficient gas limit,
+   * so callers still pad it. Absent when the node does not report it; an explicit `0` is a reported value.
+   */
+  maxUsedGas?: bigint;
+  /** Return data of the simulated call. */
+  result: `0x${string}`;
+};
+
 export class ReadOnlyL1TxUtils {
   public config: Required<L1TxUtilsConfig>;
   protected interrupted = false;
@@ -373,7 +387,7 @@ export class ReadOnlyL1TxUtils {
     stateOverrides: StateOverride = [],
     abi: Abi = RollupAbi,
     _gasConfig?: L1TxUtilsConfig & { fallbackGasEstimate?: bigint },
-  ): Promise<{ gasUsed: bigint; result: `0x${string}` }> {
+  ): Promise<L1SimulationResult> {
     const gasConfig = { ...this.config, ..._gasConfig };
 
     const call: any = {
@@ -391,7 +405,7 @@ export class ReadOnlyL1TxUtils {
     stateOverrides: StateOverride = [],
     gasConfig: L1TxUtilsConfig & { fallbackGasEstimate?: bigint },
     abi: Abi,
-  ) {
+  ): Promise<L1SimulationResult> {
     const simulateBlocks = () =>
       this.client.simulateBlocks({
         validation: false,
@@ -432,16 +446,24 @@ export class ReadOnlyL1TxUtils {
       throw err;
     }
 
-    if (result[0].calls[0].status === 'failure') {
-      this.logger?.error('L1 transaction simulation failed', result[0].calls[0].error);
-      const decodedError = decodeErrorResult({ abi, data: result[0].calls[0].data });
+    const simulatedCall = result[0].calls[0];
+    if (simulatedCall.status === 'failure') {
+      this.logger?.error('L1 transaction simulation failed', simulatedCall.error);
+      const decodedError = decodeErrorResult({ abi, data: simulatedCall.data });
 
       throw new Error(
         `L1 transaction simulation failed with error ${decodedError.errorName}(${decodedError.args?.join(',')})`,
       );
     }
-    this.logger?.debug(`L1 transaction simulation succeeded`, { ...result[0].calls[0] });
-    return { gasUsed: result[0].gasUsed, result: result[0].calls[0].data as `0x${string}` };
+    this.logger?.debug(`L1 transaction simulation succeeded`, { ...simulatedCall });
+    // The transaction gas limit must cover the top-level call, not the enclosing simulated block: under
+    // multidimensional gas accounting a block's gasUsed is the max across dimensions while a transaction is
+    // charged for their sum, so block gas can be lower than what the transaction itself needs.
+    return {
+      gasUsed: simulatedCall.gasUsed,
+      maxUsedGas: simulatedCall.maxUsedGas,
+      result: simulatedCall.data as `0x${string}`,
+    };
   }
 
   public bumpGasLimit(gasLimit: bigint, _gasConfig?: L1TxUtilsConfig): bigint {

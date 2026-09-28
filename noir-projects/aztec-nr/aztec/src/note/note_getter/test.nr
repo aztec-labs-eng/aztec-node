@@ -44,7 +44,7 @@ where
     assert_eq(count, vec.len());
 }
 
-unconstrained fn confirmed_to_hinted<Note>(confirmed: ConfirmedNote<Note>) -> HintedNote<Note> {
+fn confirmed_to_hinted<Note>(confirmed: ConfirmedNote<Note>) -> HintedNote<Note> {
     HintedNote {
         note: confirmed.note,
         contract_address: confirmed.contract_address,

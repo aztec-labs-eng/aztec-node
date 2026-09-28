@@ -30,6 +30,34 @@ This is a breaking change to the PXE oracle interface (version 31 → 32): contr
 + let origin_block = BlockReference { block_number, block_hash };
 ```
 
+### [AztecNode] `getBlockHashMembershipWitness` requires an existing reference block; new `getBlockHashMembershipWitnessAtArchive`
+
+`getBlockHashMembershipWitness(referenceBlock, blockHash)` returns a witness against the reference block header's `lastArchive.root`, the archive before the reference block was appended. v5 nodes also accepted a number-only reference one past the latest block, answering against the latest block's archive without that block existing. v6 does not: every reference, including a bare number, must name a block the node has, and a number past the tip fails once the node's hold-off for unseen blocks runs out.
+
+The node also checks that the archive it proves against is exactly the one the reference header commits to, and throws if its world state holds a different archive at that height (for instance after a reorg) instead of answering from it.
+
+To prove membership against a given archive root, including a block's own post-block archive, use the new `getBlockHashMembershipWitnessAtArchive({ archive }, blockHash)`. It accepts only an `{ archive }` selector, needs no later block to exist, and throws if the node does not know the root. Picking a root does not make it canonical or final: callers must choose a root their verifier accepts.
+
+```diff
+- // Witness against the archive after block N, via the block after it
+- const witness = await aztecNode.getBlockHashMembershipWitness(BlockNumber(n + 1), blockHash);
++ const witness = await aztecNode.getBlockHashMembershipWitnessAtArchive({ archive: blockN.archive.root }, blockHash);
+```
+
+Callers that anchor on a block header, such as PXE and its oracles, keep using `getBlockHashMembershipWitness`.
+
+### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
+
+The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.
+
+### [Protocol] The protocol nullifier is derived from the tx request's salt alone; `tx_request_salt` becomes `protocol_nullifier`
+
+The protocol nullifier, which the init kernel always inserts at index 0 of a transaction's nullifiers, is now `silo(NULL_MSG_SENDER, H(origin, chain_id, version, salt))` instead of `H(tx_request)`. Gas settings and the first call's arguments are no longer part of its preimage, so two transactions built with the same salt (a fee bump, or a cancellation) share it and at most one of them can be mined. The proof is still pinned to the full tx request by the init kernel. The kernel cannot check that the salt is random, so wallets must draw it fresh for every transaction: two requests with the same origin and salt are mutually exclusive.
+
+The `tx_request_salt` field of `PrivateCircuitPublicInputs`, `PrivateContextInputs` and `PrivateTxConstantData` is replaced by `protocol_nullifier`: the siloed protocol nullifier, kernel-checked and identical on every private call of the transaction. The raw salt no longer reaches app circuits. This is set by the framework and PXE; contracts need no changes beyond recompiling. `TxRequest` gains `computeProtocolNullifierValue()` / `computeProtocolNullifier()` in Aztec.js (`compute_protocol_nullifier_value` / `compute_protocol_nullifier` in Noir); `TxRequest.hash()` (Noir: `impl Hash for TxRequest`) and `DOM_SEP__TX_REQUEST` are removed, since computing the old protocol nullifier was their only job; and `computeProtocolNullifier(value)` in `@aztec-labs/stdlib/hash` takes the unsiloed value.
+
+Nothing in accounts, auth witnesses or wallets changes with this release; the field is only renamed and its value redefined. It is the protocol half of the design that lets accounts and auth witnesses bind to `protocol_nullifier` for replay protection, cancellation and fee bumping, which lands in the framework separately.
+
 ### [Node] `ACVM_*` config renamed to `NOIR_EXECUTE_*`
 
 Protocol circuits are now executed with noir's `noir-execute` rather than the `acvm` binary, so the
@@ -137,6 +165,20 @@ them; only a direct dependency needs updating.
 The `@aztec` scope keeps the packages published for earlier versions, so an existing project
 pinned to an older release continues to install unchanged. There is no `@aztec-foundation`
 release of those older versions: the scope starts at `6.0.0-nightly.20260901`.
+
+### [Aztec.nr] aztec-nr moved to `aztec-labs-eng/aztec-nr`
+
+The aztec-nr crates are now published at https://github.com/aztec-labs-eng/aztec-nr. The previous
+repository, `AztecProtocol/aztec-nr`, has no tags from v6 onwards, so a project that only bumps its
+`tag` fails to compile with `Remote branch v6.x.x not found`. Update the `git` field of every aztec-nr
+dependency in your `Nargo.toml` files as well:
+
+```diff
+-aztec = { git = "https://github.com/AztecProtocol/aztec-nr", tag = "v5.2.0", directory = "aztec" }
++aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v<version>", directory = "aztec" }
+```
+
+`aztec compile` warns when a dependency still points at the previous repository.
 
 ### [Aztec.nr] `DelayedPublicMutable` rejects delays below one hour
 

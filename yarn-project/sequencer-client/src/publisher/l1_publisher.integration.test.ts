@@ -1,4 +1,4 @@
-import { InboxAbi, RollupAbi } from '@aztec-foundation/l1-artifacts';
+import { RollupAbi } from '@aztec-foundation/l1-artifacts';
 
 import type { ArchiverDataSource } from '@aztec-labs/archiver';
 import { MockL1ToL2MessageSource } from '@aztec-labs/archiver/test';
@@ -12,7 +12,6 @@ import {
 } from '@aztec-labs/blob-lib';
 import {
   GENESIS_ARCHIVE_ROOT,
-  MAX_L1_TO_L2_MSGS_PER_BLOCK,
   MAX_L1_TO_L2_MSGS_PER_CHECKPOINT,
   MAX_NULLIFIERS_PER_TX,
   MAX_PROCESSABLE_L2_GAS,
@@ -22,7 +21,12 @@ import { EpochCache } from '@aztec-labs/epoch-cache';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { type L1ContractsConfig, getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
-import { GovernanceProposerContract, RollupContract, SimulationOverridesBuilder } from '@aztec-labs/ethereum/contracts';
+import {
+  GovernanceProposerContract,
+  InboxContract,
+  RollupContract,
+  SimulationOverridesBuilder,
+} from '@aztec-labs/ethereum/contracts';
 import {
   type DeployAztecL1ContractsArgs,
   deployAztecL1Contracts,
@@ -39,6 +43,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times, timesParallel } from '@aztec-labs/foundation/collection';
@@ -95,12 +100,16 @@ import {
 import { NativeWorldStateService, ServerWorldStateSynchronizer, type WorldStateConfig } from '@aztec-labs/world-state';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import { type Address, encodeFunctionData, getAbiItem, getAddress, getContract, multicall3Abi } from 'viem';
+import { type Address, encodeFunctionData, getAbiItem, getAddress, multicall3Abi } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { type SequencerClientConfig, getConfigEnvVars } from '../config.js';
-import { selectInboxBucketForBlock } from '../sequencer/inbox_bucket_selector.js';
+import {
+  PROTOCOL_INBOX_CONSUMPTION_CAPS,
+  getEndpointUpperBound,
+  resolveEndpoint,
+} from '../sequencer/inbox_message_selection.js';
 import { sendL1ToL2Message } from './l1_to_l2_messaging.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
 import { SequencerPublisher } from './sequencer-publisher.js';
@@ -149,9 +158,9 @@ describe('L1Publisher integration', () => {
 
   let builderDb: NativeWorldStateService;
 
-  // Backs the blockSource mock's streaming L1->L2 message queries. The world-state synchronizer reconstructs each
-  // block's consumed message bundle from Inbox buckets when it syncs a block back, so the test
-  // registers one bucket per published block here (see buildAndPublishBlock).
+  // Backs the blockSource mock's streaming L1->L2 message queries. The world-state synchronizer reads each block's
+  // consumed message bundle by leaf count when it syncs a block back, so the test mirrors every Inbox bucket and its
+  // leaves here before publishing the block that consumes them (see buildAndPublishBlock).
   let messageSource: MockL1ToL2MessageSource;
 
   // The header of the last block
@@ -274,7 +283,7 @@ describe('L1Publisher integration', () => {
     const initialHeaderHash = (await initialHeader.hash()).toString();
     const genesisArchiveSnapshot = new AppendOnlyTreeSnapshot(
       deployL1ContractsArgs.genesisArchiveRoot ?? new Fr(GENESIS_ARCHIVE_ROOT),
-      1,
+      TreeLeafIndex(1),
     );
     const genesisBlock = new L2Block(
       genesisArchiveSnapshot,
@@ -290,20 +299,7 @@ describe('L1Publisher integration', () => {
       checkpointNumber: CheckpointNumber.ZERO,
       indexWithinCheckpoint: IndexWithinCheckpoint(0),
     };
-    // Seed the genesis sentinel bucket (seq 0, no messages) so the world-state synchronizer can resolve a
-    // totalMsgCount of 0 to a bucket when reconstructing the first block's message bundle.
     messageSource = new MockL1ToL2MessageSource(0);
-    messageSource.setInboxBucket(
-      {
-        seq: 0n,
-        inboxRollingHash: Fr.ZERO,
-        totalMsgCount: 0n,
-        timestamp: 0n,
-        msgCount: 0,
-        lastMessageIndex: 0n,
-      },
-      [],
-    );
     blockSource = mock<ArchiverDataSource>({
       getBlocks(query: BlocksQuery) {
         if (!('from' in query)) {
@@ -355,6 +351,7 @@ describe('L1Publisher integration', () => {
             checkpoint,
             new L1PublishedData(BigInt(block.number), BigInt(block.number), (await block.hash()).toString()),
             [],
+            CommitteeAttestationsAndSigners.packAttestations([]),
           ),
         ];
       },
@@ -379,13 +376,10 @@ describe('L1Publisher integration', () => {
       getBlockNumber(): Promise<BlockNumber> {
         return Promise.resolve(BlockNumber(blocks.at(-1)?.number ?? BlockNumber.ZERO));
       },
-      // Streaming L1->L2 message reconstruction: the world-state synchronizer resolves each
-      // block's consumed message bundle from the Inbox buckets registered per published block in buildAndPublishBlock.
-      getInboxBucketByTotalMsgCount(totalMsgCount: bigint) {
-        return messageSource.getInboxBucketByTotalMsgCount(totalMsgCount);
-      },
-      getL1ToL2MessagesBetweenBuckets(fromExclusive: bigint, toInclusive: bigint) {
-        return messageSource.getL1ToL2MessagesBetweenBuckets(fromExclusive, toInclusive);
+      // Streaming L1->L2 message reconstruction: the world-state synchronizer reads each block's consumed message
+      // bundle by leaf count from the message log buildAndPublishBlock mirrors the Inbox into.
+      getL1ToL2MessagesBetweenLeafCounts(startLeafCount: bigint, endLeafCount: bigint) {
+        return messageSource.getL1ToL2MessagesBetweenLeafCounts(startLeafCount, endLeafCount);
       },
     });
 
@@ -462,6 +456,7 @@ describe('L1Publisher integration', () => {
     // for the rest of the run, logging an error per iteration and stealing time from later tests.
     publisher?.interrupt();
     await publisher?.l1TxUtils.waitMonitoringStopped();
+    publisher?.dispose();
     await tryStop(anvil);
     await tryStop(worldStateSynchronizer);
   });
@@ -521,7 +516,7 @@ describe('L1Publisher integration', () => {
       tempFork,
     );
 
-    await builder.addBlock(globalVariables, txs, l1ToL2Messages, { insertTxsEffects: true });
+    await builder.applyEffectsAndSealBlock(globalVariables, txs, l1ToL2Messages);
     const checkpoint = await builder.completeCheckpoint();
 
     await tempFork.close();
@@ -560,6 +555,12 @@ describe('L1Publisher integration', () => {
     return buildSingleCheckpoint({ ...opts, slot });
   };
 
+  /** The Inbox total and parent the integrated preflight checks for a checkpoint this harness built. */
+  const preflightInboxArgs = (checkpoint: Checkpoint) => ({
+    expectedTotal: BigInt(checkpoint.blocks.at(-1)!.header.state.l1ToL2MessageTree.nextAvailableLeafIndex),
+    expectedParentCheckpointNumber: CheckpointNumber(CheckpointNumber.fromBlockNumber(checkpoint.blocks[0].number) - 1),
+  });
+
   describe('block building', () => {
     beforeEach(async () => {
       // This suite proposes consecutive checkpoints, each consuming the streaming-Inbox messages sent while it was
@@ -578,23 +579,13 @@ describe('L1Publisher integration', () => {
         '0x1647b194c649f5dd01d7c832f89b0f496043c9150797923ea89e93d5ac619a93',
       );
 
-      // Streaming Inbox consumption: the L1 Rollup only lets a checkpoint consume Inbox buckets
-      // that have aged past the censorship cutoff (the build frame start, `toTimestamp(slot - 1)` minus one L1 slot),
-      // measured in L1 time, not whole checkpoints. Each checkpoint mirrors the real Inbox buckets into messageSource,
-      // then reuses the production `selectInboxBucketForBlock` (which mirrors `ProposeLib.validateInboxConsumption`) to
-      // pick exactly the buckets it must consume, deriving the consumed bundle, the propose bucket hint, and the header
-      // rolling hash from that one selection so header, world state, and L1 agree by construction.
-      const inbox = getContract({
-        address: getAddress(l1ContractAddresses.inboxAddress.toString()),
-        abi: InboxAbi,
-        client: l1Client,
-      });
-      // Every message sent to the Inbox, in insertion order, so each bucket's leaves can be mirrored into messageSource.
-      const allSentMessages: Fr[] = [];
-      let mirroredThroughSeq = 0n;
-      let mirroredThroughTotal = 0n;
-      // The last Inbox bucket this checkpoint chain has consumed through; genesis sentinel to start.
-      let parent = { seq: 0n, totalMsgCount: 0n };
+      // Streaming Inbox consumption: each checkpoint mirrors the messages sent while it was being built into the
+      // archiver stand-in as a plain ordered log, then reuses the production completion step to resolve its final
+      // position to a live Inbox bucket, deriving the consumed bundle, the propose bucket hint and the header rolling
+      // hash from that one resolution so header, world state and L1 agree by construction.
+      const inbox = new InboxContract(l1Client, l1ContractAddresses.inboxAddress);
+      // The message total the checkpoint chain has consumed through so far.
+      let consumedTotal = 0n;
       let previousInboxRollingHash = Fr.ZERO;
       const blobFieldsPerCheckpoint: Fr[][] = [];
       // The below batched blob is used for testing different epochs with 1..numberOfConsecutiveBlocks blocks on L1.
@@ -610,28 +601,7 @@ describe('L1Publisher integration', () => {
         for (let j = 0; j < l1ToL2Content.length; j++) {
           sentThisCheckpoint.push(await sendToL2(l1ToL2Content[j], recipientAddress));
         }
-        allSentMessages.push(...sentThisCheckpoint);
-
-        // Mirror the Inbox's new buckets (seq, timestamp, rolling hash, totals) and their leaves into messageSource,
-        // so the selector, the world-state synchronizer, and L1 all read the same bucket state.
-        const currentBucketSeq = await inbox.read.getCurrentBucketSeq();
-        for (let seq = mirroredThroughSeq + 1n; seq <= currentBucketSeq; seq++) {
-          const bucket = await inbox.read.getBucket([seq]);
-          const bucketMessages = allSentMessages.slice(Number(mirroredThroughTotal), Number(bucket.totalMsgCount));
-          messageSource.setInboxBucket(
-            {
-              seq,
-              inboxRollingHash: Fr.fromString(bucket.rollingHash),
-              totalMsgCount: bucket.totalMsgCount,
-              timestamp: bucket.timestamp,
-              msgCount: Number(bucket.msgCount),
-              lastMessageIndex: bucket.totalMsgCount - 1n,
-            },
-            bucketMessages,
-          );
-          mirroredThroughTotal = bucket.totalMsgCount;
-        }
-        mirroredThroughSeq = currentBucketSeq;
+        messageSource.appendL1ToL2Messages(sentThisCheckpoint);
 
         // Ensure that each transaction has unique (non-intersecting nullifier values)
         const totalNullifiersPerBlock = 4 * MAX_NULLIFIERS_PER_TX;
@@ -654,24 +624,22 @@ describe('L1Publisher integration', () => {
           new GasFees(0, await rollup.getManaMinFeeAt(timestamp, true)),
         );
 
-        // Reuse the production streaming selector to pick the buckets this single-block (hence last-block) checkpoint
-        // must consume, then derive the consumed bundle, the propose bucket hint, and the rolling-hash cursor from
-        // that one selection so the header, world state, and L1 all agree.
-        const previousSlotStart = await rollup.getTimestampForSlot(SlotNumber(slot - 1));
-        const cutoffTimestamp = previousSlotStart - BigInt(config.ethereumSlotDuration);
-        const selection = await selectInboxBucketForBlock({
-          messageSource,
-          now: previousSlotStart,
-          minBucketAgeSeconds: BigInt(config.ethereumSlotDuration),
-          parent,
-          checkpointStartTotalMsgCount: parent.totalMsgCount,
-          perBlockCap: MAX_L1_TO_L2_MSGS_PER_BLOCK,
-          perCheckpointCap: MAX_L1_TO_L2_MSGS_PER_CHECKPOINT,
-          isLastBlock: true,
-          cutoffTimestamp,
+        // Reuse the production endpoint step: this single-block checkpoint must end at a live bucket, so resolve the
+        // latest bucket end within one block's reach and consume every message up to it.
+        const cursor = (await messageSource.getMessagePosition(consumedTotal))!;
+        const upperBound = getEndpointUpperBound({
+          cursorCount: consumedTotal,
+          localSyncedCount: (await messageSource.getSyncedMessagePosition()).totalMessageCount,
+          checkpointStartCount: consumedTotal,
+          isFinalBlock: true,
+          caps: PROTOCOL_INBOX_CONSUMPTION_CAPS,
         });
-        const currentL1ToL2Messages = selection.consume ? selection.bundle : [];
-        const bucketHint = selection.consume ? selection.bucket.seq : parent.seq;
+        const completion = await resolveEndpoint({ inbox, messageSource, cursor, upperBound });
+        if (!completion.ok) {
+          throw new Error(`Cannot complete checkpoint ${i + 1} at a live Inbox bucket: ${completion.reason}`);
+        }
+        const currentL1ToL2Messages = completion.range.messages;
+        const bucketHint = completion.bucketSeq;
 
         const checkpoint = await buildCheckpoint(
           globalVariables,
@@ -682,9 +650,7 @@ describe('L1Publisher integration', () => {
         );
         previousInboxRollingHash = checkpoint.header.inboxRollingHash;
         const block = checkpoint.blocks[0];
-        if (selection.consume) {
-          parent = { seq: selection.bucket.seq, totalMsgCount: selection.bucket.totalMsgCount };
-        }
+        consumedTotal = completion.endpoint.totalMessageCount;
 
         const totalManaUsed = txs.reduce((acc, tx) => acc.add(new Fr(tx.gasUsed.billedGas.l2Gas)), Fr.ZERO);
         expect(totalManaUsed.toBigInt()).toEqual(block.header.totalManaUsed.toBigInt());
@@ -845,7 +811,7 @@ describe('L1Publisher integration', () => {
 
       const canPropose = await publisher.canProposeAt(new Fr(GENESIS_ARCHIVE_ROOT), proposer!);
       expect(canPropose?.slot).toEqual(block.header.getSlot());
-      await publisher.validateCheckpointHeader(checkpoint.header);
+      await publisher.validateCheckpointHeaderAndInbox(checkpoint.header, preflightInboxArgs(checkpoint));
 
       const proposerSigner = validators.find(v => v.address.equals(proposer!));
 
@@ -866,7 +832,7 @@ describe('L1Publisher integration', () => {
 
       const canPropose = await publisher.canProposeAt(new Fr(GENESIS_ARCHIVE_ROOT), proposer!);
       expect(canPropose?.slot).toEqual(block.header.getSlot());
-      await publisher.validateCheckpointHeader(checkpoint.header);
+      await publisher.validateCheckpointHeaderAndInbox(checkpoint.header, preflightInboxArgs(checkpoint));
 
       // Enqueue no longer simulates — the bundle simulate at send time drops the failing propose
       // and sendRequests returns undefined (no surviving actions). The drop is reported via a
@@ -895,7 +861,7 @@ describe('L1Publisher integration', () => {
 
       const canPropose = await publisher.canProposeAt(new Fr(GENESIS_ARCHIVE_ROOT), proposer!);
       expect(canPropose?.slot).toEqual(block.header.getSlot());
-      await publisher.validateCheckpointHeader(checkpoint.header);
+      await publisher.validateCheckpointHeaderAndInbox(checkpoint.header, preflightInboxArgs(checkpoint));
 
       const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());
       const attestationsAndSignersSignature = signAttestationsAndSigners(
@@ -933,7 +899,7 @@ describe('L1Publisher integration', () => {
 
       const canPropose = await publisher.canProposeAt(new Fr(GENESIS_ARCHIVE_ROOT), proposer!);
       expect(canPropose?.slot).toEqual(block.header.getSlot());
-      await publisher.validateCheckpointHeader(checkpoint.header);
+      await publisher.validateCheckpointHeaderAndInbox(checkpoint.header, preflightInboxArgs(checkpoint));
 
       const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());
       const attestationsAndSignersSignature = signAttestationsAndSigners(
@@ -1021,8 +987,15 @@ describe('L1Publisher integration', () => {
 
       // Same for validation
       logger.warn('Checking validate checkpoint header');
-      await expect(publisher.validateCheckpointHeader(checkpoint.header)).rejects.toThrow(/Rollup__InvalidArchive/);
-      await publisher.validateCheckpointHeader(checkpoint.header, invalidationSimulationOverridesPlan);
+      // Against the real state the pending tip is the bad checkpoint, not the parent this one was built on.
+      await expect(
+        publisher.validateCheckpointHeaderAndInbox(checkpoint.header, preflightInboxArgs(checkpoint)),
+      ).rejects.toThrow(/Rollup__UnexpectedParentCheckpoint/);
+      await publisher.validateCheckpointHeaderAndInbox(
+        checkpoint.header,
+        preflightInboxArgs(checkpoint),
+        invalidationSimulationOverridesPlan,
+      );
 
       // At this point I'm gonna need to propose the correct signature ye? So confused actually here.
       const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());

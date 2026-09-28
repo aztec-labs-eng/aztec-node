@@ -239,10 +239,9 @@ describe('single-node/fees/fee_settings', () => {
 
       const lowerMinFees = await getCurrentMinFeesAfterCheckpoint(testContractDeployBlock);
       // `higherMinFees` is the synthetic "stale" snapshot the wallet supposedly took before the
-      // real L2 fee bumped — it only needs to stay above the realized `bumpedMinFees` so that
-      // `txWithNoPadding` is still mineable after the bump. Use `4x` for unambiguous headroom
-      // while keeping the snapshot below the 6x default-padding cap.
-      const higherMinFees = lowerMinFees.mul(4);
+      // real L2 fee bumped. Match the default-padded ceiling, which this test already requires to
+      // exceed the realized bump, so both fee-selection paths have the same guaranteed headroom.
+      const higherMinFees = lowerMinFees.mul(1 + DEFAULT_MIN_FEE_PADDING);
 
       const { txWithNoPadding, txWithDefaultPadding } = await prepareTxsWithMockedMinFees(higherMinFees, lowerMinFees);
 

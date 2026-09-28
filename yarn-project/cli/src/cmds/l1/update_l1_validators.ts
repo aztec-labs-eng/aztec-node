@@ -3,14 +3,16 @@ import { RollupAbi, StakingAssetHandlerAbi, TestERC20Abi } from '@aztec-foundati
 import { createEthereumChain, isAnvilTestChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client, getPublicClient } from '@aztec-labs/ethereum/client';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
-import { GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { type AttesterExitAuthorization, GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EthCheatCodes } from '@aztec-labs/ethereum/test';
-import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
-import { encodeFunctionData, formatEther, getContract, maxUint256 } from 'viem';
+import { readFile } from 'node:fs/promises';
+import { encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 export interface RollupCommandArgs {
@@ -252,6 +254,118 @@ export async function removeL1Validator({
     }),
   });
   dualLog(`Transaction hash: ${receipt.transactionHash}`);
+}
+
+/** Reads relayed attester exit authorizations from a JSON array. */
+export async function readAttesterExitAuthorizations(path: string): Promise<AttesterExitAuthorization[]> {
+  const parsed: unknown = JSON.parse(await readFile(path, 'utf-8'));
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error('Attester exit authorization file must contain a non-empty JSON array');
+  }
+
+  return parsed.map((value, index) => parseAttesterExitAuthorization(value, index));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseAttesterExitAuthorization(value: unknown, index: number): AttesterExitAuthorization {
+  if (!isRecord(value)) {
+    throw new Error(`Attester exit authorization ${index} must be an object`);
+  }
+
+  const authorization = value;
+  if (typeof authorization.attester !== 'string') {
+    throw new Error(`Attester exit authorization ${index} has an invalid attester`);
+  }
+  if (typeof authorization.deadline !== 'string' || !/^\d+$/.test(authorization.deadline)) {
+    throw new Error(`Attester exit authorization ${index} deadline must be a decimal string`);
+  }
+  if (typeof authorization.signature !== 'string' || !isHex(authorization.signature)) {
+    throw new Error(`Attester exit authorization ${index} has an invalid signature`);
+  }
+
+  return {
+    attester: EthAddress.fromString(authorization.attester),
+    deadline: BigInt(authorization.deadline),
+    signature: Signature.fromString(authorization.signature).toViemSignature(),
+  };
+}
+
+/** Relays a batch of attester-signed exits. */
+export async function initiateWithdrawByAttesterBatch({
+  rpcUrls,
+  chainId,
+  privateKey,
+  mnemonic,
+  authorizations,
+  upToLimit,
+  rollupAddress,
+  log,
+  debugLogger,
+}: Omit<RollupCommandArgs, 'withdrawerAddress'> &
+  LoggerArgs & {
+    authorizations: AttesterExitAuthorization[];
+    upToLimit: boolean;
+  }) {
+  const account = getAccount(privateKey, mnemonic);
+  const chain = createEthereumChain(rpcUrls, chainId);
+  const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
+  const rollup = new RollupContract(client, rollupAddress);
+  const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
+  const { receipt } = upToLimit
+    ? await rollup.initiateWithdrawByAttesterBatchUpToLimit(l1TxUtils, authorizations)
+    : await rollup.initiateWithdrawByAttesterBatch(l1TxUtils, authorizations);
+
+  if (receipt.status !== 'success') {
+    throw new Error(`Attester exit batch reverted: ${receipt.transactionHash}`);
+  }
+
+  log(`Submitted ${authorizations.length} attester exit authorizations. Transaction hash: ${receipt.transactionHash}`);
+  if (upToLimit) {
+    log('The rollup processed the largest permitted prefix of the authorization list.');
+  }
+  debugLogger.info('Attester exit batch submitted', {
+    authorizationCount: authorizations.length,
+    upToLimit,
+    rollup: rollupAddress.toString(),
+    transactionHash: receipt.transactionHash,
+  });
+  return receipt;
+}
+
+/** Initiates an attester exit without changing the registered withdrawer's control over the payout. */
+export async function initiateWithdrawByAttester({
+  rpcUrls,
+  chainId,
+  privateKey,
+  mnemonic,
+  attesterAddress,
+  rollupAddress,
+  log,
+  debugLogger,
+}: Omit<RollupCommandArgs, 'withdrawerAddress'> & LoggerArgs & { attesterAddress: EthAddress }) {
+  const account = getAccount(privateKey, mnemonic);
+  if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
+    throw new Error('The transaction signer must match the attester address');
+  }
+  const chain = createEthereumChain(rpcUrls, chainId);
+  const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
+  const rollup = new RollupContract(client, rollupAddress);
+  const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
+  const { receipt } = await rollup.initiateWithdrawByAttester(l1TxUtils, attesterAddress);
+  if (receipt.status !== 'success') {
+    throw new Error(`Attester exit reverted: ${receipt.transactionHash}`);
+  }
+  log(`Attester exit initiated for ${attesterAddress}. Transaction hash: ${receipt.transactionHash}`);
+  log('The registered withdrawer must select a recipient using initiateWithdraw before finalization.');
+  debugLogger.info('Attester exit initiated', {
+    attester: attesterAddress.toString(),
+    rollup: rollupAddress.toString(),
+    transactionHash: receipt.transactionHash,
+  });
+  return receipt;
 }
 
 export async function pruneRollup({

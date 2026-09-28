@@ -1,3 +1,5 @@
+import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { filterAsync } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -6,7 +8,7 @@ import {
   ContractInstancePublishedEvent,
   ContractInstanceUpdatedEvent,
 } from '@aztec-labs/protocol-contracts/instance-registry';
-import type { CommitteeAttestation, L2Block, ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
+import type { BlockData, CommitteeAttestation, L2Block, ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
 import {
   type L1PublishedData,
   type ProposedCheckpointInput,
@@ -19,16 +21,34 @@ import {
   computeContractClassId,
 } from '@aztec-labs/stdlib/contract';
 import type { ContractClassLog, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
+import type { InboxMessagePosition, InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 
+import {
+  InboxConsumptionRewindsError,
+  InboxMessagePrefixChangedError,
+  InboxPrefixMismatchError,
+  InboxPrefixNotSyncedError,
+  ProposedBlockParentNotFoundError,
+} from '../errors.js';
+import type { AddProposedBlockResult } from '../store/block_store.js';
 import type { ArchiverDataStores } from '../store/data_stores.js';
-import type { L2TipsCache } from '../store/l2_tips_cache.js';
+import type { L2FrontierCache } from '../store/l2_frontier_cache.js';
+import type { MessageSyncState } from '../store/message_store.js';
 import { prepareBlockTxEffectsTreeData } from '../store/tx_effect_tree_data.js';
 
 /** Operation type for contract data updates. */
 enum Operation {
   Store,
   Delete,
+}
+
+/**
+ * A block's L1-to-L2 message tree leaf count: the cumulative Inbox message count consumed through it. Messages are
+ * indexed compactly with no padding, so the leaf count is exactly the length of the message prefix the block consumed.
+ */
+export function blockLeafCount(block: Pick<L2Block, 'header'> | BlockData): bigint {
+  return BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
 }
 
 /** Result of adding checkpoints with information about any pruned blocks. */
@@ -39,13 +59,21 @@ type ReconcileCheckpointsResult = {
   lastAlreadyInsertedBlockNumber: BlockNumber | undefined;
 };
 
+/** Outcome of an Inbox message rollback. */
+export type MessageRollbackResult = {
+  /** Uncheckpointed blocks pruned because they consumed a message the rollback removed. */
+  prunedBlocks: L2Block[];
+  /** Whether the checkpointed tip itself consumed a removed message; published blocks are left to L1 sync. */
+  checkpointedTipAffected: boolean;
+};
+
 /** Archiver helper module to handle updates to the data store. */
 export class ArchiverDataStoreUpdater {
   private readonly log = createLogger('archiver:store_updater');
 
   constructor(
     private stores: ArchiverDataStores,
-    private l2TipsCache?: L2TipsCache,
+    private l2FrontierCache?: L2FrontierCache,
     private opts: { rollupManaLimit?: number } = {},
   ) {}
 
@@ -54,19 +82,39 @@ export class ArchiverDataStoreUpdater {
    * This is an uncheckpointed block that has been proposed by the sequencer but not yet included in a checkpoint on L1.
    * Extracts ContractClassPublished, ContractInstancePublished, ContractInstanceUpdated events from the block logs.
    *
+   * The block's signed Inbox prefix reference is validated against the canonical messages this store holds *inside
+   * the same transaction as the writes*. A block built before an L1 reorg replaced the messages it consumed could
+   * otherwise be inserted after the reorg had already pruned the chain it belongs to, landing on the parent that
+   * survived the prune with nothing left to remove it. Because message replacement and this insertion each run as one
+   * transaction on the same store, the two orderings converge: a replacement that commits first makes this validation
+   * fail, and an insertion that commits first is visible to the replacement's prune.
+   *
    * @param block - The proposed L2 block to add.
+   * @param inboxPrefixRef - The signed Inbox prefix reference the block was built or validated against.
    * @param pendingChainValidationStatus - Optional validation status to set.
-   * @returns True if the operation is successful.
+   * @returns Whether the block was added, or `already-checkpointed` if it duplicates a checkpointed block.
+   * @throws InboxPrefixNotSyncedError, InboxPrefixMismatchError, ProposedBlockParentNotFoundError or
+   *   InboxConsumptionRewindsError when the reference does not check out; nothing is written in that case.
    */
   public async addProposedBlock(
     block: L2Block,
+    inboxPrefixRef: InboxMessagePrefixRef,
     pendingChainValidationStatus?: ValidateCheckpointResult,
-  ): Promise<boolean> {
+  ): Promise<AddProposedBlockResult> {
     await prepareBlockTxEffectsTreeData([block]);
     const result = await this.stores.db.transactionAsync(async () => {
-      await this.stores.blocks.addProposedBlock(block);
+      const outcome = await this.stores.blocks.addProposedBlock(block);
+      // The checkpoint carrying this block was ingested from L1 first, which already extracted its logs and
+      // contract data. Re-extracting them here would duplicate that work.
+      if (outcome === 'already-checkpointed') {
+        return outcome;
+      }
+      // The block store's own chain checks (sequential number, parent archive) run first so a structurally invalid
+      // block keeps its error. The prefix validation follows inside the same transaction, before logs and contract
+      // data are written: a rejection aborts the whole callback and leaves the store exactly as it was.
+      await this.validateProposedBlockInboxPrefix(block, inboxPrefixRef);
 
-      const opResults = await Promise.all([
+      await Promise.all([
         // Update the pending chain validation status if provided
         pendingChainValidationStatus &&
           this.stores.blocks.setPendingChainValidationStatus(pendingChainValidationStatus),
@@ -76,10 +124,66 @@ export class ArchiverDataStoreUpdater {
         this.addContractDataToDb(block),
       ]);
 
-      return opResults.every(Boolean);
+      return outcome;
     });
-    await this.l2TipsCache?.refresh();
+    if (result === 'added') {
+      await this.l2FrontierCache?.refresh();
+    }
     return result;
+  }
+
+  /**
+   * Checks a proposed block's signed Inbox prefix reference against the canonical messages this store holds, and
+   * that the exact range it consumed is available whole.
+   *
+   * The block's end count comes from its own signed header's L1-to-L2 leaf count and the start from its stored
+   * parent's. The range and the position it ends at are read from one store snapshot, so the hash compared against
+   * the reference is the hash over exactly the leaves the range holds. Because each message's rolling hash chains the
+   * one before it, a matching hash at the end count proves the proposer consumed exactly the prefix this store holds,
+   * which makes the range between the two counts canonical by content.
+   *
+   * Deliberately absent is any requirement that either count sit on a boundary of the L1 bucket partition: blocks
+   * consume arbitrary message prefixes, and an L1 reorg that re-mines the same messages under different boundaries
+   * leaves every leaf and prefix hash intact.
+   *
+   * Must run inside the transaction that writes the block.
+   */
+  private async validateProposedBlockInboxPrefix(block: L2Block, inboxPrefixRef: InboxMessagePrefixRef): Promise<void> {
+    const blockNumber = block.number;
+    const endCount = blockLeafCount(block);
+    const parentCount = await this.getParentBlockLeafCount(block);
+    if (endCount < parentCount) {
+      throw new InboxConsumptionRewindsError(blockNumber, endCount, parentCount);
+    }
+
+    let endRollingHash;
+    try {
+      ({
+        end: { rollingHash: endRollingHash },
+      } = await this.stores.messages.getL1ToL2MessageRange(parentCount, endCount));
+    } catch (err) {
+      throw new InboxPrefixNotSyncedError(blockNumber, endCount, `${err}`);
+    }
+    if (!endRollingHash.equals(inboxPrefixRef.inboxRollingHash)) {
+      throw new InboxPrefixMismatchError(blockNumber, endCount, inboxPrefixRef.inboxRollingHash, endRollingHash);
+    }
+  }
+
+  /**
+   * The cumulative Inbox message count consumed through a proposed block's parent: its L1-to-L2 tree leaf count, or
+   * zero when the block is the first of the chain. Throws when the parent is not in the store, since its consumed
+   * range would then have no lower bound. Must run inside the caller's transaction.
+   */
+  private async getParentBlockLeafCount(block: L2Block): Promise<bigint> {
+    const parentBlockNumber = block.number - 1;
+    if (parentBlockNumber < INITIAL_L2_BLOCK_NUM) {
+      return 0n;
+    }
+    const parent = await this.stores.blocks.getBlockData({ number: BlockNumber(parentBlockNumber) });
+    if (parent === undefined) {
+      throw new ProposedBlockParentNotFoundError(block.number, parentBlockNumber);
+    }
+    return blockLeafCount(parent);
   }
 
   /**
@@ -101,6 +205,7 @@ export class ArchiverDataStoreUpdater {
     promoteProposed?: {
       l1: L1PublishedData;
       attestations: CommitteeAttestation[];
+      verbatimAttestations: ViemCommitteeAttestations;
       checkpoint: PublishedCheckpoint;
     },
     evictProposedFrom?: CheckpointNumber,
@@ -140,6 +245,7 @@ export class ArchiverDataStoreUpdater {
               promoteProposed.checkpoint.checkpoint.number,
               promoteProposed.l1,
               promoteProposed.attestations,
+              promoteProposed.verbatimAttestations,
               promoteProposed.checkpoint.checkpoint.archive.root,
             )
           : undefined,
@@ -151,7 +257,7 @@ export class ArchiverDataStoreUpdater {
 
       return { prunedBlocks, lastAlreadyInsertedBlockNumber };
     });
-    await this.l2TipsCache?.refresh();
+    await this.l2FrontierCache?.refresh();
     return result;
   }
 
@@ -159,7 +265,7 @@ export class ArchiverDataStoreUpdater {
     const result = await this.stores.db.transactionAsync(async () => {
       await this.stores.blocks.addProposedCheckpoint(proposedCheckpoint);
     });
-    await this.l2TipsCache?.refresh();
+    await this.l2FrontierCache?.refresh();
     return result;
   }
 
@@ -249,6 +355,76 @@ export class ArchiverDataStoreUpdater {
   }
 
   /**
+   * Rolls the local Inbox message log back to `keep`, moves the message sync state and prunes every uncheckpointed
+   * block that consumed more messages than the retained count, in one store transaction. The caller chose `keep` by
+   * comparing against the local log; the position is re-checked by hash inside the transaction and the rollback
+   * refused if it moved, so a concurrent change cannot be discarded on a stale comparison.
+   *
+   * Nothing is appended here. A caller that rolled back to an anchor rather than to an authenticated canonical tip
+   * commits an unauthenticated sync state, and ordinary forward ingestion re-fetches the deleted suffix afterwards.
+   *
+   * Checkpointed blocks are never pruned here: if the retained count sits below the checkpointed tip's consumed count
+   * the published chain is L1's to reconcile, and the result flags it so the caller can gate speculative work
+   * meanwhile.
+   */
+  public async rollbackMessagesAndPruneProposedBlocks(input: {
+    keep: InboxMessagePosition;
+    syncState: MessageSyncState;
+  }): Promise<MessageRollbackResult> {
+    const { keep, syncState } = input;
+    const result = await this.stores.db.transactionAsync(async () => {
+      const currentPrefix = await this.stores.messages.getMessagePosition(keep.totalMessageCount);
+      if (currentPrefix === undefined || !currentPrefix.rollingHash.equals(keep.rollingHash)) {
+        throw new InboxMessagePrefixChangedError(keep.totalMessageCount, keep.rollingHash, currentPrefix?.rollingHash);
+      }
+      await this.stores.messages.removeL1ToL2Messages(keep.totalMessageCount);
+      await this.stores.messages.setMessageSyncState(syncState);
+
+      const [checkpointedBlockNumber, latestBlockNumber] = await Promise.all([
+        this.stores.blocks.getCheckpointedL2BlockNumber(),
+        this.stores.blocks.getLatestL2BlockNumber(),
+      ]);
+      const checkpointedTipAffected =
+        checkpointedBlockNumber > BlockNumber.ZERO &&
+        (await this.getConsumedMessageCount(checkpointedBlockNumber)) > keep.totalMessageCount;
+
+      let prunedBlocks: L2Block[] = [];
+      if (latestBlockNumber > checkpointedBlockNumber) {
+        const uncheckpointed = await this.stores.blocks.getBlocksData({
+          from: BlockNumber.add(checkpointedBlockNumber, 1),
+          limit: latestBlockNumber - checkpointedBlockNumber,
+        });
+        const firstConsumer = uncheckpointed.find(block => blockLeafCount(block) > keep.totalMessageCount);
+        if (firstConsumer !== undefined) {
+          const firstConsumerNumber = firstConsumer.header.getBlockNumber();
+          this.log.warn(
+            `Pruning proposed blocks from ${firstConsumerNumber} that consumed rolled-back Inbox messages`,
+            {
+              keptMessageCount: keep.totalMessageCount,
+              firstConsumerNumber,
+              latestBlockNumber,
+            },
+          );
+          prunedBlocks = await this.removeBlocksAfter(BlockNumber(firstConsumerNumber - 1));
+          await this.evictProposedCheckpointsForPrunedBlocks(prunedBlocks);
+        }
+      }
+      return { prunedBlocks, checkpointedTipAffected };
+    });
+    await this.l2FrontierCache?.refresh();
+    return result;
+  }
+
+  /** The cumulative Inbox message count consumed as of the given block: its L1-to-L2 message tree leaf count. */
+  private async getConsumedMessageCount(blockNumber: BlockNumber): Promise<bigint> {
+    const [block] = await this.stores.blocks.getBlocksData({ from: blockNumber, limit: 1 });
+    if (block === undefined || block.header.getBlockNumber() !== blockNumber) {
+      throw new Error(`Block ${blockNumber} is missing from the store`);
+    }
+    return blockLeafCount(block);
+  }
+
+  /**
    * Removes all uncheckpointed blocks strictly after the specified block number and cleans up associated contract data.
    * This handles removal of provisionally added blocks along with their contract classes/instances.
    * Verifies that each block being removed is not part of a stored checkpoint.
@@ -272,7 +448,7 @@ export class ArchiverDataStoreUpdater {
 
       return prunedBlocks;
     });
-    await this.l2TipsCache?.refresh();
+    await this.l2FrontierCache?.refresh();
     return result;
   }
 
@@ -298,7 +474,7 @@ export class ArchiverDataStoreUpdater {
 
       return await this.removeBlocksAfter(blockNumber);
     });
-    await this.l2TipsCache?.refresh();
+    await this.l2FrontierCache?.refresh();
     return result;
   }
 
@@ -355,7 +531,7 @@ export class ArchiverDataStoreUpdater {
 
       return opResults.every(Boolean);
     });
-    await this.l2TipsCache?.refresh();
+    await this.l2FrontierCache?.refresh();
     return result;
   }
 
@@ -367,7 +543,7 @@ export class ArchiverDataStoreUpdater {
     await this.stores.db.transactionAsync(async () => {
       await this.stores.blocks.setProvenCheckpointNumber(checkpointNumber);
     });
-    await this.l2TipsCache?.refresh();
+    await this.l2FrontierCache?.refresh();
   }
 
   /**
@@ -378,7 +554,7 @@ export class ArchiverDataStoreUpdater {
     await this.stores.db.transactionAsync(async () => {
       await this.stores.blocks.setFinalizedCheckpointNumber(checkpointNumber);
     });
-    await this.l2TipsCache?.refresh();
+    await this.l2FrontierCache?.refresh();
   }
 
   /** Extracts and stores contract data from a single block. */
@@ -401,7 +577,12 @@ export class ArchiverDataStoreUpdater {
       await Promise.all([
         this.updatePublishedContractClasses(contractClassLogs, block.number, operation),
         this.updateDeployedContractInstances(privateLogs, block.number, operation),
-        this.updateUpdatedContractInstances(publicLogs, block.header.globalVariables.timestamp, operation),
+        this.updateUpdatedContractInstances(
+          publicLogs,
+          block.header.globalVariables.timestamp,
+          block.number,
+          operation,
+        ),
       ])
     ).every(Boolean);
   }
@@ -414,9 +595,23 @@ export class ArchiverDataStoreUpdater {
     blockNum: BlockNumber,
     operation: Operation,
   ): Promise<boolean> {
-    const contractClassPublishedEvents = allLogs
-      .filter(log => ContractClassPublishedEvent.isContractClassPublishedEvent(log))
-      .map(log => ContractClassPublishedEvent.fromLog(log));
+    // A malformed publication log must not abort the enclosing checkpoint transaction: rolling it back
+    // would discard the canonical blocks and the sync cursor, leaving L1 sync to retry the same range
+    // forever. Skip the derived class instead and keep the rest of the batch.
+    const contractClassPublishedEvents: ContractClassPublishedEvent[] = [];
+    for (const log of allLogs) {
+      if (!ContractClassPublishedEvent.isContractClassPublishedEvent(log)) {
+        continue;
+      }
+      try {
+        contractClassPublishedEvents.push(ContractClassPublishedEvent.fromLog(log));
+      } catch (err) {
+        this.log.warn('Skipping unparseable contract class publication log', {
+          blockNum,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     if (operation == Operation.Delete) {
       const contractClasses = contractClassPublishedEvents.map(e => e.toContractClassPublic());
@@ -430,7 +625,17 @@ export class ArchiverDataStoreUpdater {
     // Compute bytecode commitments and validate class IDs in a single pass.
     const contractClasses: ContractClassPublicWithCommitment[] = [];
     for (const event of contractClassPublishedEvents) {
-      const contractClass = await event.toContractClassPublicWithBytecodeCommitment();
+      let contractClass: ContractClassPublicWithCommitment;
+      try {
+        contractClass = await event.toContractClassPublicWithBytecodeCommitment();
+      } catch (err) {
+        this.log.warn('Skipping contract class with invalid packed bytecode', {
+          blockNum,
+          contractClassId: event.contractClassId.toString(),
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
       const computedClassId = await computeContractClassId({
         artifactHash: contractClass.artifactHash,
         privateFunctionsRoot: contractClass.privateFunctionsRoot,
@@ -501,6 +706,7 @@ export class ArchiverDataStoreUpdater {
   private async updateUpdatedContractInstances(
     allLogs: PublicLog[],
     timestamp: UInt64,
+    blockNum: BlockNumber,
     operation: Operation,
   ): Promise<boolean> {
     const contractUpdates = allLogs
@@ -513,9 +719,9 @@ export class ArchiverDataStoreUpdater {
         this.log.verbose(`${Operation[operation]} contract instance update at ${c.address.toString()}`),
       );
       if (operation == Operation.Store) {
-        return await this.stores.contractInstances.addContractInstanceUpdates(contractUpdates, timestamp);
+        return await this.stores.contractInstances.addContractInstanceUpdates(contractUpdates, timestamp, blockNum);
       } else if (operation == Operation.Delete) {
-        return await this.stores.contractInstances.deleteContractInstanceUpdates(contractUpdates, timestamp);
+        return await this.stores.contractInstances.deleteContractInstanceUpdates(contractUpdates, timestamp, blockNum);
       }
     }
     return true;

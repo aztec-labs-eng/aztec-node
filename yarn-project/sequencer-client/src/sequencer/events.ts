@@ -66,10 +66,11 @@ export type SequencerEvents = {
   }) => void;
   ['checkpoint-empty']: (args: { slot: SlotNumber }) => void;
   /**
-   * Emitted when the proposer's pre-broadcast `validateCheckpointHeader` simulation fails. This is a
-   * last-chance check before we gossip a checkpoint proposal: a failure here means the header
-   * would not be accepted by L1 (e.g. archive mismatch, stale chain tip, or some other state
-   * drift between when we built the checkpoint and when we are about to broadcast it).
+   * Emitted when the proposer's pre-gossip `validateCheckpointHeaderAndInbox` simulation fails. This is a
+   * last-chance check before we gossip a checkpoint proposal: a failure here means the header or its
+   * Inbox consumption would not be accepted by L1 (e.g. archive mismatch, stale chain tip, a final
+   * message total that is not a live bucket end, or some other state drift between when we built the
+   * checkpoint and when we are about to broadcast it).
    */
   ['header-validation-failed']: (args: {
     slot: SlotNumber;
@@ -89,5 +90,17 @@ export type SequencerEvents = {
     slot: SlotNumber;
     checkpointNumber: CheckpointNumber;
     reason: string;
+  }) => void;
+  /**
+   * Emitted when streaming Inbox consumption cannot complete the checkpoint and the slot is abandoned: the
+   * proposer's cursor sits at a prefix no publishable checkpoint can end at, usually because the local message view
+   * moved under it (`inbox_prefix_reorged`) or because no live bucket end could be resolved in time
+   * (`inbox_completion_unresolved`). The counterpart of the metrics and log line the same path already produces.
+   */
+  ['checkpoint-build-aborted']: (args: {
+    slot: SlotNumber;
+    checkpointNumber: CheckpointNumber;
+    reason: string;
+    consumedTotalMsgCount: bigint;
   }) => void;
 };

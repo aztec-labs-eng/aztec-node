@@ -25,7 +25,7 @@ import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contra
 import { type FunctionCall, FunctionSelector } from '@aztec-labs/stdlib/abi';
 import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { BlockHash, type L2TipsProvider } from '@aztec-labs/stdlib/block';
+import { BlockHash, type BlockParameter, type L2TipsProvider } from '@aztec-labs/stdlib/block';
 import type { CompleteAddress, ContractInstancePreimageWithAddress, PartialAddress } from '@aztec-labs/stdlib/contract';
 import { siloNullifier } from '@aztec-labs/stdlib/hash';
 import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
@@ -261,8 +261,8 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     blockHash: BlockHash,
     noteHash: Fr,
   ): Promise<MembershipWitness<typeof NOTE_HASH_TREE_HEIGHT>> {
-    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, () =>
-      this.aztecNode.getNoteHashMembershipWitness(blockHash, noteHash),
+    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, referenceBlock =>
+      this.aztecNode.getNoteHashMembershipWitness(referenceBlock, noteHash),
     );
     if (!witness) {
       throw new Error(`Note hash ${noteHash} not found in the note hash tree at block ${blockHash.toString()}.`);
@@ -288,8 +288,8 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     // Note that we validate that the reference block hash is at or before the anchor block - we don't test the block
     // hash at all. If the block hash did not exist by the reference block hash, then the node will not return the
     // membership witness as there is none.
-    const witness = await this.#queryWithBlockHashNotAfterAnchor(referenceBlockHash, () =>
-      this.aztecNode.getBlockHashMembershipWitness(referenceBlockHash, blockHash),
+    const witness = await this.#queryWithBlockHashNotAfterAnchor(referenceBlockHash, referenceBlock =>
+      this.aztecNode.getBlockHashMembershipWitness(referenceBlock, blockHash),
     );
     return witness ? Option.some(witness) : Option.none();
   }
@@ -300,11 +300,9 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     blockHashes: EphemeralArray<BlockHash>,
   ): Promise<EphemeralArray<boolean>> {
     const hashes = blockHashes.readAll(this.ephemeralArrayService);
-    const memberships = await this.#queryWithBlockHashNotAfterAnchor(referenceBlockHash, () =>
+    const memberships = await this.#queryWithBlockHashNotAfterAnchor(referenceBlockHash, referenceBlock =>
       allToCompletion(
-        hashes.map(blockHash =>
-          this.aztecNode.getBlockHashMembershipWitness(referenceBlockHash, blockHash).then(Boolean),
-        ),
+        hashes.map(blockHash => this.aztecNode.getBlockHashMembershipWitness(referenceBlock, blockHash).then(Boolean)),
       ),
     );
     return EphemeralArray.fromValues(this.ephemeralArrayService, memberships);
@@ -320,8 +318,8 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     blockHash: BlockHash,
     nullifier: Fr,
   ): Promise<NullifierMembershipWitnessData> {
-    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, () =>
-      this.aztecNode.getNullifierMembershipWitness(blockHash, nullifier),
+    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, referenceBlock =>
+      this.aztecNode.getNullifierMembershipWitness(referenceBlock, nullifier),
     );
     if (!witness) {
       throw new Error(`Nullifier membership witness not found at block ${blockHash.toString()}.`);
@@ -342,8 +340,8 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     blockHash: BlockHash,
     nullifier: Fr,
   ): Promise<NullifierMembershipWitnessData> {
-    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, () =>
-      this.aztecNode.getLowNullifierMembershipWitness(blockHash, nullifier),
+    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, referenceBlock =>
+      this.aztecNode.getLowNullifierMembershipWitness(referenceBlock, nullifier),
     );
     if (!witness) {
       throw new Error(
@@ -360,8 +358,8 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    * @returns - The witness
    */
   public async getPublicDataWitness(blockHash: BlockHash, leafSlot: Fr): Promise<PublicDataWitnessData> {
-    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, () =>
-      this.aztecNode.getPublicDataWitness(blockHash, leafSlot),
+    const witness = await this.#queryWithBlockHashNotAfterAnchor(blockHash, referenceBlock =>
+      this.aztecNode.getPublicDataWitness(referenceBlock, leafSlot),
     );
     if (!witness) {
       throw new Error(`Public data witness not found for slot ${leafSlot} at block hash ${blockHash.toString()}.`);
@@ -524,11 +522,11 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
 
   /** Looks up siloed nullifiers in the nullifier tree at the anchor block, returning one status per input. */
   protected async getSiloedNullifierStatuses(siloedNullifiers: Fr[]): Promise<NullifierStatus[]> {
-    const anchorBlockHash = await this.anchorBlockHeader.hash();
+    const anchor = await this.anchorBlockHeader.toBlockParameter();
     const leaves = (
       await allToCompletion(
         chunk(siloedNullifiers, MAX_RPC_LEN).map(batch =>
-          this.aztecNode.findLeavesIndexes(anchorBlockHash, MerkleTreeId.NULLIFIER_TREE, batch),
+          this.aztecNode.findLeavesIndexes(anchor, MerkleTreeId.NULLIFIER_TREE, batch),
         ),
       )
     ).flat();
@@ -555,7 +553,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       this.aztecNode,
       messageHash,
       nullifier.value,
-      await this.anchorBlockHeader.hash(),
+      await this.anchorBlockHeader.toBlockParameter(),
     );
 
     return new MembershipWitness(L1_TO_L2_MSG_TREE_HEIGHT, messageIndex, siblingPath.toTuple());
@@ -574,12 +572,12 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     startStorageSlot: Fr,
     numberOfElements: number,
   ) {
-    return this.#queryWithBlockHashNotAfterAnchor(blockHash, async () => {
+    return this.#queryWithBlockHashNotAfterAnchor(blockHash, async referenceBlock => {
       const slots = Array(numberOfElements)
         .fill(0)
         .map((_, i) => new Fr(startStorageSlot.toBigInt() + BigInt(i)));
       const values = await allToCompletion(
-        slots.map(storageSlot => this.aztecNode.getPublicStorageAt(blockHash, contractAddress, storageSlot)),
+        slots.map(storageSlot => this.aztecNode.getPublicStorageAt(referenceBlock, contractAddress, storageSlot)),
       );
 
       this.logger.debug(
@@ -1141,7 +1139,11 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
 
     const initialWitness = toACVMWitness(0, args);
     const acirExecutionResult = await this.simulator
-      .executeUserCircuit(initialWitness, targetArtifact, buildACIRCallback(nestedOracle))
+      .executeUserCircuit(
+        initialWitness,
+        targetArtifact,
+        buildACIRCallback(nestedOracle, { contractAddress: targetContractAddress }),
+      )
       .catch((err: Error) => {
         err.message = resolveAssertionMessageFromError(err, targetArtifact);
         throw new ExecutionError(
@@ -1249,16 +1251,27 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     };
   }
 
-  /** Runs a query concurrently with a validation that the block hash is not ahead of the anchor block. */
-  async #queryWithBlockHashNotAfterAnchor<T>(blockHash: BlockHash, query: () => Promise<T>): Promise<T> {
+  /**
+   * Runs a query concurrently with a validation that the block hash is not ahead of the anchor block. `query` receives
+   * the block parameter to name in its node call, which is `blockHash` itself except when it names the anchor: there
+   * the anchor's height is at hand, so it travels with the hash and a node that has not seen the anchor yet can tell
+   * a client one block ahead of it from one naming a block it will never have.
+   *
+   * Historical hashes keep their bare form deliberately. Their height is not known here, and a deliberate probe for a
+   * block the node may have reorged away must stay a plain hash lookup.
+   */
+  async #queryWithBlockHashNotAfterAnchor<T>(
+    blockHash: BlockHash,
+    query: (referenceBlock: BlockParameter) => Promise<T>,
+  ): Promise<T> {
     // Most contracts query state at the "current" block, which is the anchor. Skip the validation when we can.
     const anchorHash = await this.anchorBlockHeader.hash();
     if (blockHash.equals(anchorHash)) {
-      return query();
+      return query(await this.anchorBlockHeader.toBlockParameter());
     }
 
     const [response] = await allToCompletion([
-      query(),
+      query(blockHash),
       (async () => {
         const block = await this.aztecNode.getBlock(blockHash);
         const header = block?.header;

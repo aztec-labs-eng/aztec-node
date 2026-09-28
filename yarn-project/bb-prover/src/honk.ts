@@ -4,6 +4,8 @@ export type UltraHonkFlavor = 'ultra_honk' | 'ultra_keccak_honk' | 'ultra_starkn
 
 const UltraKeccakHonkCircuits = ['RootRollupArtifact'] as const satisfies ServerProtocolArtifact[];
 const UltraHonkCircuits = [
+  'InboxParity4Artifact',
+  'InboxParity16Artifact',
   'InboxParity64Artifact',
   'InboxParity256Artifact',
   'InboxParity1024Artifact',

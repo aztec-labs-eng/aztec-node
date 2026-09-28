@@ -9,13 +9,12 @@ import {
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import { type Anvil, EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
-import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { FEE_ORACLE_LAG, type GasFees, ManaUsageEstimate, computeExcessMana } from '@aztec-labs/stdlib/gas';
-import { jest } from '@jest/globals';
 import { foundry } from 'viem/chains';
 
 import { FeePredictor } from './fee_predictor.js';
@@ -37,7 +36,7 @@ describe('FeePredictor', () => {
   beforeAll(async () => {
     const privateKeyRaw = '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba';
 
-    ({ anvil, rpcUrl } = await startAnvil());
+    ({ anvil, rpcUrl } = await startAnvil({ port: 0 }));
 
     publicClient = getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: 31337 });
     cheatCodes = new EthCheatCodes([rpcUrl], new DateProvider());
@@ -90,27 +89,8 @@ describe('FeePredictor', () => {
   }
 
   /** Writes a fee header and slot number for the given checkpoint, then bumps the pending tip. */
-  async function advanceCheckpoint(checkpointNumber: CheckpointNumber, feeHeader: FeeHeader, slotNumber: bigint) {
-    const rollupAddress = EthAddress.fromString(rollup.address);
-    const feeHeaderSlot = await rollup.getTempCheckpointLogStorageSlot(
-      checkpointNumber,
-      TempCheckpointLogField.FeeHeader,
-    );
-    await cheatCodes.store(rollupAddress, feeHeaderSlot, RollupContract.compressFeeHeader(feeHeader));
-
-    const slotNumberSlot = await rollup.getTempCheckpointLogStorageSlot(
-      checkpointNumber,
-      TempCheckpointLogField.SlotNumber,
-    );
-    await cheatCodes.store(rollupAddress, slotNumberSlot, slotNumber & ((1n << 32n) - 1n));
-
-    const currentTips = await cheatCodes.load(rollupAddress, RollupContract.chainTipsStorageSlot);
-    const provenCheckpointNumber = currentTips & ((1n << 128n) - 1n);
-    await cheatCodes.store(
-      rollupAddress,
-      RollupContract.chainTipsStorageSlot,
-      RollupContract.packChainTips(BigInt(checkpointNumber), provenCheckpointNumber),
-    );
+  function advanceCheckpoint(checkpointNumber: CheckpointNumber, feeHeader: FeeHeader, slotNumber: bigint) {
+    return rollupCheatCodes.setPendingCheckpoint(checkpointNumber, SlotNumber.fromBigInt(slotNumber), feeHeader);
   }
 
   async function getPredictionStartSlot(): Promise<bigint> {
@@ -120,11 +100,11 @@ describe('FeePredictor', () => {
     return afterCheckpoint > BigInt(currentSlot) ? afterCheckpoint : BigInt(currentSlot);
   }
 
-  /** Builds a predictor and refreshes it against the current L1 block, mirroring how FeeProviderImpl drives it. */
-  async function makeRefreshedPredictor(): Promise<FeePredictor> {
+  /** Reads state at the current L1 block and predicts from it, mirroring how FeeProviderImpl drives the predictor. */
+  async function predictMinFees(manaUsage: ManaUsageEstimate): Promise<GasFees[]> {
     const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
-    await predictor.refreshState(await publicClient.getBlockNumber({ cacheTime: 0 }));
-    return predictor;
+    const state = await predictor.computeState(await publicClient.getBlockNumber({ cacheTime: 0 }));
+    return predictor.computePredictions(state, manaUsage);
   }
 
   it('slot 0 matches L1 getManaMinFeeAt for all ManaUsageEstimate values', async () => {
@@ -132,15 +112,13 @@ describe('FeePredictor', () => {
     const l1Fee = await rollup.getManaMinFeeAt(getTimestamp(startSlot), true);
 
     for (const manaUsage of Object.values(ManaUsageEstimate)) {
-      const predictor = await makeRefreshedPredictor();
-      const predicted = predictor.getPredictedMinFees(manaUsage);
+      const predicted = await predictMinFees(manaUsage);
       expect(predicted[0].feePerL2Gas).toBe(l1Fee);
     }
   });
 
   it('all slots match L1 with ManaUsageEstimate.None and zero congestion', async () => {
-    const predictor = await makeRefreshedPredictor();
-    const predicted = predictor.getPredictedMinFees(ManaUsageEstimate.None);
+    const predicted = await predictMinFees(ManaUsageEstimate.None);
 
     const startSlot = await getPredictionStartSlot();
     const pendingCheckpointNumber = await rollup.getCheckpointNumber();
@@ -173,8 +151,7 @@ describe('FeePredictor', () => {
     await cheatCodes.mine();
     await rollupCheatCodes.updateL1GasFeeOracle();
 
-    const predictor = await makeRefreshedPredictor();
-    const predicted = predictor.getPredictedMinFees(ManaUsageEstimate.None);
+    const predicted = await predictMinFees(ManaUsageEstimate.None);
 
     const startSlot = await getPredictionStartSlot();
     const pendingCheckpointNumber = await rollup.getCheckpointNumber();
@@ -204,8 +181,7 @@ describe('FeePredictor', () => {
     await cheatCodes.mine();
     await rollupCheatCodes.advanceSlots(3);
 
-    const predictor = await makeRefreshedPredictor();
-    const predicted = predictor.getPredictedMinFees(ManaUsageEstimate.None);
+    const predicted = await predictMinFees(ManaUsageEstimate.None);
 
     const startSlot = await getPredictionStartSlot();
     const l1Fee = await rollup.getManaMinFeeAt(getTimestamp(startSlot), true);
@@ -213,8 +189,7 @@ describe('FeePredictor', () => {
   });
 
   it('returns exactly FEE_ORACLE_LAG entries', async () => {
-    const predictor = await makeRefreshedPredictor();
-    const predicted = predictor.getPredictedMinFees(ManaUsageEstimate.Target);
+    const predicted = await predictMinFees(ManaUsageEstimate.Target);
     expect(predicted.length).toBe(FEE_ORACLE_LAG);
   });
 
@@ -242,8 +217,7 @@ describe('FeePredictor', () => {
       const assumedManaUsed =
         estimate === ManaUsageEstimate.None ? 0n : estimate === ManaUsageEstimate.Target ? manaTarget : manaLimit;
 
-      const predictor = await makeRefreshedPredictor();
-      const predicted = predictor.getPredictedMinFees(estimate);
+      const predicted = await predictMinFees(estimate);
 
       const startSlot = await getPredictionStartSlot();
       const pendingCheckpointNumber = await rollup.getCheckpointNumber();
@@ -267,7 +241,7 @@ describe('FeePredictor', () => {
           excessMana: newExcessMana,
           manaUsed: assumedManaUsed,
           ethPerFeeAsset: decayEthPerFeeAsset(currentFeeHeader.ethPerFeeAsset, i + 1),
-          congestionCost: 0n,
+          protocolFee: 0n,
           proverCost: 0n,
         };
 
@@ -315,8 +289,7 @@ describe('FeePredictor', () => {
 
     // Step through 6 successive slots, creating a fresh predictor each time.
     for (let step = 0; step < 6; step++) {
-      const predictor = await makeRefreshedPredictor();
-      const predicted = predictor.getPredictedMinFees(ManaUsageEstimate.None);
+      const predicted = await predictMinFees(ManaUsageEstimate.None);
 
       expect(predicted.length).toBe(FEE_ORACLE_LAG);
 
@@ -344,7 +317,7 @@ describe('FeePredictor', () => {
         excessMana: newExcessMana,
         manaUsed: 0n,
         ethPerFeeAsset: decayedEthPerFeeAsset,
-        congestionCost: 0n,
+        protocolFee: 0n,
         proverCost: 0n,
       };
 
@@ -362,42 +335,45 @@ describe('FeePredictor', () => {
       nextCheckpointOffset++;
     }
   }, 60_000);
-});
 
-describe('FeePredictor state caching', () => {
-  it('getState() returns undefined until refreshState() has been called', () => {
-    const predictor: FeePredictor = Object.create(FeePredictor.prototype);
-    expect(predictor.getState()).toBeUndefined();
-  });
+  it('slot 0 matches L1 getManaMinFeeAt with a nonzero protocol fee margin', async () => {
+    // Pin the comparison timestamp so before/after fees differ only by the margin.
+    const startSlot = await getPredictionStartSlot();
+    const timestamp = getTimestamp(startSlot + 1n);
+    const feeBefore = await rollup.getManaMinFeeAt(timestamp, true);
 
-  it('refreshState() caches the fetched state for getState() to return, with no further I/O', async () => {
-    const state = { manaTarget: 1n } as unknown;
-    const fetchState = jest.fn<() => Promise<unknown>>().mockResolvedValue(state);
+    // The first-ever margin update bypasses the 30-day cooldown; from 0 the x3/2 step cap on the
+    // fee multiplier permits up to 5000 bps.
+    await rollupCheatCodes.setProtocolFeeMargin(5000);
+    expect(await rollup.getProtocolFeeMargin()).toBe(5000);
 
-    const predictor: FeePredictor = Object.create(FeePredictor.prototype);
-    Reflect.set(predictor, 'fetchState', fetchState);
+    // The margin must move the pinned fee. If L1 scaled both the fakeExponential factor and the
+    // mulDiv divisor, mu would cancel silently and this catches it.
+    const l1Fee = await rollup.getManaMinFeeAt(timestamp, true);
+    expect(l1Fee).toBeGreaterThan(feeBefore);
 
-    await expect(predictor.refreshState(1n)).resolves.toBe(state);
-    expect(predictor.getState()).toBe(state);
-    expect(predictor.getState()).toBe(state);
-    expect(fetchState).toHaveBeenCalledTimes(1);
-  });
+    // The predictor must agree with L1 exactly at mu != 0. This is the only check that catches
+    // the same factor+divisor double-scaling on the TS side of the mirror.
+    for (const manaUsage of Object.values(ManaUsageEstimate)) {
+      const predicted = await predictMinFees(manaUsage);
+      const predictionStartSlot = await getPredictionStartSlot();
+      const l1FeeAtStart = await rollup.getManaMinFeeAt(getTimestamp(predictionStartSlot), true);
+      expect(predicted[0].feePerL2Gas).toBe(l1FeeAtStart);
+    }
+  }, 60_000);
 
-  it('preserves the last known-good state if refreshState() fails', async () => {
-    const goodState = { manaTarget: 1n } as unknown;
-    const fetchState = jest
-      .fn<() => Promise<unknown>>()
-      .mockResolvedValueOnce(goodState)
-      .mockRejectedValueOnce(new Error('L1 RPC request failed'));
+  it('reads the protocol fee margin at the pinned snapshot block', async () => {
+    await rollupCheatCodes.clearProvingCostCooldown();
+    await rollupCheatCodes.setProtocolFeeMargin(1000);
+    const pinnedBlock = await publicClient.getBlockNumber({ cacheTime: 0 });
 
-    const predictor: FeePredictor = Object.create(FeePredictor.prototype);
-    Reflect.set(predictor, 'fetchState', fetchState);
+    await rollupCheatCodes.clearProvingCostCooldown();
+    await rollupCheatCodes.setProtocolFeeMargin(2000);
+    expect(await rollup.getProtocolFeeMargin()).toBe(2000);
 
-    await predictor.refreshState(1n);
-    expect(predictor.getState()).toBe(goodState);
+    const predictor = new FeePredictor(rollup, dateProvider, feePredictorConfig);
+    const state = await predictor.computeState(pinnedBlock);
 
-    await expect(predictor.refreshState(2n)).rejects.toThrow('L1 RPC request failed');
-    // The failed refresh must not have clobbered the last known-good state.
-    expect(predictor.getState()).toBe(goodState);
-  });
+    expect(state.protocolFeeMarginBps).toBe(1000n);
+  }, 60_000);
 });

@@ -37,8 +37,10 @@ type AttestationsBlockWatcherConfig = Pick<SlasherConfig, (typeof AttestationsBl
  * - Descendant of an invalid checkpoint: the proposer published a checkpoint that extends a
  *   previously-rejected one. The descendant may itself have valid attestations, but it is still
  *   unusable. Triggered by the archiver's  `CheckpointBuiltOnInvalidAncestorDetected` event
- *   when the descendant has valid attestations (skipped before ingestion). Slashes the descendant's
- *   proposer via {@link OffenseType.PROPOSED_DESCENDANT_OF_CHECKPOINT_WITH_INVALID_ATTESTATIONS}.
+ *   when the descendant has valid attestations (skipped before ingestion). Slashes the committee member
+ *   that proposer rotation assigns to the descendant's slot via
+ *   {@link OffenseType.PROPOSED_DESCENDANT_OF_CHECKPOINT_WITH_INVALID_ATTESTATIONS}, unless the epoch's
+ *   escape hatch is open, in which case rotation does not identify the publisher and no offense is raised.
  */
 export class AttestationsBlockWatcher extends (EventEmitter as new () => WatcherEmitter) implements Watcher {
   private log: Logger;
@@ -147,7 +149,9 @@ export class AttestationsBlockWatcher extends (EventEmitter as new () => Watcher
 
   /**
    * Event handler for valid-attestations checkpoints that build on a previously-rejected ancestor.
-   * The archiver emits this when ingesting the descendant, and we slash its proposer.
+   * The archiver emits this when ingesting the descendant, and we slash the committee member that
+   * proposer rotation assigns to its slot. No offense is raised when the epoch's escape hatch is open,
+   * since rotation does not identify who published the checkpoint then.
    */
   public async handleDescendantOfInvalid(event: DescendentOfInvalidAttestationsCheckpointEvent): Promise<void> {
     const { checkpoint, ancestorCheckpointNumber, ancestorArchiveRoot } = event;
@@ -155,6 +159,24 @@ export class AttestationsBlockWatcher extends (EventEmitter as new () => Watcher
     const slot = checkpoint.slotNumber;
     const epoch = EpochNumber(getEpochAtSlot(slot, this.epochCache.getL1Constants()));
     const epochCommitteeInfo = await this.epochCache.getCommitteeForEpoch(epoch);
+
+    // While the escape hatch is open, checkpoints are published outside the committee's proposer rotation, so
+    // the committee member that rotation yields for this slot did not necessarily publish the checkpoint and
+    // must not be attributed the offense. We have no way to identify the actual publisher here, so we skip.
+    if (epochCommitteeInfo.isEscapeHatchOpen) {
+      this.log.verbose(
+        `Skipping descendant-of-invalid attribution for checkpoint ${checkpoint.checkpointNumber} as the escape hatch is open`,
+        {
+          ...checkpoint,
+          slot,
+          epoch,
+          ancestorCheckpointNumber,
+          ancestorArchiveRoot: ancestorArchiveRoot.toString(),
+        },
+      );
+      return;
+    }
+
     const proposer = this.epochCache.getProposerFromEpochCommittee({ ...epochCommitteeInfo, epoch }, slot);
 
     if (!proposer) {

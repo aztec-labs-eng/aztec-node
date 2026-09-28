@@ -17,7 +17,9 @@ import type { OracleRegistryEntry } from '../contract_function_simulator/index.j
  * // Returns (sorted, newline-joined):
  * //   "aztec_prv_bar(): void\naztec_utl_foo(a: u32): bool"
  */
-export function getOracleRegistrySignature(registry: Record<string, OracleRegistryEntry>): string {
+export function getOracleRegistrySignature(
+  registry: Record<string, Pick<OracleRegistryEntry, 'params' | 'returnType'>>,
+): string {
   const oracleSignatures = Object.entries(registry).map(([name, entry]) => {
     const paramSignatures = entry.params.map(p => `${p.name}: ${p.type.label}`);
     const returnType = entry.returnType === undefined ? 'void' : entry.returnType.label;

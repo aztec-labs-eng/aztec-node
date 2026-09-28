@@ -62,14 +62,6 @@ locals {
         ROLLUP_VERSION = ""
       })
     })
-    v4 = merge(local.l1_secret_names, {
-      aztec_docker_image = var.V4_AZTEC_DOCKER_IMAGE
-      hosts              = ["v4.mainnet.rpc.aztec-labs.com"]
-      storage_size       = "8Gi"
-      env = merge(local.env, {
-        ROLLUP_VERSION = "2934756905"
-      })
-    })
   }
 
   consumer_secret_names = [
@@ -98,6 +90,16 @@ locals {
 }
 
 module "environment" {
+  OTEL_RESOURCE_ATTRIBUTES = {
+    "deployment.environment.name" = "production"
+    "project"                     = "rpc-legacy"
+    "cloud.provider"              = "gcp"
+    "cloud.platform"              = "gcp_kubernetes_engine"
+    "cloud.account.id"            = var.GCP_PROJECT_ID
+    "cloud.region"                = replace(var.GCP_REGION, "/-[a-z]$/", "")
+    "k8s.cluster.name"            = var.CLUSTER
+  }
+
   source = "../../modules/environment"
 
   providers = {
@@ -106,10 +108,10 @@ module "environment" {
     google     = google
   }
 
-  NAMESPACE       = "mainnet-rpc"
-  RELEASE_PREFIX  = "mainnet"
-  RPCS            = local.rpcs
-  ALLOW_ANONYMOUS = false
-  CONSUMERS = local.consumers
+  NAMESPACE           = "mainnet-rpc"
+  RELEASE_PREFIX      = "mainnet"
+  RPCS                = local.rpcs
+  ALLOW_ANONYMOUS     = false
+  CONSUMERS           = local.consumers
   IRM_METRICS_ENABLED = true
 }

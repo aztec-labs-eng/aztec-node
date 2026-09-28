@@ -8,6 +8,8 @@ import { promises as fs } from 'fs';
 const log = createConsoleLogger('autogenerate');
 
 const circuits = [
+  'inbox_parity_4',
+  'inbox_parity_16',
   'inbox_parity_64',
   'inbox_parity_256',
   'inbox_parity_1024',

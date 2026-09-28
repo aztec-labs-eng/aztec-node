@@ -12,6 +12,8 @@ const logger = createLogger('prover-client:test:bb-prover-parity');
 
 // Maps a ladder size to its server artifact name, mirroring the bb-prover's own selection.
 const artifactForSize: Record<InboxParitySize, ServerProtocolArtifact> = {
+  4: 'InboxParity4Artifact',
+  16: 'InboxParity16Artifact',
   64: 'InboxParity64Artifact',
   256: 'InboxParity256Artifact',
   1024: 'InboxParity1024Artifact',

@@ -35,6 +35,7 @@ import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import { STANDARD_MULTI_CALL_ENTRYPOINT_ADDRESS } from '@aztec-labs/standard-contracts/multi-call-entrypoint';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
+  type ArchiveBlockParameter,
   type BlockData,
   BlockHash,
   type BlockParameter,
@@ -111,10 +112,13 @@ import {
 import { NodeKeystoreAdapter, ValidatorClient } from '@aztec-labs/validator-client';
 
 import { NodeBlockProvider } from '../modules/node_block_provider.js';
+import { NodeLogsProvider } from '../modules/node_logs_provider.js';
 import { NodeTxReceiptBuilder } from '../modules/node_tx_receipt.js';
 import { NodeWorldStateQueries } from '../modules/node_world_state_queries.js';
+import { UnseenBlockHoldOff } from '../modules/unseen_block_hold_off.js';
 import { Sentinel } from '../sentinel/sentinel.js';
 import type { AztecNodeConfig } from './config.js';
+import { type NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block/index.js';
 import { NodeMetrics } from './node_metrics.js';
 import { NodePublicCallsSimulator } from './node_public_calls_simulator.js';
 
@@ -141,6 +145,7 @@ export interface AztecNodeServiceDeps {
   globalVariableBuilder: GlobalVariableBuilderInterface;
   rollupContract: RollupContract | undefined;
   feeProvider: FeeProvider;
+  nextBlockPredictor: NextBlockPredictor;
   epochCache: EpochCacheInterface;
   packageVersion: string;
   peerProofVerifier: ClientProtocolCircuitVerifier;
@@ -170,6 +175,8 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   private readonly nodePublicCallsSimulator: NodePublicCallsSimulator;
   private readonly worldStateQueries: NodeWorldStateQueries;
   private readonly blockProvider: NodeBlockProvider;
+  private readonly logsProvider: NodeLogsProvider;
+  private readonly unseenBlockHoldOff: UnseenBlockHoldOff;
   private readonly txReceiptBuilder: NodeTxReceiptBuilder;
 
   public readonly tracer: Tracer;
@@ -191,6 +198,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   protected readonly globalVariableBuilder: GlobalVariableBuilderInterface;
   protected readonly rollupContract: RollupContract | undefined;
   protected readonly feeProvider: FeeProvider;
+  protected readonly nextBlockPredictor: NextBlockPredictor;
   protected readonly epochCache: EpochCacheInterface;
   protected readonly packageVersion: string;
   private peerProofVerifier: ClientProtocolCircuitVerifier;
@@ -222,6 +230,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     this.globalVariableBuilder = deps.globalVariableBuilder;
     this.rollupContract = deps.rollupContract;
     this.feeProvider = deps.feeProvider;
+    this.nextBlockPredictor = deps.nextBlockPredictor;
     this.epochCache = deps.epochCache;
     this.packageVersion = deps.packageVersion;
     this.peerProofVerifier = deps.peerProofVerifier;
@@ -238,31 +247,40 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     this.metrics = new NodeMetrics(this.telemetry, 'AztecNodeService');
     this.tracer = this.telemetry.getTracer('AztecNodeService');
 
-    // The node never represents a proposer's payout addresses, so the simulator zeroes coinbase and
-    // fee recipient. The signature context only needs chain id + rollup address (see signature_utils).
     this.nodePublicCallsSimulator = new NodePublicCallsSimulator({
-      blockSource: this.blockSource,
       worldStateSynchronizer: this.worldStateSynchronizer,
+      blockSource: this.blockSource,
       l1ToL2MessageSource: this.l1ToL2MessageSource,
       contractDataSource: this.contractDataSource,
-      globalVariableBuilder: this.globalVariableBuilder,
-      rollupContract: this.rollupContract,
+      predictor: this.nextBlockPredictor,
       epochCache: this.epochCache,
-      signatureContext: { chainId: this.l1ChainId, rollupAddress: this.config.rollupAddress },
       config: this.config,
       avmSimulator: this.avmSimulator,
       telemetry: this.telemetry,
       log: this.log.createChild('public-calls-simulator'),
     });
 
+    // Shared by every block-anchored read so the concurrent-hold cap applies across all of them.
+    this.unseenBlockHoldOff = new UnseenBlockHoldOff(
+      this.blockSource,
+      {
+        byNumberWaitMs: this.config.rpcUnseenBlockByNumberWaitMs ?? 2 * this.config.blockDurationMs,
+        byHashWaitMs: this.config.rpcUnseenBlockByHashWaitMs,
+      },
+      this.log.createChild('unseen-block-hold-off'),
+    );
+
     this.worldStateQueries = new NodeWorldStateQueries({
       worldStateSynchronizer: this.worldStateSynchronizer,
       blockSource: this.blockSource,
       l1ToL2MessageSource: this.l1ToL2MessageSource,
+      holdOff: this.unseenBlockHoldOff,
       log: this.log.createChild('world-state-queries'),
     });
 
-    this.blockProvider = new NodeBlockProvider(this.blockSource);
+    this.blockProvider = new NodeBlockProvider(this.blockSource, this.unseenBlockHoldOff);
+
+    this.logsProvider = new NodeLogsProvider(this.logsSource, this.unseenBlockHoldOff);
 
     this.txReceiptBuilder = new NodeTxReceiptBuilder({
       p2pClient: this.p2pClient,
@@ -387,6 +405,14 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return this.proverNode;
   }
 
+  /**
+   * Returns the validator client, if this node runs one. Exposed for tests that need to observe a validator's own
+   * offense emitter directly, alongside the existing sequencer and prover accessors.
+   */
+  public getValidatorClient(): ValidatorClient | undefined {
+    return this.validatorClient;
+  }
+
   public getBlockSource(): L2BlockSource {
     return this.blockSource;
   }
@@ -459,9 +485,33 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     return await this.feeProvider.getCurrentMinFees();
   }
 
-  /** Returns predicted min fees for the current slot and next N slots. */
+  /**
+   * Returns the min fees a transaction submitted now may have to pay, worst entry first in intent: the list
+   * leads with the fee this node's public simulation would charge the next block right now, followed by the
+   * fee provider's projections for the current slot and the next N slots. Clients pad the worst entry, so a
+   * quoted transaction clears the simulation's fee check whether the difference comes from a frozen
+   * mid-checkpoint fee, a lagging clock, or L1 lag.
+   *
+   * The head normally comes from memory: the plan from the archiver's in-memory frontier and the boundary fee
+   * from the background-refreshed cache. At a boundary the cache has not priced yet, the request joins the
+   * shared refresh for at most {@link QUOTE_MAX_WAIT_MS}, a budget the projections' wait shares so the whole
+   * quote stays under that bound. The head is omitted when the node cannot produce it in time — an L1 outage
+   * that outlasts the cache's cutoff, or a frontier with no header for its proposed tip — in which case the
+   * projections alone are returned, as before this method grew a head.
+   */
   public async getPredictedMinFees(manaUsage?: ManaUsageEstimate): Promise<GasFees[]> {
-    return await this.feeProvider.getPredictedMinFees(manaUsage);
+    const timer = new Timer();
+    const head = await this.nextBlockPredictor.quoteMinFees().catch((err: Error) => {
+      this.log.warn(`Failed to compute the next-block min fee for a quote, serving L1 projections only`, err);
+      return undefined;
+    });
+    // Tagging the projections with the head's L1 sync point keeps both halves of the answer on one L1 block.
+    const asOf = head?.l1SyncPoint && {
+      blockNumber: head.l1SyncPoint.blockNumber,
+      maxWaitMs: Math.max(0, QUOTE_MAX_WAIT_MS - timer.ms()),
+    };
+    const projections = await this.feeProvider.getPredictedMinFees(manaUsage, asOf);
+    return head ? [head.fees, ...projections] : projections;
   }
 
   public async getMaxPriorityFees(): Promise<GasFees> {
@@ -511,11 +561,11 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
   }
 
   public getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
-    return this.logsSource.getPrivateLogsByTags(query);
+    return this.logsProvider.getPrivateLogsByTags(query);
   }
 
   public getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {
-    return this.logsSource.getPublicLogsByTags(query);
+    return this.logsProvider.getPublicLogsByTags(query);
   }
 
   /**
@@ -580,6 +630,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     await tryStop(this.automineSequencer);
     await tryStop(this.proverNode);
     await tryStop(this.p2pClient);
+    await tryStop(this.nextBlockPredictor);
     await tryStop(this.feeProvider);
     // Dispose the AVM backend before world state: it kills the bb-avm-sim processes and closes the CDB IPC
     // server, releasing their connections to the WSDB so it shuts down cleanly (and freeing the
@@ -665,6 +716,13 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     blockHash: BlockHash,
   ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
     return this.worldStateQueries.getBlockHashMembershipWitness(referenceBlock, blockHash);
+  }
+
+  public getBlockHashMembershipWitnessAtArchive(
+    reference: ArchiveBlockParameter,
+    blockHash: BlockHash,
+  ): Promise<MembershipWitness<typeof ARCHIVE_HEIGHT> | undefined> {
+    return this.worldStateQueries.getBlockHashMembershipWitnessAtArchive(reference, blockHash);
   }
 
   public getNoteHashMembershipWitness(
@@ -861,6 +919,18 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     toSlot?: SlotNumber,
   ): Promise<SingleValidatorStats | undefined> {
     return this.validatorsSentinel?.getValidatorStats(validatorAddress, fromSlot, toSlot) ?? Promise.resolve(undefined);
+  }
+
+  /** Returns validator stats in input order, with null entries when statistics are unavailable. */
+  public getValidatorStatsBatch(
+    validatorAddresses: EthAddress[],
+    fromSlot?: SlotNumber,
+    toSlot?: SlotNumber,
+  ): Promise<(SingleValidatorStats | null)[]> {
+    return (
+      this.validatorsSentinel?.getValidatorStatsBatch(validatorAddresses, fromSlot, toSlot) ??
+      Promise.resolve(validatorAddresses.map(() => null))
+    );
   }
 
   public async startSnapshotUpload(location: string): Promise<void> {

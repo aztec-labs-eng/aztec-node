@@ -146,6 +146,7 @@ describe('ContractInstanceStore', () => {
           },
         ],
         timestampOfChange - 1n,
+        BlockNumber(2),
       );
     });
 
@@ -218,6 +219,7 @@ describe('ContractInstanceStore', () => {
           },
         ],
         timestampOfChange - 1n,
+        BlockNumber(2),
       );
 
       const fetchedInstance = await contractInstanceStore.getContractInstance(
@@ -226,6 +228,153 @@ describe('ContractInstanceStore', () => {
       );
       expect(fetchedInstance?.originalContractClassId).toEqual(classId);
       expect(fetchedInstance?.currentContractClassId).toEqual(nextClassId);
+    });
+  });
+  describe('contractInstanceUpdates ordering', () => {
+    let address: AztecAddress;
+    let originalClassId: Fr;
+
+    /** Schedules a class change for `address` in the given block at the given scheduling timestamp. */
+    function addUpdate(
+      newContractClassId: Fr,
+      opts: {
+        schedulingTimestamp: bigint;
+        blockNumber: number;
+        timestampOfChange?: bigint;
+        prevContractClassId?: Fr;
+        address?: AztecAddress;
+      },
+    ) {
+      return contractInstanceStore.addContractInstanceUpdates(
+        [
+          {
+            prevContractClassId: opts.prevContractClassId ?? originalClassId,
+            newContractClassId,
+            timestampOfChange: opts.timestampOfChange ?? opts.schedulingTimestamp,
+            address: opts.address ?? address,
+          },
+        ],
+        opts.schedulingTimestamp,
+        BlockNumber(opts.blockNumber),
+      );
+    }
+
+    beforeEach(async () => {
+      address = await AztecAddress.random();
+      originalClassId = Fr.random();
+    });
+
+    it('resolves the higher block number when two blocks share a scheduling timestamp', async () => {
+      const first = Fr.random();
+      const second = Fr.random();
+      await addUpdate(first, { schedulingTimestamp: 1000n, blockNumber: 5 });
+      await addUpdate(second, { schedulingTimestamp: 1000n, blockNumber: 6 });
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 1001n, originalClassId),
+      ).resolves.toEqual(second);
+    });
+
+    it('resolves the higher index when a single block carries several updates', async () => {
+      const first = Fr.random();
+      const second = Fr.random();
+      await contractInstanceStore.addContractInstanceUpdates(
+        [
+          { prevContractClassId: originalClassId, newContractClassId: first, timestampOfChange: 1000n, address },
+          { prevContractClassId: first, newContractClassId: second, timestampOfChange: 1000n, address },
+        ],
+        1000n,
+        BlockNumber(5),
+      );
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 1001n, originalClassId),
+      ).resolves.toEqual(second);
+    });
+
+    it('reveals the earlier block update when the later same-timestamp block is deleted', async () => {
+      const first = Fr.random();
+      const second = Fr.random();
+      await addUpdate(first, { schedulingTimestamp: 1000n, blockNumber: 5 });
+      await addUpdate(second, { schedulingTimestamp: 1000n, blockNumber: 6 });
+
+      await contractInstanceStore.deleteContractInstanceUpdates(
+        [{ prevContractClassId: originalClassId, newContractClassId: second, timestampOfChange: 1000n, address }],
+        1000n,
+        BlockNumber(6),
+      );
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 1001n, originalClassId),
+      ).resolves.toEqual(first);
+    });
+
+    it('keeps updates for different addresses isolated', async () => {
+      const otherAddress = await AztecAddress.random();
+      const mine = Fr.random();
+      const theirs = Fr.random();
+      await addUpdate(mine, { schedulingTimestamp: 1000n, blockNumber: 5 });
+      await addUpdate(theirs, { schedulingTimestamp: 1000n, blockNumber: 6, address: otherAddress });
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 1001n, originalClassId),
+      ).resolves.toEqual(mine);
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(otherAddress, 1001n, originalClassId),
+      ).resolves.toEqual(theirs);
+    });
+
+    it('resolves the later timestamp even when it sits in a lower block number', async () => {
+      const earlier = Fr.random();
+      const later = Fr.random();
+      await addUpdate(earlier, { schedulingTimestamp: 1000n, blockNumber: 9 });
+      await addUpdate(later, { schedulingTimestamp: 2000n, blockNumber: 3 });
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 2001n, originalClassId),
+      ).resolves.toEqual(later);
+    });
+
+    it('finds an update whose timestamp has fewer digits than the queried one', async () => {
+      const newClassId = Fr.random();
+      await addUpdate(newClassId, { schedulingTimestamp: 99n, blockNumber: 1 });
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 100n, originalClassId),
+      ).resolves.toEqual(newClassId);
+    });
+
+    it('orders timestamps numerically across a decimal digit boundary', async () => {
+      const atNinetyNine = Fr.random();
+      const atOneHundred = Fr.random();
+      await addUpdate(atNinetyNine, { schedulingTimestamp: 99n, blockNumber: 1 });
+      await addUpdate(atOneHundred, { schedulingTimestamp: 100n, blockNumber: 2 });
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 1000n, originalClassId),
+      ).resolves.toEqual(atOneHundred);
+    });
+
+    it('returns the previous class id before activation and the new one at activation', async () => {
+      const newClassId = Fr.random();
+      await addUpdate(newClassId, { schedulingTimestamp: 1000n, blockNumber: 5, timestampOfChange: 2000n });
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 1999n, originalClassId),
+      ).resolves.toEqual(originalClassId);
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, 2000n, originalClassId),
+      ).resolves.toEqual(newClassId);
+    });
+
+    it('builds a valid upper boundary when querying at the maximum uint64 timestamp', async () => {
+      const newClassId = Fr.random();
+      const maxUint64 = 2n ** 64n - 1n;
+      await addUpdate(newClassId, { schedulingTimestamp: maxUint64, blockNumber: 5 });
+
+      await expect(
+        contractInstanceStore.getCurrentContractInstanceClassId(address, maxUint64, originalClassId),
+      ).resolves.toEqual(newClassId);
     });
   });
 });

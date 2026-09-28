@@ -1,6 +1,12 @@
 /* eslint-disable camelcase */
 import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, PRIVATE_LOG_SIZE_IN_FIELDS } from '@aztec-labs/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -11,7 +17,13 @@ import { L2TipsKVStore } from '@aztec-labs/kv-store/stores';
 import { type ContractArtifact, EventSelector, FunctionSelector, FunctionType } from '@aztec-labs/stdlib/abi';
 import { PublicDataWrite, RevertCode } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { BlockHash, Body, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import {
+  BlockHash,
+  Body,
+  CommitteeAttestationsAndSigners,
+  GENESIS_BLOCK_HEADER_HASH,
+  L2Block,
+} from '@aztec-labs/stdlib/block';
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { CompleteAddress, SerializableContractInstance } from '@aztec-labs/stdlib/contract';
 import { GasFees } from '@aztec-labs/stdlib/gas';
@@ -93,13 +105,13 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
       // `BlockHeader.empty()` would silently pass through same-width field swaps.
       await anchorBlockStore.setHeader(
         new BlockHeader(
-          new AppendOnlyTreeSnapshot(new Fr(2n), 3),
+          new AppendOnlyTreeSnapshot(new Fr(2n), TreeLeafIndex(3)),
           new StateReference(
-            new AppendOnlyTreeSnapshot(new Fr(5n), 7),
+            new AppendOnlyTreeSnapshot(new Fr(5n), TreeLeafIndex(7)),
             new PartialStateReference(
-              new AppendOnlyTreeSnapshot(new Fr(11n), 13),
-              new AppendOnlyTreeSnapshot(new Fr(17n), 19),
-              new AppendOnlyTreeSnapshot(new Fr(23n), 29),
+              new AppendOnlyTreeSnapshot(new Fr(11n), TreeLeafIndex(13)),
+              new AppendOnlyTreeSnapshot(new Fr(17n), TreeLeafIndex(19)),
+              new AppendOnlyTreeSnapshot(new Fr(23n), TreeLeafIndex(29)),
             ),
           ),
           new Fr(31n),
@@ -281,7 +293,7 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
       const block = buildL2Block();
       const publishedCheckpoint = new PublishedCheckpoint(
         new Checkpoint(
-          new AppendOnlyTreeSnapshot(new Fr(2n), 3),
+          new AppendOnlyTreeSnapshot(new Fr(2n), TreeLeafIndex(3)),
           new CheckpointHeader(
             new Fr(5n),
             new Fr(7n),
@@ -302,6 +314,7 @@ export const SCHEMA_TESTS: readonly SchemaTest[] = [
         ),
         new L1PublishedData(59n, 61n, new Fr(67n).toString()),
         [],
+        CommitteeAttestationsAndSigners.packAttestations([]),
       );
 
       // `'blocks-added'` writes to `pxe_l2_tips` (proposed tag) and `pxe_l2_block_hashes`.
@@ -703,15 +716,15 @@ function paddedFrs(leading: bigint[], totalLength: number): Fr[] {
  * We use distinct values to make a snapshot diff sensitive to regressions of specific fields, and same-width reorders.
  */
 function buildL2Block(): L2Block {
-  const archive = new AppendOnlyTreeSnapshot(new Fr(101n), 103);
+  const archive = new AppendOnlyTreeSnapshot(new Fr(101n), TreeLeafIndex(103));
   const header = new BlockHeader(
-    new AppendOnlyTreeSnapshot(new Fr(107n), 109),
+    new AppendOnlyTreeSnapshot(new Fr(107n), TreeLeafIndex(109)),
     new StateReference(
-      new AppendOnlyTreeSnapshot(new Fr(113n), 127),
+      new AppendOnlyTreeSnapshot(new Fr(113n), TreeLeafIndex(127)),
       new PartialStateReference(
-        new AppendOnlyTreeSnapshot(new Fr(131n), 137),
-        new AppendOnlyTreeSnapshot(new Fr(139n), 149),
-        new AppendOnlyTreeSnapshot(new Fr(151n), 157),
+        new AppendOnlyTreeSnapshot(new Fr(131n), TreeLeafIndex(137)),
+        new AppendOnlyTreeSnapshot(new Fr(139n), TreeLeafIndex(149)),
+        new AppendOnlyTreeSnapshot(new Fr(151n), TreeLeafIndex(157)),
       ),
     ),
     new Fr(163n),

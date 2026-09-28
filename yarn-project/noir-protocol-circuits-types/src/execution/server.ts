@@ -1,7 +1,13 @@
 import type { InputValue } from '@aztec-foundation/noir-noirc_abi';
 import type { InputMap } from '@aztec-foundation/noir-types';
 
-import { INBOX_PARITY_SIZE_LARGE, INBOX_PARITY_SIZE_MEDIUM, INBOX_PARITY_SIZE_SMALL } from '@aztec-labs/constants';
+import {
+  INBOX_PARITY_SIZE_LARGE,
+  INBOX_PARITY_SIZE_MEDIUM,
+  INBOX_PARITY_SIZE_SMALL,
+  INBOX_PARITY_SIZE_XSMALL,
+  INBOX_PARITY_SIZE_XXSMALL,
+} from '@aztec-labs/constants';
 import { pushTestData } from '@aztec-labs/foundation/testing';
 import type { InboxParityPrivateInputs } from '@aztec-labs/stdlib/parity';
 import type {
@@ -63,6 +69,10 @@ export function convertInboxParityPrivateInputsToNoir(inputs: InboxParityPrivate
 /** Maps an InboxParity ladder size to its server artifact. */
 export function inboxParityArtifactForSize(size: number): ServerProtocolArtifact {
   switch (size) {
+    case INBOX_PARITY_SIZE_XXSMALL:
+      return 'InboxParity4Artifact';
+    case INBOX_PARITY_SIZE_XSMALL:
+      return 'InboxParity16Artifact';
     case INBOX_PARITY_SIZE_SMALL:
       return 'InboxParity64Artifact';
     case INBOX_PARITY_SIZE_MEDIUM:

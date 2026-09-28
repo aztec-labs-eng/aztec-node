@@ -45,7 +45,7 @@ export async function executePrivateFunction(
   const initialWitness = privateExecutionOracle.getInitialWitness(artifact);
   const timer = new Timer();
   const acirExecutionResult = await simulator
-    .executeUserCircuit(initialWitness, artifact, buildACIRCallback(privateExecutionOracle))
+    .executeUserCircuit(initialWitness, artifact, buildACIRCallback(privateExecutionOracle, { contractAddress }))
     .catch((err: Error) => {
       err.message = resolveAssertionMessageFromError(err, artifact);
       throw new ExecutionError(

@@ -2,14 +2,24 @@ export * from './client/index.js';
 export * from './config.js';
 export * from './publisher/index.js';
 export { Sequencer, SequencerState, type SequencerEvents } from './sequencer/index.js';
+export type {
+  CheckpointProposalJobTestEvent,
+  CheckpointProposalJobTestHooks,
+  CheckpointProposalJobTestPhase,
+} from './sequencer/checkpoint_proposal_job_test_hooks.js';
 
 // Used by the node to simulate public parts of transactions. Should these be moved to a shared library?
 // ISSUE(#9832)
 export * from './global_variable_builder/index.js';
 export {
-  type ConsumedBucketCursor,
-  type InboxBucketSelection,
-  type InboxBucketSource,
-  type SelectInboxBucketInput,
-  selectInboxBucketForBlock,
-} from './sequencer/inbox_bucket_selector.js';
+  type InboxConsumptionCaps,
+  type InboxEndpointResolver,
+  PROTOCOL_INBOX_CONSUMPTION_CAPS,
+  type StreamingMessageSource,
+  getEndpointUpperBound,
+  getOrdinaryCeiling,
+  mustQueryEndpoint,
+  resolveEndpoint,
+  selectOrdinaryMessageEnd,
+  selectSafeLocalEnd,
+} from './sequencer/inbox_message_selection.js';

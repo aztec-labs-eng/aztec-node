@@ -33,6 +33,7 @@ import {
   type WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
 import { type DebugLogStore, NullDebugLogStore } from '@aztec-labs/stdlib/logs';
+import { appendL1ToL2MessagesToTree } from '@aztec-labs/stdlib/messaging';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { type CheckpointGlobalVariables, GlobalVariables, StateReference, Tx } from '@aztec-labs/stdlib/tx';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -118,6 +119,14 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
     const forkCheckpoint = await ForkCheckpoint.new(this.fork);
 
     try {
+      // Insert this block's streaming L1-to-L2 messages before executing its txs. The prover node appends them to its
+      // fork before re-executing, and the block-root circuit pins each tx's L1-to-L2 tree snapshot to the post-append
+      // root, so the AVM here must read the same tree or a tx consuming a message this block inserts would revert at
+      // proposal time and succeed at proving time. Appending inside the fork checkpoint means a failed block rolls the
+      // leaves back together with the tx effects.
+      const l1ToL2Messages = opts.l1ToL2Messages;
+      await appendL1ToL2MessagesToTree(this.fork, l1ToL2Messages);
+
       const [publicProcessorDuration, [processedTxs, failedTxs, usedTxs]] = await elapsed(() =>
         processor.process(pendingTxs, cappedOpts, validator),
       );
@@ -131,15 +140,9 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
       // Commit the fork checkpoint
       await forkCheckpoint.commit();
 
-      // Add block to checkpoint, inserting this block's streaming L1-to-L2 message bundle (if any) into the fork.
-      const { block } = await this.checkpointBuilder.addBlock(
-        globalVariables,
-        processedTxs,
-        opts.l1ToL2Messages ?? [],
-        {
-          expectedEndState: opts.expectedEndState,
-        },
-      );
+      const { block } = await this.checkpointBuilder.sealBlock(globalVariables, processedTxs, l1ToL2Messages, {
+        expectedEndState: opts.expectedEndState,
+      });
 
       this.contractsDB.commitCheckpoint();
 
@@ -187,8 +190,9 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
   /**
    * Caps per-block gas and blob field limits by remaining checkpoint-level budgets.
    * When building a proposal (isBuildingProposal=true), computes a fair share of remaining budget
-   * across remaining blocks scaled by the multiplier. When validating, only caps by per-block limit
-   * and remaining checkpoint budget (no redistribution or multiplier).
+   * across remaining blocks scaled by the multiplier, and holds back blob space for a transaction-less block that
+   * may still be needed to end the checkpoint at a live L1 Inbox bucket end. When validating, only caps by per-block
+   * limit and remaining checkpoint budget (no redistribution, multiplier or reservation).
    */
   protected capLimitsByCheckpointBudgets(
     opts: BlockBuilderOptions,
@@ -209,7 +213,20 @@ export class CheckpointBuilder implements ICheckpointBlockBuilder {
     const usedBlobFields = sum(existingBlocks.map(b => b.toBlobFields().length));
     const totalBlobCapacity = BLOBS_PER_CHECKPOINT * FIELDS_PER_BLOB - NUM_CHECKPOINT_END_MARKER_FIELDS;
     const blockEndOverhead = getNumBlockEndBlobFields();
-    const maxBlobFieldsForTxs = totalBlobCapacity - usedBlobFields - blockEndOverhead;
+
+    // A proposer whose sub-slots run out while the consumption cursor sits at a prefix that is not a live L1 Inbox
+    // bucket end appends one transaction-less block to reach one, so the checkpoint can be published at all. That
+    // block still writes its own block-end fields, so hold them back from transaction packing while such a block can
+    // still follow; the last block the checkpoint can hold releases them, since nothing can follow it. Only the
+    // proposer packs against this: re-executing a peer's proposal must not reject a block over it. The checkpoint end
+    // marker is already deducted from the total capacity, so the reservation is a block's end fields alone.
+    // Reserving blob space does not reserve build time, nor guarantee that the extra block can be built.
+    const rescueTailReservation =
+      opts.isBuildingProposal && opts.maxBlocksPerCheckpoint - existingBlocks.length > 1 ? blockEndOverhead : 0;
+    const maxBlobFieldsForTxs = Math.max(
+      0,
+      totalBlobCapacity - usedBlobFields - blockEndOverhead - rescueTailReservation,
+    );
 
     // Remaining txs
     const usedTxs = sum(existingBlocks.map(b => b.body.txEffects.length));

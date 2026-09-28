@@ -1,7 +1,8 @@
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { BlockHash } from '@aztec-labs/stdlib/block';
+import { BlockHash, blockParameterHash } from '@aztec-labs/stdlib/block';
 import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
@@ -18,9 +19,11 @@ describe('ContractClassService', () => {
   const address = AztecAddress.fromBigIntUnsafe(0x1234n);
   const originalClassId = new Fr(0xaaaan);
 
-  const anchorWithHash = (hash: BlockHash): BlockHeader => {
+  const anchorWithHash = (hash: BlockHash, number: BlockNumber = BlockNumber(7)): BlockHeader => {
     const header = mock<BlockHeader>();
     header.hash.mockResolvedValue(hash);
+    header.getBlockNumber.mockReturnValue(number);
+    header.toBlockParameter.mockResolvedValue({ number, hash });
     return header;
   };
 
@@ -40,7 +43,7 @@ describe('ContractClassService', () => {
     node.getContract.mockResolvedValue({ currentContractClassId: currentClassId } as ContractInstanceWithAddress);
 
     expect(await service.getCurrentClassId(address, anchorWithHash(hash))).toEqual(currentClassId);
-    expect(node.getContract).toHaveBeenCalledWith(address, hash);
+    expect(node.getContract).toHaveBeenCalledWith(address, { number: BlockNumber(7), hash });
   });
 
   it('resolves the node-reported current class even when no local instance is registered', async () => {
@@ -57,11 +60,12 @@ describe('ContractClassService', () => {
     const hashB = new BlockHash(new Fr(2n));
     const classAtA = new Fr(0xa1n);
     const classAtB = new Fr(0xb2n);
-    node.getContract.mockImplementation((_addr, refBlock) =>
-      Promise.resolve({
-        currentContractClassId: (refBlock as BlockHash).equals(hashA) ? classAtA : classAtB,
-      } as ContractInstanceWithAddress),
-    );
+    node.getContract.mockImplementation((_addr, refBlock) => {
+      const anchoredAt = refBlock === undefined ? undefined : blockParameterHash(refBlock);
+      return Promise.resolve({
+        currentContractClassId: anchoredAt?.equals(hashA) ? classAtA : classAtB,
+      } as ContractInstanceWithAddress);
+    });
 
     expect(await service.getCurrentClassId(address, anchorWithHash(hashA))).toEqual(classAtA);
     expect(await service.getCurrentClassId(address, anchorWithHash(hashB))).toEqual(classAtB);

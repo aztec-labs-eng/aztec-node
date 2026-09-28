@@ -3,6 +3,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { type Hex, encodeAbiParameters, getContract, keccak256, parseAbiParameters } from 'viem';
 
+import { isAnvilTestChain } from '../chain.js';
 import type { ViemClient } from '../types.js';
 import { RollupContract } from './rollup.js';
 
@@ -22,7 +23,7 @@ export function validateFeeAssetPriceModifier(modifier: bigint): boolean {
 
 /**
  * Oracle for computing fee asset price modifiers based on Uniswap V4 pool prices.
- * Only active on Ethereum mainnet - returns 0 on other chains.
+ * Active on Ethereum mainnet and local test chains with a deployed StateView. Returns 0 on other chains.
  */
 export class FeeAssetPriceOracle {
   constructor(
@@ -33,9 +34,25 @@ export class FeeAssetPriceOracle {
 
   @memoize
   async getUniswapOracle(): Promise<UniswapPriceOracle | undefined> {
+    const chainId = await this.client.getChainId();
+    const isLocalTestChain = isAnvilTestChain(chainId);
+    if (chainId !== 1 && !isLocalTestChain) {
+      this.log.debug('Fee asset price oracle disabled on non-mainnet chain', {
+        eventName: 'fee_asset_oracle_disabled',
+        chainId,
+      });
+      return undefined;
+    }
     const code = await this.client.getCode({ address: STATE_VIEW_ADDRESS.toString() });
     if (code === undefined || code === '0x') {
-      this.log.warn('Uniswap V4 StateView contract not found, skipping fee asset price oracle');
+      this.log[isLocalTestChain ? 'debug' : 'warn'](
+        'Uniswap V4 StateView contract not found, skipping fee asset price oracle',
+        {
+          eventName: 'fee_asset_oracle_unavailable',
+          chainId,
+          reason: 'missing_state_view',
+        },
+      );
       return undefined;
     }
     this.log.info('Uniswap V4 StateView contract found, initializing fee asset price oracle');
@@ -43,11 +60,20 @@ export class FeeAssetPriceOracle {
 
     try {
       if (!(await oracle.isPoolInitialized())) {
-        this.log.warn('Uniswap V4 pool not initialized, skipping fee asset price oracle');
+        this.log.warn('Uniswap V4 pool not initialized, skipping fee asset price oracle', {
+          eventName: 'fee_asset_oracle_unavailable',
+          chainId,
+          reason: 'uninitialized_pool',
+        });
         return undefined;
       }
     } catch (err) {
-      this.log.warn(`Failed to check if Uniswap V4 pool is initialized: ${err}`);
+      this.log.warn('Failed to check if Uniswap V4 pool is initialized', {
+        eventName: 'fee_asset_oracle_unavailable',
+        chainId,
+        reason: 'pool_query_failed',
+        err,
+      });
       return undefined;
     }
 
@@ -60,7 +86,7 @@ export class FeeAssetPriceOracle {
    * The modifier adjusts the on-chain fee asset price toward the oracle price,
    * clamped to ±1% (±100 basis points) per checkpoint.
    *
-   * Returns 0 if not on mainnet or if the oracle query fails.
+   * Returns 0 on unsupported chains or if the oracle query fails.
    *
    * @param currentPriceE12 - Optional override for the parent checkpoint's eth-per-fee-asset
    *   (E12 scale). When omitted, the latest published value is read from L1. Pipelined
@@ -100,7 +126,7 @@ export class FeeAssetPriceOracle {
 
   /**
    * Gets the current oracle price (ETH per fee asset, scaled by 1e12).
-   * Returns undefined if not on mainnet or if the oracle query fails.
+   * Returns undefined on unsupported chains or if the oracle query fails.
    */
   async getOraclePrice(): Promise<bigint | undefined> {
     const uniswapOracle = await this.getUniswapOracle();

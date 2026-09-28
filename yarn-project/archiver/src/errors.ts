@@ -1,5 +1,5 @@
 import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
-import type { Fr } from '@aztec-labs/foundation/schemas';
+import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 export class NoBlobBodiesFoundError extends Error {
   constructor(l2BlockNum: number) {
@@ -94,33 +94,107 @@ export class BlockNotFoundError extends Error {
   }
 }
 
-/** Thrown when a proposed block matches a block that was already checkpointed. This is expected for late proposals. */
-export class BlockAlreadyCheckpointedError extends Error {
-  constructor(public readonly blockNumber: number) {
-    super(`Block ${blockNumber} has already been checkpointed with the same content`);
-    this.name = 'BlockAlreadyCheckpointedError';
+/**
+ * Thrown when a message suffix replacement finds the local prefix it was compared against already changed, so the
+ * comparison that established the divergence no longer describes the store and must be redone.
+ */
+export class InboxMessagePrefixChangedError extends Error {
+  constructor(
+    public readonly totalMessageCount: bigint,
+    /** The rolling hash the prefix was expected to have, when a caller knows it for this exact count. */
+    public readonly expected: Fr | undefined,
+    public readonly actual: Fr | undefined,
+  ) {
+    super(
+      `Inbox message prefix at count ${totalMessageCount} changed from ${expected?.toString() ?? 'unavailable'} to ` +
+        `${actual?.toString() ?? 'unavailable'} while a replacement was being prepared`,
+    );
+    this.name = 'InboxMessagePrefixChangedError';
   }
 }
 
 /**
- * Thrown when a query names an Inbox bucket this archiver has not synced. Distinguishes "not synced yet, retry once
- * L1 sync catches up" from a genuinely empty result.
+ * Thrown when a cumulative Inbox message-count range is not fully backed by the messages this archiver has synced,
+ * either because it reaches past the synced tip or because the store is missing a message the range needs.
+ * Distinguishes "not available locally, retry once L1 sync catches up" from a genuinely empty range.
+ *
+ * The distinction is only available in process. Across JSON-RPC this arrives as a generic `Error` carrying the
+ * message text alone, so remote callers cannot recover the class or the `startLeafCount`/`endLeafCount` fields and
+ * instead treat any range failure as unavailability. Do not add behaviour that depends on `instanceof` surviving.
  */
-export class InboxBucketNotSyncedError extends Error {
-  constructor(public readonly bucketSeq: bigint) {
-    super(`Inbox bucket ${bucketSeq} has not been synced`);
-    this.name = 'InboxBucketNotSyncedError';
+export class InboxMessageRangeNotSyncedError extends Error {
+  constructor(
+    public readonly startLeafCount: bigint,
+    public readonly endLeafCount: bigint,
+    detail: string,
+  ) {
+    super(`Inbox message range [${startLeafCount}, ${endLeafCount}) is not fully synced: ${detail}`);
+    this.name = 'InboxMessageRangeNotSyncedError';
   }
 }
 
 /**
- * Thrown when a cumulative Inbox message count does not resolve to a bucket boundary this archiver has synced, either
- * because the count sits inside a bucket or because the bucket is not synced yet.
+ * Thrown when a proposed block's signed Inbox prefix reference cannot be checked against the local view, because the
+ * archiver has not synced a message at the block's end count or cannot serve its consumed range whole. Distinguishes
+ * "our view is behind, retry" from {@link InboxPrefixMismatchError}'s "our view disagrees".
  */
-export class InboxBucketBoundaryNotSyncedError extends Error {
-  constructor(public readonly totalMsgCount: bigint) {
-    super(`No synced Inbox bucket ends at cumulative message count ${totalMsgCount}`);
-    this.name = 'InboxBucketBoundaryNotSyncedError';
+export class InboxPrefixNotSyncedError extends Error {
+  constructor(
+    public readonly blockNumber: number,
+    public readonly endTotalMsgCount: bigint,
+    cause?: string,
+  ) {
+    super(
+      `Cannot confirm the Inbox prefix at message count ${endTotalMsgCount} for proposed block ${blockNumber}` +
+        (cause ? `: ${cause}` : ''),
+    );
+    this.name = 'InboxPrefixNotSyncedError';
+  }
+}
+
+/**
+ * Thrown when a proposed block's signed Inbox prefix reference does not match the canonical prefix this archiver
+ * holds at the block's end count. The block consumed messages this node's view of L1 does not back, so inserting it
+ * would put a chain nothing can replay into the store.
+ */
+export class InboxPrefixMismatchError extends Error {
+  constructor(
+    public readonly blockNumber: number,
+    public readonly endTotalMsgCount: bigint,
+    public readonly expected: Fr,
+    public readonly actual: Fr,
+  ) {
+    super(
+      `Proposed block ${blockNumber} references Inbox prefix ${expected.toString()} at message count ` +
+        `${endTotalMsgCount}, but the canonical prefix there is ${actual.toString()}`,
+    );
+    this.name = 'InboxPrefixMismatchError';
+  }
+}
+
+/** Thrown when a proposed block's parent is not in the store, so its consumed range has no lower bound. */
+export class ProposedBlockParentNotFoundError extends Error {
+  constructor(
+    public readonly blockNumber: number,
+    public readonly parentBlockNumber: number,
+  ) {
+    super(`Cannot resolve parent block ${parentBlockNumber} of proposed block ${blockNumber}`);
+    this.name = 'ProposedBlockParentNotFoundError';
+  }
+}
+
+/** Thrown when a proposed block's end message count is below its parent's, so consumption would rewind. */
+export class InboxConsumptionRewindsError extends Error {
+  constructor(
+    public readonly blockNumber: number,
+    public readonly endTotalMsgCount: bigint,
+    public readonly parentTotalMsgCount: bigint,
+  ) {
+    super(
+      `Proposed block ${blockNumber} consumes through message count ${endTotalMsgCount}, ` +
+        `behind its parent's ${parentTotalMsgCount}`,
+    );
+    this.name = 'InboxConsumptionRewindsError';
   }
 }
 
@@ -207,5 +281,24 @@ export class CannotOverwriteCheckpointedBlockError extends Error {
       `Cannot add block ${blockNumber}: would overwrite checkpointed data (checkpointed up to block ${lastCheckpointedBlock})`,
     );
     this.name = 'CannotOverwriteCheckpointedBlockError';
+  }
+}
+
+/**
+ * Thrown when a checkpoint is about to be written with a packed attestations tuple that does not decode.
+ * The store keeps only the tuple and decodes it on read, so writing an undecodable one would leave a
+ * checkpoint that can be written but never read back.
+ */
+export class UndecodableCheckpointAttestationsError extends Error {
+  constructor(
+    public readonly checkpointNumber: number,
+    public readonly committeeSize: number,
+    public override readonly cause: unknown,
+  ) {
+    super(
+      `Cannot store checkpoint ${checkpointNumber}: its attestations tuple does not decode for a committee of ` +
+        `${committeeSize} (${cause instanceof Error ? cause.message : String(cause)})`,
+    );
+    this.name = 'UndecodableCheckpointAttestationsError';
   }
 }

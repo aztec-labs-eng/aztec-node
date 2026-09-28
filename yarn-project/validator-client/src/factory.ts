@@ -12,8 +12,9 @@ import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 import type { SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
+import type { InboxEndpointReader } from './checkpoint_endpoint_check.js';
 import { ValidatorMetrics } from './metrics.js';
-import { ProposalHandler } from './proposal_handler.js';
+import { type BlockProposalObservers, ProposalHandler } from './proposal_handler.js';
 import { ValidatorClient } from './validator.js';
 
 export function createProposalHandler(
@@ -23,12 +24,15 @@ export function createProposalHandler(
     worldState: WorldStateSynchronizer;
     blockSource: L2BlockSource & L2BlockSink;
     l1ToL2MessageSource: L1ToL2MessageSource;
+    inbox: InboxEndpointReader;
     p2pClient: P2PClient;
     epochCache: EpochCache;
     blobClient: BlobClientInterface;
     dateProvider: DateProvider;
     telemetry: TelemetryClient;
     reexecutionTracker: CheckpointReexecutionTracker;
+    /** Test-only in-process observations of this node's proposal handling; absent in production. */
+    blockProposalObservers?: BlockProposalObservers;
   },
 ) {
   const metrics = new ValidatorMetrics(deps.telemetry);
@@ -41,6 +45,7 @@ export function createProposalHandler(
     deps.worldState,
     deps.blockSource,
     deps.l1ToL2MessageSource,
+    deps.inbox,
     deps.p2pClient.getTxProvider(),
     deps.epochCache,
     consensusTimetable,
@@ -51,6 +56,7 @@ export function createProposalHandler(
     deps.dateProvider,
     deps.telemetry,
     undefined,
+    deps.blockProposalObservers,
   );
 }
 
@@ -62,6 +68,7 @@ export function createValidatorClient(
     p2pClient: P2PClient;
     blockSource: L2BlockSource & L2BlockSink;
     l1ToL2MessageSource: L1ToL2MessageSource;
+    inbox: InboxEndpointReader;
     telemetry: TelemetryClient;
     dateProvider: DateProvider;
     epochCache: EpochCache;
@@ -69,6 +76,8 @@ export function createValidatorClient(
     blobClient: BlobClientInterface;
     reexecutionTracker: CheckpointReexecutionTracker;
     slashingProtectionDb?: SlashingProtectionDatabase;
+    /** Test-only in-process observations of this node's proposal handling; absent in production. */
+    blockProposalObservers?: BlockProposalObservers;
   },
 ) {
   if (config.disableValidator || !deps.keyStoreManager) {
@@ -84,6 +93,7 @@ export function createValidatorClient(
     deps.p2pClient,
     deps.blockSource,
     deps.l1ToL2MessageSource,
+    deps.inbox,
     txProvider,
     deps.keyStoreManager,
     deps.blobClient,
@@ -91,5 +101,6 @@ export function createValidatorClient(
     deps.dateProvider,
     deps.telemetry,
     deps.slashingProtectionDb,
+    deps.blockProposalObservers,
   );
 }

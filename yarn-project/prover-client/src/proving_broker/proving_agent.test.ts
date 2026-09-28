@@ -5,6 +5,7 @@ import { AbortError } from '@aztec-labs/foundation/error';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
 import {
+  type GetProvingJobResponse,
   type ProofUri,
   type ProvingJob,
   type ProvingJobConsumer,
@@ -292,6 +293,145 @@ describe('ProvingAgent', () => {
     expect(jobSource.reportProvingJobError).toHaveBeenCalledWith(job.id, 'Failed to load proof inputs', true, {
       allowList,
     });
+  });
+
+  it('drains an idle agent without claiming another job', async () => {
+    agent.start();
+    await jest.advanceTimersByTimeAsync(0);
+    jobSource.getProvingJob.mockResolvedValueOnce(makeBaseParityJob());
+
+    await agent.drain();
+
+    expect(agent.getStatus()).toEqual({ status: 'stopped' });
+    expect(agent.isRunning()).toBe(false);
+  });
+
+  it.each(['success', 'error'] as const)('drains an active proof through %s reporting', async outcome => {
+    const response = makeBaseParityJob();
+    const proof = promiseWithResolvers<ReturnType<typeof makeBaseParityResult>>();
+    const reported = promiseWithResolvers<GetProvingJobResponse | undefined>();
+    let signal: AbortSignal | undefined;
+    const heartbeats: number[] = [];
+    let reportAllowsNewJobs: boolean | undefined;
+    jest.spyOn(prover, 'getInboxParityProof').mockImplementationOnce((_, abortSignal) => {
+      signal = abortSignal;
+      return proof.promise;
+    });
+    jobSource.getProvingJob.mockResolvedValueOnce(response);
+    proofDB.getProofInput.mockResolvedValueOnce(response.inputs);
+    jobSource.reportProvingJobProgress.mockImplementation((_id, _time, filter) => {
+      if (filter?.allowNewJobs === false) {
+        heartbeats.push(jest.now());
+      }
+      return Promise.resolve(undefined);
+    });
+    jobSource.reportProvingJobSuccess.mockImplementation((_id, _uri, filter) => {
+      reportAllowsNewJobs = filter?.allowNewJobs;
+      return reported.promise;
+    });
+    jobSource.reportProvingJobError.mockImplementation((_id, _err, _retry, filter) => {
+      reportAllowsNewJobs = filter?.allowNewJobs;
+      return reported.promise;
+    });
+    agent.start();
+    await jest.advanceTimersByTimeAsync(0);
+
+    let drained = false;
+    const draining = agent.drain().then(() => {
+      drained = true;
+    });
+    const alsoDraining = agent.drain();
+    await jest.advanceTimersByTimeAsync(3 * agentPollIntervalMs);
+    expect(signal?.aborted).toBe(false);
+    expect(drained).toBe(false);
+    expect(heartbeats.length).toBeGreaterThanOrEqual(3);
+
+    if (outcome === 'success') {
+      proof.resolve(makeBaseParityResult());
+    } else {
+      proof.reject(new Error('proof failed'));
+    }
+    await jest.advanceTimersByTimeAsync(0);
+    expect(reportAllowsNewJobs).toBe(false);
+    expect(drained).toBe(false);
+
+    reported.resolve(undefined);
+    await jest.advanceTimersByTimeAsync(0);
+    await Promise.all([draining, alsoDraining]);
+    expect(agent.getStatus()).toEqual({ status: 'stopped' });
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it('finishes a job returned by a claim already in flight when draining starts', async () => {
+    const response = makeBaseParityJob();
+    const claim = promiseWithResolvers<GetProvingJobResponse | undefined>();
+    const completed: string[] = [];
+    jobSource.getProvingJob.mockReturnValueOnce(claim.promise);
+    proofDB.getProofInput.mockResolvedValueOnce(response.inputs);
+    jest.spyOn(prover, 'getInboxParityProof').mockResolvedValueOnce(makeBaseParityResult());
+    jobSource.reportProvingJobSuccess.mockImplementation((id, _uri, filter) => {
+      expect(filter?.allowNewJobs).toBe(false);
+      completed.push(id);
+      return Promise.resolve(undefined);
+    });
+    agent.start();
+
+    const draining = agent.drain();
+    claim.resolve(response);
+    await jest.advanceTimersByTimeAsync(0);
+    await draining;
+
+    expect(completed).toEqual([response.job.id]);
+    expect(agent.getStatus()).toEqual({ status: 'stopped' });
+  });
+
+  it('finishes replacement work returned by a result report already in flight', async () => {
+    const first = makeBaseParityJob();
+    const next = makeBaseParityJob();
+    const report = promiseWithResolvers<GetProvingJobResponse | undefined>();
+    const completed: string[] = [];
+    jobSource.getProvingJob.mockResolvedValueOnce(first);
+    proofDB.getProofInput.mockResolvedValueOnce(first.inputs).mockResolvedValueOnce(next.inputs);
+    jest.spyOn(prover, 'getInboxParityProof').mockResolvedValue(makeBaseParityResult());
+    jobSource.reportProvingJobSuccess.mockReturnValueOnce(report.promise).mockImplementation((id, _uri, filter) => {
+      expect(filter?.allowNewJobs).toBe(false);
+      completed.push(id);
+      return Promise.resolve(undefined);
+    });
+    agent.start();
+    await jest.advanceTimersByTimeAsync(0);
+
+    const draining = agent.drain();
+    report.resolve(next);
+    await jest.advanceTimersByTimeAsync(0);
+    await draining;
+
+    expect(completed).toEqual([next.job.id]);
+    expect(agent.getStatus()).toEqual({ status: 'stopped' });
+  });
+
+  it('reports input loading failure while draining without claiming replacement work', async () => {
+    const response = makeBaseParityJob();
+    const inputs = promiseWithResolvers<ProvingJobInputs>();
+    const failures: string[] = [];
+    jobSource.getProvingJob.mockResolvedValueOnce(response);
+    proofDB.getProofInput.mockReturnValueOnce(inputs.promise);
+    jobSource.reportProvingJobError.mockImplementation((id, _err, retry, filter) => {
+      expect(retry).toBe(true);
+      expect(filter?.allowNewJobs).toBe(false);
+      failures.push(id);
+      return Promise.resolve(undefined);
+    });
+    agent.start();
+    await jest.advanceTimersByTimeAsync(0);
+
+    const draining = agent.drain();
+    inputs.reject(new Error('input unavailable'));
+    await jest.advanceTimersByTimeAsync(0);
+    await draining;
+
+    expect(failures).toEqual([response.job.id]);
+    expect(agent.getStatus()).toEqual({ status: 'stopped' });
   });
 
   function makeBaseParityJob(): { job: ProvingJob; time: number; inputs: ProvingJobInputs } {

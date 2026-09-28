@@ -1,3 +1,4 @@
+import { ErrorsAbi } from '@aztec-foundation/l1-artifacts/ErrorsAbi';
 import { EscapeHatchAbi } from '@aztec-foundation/l1-artifacts/EscapeHatchAbi';
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 import { RollupStorage } from '@aztec-foundation/l1-artifacts/RollupStorage';
@@ -7,12 +8,13 @@ import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { memoize } from '@aztec-labs/foundation/decorators';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import type { ViemSignature } from '@aztec-labs/foundation/eth-signature';
+import { Signature, type ViemSignature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import chunk from 'lodash.chunk';
 import {
+  type AbiParameter,
   type Account,
   ContractFunctionRevertedError,
   type GetContractReturnType,
@@ -20,8 +22,10 @@ import {
   type Log,
   RpcRequestError,
   type StateOverride,
+  type TypedDataDefinition,
   type WatchContractEventReturnType,
   decodeErrorResult,
+  decodeFunctionResult,
   encodeAbiParameters,
   encodeFunctionData,
   getContract,
@@ -33,9 +37,10 @@ import { getPublicClient } from '../client.js';
 import type { DeployAztecL1ContractsReturnType } from '../deploy_aztec_l1_contracts.js';
 import type { L1ContractAddresses } from '../l1_contract_addresses.js';
 import type { L1ReaderConfig } from '../l1_reader.js';
-import type { L1TxRequest, L1TxUtils } from '../l1_tx_utils/index.js';
+import type { L1TxRequest, L1TxUtils, ReadOnlyL1TxUtils } from '../l1_tx_utils/index.js';
 import type { ViemClient } from '../types.js';
-import { formatViemError } from '../utils.js';
+import { formatViemError, mergeAbis } from '../utils.js';
+import type { ViemCommitteeAttestations } from './committee_attestations.js';
 import { GSEContract } from './gse.js';
 import type { L1EventLog } from './log.js';
 import { SlasherContract } from './slasher_contract.js';
@@ -43,15 +48,43 @@ import { SlashingProposerContract } from './slashing_proposer.js';
 import { checkBlockTag } from './utils.js';
 import { type WatchContractEventOptions, watchContractEvent } from './watch_event.js';
 
+export { type ViemCommitteeAttestations, ViemCommitteeAttestationsSchema } from './committee_attestations.js';
+
 export type ViemCommitteeAttestation = {
   addr: `0x${string}`;
   signature: ViemSignature;
 };
 
-export type ViemCommitteeAttestations = {
-  signatureIndices: `0x${string}`;
-  signaturesOrAddresses: `0x${string}`;
-};
+/**
+ * ABI definition of the `CommitteeAttestations` struct, read off the `propose` function's `_attestations`
+ * parameter so it tracks the deployed ABI rather than a hand-written copy.
+ */
+export function getCommitteeAttestationsStructDef(): AbiParameter {
+  const proposeFunction = RollupAbi.find(item => item.type === 'function' && item.name === 'propose');
+  if (!proposeFunction || proposeFunction.type !== 'function') {
+    throw new Error('propose function not found in RollupAbi');
+  }
+
+  const attestationsParam = proposeFunction.inputs.find(param => param.name === '_attestations');
+  if (!attestationsParam) {
+    throw new Error('_attestations parameter not found in propose function');
+  }
+  if (attestationsParam.type !== 'tuple') {
+    throw new Error(`Expected _attestations parameter to be a tuple, got ${attestationsParam.type}`);
+  }
+
+  return attestationsParam;
+}
+
+/**
+ * Computes the `attestationsHash` the rollup stores at propose time and re-checks when an epoch proof or an
+ * invalidation is submitted. The hash covers the packed tuple byte for byte, including bitmap bits past the
+ * committee size that no L1 or node-side decoder reads, so it can only be computed from the exact bytes that
+ * were posted — never from a tuple re-derived out of decoded attestations.
+ */
+export function computeAttestationsHash(attestations: ViemCommitteeAttestations): Hex {
+  return keccak256(encodeAbiParameters([getCommitteeAttestationsStructDef()], [attestations]));
+}
 
 export type L1RollupContractAddresses = Pick<
   L1ContractAddresses,
@@ -96,6 +129,21 @@ export type ViemGasFees = {
   feePerL2Gas: bigint;
 };
 
+/** Inputs of the Rollup's integrated header and Inbox preflight, mirroring the contract's `CheckpointPreflightArgs`. */
+export type CheckpointPreflightArgs = {
+  header: ViemHeader;
+  attestations: ViemCommitteeAttestations;
+  signers: `0x${string}`[];
+  attestationsAndSignersSignature: ViemSignature;
+  digest: `0x${string}`;
+  blobsHash: `0x${string}`;
+  flags: { ignoreDA: boolean };
+  /** Cumulative Inbox message count the checkpoint consumed up to; must be a live bucket boundary. */
+  expectedTotal: bigint;
+  /** Checkpoint number the header was built on; the call derives the real parent and rejects any other. */
+  expectedParentCheckpointNumber: bigint;
+};
+
 /**
  * Status of a validator/attester in the staking system.
  * Matches the Status enum in StakingLib.sol
@@ -114,7 +162,7 @@ export type FeeHeader = {
   excessMana: bigint;
   manaUsed: bigint;
   ethPerFeeAsset: bigint;
-  congestionCost: bigint;
+  protocolFee: bigint;
   proverCost: bigint;
 };
 
@@ -160,8 +208,8 @@ export enum TempCheckpointLogField {
  * arbitrary `bytes32` value rather than a BN254 scalar. `slotNumber` carries the uint32 portion
  * of the on-chain `CompressedSlot`.
  *
- * `slotNumber` and `inboxMsgTotal` share a single storage word, so supplying either rewrites both;
- * the one left out lands as zero.
+ * `slotNumber`, `inboxMsgTotal` and `inboxConsumedBucket` share a single storage word, so supplying
+ * any one of them rewrites all three; the ones left out land as zero.
  */
 export type TempCheckpointLogOverrideFields = {
   headerHash?: Fr;
@@ -170,6 +218,8 @@ export type TempCheckpointLogOverrideFields = {
   slotNumber?: SlotNumber;
   /** Cumulative Inbox message count consumed as of this checkpoint. */
   inboxMsgTotal?: bigint;
+  /** Inbox bucket sequence number this checkpoint's rolling hash corresponds to. */
+  inboxConsumedBucket?: bigint;
   feeHeader?: FeeHeader;
 };
 
@@ -177,7 +227,7 @@ export type TempCheckpointLogOverrideFields = {
 export type ManaMinFeeComponents = {
   sequencerCost: bigint;
   proverCost: bigint;
-  congestionCost: bigint;
+  protocolFee: bigint;
   congestionMultiplier: bigint;
 };
 
@@ -190,6 +240,33 @@ export type RewardConfig = {
   booster: EthAddress;
   checkpointReward: bigint;
 };
+
+/** Current attester-exit capacity. All durations are in seconds and counts are positions, not token amounts. */
+export type AttesterExitLimitState = {
+  window: bigint;
+  validatorCount: bigint;
+  committeeSize: bigint;
+  used: bigint;
+  /** Limit after one proposed removal; allowance minus used is not a guaranteed batch size. */
+  allowance: bigint;
+  /** Rollup-wide capacity only; the transaction still checks the caller and position. */
+  canExit: boolean;
+};
+
+/** An attester-signed authorization that anyone may relay to initiate the position's withdrawal. */
+export type AttesterExitAuthorization = {
+  attester: EthAddress;
+  deadline: bigint;
+  signature: ViemSignature;
+};
+
+function toViemAttesterExitAuthorization(authorization: AttesterExitAuthorization) {
+  return {
+    attester: authorization.attester.toString(),
+    deadline: authorization.deadline,
+    signature: authorization.signature,
+  };
+}
 
 /**
  * Exit information for a validator
@@ -432,6 +509,17 @@ export class RollupContract {
     return this.rollup.read.getProvingCostPerManaInFeeAsset();
   }
 
+  /** Returns the protocol fee margin in basis points. Not memoized: governance can change it. */
+  async getProtocolFeeMargin(options?: { blockNumber?: bigint }): Promise<number> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getProtocolFeeMargin(options);
+  }
+
+  /** Returns the current recipient of the protocol fee tranche. Not memoized: governance can change it. */
+  async getProtocolFeeRecipient(): Promise<EthAddress> {
+    return EthAddress.fromString(await this.rollup.read.getProtocolFeeRecipient());
+  }
+
   @memoize
   getManaLimit(): Promise<bigint> {
     return this.rollup.read.getManaLimit();
@@ -449,16 +537,12 @@ export class RollupContract {
 
   @memoize
   async getVkTreeRoot(): Promise<Fr> {
-    const slot = BigInt(RollupContract.stfStorageSlot) + 3n;
-    const value = await this.client.getStorageAt({ address: this.address, slot: `0x${slot.toString(16)}` });
-    return Fr.fromString(value ?? '0x0');
+    return Fr.fromString(await this.rollup.read.getVkTreeRoot());
   }
 
   @memoize
   async getProtocolContractsHash(): Promise<Fr> {
-    const slot = BigInt(RollupContract.stfStorageSlot) + 4n;
-    const value = await this.client.getStorageAt({ address: this.address, slot: `0x${slot.toString(16)}` });
-    return Fr.fromString(value ?? '0x0');
+    return Fr.fromString(await this.rollup.read.getProtocolContractsHash());
   }
 
   /**
@@ -636,7 +720,7 @@ export class RollupContract {
       excessMana: result.excessMana,
       manaUsed: result.manaUsed,
       ethPerFeeAsset: result.ethPerFeeAsset,
-      congestionCost: result.congestionCost,
+      protocolFee: result.protocolFee,
       proverCost: result.proverCost,
     };
   }
@@ -729,20 +813,23 @@ export class RollupContract {
         excessMana: result.feeHeader.excessMana,
         manaUsed: result.feeHeader.manaUsed,
         ethPerFeeAsset: result.feeHeader.ethPerFeeAsset,
-        congestionCost: result.feeHeader.congestionCost,
+        protocolFee: result.feeHeader.protocolFee,
         proverCost: result.feeHeader.proverCost,
       },
     };
   }
 
-  /** Returns the pending checkpoint from the rollup contract */
-  getPendingCheckpoint() {
+  /**
+   * Returns the pending checkpoint from the rollup contract.
+   * @param options - Optional L1 block number to pin the queries to.
+   */
+  getPendingCheckpoint(options?: { blockNumber?: bigint }) {
     // We retry because of race conditions during prunes: we may get a pending checkpoint number which is immediately
     // reorged out due to a prune happening, causing the subsequent getCheckpoint call to fail. So we try again in that case.
     return retry(
       async () => {
-        const pendingCheckpointNumber = await this.getCheckpointNumber();
-        const pendingCheckpoint = await this.getCheckpoint(pendingCheckpointNumber);
+        const pendingCheckpointNumber = await this.getCheckpointNumber(options);
+        const pendingCheckpoint = await this.getCheckpoint(pendingCheckpointNumber, options);
         return pendingCheckpoint;
       },
       'getting pending checkpoint',
@@ -782,8 +869,13 @@ export class RollupContract {
     };
   }
 
-  getTimestampForSlot(slot: SlotNumber): Promise<bigint> {
-    return this.rollup.read.getTimestampForSlot([BigInt(slot)]);
+  /**
+   * Returns the timestamp at which the given slot starts.
+   * @param options - Optional L1 block number to pin the query to.
+   */
+  async getTimestampForSlot(slot: SlotNumber, options?: { blockNumber?: bigint }): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getTimestampForSlot([BigInt(slot)], options);
   }
 
   async getEntryQueueLength(): Promise<number> {
@@ -862,10 +954,7 @@ export class RollupContract {
       ViemSignature,
       `0x${string}`,
       `0x${string}`,
-      {
-        ignoreDA: boolean;
-        ignoreSignatures: boolean;
-      },
+      { ignoreDA: boolean },
     ],
     account: `0x${string}` | Account,
   ): Promise<void> {
@@ -880,6 +969,39 @@ export class RollupContract {
     } catch (error: unknown) {
       throw formatViemError(error);
     }
+  }
+
+  /**
+   * Simulates `validateCheckpointHeaderAndInbox` at the intended execution time and state, and returns the Inbox
+   * bucket sequence to submit to `propose` as `bucketHint`.
+   *
+   * The call derives the parent checkpoint from the simulated Rollup storage the way `propose` does (the proven tip if
+   * the pending chain is prunable at `time`), so `stateOverrides` must describe the state the real transaction will
+   * see: a pipelined parent, or the tips after a bundled invalidation. It runs over `eth_simulateV1` with a block time
+   * override, the same transport as the header-only preflight, and throws a formatted error naming the contract
+   * revert (`Rollup__UnexpectedParentCheckpoint`, `Rollup__InboxTotalNotAtBucketBoundary`,
+   * `Inbox__NoBucketAtOrBeforeTotal`, or any header/Inbox consumption error `propose` raises) when the checkpoint is
+   * not publishable in that context.
+   * @param l1TxUtils - The simulation transport
+   * @param args - The header validation inputs plus the consumed Inbox total and the expected parent
+   * @param opts - The block timestamp to simulate at, the state overrides to apply, and the simulated sender
+   */
+  public async validateCheckpointHeaderAndInbox(
+    l1TxUtils: Pick<ReadOnlyL1TxUtils, 'simulate'>,
+    args: CheckpointPreflightArgs,
+    opts: { time: bigint; stateOverrides?: StateOverride; from?: `0x${string}` },
+  ): Promise<bigint> {
+    const { result } = await l1TxUtils.simulate(
+      {
+        to: this.address,
+        data: encodeFunctionData({ abi: RollupAbi, functionName: 'validateCheckpointHeaderAndInbox', args: [args] }),
+        from: opts.from,
+      },
+      { time: opts.time },
+      opts.stateOverrides ?? [],
+      mergeAbis([RollupAbi, ErrorsAbi]),
+    );
+    return decodeFunctionResult({ abi: RollupAbi, functionName: 'validateCheckpointHeaderAndInbox', data: result });
   }
 
   /**
@@ -992,16 +1114,21 @@ export class RollupContract {
         value: fields.payloadDigest.toString() as `0x${string}`,
       });
     }
-    if (fields.slotNumber !== undefined || fields.inboxMsgTotal !== undefined) {
-      // The L1 struct packs the slot number and the inbox consumption count into one word, so this
-      // diff always writes both. Widths are enforced here because the L1 writers cast through
+    if (
+      fields.slotNumber !== undefined ||
+      fields.inboxMsgTotal !== undefined ||
+      fields.inboxConsumedBucket !== undefined
+    ) {
+      // The L1 struct packs the slot number and the two inbox consumption counts into one word, so this
+      // diff always writes all three. Widths are enforced here because the L1 writers cast through
       // SafeCast and revert on overflow; a malformed override must surface rather than silently truncate
       // into a neighbouring field.
       const slotNumber = requireUintFits(BigInt(fields.slotNumber ?? 0), 32, 'slotNumber');
       const inboxMsgTotal = requireUintFits(fields.inboxMsgTotal ?? 0n, 64, 'inboxMsgTotal');
+      const inboxConsumedBucket = requireUintFits(fields.inboxConsumedBucket ?? 0n, 64, 'inboxConsumedBucket');
       stateDiff.push({
         slot: slotAt(TempCheckpointLogField.SlotNumber),
-        value: word(slotNumber | (inboxMsgTotal << 32n)),
+        value: word(slotNumber | (inboxMsgTotal << 32n) | (inboxConsumedBucket << 96n)),
       });
     }
     if (fields.feeHeader) {
@@ -1079,7 +1206,7 @@ export class RollupContract {
     let value = BigInt(feeHeader.manaUsed) & ((1n << 32n) - 1n); // bits [0:31]
     value |= (feeHeader.excessMana < MASK_48_BITS ? feeHeader.excessMana : MASK_48_BITS) << 32n; // bits [32:79]
     value |= (BigInt(feeHeader.ethPerFeeAsset) & MASK_48_BITS) << 80n; // bits [80:127]
-    value |= (feeHeader.congestionCost < MASK_64_BITS ? feeHeader.congestionCost : MASK_64_BITS) << 128n; // bits [128:191]
+    value |= (feeHeader.protocolFee < MASK_64_BITS ? feeHeader.protocolFee : MASK_64_BITS) << 128n; // bits [128:191]
     value |= (feeHeader.proverCost < MASK_63_BITS ? feeHeader.proverCost : MASK_63_BITS) << 192n; // bits [192:254]
     value |= 1n << 255n; // preheat flag
     return value;
@@ -1121,7 +1248,7 @@ export class RollupContract {
       excessMana,
       manaUsed: childManaUsed,
       ethPerFeeAsset: newPrice,
-      congestionCost: 0n,
+      protocolFee: 0n,
       proverCost: 0n,
     };
   }
@@ -1174,8 +1301,18 @@ export class RollupContract {
     return this.rollup.read.getHasSubmitted([BigInt(epochNumber), BigInt(numberOfCheckpointsInEpoch), prover]);
   }
 
-  getManaMinFeeAt(timestamp: bigint, inFeeAsset: boolean, stateOverride?: StateOverride): Promise<bigint> {
-    return this.rollup.read.getManaMinFeeAt([timestamp, inFeeAsset], { stateOverride });
+  /**
+   * Returns the minimum mana fee at the given timestamp.
+   * @param options - Optional state override to simulate against, and optional L1 block number to pin the call
+   * to, so the fee describes a known L1 state rather than whatever the node considers latest.
+   */
+  async getManaMinFeeAt(
+    timestamp: bigint,
+    inFeeAsset: boolean,
+    options?: { stateOverride?: StateOverride; blockNumber?: bigint },
+  ): Promise<bigint> {
+    await checkBlockTag(options?.blockNumber, this.client);
+    return await this.rollup.read.getManaMinFeeAt([timestamp, inFeeAsset], options);
   }
 
   async getManaMinFeeComponentsAt(timestamp: bigint, inFeeAsset: boolean): Promise<ManaMinFeeComponents> {
@@ -1183,7 +1320,7 @@ export class RollupContract {
     return {
       sequencerCost: result.sequencerCost,
       proverCost: result.proverCost,
-      congestionCost: result.congestionCost,
+      protocolFee: result.protocolFee,
       congestionMultiplier: result.congestionMultiplier,
     };
   }
@@ -1288,6 +1425,108 @@ export class RollupContract {
 
   async getCurrentBlobCommitmentsHash(): Promise<Buffer32> {
     return Buffer32.fromString(await this.rollup.read.getCurrentBlobCommitmentsHash());
+  }
+
+  public getAttesterExitWindow(): Promise<bigint> {
+    return this.rollup.read.getAttesterExitWindow();
+  }
+
+  public getAttesterExitLimitState(): Promise<AttesterExitLimitState> {
+    return this.rollup.read.getAttesterExitLimitState();
+  }
+
+  /** Builds the EIP-712 data an attester signs to authorize a relayed exit. */
+  public buildAttesterExitTypedData(attester: EthAddress, deadline: bigint): TypedDataDefinition {
+    return {
+      domain: {
+        name: 'Aztec Rollup',
+        version: '1',
+        chainId: this.client.chain.id,
+        verifyingContract: this.address,
+      },
+      types: {
+        AttesterExit: [
+          { name: 'attester', type: 'address' },
+          { name: 'deadline', type: 'uint256' },
+        ],
+      },
+      primaryType: 'AttesterExit',
+      message: { attester: attester.toString(), deadline },
+    };
+  }
+
+  /** Creates an attester exit authorization that can be submitted by another account. */
+  public async createAttesterExitAuthorization(
+    attester: EthAddress,
+    deadline: bigint,
+    signer: (typedData: TypedDataDefinition) => Promise<Hex>,
+  ): Promise<AttesterExitAuthorization> {
+    const signature = Signature.fromString(await signer(this.buildAttesterExitTypedData(attester, deadline)));
+    return { attester, deadline, signature: signature.toViemSignature() };
+  }
+
+  /** Initiates an attester exit. The transaction signer must be the position's attester. */
+  public initiateWithdrawByAttester(
+    l1TxUtils: L1TxUtils,
+    attester: EthAddress,
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttester',
+        args: [attester.toString()],
+      }),
+    });
+  }
+
+  /** Relays one signed attester exit authorization. */
+  public initiateWithdrawByAttesterWithSignature(
+    l1TxUtils: L1TxUtils,
+    authorization: AttesterExitAuthorization,
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterWithSignature',
+        args: [toViemAttesterExitAuthorization(authorization)],
+      }),
+    });
+  }
+
+  /** Relays a signed attester exit batch that reverts unless every authorization can be processed. */
+  public initiateWithdrawByAttesterBatch(
+    l1TxUtils: L1TxUtils,
+    authorizations: AttesterExitAuthorization[],
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterBatch',
+        args: [authorizations.map(toViemAttesterExitAuthorization)],
+      }),
+    });
+  }
+
+  /** Relays the largest permitted prefix of a signed attester exit batch. */
+  public initiateWithdrawByAttesterBatchUpToLimit(
+    l1TxUtils: L1TxUtils,
+    authorizations: AttesterExitAuthorization[],
+  ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    return l1TxUtils.sendAndMonitorTransaction({
+      to: this.address,
+      abi: RollupAbi,
+      data: encodeFunctionData({
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterBatchUpToLimit',
+        args: [authorizations.map(toViemAttesterExitAuthorization)],
+      }),
+    });
   }
 
   async getStakingAsset(): Promise<EthAddress> {

@@ -1,10 +1,11 @@
 import { INITIAL_CHECKPOINT_NUMBER, INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toArray } from '@aztec-labs/foundation/iterable';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { BufferReader } from '@aztec-labs/foundation/serialize';
-import { bufferToHex } from '@aztec-labs/foundation/string';
+import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import { isDefined } from '@aztec-labs/foundation/types';
 import type { AztecAsyncKVStore, AztecAsyncMap, AztecAsyncSingleton, Range } from '@aztec-labs/kv-store';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -15,8 +16,8 @@ import {
   CommitteeAttestation,
   GENESIS_CHECKPOINT_HEADER_HASH,
   L2Block,
+  type L2Frontier,
   type L2TipId,
-  type L2Tips,
   type ValidateCheckpointResult,
   deserializeValidateCheckpointResult,
   serializeValidateCheckpointResult,
@@ -42,7 +43,6 @@ import {
 } from '@aztec-labs/stdlib/tx';
 
 import {
-  BlockAlreadyCheckpointedError,
   BlockArchiveNotConsistentError,
   BlockCheckpointNumberNotSequentialError,
   BlockIndexNotSequentialError,
@@ -56,6 +56,7 @@ import {
   ProposedCheckpointArchiveRootMismatchError,
   ProposedCheckpointNotSequentialError,
   ProposedCheckpointPromotionNotSequentialError,
+  UndecodableCheckpointAttestationsError,
 } from '../errors.js';
 import { prepareBlockTxEffectsTreeData } from './tx_effect_tree_data.js';
 
@@ -125,7 +126,17 @@ type CommonCheckpointStorage = {
 
 type CheckpointStorage = CommonCheckpointStorage & {
   l1: Buffer;
-  attestations: Buffer[];
+  /**
+   * The packed `CommitteeAttestations` tuple exactly as posted to L1. The decoded attestations are derived
+   * from it on read: they are a lossy view of these bytes, and only these bytes reproduce the
+   * `attestationsHash` the rollup stored at propose time.
+   */
+  verbatimAttestations: { signatureIndices: Buffer; signaturesOrAddresses: Buffer };
+  /**
+   * Committee size the tuple was posted for. Not derivable from the tuple: the bitmap popcount would count
+   * bits past the committee size, which are unconstrained at propose time.
+   */
+  committeeSize: number;
   feeAssetPriceModifier: string;
 };
 
@@ -137,6 +148,13 @@ type ProposedCheckpointStorage = CommonCheckpointStorage & {
 };
 
 export type RemoveCheckpointsResult = { blocksRemoved: L2Block[] | undefined };
+
+/**
+ * Outcome of adding a proposed block. `already-checkpointed` means the block was already stored as part of an
+ * L1 checkpoint with the same archive root: the proposal is a late duplicate that carries nothing new. This is
+ * expected under pipelining, when the checkpoint lands on L1 while the proposal is still being re-executed.
+ */
+export type AddProposedBlockResult = 'added' | 'already-checkpointed';
 
 /**
  * Single-block lookup with the chain-tip `tag` variant of {@link BlockQuery} already resolved
@@ -203,9 +221,6 @@ export class BlockStore {
   /** Map rejected checkpoints (due to invalid attestations) by archive root */
   #rejectedCheckpoints: AztecAsyncMap<string, RejectedCheckpointStorage>;
 
-  /** Index mapping a rejected checkpoint's number to its archive root, so the latest can be read in reverse order */
-  #rejectedCheckpointsByNumber: AztecAsyncMap<number, string>;
-
   #log = createLogger('archiver:block_store');
 
   constructor(private db: AztecAsyncKVStore) {
@@ -225,7 +240,6 @@ export class BlockStore {
     this.#slotToCheckpoint = db.openMap('archiver_slot_to_checkpoint');
     this.#proposedCheckpoints = db.openMap('archiver_proposed_checkpoints');
     this.#rejectedCheckpoints = db.openMap('archiver_rejected_checkpoints');
-    this.#rejectedCheckpointsByNumber = db.openMap('archiver_rejected_checkpoints_by_number');
   }
 
   /**
@@ -250,9 +264,9 @@ export class BlockStore {
    * This is an uncheckpointed block that has been proposed by the sequencer but not yet included in a checkpoint on L1.
    * For checkpointed blocks (already published to L1), use addCheckpoints() instead.
    * @param block - The proposed L2 block to be added to the store.
-   * @returns True if the operation is successful.
+   * @returns Whether the block was added, or `already-checkpointed` if it duplicates a checkpointed block.
    */
-  async addProposedBlock(block: L2Block, opts: { force?: boolean } = {}): Promise<boolean> {
+  async addProposedBlock(block: L2Block, opts: { force?: boolean } = {}): Promise<AddProposedBlockResult> {
     await prepareBlockTxEffectsTreeData([block]);
     return await this.db.transactionAsync(async () => {
       const blockNumber = block.number;
@@ -267,10 +281,12 @@ export class BlockStore {
       // Verify we're not overwriting checkpointed blocks
       const lastCheckpointedBlockNumber = await this.getCheckpointedL2BlockNumber();
       if (!opts.force && blockNumber <= lastCheckpointedBlockNumber) {
-        // Check if the proposed block matches the already-checkpointed one
+        // A late proposal matching the already-checkpointed block is not an error, so it is reported as an
+        // outcome rather than thrown: throwing would abort the enclosing write transaction, which the
+        // kv-store reports as a failed commit.
         const existingBlock = await this.getBlockData({ number: BlockNumber(blockNumber) });
         if (existingBlock && existingBlock.archive.root.equals(block.archive.root)) {
-          throw new BlockAlreadyCheckpointedError(blockNumber);
+          return 'already-checkpointed';
         }
         throw new CannotOverwriteCheckpointedBlockError(blockNumber, lastCheckpointedBlockNumber);
       }
@@ -318,7 +334,7 @@ export class BlockStore {
 
       await this.addBlockToDatabase(block, block.checkpointNumber, block.indexWithinCheckpoint);
 
-      return true;
+      return 'added';
     });
   }
 
@@ -394,7 +410,11 @@ export class BlockStore {
           archive: checkpoint.checkpoint.archive.toBuffer(),
           checkpointOutHash: checkpoint.checkpoint.getCheckpointOutHash().toBuffer(),
           l1: checkpoint.l1.toBuffer(),
-          attestations: checkpoint.attestations.map(attestation => attestation.toBuffer()),
+          ...this.toAttestationsStorage(
+            checkpoint.checkpoint.number,
+            checkpoint.verbatimAttestations,
+            checkpoint.attestations.length,
+          ),
           checkpointNumber: checkpoint.checkpoint.number,
           startBlock: checkpoint.checkpoint.blocks[0].number,
           blockCount: checkpoint.checkpoint.blocks.length,
@@ -450,7 +470,11 @@ export class BlockStore {
         archive: incoming.checkpoint.archive.toBuffer(),
         checkpointOutHash: incoming.checkpoint.getCheckpointOutHash().toBuffer(),
         l1: incoming.l1.toBuffer(),
-        attestations: incoming.attestations.map(a => a.toBuffer()),
+        ...this.toAttestationsStorage(
+          incoming.checkpoint.number,
+          incoming.verbatimAttestations,
+          incoming.attestations.length,
+        ),
         checkpointNumber: incoming.checkpoint.number,
         startBlock: incoming.checkpoint.blocks[0].number,
         blockCount: incoming.checkpoint.blocks.length,
@@ -745,7 +769,35 @@ export class BlockStore {
     return result;
   }
 
+  /**
+   * Serializes the packed attestations tuple for storage, failing the write if the tuple does not decode.
+   * The store keeps only the tuple and rebuilds the decoded attestations on read, so decodability has to be
+   * a precondition of being stored at all — otherwise a checkpoint could be written and never read back.
+   */
+  private toAttestationsStorage(
+    checkpointNumber: number,
+    verbatimAttestations: ViemCommitteeAttestations,
+    committeeSize: number,
+  ): Pick<CheckpointStorage, 'verbatimAttestations' | 'committeeSize'> {
+    try {
+      CommitteeAttestation.fromPacked(verbatimAttestations, committeeSize);
+    } catch (err) {
+      throw new UndecodableCheckpointAttestationsError(checkpointNumber, committeeSize, err);
+    }
+    return {
+      verbatimAttestations: {
+        signatureIndices: hexToBuffer(verbatimAttestations.signatureIndices),
+        signaturesOrAddresses: hexToBuffer(verbatimAttestations.signaturesOrAddresses),
+      },
+      committeeSize,
+    };
+  }
+
   private checkpointDataFromCheckpointStorage(checkpointStorage: CheckpointStorage): CheckpointData {
+    const verbatimAttestations: ViemCommitteeAttestations = {
+      signatureIndices: bufferToHex(checkpointStorage.verbatimAttestations.signatureIndices),
+      signaturesOrAddresses: bufferToHex(checkpointStorage.verbatimAttestations.signaturesOrAddresses),
+    };
     return {
       header: CheckpointHeader.fromBuffer(checkpointStorage.header),
       archive: AppendOnlyTreeSnapshot.fromBuffer(checkpointStorage.archive),
@@ -755,7 +807,9 @@ export class BlockStore {
       blockCount: checkpointStorage.blockCount,
       feeAssetPriceModifier: BigInt(checkpointStorage.feeAssetPriceModifier),
       l1: L1PublishedData.fromBuffer(checkpointStorage.l1),
-      attestations: checkpointStorage.attestations.map(buf => CommitteeAttestation.fromBuffer(buf)),
+      // A decode failure here is store corruption: every write path rejects a tuple that does not decode.
+      attestations: CommitteeAttestation.fromPacked(verbatimAttestations, checkpointStorage.committeeSize),
+      verbatimAttestations,
     };
   }
 
@@ -879,13 +933,15 @@ export class BlockStore {
    * Remaining pending entries (e.g. N+1, N+2) are left intact — they chain off the just-promoted one.
    * @param checkpointNumber - The checkpoint number to promote.
    * @param l1 - L1 published data for the checkpoint.
-   * @param attestations - Committee attestations.
+   * @param attestations - Committee attestations, as decoded from the packed tuple.
+   * @param verbatimAttestations - The packed attestations tuple exactly as posted to L1.
    * @param expectedArchiveRoot - Archive root guard against races.
    */
   async promoteProposedToCheckpointed(
     checkpointNumber: CheckpointNumber,
     l1: L1PublishedData,
     attestations: CommitteeAttestation[],
+    verbatimAttestations: ViemCommitteeAttestations,
     expectedArchiveRoot: Fr,
   ): Promise<void> {
     return await this.db.transactionAsync(async () => {
@@ -909,7 +965,7 @@ export class BlockStore {
         archive: proposed.archive.toBuffer(),
         checkpointOutHash: proposed.checkpointOutHash.toBuffer(),
         l1: l1.toBuffer(),
-        attestations: attestations.map(attestation => attestation.toBuffer()),
+        ...this.toAttestationsStorage(proposed.checkpointNumber, verbatimAttestations, attestations.length),
         checkpointNumber: proposed.checkpointNumber,
         startBlock: proposed.startBlock,
         blockCount: proposed.blockCount,
@@ -1301,22 +1357,25 @@ export class BlockStore {
   }
 
   /**
-   * Resolves all four L2 chain tips (proposed, checkpointed, proven, finalized) in a single
-   * read-only transaction so the snapshot is internally consistent. Each underlying record is
-   * read at most once: latest block and latest confirmed checkpoint are loaded directly (no
-   * separate "find the number, then look up data" hop), the proven/finalized checkpoint
-   * singletons are read once and their storage entries are reused if they coincide with the
-   * latest checkpoint, and per-tip block hashes are deduped when two tips land on the same block
-   * (e.g. finalized == proven).
+   * Resolves all four L2 chain tips (proposed, checkpointed, proven, finalized), the leading proposed
+   * checkpoint, the latest block header, the latest confirmed checkpoint with its L1 publication data, and
+   * the pending-chain validation status in a single read-only transaction, so every field of the result
+   * describes the same committed state. Each underlying record is read at most once: latest block and
+   * latest confirmed checkpoint are loaded directly (no separate "find the number, then look up data"
+   * hop), the proven/finalized checkpoint singletons are read once and their storage entries are reused if
+   * they coincide with the latest checkpoint, and per-tip block hashes are deduped when two tips land on
+   * the same block (e.g. finalized == proven).
    *
-   * The result is guaranteed to satisfy `finalized <= proven <= checkpointed <= proposed` (by
-   * block number). Genesis is represented by `(INITIAL_L2_BLOCK_NUM - 1)` and the supplied
-   * `genesisBlockHash`, paired with the synthetic genesis checkpoint id.
+   * The tips are guaranteed to satisfy `finalized <= proven <= checkpointed <= proposed` (by block
+   * number). Genesis is represented by `(INITIAL_L2_BLOCK_NUM - 1)` and the supplied `genesisBlockHash`,
+   * paired with the synthetic genesis checkpoint id.
+   *
+   * The L1 sync point is not part of the store's state; it is attached by {@link L2FrontierCache}.
    *
    * @param genesisBlockHash - Block hash to report for the synthetic pre-initial block (used when
    *   a tip is still at genesis).
    */
-  async getL2TipsData(genesisBlockHash: BlockHash): Promise<L2Tips> {
+  async getL2Frontier(genesisBlockHash: BlockHash): Promise<Omit<L2Frontier, 'l1SyncPoint'>> {
     return await this.db.transactionAsync(async () => {
       // Define genesis tips
       const genesisBlockNumber = BlockNumber(INITIAL_L2_BLOCK_NUM - 1);
@@ -1395,25 +1454,39 @@ export class BlockStore {
               hash: BlockHash.fromBuffer(latestBlockEntry[1].blockHash).toString(),
             };
 
-      // Build other tips from checkpoint data, reading corresponding block data from the cache
+      // Build other tips from checkpoint data, reading corresponding block data from the cache. The parsed
+      // checkpoint header is returned alongside the tip so callers do not have to decode the buffer twice.
       const buildTipFromCheckpoint = async (
         stored: ProposedCheckpointStorage | CheckpointStorage | undefined,
-      ): Promise<L2TipId> => {
+      ): Promise<{ tip: L2TipId; header: CheckpointHeader | undefined }> => {
         if (!stored) {
-          return genesisTip;
+          return { tip: genesisTip, header: undefined };
         }
         const blockNumber = BlockNumber(stored.startBlock + stored.blockCount - 1);
         const blockHash = await loadBlockHash(blockNumber);
         const header = CheckpointHeader.fromBuffer(stored.header);
         return {
-          block: { number: blockNumber, hash: blockHash },
-          checkpoint: { number: CheckpointNumber(stored.checkpointNumber), hash: header.hash().toString() },
+          tip: {
+            block: { number: blockNumber, hash: blockHash },
+            checkpoint: { number: CheckpointNumber(stored.checkpointNumber), hash: header.hash().toString() },
+          },
+          header,
         };
       };
 
-      const checkpointedTip = await buildTipFromCheckpoint(latestCheckpointEntry?.[1]);
-      const provenTip = await buildTipFromCheckpoint(provenCheckpoint);
-      const finalizedTip = await buildTipFromCheckpoint(finalizedCheckpoint);
+      const { tip: checkpointedTip, header: checkpointedHeader } = await buildTipFromCheckpoint(
+        latestCheckpointEntry?.[1],
+      );
+      const { tip: provenTip } = await buildTipFromCheckpoint(provenCheckpoint);
+      const { tip: finalizedTip } = await buildTipFromCheckpoint(finalizedCheckpoint);
+      const proposedCheckpoint = await this.getLastProposedCheckpoint();
+      const pendingChainValidationStatus = (await this.getPendingChainValidationStatus()) ?? { valid: true };
+
+      const latestBlockHeader = latestBlockEntry ? BlockHeader.fromBuffer(latestBlockEntry[1].header) : undefined;
+      const checkpointedCheckpoint =
+        latestCheckpointEntry && checkpointedHeader
+          ? { header: checkpointedHeader, l1: L1PublishedData.fromBuffer(latestCheckpointEntry[1].l1) }
+          : undefined;
 
       // A checkpointed block past the latest stored block would mean a checkpoint
       // references blocks that aren't in blocks.
@@ -1445,10 +1518,16 @@ export class BlockStore {
       }
 
       return {
-        proposed: proposedBlockId,
-        checkpointed: checkpointedTip,
-        proven: provenTip,
-        finalized: finalizedTip,
+        tips: {
+          proposed: proposedBlockId,
+          checkpointed: checkpointedTip,
+          proven: provenTip,
+          finalized: finalizedTip,
+        },
+        proposedCheckpoint,
+        latestBlockHeader,
+        checkpointedCheckpoint,
+        pendingChainValidationStatus,
       };
     });
   }
@@ -1597,7 +1676,6 @@ export class BlockStore {
       l1: entry.l1.toBuffer(),
       reason: entry.reason,
     });
-    await this.#rejectedCheckpointsByNumber.set(entry.checkpointNumber, archiveRootHex);
     await this.advanceSynchedL1BlockNumber(entry.l1.blockNumber);
   }
 
@@ -1607,35 +1685,9 @@ export class BlockStore {
     return stored ? this.rejectedCheckpointFromStorage(stored) : undefined;
   }
 
-  /** Returns the rejected-checkpoint entry recorded for the given checkpoint number, or undefined if none. */
-  async getRejectedCheckpointByNumber(checkpointNumber: CheckpointNumber): Promise<RejectedCheckpoint | undefined> {
-    const archiveRootHex = await this.#rejectedCheckpointsByNumber.getAsync(checkpointNumber);
-    if (archiveRootHex === undefined) {
-      return undefined;
-    }
-    const stored = await this.#rejectedCheckpoints.getAsync(archiveRootHex);
-    return stored ? this.rejectedCheckpointFromStorage(stored) : undefined;
-  }
-
-  /** Returns the highest checkpoint number recorded across all rejected entries, or `INITIAL_CHECKPOINT_NUMBER - 1` if none. */
-  async getLatestRejectedCheckpointNumber(): Promise<CheckpointNumber> {
-    const [latest] = await toArray(this.#rejectedCheckpointsByNumber.keysAsync({ reverse: true, limit: 1 }));
-    return CheckpointNumber(latest ?? INITIAL_CHECKPOINT_NUMBER - 1);
-  }
-
   /** Removes a rejected-checkpoint entry by its archive root (used when an entry no longer matches L1). */
   async removeRejectedCheckpointByArchiveRoot(archiveRoot: Fr): Promise<void> {
-    const archiveRootHex = archiveRoot.toString();
-    const stored = await this.#rejectedCheckpoints.getAsync(archiveRootHex);
-    await this.#rejectedCheckpoints.delete(archiveRootHex);
-    if (stored) {
-      // Only clear the by-number index if it still points at this archive root, so a distinct
-      // entry that shares the checkpoint number (e.g. an L1 reorg replacement) is not dropped.
-      const indexed = await this.#rejectedCheckpointsByNumber.getAsync(stored.checkpointNumber);
-      if (indexed === archiveRootHex) {
-        await this.#rejectedCheckpointsByNumber.delete(stored.checkpointNumber);
-      }
-    }
+    await this.#rejectedCheckpoints.delete(archiveRoot.toString());
   }
 
   /**

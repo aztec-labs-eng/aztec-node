@@ -1,10 +1,12 @@
 import { GENESIS_ARCHIVE_ROOT, INITIAL_CHECKPOINT_NUMBER } from '@aztec-labs/constants';
+import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -12,6 +14,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   BlockHash,
   CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
   EthAddress,
   L2Block,
   type ValidateCheckpointResult,
@@ -23,7 +26,6 @@ import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type IndexedTxEffect, TxHash, computeTxEffectLeaves } from '@aztec-labs/stdlib/tx';
 
 import {
-  BlockAlreadyCheckpointedError,
   BlockArchiveNotConsistentError,
   BlockCheckpointNumberNotSequentialError,
   BlockIndexNotSequentialError,
@@ -31,6 +33,7 @@ import {
   CannotOverwriteCheckpointedBlockError,
   CheckpointNumberNotSequentialError,
   InitialCheckpointNumberNotSequentialError,
+  UndecodableCheckpointAttestationsError,
 } from '../errors.js';
 import {
   makeChainedCheckpoints,
@@ -117,6 +120,7 @@ describe('BlockStore', () => {
         first3[2].checkpoint,
         makeL1PublishedData(999),
         first3[2].attestations,
+        first3[2].verbatimAttestations,
       );
       // Also add checkpoint 4 (the next one) in the same batch; only checkpoint 4 is newly inserted.
       await expect(blockStore.addCheckpoints([cp3WithNewL1, publishedCheckpoints[3]])).resolves.toEqual([
@@ -348,7 +352,7 @@ describe('BlockStore', () => {
 
     it('accepts blocks that properly cross checkpoint boundaries', async () => {
       // Checkpoint 1: blocks 1-2, Checkpoint 2: blocks 3-4 — proper boundary crossing
-      const genesisArchive = new AppendOnlyTreeSnapshot(new Fr(GENESIS_ARCHIVE_ROOT), 1);
+      const genesisArchive = new AppendOnlyTreeSnapshot(new Fr(GENESIS_ARCHIVE_ROOT), TreeLeafIndex(1));
       const checkpoints = await makeChainedCheckpoints(2, {
         previousArchive: genesisArchive,
         blocksPerCheckpoint: 2,
@@ -1128,7 +1132,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
 
-      await expect(blockStore.addProposedBlock(block1)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block1)).resolves.toEqual('added');
       await expect(blockStore.addProposedBlock(block2)).rejects.toThrow(BlockNumberNotSequentialError);
     });
 
@@ -1157,7 +1161,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         lastArchive: lastBlockArchive,
       });
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
 
       // Add block 4 for the same checkpoint 2 in a separate call
       const block4 = await L2Block.random(BlockNumber(4), {
@@ -1165,7 +1169,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(1),
         lastArchive: block3.archive,
       });
-      await expect(blockStore.addProposedBlock(block4)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block4)).resolves.toEqual('added');
 
       expect(await blockStore.getLatestL2BlockNumber()).toBe(4);
     });
@@ -1185,7 +1189,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         lastArchive: lastBlockArchive,
       });
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
 
       // Add block 4 for the same checkpoint 2 in a separate call but with a missing index
       const block4 = await L2Block.random(BlockNumber(4), {
@@ -1305,7 +1309,7 @@ describe('BlockStore', () => {
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         lastArchive: lastBlockArchive,
       });
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
 
       // Add block 4 with incorrect archive (should fail)
       const block4 = await L2Block.random(BlockNumber(4), {
@@ -1343,7 +1347,7 @@ describe('BlockStore', () => {
       await expect(blockStore.addProposedBlock(block1)).rejects.toThrow(CannotOverwriteCheckpointedBlockError);
     });
 
-    it('throws BlockAlreadyCheckpointedError if proposed block matches the checkpointed one', async () => {
+    it('reports already-checkpointed if proposed block matches the checkpointed one', async () => {
       const checkpoint1 = makePublishedCheckpoint(
         await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2, startBlockNumber: 1 }),
         10,
@@ -1352,7 +1356,13 @@ describe('BlockStore', () => {
 
       // Re-propose the same block that was already checkpointed
       const checkpointedBlock = checkpoint1.checkpoint.blocks[1];
-      await expect(blockStore.addProposedBlock(checkpointedBlock)).rejects.toThrow(BlockAlreadyCheckpointedError);
+      await expect(blockStore.addProposedBlock(checkpointedBlock)).resolves.toEqual('already-checkpointed');
+
+      // The block is left as the store recorded it when the checkpoint was added
+      const stored = await blockStore.getBlockData({ number: checkpointedBlock.number });
+      expect(stored?.checkpointNumber).toEqual(CheckpointNumber(1));
+      expect(await blockStore.getCheckpointedL2BlockNumber()).toBe(2);
+      expect(await blockStore.getLatestL2BlockNumber()).toBe(2);
     });
   });
 
@@ -1777,6 +1787,45 @@ describe('BlockStore', () => {
 
     it('returns undefined for block number 0', async () => {
       await expect(blockStore.getBlock({ number: BlockNumber(0) })).resolves.toBeUndefined();
+    });
+  });
+
+  describe('checkpoint attestations', () => {
+    const publish = (verbatimAttestations: ViemCommitteeAttestations, attestations: CommitteeAttestation[]) =>
+      new PublishedCheckpoint(
+        publishedCheckpoints[0].checkpoint,
+        makeL1PublishedData(10),
+        attestations,
+        verbatimAttestations,
+      );
+
+    it('preserves a bitmap bit past the committee size across write and read', async () => {
+      const addresses = [EthAddress.random(), EthAddress.random(), EthAddress.random()];
+      const honest = CommitteeAttestationsAndSigners.packAttestations(addresses.map(CommitteeAttestation.fromAddress));
+      // A committee of three occupies bits 7..5 of the single bitmap byte. Bit 0 maps to no committee position,
+      // so no decoder reads it — but the attestationsHash the rollup stored at propose time covers it, so the
+      // store has to hand back these exact bytes.
+      const verbatimAttestations: ViemCommitteeAttestations = { ...honest, signatureIndices: '0x01' };
+      const attestations = CommitteeAttestation.fromPacked(verbatimAttestations, addresses.length);
+
+      await blockStore.addCheckpoints([publish(verbatimAttestations, attestations)]);
+
+      const stored = await blockStore.getCheckpointData(CheckpointNumber(1));
+      expect(stored!.verbatimAttestations).toEqual(verbatimAttestations);
+      expect(stored!.attestations).toEqual(attestations);
+    });
+
+    it('rejects a checkpoint whose attestations tuple does not decode', async () => {
+      // The bitmap claims the single committee member signed, but the payload carries no signature.
+      const verbatimAttestations: ViemCommitteeAttestations = {
+        signatureIndices: '0x80',
+        signaturesOrAddresses: '0x',
+      };
+
+      await expect(
+        blockStore.addCheckpoints([publish(verbatimAttestations, [CommitteeAttestation.empty()])]),
+      ).rejects.toThrow(UndecodableCheckpointAttestationsError);
+      await expect(blockStore.getCheckpointData(CheckpointNumber(1))).resolves.toBeUndefined();
     });
   });
 
@@ -2588,7 +2637,7 @@ describe('BlockStore', () => {
         lastArchive: pendingBlock!.archive,
       });
 
-      await expect(blockStore.addProposedBlock(block3)).resolves.toBe(true);
+      await expect(blockStore.addProposedBlock(block3)).resolves.toEqual('added');
     });
 
     it('throws with proposed checkpoint value when neither confirmed nor pending matches', async () => {
@@ -2770,6 +2819,7 @@ describe('BlockStore', () => {
         proposed.checkpointNumber,
         l1,
         attestations,
+        CommitteeAttestationsAndSigners.packAttestations(attestations),
         proposed.archive.root,
       );
 
@@ -2779,7 +2829,13 @@ describe('BlockStore', () => {
 
     it('throws when no proposed checkpoint exists', async () => {
       await expect(
-        blockStore.promoteProposedToCheckpointed(CheckpointNumber(1), makeL1PublishedData(20), [], Fr.random()),
+        blockStore.promoteProposedToCheckpointed(
+          CheckpointNumber(1),
+          makeL1PublishedData(20),
+          [],
+          CommitteeAttestationsAndSigners.packAttestations([]),
+          Fr.random(),
+        ),
       ).rejects.toThrow('no proposed checkpoint exists');
     });
 
@@ -2787,7 +2843,13 @@ describe('BlockStore', () => {
       const { proposed } = await setupProposedCheckpoint();
 
       await expect(
-        blockStore.promoteProposedToCheckpointed(proposed.checkpointNumber, makeL1PublishedData(20), [], Fr.random()),
+        blockStore.promoteProposedToCheckpointed(
+          proposed.checkpointNumber,
+          makeL1PublishedData(20),
+          [],
+          CommitteeAttestationsAndSigners.packAttestations([]),
+          Fr.random(),
+        ),
       ).rejects.toThrow('archive root mismatch');
 
       // Proposed checkpoint should still exist (transaction rolled back)
@@ -2841,6 +2903,102 @@ describe('BlockStore', () => {
       expect(proposedCheckpoint!.startBlock).toBe(BlockNumber(2));
       expect(proposedCheckpoint!.blockCount).toBe(1);
       expect(proposedCheckpoint!.totalManaUsed).toBe(100n);
+    });
+  });
+
+  describe('getL2Frontier', () => {
+    const genesisBlockHash = BlockHash.random();
+
+    /** Adds confirmed checkpoint 1 (block 1) and a proposed checkpoint 2 (block 2) on top of it. */
+    const addCheckpointAndProposedOnTop = async () => {
+      const checkpoint1 = publishedCheckpoints[0];
+      await blockStore.addCheckpoints([checkpoint1]);
+
+      const block2 = await L2Block.random(BlockNumber(2), {
+        checkpointNumber: CheckpointNumber(2),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        lastArchive: checkpoint1.checkpoint.blocks[0].archive,
+      });
+      await blockStore.addProposedBlock(block2, { force: true });
+      await blockStore.addProposedCheckpoint({
+        checkpointNumber: CheckpointNumber(2),
+        header: CheckpointHeader.empty({ slotNumber: SlotNumber(77) }),
+        startBlock: BlockNumber(2),
+        blockCount: 1,
+        totalManaUsed: 100n,
+        feeAssetPriceModifier: 50n,
+      });
+      return checkpoint1;
+    };
+
+    it('reports genesis tips and no headers on an empty store', async () => {
+      const status = await blockStore.getL2Frontier(genesisBlockHash);
+
+      expect(status.tips.proposed).toEqual({ number: BlockNumber(0), hash: genesisBlockHash.toString() });
+      expect(status.proposedCheckpoint).toBeUndefined();
+      expect(status.latestBlockHeader).toBeUndefined();
+      expect(status.checkpointedCheckpoint).toBeUndefined();
+      expect(status.pendingChainValidationStatus).toEqual({ valid: true });
+    });
+
+    it('returns the tips, the proposed checkpoint, and the latest block and checkpoint headers together', async () => {
+      const checkpoint1 = await addCheckpointAndProposedOnTop();
+
+      const status = await blockStore.getL2Frontier(genesisBlockHash);
+
+      expect(status.tips.proposed.number).toEqual(BlockNumber(2));
+      expect(status.tips.checkpointed.block.number).toEqual(BlockNumber(1));
+      expect(status.tips.checkpointed.checkpoint.number).toEqual(CheckpointNumber(1));
+      // Every block of a checkpoint carries its header's slot, so the tip slot comes from the checkpoint header.
+      expect(status.checkpointedCheckpoint?.header).toEqual(checkpoint1.checkpoint.header);
+      expect(status.checkpointedCheckpoint?.l1).toEqual(checkpoint1.l1);
+      expect(status.latestBlockHeader?.globalVariables.blockNumber).toEqual(BlockNumber(2));
+      expect(status.proposedCheckpoint?.checkpointNumber).toEqual(CheckpointNumber(2));
+      expect(status.proposedCheckpoint?.startBlock).toEqual(BlockNumber(2));
+    });
+
+    it('reads the pending chain validation status in the same snapshot as the tips', async () => {
+      await addCheckpointAndProposedOnTop();
+      const invalid: ValidateCheckpointResult = {
+        valid: false,
+        checkpoint: randomCheckpointInfo(2),
+        committee: [EthAddress.random()],
+        epoch: EpochNumber(1),
+        seed: 0n,
+        attestors: [],
+        attestations: [],
+        verbatimAttestations: { signatureIndices: '0x', signaturesOrAddresses: '0x' },
+        reason: 'insufficient-attestations',
+      };
+      await blockStore.setPendingChainValidationStatus(invalid);
+
+      const status = await blockStore.getL2Frontier(genesisBlockHash);
+
+      expect(status.pendingChainValidationStatus).toEqual(invalid);
+    });
+
+    // A promotion moves the checkpointed tip and drops the proposed entry in one transaction. Reading the
+    // pair separately can catch the half-applied view (proposed gone, tips still behind); reading it here
+    // must always land on one side of the commit.
+    it('advances the checkpointed tip and drops the proposed entry in the same snapshot on promotion', async () => {
+      await addCheckpointAndProposedOnTop();
+      const before = await blockStore.getL2Frontier(genesisBlockHash);
+      expect(before.tips.checkpointed.checkpoint.number).toEqual(CheckpointNumber(1));
+      expect(before.proposedCheckpoint?.checkpointNumber).toEqual(CheckpointNumber(2));
+
+      const proposed = await blockStore.getLastProposedCheckpoint();
+      await blockStore.promoteProposedToCheckpointed(
+        proposed!.checkpointNumber,
+        makeL1PublishedData(20),
+        [],
+        CommitteeAttestationsAndSigners.packAttestations([]),
+        proposed!.archive.root,
+      );
+
+      const after = await blockStore.getL2Frontier(genesisBlockHash);
+      expect(after.tips.checkpointed.checkpoint.number).toEqual(CheckpointNumber(2));
+      expect(after.proposedCheckpoint).toBeUndefined();
+      expect(after.checkpointedCheckpoint?.header.slotNumber).toEqual(SlotNumber(77));
     });
   });
 
@@ -3118,9 +3276,6 @@ describe('BlockStore', () => {
 
     it('returns an empty result when no rejected checkpoints have been recorded', async () => {
       expect(await blockStore.getRejectedCheckpointByArchiveRoot(Fr.random())).toBeUndefined();
-      expect(await blockStore.getLatestRejectedCheckpointNumber()).toEqual(
-        CheckpointNumber(INITIAL_CHECKPOINT_NUMBER - 1),
-      );
     });
 
     it('round-trips an added rejected entry', async () => {
@@ -3158,23 +3313,6 @@ describe('BlockStore', () => {
       expect(stored!.reason).toEqual('descends-from-invalid-attestations');
     });
 
-    it('returns the latest rejected checkpoint number across all entries', async () => {
-      await blockStore.addRejectedCheckpoint(makeEntry({ checkpointNumber: 1 }));
-      await blockStore.addRejectedCheckpoint(makeEntry({ checkpointNumber: 5 }));
-      await blockStore.addRejectedCheckpoint(makeEntry({ checkpointNumber: 3 }));
-
-      expect(await blockStore.getLatestRejectedCheckpointNumber()).toEqual(CheckpointNumber(5));
-    });
-
-    it('looks up a rejected entry by checkpoint number', async () => {
-      const entry = makeEntry({ checkpointNumber: 7 });
-      await blockStore.addRejectedCheckpoint(entry);
-
-      const stored = await blockStore.getRejectedCheckpointByNumber(CheckpointNumber(7));
-      expect(stored?.archiveRoot.toString()).toEqual(entry.archiveRoot.toString());
-      expect(await blockStore.getRejectedCheckpointByNumber(CheckpointNumber(8))).toBeUndefined();
-    });
-
     it('removes a rejected entry by archive root', async () => {
       const entry = makeEntry({ checkpointNumber: 4 });
       await blockStore.addRejectedCheckpoint(entry);
@@ -3182,10 +3320,6 @@ describe('BlockStore', () => {
 
       await blockStore.removeRejectedCheckpointByArchiveRoot(entry.archiveRoot);
       expect(await blockStore.getRejectedCheckpointByArchiveRoot(entry.archiveRoot)).toBeUndefined();
-      expect(await blockStore.getRejectedCheckpointByNumber(CheckpointNumber(4))).toBeUndefined();
-      expect(await blockStore.getLatestRejectedCheckpointNumber()).toEqual(
-        CheckpointNumber(INITIAL_CHECKPOINT_NUMBER - 1),
-      );
     });
   });
 });

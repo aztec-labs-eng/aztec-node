@@ -44,7 +44,7 @@ import { MockGossipSubNetwork, getMockPubSubP2PServiceFactory } from '@aztec-lab
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { ProverNodeConfig, ProverNodeDeps } from '@aztec-labs/prover-node';
 import { type PXEConfig, type PXECreationOptions, getPXEConfig } from '@aztec-labs/pxe/server';
-import type { SequencerClient } from '@aztec-labs/sequencer-client';
+import type { CheckpointProposalJobTestHooks, SequencerClient } from '@aztec-labs/sequencer-client';
 import { AuthRegistryArtifact, getStandardAuthRegistry } from '@aztec-labs/standard-contracts/auth-registry';
 import {
   HandshakeRegistryArtifact,
@@ -186,6 +186,11 @@ export type SetupOptions<TDeployExtraL1ContractsReturnType = unknown> = {
   l2StartTime?: number;
   /** Whether to start a prover node */
   startProverNode?: boolean;
+  /**
+   * Test-only hooks into the initial node's checkpoint building, passed to `createAztecNodeService` as a dependency
+   * rather than through the node config, so nothing serialized or exposed over RPC can reach them.
+   */
+  checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks;
   /** Manual config for the telemetry client */
   telemetryConfig?: Partial<TelemetryClientConfig> & { benchmark?: boolean };
   /** Public data that will be inserted in the tree in genesis */
@@ -392,6 +397,9 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
     config.listenAddress = '127.0.0.1';
 
     config.minTxPoolAgeMs = opts.minTxPoolAgeMs ?? 0;
+    // E2e profiles deliberately derive one or two block opportunities per slot against an Inbox nobody is filling,
+    // which is below the production catch-up floor the sequencer otherwise refuses to start under.
+    config.allowUnsafeInboxCatchupCapacity = opts.allowUnsafeInboxCatchupCapacity ?? true;
 
     // Create a temp directory for any services that need it and cleanup later
     const directoryToCleanup = path.join(tmpdir(), randomBytes(8).toString('hex'));
@@ -649,7 +657,12 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       withLoggerBindings({ actor: 'node-0' }, () =>
         createAztecNodeService(
           initialNodeConfig,
-          { dateProvider, telemetry: telemetryClient, p2pClientDeps },
+          {
+            dateProvider,
+            telemetry: telemetryClient,
+            p2pClientDeps,
+            checkpointProposalJobTestHooks: opts.checkpointProposalJobTestHooks,
+          },
           { genesis, dontStartSequencer: opts.skipInitialSequencer },
         ),
       ),
@@ -670,15 +683,17 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       };
 
       ({ proverNode } = await testSpan('setup:env:prover-node', () =>
-        createAndSyncProverNode(
-          proverNodePrivateKeyHex,
-          config,
-          {
-            ...config.proverNodeConfig,
-            dataDirectory: proverNodeDataDirectory,
-          },
-          { dateProvider, p2pClientDeps, telemetry: telemetryClient },
-          { genesis },
+        withLoggerBindings({ actor: 'prover-0' }, () =>
+          createAndSyncProverNode(
+            proverNodePrivateKeyHex,
+            config,
+            {
+              ...config.proverNodeConfig,
+              dataDirectory: proverNodeDataDirectory,
+            },
+            { dateProvider, p2pClientDeps, telemetry: telemetryClient },
+            { genesis },
+          ),
         ),
       ));
       logger.trace('Created prover node');
@@ -874,7 +889,7 @@ export async function waitForProvenChain(
  * Creates an AztecNodeService with the prover node enabled as a subsystem.
  * Returns both the aztec node service (for lifecycle management) and the prover node (for test internals access).
  */
-export function createAndSyncProverNode(
+export async function createAndSyncProverNode(
   proverNodePrivateKey: `0x${string}`,
   baseConfig: AztecNodeConfig,
   configOverrides: Pick<AztecNodeConfig, 'dataDirectory'>,
@@ -886,27 +901,25 @@ export function createAndSyncProverNode(
   },
   options: { genesis?: GenesisData; dontStart?: boolean },
 ): Promise<{ proverNode: AztecNodeService }> {
-  return withLoggerBindings({ actor: 'prover-0' }, async () => {
-    const proverNode = await createAztecNodeService(
-      {
-        ...baseConfig,
-        ...configOverrides,
-        p2pPort: 0,
-        enableProverNode: true,
-        disableValidator: true,
-        proverPublisherPrivateKeys: [new SecretValue(proverNodePrivateKey)],
-      },
-      deps,
-      { genesis: options.genesis, dontStartProverNode: options.dontStart },
-    );
+  const proverNode = await createAztecNodeService(
+    {
+      ...baseConfig,
+      ...configOverrides,
+      p2pPort: 0,
+      enableProverNode: true,
+      disableValidator: true,
+      proverPublisherPrivateKeys: [new SecretValue(proverNodePrivateKey)],
+    },
+    deps,
+    { genesis: options.genesis, dontStartProverNode: options.dontStart },
+  );
 
-    if (!proverNode.getProverNode()) {
-      throw new Error('Prover node subsystem was not created despite enableProverNode being set');
-    }
+  if (!proverNode.getProverNode()) {
+    throw new Error('Prover node subsystem was not created despite enableProverNode being set');
+  }
 
-    getLogger().info(`Created and synced prover node`);
-    return { proverNode };
-  });
+  getLogger().info(`Created and synced prover node`);
+  return { proverNode };
 }
 
 export type BalancesFn = ReturnType<typeof getBalancesFn>;

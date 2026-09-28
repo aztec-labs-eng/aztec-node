@@ -1,136 +1,118 @@
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK, MAX_L1_TO_L2_MSGS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { type FeeHeader, RollupContract } from '@aztec-labs/ethereum/contracts';
-import {
-  BlockNumber,
-  CheckpointNumber,
-  EpochNumber,
-  IndexWithinCheckpoint,
-  SlotNumber,
-} from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { unfreeze } from '@aztec-labs/foundation/types';
 import { type AvmSimulator, PublicProcessor, PublicProcessorFactory } from '@aztec-labs/simulator/server';
-import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
-  type BlockQuery,
   L2Block,
   type L2BlockSource,
+  type L2Frontier,
   type L2Tips,
-  type ValidateCheckpointResult,
 } from '@aztec-labs/stdlib/block';
-import type { ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { GasFees } from '@aztec-labs/stdlib/gas';
 import type { MerkleTreeWriteOperations, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
-import type { InboxBucket, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
-import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { mockTx } from '@aztec-labs/stdlib/testing';
-import { AppendOnlyTreeSnapshot, MerkleTreeId } from '@aztec-labs/stdlib/trees';
-import {
-  BlockHeader,
-  type CheckpointGlobalVariables,
-  type GlobalVariableBuilder,
-  GlobalVariables,
-  TxEffect,
-} from '@aztec-labs/stdlib/tx';
+import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { BlockHeader, GlobalVariables, TxEffect } from '@aztec-labs/stdlib/tx';
+import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
+import type { NextBlockPlan, NextBlockPredictor } from './next_block/index.js';
 import { NodePublicCallsSimulator } from './node_public_calls_simulator.js';
 
 const CHAIN_ID = new Fr(12345);
 const ROLLUP_VERSION = new Fr(1);
-const ROLLUP_ADDRESS = EthAddress.random();
+const LATEST_BLOCK = BlockNumber(5);
+const LATEST_BLOCK_HASH = new BlockHash(new Fr(0xb5)).toString();
+/** Last block of the in-progress checkpoint's parent, for the mid-checkpoint message cap origin. */
+const CHECKPOINT_PARENT_BLOCK = BlockNumber(3);
 
 describe('NodePublicCallsSimulator', () => {
   let blockSource: MockProxy<L2BlockSource>;
   let worldStateSynchronizer: MockProxy<WorldStateSynchronizer>;
   let l1ToL2MessageSource: MockProxy<L1ToL2MessageSource>;
   let contractDataSource: MockProxy<ContractDataSource>;
-  let globalVariableBuilder: MockProxy<GlobalVariableBuilder>;
-  let rollupContract: MockProxy<RollupContract>;
   let epochCache: MockProxy<EpochCacheInterface>;
+  let predictor: MockProxy<NextBlockPredictor>;
   let merkleTreeFork: MockProxy<MerkleTreeWriteOperations>;
   let avmSimulator: MockProxy<AvmSimulator>;
 
   let simulator: NodePublicCallsSimulator;
 
-  // Captures the globals the simulator builds for the next block by intercepting the processor it
-  // would run them through, so tests can assert on the result rather than on mock call counts.
+  // Captures the globals the simulator hands the processor, so tests assert on the result rather than on mocks.
   let builtGlobals: GlobalVariables | undefined;
 
-  const makeTips = (args: {
-    proposed: BlockNumber;
-    checkpointedBlock: BlockNumber;
-    checkpointed: CheckpointNumber;
-    proven?: CheckpointNumber;
-  }): L2Tips => ({
-    proposed: { number: args.proposed, hash: '0x0' },
-    checkpointed: {
-      block: { number: args.checkpointedBlock, hash: '0x0' },
-      checkpoint: { number: args.checkpointed, hash: '0x0' },
-    },
-    proven: {
-      block: { number: BlockNumber.ZERO, hash: '0x0' },
-      checkpoint: { number: args.proven ?? args.checkpointed, hash: '0x0' },
-    },
-    finalized: {
-      block: { number: BlockNumber.ZERO, hash: '0x0' },
-      checkpoint: { number: args.proven ?? args.checkpointed, hash: '0x0' },
+  const globalsFor = (blockNumber: BlockNumber, slotNumber: SlotNumber) =>
+    GlobalVariables.empty({ blockNumber, slotNumber, gasFees: new GasFees(0, 100) });
+
+  const boundaryPlan = (): NextBlockPlan => ({
+    latestBlockNumber: LATEST_BLOCK,
+    latestBlockHash: LATEST_BLOCK_HASH,
+    newCheckpoint: {
+      targetSlot: SlotNumber(20),
+      targetCheckpoint: CheckpointNumber(2),
+      proposedCheckpointData: undefined,
+      checkpointedCheckpointNumber: CheckpointNumber(1),
     },
   });
 
-  const makeBlockData = (blockNumber: BlockNumber, slotNumber: SlotNumber, gasFees = GasFees.empty()): BlockData => ({
-    header: BlockHeader.empty({
-      globalVariables: GlobalVariables.empty({ blockNumber, slotNumber, gasFees }),
-    }),
-    archive: L2Block.empty().archive,
-    blockHash: BlockHash.random(),
-    checkpointNumber: CheckpointNumber(1),
-    indexWithinCheckpoint: IndexWithinCheckpoint(0),
-  });
-
-  const mockNextL1Slot = (slot: SlotNumber) => {
-    epochCache.getEpochAndSlotInNextL1Slot.mockReturnValue({
-      epoch: EpochNumber.ZERO,
-      slot,
-      ts: 0n,
-      nowSeconds: 0n,
-    });
-  };
-
-  const checkpointGlobals = (slotNumber: SlotNumber): CheckpointGlobalVariables => ({
-    chainId: CHAIN_ID,
-    version: ROLLUP_VERSION,
-    slotNumber,
-    timestamp: BigInt(slotNumber) * 72n,
-    coinbase: EthAddress.ZERO,
-    feeRecipient: AztecAddress.ZERO,
-    gasFees: GasFees.empty(),
+  const midCheckpointPlan = (): NextBlockPlan => ({
+    latestBlockNumber: LATEST_BLOCK,
+    latestBlockHash: LATEST_BLOCK_HASH,
   });
 
   /**
-   * Mocks the Inbox so the next-block prediction selects a two-message bundle: the fork's message total (0)
-   * resolves to bucket 0, and bucket 1 is lag-eligible and holds both messages.
+   * Only the fields the simulator itself reads off the snapshot: the terminating block of the
+   * proposed-checkpoint frontier, which a mid-checkpoint message prediction counts its cap from.
    */
-  const mockInboxSelection = () => {
-    const makeBucket = (seq: bigint, totalMsgCount: bigint): InboxBucket => ({
-      seq,
-      inboxRollingHash: Fr.ZERO,
-      totalMsgCount,
-      timestamp: 0n,
-      msgCount: Number(totalMsgCount),
-      lastMessageIndex: totalMsgCount === 0n ? 0n : totalMsgCount - 1n,
+  const frontierWithCheckpointedBlock = (blockNumber: BlockNumber) =>
+    ({
+      proposedCheckpoint: undefined,
+      tips: { checkpointed: { block: { number: blockNumber } } } as L2Tips,
+    }) as L2Frontier;
+
+  const mockPrediction = (plan: NextBlockPlan) =>
+    predictor.predict.mockResolvedValue({
+      plan,
+      frontier: frontierWithCheckpointedBlock(CHECKPOINT_PARENT_BLOCK),
+      globals: globalsFor(BlockNumber.add(plan.latestBlockNumber, 1), SlotNumber(20)),
     });
-    const bundle = [new Fr(0x1234), new Fr(0x5678)];
-    l1ToL2MessageSource.getInboxBucketByTotalMsgCount.mockResolvedValue(makeBucket(0n, 0n));
-    l1ToL2MessageSource.getLatestInboxBucketAtOrBefore.mockResolvedValue(makeBucket(1n, 2n));
-    l1ToL2MessageSource.getL1ToL2MessagesBetweenBuckets.mockResolvedValue(bundle);
-    return bundle;
+
+  /**
+   * Answers the by-number read the mid-checkpoint message prediction makes for the parent block of the
+   * in-progress checkpoint. Only the header's L1-to-L2 message total is read from it.
+   */
+  const mockCheckpointStartBlockData = (blockNumber: BlockNumber) =>
+    blockSource.getBlockData.mockResolvedValue({
+      header: BlockHeader.empty(),
+      archive: L2Block.empty().archive,
+      blockHash: new BlockHash(new Fr(1000 + blockNumber)),
+      checkpointNumber: CheckpointNumber(1),
+      indexWithinCheckpoint: IndexWithinCheckpoint(0),
+    } satisfies BlockData);
+
+  /**
+   * Mocks the archiver's ordered message log with `leaves`, so the next-block prediction consumes every observed
+   * message the caps allow, and returns them.
+   */
+  const mockInboxMessages = (leaves = [new Fr(0x1234), new Fr(0x5678)]) => {
+    const position = (count: bigint) => ({ totalMessageCount: count, rollingHash: new Fr(count) });
+    l1ToL2MessageSource.getSyncedMessagePosition.mockResolvedValue(position(BigInt(leaves.length)));
+    l1ToL2MessageSource.getL1ToL2MessageRange.mockImplementation((start, end) =>
+      Promise.resolve({
+        messages: leaves.slice(Number(start), Number(end)),
+        start: position(start),
+        end: position(end),
+      }),
+    );
+    return leaves;
   };
 
   const lowGasTx = () =>
@@ -148,13 +130,12 @@ describe('NodePublicCallsSimulator', () => {
     worldStateSynchronizer = mock<WorldStateSynchronizer>();
     l1ToL2MessageSource = mock<L1ToL2MessageSource>();
     contractDataSource = mock<ContractDataSource>();
-    globalVariableBuilder = mock<GlobalVariableBuilder>();
-    rollupContract = mock<RollupContract>();
     epochCache = mock<EpochCacheInterface>();
+    predictor = mock<NextBlockPredictor>();
     merkleTreeFork = mock<MerkleTreeWriteOperations>();
     avmSimulator = mock<AvmSimulator>();
 
-    worldStateSynchronizer.syncImmediate.mockResolvedValue(BlockNumber.ZERO);
+    worldStateSynchronizer.syncImmediate.mockResolvedValue(LATEST_BLOCK);
     // The fork is an AsyncDisposable; provide the hook so `await using` does not throw.
     (merkleTreeFork as unknown as { [Symbol.asyncDispose]: () => Promise<void> })[Symbol.asyncDispose] = () =>
       Promise.resolve();
@@ -165,16 +146,11 @@ describe('NodePublicCallsSimulator', () => {
       size: 0n,
       depth: 16,
     });
-    blockSource.getPendingChainValidationStatus.mockResolvedValue({ valid: true });
-    blockSource.getProposedCheckpointData.mockResolvedValue(undefined);
-    // No Inbox bucket resolves to the fork's message total by default, so the next-block message prediction
-    // bails out and tests see the bare tip state unless they opt into it.
-    l1ToL2MessageSource.getInboxBucketByTotalMsgCount.mockResolvedValue(undefined);
+    // The archiver has observed no messages by default, so the next-block message prediction appends nothing and
+    // tests see the bare tip state unless they opt into it.
+    l1ToL2MessageSource.getSyncedMessagePosition.mockResolvedValue({ totalMessageCount: 0n, rollingHash: Fr.ZERO });
     epochCache.getL1Constants.mockReturnValue(EmptyL1RollupConstants);
-
-    globalVariableBuilder.buildCheckpointGlobalVariables.mockImplementation((_c, _f, slotNumber) =>
-      Promise.resolve(checkpointGlobals(slotNumber)),
-    );
+    mockPrediction(boundaryPlan());
 
     // Capture the globals passed to the public processor and short-circuit execution with a stub
     // processor that echoes them back, so `simulate` returns an output reflecting the chosen globals.
@@ -198,11 +174,9 @@ describe('NodePublicCallsSimulator', () => {
       worldStateSynchronizer,
       l1ToL2MessageSource,
       contractDataSource,
-      globalVariableBuilder,
-      rollupContract,
+      predictor,
       epochCache,
       avmSimulator,
-      signatureContext: { chainId: CHAIN_ID.toNumber(), rollupAddress: ROLLUP_ADDRESS },
       config: { rpcSimulatePublicMaxGasLimit: 1e11, rpcSimulatePublicMaxDebugLogMemoryReads: 100 },
     });
   });
@@ -214,274 +188,155 @@ describe('NodePublicCallsSimulator', () => {
   it('rejects when the gas limit exceeds the maximum', async () => {
     const tx = await lowGasTx();
     unfreeze(tx.data.constants.txContext.gasSettings.gasLimits).l2Gas = 1e12;
+
     await expect(simulator.simulate(tx)).rejects.toThrow(/gas/i);
+    expect(predictor.predict).not.toHaveBeenCalled();
   });
 
-  describe('continuing an in-progress checkpoint', () => {
-    // A proposed checkpoint (#2) terminates at block 5, but the latest proposed block (block 9) is
-    // ahead of it, so the next block continues the in-progress checkpoint built on top of the proposed one.
-    const setupMidCheckpoint = () => {
-      blockSource.getL2Tips.mockResolvedValue(
-        makeTips({ proposed: BlockNumber(9), checkpointedBlock: BlockNumber(3), checkpointed: CheckpointNumber(1) }),
-      );
-      blockSource.getProposedCheckpointData.mockResolvedValue(
-        makeProposedCheckpointData({ checkpointNumber: CheckpointNumber(2), lastBlock: BlockNumber(5) }),
-      );
-    };
+  it('simulates the block the predictor planned, on a fork of the block it builds on', async () => {
+    const output = await simulator.simulate(await lowGasTx());
 
-    it('copies the latest proposed header globals verbatim and bumps only the block number', async () => {
-      const tx = await lowGasTx();
-      const headerSlot = SlotNumber(42);
-      const headerGasFees = new GasFees(0, 777);
-      setupMidCheckpoint();
-      blockSource.getBlockData.mockImplementation((query: BlockQuery) =>
-        Promise.resolve('number' in query ? makeBlockData(query.number, headerSlot, headerGasFees) : undefined),
-      );
-      mockNextL1Slot(SlotNumber(100));
+    expect(worldStateSynchronizer.syncImmediate).toHaveBeenCalledWith(
+      LATEST_BLOCK,
+      BlockHash.fromString(LATEST_BLOCK_HASH),
+    );
+    expect(worldStateSynchronizer.fork).toHaveBeenCalledWith(LATEST_BLOCK);
+    expect(builtGlobals).toEqual(globalsFor(BlockNumber(6), SlotNumber(20)));
+    expect(output.globalVariables).toEqual(builtGlobals);
+  });
 
-      await simulator.simulate(tx);
+  it('appends the message bundle a checkpoint-opening block would consume', async () => {
+    const bundle = mockInboxMessages();
 
-      expect(builtGlobals).toBeDefined();
-      expect(builtGlobals!.blockNumber).toEqual(BlockNumber(10));
-      expect(builtGlobals!.slotNumber).toEqual(headerSlot);
-      expect(builtGlobals!.gasFees).toEqual(headerGasFees);
-      // No fresh globals built and no L1 reads for fees when continuing an in-progress checkpoint.
-      expect(globalVariableBuilder.buildCheckpointGlobalVariables).not.toHaveBeenCalled();
-      expect(rollupContract.getManaTarget).not.toHaveBeenCalled();
+    await simulator.simulate(await lowGasTx());
+
+    // A fresh checkpoint starts its per-checkpoint budget at the tip, so no parent block is read for it.
+    expect(blockSource.getBlockData).not.toHaveBeenCalled();
+    expect(merkleTreeFork.appendLeaves).toHaveBeenCalledWith(MerkleTreeId.L1_TO_L2_MESSAGE_TREE, bundle);
+  });
+
+  it('counts the per-checkpoint cap from the parent block when continuing a checkpoint', async () => {
+    mockPrediction(midCheckpointPlan());
+    mockCheckpointStartBlockData(CHECKPOINT_PARENT_BLOCK);
+    const bundle = mockInboxMessages();
+
+    await simulator.simulate(await lowGasTx());
+
+    expect(blockSource.getBlockData).toHaveBeenCalledWith({ number: CHECKPOINT_PARENT_BLOCK });
+    expect(merkleTreeFork.appendLeaves).toHaveBeenCalledWith(MerkleTreeId.L1_TO_L2_MESSAGE_TREE, bundle);
+  });
+
+  it('simulates against the tip when the archiver has observed no messages past the fork', async () => {
+    // Default mock: the synced message total equals the fork's.
+    await expect(simulator.simulate(await lowGasTx())).resolves.toBeDefined();
+
+    expect(merkleTreeFork.appendLeaves).not.toHaveBeenCalled();
+  });
+
+  it('simulates against the tip when the Inbox read fails', async () => {
+    l1ToL2MessageSource.getSyncedMessagePosition.mockRejectedValue(new Error('archiver is down'));
+
+    await expect(simulator.simulate(await lowGasTx())).resolves.toBeDefined();
+    expect(merkleTreeFork.appendLeaves).not.toHaveBeenCalled();
+  });
+
+  describe('mirroring the proposer selection caps', () => {
+    const forkSize = (size: bigint) =>
+      merkleTreeFork.getTreeInfo.mockResolvedValue({
+        treeId: MerkleTreeId.L1_TO_L2_MESSAGE_TREE,
+        root: Buffer.alloc(32),
+        size,
+        depth: 16,
+      });
+    const leaves = (count: number) => Array.from({ length: count }, (_, i) => new Fr(i + 1));
+    const threshold = MAX_L1_TO_L2_MSGS_PER_CHECKPOINT - MAX_L1_TO_L2_MSGS_PER_BLOCK;
+
+    beforeEach(() => {
+      // Block headers carry a zero message count, so the in-progress checkpoint started consuming at 0.
+      mockPrediction(midCheckpointPlan());
+      mockCheckpointStartBlockData(CHECKPOINT_PARENT_BLOCK);
     });
 
-    it('appends the message bundle the next block would consume', async () => {
-      const tx = await lowGasTx();
-      setupMidCheckpoint();
-      blockSource.getBlockData.mockImplementation((query: BlockQuery) =>
-        Promise.resolve('number' in query ? makeBlockData(query.number, SlotNumber(42)) : undefined),
+    it('appends at most one block of messages', async () => {
+      const all = mockInboxMessages(leaves(MAX_L1_TO_L2_MSGS_PER_BLOCK + 10));
+
+      await simulator.simulate(await lowGasTx());
+
+      expect(merkleTreeFork.appendLeaves).toHaveBeenCalledWith(
+        MerkleTreeId.L1_TO_L2_MESSAGE_TREE,
+        all.slice(0, MAX_L1_TO_L2_MSGS_PER_BLOCK),
       );
-      mockNextL1Slot(SlotNumber(100));
-      const bundle = mockInboxSelection();
-
-      await simulator.simulate(tx);
-
-      expect(merkleTreeFork.appendLeaves).toHaveBeenCalledWith(MerkleTreeId.L1_TO_L2_MESSAGE_TREE, bundle);
     });
 
-    it('simulates against the tip when the parent Inbox bucket is not synced', async () => {
-      const tx = await lowGasTx();
-      setupMidCheckpoint();
-      blockSource.getBlockData.mockImplementation((query: BlockQuery) =>
-        Promise.resolve('number' in query ? makeBlockData(query.number, SlotNumber(42)) : undefined),
-      );
-      mockNextL1Slot(SlotNumber(100));
-      // Default mock: no bucket resolves the fork's message total.
+    it('continues from the fork message total and stops at the threshold', async () => {
+      // One message short of a full block below the threshold, so the threshold, not the per-block cap, ends it.
+      const cursor = threshold - MAX_L1_TO_L2_MSGS_PER_BLOCK + 1;
+      forkSize(BigInt(cursor));
+      const all = mockInboxMessages(leaves(MAX_L1_TO_L2_MSGS_PER_CHECKPOINT));
 
-      await expect(simulator.simulate(tx)).resolves.toBeDefined();
+      await simulator.simulate(await lowGasTx());
+
+      expect(merkleTreeFork.appendLeaves).toHaveBeenCalledWith(
+        MerkleTreeId.L1_TO_L2_MESSAGE_TREE,
+        all.slice(cursor, threshold),
+      );
+    });
+
+    it('predicts nothing once the cursor reaches the threshold, where the end depends on L1', async () => {
+      // From the threshold on, the proposer's end comes from a live L1 bucket end this node does not read.
+      forkSize(BigInt(threshold));
+      mockInboxMessages(leaves(MAX_L1_TO_L2_MSGS_PER_CHECKPOINT));
+
+      await expect(simulator.simulate(await lowGasTx())).resolves.toBeDefined();
 
       expect(merkleTreeFork.appendLeaves).not.toHaveBeenCalled();
     });
-
-    it('fails with a retryable error when the latest proposed header is missing, without double-inserting messages', async () => {
-      const tx = await lowGasTx();
-      setupMidCheckpoint();
-      // Latest proposed block header is missing (torn snapshot).
-      blockSource.getBlockData.mockResolvedValue(undefined);
-      mockNextL1Slot(SlotNumber(100));
-
-      await expect(simulator.simulate(tx)).rejects.toThrow();
-
-      // Must not treat the next block as opening a new checkpoint.
-      expect(merkleTreeFork.appendLeaves).not.toHaveBeenCalled();
-      expect(globalVariableBuilder.buildCheckpointGlobalVariables).not.toHaveBeenCalled();
-    });
   });
 
-  describe('opening a new checkpoint', () => {
-    // The latest proposed block (5) coincides with the proposed-checkpoint frontier, so the next
-    // block opens a new checkpoint. Tests that pipeline on a proposed checkpoint additionally mock
-    // `getProposedCheckpointData`; otherwise the frontier is the checkpointed tip (block 5).
-    const setupBoundary = (args?: { checkpointed?: CheckpointNumber }) =>
-      makeTips({
-        proposed: BlockNumber(5),
-        checkpointedBlock: BlockNumber(5),
-        checkpointed: args?.checkpointed ?? CheckpointNumber(1),
+  it('replans once when the world state holds a different block at the planned height', async () => {
+    worldStateSynchronizer.syncImmediate.mockRejectedValueOnce(hashMismatch());
+    predictor.predict
+      .mockResolvedValueOnce({
+        plan: boundaryPlan(),
+        frontier: frontierWithCheckpointedBlock(CHECKPOINT_PARENT_BLOCK),
+        globals: globalsFor(BlockNumber(6), SlotNumber(20)),
+      })
+      .mockResolvedValueOnce({
+        plan: boundaryPlan(),
+        frontier: frontierWithCheckpointedBlock(CHECKPOINT_PARENT_BLOCK),
+        globals: globalsFor(BlockNumber(6), SlotNumber(21)),
       });
 
-    it('targets the next L1 slot plus the pipelining offset and pins tips to the checkpointed tip when idle', async () => {
-      const tx = await lowGasTx();
-      blockSource.getL2Tips.mockResolvedValue(setupBoundary());
-      blockSource.getBlockData.mockImplementation((query: BlockQuery) =>
-        Promise.resolve('number' in query ? makeBlockData(query.number, SlotNumber(5)) : undefined),
-      );
-      mockNextL1Slot(SlotNumber(20));
+    await simulator.simulate(await lowGasTx());
 
-      await simulator.simulate(tx);
-
-      // Sequencer formula: nextL1Slot + PROPOSER_PIPELINING_SLOT_OFFSET (=1).
-      const [, , slotArg, plan] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
-      expect(slotArg).toEqual(SlotNumber(21));
-      expect(builtGlobals!.blockNumber).toEqual(BlockNumber(6));
-      // Idle: tips pinned to the checkpointed tip (number 1) for both pending and proven.
-      expect(plan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(1), proven: CheckpointNumber(1) });
-    });
-
-    it('appends the message bundle the next block would consume', async () => {
-      const tx = await lowGasTx();
-      blockSource.getL2Tips.mockResolvedValue(setupBoundary());
-      blockSource.getBlockData.mockImplementation((query: BlockQuery) =>
-        Promise.resolve('number' in query ? makeBlockData(query.number, SlotNumber(5)) : undefined),
-      );
-      mockNextL1Slot(SlotNumber(20));
-      const bundle = mockInboxSelection();
-
-      await expect(simulator.simulate(tx)).resolves.toBeDefined();
-
-      // Only the first block's worth of messages: a fresh checkpoint starts its per-checkpoint budget at the tip.
-      expect(merkleTreeFork.appendLeaves).toHaveBeenCalledWith(MerkleTreeId.L1_TO_L2_MESSAGE_TREE, bundle);
-    });
-
-    it('targets parentSlot + 1 and carries the parent overrides when pipelining on a proposed checkpoint', async () => {
-      const tx = await lowGasTx();
-      const parentSlot = SlotNumber(30);
-      const parentArchiveRoot = Fr.fromString('0xabcabc');
-      blockSource.getL2Tips.mockResolvedValue(setupBoundary({ checkpointed: CheckpointNumber(2) }));
-      // The parent slot must come from the proposed checkpoint data itself, not from a separate
-      // block-data read that can be torn from it — so leave block data unavailable here.
-      blockSource.getBlockData.mockResolvedValue(undefined);
-      // The next L1 slot is well behind the proposed parent's slot, so the proposed-checkpoint + 1
-      // term must win the max().
-      mockNextL1Slot(SlotNumber(5));
-
-      const proposedCheckpointData = makeProposedCheckpointData({
-        checkpointNumber: CheckpointNumber(3),
-        lastBlock: BlockNumber(5),
-        slotNumber: parentSlot,
-        archiveRoot: parentArchiveRoot,
-      });
-      blockSource.getProposedCheckpointData.mockResolvedValue(proposedCheckpointData);
-
-      const grandparentFeeHeader = makeFeeHeader();
-      rollupContract.getCheckpoint.mockResolvedValue({ feeHeader: grandparentFeeHeader } as any);
-      rollupContract.getManaTarget.mockResolvedValue(1000n);
-      const childFeeHeader = makeFeeHeader();
-      jest.spyOn(RollupContract, 'computeChildFeeHeader').mockReturnValue(childFeeHeader);
-
-      await simulator.simulate(tx);
-
-      const [, , slotArg, plan] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
-      expect(slotArg).toEqual(SlotNumber(31));
-      expect(plan?.pendingCheckpointState?.archive).toEqual(parentArchiveRoot);
-      expect(plan?.pendingCheckpointState?.slotNumber).toEqual(parentSlot);
-      expect(plan?.pendingCheckpointState?.feeHeader).toEqual(childFeeHeader);
-      expect(RollupContract.computeChildFeeHeader).toHaveBeenCalledWith(
-        grandparentFeeHeader,
-        proposedCheckpointData.totalManaUsed,
-        proposedCheckpointData.feeAssetPriceModifier,
-        1000n,
-      );
-    });
-
-    it('pins tips to firstInvalid - 1 when the pending chain is invalid', async () => {
-      const tx = await lowGasTx();
-      blockSource.getL2Tips.mockResolvedValue(setupBoundary({ checkpointed: CheckpointNumber(5) }));
-      blockSource.getBlockData.mockImplementation((query: BlockQuery) =>
-        Promise.resolve('number' in query ? makeBlockData(query.number, SlotNumber(5)) : undefined),
-      );
-      mockNextL1Slot(SlotNumber(20));
-      blockSource.getPendingChainValidationStatus.mockResolvedValue(makeInvalidStatus(CheckpointNumber(4)));
-
-      await simulator.simulate(tx);
-
-      const [, , , plan] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
-      // invalidateToPendingCheckpointNumber = firstInvalid (4) - 1 = 3.
-      expect(plan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(3), proven: CheckpointNumber(3) });
-    });
-
-    it('degrades to a pinned-tips plan when pipelining without a rollup contract', async () => {
-      const tx = await lowGasTx();
-      simulator = makeSimulatorWithoutRollupContract();
-      blockSource.getL2Tips.mockResolvedValue(setupBoundary({ checkpointed: CheckpointNumber(2) }));
-      mockNextL1Slot(SlotNumber(5));
-      blockSource.getProposedCheckpointData.mockResolvedValue(
-        makeProposedCheckpointData({
-          checkpointNumber: CheckpointNumber(3),
-          lastBlock: BlockNumber(5),
-          slotNumber: SlotNumber(30),
-          archiveRoot: Fr.fromString('0xabcabc'),
-        }),
-      );
-
-      await simulator.simulate(tx);
-
-      const [, , , plan] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
-      // No rollup contract: pin tips to the checkpointed tip (2) without pipelining overrides.
-      expect(plan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(2), proven: CheckpointNumber(2) });
-      expect(plan?.pendingCheckpointState).toBeUndefined();
-    });
-
-    it('simulates without a rollup contract when idle (the TXE shape)', async () => {
-      const tx = await lowGasTx();
-      simulator = makeSimulatorWithoutRollupContract();
-      blockSource.getL2Tips.mockResolvedValue(setupBoundary());
-      mockNextL1Slot(SlotNumber(20));
-
-      await expect(simulator.simulate(tx)).resolves.toBeDefined();
-
-      const [, , , plan] = globalVariableBuilder.buildCheckpointGlobalVariables.mock.calls[0];
-      expect(plan?.chainTipsOverride).toEqual({ pending: CheckpointNumber(1), proven: CheckpointNumber(1) });
-    });
-
-    const makeSimulatorWithoutRollupContract = () =>
-      new NodePublicCallsSimulator({
-        blockSource,
-        worldStateSynchronizer,
-        l1ToL2MessageSource,
-        contractDataSource,
-        globalVariableBuilder,
-        epochCache,
-        avmSimulator,
-        signatureContext: { chainId: CHAIN_ID.toNumber(), rollupAddress: ROLLUP_ADDRESS },
-        config: { rpcSimulatePublicMaxGasLimit: 1e11, rpcSimulatePublicMaxDebugLogMemoryReads: 100 },
-      });
+    expect(predictor.predict).toHaveBeenCalledTimes(2);
+    expect(builtGlobals!.slotNumber).toEqual(SlotNumber(21));
   });
+
+  it('fails with a retryable error when the world state keeps disagreeing with the plan', async () => {
+    worldStateSynchronizer.syncImmediate.mockRejectedValue(hashMismatch());
+
+    await expect(simulator.simulate(await lowGasTx())).rejects.toThrow(/prune race/);
+    expect(predictor.predict).toHaveBeenCalledTimes(2);
+    expect(worldStateSynchronizer.fork).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a block the world state cannot reach without replanning', async () => {
+    worldStateSynchronizer.syncImmediate.mockRejectedValue(
+      new WorldStateSynchronizerError('unable to sync', { cause: { reason: 'block_not_available' } }),
+    );
+
+    await expect(simulator.simulate(await lowGasTx())).rejects.toThrow('unable to sync');
+    expect(predictor.predict).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces any other sync failure without replanning', async () => {
+    worldStateSynchronizer.syncImmediate.mockRejectedValue(new Error('world state is down'));
+
+    await expect(simulator.simulate(await lowGasTx())).rejects.toThrow('world state is down');
+    expect(predictor.predict).toHaveBeenCalledTimes(1);
+  });
+
+  const hashMismatch = () =>
+    new WorldStateSynchronizerError('hash mismatch', { cause: { reason: 'block_hash_mismatch' } });
 });
-
-function makeFeeHeader(): FeeHeader {
-  return { excessMana: 0n, manaUsed: 0n, ethPerFeeAsset: 0n, congestionCost: 0n, proverCost: 0n };
-}
-
-function makeProposedCheckpointData(args: {
-  checkpointNumber: CheckpointNumber;
-  lastBlock: BlockNumber;
-  slotNumber?: SlotNumber;
-  archiveRoot?: Fr;
-}): ProposedCheckpointData {
-  return {
-    checkpointNumber: args.checkpointNumber,
-    header: CheckpointHeader.empty({ slotNumber: args.slotNumber ?? SlotNumber(0) }),
-    startBlock: args.lastBlock,
-    blockCount: 1,
-    totalManaUsed: 555n,
-    feeAssetPriceModifier: 7n,
-    archive: new AppendOnlyTreeSnapshot(args.archiveRoot ?? Fr.ZERO, 0),
-    checkpointOutHash: Fr.fromString('0xfeed'),
-    inboxMsgTotal: 0n,
-  };
-}
-
-function makeInvalidStatus(firstInvalid: CheckpointNumber): ValidateCheckpointResult {
-  return {
-    valid: false,
-    checkpoint: {
-      archive: Fr.random(),
-      lastArchive: Fr.random(),
-      slotNumber: SlotNumber(10),
-      checkpointNumber: firstInvalid,
-      timestamp: 0n,
-    },
-    committee: [],
-    epoch: EpochNumber.ZERO,
-    seed: 0n,
-    attestors: [],
-    attestations: [],
-    verbatimAttestations: { signatureIndices: '0x', signaturesOrAddresses: '0x' },
-    reason: 'insufficient-attestations',
-  };
-}

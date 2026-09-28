@@ -137,6 +137,7 @@ describe('EpochSession', () => {
   describe('publishing outcome → terminal state', () => {
     it.each<[PublishOutcome, string]>([
       ['published', 'completed'],
+      ['already-submitted', 'completed'],
       ['superseded', 'superseded'],
       ['expired', 'timed-out'],
     ])('maps "%s" → "%s"', async (outcome, expected) => {
@@ -487,7 +488,6 @@ function makeStubProver(
     checkpoint,
     epochNumber: EpochNumber(5),
     slotNumber: checkpoint.header.slotNumber,
-    attestations: [],
     previousBlockHeader: BlockHeader.empty(),
     l1ToL2Messages: [],
     previousArchiveSiblingPath: makeTuple(ARCHIVE_HEIGHT, () => Fr.ZERO),

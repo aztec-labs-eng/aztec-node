@@ -14,11 +14,11 @@ error: Type PrivateImmutable<Field, Context> implements OwnedStateVariable and h
     2: storage
             at <repo>/noir-projects/aztec-nr/aztec/src/macros/storage.nr:<line>:<col>
 
-error: Could not resolve 'init' in path
+error: no associated item named `init` found for `Storage<_>`
    ┌─ <repo>/noir-projects/aztec-nr/aztec/src/macros/internals_functions_generation/external/private.nr:<line>:<col>
    │
    │             let storage = Storage::init(&mut context);
-   │                                    ----
+   │                                    ---- a path can only name an associated type, constant or function of `Storage<_>`
    │
    ┌─ src/main.nr:4:1
    │

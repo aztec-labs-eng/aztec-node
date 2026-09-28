@@ -1,5 +1,5 @@
 import { type EpochCache, type EpochCommitteeInfo, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
-import { NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -20,6 +20,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
   type BlockData,
   BlockHash,
+  type BlockQuery,
   CommitteeAttestation,
   CommitteeAttestationsAndSigners,
   GENESIS_CHECKPOINT_HEADER_HASH,
@@ -42,8 +43,9 @@ import {
   type WorldStateSynchronizer,
   type WorldStateSynchronizerStatus,
 } from '@aztec-labs/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { type L1ToL2MessageSource, MIN_BLOCKS_FOR_INBOX_CATCHUP } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { FAST_PROFILE_ETHEREUM_SLOT_DURATION } from '@aztec-labs/stdlib/timetable';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, type Tx } from '@aztec-labs/stdlib/tx';
 import type { FullNodeCheckpointsBuilder, ValidatorClient } from '@aztec-labs/validator-client';
@@ -73,6 +75,7 @@ describe('sequencer', () => {
   let publisherFactory: MockProxy<SequencerPublisherFactory>;
 
   let rollupContract: MockProxy<RollupContract>;
+  let inboxContract: MockProxy<InboxContract>;
 
   let dateProvider: TestDateProvider;
 
@@ -90,6 +93,7 @@ describe('sequencer', () => {
   >;
 
   let sequencer: TestSequencer;
+  let config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>;
 
   const slotDuration = 8;
   const ethereumSlotDuration = 4;
@@ -229,10 +233,10 @@ describe('sequencer', () => {
     });
     epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
 
-    publisher = mockDeep<SequencerPublisher>();
+    publisher = mockDeep<SequencerPublisher>({ [Symbol.dispose]: jest.fn() });
     publisher.epochCache = epochCache;
     publisher.getSenderAddress.mockImplementation(() => EthAddress.random());
-    publisher.validateCheckpointHeader.mockResolvedValue();
+    publisher.validateCheckpointHeaderAndInbox.mockResolvedValue(0n);
     publisher.enqueueProposeCheckpoint.mockResolvedValue(undefined);
     publisher.enqueueGovernanceCastSignal.mockResolvedValue(true);
     publisher.enqueueSlashingActions.mockResolvedValue(true);
@@ -260,7 +264,7 @@ describe('sequencer', () => {
     rollupContract.isEscapeHatchOpen.mockResolvedValue(false);
     // Default rollup reads used by pipelined fee-header derivation.
     rollupContract.getCheckpoint.mockResolvedValue({
-      feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, congestionCost: 0n, proverCost: 0n },
+      feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
     } as any);
     rollupContract.getManaTarget.mockResolvedValue(10_000n);
 
@@ -316,13 +320,19 @@ describe('sequencer', () => {
     checkpointBuilder.setBlockProvider(() => block);
 
     l2BlockSource = mock<L2BlockSource & L2BlockSink & ProposedCheckpointSink>({
-      getBlockData: mockFn().mockResolvedValue({
-        header: BlockHeader.empty(),
-        archive: AppendOnlyTreeSnapshot.empty(),
-        blockHash: BlockHash.ZERO,
-        checkpointNumber: CheckpointNumber(0),
-        indexWithinCheckpoint: IndexWithinCheckpoint(0),
-      } satisfies BlockData),
+      // The publication guard compares the checkpoint's last block hash with the one the archiver holds at its
+      // number; serve the blocks the mock builder built.
+      getBlockData: mockFn().mockImplementation(async (query: BlockQuery) => {
+        const built =
+          'number' in query ? checkpointBuilder.getBuiltBlocks().find(b => b.number === query.number) : undefined;
+        return {
+          header: BlockHeader.empty(),
+          archive: AppendOnlyTreeSnapshot.empty(),
+          blockHash: await (built ?? block).hash(),
+          checkpointNumber: CheckpointNumber(0),
+          indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        };
+      }),
       getBlockNumber: mockFn().mockResolvedValue(lastBlockNumber),
       getL2Tips: mockFn().mockResolvedValue({
         proposed: { number: lastBlockNumber, hash },
@@ -347,6 +357,17 @@ describe('sequencer', () => {
       getProposedCheckpointData: mockFn().mockResolvedValue(undefined),
     });
 
+    // Composed from the two halves so tests can keep steering them independently; the archiver serves
+    // this from one atomic read.
+    l2BlockSource.getL2Frontier.mockImplementation(async () => ({
+      tips: await l2BlockSource.getL2Tips(),
+      proposedCheckpoint: await l2BlockSource.getProposedCheckpointData(),
+      l1SyncPoint: undefined,
+      latestBlockHeader: undefined,
+      checkpointedCheckpoint: undefined,
+      pendingChainValidationStatus: await l2BlockSource.getPendingChainValidationStatus(),
+    }));
+
     l1ToL2MessageSource = mock<L1ToL2MessageSource>({
       getL2Tips: mockFn().mockResolvedValue({
         proposed: { number: lastBlockNumber, hash },
@@ -364,14 +385,8 @@ describe('sequencer', () => {
         },
       }),
     });
-    l1ToL2MessageSource.getInboxBucketByTotalMsgCount.mockResolvedValue({
-      seq: 0n,
-      inboxRollingHash: Fr.ZERO,
-      totalMsgCount: 0n,
-      timestamp: 0n,
-      msgCount: 0,
-      lastMessageIndex: 0n,
-    });
+    inboxContract = mock<InboxContract>();
+    TestUtils.mockStreamingInbox(l1ToL2MessageSource, inboxContract);
 
     validatorClient = mock<ValidatorClient>();
     validatorClient.collectAttestations.mockImplementation(() => Promise.resolve(getCheckpointAttestations()));
@@ -387,7 +402,7 @@ describe('sequencer', () => {
     dateProvider = new TestDateProvider();
 
     signatureContext = { chainId: chainId.toNumber(), rollupAddress: EthAddress.random() };
-    const config: SequencerConfig & Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'> = {
+    config = {
       maxTxsPerBlock: 4,
       l1ChainId: signatureContext.chainId,
       // With aztecSlotDuration=8 and ethereumSlotDuration=4 (fast profile), a 2s block duration derives
@@ -395,6 +410,8 @@ describe('sequencer', () => {
       // slot duration and make ProposerTimetable throw on construction.
       blockDurationMs: 2000,
       rollupAddress: signatureContext.rollupAddress,
+      // One block sub-slot is below the streaming-Inbox catch-up floor; this fixture is not a production profile.
+      allowUnsafeInboxCatchupCapacity: true,
     };
     sequencer = new TestSequencer(
       publisherFactory,
@@ -410,9 +427,85 @@ describe('sequencer', () => {
       dateProvider,
       epochCache,
       rollupContract,
+      inboxContract,
       config,
     );
     sequencer.updateConfig(config);
+  });
+
+  describe('Inbox catch-up capacity guard', () => {
+    // Production profile: 12s ethereum slots keep the conservative budgets, so maxBlocks is driven purely by
+    // the slot and block durations. floor((S - init - D - 2P - prepCp) / D) with S=36, init=1, P=2, prepCp=1
+    // gives 9 blocks at D=3 and 2 at D=10.
+    const productionConstants = () => ({ ...l1Constants, slotDuration: 36, ethereumSlotDuration: 12 });
+
+    const buildSequencer = (overrides: Partial<SequencerConfig>, constants = productionConstants()) => {
+      // These cases are about the production floor, so the suite-wide fixture exemption is dropped by default.
+      const sequencerConfig = {
+        ...config,
+        blockDurationMs: 3000,
+        allowUnsafeInboxCatchupCapacity: false,
+        ...overrides,
+      };
+      return new TestSequencer(
+        publisherFactory,
+        validatorClient,
+        globalVariableBuilder,
+        p2p,
+        worldState,
+        slasherClient,
+        l2BlockSource,
+        l1ToL2MessageSource,
+        checkpointsBuilder as unknown as FullNodeCheckpointsBuilder,
+        constants,
+        dateProvider,
+        epochCache,
+        rollupContract,
+        inboxContract,
+        sequencerConfig,
+      );
+    };
+
+    it.each([1, 2, 3])('rejects a configured cap of %i block(s) per checkpoint', maxBlocksPerCheckpoint => {
+      expect(() => buildSequencer({ maxBlocksPerCheckpoint })).toThrow(/streaming-Inbox backlog/);
+    });
+
+    it('accepts a configured cap at the floor', () => {
+      expect(() => buildSequencer({ maxBlocksPerCheckpoint: MIN_BLOCKS_FOR_INBOX_CATCHUP })).not.toThrow();
+    });
+
+    it('rejects timings that derive fewer blocks than the floor even when the configured cap is above it', () => {
+      // D=10 leaves floor((36 - 1 - 10 - 4 - 1) / 10) = 2 sub-slots, under a generous configured cap.
+      expect(() => buildSequencer({ maxBlocksPerCheckpoint: 8, blockDurationMs: 10_000 })).toThrow(
+        /streaming-Inbox backlog/,
+      );
+    });
+
+    it('warns rather than rejects for a fixture that declares its capacity unsafe', () => {
+      expect(() =>
+        buildSequencer({ maxBlocksPerCheckpoint: 1, blockDurationMs: 2000, allowUnsafeInboxCatchupCapacity: true }),
+      ).not.toThrow();
+    });
+
+    // Short L1 slots do not raise the per-block message cap, so a real network running them can still be unable to
+    // reach a mandatory endpoint: the floor holds for every slot duration unless the configuration opts out.
+    it.each([FAST_PROFILE_ETHEREUM_SLOT_DURATION - 4, FAST_PROFILE_ETHEREUM_SLOT_DURATION, 12])(
+      'rejects an undersized production configuration at an L1 slot duration of %is',
+      ethereumSlotDuration => {
+        const constants = { ...productionConstants(), ethereumSlotDuration };
+        expect(() => buildSequencer({ maxBlocksPerCheckpoint: 1 }, constants)).toThrow(/streaming-Inbox backlog/);
+      },
+    );
+
+    it('leaves the committed config and timetable intact when an update is rejected', () => {
+      const sequencer = buildSequencer({ maxBlocksPerCheckpoint: 8 });
+      const before = sequencer.getTimeTable();
+
+      expect(() => sequencer.updateConfig({ blockDurationMs: 10_000 })).toThrow(/streaming-Inbox backlog/);
+
+      expect(sequencer.getTimeTable()).toBe(before);
+      expect(sequencer.getTimeTable().blockDuration).toEqual(3);
+    });
   });
 
   describe('perBlockAllocationMultiplier guard', () => {
@@ -548,7 +641,12 @@ describe('sequencer', () => {
         }),
       );
 
+      let disposed = false;
+      publisher.dispose.mockImplementation(() => {
+        disposed = true;
+      });
       await sequencer.work();
+      expect(disposed).toBe(false);
       expect(publisher.sendRequestsAt).toHaveBeenCalled();
       expect(sequencer.getPendingRequestCount()).toBe(1);
 
@@ -557,6 +655,7 @@ describe('sequencer', () => {
       const stopPromise = sequencer.stop();
       releaseSend(undefined);
       await stopPromise;
+      expect(disposed).toBe(true);
 
       expect(publisher.interrupt).toHaveBeenCalled();
       expect(sequencer.getPendingRequestCount()).toBe(0);
@@ -565,6 +664,23 @@ describe('sequencer', () => {
   });
 
   describe('block building', () => {
+    it.each(['rejected', 'error'])('disposes a publisher when proposal preparation is %s', async outcome => {
+      await setupSingleTxBlock();
+      let disposed = false;
+      publisher[Symbol.dispose].mockImplementation(() => {
+        disposed = true;
+      });
+      if (outcome === 'error') {
+        publisher.canProposeAt.mockRejectedValue(new Error('RPC unavailable'));
+        await expect(sequencer.work()).rejects.toThrow('RPC unavailable');
+      } else {
+        publisher.canProposeAt.mockResolvedValue(undefined);
+        await sequencer.work();
+      }
+      expect(disposed).toBe(true);
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(0);
+    });
+
     it('builds a block out of a single tx', async () => {
       await setupSingleTxBlock();
       await sequencer.work();
@@ -787,7 +903,7 @@ describe('sequencer', () => {
       await setupSingleTxBlock();
 
       // This could practically be for any reason, e.g., could also be that we have entered a new slot.
-      publisher.validateCheckpointHeader.mockRejectedValueOnce(new Error('No block for you'));
+      publisher.validateCheckpointHeaderAndInbox.mockRejectedValueOnce(new Error('No block for you'));
 
       await sequencer.work();
 
@@ -835,10 +951,10 @@ describe('sequencer', () => {
     it('requests a publisher for each block', async () => {
       // Create multiple publishers for the test
       const publishers = times(2, i => {
-        const pub = mockDeep<SequencerPublisher>();
+        const pub = mockDeep<SequencerPublisher>({ [Symbol.dispose]: jest.fn() });
         pub.epochCache = epochCache;
         pub.getSenderAddress.mockImplementation(() => EthAddress.random());
-        pub.validateCheckpointHeader.mockResolvedValue();
+        pub.validateCheckpointHeaderAndInbox.mockResolvedValue(0n);
         pub.enqueueProposeCheckpoint.mockResolvedValue(undefined);
         pub.enqueueGovernanceCastSignal.mockResolvedValue(true);
         pub.enqueueSlashingActions.mockResolvedValue(true);

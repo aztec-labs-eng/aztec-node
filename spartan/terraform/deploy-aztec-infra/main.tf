@@ -111,7 +111,10 @@ locals {
   max_validator_nodes = max(tonumber(var.VALIDATOR_REPLICAS), local.effective_ha_count)
 
   # Detect local kind context (e.g., "kind-kind") to gate Service types
-  is_kind = can(regex("^kind", var.K8S_CLUSTER_CONTEXT))
+  is_kind                = can(regex("^kind", var.K8S_CLUSTER_CONTEXT))
+  deployment_environment = (var.NETWORK == "mainnet" || var.NETWORK == "testnet") ? "production" : "staging"
+
+  network_attributes = var.NETWORK == null || var.NETWORK == "" ? {} : { network = var.NETWORK }
 
   kong_gateway_enabled = var.RPC_GATEWAY_ENABLED || var.PROVER_NODE_RPC_GATEWAY_ENABLED
 
@@ -191,6 +194,20 @@ locals {
 
   common_inline_values = yamlencode({
     global = merge(
+      local.is_kind ? {} : {
+        aztecEnv = {
+          OTEL_RESOURCE_ATTRIBUTES = join(",", compact([
+            "project=aztec-networks",
+            "cloud.provider=gcp",
+            "cloud.platform=gcp_kubernetes_engine",
+            "cloud.account.id=${var.GCP_PROJECT_ID}",
+            "cloud.region=${replace(var.GCP_REGION, "/-[a-z]$/", "")}",
+            can(regex("-[a-z]$", var.GCP_REGION)) ? "cloud.availability_zone=${var.GCP_REGION}" : "",
+            "k8s.cluster.name=${var.CLUSTER}",
+            "deployment.environment.name=${local.deployment_environment}",
+          ]))
+        }
+      },
       length(var.L1_CONSENSUS_HOST_API_KEYS) > 0 ? {
         l1ConsensusHostApiKeys = join(",", var.L1_CONSENSUS_HOST_API_KEYS)
       } : {},
@@ -280,6 +297,7 @@ locals {
     "validator.node.env.SEQ_MAX_TX_PER_BLOCK"                                     = var.SEQ_MAX_TX_PER_BLOCK
     "validator.node.env.SEQ_MAX_TX_PER_CHECKPOINT"                                = var.SEQ_MAX_TX_PER_CHECKPOINT
     "validator.node.env.P2P_MAX_PENDING_TX_COUNT"                                 = var.P2P_MAX_PENDING_TX_COUNT
+    "validator.node.env.P2P_MIN_TX_POOL_AGE_MS"                                   = var.P2P_MIN_TX_POOL_AGE_MS
     "validator.node.env.SEQ_PER_BLOCK_ALLOCATION_MULTIPLIER"                      = var.SEQ_PER_BLOCK_ALLOCATION_MULTIPLIER
     "validator.node.env.SEQ_BLOCK_DURATION_MS"                                    = var.SEQ_BLOCK_DURATION_MS
     "validator.node.env.SEQ_L1_PUBLISHING_TIME_ALLOWANCE_IN_SLOT"                 = var.SEQ_L1_PUBLISHING_TIME_ALLOWANCE_IN_SLOT
@@ -363,6 +381,7 @@ locals {
       "service.p2p.announcePort"          = local.p2p_port_p2p_bootstrap
       "service.p2p.port"                  = local.p2p_port_p2p_bootstrap
       "node.env.P2P_MAX_PENDING_TX_COUNT" = var.P2P_MAX_PENDING_TX_COUNT
+      "node.env.P2P_MIN_TX_POOL_AGE_MS"   = var.P2P_MIN_TX_POOL_AGE_MS
     }
     boot_node_host_path  = ""
     bootstrap_nodes_path = ""
@@ -401,7 +420,7 @@ locals {
             p2p = { publicIP = var.P2P_PUBLIC_IP }
           }
           node = {
-            logLevel = var.LOG_LEVEL
+            logLevel           = var.LOG_LEVEL
             disableAdminApiKey = true
           }
         }
@@ -479,6 +498,7 @@ locals {
           "node.node.env.P2P_GOSSIPSUB_DHI"                     = var.P2P_GOSSIPSUB_DHI
           "node.node.env.P2P_DROP_TX_CHANCE"                    = var.P2P_DROP_TX_CHANCE
           "node.node.env.P2P_MAX_PENDING_TX_COUNT"              = var.P2P_MAX_PENDING_TX_COUNT
+          "node.node.env.P2P_MIN_TX_POOL_AGE_MS"                = var.P2P_MIN_TX_POOL_AGE_MS
           "node.node.env.WS_NUM_HISTORIC_CHECKPOINTS"           = var.WS_NUM_HISTORIC_CHECKPOINTS
           "node.node.env.TX_COLLECTION_FILE_STORE_URLS"         = var.TX_COLLECTION_FILE_STORE_URLS
           "node.service.p2p.nodePortEnabled"                    = var.P2P_NODEPORT_ENABLED
@@ -537,6 +557,7 @@ locals {
         "node.env.P2P_GOSSIPSUB_DHI"                  = var.P2P_GOSSIPSUB_DHI
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
+        "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
         "node.env.BLOB_FILE_STORE_UPLOAD_URL"         = var.BLOB_FILE_STORE_UPLOAD_URL
         "node.env.TX_FILE_STORE_ENABLED"              = var.TX_FILE_STORE_ENABLED
@@ -574,6 +595,7 @@ locals {
         "node.env.BLOB_ALLOW_EMPTY_SOURCES"           = var.BLOB_ALLOW_EMPTY_SOURCES
         "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
+        "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG" = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
         "node.secret.envEnabled"                      = true
         "node.env.FISHERMAN_MODE"                     = "true"
@@ -625,6 +647,7 @@ locals {
         "node.env.P2P_GOSSIPSUB_DHI"                  = var.P2P_GOSSIPSUB_DHI
         "node.env.P2P_DROP_TX_CHANCE"                 = var.P2P_DROP_TX_CHANCE
         "node.env.P2P_MAX_PENDING_TX_COUNT"           = var.P2P_MAX_PENDING_TX_COUNT
+        "node.env.P2P_MIN_TX_POOL_AGE_MS"             = var.P2P_MIN_TX_POOL_AGE_MS
         "node.env.WS_NUM_HISTORIC_CHECKPOINTS"        = var.WS_NUM_HISTORIC_CHECKPOINTS
         "node.env.TX_COLLECTION_FILE_STORE_URLS"      = var.TX_COLLECTION_FILE_STORE_URLS
       }
@@ -706,6 +729,38 @@ locals {
         "bot.mnemonicStartIndex" = var.BOT_CROSS_CHAIN_MNEMONIC_START_INDEX
         "bot.daGasLimit"         = var.BOT_DA_GAS_LIMIT
         "bot.l2GasLimit"         = var.BOT_L2_GAS_LIMIT
+      }
+      boot_node_host_path  = ""
+      bootstrap_nodes_path = ""
+      wait                 = false
+    } : null
+
+    # Optional: inbox probe bot. Takes dedicated gas limits rather than the shared
+    # BOT_DA_GAS_LIMIT/BOT_L2_GAS_LIMIT, which are tuned for the transfer bot's circuit.
+    bot_inbox = var.BOT_INBOX_REPLICAS > 0 ? {
+      name  = "${var.RELEASE_PREFIX}-bot-inbox"
+      chart = "aztec-bot"
+      values = [
+        "common.yaml",
+        "bot-resources-${var.BOT_RESOURCE_PROFILE}.yaml",
+        "bot-inbox.yaml",
+      ]
+      custom_settings = {
+        "bot.replicaCount"                   = var.BOT_INBOX_REPLICAS
+        "bot.txIntervalSeconds"              = var.BOT_INBOX_TX_INTERVAL_SECONDS
+        "bot.followChain"                    = var.BOT_INBOX_FOLLOW_CHAIN
+        "bot.pxeSyncChainTip"                = var.BOT_INBOX_PXE_SYNC_CHAIN_TIP
+        "bot.botPrivateKey"                  = var.BOT_INBOX_L2_PRIVATE_KEY
+        "bot.nodeUrl"                        = local.internal_rpc_url
+        "bot.mnemonic"                       = var.BOT_MNEMONIC
+        "bot.mnemonicStartIndex"             = var.BOT_INBOX_MNEMONIC_START_INDEX
+        "bot.daGasLimit"                     = var.BOT_INBOX_DA_GAS_LIMIT
+        "bot.l2GasLimit"                     = var.BOT_INBOX_L2_GAS_LIMIT
+        "bot.inboxMessagesPerBatch"          = var.BOT_INBOX_MESSAGES_PER_BATCH
+        "bot.inboxConsumeMode"               = var.BOT_INBOX_CONSUME_MODE
+        "bot.inboxSaturationIntervalSeconds" = var.BOT_INBOX_SATURATION_INTERVAL_SECONDS
+        "bot.l1ToL2SeedCount"                = var.BOT_INBOX_SEED_COUNT
+        "bot.l1ToL2TimeoutSeconds"           = var.BOT_INBOX_L1_TO_L2_TIMEOUT_SECONDS
       }
       boot_node_host_path  = ""
       bootstrap_nodes_path = ""
@@ -879,17 +934,22 @@ module "rpc_gateway_metrics_collector" {
       scrape_interval = "15s"
       metrics_path    = "/metrics"
       targets         = ["${module.rpc_gateway[0].metrics_service_name}.${module.rpc_gateway[0].metrics_service_namespace}.svc.cluster.local:${module.rpc_gateway[0].metrics_service_port}"]
-      labels = {
-        component = "kong"
-        network   = var.RELEASE_PREFIX
-      }
+      labels          = merge({ component = "kong" }, local.network_attributes)
     }
   ]
-  RESOURCE_ATTRIBUTES = {
-    "service.name"    = "${var.RELEASE_PREFIX}-rpc-kong"
-    "network"         = var.RELEASE_PREFIX
-    "aztec.component" = "kong"
-  }
+  RESOURCE_ATTRIBUTES = merge({
+    "project"                     = "aztec-networks"
+    "cloud.provider"              = "gcp"
+    "cloud.platform"              = "gcp_kubernetes_engine"
+    "cloud.account.id"            = var.GCP_PROJECT_ID
+    "cloud.region"                = replace(var.GCP_REGION, "/-[a-z]$/", "")
+    "k8s.cluster.name"            = var.CLUSTER
+    "deployment.environment.name" = local.deployment_environment
+    "service.name"                = "${var.RELEASE_PREFIX}-rpc-kong"
+    "aztec.component"             = "kong"
+    }, can(regex("-[a-z]$", var.GCP_REGION)) ? {
+    "cloud.availability_zone" = var.GCP_REGION
+  } : {}, local.network_attributes)
   EXTERNAL_SECRET_STORE_NAME       = var.RPC_GATEWAY_EXTERNAL_SECRET_STORE_NAME
   EXTERNAL_SECRET_STORE_KIND       = var.RPC_GATEWAY_EXTERNAL_SECRET_STORE_KIND
   EXTERNAL_SECRET_REFRESH_INTERVAL = var.RPC_GATEWAY_EXTERNAL_SECRET_REFRESH_INTERVAL

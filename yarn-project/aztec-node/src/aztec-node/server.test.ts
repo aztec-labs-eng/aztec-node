@@ -1,4 +1,5 @@
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover';
+import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import {
@@ -8,11 +9,13 @@ import {
   IndexWithinCheckpoint,
   SlotNumber,
 } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { BadRequestError } from '@aztec-labs/foundation/json-rpc';
 import type { Hex } from '@aztec-labs/foundation/string';
-import { DateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
+import { SiblingPath } from '@aztec-labs/foundation/trees';
 import { unfreeze } from '@aztec-labs/foundation/types';
 import { type KeyStore, KeystoreManager, RemoteSigner, type ValidatorKeyStore } from '@aztec-labs/node-keystore';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
@@ -24,12 +27,17 @@ import type { SlasherClientInterface } from '@aztec-labs/slasher';
 import { RevertCode } from '@aztec-labs/stdlib/avm';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
+  type ArchiverEmitter,
   type BlockData,
   BlockHash,
   type BlockParameter,
   type BlockQuery,
+  CommitteeAttestationsAndSigners,
+  type L1SyncPoint,
   L2Block,
   type L2BlockSource,
+  type L2BlockSourceEventEmitter,
+  L2BlockSourceEvents,
   type L2Tips,
 } from '@aztec-labs/stdlib/block';
 import type { CheckpointData, ProposedCheckpointData } from '@aztec-labs/stdlib/checkpoint';
@@ -41,6 +49,7 @@ import type {
   MerkleTreeReadOperations,
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
+import { SiloedTag, Tag } from '@aztec-labs/stdlib/logs';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { mockTx, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
@@ -49,6 +58,7 @@ import {
   MerkleTreeId,
   PublicDataTreeLeaf,
   PublicDataTreeLeafPreimage,
+  getTreeHeight,
 } from '@aztec-labs/stdlib/trees';
 import type { FeeProvider, IndexedTxEffect } from '@aztec-labs/stdlib/tx';
 import {
@@ -75,11 +85,13 @@ import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { type MockProxy, mock } from 'jest-mock-extended';
+import { EventEmitter } from 'node:events';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 import { type AztecNodeConfig, getConfigEnvVars } from './config.js';
+import { NextBlockPredictor, QUOTE_MAX_WAIT_MS } from './next_block/index.js';
 import { AztecNodeService } from './server.js';
 
 // Arbitrary fixed timestamp for the mock date provider. DateProvider.now() returns milliseconds but ExpirationTimestamp
@@ -126,13 +138,19 @@ describe('aztec node', () => {
   let feeProvider: MockProxy<FeeProvider>;
   let merkleTreeOps: MockProxy<MerkleTreeReadOperations>;
   let worldState: MockProxy<WorldStateSynchronizer>;
-  let l2BlockSource: MockProxy<L2BlockSource>;
+  let l2BlockSource: MockProxy<L2BlockSourceEventEmitter>;
+  /** Stands in for the archiver's emitter: the node's hold-off wakes held requests off the updates reported here. */
+  let l2BlockSourceEvents: EventEmitter;
+  let l2LogsSource: MockProxy<L2LogsSource>;
   let contractSource: MockProxy<ContractDataSource>;
   let l1ToL2MessageSource: MockProxy<L1ToL2MessageSource>;
   let lastBlockNumber: BlockNumber;
   let node: TestAztecNodeService;
+  /** Builds a node on the shared mocks, optionally overriding config entries. */
+  let createNode: (configOverrides?: Partial<AztecNodeConfig>) => TestAztecNodeService;
   let feePayer: AztecAddress;
   let epochCache: EpochCache;
+  let nextBlockPredictor: NextBlockPredictor;
   let nodeConfig: AztecNodeConfig;
 
   const chainId = new Fr(12345);
@@ -209,7 +227,8 @@ describe('aztec node', () => {
         : Promise.resolve(lastBlockNumber),
     );
 
-    l2BlockSource = mock<L2BlockSource>();
+    l2BlockSourceEvents = new EventEmitter();
+    l2BlockSource = mock<L2BlockSourceEventEmitter>({ events: l2BlockSourceEvents as ArchiverEmitter });
     l2BlockSource.getBlockNumber.mockImplementation(((query?: BlockQuery) => {
       if (!query || 'tag' in query) {
         return Promise.resolve(lastBlockNumber);
@@ -233,7 +252,7 @@ describe('aztec node', () => {
     l2BlockSource.getL1Constants.mockResolvedValue(testL1Constants);
     l2BlockSource.getGenesisBlockHash.mockReturnValue(BlockHash.random());
 
-    const l2LogsSource = mock<L2LogsSource>();
+    l2LogsSource = mock<L2LogsSource>();
 
     l1ToL2MessageSource = mock<L1ToL2MessageSource>();
 
@@ -247,6 +266,10 @@ describe('aztec node', () => {
       registryAddress: EthAddress.ZERO,
       inboxAddress: EthAddress.ZERO,
       outboxAddress: EthAddress.ZERO,
+      // Queries for blocks the node has not seen fail immediately by default here, so tests asserting miss
+      // behavior do not sit through the hold-off. The 'unseen block hold-off' suite opts back in.
+      rpcUnseenBlockByNumberWaitMs: 0,
+      rpcUnseenBlockByHashWaitMs: 0,
     };
 
     // Inject a spurious config value to test that the config is correctly picked up
@@ -260,29 +283,42 @@ describe('aztec node', () => {
       new MockDateProvider(),
     );
 
-    node = new TestAztecNodeService({
-      config: nodeConfig,
-      p2pClient: p2p,
+    nextBlockPredictor = NextBlockPredictor.create({
       blockSource: l2BlockSource,
-      logsSource: l2LogsSource,
-      contractDataSource: contractSource,
-      l1ToL2MessageSource,
-      worldStateSynchronizer: worldState,
-      sequencer: undefined,
-      proverNode: undefined,
-      slasherClient: undefined,
-      validatorsSentinel: undefined,
-      stopStartedWatchers: async () => {},
-      l1ChainId: 12345,
-      version: rollupVersion.toNumber(),
       globalVariableBuilder: globalVariablesBuilder,
       rollupContract,
-      feeProvider,
       epochCache,
-      packageVersion: getPackageVersion(),
-      peerProofVerifier: new TestCircuitVerifier(),
-      rpcProofVerifier: new TestCircuitVerifier(),
+      signatureContext: { chainId: 12345, rollupAddress: EthAddress.ZERO },
+      dateProvider: new MockDateProvider(),
     });
+
+    createNode = (configOverrides: Partial<AztecNodeConfig> = {}) =>
+      new TestAztecNodeService({
+        config: { ...nodeConfig, ...configOverrides },
+        p2pClient: p2p,
+        blockSource: l2BlockSource,
+        logsSource: l2LogsSource,
+        contractDataSource: contractSource,
+        l1ToL2MessageSource,
+        worldStateSynchronizer: worldState,
+        sequencer: undefined,
+        proverNode: undefined,
+        slasherClient: undefined,
+        validatorsSentinel: undefined,
+        stopStartedWatchers: async () => {},
+        l1ChainId: 12345,
+        version: rollupVersion.toNumber(),
+        globalVariableBuilder: globalVariablesBuilder,
+        rollupContract,
+        feeProvider,
+        nextBlockPredictor,
+        epochCache,
+        packageVersion: getPackageVersion(),
+        peerProofVerifier: new TestCircuitVerifier(),
+        rpcProofVerifier: new TestCircuitVerifier(),
+      });
+
+    node = createNode();
   });
 
   describe('tx validation', () => {
@@ -420,6 +456,65 @@ describe('aztec node', () => {
 
       await node.sendTx(tx);
       expect(p2p.sendTx).toHaveBeenCalledWith(tx);
+    });
+  });
+
+  describe('min fee quotes', () => {
+    const l1SyncPoint: L1SyncPoint = { blockNumber: 42n, blockHash: Buffer32.random() };
+    const headFees = new GasFees(3, 3000);
+    /** The provider answers differently per L1 view, so which view the node asked for is visible in the result. */
+    const projectionsAtLatest = [new GasFees(1, 100), new GasFees(1, 110)];
+    const projectionsAtSyncPoint = [new GasFees(2, 200), new GasFees(2, 210)];
+
+    let quoteMinFees: jest.SpiedFunction<NextBlockPredictor['quoteMinFees']>;
+
+    beforeEach(() => {
+      feeProvider.getPredictedMinFees.mockImplementation((_manaUsage, asOf) =>
+        Promise.resolve(
+          asOf?.blockNumber === l1SyncPoint.blockNumber &&
+            asOf.maxWaitMs !== undefined &&
+            asOf.maxWaitMs <= QUOTE_MAX_WAIT_MS
+            ? projectionsAtSyncPoint
+            : projectionsAtLatest,
+        ),
+      );
+      quoteMinFees = jest.spyOn(node['nextBlockPredictor'], 'quoteMinFees');
+    });
+
+    it('leads with the next-block fee and prices the projections at the same L1 block', async () => {
+      quoteMinFees.mockResolvedValue({ fees: headFees, l1SyncPoint });
+
+      expect(await node.getPredictedMinFees()).toEqual([headFees, ...projectionsAtSyncPoint]);
+    });
+
+    it('leaves the projections untagged when the next-block fee carries no L1 sync point', async () => {
+      quoteMinFees.mockResolvedValue({ fees: headFees, l1SyncPoint: undefined });
+
+      expect(await node.getPredictedMinFees()).toEqual([headFees, ...projectionsAtLatest]);
+    });
+
+    it('serves the projections alone when the node cannot price the next block', async () => {
+      quoteMinFees.mockResolvedValue(undefined);
+
+      expect(await node.getPredictedMinFees()).toEqual(projectionsAtLatest);
+    });
+
+    it('serves the projections alone and warns when pricing the next block throws', async () => {
+      const warn = jest.spyOn(node['log'], 'warn');
+      quoteMinFees.mockRejectedValue(new Error('l1 is down'));
+
+      expect(await node.getPredictedMinFees()).toEqual(projectionsAtLatest);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('next-block min fee'), expect.any(Error));
+    });
+
+    it('does not fold the next-block fee into the current min fees or tx admission', async () => {
+      quoteMinFees.mockResolvedValue({ fees: headFees, l1SyncPoint });
+      const currentFees = new GasFees(0, 0);
+      feeProvider.getCurrentMinFees.mockResolvedValue(currentFees);
+
+      expect(await node.getCurrentMinFees()).toEqual(currentFees);
+      // A tx priced at the current min fees stays admissible even though the quote's head is far above them.
+      expect(await node.isValidTx(await mockTxForRollup(0x10000))).toEqual({ result: 'valid' });
     });
   });
 
@@ -914,11 +1009,361 @@ describe('aztec node', () => {
           globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber.ZERO }),
         });
         const initialBlockHash = await initialHeader.hash();
-        l2BlockSource.getBlockNumber.mockResolvedValue(BlockNumber.ZERO);
+        l2BlockSource.getBlockData.mockResolvedValue(makeBlockData(BlockNumber.ZERO, initialBlockHash));
 
         const someBlockHash = BlockHash.random();
         const result = await node.getBlockHashMembershipWitness(initialBlockHash, someBlockHash);
         expect(result).toBeUndefined();
+      });
+    });
+  });
+
+  describe('unseen block hold-off', () => {
+    // Budgets small enough to keep the suite fast, but well above the delay each arrival below is scheduled after.
+    const byNumberWaitMs = 1000;
+    const byHashWaitMs = 600;
+
+    let unseenBlockNumber: BlockNumber;
+    let unseenBlockHash: BlockHash;
+    let arrivalTimer: NodeJS.Timeout | undefined;
+
+    const hashForBlock = (blockNumber: BlockNumber): BlockHash =>
+      blockNumber === unseenBlockNumber ? unseenBlockHash : new BlockHash(new Fr(1_000_000n + BigInt(blockNumber)));
+
+    /**
+     * Makes the block the node had not seen available after `delayMs` and reports the update, as the archiver does
+     * when the block arrives from the network. Cleared after each test so an arrival never lands in a later one.
+     */
+    const scheduleUnseenBlockArrival = (delayMs = 200) => {
+      arrivalTimer = setTimeout(() => {
+        lastBlockNumber = unseenBlockNumber;
+        l2BlockSourceEvents.emit(L2BlockSourceEvents.L2BlockSourceUpdated);
+      }, delayMs);
+    };
+
+    afterEach(() => {
+      clearTimeout(arrivalTimer);
+      arrivalTimer = undefined;
+    });
+
+    beforeEach(() => {
+      lastBlockNumber = BlockNumber(5);
+      unseenBlockNumber = BlockNumber(6);
+      unseenBlockHash = BlockHash.random();
+
+      l2BlockSource.getBlockData.mockImplementation(((query?: BlockQuery) => {
+        if (!query || 'tag' in query) {
+          return Promise.resolve(makeBlockData(lastBlockNumber, hashForBlock(lastBlockNumber)));
+        }
+        if ('number' in query) {
+          return Promise.resolve(
+            query.number <= lastBlockNumber ? makeBlockData(query.number, hashForBlock(query.number)) : undefined,
+          );
+        }
+        if ('hash' in query) {
+          return Promise.resolve(
+            query.hash.equals(unseenBlockHash) && lastBlockNumber >= unseenBlockNumber
+              ? makeBlockData(unseenBlockNumber, unseenBlockHash)
+              : undefined,
+          );
+        }
+        return Promise.resolve(undefined);
+      }) as L2BlockSource['getBlockData']);
+
+      worldState.getVerifiedSnapshot.mockResolvedValue(merkleTreeOps);
+      node = createNode({ rpcUnseenBlockByNumberWaitMs: byNumberWaitMs, rpcUnseenBlockByHashWaitMs: byHashWaitMs });
+    });
+
+    it('serves findLeavesIndexes anchored on a block hash that arrives while the query is held', async () => {
+      merkleTreeOps.findLeafIndices.mockResolvedValue([10n]);
+      merkleTreeOps.getBlockNumbersForLeafIndices.mockResolvedValue([unseenBlockNumber]);
+      merkleTreeOps.getLeafValue.mockResolvedValue(unseenBlockHash);
+      scheduleUnseenBlockArrival();
+
+      const result = await node.findLeavesIndexes(unseenBlockHash, MerkleTreeId.NOTE_HASH_TREE, [Fr.random()]);
+
+      expect(result).toEqual([{ l2BlockNumber: unseenBlockNumber, l2BlockHash: unseenBlockHash, data: 10n }]);
+    });
+
+    it('serves getContract anchored on a block hash that arrives while the query is held', async () => {
+      const instance = await randomContractInstanceWithAddress();
+      contractSource.getContract.mockResolvedValue(instance);
+      scheduleUnseenBlockArrival();
+
+      expect(await node.getContract(instance.address, unseenBlockHash)).toEqual(instance);
+    });
+
+    it('serves getBlock for the block right after the tip once it arrives', async () => {
+      scheduleUnseenBlockArrival();
+
+      const block = await node.getBlock(unseenBlockNumber);
+
+      expect(block?.number).toEqual(unseenBlockNumber);
+      expect(block?.hash).toEqual(unseenBlockHash);
+    });
+
+    it('serves the block with transactions once it arrives', async () => {
+      // A query wanting transactions waits on block metadata like any other, and reads the block with its
+      // transactions once the metadata shows up.
+      l2BlockSource.getBlock.mockImplementation(((query: BlockQuery) =>
+        Promise.resolve(
+          'number' in query && query.number <= lastBlockNumber ? L2Block.empty() : undefined,
+        )) as L2BlockSource['getBlock']);
+      scheduleUnseenBlockArrival();
+
+      const block = await node.getBlock(unseenBlockNumber, { includeTransactions: true });
+
+      expect(block?.body).toBeDefined();
+    });
+
+    it('holds a private logs query whose reference block has not arrived yet', async () => {
+      // Stands in for the archiver's in-transaction anchor check: the reference block must be in the chain.
+      l2LogsSource.getPrivateLogsByTags.mockImplementation(query =>
+        query.referenceBlock !== undefined && lastBlockNumber < unseenBlockNumber
+          ? Promise.reject(new Error(`Block ${query.referenceBlock} is not present`))
+          : Promise.resolve([[]]),
+      );
+      scheduleUnseenBlockArrival();
+
+      const result = await node.getPrivateLogsByTags({
+        tags: [SiloedTag.random()],
+        referenceBlock: unseenBlockHash,
+      });
+
+      expect(result).toEqual([[]]);
+    });
+
+    it('holds a public logs query whose reference block has not arrived yet', async () => {
+      l2LogsSource.getPublicLogsByTags.mockImplementation(query =>
+        query.referenceBlock !== undefined && lastBlockNumber < unseenBlockNumber
+          ? Promise.reject(new Error(`Block ${query.referenceBlock} is not present`))
+          : Promise.resolve([[]]),
+      );
+      scheduleUnseenBlockArrival();
+
+      const result = await node.getPublicLogsByTags({
+        contractAddress: await AztecAddress.random(),
+        tags: [Tag.random()],
+        referenceBlock: unseenBlockHash,
+      });
+
+      expect(result).toEqual([[]]);
+    });
+
+    it('holds a world-state query for a single budget and then fails', async () => {
+      // getWorldState resolves the query once, before its sync-retry loop, so an anchor that never arrives costs
+      // a client one budget rather than one per attempt. The upper bound is deliberately loose — it only has to
+      // separate one budget from the three a per-attempt hold-off would spend.
+      const timer = new Timer();
+
+      await expect(node.getWorldState(unseenBlockNumber)).rejects.toThrow(/Block not found for number=6/);
+
+      expect(timer.ms()).toBeGreaterThanOrEqual(byNumberWaitMs);
+      expect(timer.ms()).toBeLessThan(2 * byNumberWaitMs);
+    });
+
+    it('does not hold off again when a sync retry re-resolves the query', async () => {
+      // The block resolves, world state fails to sync to it, and a prune removes it again before the retry
+      // re-resolves. That second miss must surface immediately instead of spending another hold-off budget.
+      lastBlockNumber = unseenBlockNumber;
+      worldState.syncImmediate.mockImplementation(() => {
+        lastBlockNumber = BlockNumber(unseenBlockNumber - 1);
+        return Promise.reject(
+          new WorldStateSynchronizerError(`Unable to sync to block number ${unseenBlockNumber} (last synced is 5)`),
+        );
+      });
+      const timer = new Timer();
+
+      await expect(node.getWorldState(unseenBlockNumber)).rejects.toThrow(/Block not found for number=6/);
+
+      expect(timer.ms()).toBeLessThan(byNumberWaitMs);
+    });
+
+    it('defaults the by-number budget to twice the block duration', async () => {
+      const blockDurationMs = 400;
+      const expectedWaitMs = 2 * blockDurationMs;
+      node = createNode({ rpcUnseenBlockByNumberWaitMs: undefined, rpcUnseenBlockByHashWaitMs: 0, blockDurationMs });
+      const timer = new Timer();
+
+      expect(await node.getBlock(unseenBlockNumber)).toBeUndefined();
+
+      expect(timer.ms()).toBeGreaterThanOrEqual(expectedWaitMs);
+      // Loose enough to absorb a slow CI poll, tight enough to catch the default block duration (6s) being used.
+      expect(timer.ms()).toBeLessThan(3 * expectedWaitMs);
+    });
+
+    it('does not hold a query for a block further ahead than the next one', async () => {
+      expect(await node.getBlock(BlockNumber(unseenBlockNumber + 1))).toBeUndefined();
+
+      // A query naming a height reads once more before a miss is final, to catch a block that landed while the tip
+      // was being read. Two reads is that pair, not a hold: holding always issues further reads.
+      expect(l2BlockSource.getBlockData).toHaveBeenCalledTimes(2);
+    });
+
+    describe('anchors naming a block by number and hash', () => {
+      /** The anchor a client that has synced one block past this node sends. */
+      const unseenAnchor = () => ({ number: unseenBlockNumber, hash: unseenBlockHash });
+
+      it('serves findLeavesIndexes anchored on a block that arrives while the query is held', async () => {
+        merkleTreeOps.findLeafIndices.mockResolvedValue([10n]);
+        merkleTreeOps.getBlockNumbersForLeafIndices.mockResolvedValue([unseenBlockNumber]);
+        merkleTreeOps.getLeafValue.mockResolvedValue(unseenBlockHash);
+        scheduleUnseenBlockArrival();
+
+        const result = await node.findLeavesIndexes(unseenAnchor(), MerkleTreeId.NOTE_HASH_TREE, [Fr.random()]);
+
+        expect(result).toEqual([{ l2BlockNumber: unseenBlockNumber, l2BlockHash: unseenBlockHash, data: 10n }]);
+      });
+
+      it('serves getContract anchored on a block that arrives while the query is held', async () => {
+        const instance = await randomContractInstanceWithAddress();
+        contractSource.getContract.mockResolvedValue(instance);
+        scheduleUnseenBlockArrival();
+
+        expect(await node.getContract(instance.address, unseenAnchor())).toEqual(instance);
+      });
+
+      it('serves getBlock anchored on a block that arrives while the query is held', async () => {
+        scheduleUnseenBlockArrival();
+
+        const block = await node.getBlock(unseenAnchor());
+
+        expect(block?.number).toEqual(unseenBlockNumber);
+        expect(block?.hash).toEqual(unseenBlockHash);
+      });
+
+      it('serves getBlockHashMembershipWitness anchored on a block that arrives while the query is held', async () => {
+        // makeBlockData headers commit to an empty lastArchive, so that is the archive world state must hold.
+        merkleTreeOps.getTreeInfo.mockResolvedValue({
+          treeId: MerkleTreeId.ARCHIVE,
+          root: Fr.ZERO.toBuffer(),
+          size: 0n,
+          depth: ARCHIVE_HEIGHT,
+        });
+        const index = 7n;
+        const siblings = Array.from({ length: ARCHIVE_HEIGHT }, () => Fr.random());
+        merkleTreeOps.findSiblingPaths.mockImplementation(treeId =>
+          Promise.resolve([
+            {
+              index,
+              path: new SiblingPath(
+                getTreeHeight(treeId),
+                siblings.map(f => f.toBuffer()),
+              ),
+            },
+          ]),
+        );
+        scheduleUnseenBlockArrival();
+
+        const result = await node.getBlockHashMembershipWitness(unseenAnchor(), BlockHash.random());
+
+        expect(result?.leafIndex).toEqual(index);
+        expect(result?.siblingPath).toEqual(siblings);
+      });
+
+      it('never reads the block source with both selectors at once', async () => {
+        scheduleUnseenBlockArrival();
+
+        await node.getBlock(unseenAnchor());
+
+        for (const [query] of l2BlockSource.getBlockData.mock.calls) {
+          expect(Object.keys(query ?? {})).toHaveLength(1);
+        }
+      });
+
+      it('rejects an anchor whose hash names a block at another height', async () => {
+        lastBlockNumber = unseenBlockNumber;
+
+        // The hash resolves, so the claimed height is one the node can disprove rather than one it might yet see.
+        await expect(
+          node.getBlock({ number: BlockNumber(unseenBlockNumber + 1), hash: unseenBlockHash }),
+        ).rejects.toThrow(BadRequestError);
+      });
+
+      it('holds a private logs query and hands the logs source the bare hash', async () => {
+        l2LogsSource.getPrivateLogsByTags.mockImplementation(query =>
+          query.referenceBlock !== undefined && lastBlockNumber < unseenBlockNumber
+            ? Promise.reject(new Error(`Block ${query.referenceBlock} is not present`))
+            : Promise.resolve([[]]),
+        );
+        scheduleUnseenBlockArrival();
+
+        const result = await node.getPrivateLogsByTags({ tags: [SiloedTag.random()], referenceBlock: unseenAnchor() });
+
+        expect(result).toEqual([[]]);
+        expect(l2LogsSource.getPrivateLogsByTags).toHaveBeenCalledWith(
+          expect.objectContaining({ referenceBlock: unseenBlockHash }),
+        );
+      });
+
+      it('holds a public logs query and hands the logs source the bare hash', async () => {
+        l2LogsSource.getPublicLogsByTags.mockImplementation(query =>
+          query.referenceBlock !== undefined && lastBlockNumber < unseenBlockNumber
+            ? Promise.reject(new Error(`Block ${query.referenceBlock} is not present`))
+            : Promise.resolve([[]]),
+        );
+        scheduleUnseenBlockArrival();
+
+        const result = await node.getPublicLogsByTags({
+          contractAddress: await AztecAddress.random(),
+          tags: [Tag.random()],
+          referenceBlock: unseenAnchor(),
+        });
+
+        expect(result).toEqual([[]]);
+        expect(l2LogsSource.getPublicLogsByTags).toHaveBeenCalledWith(
+          expect.objectContaining({ referenceBlock: unseenBlockHash }),
+        );
+      });
+
+      it('surfaces a prune landing between the anchor resolving and the logs being read', async () => {
+        lastBlockNumber = unseenBlockNumber;
+        // The logs source checks the anchor inside its own transaction, which is the authoritative check: a prune
+        // after the provider resolved the anchor still fails the query rather than answering off the wrong chain.
+        l2LogsSource.getPrivateLogsByTags.mockImplementation(() => {
+          lastBlockNumber = BlockNumber(unseenBlockNumber - 1);
+          return Promise.reject(new Error(`Reference block ${unseenBlockHash} not found in the node.`));
+        });
+
+        await expect(
+          node.getPrivateLogsByTags({ tags: [SiloedTag.random()], referenceBlock: unseenAnchor() }),
+        ).rejects.toThrow(/not found in the node/);
+        expect(l2LogsSource.getPrivateLogsByTags).toHaveBeenCalledTimes(1);
+      });
+
+      it('holds a world-state query for a single budget and then fails', async () => {
+        const timer = new Timer();
+
+        await expect(node.getWorldState(unseenAnchor())).rejects.toThrow(/not found when resolving query/);
+
+        expect(timer.ms()).toBeGreaterThanOrEqual(byNumberWaitMs);
+        expect(timer.ms()).toBeLessThan(2 * byNumberWaitMs);
+      });
+
+      it('does not hold off again when a sync retry re-resolves the anchor', async () => {
+        lastBlockNumber = unseenBlockNumber;
+        worldState.syncImmediate.mockImplementation(() => {
+          lastBlockNumber = BlockNumber(unseenBlockNumber - 1);
+          return Promise.reject(
+            new WorldStateSynchronizerError(`Unable to sync to block number ${unseenBlockNumber} (last synced is 5)`),
+          );
+        });
+        const timer = new Timer();
+
+        await expect(node.getWorldState(unseenAnchor())).rejects.toThrow(/not found when resolving query/);
+
+        expect(timer.ms()).toBeLessThan(byNumberWaitMs);
+      });
+
+      it('fails a logs query whose anchor never arrives rather than reaching the logs source', async () => {
+        const result = node.getPublicLogsByTags({
+          contractAddress: await AztecAddress.random(),
+          tags: [Tag.random()],
+          referenceBlock: unseenAnchor(),
+        });
+
+        await expect(result).rejects.toThrow(/not found in the node/);
+        expect(l2LogsSource.getPublicLogsByTags).not.toHaveBeenCalled();
       });
     });
   });
@@ -987,6 +1432,7 @@ describe('aztec node', () => {
           globalVariableBuilder: globalVariablesBuilder,
           rollupContract: undefined,
           feeProvider,
+          nextBlockPredictor,
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1175,6 +1621,7 @@ describe('aztec node', () => {
           globalVariableBuilder: globalVariablesBuilder,
           rollupContract: undefined,
           feeProvider,
+          nextBlockPredictor,
           epochCache,
           packageVersion: getPackageVersion(),
           peerProofVerifier: new TestCircuitVerifier(),
@@ -1244,6 +1691,7 @@ describe('aztec node', () => {
         globalVariableBuilder: globalVariablesBuilder,
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
+        nextBlockPredictor,
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -1298,6 +1746,7 @@ describe('aztec node', () => {
         globalVariableBuilder: globalVariablesBuilder,
         rollupContract: undefined,
         feeProvider: mock<FeeProvider>(),
+        nextBlockPredictor,
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
@@ -1439,6 +1888,7 @@ describe('aztec node', () => {
         blockCount: 1,
         feeAssetPriceModifier: 0n,
         attestations: [],
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
         l1: { blockNumber: 10n, blockTimestamp: 1000n, blockHash: '0x0000' } as any,
       };
     }

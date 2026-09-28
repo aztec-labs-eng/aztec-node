@@ -34,6 +34,16 @@ export class IndexedDBAztecMap<K extends Key, V extends Value> implements AztecA
     return data ? this.restoreBuffers(data.value as V) : undefined;
   }
 
+  /** Reads all keys in one IndexedDB transaction, preserving input order. */
+  async getManyAsync(keys: K[]): Promise<(V | undefined)[]> {
+    if (keys.length === 0) {
+      return [];
+    }
+    const db = this.db;
+    const values = await Promise.all(keys.map(key => db.get(this.slot(key))));
+    return values.map(data => (data ? this.restoreBuffers(data.value as V) : undefined));
+  }
+
   async hasAsync(key: K): Promise<boolean> {
     const result = (await this.getAsync(key)) !== undefined;
     return result;
@@ -127,7 +137,7 @@ export class IndexedDBAztecMap<K extends Key, V extends Value> implements AztecA
     return (key.length > 1 ? key : key[0]) as K;
   }
 
-  protected normalizeKey(key: K): (string | number | Uint8Array)[] {
+  protected normalizeKey(key: Key): (string | number | Uint8Array)[] {
     return Array.isArray(key) ? key : [key];
   }
 

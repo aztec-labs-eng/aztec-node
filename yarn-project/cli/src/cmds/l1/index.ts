@@ -312,6 +312,7 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
       parseBigint,
     )
     .option('--move-with-latest-rollup', 'Whether to move with the latest rollup', true)
+    .option('--no-move-with-latest-rollup', 'Keep the stake on this rollup after an upgrade')
     .option('--rollup <string>', 'Rollup contract address', parseEthereumAddress)
     .action(async options => {
       const { addL1ValidatorViaRollup } = await import('./update_l1_validators.js');
@@ -332,6 +333,59 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
         withdrawerAddress: options.withdrawer,
         rollupAddress,
         moveWithLatestRollup: options.moveWithLatestRollup,
+        log,
+        debugLogger,
+      });
+    });
+
+  program
+    .command('initiate-withdraw-by-attester')
+    .description("Initiates a withdrawal signed by the position's attester.")
+    .addOption(l1RpcUrlsOption)
+    .addOption(l1ChainIdOption)
+    .option('-pk, --private-key <string>', 'The attester private key', PRIVATE_KEY)
+    .option('-m, --mnemonic <string>', 'Mnemonic for the attester account', MNEMONIC)
+    .requiredOption('--attester <address>', 'Attester address of the position to exit', parseEthereumAddress)
+    .requiredOption('--rollup <address>', 'Rollup holding the position', parseEthereumAddress)
+    .action(async options => {
+      const { initiateWithdrawByAttester } = await import('./update_l1_validators.js');
+      await initiateWithdrawByAttester({
+        rpcUrls: options.l1RpcUrls,
+        chainId: options.l1ChainId,
+        privateKey: options.privateKey,
+        mnemonic: options.mnemonic,
+        attesterAddress: options.attester,
+        rollupAddress: options.rollup,
+        log,
+        debugLogger,
+      });
+    });
+
+  program
+    .command('initiate-withdraw-by-attester-batch')
+    .description('Relays a JSON array of attester-signed withdrawal authorizations.')
+    .addOption(l1RpcUrlsOption)
+    .addOption(l1ChainIdOption)
+    .option('-pk, --private-key <string>', 'The relayer private key', PRIVATE_KEY)
+    .option('-m, --mnemonic <string>', 'Mnemonic for the relayer account', MNEMONIC)
+    .requiredOption('--authorizations <path>', 'JSON file containing attester, decimal deadline, and signature fields')
+    .requiredOption('--rollup <address>', 'Rollup holding the positions', parseEthereumAddress)
+    .option(
+      '--up-to-limit',
+      'Process the largest permitted prefix instead of reverting when the whole batch is too large',
+    )
+    .action(async options => {
+      const { initiateWithdrawByAttesterBatch, readAttesterExitAuthorizations } = await import(
+        './update_l1_validators.js'
+      );
+      await initiateWithdrawByAttesterBatch({
+        rpcUrls: options.l1RpcUrls,
+        chainId: options.l1ChainId,
+        privateKey: options.privateKey,
+        mnemonic: options.mnemonic,
+        authorizations: await readAttesterExitAuthorizations(options.authorizations),
+        upToLimit: options.upToLimit,
+        rollupAddress: options.rollup,
         log,
         debugLogger,
       });

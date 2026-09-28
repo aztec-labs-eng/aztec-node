@@ -9,7 +9,9 @@ import {
   BlocksQuerySchema,
   CheckpointQuerySchema,
   CheckpointsQuerySchema,
+  L1SyncPointSchema,
   type L2BlockSource,
+  L2FrontierSchema,
   L2TipsSchema,
   ProposedCheckpointQuerySchema,
 } from '../block/l2_block_source.js';
@@ -23,9 +25,12 @@ import {
 } from '../contract/index.js';
 import { L1RollupConstantsSchema } from '../epoch-helpers/index.js';
 import { LogResultSchema } from '../logs/log_result.js';
-import { PrivateLogsQuerySchema, PublicLogsQuerySchema } from '../logs/logs_query.js';
-import { InboxBucketSchema } from '../messaging/inbox_bucket.js';
-import type { L1ToL2MessageSource } from '../messaging/l1_to_l2_message_source.js';
+import { ResolvedPrivateLogsQuerySchema, ResolvedPublicLogsQuerySchema } from '../logs/logs_query.js';
+import {
+  InboxMessagePositionSchema,
+  InboxMessageRangeSchema,
+  type L1ToL2MessageSource,
+} from '../messaging/l1_to_l2_message_source.js';
 import { L2ToL1MembershipWitnessSchema } from '../messaging/l2_to_l1_membership.js';
 import { optional, schemas } from '../schemas/schemas.js';
 import { indexedTxSchema } from '../tx/indexed_tx_effect.js';
@@ -124,12 +129,14 @@ export const ArchiverApiSchema: ApiSchemaFor<ArchiverApi> = {
   getBlocksForSlot: z.function({ input: z.tuple([schemas.SlotNumber]), output: z.array(L2Block.schema) }),
   isEpochComplete: z.function({ input: z.tuple([EpochNumberSchema]), output: z.boolean() }),
   getL2Tips: z.function({ input: z.tuple([]), output: L2TipsSchema }),
+  getL2Frontier: z.function({ input: z.tuple([]), output: L2FrontierSchema }),
+  getL1SyncPoint: z.function({ input: z.tuple([]), output: optional(L1SyncPointSchema) }),
   getPrivateLogsByTags: z.function({
-    input: z.tuple([PrivateLogsQuerySchema]),
+    input: z.tuple([ResolvedPrivateLogsQuerySchema]),
     output: z.array(z.array(LogResultSchema)),
   }),
   getPublicLogsByTags: z.function({
-    input: z.tuple([PublicLogsQuerySchema]),
+    input: z.tuple([ResolvedPublicLogsQuerySchema]),
     output: z.array(z.array(LogResultSchema)),
   }),
   getContractClass: z.function({ input: z.tuple([schemas.Fr]), output: ContractClassPublicSchema.optional() }),
@@ -141,22 +148,15 @@ export const ArchiverApiSchema: ApiSchemaFor<ArchiverApi> = {
   getContractClassIds: z.function({ input: z.tuple([]), output: z.array(schemas.Fr) }),
   registerContractFunctionSignatures: z.function({ input: z.tuple([z.array(z.string())]), output: z.void() }),
   getL1ToL2MessageIndex: z.function({ input: z.tuple([schemas.Fr]), output: schemas.BigInt.optional() }),
-  getLatestInboxBucketAtOrBefore: z.function({
-    input: z.tuple([schemas.BigInt]),
-    output: InboxBucketSchema.optional(),
-  }),
-  getInboxBucket: z.function({ input: z.tuple([schemas.BigInt]), output: InboxBucketSchema.optional() }),
-  getInboxBucketByTotalMsgCount: z.function({
-    input: z.tuple([schemas.BigInt]),
-    output: InboxBucketSchema.optional(),
-  }),
-  getL1ToL2MessagesBetweenBuckets: z.function({
-    input: z.tuple([schemas.BigInt, schemas.BigInt]),
-    output: z.array(schemas.Fr),
-  }),
   getL1ToL2MessagesBetweenLeafCounts: z.function({
     input: z.tuple([schemas.BigInt, schemas.BigInt]),
     output: z.array(schemas.Fr),
+  }),
+  getMessagePosition: z.function({ input: z.tuple([schemas.BigInt]), output: InboxMessagePositionSchema.optional() }),
+  getSyncedMessagePosition: z.function({ input: z.tuple([]), output: InboxMessagePositionSchema }),
+  getL1ToL2MessageRange: z.function({
+    input: z.tuple([schemas.BigInt, schemas.BigInt]),
+    output: InboxMessageRangeSchema,
   }),
   getDebugFunctionName: z.function({
     input: z.tuple([schemas.AztecAddress, schemas.FunctionSelector]),

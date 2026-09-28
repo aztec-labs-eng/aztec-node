@@ -6,7 +6,7 @@ import { Blob, getKzg } from '@aztec-labs/blob-lib';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { getPublicClient, makeL1HttpTransport } from '@aztec-labs/ethereum/client';
-import { RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { compactArray } from '@aztec-labs/foundation/collection';
@@ -19,6 +19,7 @@ import { type P2PClientDeps, createP2PClient } from '@aztec-labs/p2p';
 import { type ProverNode, type ProverNodeDeps, createProverNode } from '@aztec-labs/prover-node';
 import { createKeyStoreForProver } from '@aztec-labs/prover-node/config';
 import {
+  type CheckpointProposalJobTestHooks,
   FeeProviderImpl,
   GlobalVariableBuilder,
   SequencerClient,
@@ -43,6 +44,7 @@ import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import type { GenesisData } from '@aztec-labs/stdlib/world-state';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import {
+  type BlockProposalObservers,
   FullNodeCheckpointsBuilder as CheckpointsBuilder,
   FullNodeCheckpointsBuilder,
   NodeKeystoreAdapter,
@@ -56,6 +58,7 @@ import { createWorldState, createWorldStateSynchronizer } from '@aztec-labs/worl
 import { createPublicClient } from 'viem';
 
 import { type AztecNodeConfig, createKeyStoreForValidator } from './aztec-node/config.js';
+import { NextBlockPredictor } from './aztec-node/next_block/index.js';
 import { AztecNodeService } from './aztec-node/server.js';
 import { createSentinel } from './sentinel/factory.js';
 
@@ -68,6 +71,17 @@ export interface CreateAztecNodeDeps {
   p2pClientDeps?: P2PClientDeps;
   proverNodeDeps?: Partial<ProverNodeDeps>;
   slashingProtectionDb?: SlashingProtectionDatabase;
+  /**
+   * Test-only hooks into checkpoint building, threaded to the sequencer as a dependency. Kept off
+   * {@link AztecNodeConfig} so nothing serialized or exposed over RPC can reach them.
+   */
+  checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks;
+  /**
+   * Test-only observations of this node's block-proposal handling, threaded to the proposal handler as a
+   * dependency. Kept off {@link AztecNodeConfig} for the same reason, and purely reporting: they never change a
+   * verdict.
+   */
+  blockProposalObservers?: BlockProposalObservers;
 }
 
 /** Options controlling which subsystems are started when creating a node. */
@@ -167,6 +181,9 @@ export async function createAztecNodeService(
   Object.assign(config, l1ContractsAddresses);
 
   const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
+  // Read-only Inbox handle: proposal validation confirms a checkpoint's final message position against the live
+  // bucket ring before accepting it, so every node needs one, validator or not.
+  const inboxContract = new InboxContract(publicClient, config.inboxAddress);
   const [l1GenesisTime, slotDuration, epochDuration, rollupVersionFromRollup, rollupManaLimit] = await Promise.all([
     rollupContract.getL1GenesisTime(),
     rollupContract.getSlotDuration(),
@@ -260,9 +277,21 @@ export async function createAztecNodeService(
     };
 
     const globalVariableBuilder = new GlobalVariableBuilder(publicClient, globalVariableBuilderConfig);
-    const feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig);
+    const feeProvider = new FeeProviderImpl(dateProvider, publicClient, globalVariableBuilderConfig, archiver);
     await feeProvider.start();
     started.push(feeProvider);
+
+    const nextBlockPredictor = NextBlockPredictor.create({
+      blockSource: archiver,
+      globalVariableBuilder,
+      rollupContract,
+      epochCache,
+      signatureContext: { chainId: ethereumChain.chainInfo.id, rollupAddress: config.rollupAddress },
+      dateProvider,
+      log: log.createChild('next-block-predictor'),
+    });
+    nextBlockPredictor.start();
+    started.push(nextBlockPredictor);
 
     const collectOffenses = !config.disableValidator || config.enableOffenseCollection;
 
@@ -340,10 +369,12 @@ export async function createAztecNodeService(
         epochCache,
         blockSource: archiver,
         l1ToL2MessageSource: archiver,
+        inbox: inboxContract,
         keyStoreManager,
         blobClient,
         reexecutionTracker,
         slashingProtectionDb: deps.slashingProtectionDb,
+        blockProposalObservers: deps.blockProposalObservers,
       });
 
       // If we have a validator client, register it as a source of offenses for the slasher,
@@ -376,11 +407,13 @@ export async function createAztecNodeService(
         epochCache,
         blockSource: archiver,
         l1ToL2MessageSource: archiver,
+        inbox: inboxContract,
         p2pClient,
         blobClient,
         dateProvider,
         telemetry,
         reexecutionTracker,
+        blockProposalObservers: deps.blockProposalObservers,
       });
       proposalHandler.register(p2pClient, reexecute, archiver);
     }
@@ -653,6 +686,7 @@ export async function createAztecNodeService(
       globalVariableBuilder,
       rollupContract,
       feeProvider,
+      nextBlockPredictor,
       epochCache,
       packageVersion,
       peerProofVerifier,

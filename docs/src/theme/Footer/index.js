@@ -148,7 +148,7 @@ export default function FooterWrapper(props) {
                     <Link className="footer__link-item" to="/">Introduction</Link>
                   </li>
                   <li className="footer__item">
-                    <a className="footer__link-item" href="https://github.com/AztecProtocol/aztec-nr">
+                    <a className="footer__link-item" href="https://github.com/aztec-labs-eng/aztec-nr">
                       Aztec.nr
                       <svg width="13.5" height="13.5" aria-hidden="true" className="iconExternalLink_nPIU">
                         <use href="#theme-svg-external-link"></use>

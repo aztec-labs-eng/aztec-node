@@ -26,7 +26,7 @@ import type { ProverBrokerConfig } from '../config.js';
 import type { ProvingBrokerDatabase } from '../proving_broker_database.js';
 
 class SingleEpochDatabase {
-  public static readonly SCHEMA_VERSION = 2;
+  public static readonly SCHEMA_VERSION = 3;
 
   private jobs: AztecAsyncMap<ProvingJobId, string>;
   private jobResults: AztecAsyncMap<ProvingJobId, string>;

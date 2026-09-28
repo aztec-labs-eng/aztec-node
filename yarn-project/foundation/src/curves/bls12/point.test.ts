@@ -1,5 +1,5 @@
 import { jsonParseWithSchema, jsonStringify } from '../../json-rpc/convert.js';
-import { updateInlineTestData } from '../../testing/files/index.js';
+import { updateInlineFndTestData } from '../../testing/files/index.js';
 import { BLS12Fq, BLS12Fr } from './field.js';
 import { BLS12Point } from './point.js';
 
@@ -164,7 +164,7 @@ describe('BLS12Point', () => {
     const byteArrayString = `[${compressed.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))}]`;
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/utils/compress_to_blob_commitment.nr',
       'expected_compressed_point_greater',
       byteArrayString,
@@ -187,7 +187,7 @@ describe('BLS12Point', () => {
     const byteArrayString = `[${compressed.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))}]`;
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/utils/compress_to_blob_commitment.nr',
       'expected_compressed_point_not_greater',
       byteArrayString,

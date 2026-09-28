@@ -2,6 +2,7 @@ import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { type Blob, getBlobsPerL1Block } from '@aztec-labs/blob-lib';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { CheckpointNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { compactArray } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
@@ -37,7 +38,7 @@ import type {
   ValidatorClientFullConfig,
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
-import type { InboxBucketRef, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import type { InboxMessagePrefixRef, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
   type BlockProposal,
   type BlockProposalOptions,
@@ -65,12 +66,14 @@ import { EventEmitter } from 'events';
 import type { TypedDataDefinition } from 'viem';
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
+import type { InboxEndpointReader } from './checkpoint_endpoint_check.js';
 import { ValidationService } from './duties/validation_service.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
 import type { ExtendedValidatorKeyStore } from './key_store/interface.js';
 import { NodeKeystoreAdapter } from './key_store/node_keystore_adapter.js';
 import { ValidatorMetrics } from './metrics.js';
 import {
+  type BlockProposalObservers,
   type BlockProposalValidationFailureReason,
   type CheckpointProposalValidationFailureResult,
   ProposalHandler,
@@ -137,6 +140,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
     this.tracer = telemetry.getTracer('Validator');
     this.metrics = new ValidatorMetrics(telemetry);
+    this.metrics.setLoadedAttestersCount(this.keyStore.getAttesterAddresses().length);
 
     this.validationService = new ValidationService(
       keyStore,
@@ -214,6 +218,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     p2pClient: P2P,
     blockSource: L2BlockSource & L2BlockSink,
     l1ToL2MessageSource: L1ToL2MessageSource,
+    inbox: InboxEndpointReader,
     txProvider: ITxProvider,
     keyStoreManager: KeystoreManager,
     blobClient: BlobClientInterface,
@@ -221,6 +226,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     dateProvider: DateProvider = new DateProvider(),
     telemetry: TelemetryClient = getTelemetryClient(),
     slashingProtectionDb?: SlashingProtectionDatabase,
+    observers: BlockProposalObservers = {},
   ) {
     const metrics = new ValidatorMetrics(telemetry);
     const consensusTimetable = new ConsensusTimetable({
@@ -232,6 +238,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       worldState,
       blockSource,
       l1ToL2MessageSource,
+      inbox,
       txProvider,
       epochCache,
       consensusTimetable,
@@ -242,6 +249,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       dateProvider,
       telemetry,
       undefined,
+      observers,
     );
 
     const nodeKeystoreAdapter = NodeKeystoreAdapter.fromKeyStoreManager(keyStoreManager);
@@ -341,6 +349,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
   public reloadKeystore(newManager: KeystoreManager): void {
     const newAdapter = NodeKeystoreAdapter.fromKeyStoreManager(newManager);
     this.keyStore = new HAKeyStore(newAdapter, this.slashingProtectionSigner);
+    this.metrics.setLoadedAttestersCount(this.keyStore.getAttesterAddresses().length);
     this.validationService = new ValidationService(
       this.keyStore,
       this.getSignatureContext(),
@@ -467,27 +476,18 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
       this.log.warn(`Block proposal validation failed: ${reason}`, proposalInfo);
 
-      // Classify failure reason: bad proposal vs node issue
-      const badProposalReasons: BlockProposalValidationFailureReason[] = [
-        'invalid_proposal',
-        'state_mismatch',
-        'failed_txs',
-        'parent_block_wrong_slot',
-        'duplicate_txs',
-        'invalid_embedded_txs',
-      ];
-
-      if (badProposalReasons.includes(reason as BlockProposalValidationFailureReason)) {
+      // A slashable reject is a bad proposal, not a node issue, so branch the metric on the slashable set. A separate
+      // reason list would need every slashable reason (e.g. global_variables_mismatch) kept in sync by hand.
+      if (SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason as BlockProposalValidationFailureReason]) {
         this.metrics.incFailedAttestationsBadProposal(1, reason, partOfCommittee);
       } else {
-        // Node issues so we can't validate
         this.metrics.incFailedAttestationsNodeIssue(1, reason, partOfCommittee);
       }
 
       if (
         !escapeHatchOpen &&
         validationResult.reason &&
-        SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT.includes(validationResult.reason)
+        SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[validationResult.reason]
       ) {
         this.log.info(`Detected invalid block proposal offense`, {
           ...proposalInfo,
@@ -497,6 +497,9 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
         this.slashInvalidBlock(proposal);
         this.markInvalidProposalSlot(proposal.slotNumber);
       }
+      // Reported after the classification and the slashing side effect above have run, so an observer never sees a
+      // rejection whose offense this node has not finished deciding on.
+      await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult, { escapeHatchOpen });
       return false;
     }
 
@@ -506,6 +509,10 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       fishermanMode: this.config.fishermanMode || false,
       escapeHatchOpen,
     });
+
+    // The escape hatch rejects a proposal this node just validated, so it is reported alongside the result rather
+    // than after it: an observer that read `accepted` alone would have the opposite of the node's actual answer.
+    await this.proposalHandler.notifyBlockProposalDecision(proposal, validationResult, { escapeHatchOpen });
 
     if (escapeHatchOpen) {
       this.log.warn(`Escape hatch open for slot ${slotNumber}, rejecting block proposal`, proposalInfo);
@@ -594,19 +601,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       },
     );
 
-    this.metrics.incSuccessfulAttestations(inCommittee.length);
-
-    // Track epoch participation per attester: count each (attester, epoch) pair at most once
-    const proposalEpoch = getEpochAtSlot(proposalSlotNumber, this.epochCache.getL1Constants());
-    for (const attester of inCommittee) {
-      const key = attester.toString();
-      const lastEpoch = this.lastAttestedEpochByAttester.get(key);
-      if (lastEpoch === undefined || proposalEpoch > lastEpoch) {
-        this.lastAttestedEpochByAttester.set(key, proposalEpoch);
-        this.metrics.incAttestedEpochCount(attester);
-      }
-    }
-
     // Determine which validators should attest
     let attestors: EthAddress[];
     if (partOfCommittee) {
@@ -629,10 +623,34 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
         ...proposalInfo,
         attestors: attestors.map(a => a.toString()),
       });
+      this.recordAttestationParticipation(inCommittee, proposalSlotNumber);
       return undefined;
     }
 
-    return await this.createCheckpointAttestationsFromProposal(proposal, attestors, checkpointNumber);
+    const attestations = await this.createCheckpointAttestationsFromProposal(proposal, attestors, checkpointNumber);
+    // Counted from the attestations actually kept, so one refused for equivocation, discarded past the deadline, or
+    // signed by another HA node is not reported as this node's participation.
+    if (attestations) {
+      this.recordAttestationParticipation(
+        compactArray(attestations.map(attestation => attestation.getSender())),
+        proposalSlotNumber,
+      );
+    }
+    return attestations;
+  }
+
+  /** Records successful attestations and each attester's epoch participation, counting an (attester, epoch) once. */
+  private recordAttestationParticipation(attesters: EthAddress[], slot: SlotNumber): void {
+    this.metrics.incSuccessfulAttestations(attesters.length);
+    const epoch = getEpochAtSlot(slot, this.epochCache.getL1Constants());
+    for (const attester of attesters) {
+      const key = attester.toString();
+      const lastEpoch = this.lastAttestedEpochByAttester.get(key);
+      if (lastEpoch === undefined || epoch > lastEpoch) {
+        this.lastAttestedEpochByAttester.set(key, epoch);
+        this.metrics.incAttestedEpochCount(attester);
+      }
+    }
   }
 
   /**
@@ -666,13 +684,50 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       return undefined;
     }
 
+    // Deadline check, for the same reason and in the same place. Validation can run up to the attestation deadline
+    // and past it — the archiver sync waits are bounded by the deadline, and the Inbox endpoint gate keeps a minimum
+    // window beyond it on purpose — so it is re-read here, with nothing left between it and the signature. Finishing
+    // a late validation is still worth doing for telemetry; signing on it is not. Both the peer path and the
+    // proposer's own `collectOwnAttestations` sign through here, so this is the one place that covers both.
+    //
+    // The cutoff is the deadline itself, not the deadline widened by `maxGossipClockDisparityMs`. The deadline is the
+    // sender's obligation; that tolerance is the receiver's allowance for clock skew and propagation delay on
+    // messages sent in time, and a sender that spends it leaves none for the network. Signing late for the sake of
+    // inactivity-slashing credit is a poor trade too: a late attestation only counts if it still reaches peers inside
+    // their tolerance, and one further out is dropped, or penalized as stale, by every peer.
+    if (this.isPastAttestationDeadline(proposal, 'validation')) {
+      return undefined;
+    }
+
     const attestations = await this.validationService.attestToCheckpointProposal(proposal, attestors, checkpointNumber);
 
-    // Track the proposal we attested to (to prevent equivocation)
+    // Track the proposal we attested to (to prevent equivocation). This is recorded even when the signature is
+    // discarded below: the attestors have signed for this slot, so a second proposal for it must still be refused.
     this.lastAttestedProposal = proposal;
+
+    // Signing is not instant: a remote signer or HA coordination can take seconds. A signature produced past the
+    // deadline is discarded rather than stored and gossiped, for the reasons above.
+    if (this.isPastAttestationDeadline(proposal, 'signing')) {
+      return undefined;
+    }
 
     await this.p2pClient.addOwnCheckpointAttestations(attestations);
     return attestations;
+  }
+
+  /** Whether the attestation deadline for the proposal's slot has passed, logging which step overran it if so. */
+  private isPastAttestationDeadline(proposal: CheckpointProposalCore, step: 'validation' | 'signing'): boolean {
+    const attestationDeadline = this.proposalHandler.getAttestationDeadline(proposal.slotNumber);
+    if (+attestationDeadline > this.dateProvider.now()) {
+      return false;
+    }
+    this.log.warn(`Attestation deadline for slot ${proposal.slotNumber} passed during ${step}, not attesting`, {
+      slot: proposal.slotNumber,
+      archive: proposal.archive.toString(),
+      attestationDeadline: attestationDeadline.toISOString(),
+      step,
+    });
+    return true;
   }
 
   /**
@@ -915,8 +970,8 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
     archive: Fr,
     txs: Tx[],
     proposerAddress: EthAddress | undefined,
+    inboxPrefixRef: InboxMessagePrefixRef,
     options: BlockProposalOptions = {},
-    bucketRef?: InboxBucketRef,
   ): Promise<BlockProposal> {
     // Validate that we're not creating a proposal for an older or equal position
     if (this.lastProposedBlock) {
@@ -947,7 +1002,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
         broadcastInvalidBlockProposal:
           options.broadcastInvalidBlockProposal || this.config.broadcastInvalidBlockProposal,
       },
-      bucketRef,
+      inboxPrefixRef,
     );
     this.lastProposedBlock = newProposal;
     return newProposal;

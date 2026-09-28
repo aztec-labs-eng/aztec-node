@@ -94,10 +94,14 @@ describe('L1TxUtils', () => {
     await cheatCodes.evmMine();
   });
 
+  // The budget has to clear `anvil.stop()`'s own teardown ladder, which waits 5s for anvil to honour
+  // SIGTERM before killing it outright. A 5s hook expires exactly when that escalation is due, so it
+  // can never reach it; anvil misses the SIGTERM window whenever the box is loaded enough to delay
+  // scheduling it.
   afterEach(async () => {
     await cheatCodes.setIntervalMining(0); // Disable interval mining to ensure anvil stops properly
     await anvil.stop().catch(err => createLogger('cleanup').error(err));
-  }, 5000);
+  }, 10_000);
 
   describe('L1TxUtils with blobs', () => {
     let gasUtils: TestL1TxUtils;

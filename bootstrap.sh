@@ -762,11 +762,19 @@ case "$cmd" in
     spartan/bootstrap.sh network_tests "${env_file}"
     ;;
   "ci-network-kind-tests")
+    # Args: [docker_image]
+    # Without an image, the tests run against one built from this tree.
     export CI=1
+    docker_image="${1:-}"
     [ "${SKIP_BUILD:-0}" -eq 0 ] && build
-    # Set the docker image to the locally built image and load it into KIND
-    export AZTEC_DOCKER_IMAGE="azteclabs/aztec:$(git rev-parse HEAD)"
+    if [ -n "$docker_image" ]; then
+      docker pull "$docker_image"
+    else
+      docker_image="azteclabs/aztec:$(git rev-parse HEAD)"
+    fi
+    export AZTEC_DOCKER_IMAGE="$docker_image"
     spartan/bootstrap.sh kind
+    # kind load reads the local docker daemon, so the image has to be present either way.
     kind load docker-image "$AZTEC_DOCKER_IMAGE"
     # Just one test for now
     spartan/bootstrap.sh test-kind-upgrade-rollup
@@ -932,10 +940,7 @@ case "$cmd" in
     if ! semver check $REF_NAME; then
       exit 1
     fi
-    # Before the build, so a misconfigured release environment fails in seconds. Exported values
-    # reach both children below.
-    source $ci3/source_release_target
-
+    source $ci3/source_release_target   # Source vars for public or private releases.
     ./bootstrap.sh build release
     ./bootstrap.sh release
     ;;

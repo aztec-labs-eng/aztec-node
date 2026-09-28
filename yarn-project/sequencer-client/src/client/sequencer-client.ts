@@ -2,7 +2,7 @@ import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { EpochCache } from '@aztec-labs/epoch-cache';
 import { getPublicClient } from '@aztec-labs/ethereum/client';
-import { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { GovernanceProposerContract, InboxContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { type Delayer, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -20,6 +20,7 @@ import { FullNodeCheckpointsBuilder, NodeKeystoreAdapter, type ValidatorClient }
 import { type SequencerClientConfig, getPublisherConfigFromSequencerConfig } from '../config.js';
 import type { GlobalVariableBuilder } from '../global_variable_builder/index.js';
 import { SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
+import type { CheckpointProposalJobTestHooks } from '../sequencer/checkpoint_proposal_job_test_hooks.js';
 import { Sequencer, type SequencerConfig } from '../sequencer/index.js';
 
 /**
@@ -66,6 +67,11 @@ export class SequencerClient {
       funderL1TxUtils?: L1TxUtils;
       nodeKeyStore: KeystoreManager;
       globalVariableBuilder: GlobalVariableBuilder;
+      /**
+       * Test-only checkpoint-build hooks. Passed straight to the sequencer as a dependency; deliberately not part of
+       * {@link SequencerClientConfig}, so no serialized configuration or RPC surface can reach them.
+       */
+      checkpointProposalJobTestHooks?: CheckpointProposalJobTestHooks;
     },
   ) {
     const {
@@ -86,12 +92,14 @@ export class SequencerClient {
       telemetryClient.getMeter('L1PublisherMetrics'),
       publicClient,
       l1TxUtils.map(x => x.getSenderAddress()),
+      'sequencer',
     );
     const publisherManager = new PublisherManager(l1TxUtils, getPublisherConfigFromSequencerConfig(config), {
       bindings: log.getBindings(),
       funder: deps.funderL1TxUtils,
     });
     const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
+    const inboxContract = new InboxContract(publicClient, config.inboxAddress);
     const [l1GenesisTime, slotDuration, rollupManaLimit] = await Promise.all([
       rollupContract.getL1GenesisTime(),
       rollupContract.getSlotDuration(),
@@ -157,9 +165,11 @@ export class SequencerClient {
       deps.dateProvider,
       epochCache,
       rollupContract,
+      inboxContract,
       { ...config, maxL2BlockGas, maxDABlockGas, maxTxsPerBlock },
       telemetryClient,
       log,
+      deps.checkpointProposalJobTestHooks,
     );
 
     sequencer.init();

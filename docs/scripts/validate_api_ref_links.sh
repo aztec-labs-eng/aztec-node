@@ -20,6 +20,10 @@ set -euo pipefail
 #
 # Exit code: Always 0 (warnings only) to avoid breaking builds initially.
 
+# Lowercase a string. The `${var,,}` form this replaces is bash 4 only: macOS
+# ships bash 3.2, where it aborts with "bad substitution".
+lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOCS_ROOT="$(dirname "$SCRIPT_DIR")"
 STATIC_API_DIR="$DOCS_ROOT/static/aztec-nr-api"
@@ -134,6 +138,8 @@ resolve_static_path() {
   for i in "${!components[@]}"; do
     local component="${components[$i]}"
     [[ -z "$component" ]] && continue
+    local component_lc
+    component_lc=$(lc "$component")
 
     local found=""
     # On the last component, also try with .html extension
@@ -141,9 +147,10 @@ resolve_static_path() {
       # Try: exact, exact.html, exact/index.html (case-insensitive)
       for candidate in "$current_dir"/*; do
         [[ -e "$candidate" ]] || continue
-        local basename
+        local basename basename_lc
         basename=$(basename "$candidate")
-        if [[ "${basename,,}" == "${component,,}" ]]; then
+        basename_lc=$(lc "$basename")
+        if [[ "$basename_lc" == "$component_lc" ]]; then
           if [[ -f "$candidate" ]]; then
             found="$candidate"
             break
@@ -152,7 +159,7 @@ resolve_static_path() {
             break
           fi
         fi
-        if [[ "${basename,,}" == "${component,,}.html" ]] && [[ -f "$candidate" ]]; then
+        if [[ "$basename_lc" == "${component_lc}.html" ]] && [[ -f "$candidate" ]]; then
           found="$candidate"
           break
         fi
@@ -161,9 +168,10 @@ resolve_static_path() {
       # Intermediate component: must be a directory
       for candidate in "$current_dir"/*/; do
         [[ -d "$candidate" ]] || continue
-        local basename
+        local basename basename_lc
         basename=$(basename "$candidate")
-        if [[ "${basename,,}" == "${component,,}" ]]; then
+        basename_lc=$(lc "$basename")
+        if [[ "$basename_lc" == "$component_lc" ]]; then
           found="${candidate%/}"
           break
         fi

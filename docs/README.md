@@ -49,9 +49,9 @@ Note that you cannot use the macros (`#include_aztec_version` and `#include_code
 
 The way docs builds work is the following:
 
-- CI runs on merge to next (the default branch), builds the dependencies needed to build the docs, then deploys on the main docs website
+- **Publishing from this repo is not live yet.** docs.aztec.network still serves the last build cut from `AztecProtocol/aztec-packages` (2026-08-19); the Netlify site has not been repointed since the docs moved here, so merging to `main` does not currently reach readers. Restoring it is tracked separately — delete this bullet once it lands.
+- Once restored, the live site is deployed from `main`. Netlify hosts and serves it — the domain, the `netlify.toml` redirects, the `subscribe` function and the markdown edge function are all Netlify — but the build itself is expected to run in CI and be pushed as a built artifact, not run by Netlify from a linked repo.
 - [The main CI workflow](../.github/workflows/ci3.yml) runs on pull requests and builds the dependencies and the docs, giving you a preview to check that everything is correct. You can also trigger docs CI specifically with the `ci-docs` label on a PR.
-- [The nightly docs workflow](../.github/workflows/nightly-docs-release.yml) runs daily to create versioned documentation for nightly releases, automatically cutting a new version of the docs for the latest nightly tag
 
 The preprocessing macros use environment variables to determine version numbers. For nightly builds, set `NIGHTLY_TAG` (or `COMMIT_TAG` for backwards compatibility):
 
@@ -100,7 +100,7 @@ This ensures that:
 
 ## Releases
 
-A new docs site is published on every merge to the next branch.
+A new docs site is published on every merge to `main` — once publishing is restored; see the note under "The way docs builds work" above.
 
 ### Installation
 

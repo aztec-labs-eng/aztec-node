@@ -11,7 +11,7 @@ import type { ViemClient } from '../types.js';
 
 /** L2 fee data reported by the chain monitor. */
 export type L2FeeData = ManaMinFeeComponents & {
-  /** Total minimum fee per mana in Fee Juice (sum of sequencerCost + proverCost + congestionCost). */
+  /** Total minimum fee per mana in Fee Juice (sum of sequencerCost + proverCost + protocolFee). */
   minFeePerMana: bigint;
   /** L1 base fee observed by the oracle. */
   l1BaseFee: bigint;
@@ -380,7 +380,7 @@ export class ChainMonitor extends EventEmitter<ChainMonitorEventMap> {
     return (
       this.l2FeeData.sequencerCost !== newData.sequencerCost ||
       this.l2FeeData.proverCost !== newData.proverCost ||
-      this.l2FeeData.congestionCost !== newData.congestionCost ||
+      this.l2FeeData.protocolFee !== newData.protocolFee ||
       this.l2FeeData.l1BaseFee !== newData.l1BaseFee ||
       this.l2FeeData.l1BlobFee !== newData.l1BlobFee ||
       this.l2FeeData.ethPerFeeAsset !== newData.ethPerFeeAsset

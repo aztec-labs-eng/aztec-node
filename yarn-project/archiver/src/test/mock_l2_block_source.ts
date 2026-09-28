@@ -6,6 +6,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -22,10 +23,13 @@ import {
   Body,
   type CheckpointQuery,
   type CheckpointsQuery,
+  CommitteeAttestationsAndSigners,
   GENESIS_BLOCK_HEADER_HASH,
   GENESIS_CHECKPOINT_HEADER_HASH,
+  type L1SyncPoint,
   L2Block,
   type L2BlockSource,
+  type L2Frontier,
   type L2Tips,
   type ProposedCheckpointQuery,
   type ValidateCheckpointResult,
@@ -60,6 +64,9 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
   private initialHeaderHash: BlockHash = GENESIS_BLOCK_HEADER_HASH;
   private genesisArchiveRoot?: Fr;
   private genesisBlock?: L2Block;
+
+  /** L1 block the mock claims to be synced to; tests that exercise L1-pinned reads set it. */
+  public l1SyncPoint: L1SyncPoint | undefined = undefined;
 
   private log = createLogger('archiver:mock_l2_block_source');
 
@@ -105,7 +112,7 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
       return this.genesisBlock;
     }
     const archive = this.genesisArchiveRoot
-      ? new AppendOnlyTreeSnapshot(this.genesisArchiveRoot, 1)
+      ? new AppendOnlyTreeSnapshot(this.genesisArchiveRoot, TreeLeafIndex(1))
       : AppendOnlyTreeSnapshot.empty();
     return (this.genesisBlock = new L2Block(
       archive,
@@ -250,13 +257,28 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
     if (!checkpoint) {
       return Promise.resolve(undefined);
     }
-    return Promise.resolve(new PublishedCheckpoint(checkpoint, this.mockL1DataForCheckpoint(checkpoint), []));
+    return Promise.resolve(
+      new PublishedCheckpoint(
+        checkpoint,
+        this.mockL1DataForCheckpoint(checkpoint),
+        [],
+        CommitteeAttestationsAndSigners.packAttestations([]),
+      ),
+    );
   }
 
   public getCheckpoints(query: CheckpointsQuery): Promise<PublishedCheckpoint[]> {
     const checkpoints = this.resolveCheckpointsQuery(query);
     return Promise.resolve(
-      checkpoints.map(checkpoint => new PublishedCheckpoint(checkpoint, this.mockL1DataForCheckpoint(checkpoint), [])),
+      checkpoints.map(
+        checkpoint =>
+          new PublishedCheckpoint(
+            checkpoint,
+            this.mockL1DataForCheckpoint(checkpoint),
+            [],
+            CommitteeAttestationsAndSigners.packAttestations([]),
+          ),
+      ),
     );
   }
 
@@ -290,6 +312,7 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
       blockCount: checkpoint.blocks.length,
       feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
       attestations: [],
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
       l1: this.mockL1DataForCheckpoint(checkpoint),
     };
   }
@@ -414,7 +437,7 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
       const checkpointNumber = this.findCheckpointNumberForBlock(blockId.number) ?? CheckpointNumber(0);
       // Match production semantics: checkpoint 0 is fully synthetic (no real checkpoint header
       // exists at 0), so its hash stays at the protocol constant `GENESIS_CHECKPOINT_HEADER_HASH`
-      // even though the block-0 hash is dynamic. See L2TipsCache for the production path.
+      // even though the block-0 hash is dynamic. See L2FrontierCache for the production path.
       const hash = checkpointNumber === 0 ? GENESIS_CHECKPOINT_HEADER_HASH.toString() : blockId.hash;
       return {
         block: blockId,
@@ -427,6 +450,27 @@ export class MockL2BlockSource implements L2BlockSource, ContractDataSource {
       checkpointed: makeTipId(checkpointedBlockId),
       proven: makeTipId(provenBlockId),
       finalized: makeTipId(finalizedBlockId),
+    };
+  }
+
+  getL1SyncPoint(): Promise<L1SyncPoint | undefined> {
+    return Promise.resolve(this.l1SyncPoint);
+  }
+
+  // The mock never holds proposed checkpoints and its pending chain is always valid, so the frontier is just
+  // the tips plus the headers of the latest block and the checkpoint holding the checkpointed tip.
+  async getL2Frontier(): Promise<L2Frontier> {
+    const tips = await this.getL2Tips();
+    const checkpointed = this.checkpointList.find(c => c.blocks.some(b => b.number === tips.checkpointed.block.number));
+    return {
+      tips,
+      proposedCheckpoint: undefined,
+      l1SyncPoint: this.l1SyncPoint,
+      latestBlockHeader: this.l2Blocks[tips.proposed.number - 1]?.header,
+      checkpointedCheckpoint: checkpointed
+        ? { header: checkpointed.header, l1: this.mockL1DataForCheckpoint(checkpointed) }
+        : undefined,
+      pendingChainValidationStatus: { valid: true },
     };
   }
 

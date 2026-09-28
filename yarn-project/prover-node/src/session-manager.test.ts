@@ -290,29 +290,31 @@ describe('SessionManager', () => {
     expect(sessionFailures).toHaveLength(1); // still just the one upload
   });
 
-  it('replaces a retained failed session when its canonical content changes (re-add)', async () => {
-    // The one way a retained failed session is retried: its content changes. A re-add over new content
-    // replaces the marker with a fresh session so the epoch can be proven over the new provers.
-    mockNextUnprovenSlot(2, 6);
-    l2BlockSource.isEpochComplete.mockResolvedValue(true);
-    l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6)]);
-    store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 6)]);
+  it.each(['failed', 'completed'] as const)(
+    'replaces a retained %s session when its canonical content changes (re-add)',
+    async state => {
+      // A re-add over new content replaces the retained marker so the epoch can be proven over the new provers.
+      mockNextUnprovenSlot(2, 6);
+      l2BlockSource.isEpochComplete.mockResolvedValue(true);
+      l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6)]);
+      store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 6)]);
 
-    await manager.onTick();
-    stubs[0].terminate('failed');
-    await flushSessionCompletion();
+      await manager.onTick();
+      stubs[0].terminate(state);
+      await flushSessionCompletion();
 
-    // Content changes (a re-add at a different slot in the epoch) → the retained session is replaced.
-    store.listInSlotRange.mockReturnValue([proverForCheckpoint(2, 7)]);
-    await manager.onTick();
+      // Content changes (a re-add at a different slot in the epoch) → the retained session is replaced.
+      store.listInSlotRange.mockReturnValue([proverForCheckpoint(2, 7)]);
+      await manager.onTick();
 
-    const replacement = manager.getFullSession(EpochNumber(3)) as unknown as StubSession | undefined;
-    expect(replacement).toBeDefined();
-    expect(replacement).not.toBe(stubs[0]);
-    expect(replacement!.isTerminal()).toBe(false);
-    expect(replacement!.provers.map(p => p.id)).toEqual([proverForCheckpoint(2, 7).id]);
-    expect(stubs.length).toBe(2);
-  });
+      const replacement = manager.getFullSession(EpochNumber(3)) as unknown as StubSession | undefined;
+      expect(replacement).toBeDefined();
+      expect(replacement).not.toBe(stubs[0]);
+      expect(replacement!.isTerminal()).toBe(false);
+      expect(replacement!.provers.map(p => p.id)).toEqual([proverForCheckpoint(2, 7).id]);
+      expect(stubs.length).toBe(2);
+    },
+  );
 
   it('does not upload when a session stops because a checkpoint prover failed', async () => {
     // A 'stopped' session (a prover under it failed — possibly a prune) is not the session's own failure,
@@ -359,6 +361,31 @@ describe('SessionManager', () => {
     expect(manager.getFullSession(epoch)).toBeUndefined();
     expect(stubs.length).toBe(1);
     expect(sessionFailures).toEqual([]);
+  });
+
+  it('onTick does not re-prove a completed full epoch while the archiver proven tip is stale', async () => {
+    const epoch = EpochNumber(3);
+    mockNextUnprovenSlot(2, 6);
+    const provers = [proverForCheckpoint(3, 6), proverForCheckpoint(4, 7)];
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(3, 6), archiverCp(4, 7)]);
+    store.listInSlotRange.mockReturnValue(provers);
+
+    await manager.onTick();
+    const original = stubs[0];
+    expect(original.spec).toEqual({ kind: 'full', epochNumber: epoch, fromSlot: SlotNumber(6), toSlot: SlotNumber(7) });
+    expect(original.provers).toEqual(provers);
+    original.terminate('completed');
+    await flushSessionCompletion();
+
+    // Successful submission can precede the archiver observing the new proven tip.
+    await manager.onTick();
+    await manager.onTick();
+
+    expect(manager.getJobs().filter(job => job.status !== 'completed')).toEqual([]);
+    expect(stubs.map(session => ({ spec: session.spec, state: session.state }))).toEqual([
+      { spec: original.spec, state: 'completed' },
+    ]);
   });
 
   it('onTick does not reopen an epoch once the proven height advances past it', async () => {
@@ -540,12 +567,16 @@ describe('SessionManager', () => {
     expect(session!.state).toBe('completed');
   });
 
-  it('drops terminal sessions on the next reconcile', async () => {
+  it('drops a retained completed session once its canonical checkpoints are removed', async () => {
     const epoch = EpochNumber(3);
     await openCanonicalFullSession(epoch, [proverForCheckpoint(1, 6)]);
     const original = stubs[0];
     original.terminate('completed');
-    // Trigger a reconcile.
+    store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 6)]);
+    await manager.onTick();
+    expect(manager.getFullSession(epoch)?.getState()).toBe('completed');
+
+    store.listInSlotRange.mockReturnValue([]);
     await manager.onTick();
     expect(manager.getFullSession(epoch)).toBeUndefined();
     expect(stubs.length).toBe(1); // no replacement constructed

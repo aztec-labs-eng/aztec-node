@@ -47,6 +47,10 @@ mask_secret_value() {
     local env_var="$1"
     local secret_file="$2"
 
+    if [[ "${GITHUB_ACTIONS:-false}" != "true" ]]; then
+        return
+    fi
+
     # Read secret from file
     local secret_value
     secret_value=$(cat "$secret_file")

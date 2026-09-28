@@ -1,5 +1,6 @@
 {
   "name": "@aztec-labs/end-to-end",
+  "private": true,
   "version": "0.0.0",
   "type": "module",
   "exports": {
@@ -103,8 +104,8 @@
     "tslib": "^2.4.0",
     "typescript": "^5.3.3",
     "util": "^0.12.5",
-    "viem": "npm:@aztec/viem@2.38.2",
-    "zod": "^4"
+    "viem": "npm:@aztec/viem@2.38.3",
+    "zod": "~4.4.3"
   },
   "devDependencies": {
     "0x": "^5.7.0",

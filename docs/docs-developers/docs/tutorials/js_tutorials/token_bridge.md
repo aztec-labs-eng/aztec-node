@@ -227,7 +227,7 @@ Now add the `NFTPunk` contract dependency to `nft_bridge_contract/Nargo.toml`. T
 
 ```toml
 [dependencies]
-aztec = { git="https://github.com/AztecProtocol/aztec-nr", tag = "#include_aztec_version", directory = "aztec" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr", tag = "#include_aztec_version", directory = "aztec" }
 NFTPunk = { path = "../../nft/nft_contract" }
 ```
 

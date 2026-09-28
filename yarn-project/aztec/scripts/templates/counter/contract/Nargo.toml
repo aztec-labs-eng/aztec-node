@@ -3,5 +3,5 @@ name = "__CRATE_NAME___contract"
 type = "contract"
 
 [dependencies]
-aztec = { git="https://github.com/AztecProtocol/aztec-nr", tag="v__AZTEC_VERSION__", directory="aztec" }
-balance_set = { git="https://github.com/AztecProtocol/aztec-nr", tag="v__AZTEC_VERSION__", directory="balance-set" }
+aztec = { git="https://github.com/aztec-labs-eng/aztec-nr", tag="v__AZTEC_VERSION__", directory="aztec" }
+balance_set = { git="https://github.com/aztec-labs-eng/aztec-nr", tag="v__AZTEC_VERSION__", directory="balance-set" }

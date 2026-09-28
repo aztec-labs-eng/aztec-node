@@ -2,7 +2,7 @@ import { chunk } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { BlockHash, type DataInBlock, type InBlock } from '@aztec-labs/stdlib/block';
+import type { AnchoredBlockParameter, DataInBlock, InBlock } from '@aztec-labs/stdlib/block';
 import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec-labs/stdlib/hash';
 import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/client';
 import { Note, NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
@@ -75,7 +75,7 @@ export class NoteService {
    * @param contractAddress - The contract whose notes should be checked and nullified.
    */
   public async syncNoteNullifiers(contractAddress: AztecAddress, scopes: AztecAddress[]): Promise<void> {
-    const anchorBlockHash = await this.anchorBlockHeader.hash();
+    const anchor = await this.anchorBlockHeader.toBlockParameter();
 
     const contractNotes = await this.noteStore.getNotes({ contractAddress, scopes }, this.changeSetId);
 
@@ -84,7 +84,7 @@ export class NoteService {
     }
 
     const nullifiersToCheck = contractNotes.map(note => note.siloedNullifier);
-    const nullifierIndexes = await this.#findNullifierIndexes(anchorBlockHash, nullifiersToCheck);
+    const nullifierIndexes = await this.#findNullifierIndexes(anchor, nullifiersToCheck);
 
     const foundNullifiers = nullifiersToCheck
       .map((nullifier, i) => {
@@ -133,7 +133,7 @@ export class NoteService {
     // Also note that the note should never be ahead of the synced block here since `fetchTaggedLogs` only processes
     // logs up to the synced block making this only an additional safety check.
     const anchorBlockNumber = this.anchorBlockHeader.getBlockNumber();
-    const anchorBlockHash = await this.anchorBlockHeader.hash();
+    const anchor = await this.anchorBlockHeader.toBlockParameter();
 
     // By computing siloed and unique note hashes ourselves we prevent contracts from interfering with the note storage
     // of other contracts, which would constitute a security breach.
@@ -149,7 +149,7 @@ export class NoteService {
     );
 
     const nullifierIndexes = await this.#findNullifierIndexes(
-      anchorBlockHash,
+      anchor,
       computed.map(c => c.siloedNullifier),
     );
 
@@ -221,11 +221,11 @@ export class NoteService {
     }
   }
 
-  async #findNullifierIndexes(anchorBlockHash: BlockHash, siloedNullifiers: Fr[]) {
+  async #findNullifierIndexes(anchor: AnchoredBlockParameter, siloedNullifiers: Fr[]) {
     const batches = chunk(siloedNullifiers, MAX_RPC_LEN);
     return (
       await allToCompletion(
-        batches.map(batch => this.aztecNode.findLeavesIndexes(anchorBlockHash, MerkleTreeId.NULLIFIER_TREE, batch)),
+        batches.map(batch => this.aztecNode.findLeavesIndexes(anchor, MerkleTreeId.NULLIFIER_TREE, batch)),
       )
     ).flat();
   }

@@ -84,10 +84,14 @@ describe('ForwarderL1TxUtils', () => {
     logger.debug(`Added forwarder as minter`);
   });
 
+  // The budget has to clear `anvil.stop()`'s own teardown ladder, which waits 5s for anvil to honour
+  // SIGTERM before killing it outright. A 5s hook expires exactly when that escalation is due, so it
+  // can never reach it; anvil misses the SIGTERM window whenever the box is loaded enough to delay
+  // scheduling it.
   afterEach(async () => {
     await cheatCodes.setIntervalMining(0);
     await anvil.stop().catch(err => createLogger('cleanup').error(err));
-  }, 5000);
+  }, 10_000);
 
   it('wraps transactions through forwarder contract and emits events', async () => {
     const forwarderUtils = new ForwarderL1TxUtils(

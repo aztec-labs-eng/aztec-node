@@ -1,6 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 import { FunctionSelector } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import {
@@ -113,7 +113,7 @@ describe('Data generation for noir tests', () => {
     contractData.public_keys = 'PublicKeys::default()';
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/protocol-test-utils/src/fixtures/contracts.nr',
       `${namePrefix}_contract`,
       `ContractData ${format(contractData)}`,
@@ -140,7 +140,7 @@ describe('Data generation for noir tests', () => {
     expect(functionData).toMatchSnapshot();
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/protocol-test-utils/src/fixtures/contract_functions.nr',
       `${namePrefix}_private_function`,
       `ContractFunction ${format(functionData)}`,

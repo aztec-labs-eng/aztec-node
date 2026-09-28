@@ -163,6 +163,7 @@ export interface TxPoolV2 extends TypedEventEmitter<TxPoolV2Events> {
 
   /**
    * Handles a mined block - marks transactions as mined and evicts conflicting pending txs.
+   * Soft-deleted transactions in the block are re-added as mined from their retained data.
    * Uses nullifiers directly from the block to evict pending transactions with conflicts.
    * @param block - The complete mined block
    */
@@ -197,7 +198,9 @@ export interface TxPoolV2 extends TypedEventEmitter<TxPoolV2Events> {
 
   /**
    * Handles failed transaction execution.
-   * Deletes transactions that failed during block building.
+   * Deletes transactions that failed during block building. Transactions already mined are left in place, since a
+   * block containing them may have been synced while they were being executed, and they must be kept until that
+   * block is finalized.
    * @param txHashes - Hashes of transactions that failed
    */
   handleFailedExecution(txHashes: TxHash[]): Promise<void>;

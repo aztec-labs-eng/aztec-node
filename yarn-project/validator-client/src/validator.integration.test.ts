@@ -21,12 +21,17 @@ import { TestTxProvider } from '@aztec-labs/p2p/test-helpers';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { AvmSimulatorPool } from '@aztec-labs/simulator/server';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { CommitteeAttestation, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import {
+  CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
+  GENESIS_BLOCK_HEADER_HASH,
+  L2Block,
+} from '@aztec-labs/stdlib/block';
 import { CheckpointReexecutionTracker, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { Gas, GasFees } from '@aztec-labs/stdlib/gas';
 import { tryStop } from '@aztec-labs/stdlib/interfaces/server';
-import { InboxBucketRef } from '@aztec-labs/stdlib/messaging';
+import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import {
   type BlockProposal,
   CheckpointProposal,
@@ -45,6 +50,7 @@ import { hashTypedData } from 'viem';
 import { generatePrivateKey } from 'viem/accounts';
 
 import { CheckpointBuilder, FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
+import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import { ValidatorClient } from './validator.js';
 
 jest.setTimeout(60_000);
@@ -52,8 +58,6 @@ jest.setTimeout(60_000);
 describe('ValidatorClient Integration', () => {
   // Constants for L1
   const l1Constants: L1RollupConstants = {
-    // Non-zero genesis time so the slot-1 validation clock is well past the minimum bucket age; otherwise the
-    // streaming Inbox acceptance check rejects even a genesis-timestamp (0) bucket as `bucket_too_new`.
     l1GenesisTime: 1_700_000_000n,
     slotDuration: 24,
     epochDuration: 16,
@@ -74,6 +78,7 @@ describe('ValidatorClient Integration', () => {
     checkpointsBuilder: FullNodeCheckpointsBuilder;
     p2pClient: MockProxy<P2P>;
     validator: ValidatorClient;
+    inbox: FakeInbox;
     avmSimulator?: AvmSimulatorPool;
   };
 
@@ -192,6 +197,10 @@ describe('ValidatorClient Integration', () => {
     };
     keyStoreManager = new KeystoreManager(keyStore);
 
+    // Every checkpoint of these tests consumes the whole local message log, so its final position is the end
+    // of the one live bucket holding those messages; tests that seed messages set that bucket themselves.
+    const inbox = makeFakeInbox();
+
     // Create and start validator
     const validator = await ValidatorClient.new(
       {
@@ -222,6 +231,7 @@ describe('ValidatorClient Integration', () => {
       p2pClient,
       archiver,
       archiver,
+      inbox,
       txProvider,
       keyStoreManager,
       blobClient,
@@ -238,6 +248,7 @@ describe('ValidatorClient Integration', () => {
       checkpointsBuilder,
       p2pClient,
       validator,
+      inbox,
       avmSimulator,
     };
   };
@@ -261,13 +272,16 @@ describe('ValidatorClient Integration', () => {
       l1ToL2Messages,
     });
 
-    // Resolve the Inbox bucket this block consumed through (keyed by its cumulative L1-to-L2 leaf count) and attach
-    // the reference, mirroring the sequencer's block-building loop which carries a bucketRef on every proposal.
-    // Without it the validator's streaming acceptance check rejects the proposal as
-    // `bucket_unknown`. A block that consumed nothing resolves to the genesis (or reused parent) bucket.
+    // Attach the signed reference to the message prefix this block consumed through (the rolling hash at its
+    // cumulative L1-to-L2 leaf count), mirroring the sequencer's block-building loop which carries one on every
+    // proposal. A block that consumed nothing references the parent's prefix. A prefix the proposer's own archiver
+    // cannot serve means the test fixture is out of sync, so fail loudly rather than signing a placeholder.
     const blockTotal = BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
-    const bucket = await proposer.archiver.getInboxBucketByTotalMsgCount(blockTotal);
-    const bucketRef = bucket ? InboxBucketRef.fromBucket(bucket) : undefined;
+    const position = await proposer.archiver.getMessagePosition(blockTotal);
+    if (position === undefined) {
+      throw new Error(`No Inbox message position at cumulative total ${blockTotal} for block ${blockNumber}`);
+    }
+    const inboxPrefixRef = InboxMessagePrefixRef.fromPosition(position);
 
     const proposal = await proposer.validator.createBlockProposal(
       block.header,
@@ -276,8 +290,8 @@ describe('ValidatorClient Integration', () => {
       block.archive.root,
       usedTxs,
       proposerSigner.address,
+      inboxPrefixRef,
       {},
-      bucketRef,
     );
 
     logger.warn(`Built block proposal for block ${blockNumber}`, { ...block.toBlockInfo() });
@@ -486,8 +500,8 @@ describe('ValidatorClient Integration', () => {
     it('validates and attests with txs anchored to proposed blocks and non-empty l1-to-l2 messages', async () => {
       // Create l1 to l2 messages and seed them into the archivers
       const l1ToL2Messages = makeInboxMessages(4);
-      await proposer.archiver.dataStores.messages.addL1ToL2MessageBuckets(l1ToL2Messages);
-      await attestor.archiver.dataStores.messages.addL1ToL2MessageBuckets(l1ToL2Messages);
+      await proposer.archiver.dataStores.messages.addL1ToL2Messages(l1ToL2Messages);
+      await attestor.archiver.dataStores.messages.addL1ToL2Messages(l1ToL2Messages);
 
       // Build txs anchored to the previously proposed block
       const { blocks, proposal } = await buildCheckpoint(
@@ -502,6 +516,9 @@ describe('ValidatorClient Integration', () => {
       );
 
       await attestorValidateBlocks(blocks);
+
+      // The checkpoint consumes all four seeded messages, so the position it ends at closes the live bucket.
+      attestor.inbox.setBuckets([{ seq: 1n, total: 4n, rollingHash: proposal.checkpointHeader.inboxRollingHash }]);
 
       const attestations = await attestor.validator.attestToCheckpointProposal(
         ValidatedCheckpointProposalCore(proposal),
@@ -534,10 +551,12 @@ describe('ValidatorClient Integration', () => {
       );
 
       // Publish checkpoint 1 to both archivers
+      const checkpoint1Attestations = [CommitteeAttestation.random()];
       const publishedCheckpoint1 = PublishedCheckpoint.from({
         checkpoint: checkpoint1,
         l1: new L1PublishedData(1n, BigInt(Math.floor(Date.now() / 1000)), Buffer32.random().toString()),
-        attestations: [CommitteeAttestation.random()],
+        attestations: checkpoint1Attestations,
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(checkpoint1Attestations),
       });
       await attestor.archiver.addCheckpoints([publishedCheckpoint1]);
       await proposer.archiver.addCheckpoints([publishedCheckpoint1]);
@@ -704,10 +723,10 @@ describe('ValidatorClient Integration', () => {
 
     it('refuses block proposal with mismatching l1 to l2 messages', async () => {
       const l1ToL2Messages = makeInboxMessages(4);
-      await proposer.archiver.dataStores.messages.addL1ToL2MessageBuckets(l1ToL2Messages);
+      await proposer.archiver.dataStores.messages.addL1ToL2Messages(l1ToL2Messages);
 
       const otherL1ToL2Messages = makeInboxMessages(4);
-      await attestor.archiver.dataStores.messages.addL1ToL2MessageBuckets(otherL1ToL2Messages);
+      await attestor.archiver.dataStores.messages.addL1ToL2Messages(otherL1ToL2Messages);
 
       const { blocks } = await buildCheckpoint(
         CheckpointNumber(1),

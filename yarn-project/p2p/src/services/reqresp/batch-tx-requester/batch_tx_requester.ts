@@ -10,7 +10,12 @@ import { strict as assert } from 'assert';
 
 import type { IRequestTracker } from '../../tx_collection/request_tracker.js';
 import { ReqRespSubProtocol } from '.././interface.js';
-import { BlockTxsRequest, BlockTxsResponse, type BlockTxsSource } from '.././protocols/index.js';
+import {
+  BlockTxsRequest,
+  BlockTxsResponse,
+  type BlockTxsSource,
+  MAX_BLOCK_TXS_PER_REQUEST,
+} from '.././protocols/index.js';
 import { ReqRespStatus } from '.././status.js';
 import {
   DEFAULT_BATCH_TX_REQUESTER_BAD_PEER_THRESHOLD,
@@ -76,7 +81,12 @@ export class BatchTxRequester {
       this.opts.smartParallelWorkerCount ?? DEFAULT_BATCH_TX_REQUESTER_SMART_PARALLEL_WORKER_COUNT;
     this.dumbParallelWorkerCount =
       this.opts.dumbParallelWorkerCount ?? DEFAULT_BATCH_TX_REQUESTER_DUMB_PARALLEL_WORKER_COUNT;
-    this.txBatchSize = this.opts.txBatchSize ?? DEFAULT_BATCH_TX_REQUESTER_TX_BATCH_SIZE;
+    // Clamp to the responder's per-request cap so a configured batch can never exceed
+    // what the BLOCK_TXS handler will serve (which would get the request rejected).
+    this.txBatchSize = Math.min(
+      this.opts.txBatchSize ?? DEFAULT_BATCH_TX_REQUESTER_TX_BATCH_SIZE,
+      MAX_BLOCK_TXS_PER_REQUEST,
+    );
     this.txQueue = new FifoMemoryQueue(this.logger);
     this.txValidator = this.opts.txValidator ?? createBatchRequestTxValidator(this.p2pService.txValidatorConfig);
 

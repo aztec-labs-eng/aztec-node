@@ -1,5 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { deriveStorageSlotInMap } from './index.js';
@@ -16,7 +16,7 @@ describe('Map slot', () => {
     );
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/types/src/storage/map.nr',
       'slot_from_typescript',
       slot.toString(),

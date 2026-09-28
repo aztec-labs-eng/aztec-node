@@ -1,10 +1,12 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import type { L1BlockId } from '@aztec-labs/ethereum/l1-types';
 import {
   BlockNumber,
   CheckpointNumber,
   type EpochNumber,
   IndexWithinCheckpoint,
   type SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -19,7 +21,9 @@ import {
   Body,
   type CheckpointQuery,
   type CheckpointsQuery,
+  type L1SyncPoint,
   L2Block,
+  type L2Frontier,
   type L2Tips,
   type ProposedCheckpointQuery,
 } from '@aztec-labs/stdlib/block';
@@ -39,8 +43,13 @@ import {
   getSlotRangeForEpoch,
 } from '@aztec-labs/stdlib/epoch-helpers';
 import type { L2LogsSource } from '@aztec-labs/stdlib/interfaces/server';
-import type { LogResult, PrivateLogsQuery, PublicLogsQuery } from '@aztec-labs/stdlib/logs';
-import type { InboxBucket, L1ToL2MessageSource, L2ToL1MembershipWitness } from '@aztec-labs/stdlib/messaging';
+import type { LogResult, PrivateLogsQuery, PublicLogsQuery, ResolvedLogsQuery } from '@aztec-labs/stdlib/logs';
+import type {
+  InboxMessagePosition,
+  InboxMessageRange,
+  L1ToL2MessageSource,
+  L2ToL1MembershipWitness,
+} from '@aztec-labs/stdlib/messaging';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import type { BlockHeader, IndexedTxEffect, TxEffectMembershipWitness, TxHash } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
@@ -88,7 +97,7 @@ export abstract class ArchiverDataSourceBase
     this.initialBlockHash = initialBlockHash;
     this.genesisArchiveRoot = genesisArchiveRoot;
 
-    const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, 1);
+    const genesisArchive = new AppendOnlyTreeSnapshot(genesisArchiveRoot, TreeLeafIndex(1));
     this.genesisBlock = new L2Block(
       genesisArchive,
       initialHeader,
@@ -140,6 +149,10 @@ export abstract class ArchiverDataSourceBase
   abstract getL1Timestamp(): Promise<bigint | undefined>;
 
   abstract getL2Tips(): Promise<L2Tips>;
+
+  abstract getL2Frontier(): Promise<L2Frontier>;
+
+  abstract getL1SyncPoint(): Promise<L1SyncPoint | undefined>;
 
   abstract getSyncedL2SlotNumber(): Promise<SlotNumber | undefined>;
 
@@ -284,11 +297,11 @@ export abstract class ArchiverDataSourceBase
     return (await this.stores.blocks.getPendingChainValidationStatus()) ?? { valid: true };
   }
 
-  public getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
+  public getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]> {
     return this.stores.logs.getPrivateLogsByTags(query);
   }
 
-  public getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {
+  public getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]> {
     return this.stores.logs.getPublicLogsByTags(query);
   }
 
@@ -322,24 +335,32 @@ export abstract class ArchiverDataSourceBase
     return this.stores.messages.getL1ToL2MessageIndex(l1ToL2Message);
   }
 
-  public getLatestInboxBucketAtOrBefore(timestamp: bigint): Promise<InboxBucket | undefined> {
-    return this.stores.messages.getLatestInboxBucketAtOrBefore(timestamp);
-  }
-
-  public getInboxBucket(seq: bigint): Promise<InboxBucket | undefined> {
-    return this.stores.messages.getInboxBucket(seq);
-  }
-
-  public getInboxBucketByTotalMsgCount(totalMsgCount: bigint): Promise<InboxBucket | undefined> {
-    return this.stores.messages.getInboxBucketByTotalMsgCount(totalMsgCount);
-  }
-
-  public getL1ToL2MessagesBetweenBuckets(fromExclusive: bigint, toInclusive: bigint): Promise<Fr[]> {
-    return this.stores.messages.getL1ToL2MessagesBetweenBuckets(fromExclusive, toInclusive);
-  }
-
   public getL1ToL2MessagesBetweenLeafCounts(startLeafCount: bigint, endLeafCount: bigint): Promise<Fr[]> {
     return this.stores.messages.getL1ToL2MessagesBetweenLeafCounts(startLeafCount, endLeafCount);
+  }
+
+  public getMessagePosition(totalMessageCount: bigint): Promise<InboxMessagePosition | undefined> {
+    return this.stores.messages.getMessagePosition(totalMessageCount);
+  }
+
+  public getSyncedMessagePosition(): Promise<InboxMessagePosition> {
+    return this.stores.messages.getSyncedMessagePosition();
+  }
+
+  /**
+   * The L1 block the stored message log was last certified against: the block at which the log was found equal to
+   * the Inbox's own position. Undefined while the log holds messages no such comparison has covered.
+   *
+   * Count and rolling hash alone cannot say which L1 chain a log belongs to — a placement-only reorg leaves both
+   * unchanged — so this is the only thing that identifies the reconciled chain. Kept off the RPC surface: it is an
+   * internal syncpoint, not a protocol query.
+   */
+  public getSyncedMessageL1Block(): Promise<L1BlockId | undefined> {
+    return this.stores.messages.getSynchedL1Block();
+  }
+
+  public getL1ToL2MessageRange(startLeafCount: bigint, endLeafCount: bigint): Promise<InboxMessageRange> {
+    return this.stores.messages.getL1ToL2MessageRange(startLeafCount, endLeafCount);
   }
 
   private async getPublishedCheckpointFromCheckpointData(checkpoint: CheckpointData): Promise<PublishedCheckpoint> {
@@ -354,7 +375,12 @@ export abstract class ArchiverDataSourceBase
       checkpoint.checkpointNumber,
       checkpoint.feeAssetPriceModifier,
     );
-    return new PublishedCheckpoint(fullCheckpoint, checkpoint.l1, checkpoint.attestations);
+    return new PublishedCheckpoint(
+      fullCheckpoint,
+      checkpoint.l1,
+      checkpoint.attestations,
+      checkpoint.verbatimAttestations,
+    );
   }
 
   public getBlocksForSlot(slotNumber: SlotNumber): Promise<L2Block[]> {

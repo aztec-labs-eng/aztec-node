@@ -8,6 +8,7 @@ import {
   EpochNumber,
   IndexWithinCheckpoint,
   SlotNumber,
+  TreeLeafIndex,
 } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
@@ -36,7 +37,7 @@ import {
   type ProposedCheckpointData,
 } from '@aztec-labs/stdlib/checkpoint';
 import type { SlasherConfig, WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
-import { type InboxBucket, InboxBucketRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { InboxMessagePrefixRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
   type BlockProposal,
   type CheckpointProposalCore,
@@ -46,11 +47,11 @@ import {
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
-  makeBlockHeader,
   makeBlockProposal,
   makeCheckpointAttestation,
   makeCheckpointHeader,
   makeCheckpointProposal,
+  makeBlockHeader as makeRandomBlockHeader,
   mockTx,
 } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
@@ -66,8 +67,13 @@ import type {
   FullNodeCheckpointsBuilder,
 } from './checkpoint_builder.js';
 import { type ValidatorClientConfig, validatorClientConfigMappings } from './config.js';
+import { type FakeInbox, makeFakeInbox } from './fake_inbox_test_helper.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
-import { type CheckpointProposalValidationFailureReason, ProposalHandler } from './proposal_handler.js';
+import {
+  type BlockProposalObservers,
+  type CheckpointProposalValidationFailureReason,
+  ProposalHandler,
+} from './proposal_handler.js';
 import { ValidatorClient } from './validator.js';
 
 function makeKeyStore(validator: {
@@ -93,6 +99,16 @@ function makeKeyStore(validator: {
   };
 }
 
+/** A block header consuming no Inbox messages (leaf count zero), so the streaming checks see an empty bundle. */
+function makeBlockHeader(...args: Parameters<typeof makeRandomBlockHeader>) {
+  const header = makeRandomBlockHeader(...args);
+  header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(0);
+  return header;
+}
+
+/** The empty Inbox position every chain starts from. */
+const zeroInboxPosition = () => ({ totalMessageCount: 0n, rollingHash: Fr.ZERO });
+
 describe('ValidatorClient', () => {
   let config: ValidatorClientConfig &
     Pick<
@@ -110,6 +126,9 @@ describe('ValidatorClient', () => {
   let p2pClient: MockProxy<P2P>;
   let blockSource: MockProxy<L2BlockSource & L2BlockSink>;
   let l1ToL2MessageSource: MockProxy<L1ToL2MessageSource>;
+  let observedFirstChecks: Parameters<NonNullable<BlockProposalObservers['onFirstInboxMetadataCheck']>>[0][] = [];
+  let observedDecisions: Parameters<NonNullable<BlockProposalObservers['onBlockProposalDecision']>>[0][] = [];
+  let inbox: FakeInbox;
   let epochCache: MockProxy<EpochCache>;
   let checkpointsBuilder: MockProxy<FullNodeCheckpointsBuilder>;
   let worldState: MockProxy<WorldStateSynchronizer>;
@@ -169,6 +188,7 @@ describe('ValidatorClient', () => {
       nowSeconds: 0n,
     });
 
+    inbox = makeFakeInbox();
     blockSource = mock<L2BlockSource & L2BlockSink>();
     blockSource.getBlocks.mockResolvedValue([]);
     blockSource.getCheckpointsData.mockResolvedValue([]);
@@ -225,6 +245,9 @@ describe('ValidatorClient', () => {
 
     keyStoreManager = new KeystoreManager(makeKeyStore({ attester: validatorPrivateKeys.map(key => key as Hex<32>) }));
 
+    observedFirstChecks = [];
+    observedDecisions = [];
+
     validatorClient = (await ValidatorClient.new(
       config,
       checkpointsBuilder,
@@ -233,11 +256,18 @@ describe('ValidatorClient', () => {
       p2pClient,
       blockSource,
       l1ToL2MessageSource,
+      inbox,
       txProvider,
       keyStoreManager,
       blobClient,
       new CheckpointReexecutionTracker(),
       dateProvider,
+      undefined,
+      undefined,
+      {
+        onFirstInboxMetadataCheck: event => observedFirstChecks.push(event),
+        onBlockProposalDecision: event => observedDecisions.push(event),
+      },
     )) as ValidatorClient;
   });
 
@@ -255,6 +285,7 @@ describe('ValidatorClient', () => {
         archive,
         txs,
         EthAddress.fromString(validatorAccounts[0].address),
+        InboxMessagePrefixRef.random(),
         { publishFullTxs: false },
       );
 
@@ -317,6 +348,11 @@ describe('ValidatorClient', () => {
       );
       const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
       const proposal = await makeCheckpointProposal({ lastBlock: {} });
+      // Own attestations are signed through the same deadline-guarded helper as a peer's, so the collection has to
+      // run inside the proposal's slot; the short deadline below is what this case is actually about.
+      dateProvider.setTime(
+        validatorClient.getProposalHandler().getAttestationDeadline(proposal.slotNumber).getTime() - 5_000,
+      );
       // collectAttestations still throws as we don't have a real p2pClient
       await expect(
         validatorClient.collectAttestations(proposal, 3, new Date(dateProvider.now() + 100), CheckpointNumber(1)),
@@ -404,11 +440,23 @@ describe('ValidatorClient', () => {
         ...blockBuildResult.block,
         number: blockNumber,
         header: makeBlockHeader(1, { blockNumber, slotNumber: proposal.slotNumber }),
-        archive: new AppendOnlyTreeSnapshot(proposal.archive, blockNumber),
+        archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
         checkpointNumber: CheckpointNumber(1),
       } as unknown as L2Block;
       const disposeFork = jest.fn();
       blockSource.getBlocksForSlot.mockResolvedValue([checkpointBlock]);
+      // The checkpoint's consumed message bundle derives from the leaf count of the block before its first block, so
+      // that parent must resolve by number; other number queries stay unresolved as in the surrounding setup.
+      blockSource.getBlockData.mockImplementation(query =>
+        Promise.resolve('number' in query && query.number !== blockNumber - 1 ? undefined : parentBlockData),
+      );
+      // With the parent resolvable, the consumed range is read and its ending hash compared with the proposal
+      // header's: serve an empty range ending at that hash so validation reaches the header comparison.
+      l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue({
+        messages: [],
+        start: zeroInboxPosition(),
+        end: { totalMessageCount: 0n, rollingHash: proposalHeader.inboxRollingHash },
+      });
       checkpointsBuilder.getFork.mockResolvedValue({
         [Symbol.asyncDispose]: disposeFork,
         // Match the proposal's expected starting archive so the fork archive check passes and validation
@@ -417,7 +465,7 @@ describe('ValidatorClient', () => {
       } as any);
       mockCheckpointBuilder.completeCheckpoint.mockResolvedValue({
         header: computedHeader,
-        archive: new AppendOnlyTreeSnapshot(proposal.archive, blockNumber),
+        archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
         getCheckpointOutHash: () => Fr.random(),
         blocks: [checkpointBlock],
         number: CheckpointNumber(1),
@@ -459,22 +507,14 @@ describe('ValidatorClient', () => {
           Array.isArray(args) &&
           args[0]?.offenseType === OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
       );
-    // Streaming Inbox: an empty-consumption streaming setup. Proposals reference the genesis Inbox bucket, the
-    // parent block's L1-to-L2 leaf count equals its cumulative total (0), so the derived per-block bundle is empty.
-    const genesisInboxBucket: InboxBucket = {
-      seq: 0n,
-      inboxRollingHash: Fr.ZERO,
-      totalMsgCount: 0n,
-      timestamp: 0n,
-      msgCount: 0,
-      lastMessageIndex: 0n,
-    };
-    const genesisBucketRef = InboxBucketRef.fromBucket(genesisInboxBucket);
+    // Streaming Inbox: an empty-consumption streaming setup. Proposals reference the empty message prefix and the
+    // parent block's L1-to-L2 leaf count is 0, so the derived per-block bundle is empty.
+    const genesisPrefixRef = InboxMessagePrefixRef.empty();
 
     beforeEach(async () => {
       const blockHeader = makeBlockHeader(1, { blockNumber: BlockNumber(100), slotNumber: SlotNumber(100) });
       blockNumber = BlockNumber(blockHeader.globalVariables.blockNumber);
-      proposal = ValidatedBlockProposal(await makeBlockProposal({ blockHeader, bucketRef: genesisBucketRef }));
+      proposal = ValidatedBlockProposal(await makeBlockProposal({ blockHeader, inboxPrefixRef: genesisPrefixRef }));
       // The proposal targets slot 100, which under pipelining is built during the previous slot. Set the
       // wall clock to the start of that build slot (target_slot_start - S), matching how a pipelined
       // proposer is positioned when validating an inbound block proposal. With S - 2E = 0 in this config
@@ -536,7 +576,7 @@ describe('ValidatorClient', () => {
           globalVariables: blockHeader.globalVariables,
           state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
         },
-        archive: new AppendOnlyTreeSnapshot(Fr.random(), blockNumber - 1),
+        archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(blockNumber - 1)),
         blockHash: BlockHash.random(),
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
@@ -548,10 +588,14 @@ describe('ValidatorClient', () => {
       blockSource.getGenesisValues.mockResolvedValue({ genesisArchiveRoot: new Fr(GENESIS_ARCHIVE_ROOT) });
       blockSource.syncImmediate.mockImplementation(() => Promise.resolve());
 
-      // Resolve every Inbox bucket query to the genesis bucket, so streaming checks accept with an empty bundle.
-      l1ToL2MessageSource.getInboxBucket.mockResolvedValue(genesisInboxBucket);
-      l1ToL2MessageSource.getInboxBucketByTotalMsgCount.mockResolvedValue(genesisInboxBucket);
-      l1ToL2MessageSource.getL1ToL2MessagesBetweenBuckets.mockResolvedValue([]);
+      // Resolve every Inbox query to the empty prefix, so streaming checks accept with an empty bundle.
+      l1ToL2MessageSource.getMessagePosition.mockResolvedValue(zeroInboxPosition());
+      l1ToL2MessageSource.getL1ToL2MessageRange.mockResolvedValue({
+        messages: [],
+        start: zeroInboxPosition(),
+        end: zeroInboxPosition(),
+      });
+      l1ToL2MessageSource.getL1ToL2MessagesBetweenLeafCounts.mockResolvedValue([]);
 
       const clonedBlockHeader = blockHeader.clone();
       blockBuildResult = {
@@ -562,7 +606,7 @@ describe('ValidatorClient', () => {
         block: {
           header: clonedBlockHeader,
           body: { txEffects: times(proposal.txHashes.length, () => TxEffect.empty()) },
-          archive: new AppendOnlyTreeSnapshot(proposal.archive, blockNumber),
+          archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
           checkpointNumber: CheckpointNumber(1),
           indexWithinCheckpoint: IndexWithinCheckpoint(0),
         } as unknown as L2Block,
@@ -604,7 +648,7 @@ describe('ValidatorClient', () => {
 
       const terminalGlobals = terminalBlock.blockHeader.globalVariables;
       const laterBlockHeader = makeBlockHeader(2, {
-        lastArchive: new AppendOnlyTreeSnapshot(terminalBlock.archive, terminalBlock.blockNumber),
+        lastArchive: new AppendOnlyTreeSnapshot(terminalBlock.archive, TreeLeafIndex(terminalBlock.blockNumber)),
         blockNumber: BlockNumber(terminalBlock.blockNumber + 1),
         slotNumber: proposal.slotNumber,
         chainId: terminalGlobals.chainId,
@@ -631,7 +675,7 @@ describe('ValidatorClient', () => {
 
       const terminalBlockData = {
         header: terminalBlock.blockHeader,
-        archive: new AppendOnlyTreeSnapshot(terminalBlock.archive, terminalBlock.blockNumber),
+        archive: new AppendOnlyTreeSnapshot(terminalBlock.archive, TreeLeafIndex(terminalBlock.blockNumber)),
         blockHash: BlockHash.random(),
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: terminalBlock.indexWithinCheckpoint,
@@ -644,7 +688,7 @@ describe('ValidatorClient', () => {
         ...blockBuildResult.block,
         header: laterBlock.blockHeader,
         body: { txEffects: times(laterBlock.txHashes.length, () => TxEffect.empty()) },
-        archive: new AppendOnlyTreeSnapshot(laterBlock.archive, laterBlock.blockNumber),
+        archive: new AppendOnlyTreeSnapshot(laterBlock.archive, TreeLeafIndex(laterBlock.blockNumber)),
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: laterBlock.indexWithinCheckpoint,
       } as unknown as L2Block;
@@ -709,7 +753,7 @@ describe('ValidatorClient', () => {
             blockNumber,
             slotNumber: futureSlot,
           }),
-          bucketRef: genesisBucketRef,
+          inboxPrefixRef: genesisPrefixRef,
         }),
       );
 
@@ -755,7 +799,7 @@ describe('ValidatorClient', () => {
           archiveRoot: proposal.archive,
           txHashes: proposal.txHashes,
           signer: selfSigner,
-          bucketRef: genesisBucketRef,
+          inboxPrefixRef: genesisPrefixRef,
         }),
       );
 
@@ -873,6 +917,9 @@ describe('ValidatorClient', () => {
       // Enable blob upload for this attestation
       blobClient.canUpload.mockReturnValue(true);
 
+      // The checkpoint's last block consumed nothing, and the live bucket ends where it starts.
+      inbox.setBuckets([{ seq: 0n, total: 0n, rollingHash: checkpointProposal.checkpointHeader.inboxRollingHash }]);
+
       const attestations = await validatorClient.attestToCheckpointProposal(
         ValidatedCheckpointProposalCore(checkpointProposal),
         sender,
@@ -887,6 +934,150 @@ describe('ValidatorClient', () => {
       validateCheckpointSpy.mockRestore();
     });
 
+    // The Inbox endpoint gate and the archiver sync waits both run right up to the attestation deadline, so a
+    // validation can finish after it. Signing then produces an attestation the committee's timetable has already
+    // closed on; the content verdict is still worth having for telemetry, the signature is not.
+    describe('attestation deadline', () => {
+      /** A checkpoint proposal for the validated slot, with content validation stubbed to pass. */
+      async function setupLateValidation() {
+        const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
+        expect(await validatorClient.validateBlockProposal(proposal, sender)).toBe(true);
+
+        const checkpointProposal = await makeCheckpointProposal({
+          archiveRoot: proposal.archive,
+          checkpointHeader: makeCheckpointHeader(0, { slotNumber: proposal.slotNumber }),
+          lastBlock: {
+            blockHeader: makeBlockHeader(1, { blockNumber: BlockNumber(123), slotNumber: proposal.slotNumber }),
+            indexWithinCheckpoint: IndexWithinCheckpoint(0),
+            txHashes: proposal.txHashes,
+          },
+        });
+        const validateCheckpointSpy = jest
+          .spyOn(validatorClient.getProposalHandler(), 'validateCheckpointProposal')
+          .mockResolvedValue({ isValid: true, checkpointNumber: CheckpointNumber(1) });
+        inbox.setBuckets([{ seq: 0n, total: 0n, rollingHash: checkpointProposal.checkpointHeader.inboxRollingHash }]);
+
+        const deadlineMs = validatorClient.getProposalHandler().getAttestationDeadline(proposal.slotNumber).getTime();
+        const successfulAttestationsSpy = jest.spyOn(validatorClient['metrics'], 'incSuccessfulAttestations');
+        return {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        };
+      }
+
+      /** Spies on the signing step, passing calls through to the real signer. */
+      const spyOnSigning = () => jest.spyOn(validatorClient['validationService'], 'attestToCheckpointProposal');
+
+      it('signs a validation that finishes before the deadline', async () => {
+        const {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        } = await setupLateValidation();
+        dateProvider.setTime(deadlineMs - 1_000);
+
+        const attestations = await validatorClient.attestToCheckpointProposal(
+          ValidatedCheckpointProposalCore(checkpointProposal),
+          sender,
+        );
+
+        expect(attestations).toHaveLength(1);
+        expect(addCheckpointAttestationsSpy).toHaveBeenCalledTimes(1);
+        expect(successfulAttestationsSpy).toHaveBeenCalledWith(1);
+        validateCheckpointSpy.mockRestore();
+      });
+
+      // The proposer's own attestations are signed through the same helper, so the check has to cover that path
+      // too — it does not go through `attestToCheckpointProposal` at all.
+      it('signs its own attestations before the deadline', async () => {
+        const { checkpointProposal, validateCheckpointSpy, deadlineMs } = await setupLateValidation();
+        dateProvider.setTime(deadlineMs - 1_000);
+        expect(await validatorClient.collectOwnAttestations(checkpointProposal, CheckpointNumber(1))).toHaveLength(1);
+        validateCheckpointSpy.mockRestore();
+      });
+
+      it('does not sign its own attestations past the deadline either', async () => {
+        const { checkpointProposal, addCheckpointAttestationsSpy, validateCheckpointSpy, deadlineMs } =
+          await setupLateValidation();
+        const signSpy = spyOnSigning();
+        dateProvider.setTime(deadlineMs + 1_000);
+
+        expect(await validatorClient.collectOwnAttestations(checkpointProposal, CheckpointNumber(1))).toEqual([]);
+        expect(signSpy).not.toHaveBeenCalled();
+        expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+        signSpy.mockRestore();
+        validateCheckpointSpy.mockRestore();
+      });
+
+      it.each([0, 1_000])('does not sign a validation that finishes %ims past the deadline', async pastMs => {
+        const {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        } = await setupLateValidation();
+        const signSpy = spyOnSigning();
+        dateProvider.setTime(deadlineMs + pastMs);
+
+        const attestations = await validatorClient.attestToCheckpointProposal(
+          ValidatedCheckpointProposalCore(checkpointProposal),
+          sender,
+        );
+
+        expect(attestations).toBeUndefined();
+        expect(signSpy).not.toHaveBeenCalled();
+        expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+        expect(successfulAttestationsSpy).not.toHaveBeenCalled();
+        // The proposal was still validated: a late node keeps its own view of the checkpoint for telemetry.
+        expect(validateCheckpointSpy).toHaveBeenCalled();
+        signSpy.mockRestore();
+        validateCheckpointSpy.mockRestore();
+      });
+
+      it('discards a signature that a slow signer produces past the deadline, but still counts the slot as signed', async () => {
+        const {
+          checkpointProposal,
+          addCheckpointAttestationsSpy,
+          validateCheckpointSpy,
+          successfulAttestationsSpy,
+          deadlineMs,
+        } = await setupLateValidation();
+        dateProvider.setTime(deadlineMs - 1_000);
+        const validationService = validatorClient['validationService'];
+        const sign = validationService.attestToCheckpointProposal.bind(validationService);
+        const signSpy = jest
+          .spyOn(validationService, 'attestToCheckpointProposal')
+          .mockImplementationOnce(async (...args) => {
+            const signed = await sign(...args);
+            dateProvider.setTime(deadlineMs + 1_000);
+            return signed;
+          });
+
+        const attestations = await validatorClient.attestToCheckpointProposal(
+          ValidatedCheckpointProposalCore(checkpointProposal),
+          sender,
+        );
+
+        expect(attestations).toBeUndefined();
+        expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+        expect(successfulAttestationsSpy).not.toHaveBeenCalled();
+
+        // The attestors did sign for the slot, so equivocation protection refuses to sign for it again.
+        dateProvider.setTime(deadlineMs - 1_000);
+        expect(
+          await validatorClient.attestToCheckpointProposal(ValidatedCheckpointProposalCore(checkpointProposal), sender),
+        ).toBeUndefined();
+        signSpy.mockRestore();
+        validateCheckpointSpy.mockRestore();
+      });
+    });
+
     it('should not attest to a checkpoint proposal that references a middle block instead of the last', async () => {
       const addCheckpointAttestationsSpy = jest.spyOn(p2pClient, 'addOwnCheckpointAttestations');
 
@@ -895,9 +1086,9 @@ describe('ValidatorClient', () => {
       expect(didValidate).toBe(true);
 
       // Create 3 blocks for the slot, each with a distinct archive root
-      const block1Archive = new AppendOnlyTreeSnapshot(Fr.random(), 1);
-      const block2Archive = new AppendOnlyTreeSnapshot(Fr.random(), 2);
-      const block3Archive = new AppendOnlyTreeSnapshot(Fr.random(), 3);
+      const block1Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1));
+      const block2Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(2));
+      const block3Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(3));
       const blocks = [
         { archive: block1Archive, number: 1 },
         { archive: block2Archive, number: 2 },
@@ -972,6 +1163,109 @@ describe('ValidatorClient', () => {
       ]);
     });
 
+    // The multi-node reorg test reads its verdict off these two observations, so they have to describe what the
+    // validator actually did — including the offense it did or did not raise — rather than what a direct call to
+    // the notifier would report.
+    it('reports a persistent Inbox prefix mismatch as a non-slashable rejection and raises no offense', async () => {
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+      // Every attempt sees a prefix that is present but not the one the proposal signed, so the bounded retries
+      // are spent and the rejection stands.
+      l1ToL2MessageSource.getMessagePosition.mockResolvedValue({
+        totalMessageCount: 0n,
+        rollingHash: new Fr(0xdead),
+      });
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      const decision = observedDecisions.find(event => event.slot === proposal.slotNumber);
+      expect(decision).toMatchObject({
+        accepted: false,
+        reason: 'inbox_prefix_mismatch',
+        slashable: false,
+        escapeHatchOpen: false,
+        proposer: proposal.getSender(),
+      });
+      expect(decision!.blockHash.equals(await proposal.blockHeader.hash())).toBe(true);
+      expect(observedFirstChecks).toEqual([
+        expect.objectContaining({ accepted: false, reason: 'inbox_prefix_mismatch', slot: proposal.slotNumber }),
+      ]);
+      expect(
+        emitSpy.mock.calls.filter(
+          ([event, args]) =>
+            event === WANT_TO_SLASH_EVENT &&
+            (args as { offenseType: OffenseType }[]).some(
+              arg => arg.offenseType === OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL,
+            ),
+        ),
+      ).toEqual([]);
+    });
+
+    it('reports a genuinely invalid proposal as slashable, after the offense has been raised', async () => {
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+      blockBuildResult.block.archive.root = Fr.random();
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: false, reason: 'state_mismatch', slashable: true }),
+      ]);
+      // The observation describes a decision this node had already acted on: the offense was raised first.
+      expect(emitSpy).toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, [
+        {
+          validator: proposal.getSender()!,
+          amount: config.slashBroadcastedInvalidBlockPenalty,
+          offenseType: OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL,
+          epochOrSlot: expect.any(BigInt),
+        },
+      ]);
+    });
+
+    it('classifies a slashable reject as a bad proposal and a non-slashable one as a node issue, never both', async () => {
+      const badProposal = jest.spyOn((validatorClient as any).metrics, 'incFailedAttestationsBadProposal');
+      const nodeIssue = jest.spyOn((validatorClient as any).metrics, 'incFailedAttestationsNodeIssue');
+      const handleSpy = jest.spyOn(validatorClient.getProposalHandler(), 'handleBlockProposal');
+
+      // global_variables_mismatch is slashable but was omitted from the old hand-maintained bad-proposal list, so it
+      // used to be miscounted as a node issue. The metric now branches on the slashable set: a bad proposal, not both.
+      handleSpy.mockResolvedValueOnce({ isValid: false, reason: 'global_variables_mismatch' } as any);
+      await validatorClient.validateBlockProposal(proposal, sender);
+      expect(badProposal).toHaveBeenCalledWith(1, 'global_variables_mismatch', expect.anything());
+      expect(nodeIssue).not.toHaveBeenCalled();
+
+      badProposal.mockClear();
+      nodeIssue.mockClear();
+
+      // timeout is this node's own inability to validate, never the proposer's fault: a node issue, not a bad proposal.
+      handleSpy.mockResolvedValueOnce({ isValid: false, reason: 'timeout' } as any);
+      await validatorClient.validateBlockProposal(proposal, sender);
+      expect(nodeIssue).toHaveBeenCalledWith(1, 'timeout', expect.anything());
+      expect(badProposal).not.toHaveBeenCalled();
+    });
+
+    it('reports an accepted proposal with no reason and no offense', async () => {
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(true);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: true, reason: undefined, slashable: false, escapeHatchOpen: false }),
+      ]);
+    });
+
+    // An open escape hatch rejects a proposal that validated, so the observation has to report the node's answer
+    // rather than the validation verdict it was derived from.
+    it('reports a proposal the escape hatch rejects as not accepted', async () => {
+      epochCache.isEscapeHatchOpenAtSlot.mockResolvedValue(true);
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      expect(observedDecisions).toEqual([
+        expect.objectContaining({ accepted: false, reason: undefined, escapeHatchOpen: true }),
+      ]);
+    });
+
     it('should not validate proposal if a random field in the proposal does not match', async () => {
       // Block builder returns a block with a different archive root
       blockBuildResult.block.archive.root = Fr.random();
@@ -1023,6 +1317,57 @@ describe('ValidatorClient', () => {
 
       expect(isValid).toBe(false);
       expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(true);
+    });
+
+    // Under pipelining the archiver prunes the proposal's parent and inserts the L1 version at the same numbers when a
+    // checkpoint lands on L1 differing from the one this node gossiped. Checks that read the local chain by number then
+    // run against blocks the proposal was never built on, so their verdict says nothing about the proposer.
+    describe('when the parent is pruned during validation', () => {
+      const prunedDecision = expect.objectContaining({
+        accepted: false,
+        reason: 'parent_block_pruned_during_validation',
+        slashable: false,
+      });
+
+      /** Makes re-execution disagree with the proposal, with the parent pruned from the local chain meanwhile. */
+      const pruneParentDuringReexecution = () => {
+        let parentPruned = false;
+        blockSource.getBlockData.mockImplementation(query =>
+          Promise.resolve('number' in query || parentPruned ? undefined : parentBlockData),
+        );
+        blockBuildResult.block.archive.root = Fr.random();
+        mockCheckpointBuilder.buildBlock.mockImplementation(() => {
+          parentPruned = true;
+          return Promise.resolve(blockBuildResult);
+        });
+      };
+
+      it('rejects without raising an offense or marking the slot invalid', async () => {
+        const emitSpy = jest.spyOn(validatorClient, 'emit');
+        pruneParentDuringReexecution();
+
+        const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+        expect(isValid).toBe(false);
+        expect(observedDecisions).toEqual([prunedDecision]);
+        expect(emitSpy).not.toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, expect.anything());
+        expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
+      });
+
+      it('rejects without marking the slot invalid on a non-validator node', async () => {
+        let blockHandler: Parameters<P2P['registerBlockProposalHandler']>[0] | undefined;
+        p2pClient.registerBlockProposalHandler.mockImplementation(handler => {
+          blockHandler = handler;
+        });
+        validatorClient.getProposalHandler().register(p2pClient, true);
+        pruneParentDuringReexecution();
+
+        const accepted = await blockHandler!(proposal, sender);
+
+        expect(accepted).toBe(false);
+        expect(observedDecisions).toEqual([prunedDecision]);
+        expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
+      });
     });
 
     it('emits invalid block proposal offense for oversized proposals, deduped per proposer and slot', async () => {
@@ -1459,7 +1804,7 @@ describe('ValidatorClient', () => {
       const duplicateProposal = ValidatedBlockProposal(
         await makeBlockProposal({
           blockHeader: proposal.blockHeader,
-          bucketRef: proposal.bucketRef,
+          inboxPrefixRef: proposal.inboxPrefixRef,
           txHashes: [txHash, txHash],
           signer,
         }),
@@ -1585,7 +1930,7 @@ describe('ValidatorClient', () => {
             getSlot: () => SlotNumber(parentSlotNumber),
             globalVariables: parentGlobalVariables,
           },
-          archive: new AppendOnlyTreeSnapshot(Fr.random(), parentBlockNumber),
+          archive: new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(parentBlockNumber)),
           blockHash: BlockHash.random(),
           checkpointNumber: parentCheckpointNumber,
           indexWithinCheckpoint: IndexWithinCheckpoint(0), // Parent is first block in checkpoint

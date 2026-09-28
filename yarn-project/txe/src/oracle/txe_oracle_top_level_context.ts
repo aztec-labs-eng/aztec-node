@@ -305,6 +305,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     secret: Fr,
     salt: Fr,
     deployer: AztecAddress,
+    immutablesHash: Fr,
   ): Promise<Fr[]> {
     const { artifact, instance } = await this.artifactResolver.resolveDeployArtifact({
       rootPath: this.rootPath,
@@ -315,6 +316,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
       secret,
       salt,
       deployer,
+      immutablesHash,
     });
 
     // Emit deployment nullifier
@@ -522,7 +524,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     const privateExecutionOracle = new PrivateExecutionOracle({
       argsHash,
       txContext,
-      txRequestSalt: Fr.ZERO,
+      protocolNullifier,
       callContext,
       anchorBlockHeader: blockHeader,
       utilityExecutor,
@@ -999,6 +1001,8 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
         // Execution-tree root (top-level utility run or contract sync): own store; nested frames inherit it.
         transientArrayService: new TransientArrayService(),
       });
+      // Running utility functions of protocol contracts is not currently supported: the callback is built without a
+      // contract address, so it does not serve the protocol oracles.
       const acirExecutionResult = await simulator
         .executeUserCircuit(toACVMWitness(0, call.args), entryPointArtifact, buildACIRCallback(oracle))
         .catch((err: Error) => {

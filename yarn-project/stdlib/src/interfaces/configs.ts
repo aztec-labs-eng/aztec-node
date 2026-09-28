@@ -137,6 +137,13 @@ export interface SequencerConfig {
    * check. Ignored when p2p is disabled by config.
    */
   minPeersToPropose?: number;
+  /**
+   * Allow starting with fewer block opportunities per checkpoint than `MIN_BLOCKS_FOR_INBOX_CATCHUP`, which on a
+   * real network leaves a proposer that can never clear a mandatory streaming-Inbox backlog and loses all of its
+   * slots. Only sandbox, e2e and benchmark fixtures set this: they run one or two blocks per slot against an Inbox
+   * nobody is filling (for testing only).
+   */
+  allowUnsafeInboxCatchupCapacity?: boolean;
 }
 
 export const SequencerConfigSchema = zodFor<SequencerConfig>()(
@@ -191,6 +198,7 @@ export const SequencerConfigSchema = zodFor<SequencerConfig>()(
     skipBroadcastCheckpointProposal: z.boolean().optional(),
     pauseProposingForSlots: z.array(SlotNumberSchema).optional(),
     minPeersToPropose: z.number().nonnegative().optional(),
+    allowUnsafeInboxCatchupCapacity: z.boolean().optional(),
   }),
 );
 

@@ -117,6 +117,10 @@ yarn workspace @aztec/<package-name> test --runInBand
 
 ### Test Logging
 
+Do not assert ordinary log messages, levels, or logger calls in application tests. Test logging only for structured events
+that tests or operators rely on, or for payload size and serialization requirements such as transaction receipt logs.
+Match structured fields rather than message prose.
+
 ```bash
 LOG_LEVEL=verbose yarn workspace @aztec/<package-name> test src/file.test.ts  # Recommended
 LOG_LEVEL="debug; info: json-rpc, simulator" yarn workspace @aztec/<package-name> test src/file.test.ts    # More detail

@@ -109,8 +109,8 @@ export async function computeSiloedPublicInitializationNullifier(contract: Aztec
  *
  * @dev Must match the implementation in noir-protocol-circuits/crates/types/src/hash.nr > compute_protocol_nullifier
  */
-export function computeProtocolNullifier(txRequestHash: Fr): Promise<Fr> {
-  return siloNullifier(AztecAddress.NULL_MSG_SENDER, txRequestHash);
+export function computeProtocolNullifier(protocolNullifierValue: Fr): Promise<Fr> {
+  return siloNullifier(AztecAddress.NULL_MSG_SENDER, protocolNullifierValue);
 }
 
 /** Domain-separates a raw log tag with the given domain separator. */

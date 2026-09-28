@@ -5,6 +5,13 @@ import { parseWithOptionals } from './parse.js';
 import { optional } from './utils.js';
 
 describe('parse', () => {
+  it('applies a wrapped default when a leading arg arrives as null and trailing args are omitted', async () => {
+    // An RPC call that skips a leading argument sends it as null (JSON has no undefined); omitted trailing
+    // args are padded. The wrapped default on the leading arg must still fire through this path.
+    const schema = z.tuple([optional(z.number().default(50)), z.string().optional(), z.number().optional()]);
+    await expect(parseWithOptionals([null], schema)).resolves.toEqual([50, undefined, undefined]);
+  });
+
   it('parses arguments without optionals', async () => {
     await expect(parseWithOptionals([1, 2], z.tuple([z.number(), z.number()]))).resolves.toEqual([1, 2]);
   });

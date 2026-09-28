@@ -47,6 +47,14 @@ export class SentinelStore {
     return currentPerformanceBuffer ? this.deserializePerformance(currentPerformanceBuffer) : [];
   }
 
+  /** Reads epoch performance for multiple validators in input order, using empty arrays for missing records. */
+  public async getEpochPerformanceBatch(
+    addresses: EthAddress[],
+  ): Promise<{ missed: number; total: number; epoch: EpochNumber }[][]> {
+    const buffers = await this.epochMap.getManyAsync(addresses.map(address => address.toString()));
+    return buffers.map(buffer => (buffer ? this.deserializePerformance(buffer) : []));
+  }
+
   private async pushValidatorEpochPerformance({
     who,
     missed,
@@ -105,6 +113,12 @@ export class SentinelStore {
   public async getHistory(address: EthAddress): Promise<ValidatorStatusHistory | undefined> {
     const data = await this.historyMap.getAsync(address.toString());
     return data && this.deserializeHistory(data);
+  }
+
+  /** Reads histories for multiple validators in input order, preserving missing records. */
+  public async getHistoryBatch(addresses: EthAddress[]): Promise<(ValidatorStatusHistory | undefined)[]> {
+    const buffers = await this.historyMap.getManyAsync(addresses.map(address => address.toString()));
+    return buffers.map(buffer => (buffer ? this.deserializeHistory(buffer) : undefined));
   }
 
   private serializePerformance(performance: { missed: number; total: number; epoch: EpochNumber }[]): Buffer {

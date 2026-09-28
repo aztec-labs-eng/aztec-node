@@ -3,7 +3,8 @@
 // 1_000_000_000_000_000_000 Wei = 1 ETH
 export const WEI_CONST = 1_000_000_000n;
 
-// EIP-7825: protocol-level cap on tx gas limit (2^24). Clients reject above this.
+// Our conservative ceiling on the total gas limit of any L1 tx we send (2^24), matching the EIP-7825 cap.
+// EIP-8037 keeps 2^24 as the execution cap but would allow a higher total; we stay at the tighter value.
 export const MAX_L1_TX_LIMIT = 16_777_216n;
 
 // setting a minimum bump percentage to 10% due to geth's implementation

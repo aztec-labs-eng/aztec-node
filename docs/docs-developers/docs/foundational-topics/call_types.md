@@ -159,7 +159,7 @@ This is what the implementation of the check timestamp functionality looks like:
 #include_code check_timestamp /noir-projects/noir-contracts/contracts/standard/public_checks_contract/src/main.nr rust
 
 :::note
-The `PublicChecks` contract is not part of the [aztec-nr repository](https://github.com/AztecProtocol/aztec-nr).
+The `PublicChecks` contract is not part of the [aztec-nr repository](https://github.com/aztec-labs-eng/aztec-nr).
 To add it as a dependency, point to the aztec-packages repository:
 
 ```toml

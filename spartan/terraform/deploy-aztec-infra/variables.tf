@@ -75,6 +75,12 @@ variable "BB_CHONK_VERIFY_BATCH_CONCURRENCY" {
   default     = 6
 }
 
+variable "CLUSTER" {
+  description = "GKE cluster name, independent of the kubeconfig context alias."
+  type        = string
+  default     = "aztec-gke-public"
+}
+
 variable "K8S_CLUSTER_CONTEXT" {
   description = "GKE cluster context"
   type        = string
@@ -396,6 +402,12 @@ variable "P2P_MAX_PENDING_TX_COUNT" {
   default     = null
 }
 
+variable "P2P_MIN_TX_POOL_AGE_MS" {
+  description = "Minimum age of pending transactions before they are eligible for block building"
+  type        = string
+  default     = null
+}
+
 variable "SEQ_SKIP_CHECKPOINT_PUBLISH_PERCENT" {
   description = "Percentage probability of skipping checkpoint publishing"
   type        = string
@@ -706,6 +718,85 @@ variable "BOT_CROSS_CHAIN_PXE_SYNC_CHAIN_TIP" {
   description = "Cross-chain bot PXE sync chain tip mode (e.g., checkpointed)"
   type        = string
   default     = "checkpointed"
+}
+
+variable "BOT_INBOX_MNEMONIC_START_INDEX" {
+  description = "The inbox bot mnemonic start index"
+  type        = number
+  default     = 7300
+}
+
+variable "BOT_INBOX_REPLICAS" {
+  description = "Number of inbox bot replicas to deploy (0 to disable)"
+  type        = number
+  default     = 0
+}
+
+variable "BOT_INBOX_TX_INTERVAL_SECONDS" {
+  description = "Interval in seconds between inbox bot L1 message batches"
+  type        = number
+  default     = 300
+}
+
+variable "BOT_INBOX_FOLLOW_CHAIN" {
+  description = "Inbox bot follow-chain mode (NONE is rejected in inbox mode)"
+  type        = string
+  default     = "PROPOSED"
+}
+
+variable "BOT_INBOX_PXE_SYNC_CHAIN_TIP" {
+  description = "Inbox bot PXE sync chain tip mode (e.g., checkpointed)"
+  type        = string
+  default     = "checkpointed"
+}
+
+variable "BOT_INBOX_L2_PRIVATE_KEY" {
+  description = "Private key for the inbox bot (hex string starting with 0x)"
+  type        = string
+  nullable    = true
+  default     = "0xcafe04"
+}
+
+variable "BOT_INBOX_MESSAGES_PER_BATCH" {
+  description = "How many L1->L2 messages the inbox bot sends per atomic L1 batch"
+  type        = number
+  default     = 4
+}
+
+variable "BOT_INBOX_CONSUME_MODE" {
+  description = "Which L2 domain the inbox bot consumes through: mixed, public, or private"
+  type        = string
+  default     = "mixed"
+}
+
+variable "BOT_INBOX_SATURATION_INTERVAL_SECONDS" {
+  description = "How often the inbox bot runs a full-bucket saturation batch, in seconds; 0 disables it"
+  type        = number
+  default     = 0
+}
+
+variable "BOT_INBOX_SEED_COUNT" {
+  description = "Max L1->L2 messages the inbox bot keeps in flight"
+  type        = number
+  default     = 512
+}
+
+variable "BOT_INBOX_L1_TO_L2_TIMEOUT_SECONDS" {
+  description = "How long the inbox bot waits for an L1->L2 message to complete before writing it off"
+  type        = number
+  default     = 3600
+}
+
+variable "BOT_INBOX_DA_GAS_LIMIT" {
+  description = "DA gas limit for inbox bot transactions (empty to use gas estimation)"
+  type        = string
+  default     = ""
+}
+
+variable "BOT_INBOX_L2_GAS_LIMIT" {
+  description = "L2 gas limit for inbox bot transactions (empty to use gas estimation)"
+  type        = string
+  default     = ""
 }
 
 variable "BOT_DA_GAS_LIMIT" {

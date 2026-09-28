@@ -118,14 +118,21 @@ export class FullProverTest extends SingleNodeTestContext {
 
   override async setup(opts: SingleNodeTestOpts = {}) {
     this.logger.info('Setting up subsystems from fresh');
-    const context = await setup(0, {
-      ...opts,
-      startProverNode: true,
-      coinbase: this.coinbase,
-      fundSponsoredFPC: true,
-      additionallyFundedAccounts: await generateSchnorrAccounts(2),
-      l1ContractsArgs: { realVerifier: this.realProofs },
-    });
+    const context = await setup(
+      0,
+      {
+        ...opts,
+        startProverNode: true,
+        coinbase: this.coinbase,
+        fundSponsoredFPC: true,
+        additionallyFundedAccounts: await generateSchnorrAccounts(2),
+        l1ContractsArgs: { realVerifier: this.realProofs },
+      },
+      // This subclass builds its environment with a bespoke `setup(...)` call rather than the base's,
+      // so it has to repeat the base's PXE default: anchor to the checkpointed tip, since a proposed
+      // block can be pruned and leave the PXE holding an anchor the node will no longer serve.
+      { syncChainTip: 'checkpointed', ...opts.pxeOpts },
+    );
 
     // Reuse the base context machinery (rollup, epoch cache, chain monitor, node tracking, teardown)
     // over the environment built above. Restore the FullProverTest-named logger afterwards, since
@@ -184,7 +191,7 @@ export class FullProverTest extends SingleNodeTestContext {
     const { wallet: provenWallet, teardown: provenTeardown } = await setupPXEAndGetWallet(
       this.aztecNode,
       this.context.aztecNode,
-      { proverEnabled: this.realProofs },
+      { proverEnabled: this.realProofs, syncChainTip: 'checkpointed' },
       undefined,
       'pxe-proven',
     );
@@ -290,7 +297,7 @@ export class FullProverTest extends SingleNodeTestContext {
     }
 
     // Stop the prover node before destroying the BB singleton it proves with.
-    await this.proverAztecNode.stop();
+    await this.proverAztecNode?.stop();
 
     await Barretenberg.destroySingleton();
     await this.bbConfigCleanup?.();

@@ -22,7 +22,7 @@ import type {
   ValidatorClientFullConfig,
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
-import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
+import { InboxMessagePrefixRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockHeader,
@@ -34,7 +34,7 @@ import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { INSERT_SCHEMA_VERSION, SCHEMA_SETUP, SCHEMA_VERSION } from '@aztec-labs/validator-ha-signer/db';
-import { DutyAlreadySignedError } from '@aztec-labs/validator-ha-signer/errors';
+import { DutyAlreadySignedError, SlashingProtectionError } from '@aztec-labs/validator-ha-signer/errors';
 import { createHASigner } from '@aztec-labs/validator-ha-signer/factory';
 import { Pool } from '@aztec-labs/validator-ha-signer/test';
 import type { ValidatorHASigner } from '@aztec-labs/validator-ha-signer/validator-ha-signer';
@@ -45,6 +45,7 @@ import { type PrivateKeyAccount, generatePrivateKey, privateKeyToAccount } from 
 
 import type { FullNodeCheckpointsBuilder } from './checkpoint_builder.js';
 import type { ValidatorClientConfig } from './config.js';
+import { makeFakeInbox } from './fake_inbox_test_helper.js';
 import { HAKeyStore } from './key_store/ha_key_store.js';
 import type { ExtendedValidatorKeyStore } from './key_store/interface.js';
 import { NodeKeystoreAdapter } from './key_store/node_keystore_adapter.js';
@@ -228,6 +229,7 @@ describe('ValidatorClient HA Integration', () => {
       worldState,
       blockSource,
       l1ToL2MessageSource,
+      makeFakeInbox(),
       txProvider,
       epochCache,
       consensusTimetable,
@@ -302,6 +304,9 @@ describe('ValidatorClient HA Integration', () => {
       const archive = Fr.random();
       const txs = await Promise.all([1, 2, 3].map(() => mockTx()));
       const proposerAddress = EthAddress.fromString(validatorAccounts[0].address);
+      // Shared across the validators: a per-validator reference would make each payload different, which the HA
+      // signer reports as a slashing-protection conflict rather than the duplicate duty this test covers.
+      const inboxPrefixRef = InboxMessagePrefixRef.random();
 
       // All 5 validators try to create a block proposal for the same slot simultaneously
       const results = await Promise.allSettled(
@@ -313,6 +318,7 @@ describe('ValidatorClient HA Integration', () => {
             archive,
             txs,
             proposerAddress,
+            inboxPrefixRef,
             {
               publishFullTxs: false,
             },
@@ -336,6 +342,42 @@ describe('ValidatorClient HA Integration', () => {
       expect(successfulResult?.value?.getSender()).toEqual(proposerAddress);
     });
 
+    it('should refuse to sign a second prefix reference for the same block duty', async () => {
+      // After an L1 reorg a peer can rebuild the same block against a different message prefix. The reference is part
+      // of the signed payload, so that second attempt is a conflicting signature for a duty already signed, not a
+      // duplicate of it.
+      const blockHeader = makeBlockHeader(1);
+      const indexWithinCheckpoint = IndexWithinCheckpoint(0);
+      const archive = Fr.random();
+      const txs = await Promise.all([1, 2, 3].map(() => mockTx()));
+      const proposerAddress = EthAddress.fromString(validatorAccounts[0].address);
+
+      const first = await validators[0].createBlockProposal(
+        blockHeader,
+        CheckpointNumber(1),
+        indexWithinCheckpoint,
+        archive,
+        txs,
+        proposerAddress,
+        new InboxMessagePrefixRef(new Fr(1n)),
+        { publishFullTxs: false },
+      );
+      expect(first.getSender()).toEqual(proposerAddress);
+
+      await expect(
+        validators[1].createBlockProposal(
+          blockHeader,
+          CheckpointNumber(1),
+          indexWithinCheckpoint,
+          archive,
+          txs,
+          proposerAddress,
+          new InboxMessagePrefixRef(new Fr(2n)),
+          { publishFullTxs: false },
+        ),
+      ).rejects.toThrow(SlashingProtectionError);
+    });
+
     it('should allow different validators to create proposals for different slots', async () => {
       const proposerAddress = EthAddress.fromString(validatorAccounts[0].address);
       const txs = await Promise.all([1, 2, 3].map(() => mockTx()));
@@ -352,6 +394,7 @@ describe('ValidatorClient HA Integration', () => {
             archive,
             txs,
             proposerAddress,
+            InboxMessagePrefixRef.random(),
             { publishFullTxs: false },
           );
         }),
@@ -369,6 +412,10 @@ describe('ValidatorClient HA Integration', () => {
       // Create checkpoint proposal using the test helper (without HA signing)
       // This bypasses HA signing for proposal creation - we only want to test attestation HA coordination
       const testSlot = 200;
+      // Signing is gated on the slot's attestation deadline, so the clock has to sit inside the slot being
+      // attested to rather than at real wall time, which is far past a slot derived from genesis time 0.
+      const { l1GenesisTime, slotDuration } = epochCache.getL1Constants();
+      dateProvider.setTime(Number((l1GenesisTime + BigInt(testSlot) * BigInt(slotDuration)) * 1000n));
       const txHashes = [0, 1, 2, 3, 4, 5].map(() => TxHash.random());
       const checkpointProposal = await makeCheckpointProposal({
         checkpointHeader: makeCheckpointHeader(testSlot),

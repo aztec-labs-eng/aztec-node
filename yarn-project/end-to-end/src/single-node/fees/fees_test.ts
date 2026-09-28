@@ -350,7 +350,7 @@ export class FeesTest extends SingleNodeTestContext {
 
       // @todo @lherskind As we deal with #13601
       // Right now the value is from `FeeLib.sol`
-      const L1_GAS_PER_EPOCH_VERIFIED = 3600000n;
+      const L1_GAS_PER_EPOCH_VERIFIED = 4000000n;
 
       // We round up
       const mulDiv = (a: bigint, b: bigint, c: bigint) => (a * b) / c + ((a * b) % c > 0n ? 1n : 0n);
@@ -381,13 +381,14 @@ export class FeesTest extends SingleNodeTestContext {
       return feeHeader.manaUsed * feeHeader.proverCost;
     };
 
-    // RewardLib computes sequencerFee = checkpointFee - burn - proverFee where burn = manaUsed * congestionCost.
-    // The fixture's typical case keeps congestionCost at zero, but reading it explicitly avoids latent bugs
-    // when test load changes excess mana.
+    // RewardLib computes sequencerFee = checkpointFee - protocolFee - proverFee where
+    // protocolFee = manaUsed * feeHeader.protocolFee. The fixture's typical case keeps the
+    // protocol fee at zero, but reading it explicitly avoids latent bugs when test load changes
+    // excess mana.
     this.getCommittedBurn = async (blockNumber: BlockNumber) => {
       const block = await this.aztecNode.getBlock(blockNumber);
       const feeHeader = await this.rollupContract.getFeeHeader(BigInt(block!.checkpointNumber));
-      return feeHeader.manaUsed * feeHeader.congestionCost;
+      return feeHeader.manaUsed * feeHeader.protocolFee;
     };
   }
 

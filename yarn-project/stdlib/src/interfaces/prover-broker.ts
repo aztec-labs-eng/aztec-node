@@ -35,6 +35,8 @@ export interface ProvingJobProducer {
 
 export type ProvingJobFilter = {
   allowList: ProvingRequestType[];
+  /** Whether to acquire new work. Set false to report progress or results while draining. Defaults to true. */
+  allowNewJobs?: boolean;
 };
 
 export type GetProvingJobResponse = {

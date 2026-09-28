@@ -4,6 +4,7 @@ import {
   NULLIFIER_TREE_HEIGHT,
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
+import { TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import { BlobDeserializationError } from '../errors.js';
@@ -13,10 +14,10 @@ import { BlobDeserializationError } from '../errors.js';
 export const TOTAL_MANA_USED_BIT_SIZE = 48n;
 
 export interface BlockEndStateField {
-  l1ToL2MessageNextAvailableLeafIndex: number;
-  noteHashNextAvailableLeafIndex: number;
-  nullifierNextAvailableLeafIndex: number;
-  publicDataNextAvailableLeafIndex: number;
+  l1ToL2MessageNextAvailableLeafIndex: TreeLeafIndex;
+  noteHashNextAvailableLeafIndex: TreeLeafIndex;
+  nullifierNextAvailableLeafIndex: TreeLeafIndex;
+  publicDataNextAvailableLeafIndex: TreeLeafIndex;
   totalManaUsed: bigint;
 }
 
@@ -37,17 +38,19 @@ export function decodeBlockEndStateField(field: Fr): BlockEndStateField {
   let value = field.toBigInt();
   const totalManaUsed = value & (2n ** TOTAL_MANA_USED_BIT_SIZE - 1n);
   value >>= TOTAL_MANA_USED_BIT_SIZE;
-  const publicDataNextAvailableLeafIndex = Number(value & (2n ** BigInt(PUBLIC_DATA_TREE_HEIGHT) - 1n));
+  const publicDataNextAvailableLeafIndex = TreeLeafIndex.fromBigInt(
+    value & (2n ** BigInt(PUBLIC_DATA_TREE_HEIGHT) - 1n),
+  );
   value >>= BigInt(PUBLIC_DATA_TREE_HEIGHT);
-  const nullifierNextAvailableLeafIndex = Number(value & (2n ** BigInt(NULLIFIER_TREE_HEIGHT) - 1n));
+  const nullifierNextAvailableLeafIndex = TreeLeafIndex.fromBigInt(value & (2n ** BigInt(NULLIFIER_TREE_HEIGHT) - 1n));
   value >>= BigInt(NULLIFIER_TREE_HEIGHT);
-  const noteHashNextAvailableLeafIndex = Number(value & (2n ** BigInt(NOTE_HASH_TREE_HEIGHT) - 1n));
+  const noteHashNextAvailableLeafIndex = TreeLeafIndex.fromBigInt(value & (2n ** BigInt(NOTE_HASH_TREE_HEIGHT) - 1n));
   value >>= BigInt(NOTE_HASH_TREE_HEIGHT);
 
   if (value > 2n ** BigInt(L1_TO_L2_MSG_TREE_HEIGHT) - 1n) {
     throw new BlobDeserializationError(`Incorrect encoding of blob fields: invalid block end state field.`);
   }
-  const l1ToL2MessageNextAvailableLeafIndex = Number(value);
+  const l1ToL2MessageNextAvailableLeafIndex = TreeLeafIndex.fromBigInt(value);
 
   return {
     l1ToL2MessageNextAvailableLeafIndex,

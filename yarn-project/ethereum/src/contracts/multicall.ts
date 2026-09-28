@@ -88,10 +88,13 @@ export type SimulateAggregate3EntryResult = {
  * - `decoded`: eth_simulateV1 ran and produced a per-entry Result[]. Use `entries` for filtering.
  * - `fallback`: the node does not support eth_simulateV1; `fallbackGasEstimate` was returned and no
  *    per-entry info is available. Caller should send the bundle as-is with a conservative gas cap.
+ *
+ * `gasUsed` and the optional `maxUsedGas` both refer to the whole aggregate3 transaction, not to an
+ * individual entry. `maxUsedGas` is absent when the node does not report it.
  */
 export type SimulateAggregate3Result =
-  | { kind: 'decoded'; entries: SimulateAggregate3EntryResult[]; gasUsed: bigint }
-  | { kind: 'fallback'; gasUsed: bigint };
+  | { kind: 'decoded'; entries: SimulateAggregate3EntryResult[]; gasUsed: bigint; maxUsedGas?: bigint }
+  | { kind: 'fallback'; gasUsed: bigint; maxUsedGas?: bigint };
 
 export type SimulateAggregate3Options = {
   blockOverrides?: BlockOverrides<bigint, number>;
@@ -161,7 +164,7 @@ export class Multicall3 {
     );
 
     if (simResult.result === '0x') {
-      return { kind: 'fallback', gasUsed: simResult.gasUsed };
+      return { kind: 'fallback', gasUsed: simResult.gasUsed, maxUsedGas: simResult.maxUsedGas };
     }
 
     const decoded = decodeFunctionResult({
@@ -179,7 +182,7 @@ export class Multicall3 {
       return { success: false, returnData: entry.returnData, revertReason };
     });
 
-    return { kind: 'decoded', entries, gasUsed: simResult.gasUsed };
+    return { kind: 'decoded', entries, gasUsed: simResult.gasUsed, maxUsedGas: simResult.maxUsedGas };
   }
 
   /**

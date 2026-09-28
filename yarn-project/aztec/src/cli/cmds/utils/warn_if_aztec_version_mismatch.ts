@@ -6,25 +6,32 @@ import { join } from 'path';
 
 import { collectCrateDirs } from './collect_crate_dirs.js';
 
-/** Returns true if the given git URL points to the AztecProtocol/aztec-nr repository. */
-function isAztecNrGitUrl(gitUrl: string): boolean {
+const AZTEC_NR_REPO = 'aztec-labs-eng/aztec-nr';
+// Where aztec-nr was published before it moved to the labs organisation. Its tags stop at v5, so a
+// project still pointing there cannot be fixed by bumping the tag alone.
+const PREVIOUS_AZTEC_NR_REPO = 'AztecProtocol/aztec-nr';
+
+/** Returns the `owner/name` of a github.com git URL, or undefined for anything else. */
+function githubRepoOf(gitUrl: string): string | undefined {
   let url: URL;
   try {
     url = new URL(gitUrl);
   } catch {
-    return false;
+    return undefined;
   }
   if (url.hostname !== 'github.com') {
-    return false;
+    return undefined;
   }
-  const repoPath = url.pathname
+  return url.pathname
     .replace(/^\//, '')
     .replace(/\.git$/, '')
     .replace(/\/$/, '');
-  return repoPath === 'AztecProtocol/aztec-nr';
 }
 
-/** Warns if any aztec-nr git dependency in a crate's Nargo.toml has a tag that doesn't match the CLI version. */
+/**
+ * Warns if any aztec-nr git dependency in a crate's Nargo.toml has a tag that doesn't match the CLI version, or still
+ * points at the repository aztec-nr was published from before it moved.
+ */
 export async function warnIfAztecVersionMismatch(log: LogFn, cliVersion?: string): Promise<void> {
   const version = cliVersion ?? getPackageVersion();
   if (version === DEV_VERSION) {
@@ -33,6 +40,7 @@ export async function warnIfAztecVersionMismatch(log: LogFn, cliVersion?: string
 
   const expectedTag = `v${version}`;
   const mismatches: { file: string; depName: string; tag: string }[] = [];
+  const movedRepoDeps: { file: string; depName: string }[] = [];
 
   const crateDirs = await collectCrateDirs('.', { skipGitDeps: true });
 
@@ -53,14 +61,24 @@ export async function warnIfAztecVersionMismatch(log: LogFn, cliVersion?: string
       if (!dep || typeof dep !== 'object' || typeof dep.git !== 'string' || typeof dep.tag !== 'string') {
         continue;
       }
-      // Only flag deps that are sourced from the aztec-nr repo.
-      if (!isAztecNrGitUrl(dep.git)) {
-        continue;
-      }
-      if (dep.tag !== expectedTag) {
+      const repo = githubRepoOf(dep.git);
+      if (repo === PREVIOUS_AZTEC_NR_REPO) {
+        movedRepoDeps.push({ file: tomlPath, depName });
+      } else if (repo === AZTEC_NR_REPO && dep.tag !== expectedTag) {
         mismatches.push({ file: tomlPath, depName, tag: dep.tag });
       }
     }
+  }
+
+  if (movedRepoDeps.length > 0) {
+    const details = movedRepoDeps.map(m => `  ${m.file} — ${m.depName}`).join('\n');
+    log(
+      `WARNING: aztec-nr has moved to https://github.com/${AZTEC_NR_REPO}.\n` +
+        `The following dependencies still point at https://github.com/${PREVIOUS_AZTEC_NR_REPO}, which has no tags ` +
+        `for this version of Aztec:\n` +
+        `${details}\n\n` +
+        `Change their \`git\` field to "https://github.com/${AZTEC_NR_REPO}" and their \`tag\` to "${expectedTag}".`,
+    );
   }
 
   if (mismatches.length > 0) {

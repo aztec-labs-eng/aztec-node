@@ -23,6 +23,54 @@ export function describeAztecMap(
       await store.delete();
     });
 
+    it('bulk reads preserve order, missing values, duplicates and map isolation', async () => {
+      if (!('getManyAsync' in map)) {
+        throw new Error('Map does not implement bulk reads');
+      }
+      await map.set('a', 'A');
+      await map.set('b', 'B');
+      await store.openMap<string, string>('other').set('a', 'other');
+      expect(await map.getManyAsync(['b', 'missing', 'a', 'b'])).toEqual(['B', undefined, 'A', 'B']);
+      expect(await map.getManyAsync([])).toEqual([]);
+    });
+
+    it('bulk reads preserve positions across large key lists', async () => {
+      if (!('getManyAsync' in map)) {
+        throw new Error('Map does not implement bulk reads');
+      }
+      await map.set('first', 'A');
+      await map.set('last', 'B');
+      const missing = Array.from({ length: 901 }, (_, index) => `missing-${index}`);
+      expect(await map.getManyAsync(['first', ...missing, 'last', 'first'])).toEqual([
+        'A',
+        ...missing.map(() => undefined),
+        'B',
+        'A',
+      ]);
+    });
+
+    it('bulk reads observe transaction writes and deletions', async () => {
+      if (!('transactionAsync' in store) || !('getManyAsync' in map)) {
+        throw new Error('Store does not implement async bulk reads');
+      }
+      const bulkMap = map;
+      await map.set('a', 'old');
+      await map.set('b', 'deleted');
+      await map.set('c', 'unchanged');
+      await store.transactionAsync(async () => {
+        await bulkMap.set('a', 'new');
+        await bulkMap.delete('b');
+        expect(await bulkMap.getManyAsync(['a', 'b', 'c', 'missing', 'a'])).toEqual([
+          'new',
+          undefined,
+          'unchanged',
+          undefined,
+          'new',
+        ]);
+      });
+      expect(await bulkMap.getManyAsync(['a', 'b', 'c'])).toEqual(['new', undefined, 'unchanged']);
+    });
+
     async function get(key: Key, sut: AztecAsyncMap<any, any> | AztecMap<any, any> = map) {
       return isSyncStore(store) && !forceAsync
         ? (sut as AztecMap<any, any>).get(key)
@@ -45,6 +93,12 @@ export function describeAztecMap(
       return isSyncStore(store) && !forceAsync
         ? await toArray((map as AztecMap<any, any>).values())
         : await toArray((map as AztecAsyncMap<any, any>).valuesAsync());
+    }
+
+    async function valuesIn(range?: Range<Key>, sut: AztecAsyncMap<any, any> | AztecMap<any, any> = map) {
+      return isSyncStore(store) && !forceAsync
+        ? await toArray((sut as AztecMap<any, any>).values(range))
+        : await toArray((sut as AztecAsyncMap<any, any>).valuesAsync(range));
     }
 
     async function keys(range?: Range<Key>, sut: AztecAsyncMap<any, any> | AztecMap<any, any> = map) {
@@ -194,5 +248,21 @@ export function describeAztecMap(
         expect(await keys({ end: b, reverse: true })).toEqual([b, a]);
       });
     }
+
+    it('bounds a range over tuple keys by a prefix of them', async () => {
+      await map.set(['a', 1, 0], 'a-1-0');
+      await map.set(['a', 1, 1], 'a-1-1');
+      await map.set(['a', 2, 0], 'a-2-0');
+      await map.set(['b', 1, 0], 'b-1-0');
+
+      // A prefix sorts immediately before every key extending it, so it brackets a whole group.
+      expect(await valuesIn({ start: ['a'], end: ['b'] })).toEqual(['a-1-0', 'a-1-1', 'a-2-0']);
+      expect(await valuesIn({ start: ['a', 1], end: ['a', 2] })).toEqual(['a-1-0', 'a-1-1']);
+      expect(await valuesIn({ start: ['a', 2] })).toEqual(['a-2-0', 'b-1-0']);
+
+      // Sorting before its extensions also means a prefix does not include them as a reverse start.
+      // The boundary for "everything at or below group N" is therefore the prefix of group N + 1.
+      expect(await valuesIn({ start: ['a'], end: ['a', 3], reverse: true, limit: 1 })).toEqual(['a-2-0']);
+    });
   });
 }

@@ -5,6 +5,7 @@ import { BufferReader, serializeToBuffer, serializeToFields } from '@aztec-labs/
 import type { FieldsOf } from '@aztec-labs/foundation/types';
 
 import { AztecAddress } from '../aztec-address/index.js';
+import { computeProtocolNullifier } from '../hash/hash.js';
 import { FunctionData } from './function_data.js';
 import { TxContext } from './tx_context.js';
 
@@ -22,7 +23,12 @@ export class TxRequest {
     public txContext: TxContext,
     /** Function data representing the function to call. */
     public functionData: FunctionData,
-    /** A salt to make the hash difficult to predict. The hash is used as the first nullifier if there is no nullifier emitted throughout the tx. */
+    /**
+     * A fresh random field drawn by the wallet, acting as the tx request's nonce. With `origin`, `chainId` and `version`
+     * it is the whole preimage of the protocol nullifier, so it keeps that nullifier unpredictable and unique. The kernel
+     * cannot check that it is random; draw it fresh for every transaction, since two requests with the same origin and
+     * salt are mutually exclusive.
+     */
     public salt: Fr,
   ) {}
   // docs:end:constructor
@@ -41,6 +47,26 @@ export class TxRequest {
    */
   toBuffer() {
     return serializeToBuffer([...TxRequest.getFields(this)]);
+  }
+
+  /**
+   * The unsiloed value of the protocol nullifier: the transaction's nonce commitment.
+   * The preimage is only `origin`, `chainId`, `version` and `salt`. Gas settings and the first call's arguments are
+   * left out so that a fee bump or a cancellation that reuses the salt produces the same nullifier.
+   */
+  computeProtocolNullifierValue(): Promise<Fr> {
+    return poseidon2HashWithSeparator(
+      [this.origin.toField(), this.txContext.chainId, this.txContext.version, this.salt],
+      DomainSeparator.PROTOCOL_NULLIFIER,
+    );
+  }
+
+  /**
+   * The protocol nullifier as inserted into the nullifier tree, and as every private call receives it in
+   * `PrivateCircuitPublicInputs.protocolNullifier`: the value above siloed under `NULL_MSG_SENDER`.
+   */
+  async computeProtocolNullifier(): Promise<Fr> {
+    return computeProtocolNullifier(await this.computeProtocolNullifierValue());
   }
 
   toFields(): Fr[] {
@@ -65,10 +91,6 @@ export class TxRequest {
       reader.readObject(FunctionData),
       Fr.fromBuffer(reader),
     );
-  }
-
-  hash() {
-    return poseidon2HashWithSeparator(this.toFields(), DomainSeparator.TX_REQUEST);
   }
 
   static empty() {

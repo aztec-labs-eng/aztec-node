@@ -1,7 +1,7 @@
 import { keccak256String } from '@aztec-labs/foundation/crypto/keccak';
 
-import { ORACLE_REGISTRY } from '../contract_function_simulator/index.js';
-import { ORACLE_INTERFACE_HASH } from '../oracle_version.js';
+import { ORACLE_REGISTRY, PROTOCOL_ORACLE_REGISTRY } from '../contract_function_simulator/index.js';
+import { ORACLE_INTERFACE_HASH, PROTOCOL_ORACLE_INTERFACE_HASH } from '../oracle_version.js';
 import { getOracleRegistrySignature } from './oracle_version_helpers.js';
 
 /**
@@ -25,4 +25,20 @@ function assertOracleInterfaceMatches(): void {
   }
 }
 
+/**
+ * Verifies that the interface of the oracles served to the protocol contracts matches the expected interface hash.
+ *
+ * Protocol contracts are only redeployed on a protocol upgrade, so unlike the Aztec.nr oracle interface this one cannot
+ * change in between: a mismatch means deployed protocol contracts would stop working.
+ */
+function assertProtocolOracleInterfaceMatches(): void {
+  const protocolOracleInterfaceHash = keccak256String(getOracleRegistrySignature(PROTOCOL_ORACLE_REGISTRY));
+  if (protocolOracleInterfaceHash !== PROTOCOL_ORACLE_INTERFACE_HASH) {
+    throw new Error(
+      `The protocol oracle interface has changed, which breaks the deployed protocol contracts. If this ships with a protocol upgrade that redeploys them, update PROTOCOL_ORACLE_INTERFACE_HASH to ${protocolOracleInterfaceHash} in pxe/src/oracle_version.ts and set PROTOCOL_ORACLE_VERSION to the new protocol version. Otherwise keep the interface as it was, adapting how PROTOCOL_ORACLE_REGISTRY serves it to the changed oracle handlers.`,
+    );
+  }
+}
+
 assertOracleInterfaceMatches();
+assertProtocolOracleInterfaceMatches();

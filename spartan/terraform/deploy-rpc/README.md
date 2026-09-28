@@ -10,11 +10,9 @@ Shared modules:
 
 Environments. This is what you want to `terraform apply`
 - `environments/testnet`: testnet RPC
-- `environments/mainnet`: mainnet RPC following canonical & v4
+- `environments/mainnet`: mainnet RPC following canonical
 
-Set the Aztec images in each environment with `V4_AZTEC_DOCKER_IMAGE` and `CANONICAL_AZTEC_DOCKER_IMAGE`. The canonical RPC block is currently commented out, but it already references the canonical image variable for when that route is enabled. Each RPC entry passes its image directly to the node module.
-
-GitHub Actions can deploy these environments through `.github/workflows/deploy-rpc.yml`. Call it with `rpc_environment` set to `testnet` or `mainnet`, and `v4_aztec_docker_image` set to the image to deploy.
+Set the Aztec image in each environment with `CANONICAL_AZTEC_DOCKER_IMAGE`. Each RPC entry passes its image directly to the node module.
 
 RPC node environment is configured through each RPC entry's single `env` map. Common values such as `NETWORK`, `L1_CHAIN_ID`, and `RPC_MAX_BODY_SIZE` live in the environment-level `local.env`; rollup-specific values such as `ROLLUP_VERSION` are merged per RPC.
 

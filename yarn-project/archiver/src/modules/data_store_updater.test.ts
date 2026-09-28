@@ -1,6 +1,20 @@
-import { CONTRACT_CLASS_LOG_SIZE_IN_FIELDS, CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE } from '@aztec-labs/constants';
-import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import {
+  CONTRACT_CLASS_LOG_SIZE_IN_FIELDS,
+  CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE,
+  CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE,
+  MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS,
+} from '@aztec-labs/constants';
+import {
+  BlockNumber,
+  CheckpointNumber,
+  IndexWithinCheckpoint,
+  SlotNumber,
+  TreeLeafIndex,
+} from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { toArray } from '@aztec-labs/foundation/iterable';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { ContractClassPublishedEvent } from '@aztec-labs/protocol-contracts/class-registry';
@@ -9,8 +23,9 @@ import { BundledProtocolContractsProvider } from '@aztec-labs/protocol-contracts
 import { getPublishableStandardContracts } from '@aztec-labs/standard-contracts';
 import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
-import { ContractClassLog, ContractClassLogFields, PrivateLog } from '@aztec-labs/stdlib/logs';
+import { CommitteeAttestationsAndSigners, GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import { ContractClassLog, ContractClassLogFields, PrivateLog, PublicLog } from '@aztec-labs/stdlib/logs';
+import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import '@aztec-labs/stdlib/testing/jest';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
@@ -19,10 +34,22 @@ import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
+import {
+  InboxConsumptionRewindsError,
+  InboxMessagePrefixChangedError,
+  InboxPrefixMismatchError,
+  InboxPrefixNotSyncedError,
+  NoProposedCheckpointToPromoteError,
+} from '../errors.js';
 import { registerProtocolContracts, registerStandardContracts } from '../factory.js';
 import { type ArchiverDataStores, createArchiverDataStores } from '../store/data_stores.js';
-import { L2TipsCache } from '../store/l2_tips_cache.js';
-import { makeCheckpoint, makePublishedCheckpoint } from '../test/mock_structs.js';
+import { L2FrontierCache } from '../store/l2_frontier_cache.js';
+import {
+  makeCheckpoint,
+  makeInboxMessages,
+  makeL1PublishedData,
+  makePublishedCheckpoint,
+} from '../test/mock_structs.js';
 import { ArchiverDataStoreUpdater } from './data_store_updater.js';
 
 /**
@@ -53,6 +80,30 @@ function buildProtocolContractClassLog(contractClass: {
   );
 }
 
+/** Fields a ContractClassPublished log leaves for the bytecode encoding (length prefix included) after tag and metadata. */
+const BYTECODE_ENCODING_FIELDS = CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - 5;
+
+/**
+ * Builds a publication-looking ContractClassPublished log whose bytecode encoding declares
+ * `declaredByteLength` bytes but carries an all-zero payload.
+ */
+function buildContractClassPublishedLog(declaredByteLength: number, classId: Fr): ContractClassLog {
+  const fields = [
+    new Fr(CONTRACT_CLASS_PUBLISHED_MAGIC_VALUE),
+    classId,
+    new Fr(1), // version
+    Fr.random(), // artifactHash
+    Fr.random(), // privateFunctionsRoot
+    new Fr(declaredByteLength),
+  ];
+  const padded = [...fields, ...Array(CONTRACT_CLASS_LOG_SIZE_IN_FIELDS - fields.length).fill(Fr.ZERO)];
+  return new ContractClassLog(
+    ProtocolContractAddress.ContractClassRegistry,
+    new ContractClassLogFields(padded),
+    fields.length,
+  );
+}
+
 /** Loads the sample ContractClassPublished event payload from protocol-contracts fixtures. */
 function getSampleContractClassPublishedEventPayload(): Buffer {
   const fixturePath = resolve(
@@ -69,6 +120,35 @@ function getSampleContractInstancePublishedEventPayload(): Buffer {
     '../../../protocol-contracts/fixtures/ContractInstancePublishedEventData.hex',
   );
   return Buffer.from(readFileSync(fixturePath).toString(), 'hex');
+}
+
+/** Builds a ContractInstanceUpdated public log as emitted by the contract instance registry. */
+function buildContractInstanceUpdatedLog(
+  address: AztecAddress,
+  previousClassId: Fr,
+  newClassId: Fr,
+  timestampOfChange: bigint,
+): PublicLog {
+  return new PublicLog(ProtocolContractAddress.ContractInstanceRegistry, [
+    new Fr(CONTRACT_INSTANCE_UPDATED_MAGIC_VALUE),
+    address.toField(),
+    previousClassId,
+    newClassId,
+    new Fr(timestampOfChange),
+  ]);
+}
+
+/** The reference every block consuming no Inbox messages carries. */
+const emptyPrefix = InboxMessagePrefixRef.empty();
+
+/**
+ * A random block whose header consumes no Inbox messages (leaf count zero), so the proposed-block insertion guard
+ * accepts it against a message store that has synced nothing.
+ */
+async function randomBlock(blockNumber: number, opts: Parameters<typeof L2Block.random>[1] = {}): Promise<L2Block> {
+  const block = await L2Block.random(BlockNumber(blockNumber), opts);
+  block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(0);
+  return block;
 }
 
 describe('ArchiverDataStoreUpdater', () => {
@@ -96,14 +176,14 @@ describe('ArchiverDataStoreUpdater', () => {
   describe('contract data', () => {
     it('stores contract class and instance data when blocks are added via addProposedBlock', async () => {
       // Create block with contract class and instance logs
-      const block = await L2Block.random(BlockNumber(1), {
+      const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
       block.body.txEffects[0].contractClassLogs = [contractClassLog];
       block.body.txEffects[0].privateLogs = [PrivateLog.fromBuffer(getSampleContractInstancePublishedEventPayload())];
 
-      await updater.addProposedBlock(block);
+      await updater.addProposedBlock(block, emptyPrefix);
 
       // Verify contract class was stored
       const retrievedClass = await store.contractClasses.getContractClass(contractClassId);
@@ -131,7 +211,7 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.contractClasses.getContractClass(protocolClassId)).toBeDefined();
 
       // Build a block whose tx emits a ContractClassPublished log for the bundled protocol class id.
-      const block = await L2Block.random(BlockNumber(1), {
+      const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
@@ -145,7 +225,7 @@ describe('ArchiverDataStoreUpdater', () => {
       ).toBe(true);
 
       // Adding the block must not throw, and the protocol class must remain queryable afterwards.
-      await expect(updater.addProposedBlock(block)).resolves.not.toThrow();
+      await expect(updater.addProposedBlock(block, emptyPrefix)).resolves.not.toThrow();
       expect(await store.contractClasses.getContractClass(protocolClassId)).toBeDefined();
     });
 
@@ -177,7 +257,7 @@ describe('ArchiverDataStoreUpdater', () => {
 
     it('removes contract class and instance data when blocks are pruned via setCheckpointData', async () => {
       // First, add a local provisional block with contract data
-      const localBlock = await L2Block.random(BlockNumber(1), {
+      const localBlock = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
@@ -187,7 +267,7 @@ describe('ArchiverDataStoreUpdater', () => {
         PrivateLog.fromBuffer(getSampleContractInstancePublishedEventPayload()),
       ];
 
-      await updater.addProposedBlock(localBlock);
+      await updater.addProposedBlock(localBlock, emptyPrefix);
 
       // Verify contract data was stored
       const timestamp = localBlock.header.globalVariables.timestamp + 1n;
@@ -195,7 +275,7 @@ describe('ArchiverDataStoreUpdater', () => {
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
 
       // Now create a checkpoint with a conflicting block (same slot but different archive root)
-      const conflictingBlock = await L2Block.random(BlockNumber(1), {
+      const conflictingBlock = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100), // Same slot as local block
@@ -217,7 +297,7 @@ describe('ArchiverDataStoreUpdater', () => {
     it('reconciles a local proposed block with an L1 checkpoint at the same block number but different slot', async () => {
       // Regression for issue fixed at https://github.com/AztecProtocol/aztec-packages/pull/23461
       // Local proposed block 1 at slot 125, containing a deployed contract instance.
-      const localBlock = await L2Block.random(BlockNumber(1), {
+      const localBlock = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(125),
@@ -226,7 +306,7 @@ describe('ArchiverDataStoreUpdater', () => {
       localBlock.body.txEffects[0].privateLogs = [
         PrivateLog.fromBuffer(getSampleContractInstancePublishedEventPayload()),
       ];
-      await updater.addProposedBlock(localBlock);
+      await updater.addProposedBlock(localBlock, emptyPrefix);
 
       const timestamp = localBlock.header.globalVariables.timestamp + 1n;
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
@@ -235,7 +315,7 @@ describe('ArchiverDataStoreUpdater', () => {
       // (the same user tx ended up on chain, just signed by a different proposer at a different slot).
       // Without the fix the prune step misses the conflict because the slot does not match, and
       // re-applying the L1 block's contract data throws "Contract instance ... already exists".
-      const l1Block = await L2Block.random(BlockNumber(1), {
+      const l1Block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(124),
@@ -260,12 +340,12 @@ describe('ArchiverDataStoreUpdater', () => {
       // block_store.addCheckpoints already deletes the proposed entry at the same number it stores,
       // so the eviction code matters specifically for higher-numbered proposed checkpoints whose
       // referenced blocks were pruned by the conflict.
-      const localBlock1 = await L2Block.random(BlockNumber(1), {
+      const localBlock1 = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(125),
       });
-      await updater.addProposedBlock(localBlock1);
+      await updater.addProposedBlock(localBlock1, emptyPrefix);
       await store.blocks.addProposedCheckpoint({
         checkpointNumber: CheckpointNumber(1),
         header: CheckpointHeader.empty(),
@@ -275,13 +355,13 @@ describe('ArchiverDataStoreUpdater', () => {
         feeAssetPriceModifier: 0n,
       });
 
-      const localBlock2 = await L2Block.random(BlockNumber(2), {
+      const localBlock2 = await randomBlock(2, {
         checkpointNumber: CheckpointNumber(2),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(126),
         lastArchive: localBlock1.archive,
       });
-      await updater.addProposedBlock(localBlock2);
+      await updater.addProposedBlock(localBlock2, emptyPrefix);
       await store.blocks.addProposedCheckpoint({
         checkpointNumber: CheckpointNumber(2),
         header: CheckpointHeader.empty(),
@@ -295,7 +375,7 @@ describe('ArchiverDataStoreUpdater', () => {
 
       // L1 publishes a conflicting block 1. Pruning takes out both local blocks; both proposed
       // checkpoints must be evicted (proposed 1 by block_store.addCheckpoints, proposed 2 by us).
-      const l1Block = await L2Block.random(BlockNumber(1), {
+      const l1Block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(124),
@@ -311,12 +391,12 @@ describe('ArchiverDataStoreUpdater', () => {
       // Local proposes block 1 at slot 100 and a speculative block 2 at slot 101 built atop it.
       // Pipelining: block 2 is the start of proposed checkpoint 2 and must not be pruned just
       // because L1 confirmed a checkpoint that only contains block 1.
-      const localBlock1 = await L2Block.random(BlockNumber(1), {
+      const localBlock1 = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
       });
-      await updater.addProposedBlock(localBlock1);
+      await updater.addProposedBlock(localBlock1, emptyPrefix);
 
       await store.blocks.addProposedCheckpoint({
         checkpointNumber: CheckpointNumber(1),
@@ -327,13 +407,13 @@ describe('ArchiverDataStoreUpdater', () => {
         feeAssetPriceModifier: 0n,
       });
 
-      const localBlock2 = await L2Block.random(BlockNumber(2), {
+      const localBlock2 = await randomBlock(2, {
         checkpointNumber: CheckpointNumber(2),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(101),
         lastArchive: localBlock1.archive,
       });
-      await updater.addProposedBlock(localBlock2);
+      await updater.addProposedBlock(localBlock2, emptyPrefix);
 
       // L1 confirms checkpoint 1 with the same block 1 as local. Speculative block 2 must survive.
       await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([localBlock1]), 10)]);
@@ -344,7 +424,7 @@ describe('ArchiverDataStoreUpdater', () => {
 
     it('removes contract data when checkpoints are unwound', async () => {
       // Create block with contract data and add it as a checkpoint
-      const block = await L2Block.random(BlockNumber(1), {
+      const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
@@ -369,7 +449,7 @@ describe('ArchiverDataStoreUpdater', () => {
     });
 
     it('accepts a re-included already-stored checkpoint carrying contract data (A-1350)', async () => {
-      const block = await L2Block.random(BlockNumber(1), {
+      const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
@@ -396,7 +476,7 @@ describe('ArchiverDataStoreUpdater', () => {
       // contract instance log. Ingest checkpoint 1, then re-present it (at a new L1 block) batched with
       // the brand-new checkpoint 2. Only checkpoint 2's block is new, so its instance must be extracted
       // while re-extracting checkpoint 1's already-stored class is skipped rather than throwing.
-      const block1 = await L2Block.random(BlockNumber(1), {
+      const block1 = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
@@ -406,7 +486,7 @@ describe('ArchiverDataStoreUpdater', () => {
       await updater.addCheckpoints([makePublishedCheckpoint(checkpoint1, 10)]);
       expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
 
-      const block2 = await L2Block.random(BlockNumber(2), {
+      const block2 = await randomBlock(2, {
         checkpointNumber: CheckpointNumber(2),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         lastArchive: block1.archive,
@@ -424,6 +504,176 @@ describe('ArchiverDataStoreUpdater', () => {
       const timestamp = block2.header.globalVariables.timestamp + 1n;
       expect(await store.contractInstances.getContractInstance(instanceAddress, timestamp)).toBeDefined();
     });
+
+    it('persists the checkpoint when a contract class log declares a bytecode length over the packed limit', async () => {
+      // One byte past the protocol maximum still fits the physical log width, so the decoder used to
+      // accept it and the bytecode commitment blew up later, aborting the whole checkpoint transaction.
+      const overLimitLength = (MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS - 1) * (Fr.SIZE_IN_BYTES - 1) + 1;
+      const malformedClassId = Fr.random();
+
+      // A tx can carry at most one contract class log, so the malformed one rides its own tx effect.
+      const block = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        txsPerBlock: 2,
+      });
+      block.body.txEffects[0].contractClassLogs = [contractClassLog];
+      block.body.txEffects[1].contractClassLogs = [buildContractClassPublishedLog(overLimitLength, malformedClassId)];
+
+      await expect(
+        updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]),
+      ).resolves.toBeDefined();
+
+      const storedBlock = await store.blocks.getBlock({ number: BlockNumber(1) });
+      expect(storedBlock?.archive.root.equals(block.archive.root)).toBe(true);
+      expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
+      expect(await store.contractClasses.getContractClass(malformedClassId)).toBeUndefined();
+    });
+
+    it('persists the checkpoint when a contract class log declares a bytecode length over the log capacity', async () => {
+      const overCapacityLength = (BYTECODE_ENCODING_FIELDS - 1) * (Fr.SIZE_IN_BYTES - 1) + 1;
+      const malformedClassId = Fr.random();
+
+      // A tx can carry at most one contract class log, so the malformed one rides its own tx effect.
+      const block = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        txsPerBlock: 2,
+      });
+      block.body.txEffects[0].contractClassLogs = [contractClassLog];
+      block.body.txEffects[1].contractClassLogs = [
+        buildContractClassPublishedLog(overCapacityLength, malformedClassId),
+      ];
+
+      await expect(
+        updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]),
+      ).resolves.toBeDefined();
+
+      const storedBlock = await store.blocks.getBlock({ number: BlockNumber(1) });
+      expect(storedBlock?.archive.root.equals(block.archive.root)).toBe(true);
+      expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
+      expect(await store.contractClasses.getContractClass(malformedClassId)).toBeUndefined();
+    });
+
+    it('persists the checkpoint when computing a bytecode commitment fails for one class', async () => {
+      const failingClassId = Fr.random();
+      const original = ContractClassPublishedEvent.prototype.toContractClassPublicWithBytecodeCommitment;
+      const spy = jest
+        .spyOn(ContractClassPublishedEvent.prototype, 'toContractClassPublicWithBytecodeCommitment')
+        .mockImplementation(function (this: ContractClassPublishedEvent) {
+          return this.contractClassId.equals(failingClassId)
+            ? Promise.reject(new Error('bytecode commitment failed'))
+            : original.call(this);
+        });
+
+      try {
+        // A tx can carry at most one contract class log, so the malformed one rides its own tx effect.
+        const block = await randomBlock(1, {
+          checkpointNumber: CheckpointNumber(1),
+          indexWithinCheckpoint: IndexWithinCheckpoint(0),
+          txsPerBlock: 2,
+        });
+        block.body.txEffects[0].contractClassLogs = [contractClassLog];
+        block.body.txEffects[1].contractClassLogs = [buildContractClassPublishedLog(0, failingClassId)];
+
+        await expect(
+          updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]),
+        ).resolves.toBeDefined();
+
+        const storedBlock = await store.blocks.getBlock({ number: BlockNumber(1) });
+        expect(storedBlock?.archive.root.equals(block.archive.root)).toBe(true);
+        expect(await store.contractClasses.getContractClass(contractClassId)).toBeDefined();
+        expect(await store.contractClasses.getContractClass(failingClassId)).toBeUndefined();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
+  describe('contract instance updates', () => {
+    let updatedAddress: AztecAddress;
+    let otherAddress: AztecAddress;
+    let originalClassId: Fr;
+
+    beforeEach(async () => {
+      updatedAddress = await AztecAddress.random();
+      otherAddress = await AztecAddress.random();
+      originalClassId = Fr.random();
+    });
+
+    /** Builds two consecutive blocks that share a timestamp, the second chaining off the first. */
+    async function makeSameTimestampBlockPair(timestamp: bigint) {
+      const block1 = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+        timestamp,
+      });
+      const block2 = await randomBlock(2, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(1),
+        slotNumber: SlotNumber(100),
+        timestamp,
+        lastArchive: block1.archive,
+      });
+      return { block1, block2 };
+    }
+
+    it('resolves the later block when two blocks in the same slot update the same contract', async () => {
+      const timestamp = 5000n;
+      const timestampOfChange = timestamp + 10n;
+      const classIdX = Fr.random();
+      const classIdY = Fr.random();
+
+      const { block1, block2 } = await makeSameTimestampBlockPair(timestamp);
+      // The first block also updates an unrelated contract, so the update that targets `updatedAddress`
+      // does not sit at in-block index 0.
+      block1.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(otherAddress, Fr.random(), Fr.random(), timestampOfChange),
+        buildContractInstanceUpdatedLog(updatedAddress, originalClassId, classIdX, timestampOfChange),
+      ];
+      block2.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(updatedAddress, classIdX, classIdY, timestampOfChange),
+      ];
+
+      await updater.addProposedBlock(block1, emptyPrefix);
+      await updater.addProposedBlock(block2, emptyPrefix);
+
+      await expect(
+        store.contractInstances.getCurrentContractInstanceClassId(
+          updatedAddress,
+          timestampOfChange + 1n,
+          originalClassId,
+        ),
+      ).resolves.toEqual(classIdY);
+    });
+
+    it('restores the earlier block update when a later block in the same slot is pruned', async () => {
+      const timestamp = 5000n;
+      const timestampOfChange = timestamp + 10n;
+      const classIdX = Fr.random();
+      const classIdY = Fr.random();
+
+      const { block1, block2 } = await makeSameTimestampBlockPair(timestamp);
+      block1.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(updatedAddress, originalClassId, classIdX, timestampOfChange),
+      ];
+      block2.body.txEffects[0].publicLogs = [
+        buildContractInstanceUpdatedLog(updatedAddress, classIdX, classIdY, timestampOfChange),
+      ];
+
+      await updater.addProposedBlock(block1, emptyPrefix);
+      await updater.addProposedBlock(block2, emptyPrefix);
+      await updater.removeUncheckpointedBlocksAfter(BlockNumber(1));
+
+      await expect(
+        store.contractInstances.getCurrentContractInstanceClassId(
+          updatedAddress,
+          timestampOfChange + 1n,
+          originalClassId,
+        ),
+      ).resolves.toEqual(classIdX);
+    });
   });
 
   describe('logs handling', () => {
@@ -439,13 +689,13 @@ describe('ArchiverDataStoreUpdater', () => {
     }
 
     it('does not duplicate logs when checkpoint contains same block as provisional', async () => {
-      const block = await L2Block.random(BlockNumber(1), {
+      const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
       });
 
-      await updater.addProposedBlock(block);
+      await updater.addProposedBlock(block, emptyPrefix);
 
       // Create checkpoint with the SAME block (same archive root)
       const publishedCheckpoint = makePublishedCheckpoint(makeCheckpoint([block]), 10);
@@ -459,17 +709,17 @@ describe('ArchiverDataStoreUpdater', () => {
     });
 
     it('replaces logs when checkpoint conflicts with provisional block', async () => {
-      const localBlock = await L2Block.random(BlockNumber(1), {
+      const localBlock = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
       });
-      await updater.addProposedBlock(localBlock);
+      await updater.addProposedBlock(localBlock, emptyPrefix);
       expect(await countIndexedPublicLogs(localBlock)).toBe(
         localBlock.body.txEffects.flatMap(tx => tx.publicLogs).length,
       );
 
-      const checkpointBlock = await L2Block.random(BlockNumber(1), {
+      const checkpointBlock = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
@@ -489,12 +739,12 @@ describe('ArchiverDataStoreUpdater', () => {
     });
 
     it('removes logs when removing uncheckpointed blocks', async () => {
-      const localBlock = await L2Block.random(BlockNumber(1), {
+      const localBlock = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
       });
-      await updater.addProposedBlock(localBlock);
+      await updater.addProposedBlock(localBlock, emptyPrefix);
       expect(await countIndexedPublicLogs(localBlock)).toBe(
         localBlock.body.txEffects.flatMap(tx => tx.publicLogs).length,
       );
@@ -505,15 +755,36 @@ describe('ArchiverDataStoreUpdater', () => {
     });
   });
 
-  describe('l2 tips cache refresh', () => {
+  describe('late proposals', () => {
+    it('reports a proposed block already checkpointed on L1 as already-checkpointed, without rewriting it', async () => {
+      const block = await L2Block.random(BlockNumber(1), {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+      });
+
+      // The checkpoint carrying the block lands on L1 while the proposal is still being re-executed, so the
+      // block is already stored as checkpointed by the time the proposal reaches the store.
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block]), 10)]);
+      const logsAfterCheckpoint = await store.logs.getPublicLogsForBlock(block.number);
+
+      await expect(updater.addProposedBlock(block, emptyPrefix)).resolves.toEqual('already-checkpointed');
+
+      expect(await store.blocks.getLatestL2BlockNumber()).toEqual(BlockNumber(1));
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toEqual(BlockNumber(1));
+      expect(await store.logs.getPublicLogsForBlock(block.number)).toEqual(logsAfterCheckpoint);
+    });
+  });
+
+  describe('L2 frontier cache refresh', () => {
     it('does not refresh the cache when the writer transaction aborts', async () => {
       const initialBlockHash = await BlockHeader.empty().hash();
-      const tipsCache = new L2TipsCache(store.blocks, initialBlockHash);
-      const updaterWithCache = new ArchiverDataStoreUpdater(store, tipsCache);
+      const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
 
-      const tipsBefore = await tipsCache.getL2Tips();
+      const tipsBefore = await l2FrontierCache.getL2Tips();
 
-      const block = await L2Block.random(BlockNumber(1), {
+      const block = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
       });
@@ -521,12 +792,72 @@ describe('ArchiverDataStoreUpdater', () => {
       const failure = new Error('forced failure inside writer transaction');
       const addProposedBlockSpy = jest.spyOn(store.blocks, 'addProposedBlock').mockRejectedValueOnce(failure);
 
-      await expect(updaterWithCache.addProposedBlock(block)).rejects.toBe(failure);
+      await expect(updaterWithCache.addProposedBlock(block, emptyPrefix)).rejects.toBe(failure);
 
-      const tipsAfter = await tipsCache.getL2Tips();
+      const tipsAfter = await l2FrontierCache.getL2Tips();
       expect(tipsAfter).toEqual(tipsBefore);
 
       addProposedBlockSpy.mockRestore();
+    });
+
+    it('serves tips and the proposed checkpoint from the same instant while a promotion commits', async () => {
+      const initialBlockHash = await BlockHeader.empty().hash();
+      const l2FrontierCache = new L2FrontierCache(store.blocks, initialBlockHash);
+      const updaterWithCache = new ArchiverDataStoreUpdater(store, l2FrontierCache);
+
+      const block = await randomBlock(1, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(0),
+        slotNumber: SlotNumber(100),
+      });
+      await updaterWithCache.addProposedBlock(block, emptyPrefix);
+      await store.blocks.addProposedCheckpoint({
+        checkpointNumber: CheckpointNumber(1),
+        header: CheckpointHeader.empty(),
+        startBlock: BlockNumber(1),
+        blockCount: 1,
+        totalManaUsed: 0n,
+        feeAssetPriceModifier: 0n,
+      });
+      await l2FrontierCache.refresh();
+
+      // Park the promotion transaction after it has committed but before the updater refreshes the cache,
+      // which is the window a concurrent reader can land in.
+      const { promise: committed, resolve: markCommitted } = promiseWithResolvers<void>();
+      const { promise: gate, resolve: openGate } = promiseWithResolvers<void>();
+      const realTransactionAsync = store.db.transactionAsync.bind(store.db);
+      const transactionSpy = jest.spyOn(store.db, 'transactionAsync').mockImplementationOnce(async callback => {
+        const result = await realTransactionAsync(callback);
+        markCommitted();
+        await gate;
+        return result;
+      });
+
+      const publishedCheckpoint = makePublishedCheckpoint(makeCheckpoint([block]), 10);
+      const promotion = updaterWithCache.addCheckpoints([], undefined, {
+        l1: publishedCheckpoint.l1,
+        attestations: publishedCheckpoint.attestations,
+        verbatimAttestations: publishedCheckpoint.verbatimAttestations,
+        checkpoint: publishedCheckpoint,
+      });
+
+      await committed;
+      const frontier = await l2FrontierCache.getL2Frontier();
+      openGate();
+      await promotion;
+
+      // The proposed-checkpoint frontier and the proposed tip describe the same chain: a reader can see
+      // the pre-promotion snapshot or the post-promotion one, never a mix of the two.
+      const frontierBlock = frontier.proposedCheckpoint
+        ? BlockNumber.add(frontier.proposedCheckpoint.startBlock, frontier.proposedCheckpoint.blockCount - 1)
+        : frontier.tips.checkpointed.block.number;
+      expect(frontierBlock).toEqual(frontier.tips.proposed.number);
+
+      // The header comes from the same transaction as the tips, so it always describes the proposed tip.
+      expect(frontier.latestBlockHeader?.globalVariables.blockNumber).toEqual(frontier.tips.proposed.number);
+      expect(frontier.pendingChainValidationStatus).toEqual({ valid: true });
+
+      transactionSpy.mockRestore();
     });
   });
 
@@ -538,13 +869,13 @@ describe('ArchiverDataStoreUpdater', () => {
       slotNumber: number,
       previousBlock?: L2Block,
     ): Promise<L2Block> => {
-      const block = await L2Block.random(BlockNumber(blockNumber), {
+      const block = await randomBlock(blockNumber, {
         checkpointNumber: CheckpointNumber(checkpointNumber),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(slotNumber),
         ...(previousBlock ? { lastArchive: previousBlock.archive } : {}),
       });
-      await updater.addProposedBlock(block);
+      await updater.addProposedBlock(block, emptyPrefix);
       await store.blocks.addProposedCheckpoint({
         checkpointNumber: CheckpointNumber(checkpointNumber),
         header: CheckpointHeader.empty(),
@@ -571,7 +902,7 @@ describe('ArchiverDataStoreUpdater', () => {
 
     it('drops a proposed checkpoint built on the checkpointed tip without touching checkpointed state', async () => {
       // Checkpointed checkpoint 1 (block 1).
-      const block1 = await L2Block.random(BlockNumber(1), {
+      const block1 = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
@@ -606,7 +937,7 @@ describe('ArchiverDataStoreUpdater', () => {
     });
 
     it('refuses to remove checkpointed blocks', async () => {
-      const block1 = await L2Block.random(BlockNumber(1), {
+      const block1 = await randomBlock(1, {
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: IndexWithinCheckpoint(0),
         slotNumber: SlotNumber(100),
@@ -616,6 +947,242 @@ describe('ArchiverDataStoreUpdater', () => {
       await expect(updater.removeUncheckpointedBlocksAfter(BlockNumber(0))).rejects.toThrow(
         /checkpointed blocks exist up to 1/,
       );
+    });
+  });
+
+  describe('addProposedBlock Inbox prefix guard', () => {
+    /** A random block consuming through `leafCount` messages, chained on `previousBlock` when given. */
+    const makeConsumingBlock = async (blockNumber: number, leafCount: number, previousBlock?: L2Block) => {
+      const block = await randomBlock(blockNumber, {
+        checkpointNumber: CheckpointNumber(1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(blockNumber - 1),
+        slotNumber: SlotNumber(100),
+        ...(previousBlock ? { lastArchive: previousBlock.archive } : {}),
+      });
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(leafCount);
+      return block;
+    };
+    const refAt = async (leafCount: number) =>
+      InboxMessagePrefixRef.fromPosition((await store.messages.getMessagePosition(BigInt(leafCount)))!);
+    const storeIsUntouched = async (block: L2Block) => {
+      expect(await store.blocks.getBlock({ number: block.number })).toBeUndefined();
+      expect(await store.logs.getPublicLogsForBlock(block.number)).toEqual([]);
+      expect(await store.blocks.getLatestL2BlockNumber()).toBe(0);
+    };
+
+    beforeEach(async () => {
+      await store.messages.addL1ToL2Messages(makeInboxMessages(5));
+    });
+
+    it('accepts a block whose signed prefix matches the local messages at its leaf count', async () => {
+      const block = await makeConsumingBlock(1, 3);
+      await updater.addProposedBlock(block, await refAt(3));
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+    });
+
+    it('accepts a prefix interior to the synced log and is unaffected by messages appended after it', async () => {
+      const block = await makeConsumingBlock(1, 3);
+      const ref = await refAt(3);
+      await store.messages.addL1ToL2Messages(
+        makeInboxMessages(2, {
+          initialIndex: 5n,
+          initialInboxHash: (await store.messages.getSyncedMessagePosition()).rollingHash,
+        }),
+      );
+      await updater.addProposedBlock(block, ref);
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+    });
+
+    it('rejects a mismatching prefix and writes nothing', async () => {
+      const block = await makeConsumingBlock(1, 3);
+      await expect(updater.addProposedBlock(block, InboxMessagePrefixRef.random())).rejects.toThrow(
+        InboxPrefixMismatchError,
+      );
+      await storeIsUntouched(block);
+    });
+
+    it('rejects a prefix the local view has not synced and writes nothing', async () => {
+      const block = await makeConsumingBlock(1, 9);
+      await expect(updater.addProposedBlock(block, InboxMessagePrefixRef.random())).rejects.toThrow(
+        InboxPrefixNotSyncedError,
+      );
+      await storeIsUntouched(block);
+    });
+
+    it('rejects a block consuming behind its parent', async () => {
+      const parent = await makeConsumingBlock(1, 3);
+      await updater.addProposedBlock(parent, await refAt(3));
+      const block = await makeConsumingBlock(2, 2, parent);
+      await expect(updater.addProposedBlock(block, await refAt(2))).rejects.toThrow(InboxConsumptionRewindsError);
+      expect(await store.blocks.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+    });
+
+    it('rejects a block whose prefix matched an earlier version of the log after a suffix replacement', async () => {
+      const block = await makeConsumingBlock(1, 5);
+      const staleRef = await refAt(5);
+      // A reorg replaces the last two messages before the block is inserted.
+      await store.messages.removeL1ToL2Messages(3n);
+      const hashAtThree = (await store.messages.getSyncedMessagePosition()).rollingHash;
+      await store.messages.addL1ToL2Messages(
+        makeInboxMessages(2, {
+          initialIndex: 3n,
+          initialInboxHash: hashAtThree,
+        }),
+      );
+      await expect(updater.addProposedBlock(block, staleRef)).rejects.toThrow(InboxPrefixMismatchError);
+      await storeIsUntouched(block);
+    });
+  });
+
+  describe('rollbackMessagesAndPruneProposedBlocks', () => {
+    const syncState = {
+      l1Block: { l1BlockNumber: 200n, l1BlockHash: Buffer32.random() },
+      authenticated: true as const,
+    };
+    let messages: ReturnType<typeof makeInboxMessages>;
+
+    /** A block consuming through `leafCount` messages, chained on `previousBlock` when given. */
+    const makeConsumingBlock = async (blockNumber: number, leafCount: number, previousBlock?: L2Block) => {
+      const block = await randomBlock(blockNumber, {
+        checkpointNumber: CheckpointNumber(previousBlock ? previousBlock.checkpointNumber : 1),
+        indexWithinCheckpoint: IndexWithinCheckpoint(blockNumber - 1),
+        slotNumber: SlotNumber(100),
+        ...(previousBlock ? { lastArchive: previousBlock.archive } : {}),
+      });
+      block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(leafCount);
+      return block;
+    };
+    const positionAt = async (count: number) => (await store.messages.getMessagePosition(BigInt(count)))!;
+    const storedLeaves = async () => (await toArray(store.messages.iterateL1ToL2Messages())).map(m => m.leaf);
+
+    beforeEach(async () => {
+      messages = makeInboxMessages(6);
+      await store.messages.addL1ToL2Messages(messages);
+    });
+
+    it('rolls back to the retained prefix, moves the sync state and prunes from the first block consuming past it', async () => {
+      const block1 = await makeConsumingBlock(1, 3);
+      const block2 = await makeConsumingBlock(2, 5, block1);
+      const block3 = await makeConsumingBlock(3, 6, block2);
+      for (const [block, count] of [
+        [block1, 3],
+        [block2, 5],
+        [block3, 6],
+      ] as const) {
+        await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(count)));
+      }
+
+      const result = await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(4), syncState });
+
+      expect(await storedLeaves()).toEqual(messages.slice(0, 4).map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toEqual(syncState.l1Block);
+      // Block 1 stayed within the retained prefix; block 2 consumed past it and block 3 chains on it.
+      expect(result.prunedBlocks.map(b => b.number)).toEqual([2, 3]);
+      expect(result.checkpointedTipAffected).toBe(false);
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+      expect(await store.blocks.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+      expect(await store.blocks.getLatestL2BlockNumber()).toBe(1);
+    });
+
+    it('refuses a rollback whose retained prefix has moved and writes nothing', async () => {
+      const block = await makeConsumingBlock(1, 6);
+      await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+
+      await expect(
+        updater.rollbackMessagesAndPruneProposedBlocks({
+          keep: { totalMessageCount: 4n, rollingHash: Fr.random() },
+          syncState,
+        }),
+      ).rejects.toThrow(InboxMessagePrefixChangedError);
+
+      expect(await storedLeaves()).toEqual(messages.map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toBeUndefined();
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+    });
+
+    it('rolls the whole rollback back when the block prune fails', async () => {
+      const block = await makeConsumingBlock(1, 6);
+      await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+      const failure = new Error('prune failed');
+      jest.spyOn(store.blocks, 'removeBlocksAfter').mockRejectedValueOnce(failure);
+
+      await expect(
+        updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(4), syncState }),
+      ).rejects.toBe(failure);
+
+      expect(await storedLeaves()).toEqual(messages.map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toBeUndefined();
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+    });
+
+    it('evicts the proposed checkpoint of pruned blocks so it can no longer be promoted', async () => {
+      const block = await makeConsumingBlock(1, 6);
+      await updater.addProposedBlock(block, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+      await store.blocks.addProposedCheckpoint({
+        checkpointNumber: CheckpointNumber(1),
+        header: CheckpointHeader.empty(),
+        startBlock: BlockNumber(1),
+        blockCount: 1,
+        totalManaUsed: 0n,
+        feeAssetPriceModifier: 0n,
+      });
+      const proposed = (await store.blocks.getLastProposedCheckpoint())!;
+
+      await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(5), syncState });
+
+      expect(await store.blocks.getLastProposedCheckpoint()).toBeUndefined();
+      await expect(
+        store.blocks.promoteProposedToCheckpointed(
+          CheckpointNumber(1),
+          makeL1PublishedData(10),
+          [],
+          CommitteeAttestationsAndSigners.packAttestations([]),
+          proposed.archive.root,
+        ),
+      ).rejects.toThrow(NoProposedCheckpointToPromoteError);
+    });
+
+    it('flags a rollback below the checkpointed tip and leaves checkpointed blocks in place', async () => {
+      const block1 = await makeConsumingBlock(1, 3);
+      await updater.addCheckpoints([makePublishedCheckpoint(makeCheckpoint([block1]), 10)]);
+      const block2 = await makeConsumingBlock(2, 6, block1);
+      block2.checkpointNumber = CheckpointNumber(2);
+      block2.indexWithinCheckpoint = IndexWithinCheckpoint(0);
+      await updater.addProposedBlock(block2, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+
+      const result = await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(2), syncState });
+
+      expect(result.checkpointedTipAffected).toBe(true);
+      expect(result.prunedBlocks.map(b => b.number)).toEqual([2]);
+      expect(await store.blocks.getBlock({ number: BlockNumber(1) })).toBeDefined();
+      expect(await store.blocks.getCheckpointedL2BlockNumber()).toBe(1);
+      expect(await storedLeaves()).toHaveLength(2);
+    });
+
+    it('clears the syncpoint when the rewound cursor is unauthenticated', async () => {
+      await store.messages.setMessageSyncState(syncState);
+
+      await updater.rollbackMessagesAndPruneProposedBlocks({
+        keep: await positionAt(3),
+        syncState: { l1Block: { l1BlockNumber: 99n, l1BlockHash: Buffer32.random() }, authenticated: false },
+      });
+
+      expect(await storedLeaves()).toEqual(messages.slice(0, 3).map(m => m.leaf));
+      expect(await store.messages.getSynchedL1Block()).toBeUndefined();
+      expect((await store.messages.getScannedL1Block())?.l1BlockNumber).toEqual(99n);
+    });
+
+    it('empties the log and prunes every proposed block when nothing is retained', async () => {
+      const block1 = await makeConsumingBlock(1, 3);
+      const block2 = await makeConsumingBlock(2, 6, block1);
+      await updater.addProposedBlock(block1, InboxMessagePrefixRef.fromPosition(await positionAt(3)));
+      await updater.addProposedBlock(block2, InboxMessagePrefixRef.fromPosition(await positionAt(6)));
+
+      const result = await updater.rollbackMessagesAndPruneProposedBlocks({ keep: await positionAt(0), syncState });
+
+      expect(await storedLeaves()).toEqual([]);
+      expect(await store.messages.getTotalL1ToL2MessageCount()).toEqual(0n);
+      expect(result.prunedBlocks.map(b => b.number)).toEqual([1, 2]);
     });
   });
 });

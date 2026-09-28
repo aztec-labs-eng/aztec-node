@@ -101,6 +101,8 @@ export type ClientCircuitName =
   | 'app-circuit';
 
 export type ServerCircuitName =
+  | 'inbox-parity-4'
+  | 'inbox-parity-16'
   | 'inbox-parity-64'
   | 'inbox-parity-256'
   | 'inbox-parity-1024'

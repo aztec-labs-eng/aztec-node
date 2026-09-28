@@ -160,7 +160,7 @@ const config = {
         sidebarPath: "./sidebars-developer.js",
         editUrl: (params) => {
           return (
-            `https://github.com/AztecProtocol/aztec-packages/edit/next/docs/docs-developers/` +
+            `https://github.com/aztec-labs-eng/aztec-node/edit/main/docs/docs-developers/` +
             params.docPath
           );
         },
@@ -208,7 +208,7 @@ const config = {
         sidebarPath: "./sidebars-operate.js",
         editUrl: (params) => {
           return (
-            `https://github.com/AztecProtocol/aztec-packages/edit/next/docs/docs-operate/` +
+            `https://github.com/aztec-labs-eng/aztec-node/edit/main/docs/docs-operate/` +
             params.docPath
           );
         },
@@ -258,7 +258,7 @@ const config = {
         sidebarPath: "./sidebars-participate.js",
         editUrl: (params) => {
           return (
-            `https://github.com/AztecProtocol/aztec-packages/edit/next/docs/docs-participate/` +
+            `https://github.com/aztec-labs-eng/aztec-node/edit/main/docs/docs-participate/` +
             params.docPath
           );
         },
@@ -427,7 +427,7 @@ const config = {
                 className: "github-item",
               },
               {
-                to: "https://github.com/AztecProtocol/aztec-nr",
+                to: "https://github.com/aztec-labs-eng/aztec-nr",
                 label: "Aztec.nr",
                 target: "_blank",
                 rel: "noopener noreferrer",
@@ -516,7 +516,7 @@ const config = {
               },
               {
                 label: "Aztec.nr",
-                to: "https://github.com/AztecProtocol/aztec-nr",
+                to: "https://github.com/aztec-labs-eng/aztec-nr",
               },
             ],
           },

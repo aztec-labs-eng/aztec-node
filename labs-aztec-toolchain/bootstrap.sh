@@ -38,13 +38,13 @@ FND_HASHES_FILE=fnd-hashes
 # other files throughout the repo: pins.mjs owns that list. `./bootstrap.sh set-pins`
 # bumps this file and every copy, and check_pin_drift fails the build on any mismatch.
 # BB_VERSION doubles as the version of the @aztec-foundation npm packages bb and bb-avm ship in.
-BB_VERSION=6.0.0-nightly.20260910
+BB_VERSION=6.0.0-rc.1
 # NOIR_VERSION must be the noir release the $BB_VERSION aztec-packages release was built
 # against (its noir submodule): the pinned nargo's output is consumed by tools from that
 # release (bb, and the @aztec/noir-* js packages, which are that submodule republished).
 # Skew is not detected by check_pin_drift, it surfaces in other places (e.g. the docs
 # examples' runtime tests).
-NOIR_VERSION=1.0.0-rc.1
+NOIR_VERSION=1.0.0-rc.3
 
 # The releases are fetched at build time; overridable for testing/mirroring.
 # bb and bb-avm come from the npm packages the foundation publishes, fetched as plain
@@ -233,7 +233,15 @@ function install_npm_binary {
   local url=${NPM_REGISTRY%/}/@aztec-foundation/$pkg/-/$pkg-$BB_VERSION.tgz
   local archive=$tmp/$pkg.tgz
   echo "Installing $binary $BB_VERSION from @aztec-foundation/$pkg..."
-  if ! curl -fsSL "$url" -o "$archive"; then
+  # Credentials are passed whenever the environment has them, without asking what the registry is:
+  # a private registry needs them to serve the tarball at all, and npmjs ignores them.
+  local -a auth=()
+  if [ -n "${NPM_TOKEN:-}" ]; then
+    auth=(-H "Authorization: Bearer $NPM_TOKEN")
+  elif [ -n "${NPM_PASSWORD:-}" ]; then
+    auth=(-u "${NPM_USERNAME:?NPM_PASSWORD is set without NPM_USERNAME}:$NPM_PASSWORD")
+  fi
+  if ! curl -fsSL "${auth[@]}" "$url" -o "$archive"; then
     echo_stderr "Could not download $url."
     exit 1
   fi

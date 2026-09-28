@@ -29,6 +29,6 @@ case "$type" in
     # NAME_POSTFIX namespaces the compose project per test so parallel per-test jobs don't collide.
     # Compose project names must be lowercase alphanumerics, hyphens, and underscores.
     postfix=$(echo "$test_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g')
-    TEST=$test TEST_NAME=$test_name NAME_POSTFIX=${postfix:+_$postfix} REMOVE_COMPOSE_VOLUMES=1 exec run_compose_test $test end-to-end $PWD/ha
+    TEST=$test TEST_NAME=$test_name NAME_POSTFIX="${NAME_POSTFIX:-}${postfix:+_$postfix}" REMOVE_COMPOSE_VOLUMES=1 exec run_compose_test $test end-to-end $PWD/ha
   ;;
 esac

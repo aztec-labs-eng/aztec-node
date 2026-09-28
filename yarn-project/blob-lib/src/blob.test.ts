@@ -2,7 +2,7 @@ import { FIELDS_PER_BLOB } from '@aztec-labs/constants';
 import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toInlineStrArray } from '@aztec-labs/foundation/testing';
-import { updateInlineTestData } from '@aztec-labs/foundation/testing/files';
+import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
 
 import { Blob } from './blob.js';
 import { commitmentToFields } from './hash.js';
@@ -72,12 +72,12 @@ describe('blob', () => {
     expect(y.toString()).toMatchInlineSnapshot(`"0x2ed43e9899a71532fd9787ba8424169e82ac45e1ed214434c298758a8ecbb9b6"`);
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob.nr',
       'kzg_commitment_blob_400_from_ts',
       toInlineStrArray(blobCommitmentFields),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob.nr',
       'y_limbs_blob_400_from_ts',
       toInlineStrArray(y.toNoirBigNum().limbs),
@@ -102,12 +102,12 @@ describe('blob', () => {
     expect(y.toString()).toMatchInlineSnapshot(`"0x64d9451840b84faad4f5942121befd2b42c94c4fd96f6184b2cae95ae0510e92"`);
 
     // Run with AZTEC_GENERATE_TEST_DATA=1 to update noir test data.
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob.nr',
       'kzg_commitment_blob_full_from_ts',
       toInlineStrArray(blobCommitmentFields),
     );
-    updateInlineTestData(
+    updateInlineFndTestData(
       'noir-projects/fnd/noir-protocol-circuits/crates/blob/src/blob.nr',
       'y_limbs_blob_full_from_ts',
       toInlineStrArray(y.toNoirBigNum().limbs),

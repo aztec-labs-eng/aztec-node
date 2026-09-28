@@ -55,19 +55,26 @@ export class WriteTransaction extends ReadTransaction {
     return Promise.resolve();
   }
 
-  public override async get(key: Buffer): Promise<Uint8Array | undefined> {
+  /** Reads data keys with pending writes and deletions applied before querying the database. */
+  public override async getMany(keys: Uint8Array[]): Promise<(Uint8Array | undefined)[]> {
     this.assertIsOpen();
-
-    const addEntry = findInSortedArray(this.dataBatch.addEntries, key, singleKeyCmp);
-    if (addEntry) {
-      return addEntry[1][0];
-    }
-    const removeEntryIdx = findIndexInSortedArray(this.dataBatch.removeEntries, key, singleKeyCmp);
-    if (removeEntryIdx > -1) {
-      return undefined;
-    }
-
-    return await super.get(key);
+    const results: (Uint8Array | undefined)[] = keys.map(() => undefined);
+    const pendingKeys: Uint8Array[] = [];
+    const pendingIndices: number[] = [];
+    keys.forEach((key, index) => {
+      const addEntry = findInSortedArray(this.dataBatch.addEntries, key, singleKeyCmp);
+      if (addEntry) {
+        results[index] = addEntry[1][0];
+      } else if (findIndexInSortedArray(this.dataBatch.removeEntries, key, singleKeyCmp) === -1) {
+        pendingKeys.push(key);
+        pendingIndices.push(index);
+      }
+    });
+    const values = await super.getMany(pendingKeys);
+    pendingIndices.forEach((index, position) => {
+      results[index] = values[position];
+    });
+    return results;
   }
 
   setIndex(key: Buffer, ...values: Buffer[]): Promise<void> {

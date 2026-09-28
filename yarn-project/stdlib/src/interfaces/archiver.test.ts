@@ -1,4 +1,5 @@
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -9,17 +10,27 @@ import omit from 'lodash.omit';
 import type { ContractArtifact } from '../abi/abi.js';
 import { FunctionSelector } from '../abi/function_selector.js';
 import { AztecAddress } from '../aztec-address/index.js';
-import { type BlockData, BlockHash, CommitteeAttestation, L2Block } from '../block/index.js';
+import {
+  type BlockData,
+  BlockHash,
+  CommitteeAttestation,
+  CommitteeAttestationsAndSigners,
+  L2Block,
+} from '../block/index.js';
 import {
   type BlockQuery,
   BlockQuerySchema,
   type BlocksQuery,
   BlocksQuerySchema,
   type CheckpointQuery,
+  CheckpointQuerySchema,
   type CheckpointsQuery,
   CheckpointsQuerySchema,
+  type L1SyncPoint,
+  type L2Frontier,
   type L2Tips,
   type ProposedCheckpointQuery,
+  ProposedCheckpointQuerySchema,
 } from '../block/l2_block_source.js';
 import type { ValidateCheckpointResult } from '../block/validate_block_result.js';
 import { Checkpoint } from '../checkpoint/checkpoint.js';
@@ -34,13 +45,15 @@ import {
 import { EmptyL1RollupConstants, type L1RollupConstants } from '../epoch-helpers/index.js';
 import { PublicKeys } from '../keys/public_keys.js';
 import { type LogResult, randomLogResult } from '../logs/log_result.js';
-import type { PrivateLogsQuery, PublicLogsQuery } from '../logs/logs_query.js';
+import type { PrivateLogsQuery, PublicLogsQuery, ResolvedLogsQuery } from '../logs/logs_query.js';
 import { SiloedTag } from '../logs/siloed_tag.js';
 import { Tag } from '../logs/tag.js';
-import type { InboxBucket } from '../messaging/inbox_bucket.js';
+import type { InboxMessagePosition, InboxMessageRange } from '../messaging/l1_to_l2_message_source.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';
 import { getTokenContractArtifact } from '../tests/fixtures.js';
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
+import { BlockHeader } from '../tx/block_header.js';
+import { GlobalVariables } from '../tx/global_variables.js';
 import type { IndexedTxEffect } from '../tx/indexed_tx_effect.js';
 import { TxEffect } from '../tx/tx_effect.js';
 import type { TxEffectMembershipWitness } from '../tx/tx_effect_membership.js';
@@ -176,6 +189,14 @@ describe('ArchiverApiSchema', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toHaveLength(1);
     expect(result[0][0].txHash).toBeDefined();
+
+    // The archiver is only ever handed an anchor the node has already reduced to a hash, and says so.
+    await expect(
+      context.client.getPrivateLogsByTags({
+        tags: [SiloedTag.random()],
+        referenceBlock: { number: BlockNumber(1), hash: BlockHash.random() } as unknown as BlockHash,
+      }),
+    ).rejects.toThrow();
   });
 
   it('getPublicLogsByTags', async () => {
@@ -217,29 +238,28 @@ describe('ArchiverApiSchema', () => {
     expect(result).toBe(1n);
   });
 
-  it('getLatestInboxBucketAtOrBefore', async () => {
-    const result = await context.client.getLatestInboxBucketAtOrBefore(123n);
-    expect(result).toMatchObject({ seq: 1n, msgCount: 3, totalMsgCount: 3n });
-  });
-
-  it('getInboxBucket', async () => {
-    const result = await context.client.getInboxBucket(2n);
-    expect(result).toMatchObject({ seq: 2n, msgCount: 3 });
-  });
-
-  it('getInboxBucketByTotalMsgCount', async () => {
-    const result = await context.client.getInboxBucketByTotalMsgCount(3n);
-    expect(result).toMatchObject({ seq: 2n, totalMsgCount: 3n, msgCount: 3 });
-  });
-
-  it('getL1ToL2MessagesBetweenBuckets', async () => {
-    const result = await context.client.getL1ToL2MessagesBetweenBuckets(0n, 3n);
-    expect(result).toEqual([expect.any(Fr)]);
-  });
-
   it('getL1ToL2MessagesBetweenLeafCounts', async () => {
     const result = await context.client.getL1ToL2MessagesBetweenLeafCounts(0n, 3n);
     expect(result).toEqual([expect.any(Fr)]);
+  });
+
+  it('getMessagePosition', async () => {
+    const result = await context.client.getMessagePosition(3n);
+    expect(result).toEqual({ totalMessageCount: 3n, rollingHash: expect.any(Fr) });
+  });
+
+  it('getSyncedMessagePosition', async () => {
+    const result = await context.client.getSyncedMessagePosition();
+    expect(result).toEqual({ totalMessageCount: 3n, rollingHash: expect.any(Fr) });
+  });
+
+  it('getL1ToL2MessageRange', async () => {
+    const result = await context.client.getL1ToL2MessageRange(2n, 3n);
+    expect(result).toEqual({
+      messages: [expect.any(Fr)],
+      start: { totalMessageCount: 2n, rollingHash: expect.any(Fr) },
+      end: { totalMessageCount: 3n, rollingHash: expect.any(Fr) },
+    });
   });
 
   it('registerContractFunctionSignatures', async () => {
@@ -288,6 +308,37 @@ describe('ArchiverApiSchema', () => {
       totalManaUsed: 1n,
       feeAssetPriceModifier: 1n,
       inboxMsgTotal: 1n,
+    });
+  });
+
+  it('getL1SyncPoint', async () => {
+    const result = await context.client.getL1SyncPoint();
+    expect(result).toEqual({ blockNumber: 42n, blockHash: Buffer32.fromField(new Fr(7)) });
+  });
+
+  it('getL2Frontier', async () => {
+    const result = await context.client.getL2Frontier();
+    const expectedTipId = {
+      block: { number: 1, hash: `0x01` },
+      checkpoint: { number: 1, hash: `0x01` },
+    };
+    expect(result).toEqual({
+      tips: {
+        proposed: { number: 1, hash: `0x01` },
+        checkpointed: expectedTipId,
+        proven: expectedTipId,
+        finalized: expectedTipId,
+      },
+      proposedCheckpoint: expect.objectContaining({ checkpointNumber: 1 }),
+      l1SyncPoint: { blockNumber: 42n, blockHash: Buffer32.fromField(new Fr(7)) },
+      latestBlockHeader: BlockHeader.empty({
+        globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(1) }),
+      }),
+      checkpointedCheckpoint: {
+        header: CheckpointHeader.empty({ slotNumber: SlotNumber(1) }),
+        l1: new L1PublishedData(3n, 4n, `0x05`),
+      },
+      pendingChainValidationStatus: { valid: true },
     });
   });
 
@@ -357,9 +408,21 @@ describe('BlockQuerySchema', () => {
     expect(BlockQuerySchema.safeParse({ hash: '0x1', archive: '0x2' }).success).toBe(false);
   });
 
-  it('rejects extra keys (onlyCheckpointed is plural-only)', () => {
-    expect(BlockQuerySchema.safeParse({ number: 1, onlyCheckpointed: true }).success).toBe(false);
-    expect(BlockQuerySchema.safeParse({ tag: 'checkpointed', onlyCheckpointed: true }).success).toBe(false);
+  it('drops fields that are not part of this query', () => {
+    expect(BlockQuerySchema.parse({ number: 1, onlyCheckpointed: true })).toEqual({ number: BlockNumber(1) });
+    expect(BlockQuerySchema.parse({ tag: 'checkpointed', onlyCheckpointed: true })).toEqual({ tag: 'checkpointed' });
+  });
+
+  it('rejects an anchor: this API names a block one way', () => {
+    // The node RPC accepts `{ number, hash }` and reduces it to a hash before the archiver is read, so an anchor
+    // reaching here would be resolved by height and lose the fork its hash pins.
+    const hash = BlockHash.fromBuffer(Buffer.alloc(32, 1)).toString();
+    expect(BlockQuerySchema.safeParse({ number: 1, hash }).success).toBe(false);
+  });
+
+  it('drops a key it does not know', () => {
+    expect(BlockQuerySchema.parse({ number: 1, futureOption: true })).toEqual({ number: BlockNumber(1) });
+    expect(BlockQuerySchema.safeParse({ futureOption: true }).success).toBe(false);
   });
 });
 
@@ -372,6 +435,7 @@ describe('BlocksQuerySchema', () => {
     const json = JSON.parse(JSON.stringify(query));
     const parsed = BlocksQuerySchema.parse(json);
     expect(parsed).toEqual(query);
+    expect(BlocksQuerySchema.parse({ ...json, futureOption: true })).toEqual(query);
   });
 
   it('rejects mixed-key inputs', () => {
@@ -384,6 +448,30 @@ describe('BlocksQuerySchema', () => {
 
   it('rejects epoch query with onlyCheckpointed: false', () => {
     expect(BlocksQuerySchema.safeParse({ epoch: 1, onlyCheckpointed: false }).success).toBe(false);
+  });
+});
+
+describe.each([
+  { name: 'CheckpointQuerySchema', schema: CheckpointQuerySchema, tags: ['checkpointed', 'proven', 'finalized'] },
+  { name: 'ProposedCheckpointQuerySchema', schema: ProposedCheckpointQuerySchema, tags: ['proposed'] },
+])('$name', ({ schema, tags }) => {
+  it.each([{ number: CheckpointNumber(7) }, { slot: SlotNumber(8) }, ...tags.map(tag => ({ tag }))])(
+    'roundtrips and strips unknown fields from %j',
+    query => {
+      const json = JSON.parse(JSON.stringify(query));
+      expect(schema.parse(json)).toEqual(query);
+      expect(schema.parse({ ...json, futureOption: true })).toEqual(query);
+    },
+  );
+
+  it.each([
+    {},
+    { futureOption: true },
+    { number: 7, slot: 8 },
+    { number: 7, slot: -1, futureOption: true },
+    { tag: 'latest', futureOption: true },
+  ])('rejects invalid selectors %j', query => {
+    expect(schema.safeParse(query).success).toBe(false);
   });
 });
 
@@ -407,6 +495,19 @@ describe('CheckpointsQuerySchema', () => {
     const limit = MAX_RPC_CHECKPOINTS_DATA_LEN + 1;
     expect(CheckpointsQuerySchema.safeParse({ from: 1, limit }).success).toBe(false);
     expect(CheckpointsQuerySchema.safeParse({ fromSlot: 1, limit }).success).toBe(false);
+  });
+
+  it('drops a key it does not know while still requiring the ones it does', () => {
+    expect(CheckpointsQuerySchema.parse({ from: 1, limit: 10, futureOption: true })).toEqual({
+      from: CheckpointNumber(1),
+      limit: 10,
+    });
+    expect(CheckpointsQuerySchema.safeParse({ from: 1, futureOption: true }).success).toBe(false);
+  });
+
+  it('rejects a range named two ways at once', () => {
+    expect(CheckpointsQuerySchema.safeParse({ from: 1, limit: 10, epoch: 5 }).success).toBe(false);
+    expect(CheckpointsQuerySchema.safeParse({ from: 1, fromSlot: 1, limit: 10 }).success).toBe(false);
   });
 });
 
@@ -477,17 +578,21 @@ class MockArchiver implements ArchiverApi {
     return Promise.resolve([]);
   }
   async getCheckpoint(_query: CheckpointQuery): Promise<PublishedCheckpoint | undefined> {
+    const attestations = [CommitteeAttestation.random()];
     return PublishedCheckpoint.from({
       checkpoint: await Checkpoint.random(CheckpointNumber(1)),
-      attestations: [CommitteeAttestation.random()],
+      attestations,
+      verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(attestations),
       l1: new L1PublishedData(1n, 0n, `0x`),
     });
   }
   async getCheckpoints(_query: CheckpointsQuery): Promise<PublishedCheckpoint[]> {
+    const attestations = [CommitteeAttestation.random()];
     return [
       PublishedCheckpoint.from({
         checkpoint: await Checkpoint.random(CheckpointNumber(1)),
-        attestations: [CommitteeAttestation.random()],
+        attestations,
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(attestations),
         l1: new L1PublishedData(1n, 0n, `0x`),
       }),
     ];
@@ -520,6 +625,7 @@ class MockArchiver implements ArchiverApi {
   }
   async getCheckpointsData(_query: CheckpointsQuery): Promise<CheckpointData[]> {
     const checkpoint = await Checkpoint.random(CheckpointNumber(1));
+    const attestations = [CommitteeAttestation.random()];
     return [
       {
         checkpointNumber: checkpoint.number,
@@ -529,7 +635,8 @@ class MockArchiver implements ArchiverApi {
         startBlock: BlockNumber(1),
         blockCount: checkpoint.blocks.length,
         feeAssetPriceModifier: 0n,
-        attestations: [CommitteeAttestation.random()],
+        attestations,
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations(attestations),
         l1: L1PublishedData.random(),
       },
     ];
@@ -554,15 +661,33 @@ class MockArchiver implements ArchiverApi {
       finalized: tipId,
     });
   }
+  getL1SyncPoint(): Promise<L1SyncPoint | undefined> {
+    return Promise.resolve({ blockNumber: 42n, blockHash: Buffer32.fromField(new Fr(7)) });
+  }
+  async getL2Frontier(): Promise<L2Frontier> {
+    return {
+      tips: await this.getL2Tips(),
+      proposedCheckpoint: await this.getProposedCheckpointData(),
+      l1SyncPoint: { blockNumber: 42n, blockHash: Buffer32.fromField(new Fr(7)) },
+      latestBlockHeader: BlockHeader.empty({
+        globalVariables: GlobalVariables.empty({ blockNumber: BlockNumber(1) }),
+      }),
+      checkpointedCheckpoint: {
+        header: CheckpointHeader.empty({ slotNumber: SlotNumber(1) }),
+        l1: new L1PublishedData(3n, 4n, `0x05`),
+      },
+      pendingChainValidationStatus: { valid: true },
+    };
+  }
   getL2BlockHash(blockNumber: BlockNumber): Promise<string | undefined> {
     expect(blockNumber).toEqual(BlockNumber(1));
     return Promise.resolve(`0x01`);
   }
-  getPrivateLogsByTags(query: PrivateLogsQuery): Promise<LogResult[][]> {
+  getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]> {
     expect(Array.isArray(query.tags)).toBe(true);
     return Promise.resolve([query.tags.map(() => randomLogResult())]);
   }
-  getPublicLogsByTags(query: PublicLogsQuery): Promise<LogResult[][]> {
+  getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]> {
     expect(query.contractAddress).toBeInstanceOf(AztecAddress);
     expect(Array.isArray(query.tags)).toBe(true);
     return Promise.resolve([query.tags.map(() => randomLogResult())]);
@@ -617,48 +742,26 @@ class MockArchiver implements ArchiverApi {
     expect(l1ToL2Message).toBeInstanceOf(Fr);
     return Promise.resolve(1n);
   }
-  getLatestInboxBucketAtOrBefore(timestamp: bigint): Promise<InboxBucket | undefined> {
-    expect(typeof timestamp).toEqual('bigint');
-    return Promise.resolve({
-      seq: 1n,
-      inboxRollingHash: Fr.random(),
-      totalMsgCount: 3n,
-      timestamp: 100n,
-      msgCount: 3,
-      lastMessageIndex: 2n,
-    });
-  }
-  getInboxBucket(seq: bigint): Promise<InboxBucket | undefined> {
-    expect(typeof seq).toEqual('bigint');
-    return Promise.resolve({
-      seq,
-      inboxRollingHash: Fr.random(),
-      totalMsgCount: 3n,
-      timestamp: 100n,
-      msgCount: 3,
-      lastMessageIndex: 2n,
-    });
-  }
-  getInboxBucketByTotalMsgCount(totalMsgCount: bigint): Promise<InboxBucket | undefined> {
-    expect(typeof totalMsgCount).toEqual('bigint');
-    return Promise.resolve({
-      seq: 2n,
-      inboxRollingHash: Fr.random(),
-      totalMsgCount,
-      timestamp: 100n,
-      msgCount: 3,
-      lastMessageIndex: 2n,
-    });
-  }
-  getL1ToL2MessagesBetweenBuckets(fromExclusive: bigint, toInclusive: bigint): Promise<Fr[]> {
-    expect(typeof fromExclusive).toEqual('bigint');
-    expect(typeof toInclusive).toEqual('bigint');
-    return Promise.resolve([Fr.random()]);
-  }
   getL1ToL2MessagesBetweenLeafCounts(startLeafCount: bigint, endLeafCount: bigint): Promise<Fr[]> {
     expect(typeof startLeafCount).toEqual('bigint');
     expect(typeof endLeafCount).toEqual('bigint');
     return Promise.resolve([Fr.random()]);
+  }
+  getMessagePosition(totalMessageCount: bigint): Promise<InboxMessagePosition | undefined> {
+    expect(typeof totalMessageCount).toEqual('bigint');
+    return Promise.resolve({ totalMessageCount, rollingHash: Fr.random() });
+  }
+  getSyncedMessagePosition(): Promise<InboxMessagePosition> {
+    return Promise.resolve({ totalMessageCount: 3n, rollingHash: Fr.random() });
+  }
+  getL1ToL2MessageRange(startLeafCount: bigint, endLeafCount: bigint): Promise<InboxMessageRange> {
+    expect(typeof startLeafCount).toEqual('bigint');
+    expect(typeof endLeafCount).toEqual('bigint');
+    return Promise.resolve({
+      messages: [Fr.random()],
+      start: { totalMessageCount: startLeafCount, rollingHash: Fr.random() },
+      end: { totalMessageCount: endLeafCount, rollingHash: Fr.random() },
+    });
   }
   getL1Constants(): Promise<L1RollupConstants> {
     return Promise.resolve(EmptyL1RollupConstants);

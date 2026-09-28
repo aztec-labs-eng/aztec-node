@@ -54,6 +54,15 @@ function urlencode {
   printf '%s' "$1" | python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.stdin.read(), safe=''))"
 }
 
+# True when the given registry URL is npmjs, whatever scheme and trailing slash it is spelled with.
+# The public release assertion and the scope routing both key on this, so no spelling can satisfy
+# one and not the other: that is how a public release would end up routing its scopes at npmjs
+# while switching on the private-registry behaviour that goes with them.
+function is_npmjs {
+  local host=${1#*://}
+  [ "${host%%/*}" = registry.npmjs.org ]
+}
+
 function term_link {
   echo -e "${yellow}${link_open}$1${link_close}$2${link_open}${link_close}${reset}"
 }

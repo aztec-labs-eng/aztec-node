@@ -1,67 +1,90 @@
-# Creates release tags via the release GitHub App — the only identity the
-# release-tags ruleset permits to create v* tags.
+# Creates release tags on demand via the release GitHub App — the only
+# identity the release-tags ruleset permits to create tags. Every run needs a
+# second person's approval; the unattended nightly lives in
+# release-tag-nightly.yml, apart from this file.
 #
-#   nightly:  cron (or dispatch with kind=nightly)  -> v<ver>-nightly.<date>
-#             per branch in the nightly matrix below; unattended via the
-#             `tagger` environment.
-#   rc:       dispatch with kind=rc                 -> v<ver>-rc.<n>
-#             from any branch (input); n is derived from origin's existing
-#             rc tags for that version (max + 1, starting at 1). Gated by
-#             `release-approval` like a real release; artifacts publish to
-#             the 'rc' channel and never take 'latest'.
-#   release:  dispatch with kind=release            -> v<ver>
-#             from any branch (input), gated by the `release-approval`
-#             environment: required reviewers with self-review prevented, so
-#             cutting a release takes two distinct humans.
+#   nightly:  dispatch with kind=nightly    -> v<ver>-nightly.<date>[.<suffix>]
+#             re-cuts a day the schedule missed or botched. The optional
+#             suffix keeps a re-cut from colliding with the tag the schedule
+#             already pushed.
+#   rc:       dispatch with kind=rc         -> v<ver>-rc.<n>
+#             n is derived from origin's existing rc tags for that version
+#             (max + 1, starting at 1). Gated by `release-approval` like a
+#             real release; artifacts publish to the 'rc' channel and never
+#             take 'latest'.
+#   stable:   dispatch with kind=stable     -> v<ver>
+#             gated by the `release-approval` environment: required reviewers
+#             with self-review prevented, so cutting a release takes two
+#             distinct humans.
+#   private:  dispatch with kind=private    -> private/v<ver>-private.<n>
+#             n is derived like an rc's, and the gate is the same. The ref
+#             carries a private/ prefix, which is what routes it to
+#             private-release.yml and the release-private environment; the
+#             version inside it is a plain semver on the 'private' channel.
 #
-# rc numbers are dotted (-rc.N, not -rcN): semver compares the dotted N
-# numerically (rc.2 < rc.10) but an undotted rcN lexically (rc10 < rc2), and
-# ci3/dist_tag takes the first dot-separated prerelease identifier as the
-# release channel — 'rc' — where rcN would mint a fresh channel per candidate.
+# rc and private numbers are dotted (-rc.N, not -rcN): semver compares the
+# dotted N numerically (rc.2 < rc.10) but an undotted rcN lexically
+# (rc10 < rc2), and ci3/dist_tag takes the first dot-separated prerelease
+# identifier as the release channel — 'rc' or 'private' — where rcN would mint
+# a fresh channel per candidate.
 #
-# Multi-branch model: scheduled/dispatched runs always execute THIS file from
-# the default branch, so the token-minting code is always the reviewed code on
-# main — and the environments' deployment policy stays main-only for the same
-# reason. The branch being tagged is just data: each branch's version comes
-# from its own .release-please-manifest.json, so a v5 line tags v5.x.y and
-# main tags v6.x.y with no collision. To start nightlies for a new release
-# line, add it to the matrix list below (a one-line reviewed PR).
+# A dispatched run executes the copy of this file on the ref it was dispatched
+# from, so what keeps the token-minting code reviewed is not this file. It is
+# that RELEASE_APP_PRIVATE_KEY exists only as a secret on `release-approval` and
+# `tagger`, whose deployment policies admit main alone: a copy on another branch
+# that drops the `environment:` line below mints nothing.
+#
+# To start a new release line, add it to the `branch` options below, and to the
+# matrix in release-tag-nightly.yml for nightlies.
+
 name: Release Tag
 
 on:
-  schedule:
-    # Every night at 4:00 AM UTC.
-    - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
       kind:
-        description: "nightly re-tag, a release candidate (requires approval), or a real release (requires approval)"
+        description: "a nightly re-cut, a release candidate, a real (stable) release, or a private release"
         type: choice
-        options: [nightly, rc, release]
-        default: nightly
+        options: [nightly, rc, stable, private]
+        default: rc
+      # A choice, not free text: this value reaches both the checkout ref and
+      # the tagging step, and git accepts shell metacharacters in a ref name.
       branch:
-        description: "branch to tag (its manifest supplies the version)"
-        type: string
+        description: "release line to tag (its manifest supplies the version)"
+        type: choice
+        options: [main]
         default: main
+      # Free text, unlike the two above, because it can afford to be. `branch`
+      # steers what actions/checkout puts on disk before any of this file's own
+      # code runs, so it is constrained where it is declared; this steers nothing
+      # but the name of the tag at the end, and reaches the script as an env var,
+      # which bash never parses as code. The pattern checked below is what keeps
+      # it one semver prerelease identifier and a legal ref component.
+      suffix:
+        description: "nightly only: tells a re-cut apart from the day's scheduled tag, e.g. 'hotfix' -> v<ver>-nightly.<date>.hotfix"
+        type: string
+        default: ""
 
 jobs:
   tag:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # TO ADD A NEW RELEASE LINE to the nightly schedule: extend the LAST
-        # list in this expression, e.g. fromJSON('["main", "v5"]'). Nothing else
-        # changes — no environment, ruleset, or App-installation edits (see the
-        # multi-branch model in the header). The first arm of the expression is
-        # not a branch list: it collapses dispatch runs to the one requested branch.
-        branch: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.branch)) || fromJSON('["main"]') }}
+    # Shared with release-tag-nightly.yml, so a dispatched tag and a scheduled
+    # nightly on the same line queue rather than race; it also keeps two rc or
+    # private dispatches from computing the same number.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.repository }}-${{ matrix.branch }}
-    environment: ${{ (github.event_name == 'workflow_dispatch' && (inputs.kind == 'release' || inputs.kind == 'rc')) && 'release-approval' || 'tagger' }}
+      group: release-tag-${{ inputs.branch }}
+    # A re-run replays the original inputs against main's current tip, so an old
+    # stable dispatch re-run after a version bump would cut a release nobody asked
+    # for. Dispatch again instead, which asks for approval afresh.
+    if: github.run_attempt == 1
+    # A literal, not an expression: no input or event can route this job to
+    # `tagger`, whatever the kind.
+    environment: release-approval
     steps:
       - name: Mint App token
-        uses: actions/create-github-app-token@v2
+        # SHA-pinned, not @v2: this is the step the private key is passed to, so a
+        # moved tag upstream would be arbitrary code beside the key.
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         id: app
         with:
           app-id: ${{ vars.RELEASE_APP_ID || secrets.RELEASE_APP_ID }}
@@ -70,53 +93,117 @@ jobs:
       # Do NOT bump to checkout v6 (see the pinning rationale in ci3.yml).
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ matrix.branch }}
+          ref: ${{ inputs.branch }}
           token: ${{ steps.app.outputs.token }}
 
       - name: Create and push tag
+        # Passed as env rather than interpolated with ${{ }}: an expression is
+        # substituted into the script before bash parses it, so its value would
+        # be executed as shell text.
+        env:
+          BRANCH: ${{ inputs.branch }}
+          KIND: ${{ inputs.kind }}
+          SUFFIX: ${{ inputs.suffix }}
         run: |
           set -euo pipefail
-          git config --global user.email "tech@aztecprotocol.com"
-          git config --global user.name "AztecBot"
+          # [a-z] below is a collation range: under a UTF-8 locale it also matches
+          # accented letters, which are legal in a ref but not in a semver
+          # identifier. The runner's locale is not ours to assume, so fix it.
+          export LC_ALL=C
+          git config --global user.email "noreply@aztec-labs.com"
+          git config --global user.name "Aztec Labs release"
           version=$(jq -r '."."' .release-please-manifest.json)
-          kind=${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
-          case "$kind" in
-            release)
+          # The whole tag name is built from this, so refuse anything that is not
+          # a plain X.Y.Z before it reaches a ref name.
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Manifest version on $BRANCH is not X.Y.Z: $version"
+            exit 1
+          fi
+          suffix=${SUFFIX:-}
+          if [ -n "$suffix" ]; then
+            if [ "$KIND" != nightly ]; then
+              echo "::error::suffix applies to kind=nightly only; the other kinds are numbered by their own schemes."
+              exit 1
+            fi
+            # One semver prerelease identifier. Keeps the tag valid semver, keeps
+            # ci3/dist_tag reading the channel as 'nightly' (it takes the first
+            # dot-separated identifier), and admits nothing that would change the
+            # meaning of the ref name: no dot, slash, or leading hyphen.
+            #
+            # Hyphens are excluded rather than merely anchored: release-image
+            # publishes the per-architecture images as "<tag>-amd64"/"<tag>-arm64"
+            # and assembles the manifest list from them, so a suffix ending in one
+            # of those would name another release's architecture image.
+            #
+            # The rejected value is deliberately not echoed: a newline in it would
+            # close this line and let the rest forge a second ::workflow-command::.
+            if [[ ! "$suffix" =~ ^[a-z][a-z0-9]{0,19}$ ]]; then
+              echo "::error::Invalid suffix rejected: use 1-20 characters, lowercase letters and digits, starting with a letter."
+              exit 1
+            fi
+          fi
+          # Next number in a numbered channel comes from origin, not the clone: list the
+          # existing tags for that version and channel and take max+1 (1 when none). The
+          # trailing anchor also drops ls-remote's peeled ^{} duplicates.
+          function next_in_channel {
+            local prefix=$1 channel=$2 last
+            last=$(git ls-remote --tags origin "refs/tags/${prefix}v${version}-${channel}.*" \
+              | sed -n "s|.*refs/tags/${prefix}v${version}-${channel}\.\([0-9][0-9]*\)$|\1|p" \
+              | sort -n | tail -1)
+            echo "${prefix}v${version}-${channel}.$(( ${last:-0} + 1 ))"
+          }
+          case "$KIND" in
+            stable)
               tag="v${version}"
               ;;
             rc)
-              # Next candidate number comes from origin, not the clone: list the
-              # existing v<ver>-rc.* tags and take max+1 (1 when none). The trailing
-              # anchor also drops ls-remote's peeled ^{} duplicates.
-              last=$(git ls-remote --tags origin "refs/tags/v${version}-rc.*" \
-                | sed -n "s|.*refs/tags/v${version}-rc\.\([0-9][0-9]*\)$|\1|p" \
-                | sort -n | tail -1)
-              tag="v${version}-rc.$(( ${last:-0} + 1 ))"
+              tag=$(next_in_channel "" rc)
+              ;;
+            private)
+              # private/ is a path segment of the ref, not part of the version: the release
+              # publishes <version>-private.<n>, and the prefix is what keeps this tag out of
+              # release.yml's tags: v* trigger and out of the `release` environment's policy.
+              tag=$(next_in_channel "private/" private)
               ;;
             *)
               tag="v${version}-nightly.$(date -u +%Y%m%d)"
+              # A suffixed re-cut is released like any nightly, so it takes the
+              # nightly aliases from the day's scheduled build: aztec-up's
+              # v<major>-nightly on S3, and npm's dist-tag. Suffixes are words, not
+              # a sequence, so two re-cuts on one day have no meaningful order
+              # between them — the S3 alias follows whichever published last, while
+              # npm's only moves for whichever sorts higher. Neither promises a
+              # global order; pin an exact version if you need one.
+              if [ -n "$suffix" ]; then
+                tag="${tag}.${suffix}"
+              fi
               ;;
           esac
-          echo "Tagging ${{ matrix.branch }} @ $(git rev-parse --short HEAD): $tag"
+          echo "Tagging $BRANCH @ $(git rev-parse --short HEAD): $tag"
           # Refuse to move an existing tag: re-dispatching a release without a
           # version-bump PR must fail loudly, not re-tag.
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on ${{ matrix.branch }} first."
+            if [ "$KIND" = nightly ] && [ -n "$suffix" ]; then
+              echo "::error::Tag $tag already exists. Re-dispatch with a different suffix."
+            elif [ "$KIND" = nightly ]; then
+              echo "::error::Tag $tag already exists. Re-dispatch with a suffix to cut a distinct nightly for today, e.g. suffix=hotfix."
+            else
+              echo "::error::Tag $tag already exists. Bump .release-please-manifest.json on $BRANCH first."
+            fi
             exit 1
           fi
           git tag -a "$tag" -m "$tag"
           git push origin "$tag"
 
-      # Nightly tagging is unattended, so a failure here is otherwise invisible: no tag is
-      # pushed and the release run that would report it never starts. Posted inline rather
-      # than via ci3/slack_notify because two of the three steps above can fail before the
-      # repo is checked out.
+      # A failed tag pushes nothing, so the release run that would report it never starts.
+      # Posted inline rather than via ci3/slack_notify because the steps above can fail
+      # before the repo is checked out.
       - name: Notify Slack on tagging failure
         if: failure()
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          KIND: ${{ github.event_name == 'workflow_dispatch' && inputs.kind || 'nightly' }}
-          BRANCH: ${{ matrix.branch }}
+          KIND: ${{ inputs.kind }}
+          BRANCH: ${{ inputs.branch }}
           ACTOR: ${{ github.actor }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |

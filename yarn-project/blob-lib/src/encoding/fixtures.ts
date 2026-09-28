@@ -9,7 +9,7 @@ import {
   PRIVATE_LOG_SIZE_IN_FIELDS,
 } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
-import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { BlockNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 
 import type { BlockBlobData, BlockEndBlobData } from './block_blob_data.js';
@@ -121,10 +121,10 @@ export function makeBlockEndStateField({
   ...overrides
 }: { seed?: number } & Partial<BlockEndStateField> = {}): BlockEndStateField {
   return {
-    l1ToL2MessageNextAvailableLeafIndex: seed,
-    noteHashNextAvailableLeafIndex: seed + 0x10,
-    nullifierNextAvailableLeafIndex: seed + 0x20,
-    publicDataNextAvailableLeafIndex: seed + 0x30,
+    l1ToL2MessageNextAvailableLeafIndex: TreeLeafIndex(seed),
+    noteHashNextAvailableLeafIndex: TreeLeafIndex(seed + 0x10),
+    nullifierNextAvailableLeafIndex: TreeLeafIndex(seed + 0x20),
+    publicDataNextAvailableLeafIndex: TreeLeafIndex(seed + 0x30),
     totalManaUsed: BigInt(seed + 0x40),
     ...overrides,
   };

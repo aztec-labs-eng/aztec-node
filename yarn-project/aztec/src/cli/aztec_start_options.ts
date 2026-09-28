@@ -168,12 +168,12 @@ export const aztecStartOptions: { [key: string]: AztecStartOption[] } = {
       parseVal: val => val === undefined || val === 'true' || val === '1',
     },
     {
-      flag: '--reset-admin-api-key',
+      flag: '--reset-admin-api-key [value]',
       description:
         'Force-generate a new admin API key, replacing any previously persisted key hash. The new key is displayed once at startup.',
-      defaultValue: false,
       env: 'AZTEC_RESET_ADMIN_API_KEY',
-      parseVal: val => val === 'true' || val === '1',
+      // Optional-value boolean: bare flag resets the key; an explicit true/false is also honored.
+      ...booleanConfigHelper(),
     },
     {
       flag: '--node-debug',

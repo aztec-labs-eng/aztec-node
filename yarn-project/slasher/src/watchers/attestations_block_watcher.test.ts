@@ -184,6 +184,34 @@ describe('AttestationsBlockWatcher', () => {
     expect(handler).toHaveBeenCalledTimes(2);
   });
 
+  it('does not slash the rotation-derived proposer for a descendant whose epoch has the escape hatch open', async () => {
+    // While the hatch is open, checkpoints are published outside the committee's proposer rotation, so the
+    // committee member rotation yields for the slot did not necessarily publish this checkpoint.
+    epochCache.getCommitteeForEpoch.mockResolvedValue({
+      committee,
+      seed: 0n,
+      epoch: EpochNumber(0),
+      isEscapeHatchOpen: true,
+    } as EpochCommitteeInfo);
+
+    const descendant: CheckpointInfo = {
+      archive: Fr.random(),
+      lastArchive: checkpointInfo.archive,
+      slotNumber: SlotNumber(2),
+      checkpointNumber: CheckpointNumber(2),
+      timestamp: BigInt(Math.floor(Date.now() / 1000)),
+    };
+
+    await watcher.handleDescendantOfInvalid({
+      type: 'descendentOfInvalidAttestationsCheckpointDetected',
+      checkpoint: descendant,
+      ancestorArchiveRoot: checkpointInfo.archive,
+      ancestorCheckpointNumber: checkpointInfo.checkpointNumber,
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('emits WANT_TO_SLASH_EVENT for proposer when a valid-attestations descendant of an invalid checkpoint is detected', async () => {
     // Seed the watcher with one invalid ancestor so the descendant event hits the cache.
     const invalidValidationResult: ValidateCheckpointNegativeResult = {

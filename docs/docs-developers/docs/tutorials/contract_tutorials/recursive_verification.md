@@ -87,7 +87,7 @@ This enables patterns impossible on transparent blockchains, like proving you ha
 
 ### UX Considerations: Multiple Proof Generation
 
-When using [recursive verification](https://noir-lang.org/docs/noir/standard_library/recursion) in Aztec, users experience **two distinct proof generation phases**:
+When using [recursive verification](https://noir-lang.org/docs/libraries/standard_library/recursion) in Aztec, users experience **two distinct proof generation phases**:
 
 1. **Noir Proof Generation** (application-specific):
    - Happens before interacting with the Aztec contract
@@ -154,7 +154,7 @@ For example, you could create a zkpassport proof demonstrating that you are over
 
 ### Circuit Configuration
 
-Update `circuit/Nargo.toml` (see [Noir crates and packages](https://noir-lang.org/docs/noir/modules_packages_crates/crates_and_packages) for more details):
+Update `circuit/Nargo.toml` (see [Noir crates and packages](https://noir-lang.org/docs/project_structure/crates_and_packages) for more details):
 
 #include_code circuit_nargo_toml /docs/examples/circuits/hello_circuit/Nargo.toml toml
 
@@ -238,7 +238,7 @@ type = "contract"
 authors = ["[YOUR_NAME]"]
 
 [dependencies]
-aztec = { git = "https://github.com/AztecProtocol/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
+aztec = { git = "https://github.com/aztec-labs-eng/aztec-nr/", tag = "#include_aztec_version", directory = "aztec" }
 bb_proof_verification = { git = "https://github.com/AztecProtocol/aztec-packages/", tag = "#include_aztec_version", directory = "barretenberg/noir/bb_proof_verification" }
 ```
 

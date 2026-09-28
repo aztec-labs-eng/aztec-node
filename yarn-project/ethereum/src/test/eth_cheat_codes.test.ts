@@ -164,6 +164,24 @@ describe('EthCheatCodes', () => {
       ).resolves.toEqual([3, 0, 1]);
     });
 
+    // Without an explicit limit anvil estimates the replacement against the chain before the rollback, where the
+    // call's state is still warm. The reorg tests re-mine calls whose state is cold on the replacement chain, so
+    // the limit they ask for has to reach the transaction.
+    it('honours an explicit gas limit on an unsigned replacement tx', async () => {
+      const token = await deployToken();
+      await timesAsync(2, () => mint(token, 100n));
+
+      const data = encodeFunctionData({ abi: TestERC20Abi, functionName: 'mint', args: [sender, 1000n] });
+      const blockNumber = await getBlockNumber();
+      await cheatCodes.reorgWithReplacement(2, [[{ input: data, to: token.address, from: sender, gas: 900_000n }]]);
+
+      const replacement = await l1Client.getBlock({ blockNumber: blockNumber - 1n, includeTransactions: true });
+      expect(replacement.transactions).toHaveLength(1);
+      expect(replacement.transactions[0].gas).toEqual(900_000n);
+      // Both mints were rolled back, and the replacement ran with the limit it asked for.
+      await expect(token.read.balanceOf([sender])).resolves.toEqual(1000n);
+    });
+
     it('reorgs with blocks with serialized replacement txs', async () => {
       const token = await deployToken();
       const initialNonce = await l1Client.getTransactionCount({ address: sender });

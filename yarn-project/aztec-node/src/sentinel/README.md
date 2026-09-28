@@ -8,7 +8,7 @@ The Sentinel watches every committee member's behaviour each L2 slot, aggregates
 - Persist a sliding window of per-slot history per validator.
 - Roll up that history into per-epoch performance after each epoch ends.
 - Decide which validators have been inactive for `slashInactivityConsecutiveEpochThreshold` consecutive epochs and emit `WANT_TO_SLASH_EVENT` with `OffenseType.INACTIVITY`.
-- Expose validator stats to RPC consumers (`getValidatorStats`, `computeStats`).
+- Expose validator stats to RPC consumers (`getValidatorStats`, `getValidatorStatsBatch`, `computeStats`).
 
 The sentinel is one of several watchers registered with the slasher; it does not vote or publish to L1 itself.
 
@@ -101,3 +101,8 @@ The sentinel also reads slashing thresholds and L1 chain identifiers from `Senti
 - `config.ts` — `SentinelConfig` and env-var mappings
 - `factory.ts` — `createSentinel` factory used by `AztecNodeService`
 - `sentinel.test.ts` / `store.test.ts` — unit tests
+
+## Querying multiple validators
+
+Prefer `node_getValidatorStatsBatch` instead of a JSON-RPC batch of individual
+`node_getValidatorStats` requests.
