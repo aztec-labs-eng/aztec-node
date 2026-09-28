@@ -1,3 +1,6 @@
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { retryUntil } from '@aztec-labs/foundation/retry';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
 
 import { FakeBBJsFactory } from '../test/fake_bb_js.js';
@@ -23,7 +26,7 @@ describe('BBJsFactory pool', () => {
     await factory.destroy();
   });
 
-  it('evicts a borrowed instance whose bb died instead of returning it to the pool', async () => {
+  it('does not return a borrowed instance whose bb died, and replaces it', async () => {
     factory = new FakeBBJsFactory(1);
     {
       await using first = await factory.getInstance();
@@ -38,7 +41,7 @@ describe('BBJsFactory pool', () => {
     expect(factory.created[1].chonkVerifyCalls).toBe(1);
   });
 
-  it('skips an idle instance whose bb died and spawns a replacement', async () => {
+  it('skips an idle instance whose bb died and replaces it', async () => {
     factory = new FakeBBJsFactory(2);
     {
       await using _warmup = await factory.getInstance();
@@ -85,76 +88,77 @@ describe('BBJsFactory pool', () => {
     expect(factory.created).toHaveLength(2);
   });
 
-  it('fails waiting borrows once the instance they wait for dies and cannot be replaced', async () => {
+  it('keeps a borrower waiting while replacements fail to spawn, and hands it the first one that starts', async () => {
     factory = new FakeBBJsFactory(1);
     const first = await factory.getInstance();
-    const waiting = [factory.getInstance(), factory.getInstance()];
-    await settle();
-    factory.created[0].kill();
-    // More failures than spawns: the background replacement, then a spawn by each waiting borrow when it re-checks.
-    for (let i = 0; i < 10; i++) {
-      factory.planNextInstance(new Error('spawn failed'));
-    }
-    await first[Symbol.asyncDispose]();
-
-    const results = await Promise.allSettled(waiting);
-    expect(results.map(r => r.status)).toEqual(['rejected', 'rejected']);
-  });
-
-  it('fails a borrow when no instance exists and none can be spawned, and spawns one on the next borrow', async () => {
-    factory = new FakeBBJsFactory(1);
-    {
-      await using _first = await factory.getInstance();
-      factory.created[0].kill();
-      // One spawn when the dead instance is returned, one by the next borrow.
-      factory.planNextInstance(new Error('spawn failed'));
-      factory.planNextInstance(new Error('spawn failed'));
-    }
-    await settle();
-
-    await expect(factory.getInstance()).rejects.toThrow('spawn failed');
-    await using second = await factory.getInstance();
-    await expect(verify(second)).resolves.toEqual(verified);
-  });
-
-  it('waits for a borrowed instance when a replacement cannot be spawned', async () => {
-    factory = new FakeBBJsFactory(2);
-    const first = await factory.getInstance();
-    {
-      await using _second = await factory.getInstance();
-      factory.created[1].kill();
-      // Enough failures for the background replacement, the borrow's spawn, and any re-checks before `first` returns.
-      for (let i = 0; i < 10; i++) {
-        factory.planNextInstance(new Error('spawn failed'));
-      }
-    }
-    await settle();
-
     const waiting = factory.getInstance();
-    // Let the borrow fail its spawn and start waiting before the live instance comes back.
-    await settle();
+    factory.created[0].kill();
+    for (let i = 0; i < 3; i++) {
+      factory.planNextInstance(new Error('spawn failed'));
+    }
     await first[Symbol.asyncDispose]();
 
-    await using third = await waiting;
-    await expect(verify(third)).resolves.toEqual(verified);
+    await using second = await waiting;
+    await expect(verify(second)).resolves.toEqual(verified);
     expect(factory.created).toHaveLength(2);
   });
 
-  it('keeps the instances that started when pool initialization partly fails', async () => {
+  it('waits for the first instance when bb cannot start yet', async () => {
+    factory = new FakeBBJsFactory(1);
+    factory.planNextInstance(new Error('spawn failed'));
+    factory.planNextInstance(new Error('spawn failed'));
+
+    await using instance = await factory.getInstance();
+    await expect(verify(instance)).resolves.toEqual(verified);
+  });
+
+  it('keeps the instances that started and spawns the ones that failed later', async () => {
     factory = new FakeBBJsFactory(2);
     factory.planNextInstance(new Error('spawn failed'));
 
-    await using instance = await factory.getInstance();
-    await expect(verify(instance)).resolves.toEqual(verified);
+    await using a = await factory.getInstance();
+    await using b = await factory.getInstance();
+    await expect(verify(a)).resolves.toEqual(verified);
+    await expect(verify(b)).resolves.toEqual(verified);
+    expect(factory.created).toHaveLength(2);
+  });
+
+  it('does not spawn past poolSize while a spawn is in flight', async () => {
+    factory = new FakeBBJsFactory(1);
+    const spawned = promiseWithResolvers<void>();
+    factory.planNextInstance([], spawned.promise);
+    const borrowing = factory.getInstance();
+    // Several maintenance runs happen while the spawn is in flight.
+    await sleep(50);
+    spawned.resolve();
+
+    await using _instance = await borrowing;
     expect(factory.created).toHaveLength(1);
   });
 
-  it('retries pool initialization when no instance started', async () => {
+  it('does not wait for a spawn in flight when destroyed, and destroys its instance once it arrives', async () => {
     factory = new FakeBBJsFactory(1);
-    factory.planNextInstance(new Error('spawn failed'));
+    const spawned = promiseWithResolvers<void>();
+    factory.planNextInstance([], spawned.promise);
+    const borrowFails = expect(factory.getInstance()).rejects.toThrow('destroyed while waiting');
 
-    await expect(factory.getInstance()).rejects.toThrow('spawn failed');
-    await using instance = await factory.getInstance();
-    await expect(verify(instance)).resolves.toEqual(verified);
+    await factory.destroy();
+    await borrowFails;
+    spawned.resolve();
+    await settle();
+    expect(factory.created).toHaveLength(1);
+    expect(factory.created[0].destroyCount).toBe(1);
+  });
+
+  it('destroys every instance once when destroyed after replacing a dead idle one', async () => {
+    factory = new FakeBBJsFactory(2);
+    {
+      await using _warmup = await factory.getInstance();
+    }
+    factory.created[1].kill();
+    await retryUntil(() => factory.created.length === 3, 'replacement of the dead instance', 5, 0.001);
+
+    await factory.destroy();
+    expect(factory.created.map(instance => instance.destroyCount)).toEqual([1, 1, 1]);
   });
 });

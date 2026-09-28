@@ -6,6 +6,7 @@ import type { BBJsFactory } from '../bb/bb_js_backend.js';
 import type { BBConfig } from '../config.js';
 import { FakeBBJsFactory } from '../test/fake_bb_js.js';
 import { BBCircuitVerifier, ProofVerifierUnavailableError } from './bb_verifier.js';
+import { QueuedIVCVerifier } from './queued_chonk_verifier.js';
 
 const config: BBConfig = {
   bbBinaryPath: '/unused/bb',
@@ -67,14 +68,26 @@ describe('BBCircuitVerifier', () => {
     await expect(verifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
   });
 
-  it('reports the verifier unavailable when no bb instance can be started', async () => {
+  it('waits for a bb instance to start rather than rejecting the proof', async () => {
     factory.planNextInstance(new Error('spawn failed'));
-    await expect(verifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
+    await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: true });
   });
 
-  it('verifies again once a failed bb spawn succeeds', async () => {
-    factory.planNextInstance(new Error('spawn failed'));
-    await expect(verifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
-    await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: true });
+  it('reports the verifier unavailable when a per-call bb instance cannot be started', async () => {
+    const perCallFactory = new FakeBBJsFactory();
+    perCallFactory.planNextInstance(new Error('spawn failed'));
+    const perCallVerifier = new TestBBCircuitVerifier(perCallFactory);
+    await expect(perCallVerifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
+  });
+
+  it('stops a queued verifier while a verification waits for a bb instance that never starts', async () => {
+    factory.planNextInstance([], new Promise<void>(() => {}));
+    const queued = new QueuedIVCVerifier(verifier, 1);
+    const verificationFails = expect(queued.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
+    // Let the verification start waiting for the pool before stopping.
+    await new Promise(resolve => setImmediate(resolve));
+
+    await queued.stop();
+    await verificationFails;
   });
 });
