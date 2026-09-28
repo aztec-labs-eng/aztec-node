@@ -14,20 +14,9 @@ import { Tx } from '@aztec-labs/stdlib/tx';
 import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { promises as fs } from 'fs';
 
-import { type BBJsApi, BBJsFactory } from '../bb/bb_js_backend.js';
+import { type BBJsApi, BBJsFactory, isRetryableFailure } from '../bb/bb_js_backend.js';
 import type { BBConfig } from '../config.js';
 import { getUltraHonkFlavorForCircuit } from '../honk.js';
-
-/**
- * Whether a failure was environmental, and so may be retried: the bb process died, its connection broke, or it could
- * not be started.
- *
- * The bare `retry` property is the contract, feature-detected rather than imported, so it holds across the bb.js and
- * ipc-runtime package boundaries alike. An error without it is the verification's own verdict.
- */
-function isRetryableFailure(err: unknown): boolean {
-  return err instanceof Error && (err as Error & { retry?: unknown }).retry === true;
-}
 
 /** Thrown when no live bb process could check a proof, so the proof was neither accepted nor rejected. */
 export class ProofVerifierUnavailableError extends Error {

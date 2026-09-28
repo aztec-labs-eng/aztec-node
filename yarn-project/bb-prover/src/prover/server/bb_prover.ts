@@ -75,7 +75,7 @@ import { promises as fs } from 'fs';
 import { ungzip } from 'pako';
 import * as path from 'path';
 
-import { BBJsFactory, type BBJsProofResult } from '../../bb/bb_js_backend.js';
+import { BBJsFactory, type BBJsProofResult, isRetryableFailure } from '../../bb/bb_js_backend.js';
 import type { ACVMConfig, BBConfig } from '../../config.js';
 import { getUltraHonkFlavorForCircuit } from '../../honk.js';
 import { ProverInstrumentation } from '../../instrumentation.js';
@@ -449,7 +449,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       );
     } catch (error) {
       // Preserve retryability of the underlying failure (e.g. a transient bb startup error).
-      const retry = error instanceof ProvingError && error.retry;
+      const retry = isRetryableFailure(error);
       throw new ProvingError(`Failed to generate proof for ${circuitType}: ${error}`, error, retry);
     }
 
@@ -590,7 +590,7 @@ export class BBNativeRollupProver implements ServerCircuitProver {
       ));
     } catch (error) {
       // Preserve retryability of the underlying failure (e.g. a transient bb startup error).
-      const retry = error instanceof ProvingError && error.retry;
+      const retry = isRetryableFailure(error);
       throw new ProvingError(`Failed to verify proof for ${circuitType}: ${error}`, error, retry);
     }
 
