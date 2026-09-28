@@ -5,16 +5,13 @@ version=$1
 
 dry_run=${DRY_RUN:-0}
 
-# A stable release takes 'latest'; the nightly and rc channels share 'prerelease'; every other
-# channel gets a dist-tag of its own. Sharing is a closed set on purpose: an off-mainline channel
-# carries its own manifest version, so it can be newer than the newest nightly and would otherwise
-# repoint 'prerelease' at a build that is not on the release line. Prerelease versions are
-# installed by exact version anyway.
+# A stable release takes 'latest', the rc channel takes 'prerelease', and every other channel takes
+# a dist-tag named after itself ('nightly', 'commit', ...), so each tag follows exactly one channel.
 prerelease=$(semver prerelease $version)
 channel=${prerelease%%.*}
 case "$channel" in
   "") npm_tag="latest" ;;
-  nightly | rc) npm_tag="prerelease" ;;
+  rc) npm_tag="prerelease" ;;
   *) npm_tag="$channel" ;;
 esac
 
@@ -43,9 +40,9 @@ fi
 
 # A version older than what its dist-tag already points at must not take it: publishing a patch to
 # an old release line, or re-running an old tag's workflow, would otherwise repoint 'latest' (or
-# 'prerelease', or a channel's own tag) backwards for everyone. Such a version is published with no
-# dist-tag at all, which costs nothing: an exact version and a range like '@5' both resolve against
-# the published versions and consult no tag.
+# 'prerelease', or a channel's own tag) backwards for everyone. Such a version is published without
+# a dist-tag anyone reads, which costs nothing: an exact version and a range like '@5' both resolve
+# against the published versions and consult no tag.
 take_tag=1
 if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
   take_tag=0
@@ -54,25 +51,15 @@ if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$versio
 fi
 
 # npm attaches a dist-tag to every publish — omitting --tag means 'latest' — so publishing untagged
-# means taking one nothing reads and dropping it again. The name is fixed rather than derived from
-# the version, so that a tag left behind by an attempt that died between the two steps is cleaned up
-# by this package's next publish whatever version that carries. It is also not a bare 'v<major>':
-# npm rejects any dist-tag that parses as a semver range, and 'v5' is '>=5.0.0 <6.0.0-0'.
+# means taking one that nothing reads. Its name is fixed, so each package carries one such tag,
+# pointing at its most recent superseded publish, and it must not parse as a semver range, which npm
+# rejects as a dist-tag.
 tmp_tag=tmp-publish
 if [ "$take_tag" -eq 1 ]; then
   publish_tag=$npm_tag
 else
   publish_tag=$tmp_tag
 fi
-
-# Called on every path that reaches the registry, so it drops the tag whether this run took it or
-# an earlier one died holding it. npm errors when the tag is absent, which is the normal case, so
-# ask first — a failure of the removal itself is then still a failure of the release.
-function drop_tmp_tag {
-  if npm dist-tag ls "$package_name" 2>/dev/null | grep -q "^$tmp_tag:"; then
-    npm dist-tag rm "$package_name" "$tmp_tag"
-  fi
-}
 
 # npmjs holds an accepted upload as "staged" for several minutes before the version goes live, and
 # `npm view` does not see it meanwhile. A publish that dies after the upload (e.g. an evicted spot
@@ -124,5 +111,4 @@ else
       echo "$package_name@$version is already staged by an earlier publish and will go live on its own."
     fi
   fi
-  drop_tmp_tag
 fi
