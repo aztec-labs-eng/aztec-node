@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+// The generator reuses dependencies (js-yaml and semver) without adding its own
 const require = createRequire(new URL('../../yarn-project/end-to-end/package.json', import.meta.url));
 const yaml = require('js-yaml');
 const semver = createRequire(new URL('../../yarn-project/cli/package.json', import.meta.url))('semver');
@@ -92,7 +93,8 @@ try {
   }
 
   // npm can use a Yarn Classic lock as a resolution hint; it cannot use Yarn 4's format.
-  for (;;) {
+  const maxPeerDiscoveryPasses = 20; // In practice it settled in 3
+  for (let pass = 1; pass <= maxPeerDiscoveryPasses; pass++) {
     await writeManifest();
     await writeFile(seedPath, classicLock);
     await rm(lockPath, { force: true });
@@ -117,8 +119,13 @@ try {
       }
     }
     if (!changed) break;
+    assert(
+      pass < maxPeerDiscoveryPasses,
+      `Peer dependency discovery did not converge after ${maxPeerDiscoveryPasses} passes`,
+    );
   }
 
+  // Validate the lock works
   await writeManifest();
   await writeFile(seedPath, classicLock);
   await rm(lockPath, { force: true });
