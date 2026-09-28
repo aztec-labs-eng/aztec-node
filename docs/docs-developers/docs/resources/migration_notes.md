@@ -46,9 +46,9 @@ To prove membership against a given archive root, including a block's own post-b
 
 Callers that anchor on a block header, such as PXE and its oracles, keep using `getBlockHashMembershipWitness`.
 
-### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
+### [Aztec.nr] `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` re-pinned at new addresses
 
-The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.
+The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain and oracle interface version 32. The canonical `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` move to new addresses and class ids; `PublicChecks` keeps its own. Handshakes established with the previous registry instance are not visible to the new one and must be re-established, and authorizations set on the previous `AuthRegistry` instance must be set again on the new one.
 
 ### [Protocol] The protocol nullifier is derived from the tx request's salt alone; `tx_request_salt` becomes `protocol_nullifier`
 
