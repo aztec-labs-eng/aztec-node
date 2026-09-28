@@ -80,29 +80,44 @@ export class FakeBBJsInstance implements BBJsApi {
   }
 }
 
-/** A pooled {@link BBJsFactory} that creates {@link FakeBBJsInstance}s instead of spawning bb. */
+/** A scripted {@link FakeBBJsFactory} spawn. */
+type PlannedSpawn = {
+  /** An error fails the spawn; outcomes script the created instance's verifications. */
+  next: FakeChonkVerifyOutcome[] | Error;
+  /** When set, the spawn completes only once it resolves. */
+  spawned?: Promise<void>;
+};
+
+/** A {@link BBJsFactory} that creates {@link FakeBBJsInstance}s instead of spawning bb. */
 export class FakeBBJsFactory extends BBJsFactory {
   /** Every instance created, in creation order. */
   public readonly created: FakeBBJsInstance[] = [];
-  protected override readonly waitRecheckSeconds = 0.01;
-  private readonly plan: (FakeChonkVerifyOutcome[] | Error)[] = [];
+  protected override readonly maintenanceIntervalMs = 5;
+  private readonly plan: PlannedSpawn[] = [];
 
-  constructor(poolSize: number) {
+  /** @param poolSize - Pooled instances to keep; when omitted, every borrow creates a fresh instance. */
+  constructor(poolSize?: number) {
     super('/unused/bb', { poolSize });
   }
 
-  /** Scripts the next creation: an error makes that spawn fail, outcomes script the created instance's verifications. */
-  public planNextInstance(next: FakeChonkVerifyOutcome[] | Error): void {
-    this.plan.push(next);
+  /**
+   * Scripts the next creation: an error makes that spawn fail, outcomes script the created instance's verifications.
+   * With `spawned`, the spawn completes only once it resolves.
+   */
+  public planNextInstance(next: FakeChonkVerifyOutcome[] | Error, spawned?: Promise<void>): void {
+    this.plan.push({ next, spawned });
   }
 
-  protected override createInstance(): Promise<BBJsApi> {
-    const next = this.plan.shift() ?? [];
+  protected override async createInstance(): Promise<BBJsApi> {
+    const { next, spawned }: PlannedSpawn = this.plan.shift() ?? { next: [] };
+    if (spawned) {
+      await spawned;
+    }
     if (next instanceof Error) {
-      return Promise.reject(next);
+      throw next;
     }
     const instance = new FakeBBJsInstance(next);
     this.created.push(instance);
-    return Promise.resolve(instance);
+    return instance;
   }
 }
