@@ -109,17 +109,18 @@ describe('BBJsFactory pool', () => {
     expect(factory.created).toHaveLength(2);
   });
 
-  it('does not spawn past poolSize while a spawn is in flight', async () => {
-    factory = new FakeBBJsFactory(1);
+  it('does not spawn past poolSize while instances are borrowed or being spawned', async () => {
+    factory = new FakeBBJsFactory(2);
     const spawned = promiseWithResolvers<void>();
+    factory.planNextInstance([]);
     factory.planNextInstance([], spawned.promise);
-    const borrowing = factory.getInstance();
-    // Several maintenance runs happen while the spawn is in flight.
+    await using _borrowed = await factory.getInstance();
+    // Several maintenance runs happen while one instance is borrowed and the other is being spawned.
     await sleep(50);
     spawned.resolve();
+    await settle();
 
-    await using _instance = await borrowing;
-    expect(factory.created).toHaveLength(1);
+    expect(factory.created).toHaveLength(2);
   });
 
   it('does not wait for a spawn in flight when destroyed, and destroys its instance once it arrives', async () => {
