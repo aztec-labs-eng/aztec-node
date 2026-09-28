@@ -1692,6 +1692,35 @@ describe('Archiver Sync', () => {
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
     }, 15_000);
 
+    it('re-fetches a rolled-back checkpoint range without waiting for another L1 block', async () => {
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
+      await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 70n,
+        messagesL1BlockNumber: 50n,
+        numL1ToL2Messages: 3,
+      });
+      fake.setL1BlockNumber(100n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      await archiverStore.blocks.setSynchedL1BlockNumber(200n);
+      await archiverStore.blocks.setPendingChainValidationStatus({ valid: true });
+      await fake.addCheckpoint(CheckpointNumber(2), {
+        l1BlockNumber: 150n,
+        messagesL1BlockNumber: 130n,
+        numL1ToL2Messages: 3,
+      });
+      // First sync at head 201 detects the gap and rolls the scan point back, and must not advertise 201 as synced.
+      fake.setL1BlockNumber(201n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      // A second sync at the SAME head re-reads the rewound scan point and ingests the checkpoint.
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      // A third same-head sync is a stable no-op: the head is now genuinely synced.
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+    }, 20_000);
+
     it('detects a same-number replacement behind the syncpoint after a rejected checkpoint reorgs out', async () => {
       // A rejected checkpoint advances the L1 sync point past its L1 block. If an L1 reorg then drops it and a
       // valid checkpoint with the same number lands at an earlier L1 block, the stale rejected marker must not be
@@ -2716,6 +2745,43 @@ describe('Archiver Sync', () => {
       await archiver.syncImmediate();
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
       expect(archiver.getL1BlockNumber()).toEqual(106n);
+    });
+
+    it('does not advertise a non-advancing head as synced while a checkpoint behind the rewound syncpoint stays unread', async () => {
+      // CP1 at L1 105; sync at head 110 so the syncpoint is 105 and CP1 is local.
+      await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 105n,
+        messagesL1BlockNumber: 100n,
+        numL1ToL2Messages: 3,
+      });
+      fake.setL1BlockNumber(110n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      expect(await archiverStore.blocks.getSynchedL1BlockNumber()).toEqual(105n);
+
+      // L1 reorg at 100 replaces the message CP1 consumed (gating speculative work) and drops CP1; a replacement
+      // checkpoint lands behind the syncpoint and the head does not advance past it, so reconciliation runs on the
+      // non-advancing path and rewinds the scan point to pick the replacement up.
+      fake.removeMessagesAfter(2);
+      fake.addMessages(CheckpointNumber(1), 100n, [Fr.random()]);
+      fake.removeCheckpoint(CheckpointNumber(1));
+      fake.reorgL1BlocksFrom(100n);
+      await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 103n,
+        messagesL1BlockNumber: 100n,
+        numL1ToL2Messages: 0,
+      });
+      await archiverStore.blocks.setPendingChainValidationStatus({ valid: true });
+      fake.setL1BlockNumber(105n);
+
+      // The head must not be advertised as synced while the rewound range is unread, or the next same-head sync
+      // returns early and the checkpoint stays absent until another L1 block arrives.
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(0));
+
+      // A second sync at the SAME head re-reads the rewound scan point and ingests the replacement checkpoint.
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
     });
 
     it('discards an intermediate batch whose chain was replaced before it could be committed', async () => {
