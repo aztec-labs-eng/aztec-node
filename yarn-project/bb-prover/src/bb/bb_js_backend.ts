@@ -70,6 +70,18 @@ export interface BBJsApi {
 }
 
 /**
+ * Whether a failure was environmental, and so may be retried: the bb process died, its connection
+ * broke, or it could not be started.
+ *
+ * The bare `retry` property is the contract, feature-detected rather than imported, so the same
+ * check holds for errors from bb.js, from ipc-runtime and from ProvingError alike. An error
+ * without it failed for a reason retrying cannot fix.
+ */
+export function isRetryableFailure(err: unknown): boolean {
+  return err instanceof Error && (err as Error & { retry?: unknown }).retry === true;
+}
+
+/**
  * Thin wrapper around a single Barretenberg instance.
  * Each instance spawns its own bb process via the NativeUnixSocket backend.
  */
