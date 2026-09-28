@@ -100,8 +100,8 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
   }
 
   /**
-   * Verify a Chonk (IVC) proof from a transaction via bb.js API. Returns `valid: false` when bb checked the proof and
-   * rejected it, and throws {@link ProofVerifierUnavailableError} when no live bb process could check it.
+   * Verify a Chonk (IVC) proof from a transaction via bb.js API. Throws {@link ProofVerifierUnavailableError} when no
+   * live bb process could check the proof; any other failure returns `valid: false`.
    */
   public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const proofType = 'Chonk';
@@ -138,14 +138,14 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
       if (err instanceof ProofVerifierUnavailableError) {
         throw err;
       }
-      this.logger.warn(`Failed to verify ${proofType} proof for tx ${txHash}: ${String(err)}`);
+      this.logger.warn(`Failed to verify ${proofType} proof`, { txHash, err });
       return { valid: false, durationMs: 0, totalDurationMs: 0 };
     }
   }
 
   /**
    * Runs a Chonk verification on a pooled bb instance. A call that fails because the instance's bb died is retried on
-   * another instance; a call that fails while bb is alive is bb rejecting the proof, and its error is rethrown.
+   * another instance; any other failure is rethrown.
    */
   private async verifyChonkProofOnLiveInstance(
     fieldsWithPublicInputs: Uint8Array[],
