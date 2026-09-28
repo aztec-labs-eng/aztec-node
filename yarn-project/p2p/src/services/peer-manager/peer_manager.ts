@@ -71,6 +71,9 @@ export class PeerManager implements PeerManagerInterface {
   private privatePeers: Set<string> = new Set();
   private privatePeersInitialized: boolean = false;
   private preferredPeers: Set<string> = new Set();
+  // Per-peer dial counter, bumped when a dial starts, so a stale failed dial can tell whether a
+  // newer dial for the same peer has since begun and refreshed its address book entry.
+  private readonly dialGenerations: Map<string, number> = new Map();
   private authenticatedPeerIdToValidatorAddress: Map<string, EthAddress> = new Map();
   private authenticatedValidatorAddressToPeerId: Map<string, PeerId> = new Map();
   private peersToBeDisconnected: Set<string> = new Set();
@@ -901,6 +904,8 @@ export class PeerManager implements PeerManagerInterface {
 
   private async dialPeer(peer: CachedPeer) {
     const id = peer.peerId.toString();
+    const dialGeneration = (this.dialGenerations.get(id) ?? 0) + 1;
+    this.dialGenerations.set(id, dialGeneration);
 
     // Add to the address book before dialing
     await this.libP2PNode.peerStore.merge(peer.peerId, { multiaddrs: [peer.multiaddrTcp] });
@@ -908,6 +913,9 @@ export class PeerManager implements PeerManagerInterface {
     this.logger.trace(`Dialing peer ${id}`);
     try {
       await this.libP2PNode.dial(peer.multiaddrTcp);
+      if (this.dialGenerations.get(id) === dialGeneration) {
+        this.dialGenerations.delete(id);
+      }
     } catch (error) {
       peer.dialAttempts++;
       if (peer.dialAttempts < MAX_DIAL_ATTEMPTS) {
@@ -923,6 +931,23 @@ export class PeerManager implements PeerManagerInterface {
           timeoutUntilMs:
             this.dateProvider.now() + (this.config.peerFailedBanTimeMs ?? DEFAULT_FAILED_PEER_BAN_TIME_MS),
         });
+        // Drop the address-book record written before the dial. Nothing else deletes /peers/
+        // rows, so a stream of unreachable discovered peers would otherwise grow the durable
+        // peerstore without bound. Operator-configured peers (trusted, private, preferred) are kept.
+        // Skip the delete when a newer dial for this peer has started since ours began: a concurrent
+        // rediscovery re-dial merges a fresh address that this stale failure must not wipe.
+        if (this.dialGenerations.get(id) === dialGeneration) {
+          this.dialGenerations.delete(id);
+          if (!this.isProtectedPeer(peer.peerId)) {
+            try {
+              await this.libP2PNode.peerStore.delete(peer.peerId);
+            } catch (deleteError) {
+              this.logger.trace(`Failed to remove dropped peer ${id} from the peer store`, {
+                error: inspect(deleteError),
+              });
+            }
+          }
+        }
       }
     }
   }
