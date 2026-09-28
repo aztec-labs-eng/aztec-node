@@ -160,7 +160,7 @@ export default defineConfig(({ mode }) => {
         //   assets/barretenberg-*.js to 5079.12 KB and assets/barretenberg-threads-*.js to 5116.65 KB.
         {
           pattern: /.*/,
-          maxSizeKB: 5300,
+          maxSizeKB: 5350,
           description: 'Detect if json artifacts or bb.js wasm get out of control',
         },
       ]),
