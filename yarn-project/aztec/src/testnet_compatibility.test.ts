@@ -15,12 +15,12 @@ import { defaultInitialAccountFeeJuice } from '@aztec-labs/world-state/testing';
  */
 describe('Testnet compatibility', () => {
   it('has expected VK tree root', () => {
-    const expectedRoots = [Fr.fromHexString('0x258bc0b99bbadc087d8d8f7c78e4b41ba24c8d6979dbe698e00411bd7ec11891')];
+    const expectedRoots = [Fr.fromHexString('0x2d89003cc2dc62b06f07d83d3635c66c63fc43668369d30e7ee516f908ee10e3')];
     expect(expectedRoots).toContainEqual(getVKTreeRoot());
   });
   it('has expected Protocol Contracts hash', () => {
     expect(protocolContractsHash).toEqual(
-      Fr.fromHexString('0x04b0ccfafec7ff9a4a31c67c21377f73a8c01dcadc8710ee2a8e7751565db7f4'),
+      Fr.fromHexString('0x0030cdae9792549b9edb5b865f4e10e91bb87565f22ab80d405213f7e991b378'),
     );
   });
   // Testnet was initialized before the protocol contract registration nullifiers were seeded at genesis, so its root
