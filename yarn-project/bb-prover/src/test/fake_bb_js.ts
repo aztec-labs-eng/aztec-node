@@ -84,6 +84,7 @@ export class FakeBBJsInstance implements BBJsApi {
 export class FakeBBJsFactory extends BBJsFactory {
   /** Every instance created, in creation order. */
   public readonly created: FakeBBJsInstance[] = [];
+  protected override readonly waitRecheckSeconds = 0.01;
   private readonly plan: (FakeChonkVerifyOutcome[] | Error)[] = [];
 
   constructor(poolSize: number) {
