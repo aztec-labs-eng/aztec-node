@@ -66,6 +66,11 @@ export interface BBJsApi {
   verifyAvmProof(proof: Uint8Array[], publicInputs: Uint8Array): Promise<{ verified: boolean; durationMs: number }>;
   /** Check the AVM circuit from serialized inputs. Returns pass/fail and per-stage timings. */
   checkAvmCircuit(inputs: Uint8Array): Promise<{ passed: boolean; stats: AvmStat[]; durationMs: number }>;
+  /**
+   * Whether the bb process behind this instance is running and connected. An instance that is not alive never recovers,
+   * and every later call on it fails.
+   */
+  isAlive(): boolean;
   destroy(): Promise<void>;
 }
 
@@ -238,6 +243,10 @@ export class BBJsInstance implements BBJsApi {
     return { passed: result.passed, stats: result.stats, durationMs: timer.ms() };
   }
 
+  isAlive(): boolean {
+    return this.api.isAlive();
+  }
+
   /** Destroy this instance and kill the underlying bb process. */
   async destroy(): Promise<void> {
     await this.api.destroy();
@@ -262,6 +271,9 @@ export interface BBJsFactoryOptions {
  * set of long-lived bb processes that are reused across calls — useful when the per-call
  * bb startup cost dominates the workload (e.g. high-rate IVC verification).
  *
+ * A pooled instance whose bb process died is never handed out again: it is destroyed when it is returned or found idle,
+ * and a replacement is spawned when a borrower finds no idle instance while the pool is below `poolSize`.
+ *
  * Idiomatic usage:
  * ```
  * await using inst = await factory.getInstance();
@@ -279,6 +291,8 @@ export class BBJsFactory {
   private pool?: FifoMemoryQueue<BBJsApi>;
   /** Lazily-resolved on first `getInstance()` call to prevent racing pool initialization. */
   private initPromise?: Promise<void>;
+  /** Pooled instances that exist, idle or borrowed, plus spawns in flight. Below `poolSize` after an eviction. */
+  private pooledCount = 0;
   private destroyed = false;
 
   constructor(
@@ -296,8 +310,9 @@ export class BBJsFactory {
 
   /**
    * Acquire a bb instance. The returned object implements `BBJsApi` and `AsyncDisposable`.
-   * With no pool: spawns a fresh bb that is destroyed on dispose. With a pool: borrows from
-   * the pool and returns to it on dispose.
+   * With no pool: spawns a fresh bb that is destroyed on dispose. With a pool: borrows a live instance from
+   * the pool and returns it on dispose, spawning a replacement first if the pool has no idle instance and is below
+   * `poolSize`. Throws if that spawn fails; the next call tries again.
    */
   async getInstance(): Promise<BBJsApi & AsyncDisposable> {
     if (this.destroyed) {
@@ -308,19 +323,27 @@ export class BBJsFactory {
       const instance = await this.createInstance();
       return this.makeOwned(instance);
     }
-    if (!this.initPromise) {
-      this.initPromise = this.initPool();
+    await this.ensurePoolInitialized();
+    // Every idle instance can turn out dead, and each one found dead makes room for a replacement, so poolSize + 1
+    // attempts always reach a live instance unless replacements keep dying too.
+    for (let attempt = 0; attempt <= this.poolSize; attempt++) {
+      const pool = this.pool;
+      if (!pool) {
+        throw new Error('BBJsFactory has been destroyed');
+      }
+      if (pool.length() === 0) {
+        await this.replenish(pool);
+      }
+      const instance = await pool.get();
+      if (!instance) {
+        throw new Error('BBJsFactory was destroyed while waiting for an instance');
+      }
+      if (instance.isAlive()) {
+        return this.makeBorrowed(instance);
+      }
+      await this.evict(instance);
     }
-    await this.initPromise;
-    const pool = this.pool;
-    if (!pool) {
-      throw new Error('BBJsFactory has been destroyed');
-    }
-    const instance = await pool.get();
-    if (!instance) {
-      throw new Error('BBJsFactory was destroyed while waiting for an instance');
-    }
-    return this.makeBorrowed(instance);
+    throw new Error(`BBJsFactory found no live bb instance after ${this.poolSize + 1} attempts`);
   }
 
   /**
@@ -354,6 +377,28 @@ export class BBJsFactory {
     }
   }
 
+  protected async createInstance(): Promise<BBJsApi> {
+    const logFn = this.logger ? (msg: string) => this.logger!.verbose(`bb.js - ${msg}`) : undefined;
+    const raw = await BBJsInstance.create(this.bbPath, logFn, this.threads);
+    return this.maybeWrapDebug(raw);
+  }
+
+  /** Initializes the pool once; a failed initialization is retried by the next call. */
+  private async ensurePoolInitialized(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.initPool();
+    }
+    const initPromise = this.initPromise;
+    try {
+      await initPromise;
+    } catch (err) {
+      if (this.initPromise === initPromise) {
+        this.initPromise = undefined;
+      }
+      throw err;
+    }
+  }
+
   private async initPool(): Promise<void> {
     // Use allSettled so that if any createInstance() rejects we can destroy the rest instead of
     // leaking bb child processes whose creation succeeded.
@@ -379,13 +424,40 @@ export class BBJsFactory {
     for (const item of items) {
       pool.put(item);
     }
+    this.pooledCount = items.length;
     this.pool = pool;
   }
 
-  private async createInstance(): Promise<BBJsApi> {
-    const logFn = this.logger ? (msg: string) => this.logger!.verbose(`bb.js - ${msg}`) : undefined;
-    const raw = await BBJsInstance.create(this.bbPath, logFn, this.threads);
-    return this.maybeWrapDebug(raw);
+  /** Spawns one pooled instance into `pool` if the pool is below `poolSize`. */
+  private async replenish(pool: FifoMemoryQueue<BBJsApi>): Promise<void> {
+    if (this.pooledCount >= this.poolSize!) {
+      return;
+    }
+    // Counted before the spawn so that concurrent borrowers do not spawn past poolSize.
+    this.pooledCount++;
+    let instance: BBJsApi;
+    try {
+      instance = await this.createInstance();
+    } catch (err) {
+      this.pooledCount--;
+      throw err;
+    }
+    if (this.destroyed) {
+      await instance.destroy();
+      return;
+    }
+    pool.put(instance);
+  }
+
+  /** Destroys a pooled instance whose bb process died, making room in the pool for a replacement. */
+  private async evict(instance: BBJsApi): Promise<void> {
+    this.pooledCount--;
+    this.logger?.warn('Evicting a pooled bb instance whose process died', {
+      poolSize: this.poolSize,
+      pooledCount: this.pooledCount,
+    });
+    // bb is already gone, so a teardown error is not actionable and must not fail the borrow that found it.
+    await instance.destroy().catch(err => this.logger?.warn('Failed to destroy a dead bb instance', { err }));
   }
 
   /** Wrap the instance in a debug wrapper if debugDir is configured. */
@@ -407,16 +479,18 @@ export class BBJsFactory {
   }
 
   /**
-   * Wrap a pooled instance with an `AsyncDisposable` that returns it to the pool (or destroys it
-   * if the factory was destroyed in the meantime). Destroy errors are propagated.
+   * Wrap a pooled instance with an `AsyncDisposable` that returns it to the pool, evicts it if its bb process died, or
+   * destroys it if the factory was destroyed in the meantime. Destroy errors of a live instance are propagated.
    */
   private makeBorrowed(instance: BBJsApi): BBJsApi & AsyncDisposable {
     return this.makeDisposable(instance, async () => {
       const pool = this.pool;
-      if (pool && !this.destroyed) {
+      if (!pool || this.destroyed) {
+        await instance.destroy();
+      } else if (instance.isAlive()) {
         pool.put(instance);
       } else {
-        await instance.destroy();
+        await this.evict(instance);
       }
     });
   }
