@@ -18,6 +18,17 @@ import { type BBJsApi, BBJsFactory } from '../bb/bb_js_backend.js';
 import type { BBConfig } from '../config.js';
 import { getUltraHonkFlavorForCircuit } from '../honk.js';
 
+/**
+ * Whether a failure was environmental, and so may be retried: the bb process died, its connection broke, or it could
+ * not be started.
+ *
+ * The bare `retry` property is the contract, feature-detected rather than imported, so it holds across the bb.js and
+ * ipc-runtime package boundaries alike. An error without it is the verification's own verdict.
+ */
+function isRetryableFailure(err: unknown): boolean {
+  return err instanceof Error && (err as Error & { retry?: unknown }).retry === true;
+}
+
 /** Thrown when no live bb process could check a proof, so the proof was neither accepted nor rejected. */
 export class ProofVerifierUnavailableError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -144,8 +155,11 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
   }
 
   /**
-   * Runs a Chonk verification on a pooled bb instance. A call that fails because the instance's bb died is retried on
-   * another instance; any other failure is rethrown.
+   * Runs a Chonk verification on a pooled bb instance. A call that failed for environmental reasons — its bb process
+   * died, or could not be started — is retried; any other failure is the verification's own verdict and is rethrown.
+   *
+   * The error says so itself, through the `retry` property bb.js sets. Asking the instance whether it is still alive
+   * would be a guess: the process can die between the answer and the next call.
    */
   private async verifyChonkProofOnLiveInstance(
     fieldsWithPublicInputs: Uint8Array[],
@@ -157,7 +171,7 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
       try {
         return await instance.verifyChonkProof(fieldsWithPublicInputs, verificationKey);
       } catch (err) {
-        if (instance.isAlive()) {
+        if (!isRetryableFailure(err)) {
           throw err;
         }
         if (attempt >= BBCircuitVerifier.MAX_CHONK_VERIFY_ATTEMPTS) {

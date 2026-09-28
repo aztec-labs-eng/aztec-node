@@ -55,16 +55,17 @@ describe('BBCircuitVerifier', () => {
     expect(factory.created).toHaveLength(1);
   });
 
-  it('retries on a replacement instance when bb dies during verification', async () => {
+  it('retries after bb dies during verification, on the replacement process', async () => {
     factory.planNextInstance(['die']);
     await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: true });
-    expect(factory.created).toHaveLength(2);
-    expect(factory.created[0].destroyCount).toBe(1);
+    // The instance replaced its own bb process, so the pool neither grew nor lost a member.
+    expect(factory.created).toHaveLength(1);
+    expect(factory.created[0].chonkVerifyCalls).toBe(2);
+    expect(factory.created[0].destroyCount).toBe(0);
   });
 
   it('reports the verifier unavailable, not the proof invalid, when bb dies on every attempt', async () => {
-    factory.planNextInstance(['die']);
-    factory.planNextInstance(['die']);
+    factory.planNextInstance(['die', 'die']);
     await expect(verifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
   });
 
