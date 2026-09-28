@@ -125,6 +125,18 @@ try {
     );
   }
 
+  // npm 11.6 rejects shared dependencies of separately overridden parents, even for no-op overrides.
+  const discovered = JSON.parse(await readFile(lockPath));
+  for (const [name, spec] of Object.entries(overrides)) {
+    if (!semver.valid(spec)) continue;
+    const requests = Object.values(discovered.packages).flatMap(entry =>
+      [entry.dependencies?.[name], entry.optionalDependencies?.[name], entry.peerDependencies?.[name]].filter(
+        request => request !== undefined,
+      ),
+    );
+    if (requests.length && requests.every(request => request === spec)) delete overrides[name];
+  }
+
   // Validate the lock works
   await writeManifest();
   await writeFile(seedPath, classicLock);
