@@ -54,25 +54,18 @@ if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$versio
 fi
 
 # npm attaches a dist-tag to every publish — omitting --tag means 'latest' — so publishing untagged
-# means taking one nothing reads and dropping it again. The name is fixed rather than derived from
-# the version, so that a tag left behind by an attempt that died between the two steps is cleaned up
-# by this package's next publish whatever version that carries. It is also not a bare 'v<major>':
-# npm rejects any dist-tag that parses as a semver range, and 'v5' is '>=5.0.0 <6.0.0-0'.
+# means taking one that nothing reads. The tag stays on the registry: the release token can publish
+# but is refused `npm dist-tag rm`, and npmjs applies a staged upload's tag only when the version
+# goes live, after this script has exited. The name is fixed rather than derived from the version,
+# so each package carries one such tag, pointing at its most recent superseded publish. It is also
+# not a bare 'v<major>': npm rejects any dist-tag that parses as a semver range, and 'v5' is
+# '>=5.0.0 <6.0.0-0'.
 tmp_tag=tmp-publish
 if [ "$take_tag" -eq 1 ]; then
   publish_tag=$npm_tag
 else
   publish_tag=$tmp_tag
 fi
-
-# Called on every path that reaches the registry, so it drops the tag whether this run took it or
-# an earlier one died holding it. npm errors when the tag is absent, which is the normal case, so
-# ask first — a failure of the removal itself is then still a failure of the release.
-function drop_tmp_tag {
-  if npm dist-tag ls "$package_name" 2>/dev/null | grep -q "^$tmp_tag:"; then
-    npm dist-tag rm "$package_name" "$tmp_tag"
-  fi
-}
 
 # npmjs holds an accepted upload as "staged" for several minutes before the version goes live, and
 # `npm view` does not see it meanwhile. A publish that dies after the upload (e.g. an evicted spot
@@ -124,5 +117,4 @@ else
       echo "$package_name@$version is already staged by an earlier publish and will go live on its own."
     fi
   fi
-  drop_tmp_tag
 fi
