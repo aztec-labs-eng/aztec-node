@@ -5,16 +5,15 @@ version=$1
 
 dry_run=${DRY_RUN:-0}
 
-# A stable release takes 'latest'; the nightly and rc channels share 'prerelease'; every other
-# channel gets a dist-tag of its own. Sharing is a closed set on purpose: an off-mainline channel
-# carries its own manifest version, so it can be newer than the newest nightly and would otherwise
-# repoint 'prerelease' at a build that is not on the release line. Prerelease versions are
-# installed by exact version anyway.
+# A stable release takes 'latest', the rc channel takes 'prerelease', and every other channel takes
+# a dist-tag named after itself ('nightly', 'commit', ...). No two channels share a tag: a nightly
+# of X.Y.Z sorts below an rc of X.Y.Z, and an off-mainline channel carries its own manifest version,
+# so a shared tag would stop following one channel whenever the other held a higher version.
 prerelease=$(semver prerelease $version)
 channel=${prerelease%%.*}
 case "$channel" in
   "") npm_tag="latest" ;;
-  nightly | rc) npm_tag="prerelease" ;;
+  rc) npm_tag="prerelease" ;;
   *) npm_tag="$channel" ;;
 esac
 
