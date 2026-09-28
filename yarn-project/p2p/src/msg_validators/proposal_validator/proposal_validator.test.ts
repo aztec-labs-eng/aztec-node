@@ -664,6 +664,19 @@ describe('ProposalValidator', () => {
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'accept' });
     });
+
+    it('rejects a structurally-invalid index even when the proposer lookup fails (structural check runs first)', async () => {
+      // A local proposer-lookup failure alone would ignore the proposal; the structural check must run
+      // before the lookup so a peer's structurally-impossible index is still rejected during an L1 outage.
+      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 rpc unavailable'));
+      const proposal = await makeBlockProposal({
+        blockHeader: makeBlockHeader(0, { slotNumber: currentSlot }),
+        indexWithinCheckpoint: IndexWithinCheckpoint(MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT),
+        signer,
+      });
+      const result = await validator.validate(proposal);
+      expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.MidToleranceError });
+    });
   });
 
   describe('maxBlocksPerCheckpoint hard ceiling', () => {

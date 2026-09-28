@@ -1,5 +1,4 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT, MAX_TXS_PER_CHECKPOINT } from '@aztec-labs/stdlib/deserialization';
 import {
@@ -12,6 +11,7 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 
+import { mapEpochCacheLookupFailure } from '../epoch_cache_lookup.js';
 import { classifyReceiveWindowArrival } from '../receive_window.js';
 
 /** Validates header-level and tx-level fields of block and checkpoint proposals. */
@@ -50,105 +50,92 @@ export class ProposalValidator {
 
   /** Validates header-level fields: slot, signature, and proposer. */
   public async validate(proposal: BlockProposal | CheckpointProposalCore): Promise<ValidationResult> {
-    try {
-      // Cross-chain replay check: reject proposals that carry a foreign signing domain.
-      if (!hasValidSignatureContext(proposal, this.signatureContext)) {
-        this.logger.warn(`Penalizing peer for proposal with foreign signature context`, {
-          chainId: proposal.signatureContext.chainId,
-          rollupAddress: proposal.signatureContext.rollupAddress.toString(),
-          expectedChainId: this.signatureContext.chainId,
-          expectedRollupAddress: this.signatureContext.rollupAddress.toString(),
-        });
-        return { result: 'reject', severity: PeerErrorSeverity.LowToleranceError };
-      }
-
-      // Slot check: the tight checkpoint proposal receive window (`[receiveStart - δ, target_slot_start -
-      // E - D + δ]`) is the sole acceptance gate, applied to both block and checkpoint proposals. The
-      // window itself bounds which slots are valid, so far/wrong slots fall outside it. Every block
-      // proposal for slot N is sent before the checkpoint proposal for slot N, so nothing legitimate can
-      // arrive after the checkpoint receive deadline; gating block proposals on the same window rejects
-      // late block proposals at p2p ingress. The attestation deadline remains their re-execution/
-      // validation deadline downstream, not their arrival gate.
-      const slotNumber = proposal.slotNumber;
-      if (!this.skipSlotValidation) {
-        // Proposal receive window: [checkpoint_proposal_receive_start, checkpoint_proposal_receive_deadline],
-        // widened by the configured clock-disparity tolerance on both ends.
-        const startSeconds = this.timetable.getCheckpointProposalReceiveStart(slotNumber);
-        const deadlineSeconds = this.timetable.getCheckpointProposalReceiveDeadline(slotNumber);
-        const nowMs = Number(this.epochCache.getEpochAndSlotNow().nowMs);
-        const windowMiss = classifyReceiveWindowArrival(
-          nowMs,
-          startSeconds * 1000 - this.clockDisparityMs,
-          deadlineSeconds * 1000 + this.clockDisparityMs,
-        );
-        if (windowMiss) {
-          this.logger.warn(
-            `Proposal for slot ${slotNumber} is outside its receive window (${windowMiss.outcome.result})`,
-            {
-              slotNumber,
-              nowMs,
-              missMs: windowMiss.missMs,
-              windowStartSeconds: startSeconds,
-              windowDeadlineSeconds: deadlineSeconds,
-            },
-          );
-          return windowMiss.outcome;
-        }
-      }
-
-      // Signature validity
-      const proposer = proposal.getSender();
-      if (!proposer) {
-        this.logger.warn(`Penalizing peer for proposal with invalid signature`);
-        return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
-      }
-
-      // An undefined proposer means an empty committee (anyone may propose), so skip the
-      // proposer-equality check and keep validating. A missing committee instead throws
-      // NoCommitteeError, handled as a reject below.
-      // Scope the catch to just this lookup: it can fail on a receiver-local cause (L1 RPC down, or this
-      // node behind) that says nothing about the relaying peer. Map that to ignore, not throw: a thrown
-      // validation defaults to reject and would penalize an honest relayer for our own failure.
-      let expectedProposer;
-      try {
-        expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slotNumber);
-      } catch (e) {
-        if (e instanceof NoCommitteeError) {
-          throw e;
-        }
-        this.logger.warn(`Ignoring proposal for slot ${slotNumber} after a local proposer lookup failure`, {
-          error: e instanceof Error ? e.message : String(e),
-        });
-        return { result: 'ignore' };
-      }
-      if (expectedProposer !== undefined && !proposer.equals(expectedProposer)) {
-        this.logger.warn(`Penalizing peer for invalid proposer for current slot ${slotNumber}`, {
-          expectedProposer,
-          proposer: proposer.toString(),
-        });
-        return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
-      }
-
-      // A block proposal whose index lands at or beyond the hard attestable ceiling is structurally
-      // impossible garbage, so reject it immediately at ingress. Indices in
-      // `[maxBlocksPerCheckpoint, MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT)` are over the consensus limit
-      // but structurally valid proposer misbehavior; they pass gossip validation here so the offending
-      // proposal can be retained and re-broadcast as slashing evidence (handled downstream in the p2p
-      // service), rather than penalizing the relaying peer.
-      if ('indexWithinCheckpoint' in proposal) {
-        const indexResult = this.validateBlockIndexWithinCheckpoint(proposal);
-        if (indexResult.result !== 'accept') {
-          return indexResult;
-        }
-      }
-
-      return { result: 'accept' };
-    } catch (e) {
-      if (e instanceof NoCommitteeError) {
-        return { result: 'reject', severity: PeerErrorSeverity.LowToleranceError };
-      }
-      throw e;
+    // Cross-chain replay check: reject proposals that carry a foreign signing domain.
+    if (!hasValidSignatureContext(proposal, this.signatureContext)) {
+      this.logger.warn(`Penalizing peer for proposal with foreign signature context`, {
+        chainId: proposal.signatureContext.chainId,
+        rollupAddress: proposal.signatureContext.rollupAddress.toString(),
+        expectedChainId: this.signatureContext.chainId,
+        expectedRollupAddress: this.signatureContext.rollupAddress.toString(),
+      });
+      return { result: 'reject', severity: PeerErrorSeverity.LowToleranceError };
     }
+
+    // Slot check: the tight checkpoint proposal receive window (`[receiveStart - δ, target_slot_start -
+    // E - D + δ]`) is the sole acceptance gate, applied to both block and checkpoint proposals. The
+    // window itself bounds which slots are valid, so far/wrong slots fall outside it. Every block
+    // proposal for slot N is sent before the checkpoint proposal for slot N, so nothing legitimate can
+    // arrive after the checkpoint receive deadline; gating block proposals on the same window rejects
+    // late block proposals at p2p ingress. The attestation deadline remains their re-execution/
+    // validation deadline downstream, not their arrival gate.
+    const slotNumber = proposal.slotNumber;
+    if (!this.skipSlotValidation) {
+      // Proposal receive window: [checkpoint_proposal_receive_start, checkpoint_proposal_receive_deadline],
+      // widened by the configured clock-disparity tolerance on both ends.
+      const startSeconds = this.timetable.getCheckpointProposalReceiveStart(slotNumber);
+      const deadlineSeconds = this.timetable.getCheckpointProposalReceiveDeadline(slotNumber);
+      const nowMs = Number(this.epochCache.getEpochAndSlotNow().nowMs);
+      const windowMiss = classifyReceiveWindowArrival(
+        nowMs,
+        startSeconds * 1000 - this.clockDisparityMs,
+        deadlineSeconds * 1000 + this.clockDisparityMs,
+      );
+      if (windowMiss) {
+        this.logger.warn(
+          `Proposal for slot ${slotNumber} is outside its receive window (${windowMiss.outcome.result})`,
+          {
+            slotNumber,
+            nowMs,
+            missMs: windowMiss.missMs,
+            windowStartSeconds: startSeconds,
+            windowDeadlineSeconds: deadlineSeconds,
+          },
+        );
+        return windowMiss.outcome;
+      }
+    }
+
+    // Signature validity
+    const proposer = proposal.getSender();
+    if (!proposer) {
+      this.logger.warn(`Penalizing peer for proposal with invalid signature`);
+      return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
+    }
+
+    // A block proposal whose index lands at or beyond the hard attestable ceiling is structurally
+    // impossible garbage, so reject it immediately at ingress. This is peer-attributable and needs no
+    // epoch-cache lookup, so it runs before the proposer lookup: a structurally-invalid index must be
+    // rejected even when a local lookup fails. Indices in
+    // `[maxBlocksPerCheckpoint, MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT)` are over the consensus limit
+    // but structurally valid proposer misbehavior; they pass gossip validation here so the offending
+    // proposal can be retained and re-broadcast as slashing evidence (handled downstream in the p2p
+    // service), rather than penalizing the relaying peer.
+    if ('indexWithinCheckpoint' in proposal) {
+      const indexResult = this.validateBlockIndexWithinCheckpoint(proposal);
+      if (indexResult.result !== 'accept') {
+        return indexResult;
+      }
+    }
+
+    // An undefined proposer means an empty committee (anyone may propose), so skip the
+    // proposer-equality check and keep validating. Only this lookup can fail on a receiver-local
+    // cause (L1 RPC down, or this node behind); mapEpochCacheLookupFailure ignores that (it is not the
+    // relaying peer's fault) and rejects a missing committee (which is).
+    let expectedProposer;
+    try {
+      expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slotNumber);
+    } catch (e) {
+      return mapEpochCacheLookupFailure(e, this.logger, 'proposal', slotNumber);
+    }
+    if (expectedProposer !== undefined && !proposer.equals(expectedProposer)) {
+      this.logger.warn(`Penalizing peer for invalid proposer for current slot ${slotNumber}`, {
+        expectedProposer,
+        proposer: proposer.toString(),
+      });
+      return { result: 'reject', severity: PeerErrorSeverity.MidToleranceError };
+    }
+
+    return { result: 'accept' };
   }
 
   /**
