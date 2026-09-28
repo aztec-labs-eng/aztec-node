@@ -92,16 +92,11 @@ type PlannedSpawn = {
 export class FakeBBJsFactory extends BBJsFactory {
   /** Every instance created, in creation order. */
   public readonly created: FakeBBJsInstance[] = [];
+  protected override readonly maintenanceIntervalMs = 5;
   private readonly plan: PlannedSpawn[] = [];
 
-  /**
-   * @param poolSize - Pooled instances to keep; when omitted, every borrow creates a fresh instance.
-   * @param maintenanceIntervalMs - How often pool maintenance runs after its first run.
-   */
-  constructor(
-    poolSize?: number,
-    protected override readonly maintenanceIntervalMs = 5,
-  ) {
+  /** @param poolSize - Pooled instances to keep; when omitted, every borrow creates a fresh instance. */
+  constructor(poolSize?: number) {
     super('/unused/bb', { poolSize });
   }
 
