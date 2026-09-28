@@ -862,8 +862,7 @@ aztec sign-attester-exit [options]
 - `--rollup <address>` - Rollup holding the position
 - `--deadline <timestamp>` - Authorization expiry as Unix seconds
 - `--output <path>` - JSON output file (must be new unless --append is used)
-- `--append` - Append without validating existing authorizations; run validate-attester-exits after the batch is complete
-- `--create-if-missing` - With --append, create the output file if it does not exist
+- `--append` - Append or create if missing, without validating existing authorizations; run validate-attester-exits after the batch is complete
 - `-h, --help` - display help for command
 
 ### aztec start

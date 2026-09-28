@@ -69,7 +69,6 @@ describe('sign-attester-exit', () => {
         attesterAddress: EthAddress.fromString(account.address),
         output,
         append: true,
-        createIfMissing: true,
       });
     }
     const entries = await readAttesterExitAuthorizations(output);
@@ -78,17 +77,10 @@ describe('sign-attester-exit', () => {
     );
   });
 
-  it('still requires an existing file when only append is supplied', async () => {
-    await expect(
-      signAttesterExit({ ...args, output: join(directory, 'missing.json'), append: true }),
-    ).rejects.toMatchObject({ code: 'ENOENT' });
-  });
-
-  it.each([false, true])('leaves invalid batch JSON unchanged with create-if-missing=%s', async createIfMissing => {
+  it('leaves invalid batch JSON unchanged when appending', async () => {
     const output = join(directory, 'batch.json');
     await writeFile(output, 'invalid');
-    const options = { ...args, output, append: true, createIfMissing };
-    await expect(signAttesterExit(options)).rejects.toThrow();
+    await expect(signAttesterExit({ ...args, output, append: true })).rejects.toThrow();
     expect(await readFile(output, 'utf8')).toBe('invalid');
   });
 
