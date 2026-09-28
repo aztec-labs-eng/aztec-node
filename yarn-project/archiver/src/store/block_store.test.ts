@@ -2401,7 +2401,8 @@ describe('BlockStore', () => {
       blockCount: number,
       checkpointNumber: number,
       previousArchive?: AppendOnlyTreeSnapshot,
-    ): Promise<void> {
+    ): Promise<AppendOnlyTreeSnapshot> {
+      let lastArchive: AppendOnlyTreeSnapshot | undefined;
       for (let i = 0; i < blockCount; i++) {
         const opts: Parameters<typeof L2Block.random>[1] = {
           checkpointNumber: CheckpointNumber(checkpointNumber),
@@ -2412,8 +2413,54 @@ describe('BlockStore', () => {
         }
         const block = await L2Block.random(BlockNumber(startBlock + i), opts);
         await blockStore.addProposedBlock(block, { force: true });
+        lastArchive = block.archive;
       }
+      return lastArchive!;
     }
+
+    const addProposed = (checkpointNumber: number, startBlock: number) =>
+      blockStore.addProposedCheckpoint({
+        checkpointNumber: CheckpointNumber(checkpointNumber),
+        header: CheckpointHeader.empty(),
+        startBlock: BlockNumber(startBlock),
+        blockCount: 1,
+        totalManaUsed: 100n,
+        feeAssetPriceModifier: 50n,
+      });
+
+    it('rejects a proposed checkpoint beyond the pipeline depth from the confirmed tip', async () => {
+      const checkpoint1 = makePublishedCheckpoint(
+        await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, startBlockNumber: 1 }),
+        10,
+      );
+      await blockStore.addCheckpoints([checkpoint1]);
+
+      let archive = await addBlocksForProposedCheckpoint(2, 1, 2, checkpoint1.checkpoint.blocks[0].archive);
+      await addProposed(2, 2);
+      archive = await addBlocksForProposedCheckpoint(3, 1, 3, archive);
+      await addProposed(3, 3);
+      expect(await blockStore.getProposedCheckpointNumber()).toBe(3);
+
+      // Checkpoint 4 is confirmed + 3. Its blocks exist and chain, so without the depth guard the store
+      // would accept it; the guard must reject it before block validation.
+      await addBlocksForProposedCheckpoint(4, 1, 4, archive);
+      await expect(addProposed(4, 4)).rejects.toThrow('exceeds the pipeline depth');
+      expect(await blockStore.getProposedCheckpointNumber()).toBe(3);
+    });
+
+    it('accepts a proposed checkpoint at the maximum pipeline depth', async () => {
+      const checkpoint1 = makePublishedCheckpoint(
+        await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, startBlockNumber: 1 }),
+        10,
+      );
+      await blockStore.addCheckpoints([checkpoint1]);
+
+      const archive = await addBlocksForProposedCheckpoint(2, 1, 2, checkpoint1.checkpoint.blocks[0].archive);
+      await addProposed(2, 2);
+      await addBlocksForProposedCheckpoint(3, 1, 3, archive);
+      await addProposed(3, 3);
+      expect(await blockStore.getProposedCheckpointNumber()).toBe(3);
+    });
 
     it('returns initial value when no proposed checkpoint is set', async () => {
       const pending = await blockStore.getProposedCheckpointNumber();

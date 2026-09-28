@@ -1,3 +1,4 @@
+import { MAX_PIPELINE_DEPTH } from '@aztec-labs/archiver';
 import { getKzg } from '@aztec-labs/blob-lib';
 import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
 import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
@@ -639,7 +640,7 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // Guard: don't exceed 1-deep pipeline. Without a proposed checkpoint, we can only build
     // confirmed + 1. With a proposed checkpoint, we can build confirmed + 2.
     const confirmedCkpt = syncedTo.checkpointedCheckpointNumber;
-    if (checkpointNumber > confirmedCkpt + 2) {
+    if (checkpointNumber > confirmedCkpt + MAX_PIPELINE_DEPTH) {
       this.log.verbose(
         `Skipping slot ${targetSlot}: checkpoint ${checkpointNumber} exceeds max pipeline depth (confirmed=${confirmedCkpt})`,
       );
