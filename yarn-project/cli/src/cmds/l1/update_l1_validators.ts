@@ -268,14 +268,12 @@ export async function signAttesterExit({
   deadline,
   output,
   append = false,
-  createIfMissing = false,
   log,
 }: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> & { privateKey: string } & {
   attesterAddress: EthAddress;
   deadline: bigint;
   output: string;
   append?: boolean;
-  createIfMissing?: boolean;
   log: LogFn;
 }) {
   const account = getAccount(privateKey, undefined);
@@ -288,25 +286,22 @@ export async function signAttesterExit({
   const authorization = await rollup.createAttesterExitAuthorization(attesterAddress, deadline, typedData =>
     account.signTypedData(typedData),
   );
-  let updateExisting = append;
-  let authorizations: unknown[] = [];
-  if (append) {
-    try {
-      authorizations = await readAttesterExitAuthorizationJson(output);
-    } catch (error) {
-      if (!createIfMissing || !isRecord(error) || error.code !== 'ENOENT') {
-        throw error;
-      }
-      updateExisting = false;
-    }
-  }
+  const existingAuthorizations = append
+    ? await readAttesterExitAuthorizationJson(output).catch((error: unknown) => {
+        if (!isRecord(error) || error.code !== 'ENOENT') {
+          throw error;
+        }
+        return undefined;
+      })
+    : undefined;
+  const authorizations = existingAuthorizations ?? [];
   authorizations.push({
     attester: authorization.attester.toString(),
     deadline: authorization.deadline.toString(),
     signature: Signature.fromViemSignature(authorization.signature).toString(),
   });
   const json = JSON.stringify(authorizations, null, 2);
-  if (updateExisting) {
+  if (existingAuthorizations) {
     await atomicUpdateFile(output, `${json}\n`);
   } else {
     await writeFile(output, `${json}\n`, { flag: 'wx' });

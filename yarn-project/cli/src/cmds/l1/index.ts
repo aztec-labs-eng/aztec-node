@@ -371,15 +371,14 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
     .requiredOption('--output <path>', 'JSON output file (must be new unless --append is used)')
     .option(
       '--append',
-      'Append without validating existing authorizations; run validate-attester-exits after the batch is complete',
+      'Append or create if missing, without validating existing authorizations; run validate-attester-exits after the batch is complete',
     )
-    .option('--create-if-missing', 'With --append, create the output file if it does not exist')
     .addHelpText(
       'after',
       `
 Examples:
-  aztec sign-attester-exit --private-key "$ATTESTER_KEY_0" --attester "$ATTESTER_0" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append --create-if-missing
-  aztec sign-attester-exit --private-key "$ATTESTER_KEY_1" --attester "$ATTESTER_1" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append --create-if-missing
+  aztec sign-attester-exit --private-key "$ATTESTER_KEY_0" --attester "$ATTESTER_0" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
+  aztec sign-attester-exit --private-key "$ATTESTER_KEY_1" --attester "$ATTESTER_1" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
   aztec validate-attester-exits --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID"
   aztec initiate-withdraw-by-attester-batch --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --l1-rpc-urls "$L1_RPC_URL" --private-key "$RELAYER_PRIVATE_KEY"
 Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequentially.
@@ -397,7 +396,6 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
         deadline: options.deadline,
         output: options.output,
         append: options.append,
-        createIfMissing: options.createIfMissing,
         log,
       });
     });
