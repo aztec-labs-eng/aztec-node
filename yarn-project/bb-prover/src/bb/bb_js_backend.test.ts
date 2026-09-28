@@ -19,14 +19,14 @@ describe('BBJsFactory pool', () => {
 
   const verify = (instance: BBJsApi) => instance.verifyChonkProof([], new Uint8Array());
   const verified = { verified: true, durationMs: 1 };
-  // The fake spawns settle within microtasks, so one macrotask lets every pending spawn and waiting borrow progress.
+  // Runs the pending microtasks, such as a released fake spawn or a borrow taking an idle instance.
   const settle = () => new Promise(resolve => setImmediate(resolve));
 
   afterEach(async () => {
     await factory.destroy();
   });
 
-  it('does not return a borrowed instance whose bb died, and replaces it', async () => {
+  it('replaces a borrowed instance whose bb died', async () => {
     factory = new FakeBBJsFactory(1);
     {
       await using first = await factory.getInstance();
@@ -78,8 +78,6 @@ describe('BBJsFactory pool', () => {
     factory = new FakeBBJsFactory(1);
     const first = await factory.getInstance();
     const waiting = factory.getInstance();
-    // Let the second borrow start waiting on the full pool before the borrowed instance dies.
-    await settle();
     factory.created[0].kill();
     await first[Symbol.asyncDispose]();
 
@@ -146,6 +144,23 @@ describe('BBJsFactory pool', () => {
     await borrowFails;
     spawned.resolve();
     await settle();
+    expect(factory.created).toHaveLength(1);
+    expect(factory.created[0].destroyCount).toBe(1);
+  });
+
+  it('destroys a dead instance that a borrow dropped before maintenance could', async () => {
+    // Maintenance runs only once, when the pool starts.
+    factory = new FakeBBJsFactory(1, 60_000);
+    {
+      await using _first = await factory.getInstance();
+      factory.created[0].kill();
+    }
+    const borrowFails = expect(factory.getInstance()).rejects.toThrow('destroyed while waiting');
+    // Let the borrow take the dead instance and drop it.
+    await settle();
+
+    await factory.destroy();
+    await borrowFails;
     expect(factory.created).toHaveLength(1);
     expect(factory.created[0].destroyCount).toBe(1);
   });
