@@ -45,6 +45,57 @@ validator:
 
   web3signerUrl: ""
 
+  initContainers:
+    - name: wait-for-web3signer
+      image: '{{ printf "%s:%s" (.Values.node.image.repository | default .Values.global.aztecImage.repository) (.Values.node.image.tag | default .Values.global.aztecImage.tag) }}'
+      imagePullPolicy: '{{ .Values.global.aztecImage.pullPolicy }}'
+      env:
+        - name: WEB3_SIGNER_URL
+          value: '{{ .Values.web3signerUrl | default "" }}'
+      command:
+        - node
+        - --input-type=module
+        - -e
+        - |
+          import { setTimeout as sleep } from 'node:timers/promises';
+
+          const url = process.env.WEB3_SIGNER_URL;
+          if (!url) process.exit(0);
+
+          const startedAt = performance.now();
+          const deadline = startedAt + 300_000;
+          let lastFailure = 'No successful response';
+
+          while (true) {
+            const remainingMs = deadline - performance.now();
+            if (remainingMs <= 0) break;
+
+            try {
+              const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_accounts', params: [], id: 1 }),
+                signal: AbortSignal.timeout(Math.min(5000, Math.ceil(remainingMs))),
+              });
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const result = await response.json();
+              if (result.error || !Array.isArray(result.result) || result.result.length === 0) {
+                throw new Error('Signer accounts are not available yet');
+              }
+              console.log('Web3Signer is ready');
+              process.exit(0);
+            } catch (error) {
+              lastFailure = error.message;
+              console.log(`Waiting for Web3Signer: ${lastFailure}`);
+              const retryDelayMs = Math.min(5000, deadline - performance.now());
+              if (retryDelayMs > 0) await sleep(retryDelayMs);
+            }
+          }
+
+          const elapsedSeconds = Math.round((performance.now() - startedAt) / 1000);
+          console.error(`Timed out waiting for Web3Signer after ${elapsedSeconds}s. Last failure: ${lastFailure}`);
+          process.exit(1);
+
   service:
     p2p:
       enabled: true
