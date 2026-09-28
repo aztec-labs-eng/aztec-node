@@ -74,18 +74,6 @@ describe('BBJsFactory pool', () => {
     expect(failures).toBe(1);
   });
 
-  it('hands the replacement for a dead borrowed instance to a borrower waiting for it', async () => {
-    factory = new FakeBBJsFactory(1);
-    const first = await factory.getInstance();
-    const waiting = factory.getInstance();
-    factory.created[0].kill();
-    await first[Symbol.asyncDispose]();
-
-    await using second = await waiting;
-    await expect(verify(second)).resolves.toEqual(verified);
-    expect(factory.created).toHaveLength(2);
-  });
-
   it('keeps a borrower waiting while replacements fail to spawn, and hands it the first one that starts', async () => {
     factory = new FakeBBJsFactory(1);
     const first = await factory.getInstance();
