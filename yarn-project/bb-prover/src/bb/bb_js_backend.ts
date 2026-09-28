@@ -438,7 +438,7 @@ export class BBJsFactory {
 
   /** Spawns one pooled instance into `pool` if the pool is below `poolSize`. */
   private async replenish(pool: FifoMemoryQueue<BBJsApi>): Promise<void> {
-    if (this.pooledCount >= this.poolSize!) {
+    if (this.destroyed || this.pooledCount >= this.poolSize!) {
       return;
     }
     // Counted before the spawn so that concurrent borrowers do not spawn past poolSize.
