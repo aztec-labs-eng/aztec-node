@@ -123,8 +123,10 @@ describe('BBJsFactory pool', () => {
     {
       await using _second = await factory.getInstance();
       factory.created[1].kill();
-      factory.planNextInstance(new Error('spawn failed'));
-      factory.planNextInstance(new Error('spawn failed'));
+      // Enough failures for the background replacement, the borrow's spawn, and any re-checks before `first` returns.
+      for (let i = 0; i < 10; i++) {
+        factory.planNextInstance(new Error('spawn failed'));
+      }
     }
     await settle();
 
