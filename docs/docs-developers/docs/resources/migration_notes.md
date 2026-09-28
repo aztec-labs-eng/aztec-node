@@ -9,6 +9,27 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] Batch nullifier status oracle
+
+The single-nullifier existence oracle is replaced by `aztec::oracle::nullifiers::get_nullifier_statuses`, which checks any number of nullifiers in one call and reports, for each settled one, the block it was included in. `check_nullifier_exists` is kept and now calls the new oracle.
+
+This is a breaking change to the PXE oracle interface (version 31 → 32): contracts must be recompiled against the updated `aztec-nr` to run against the new PXE.
+
+### [Aztec.nr] `OriginBlock` replaced by `BlockReference`
+
+`aztec::facts::OriginBlock` has been removed. Retractable facts now identify their origin block with `aztec::oracle::block_reference::BlockReference`, which has the same `block_number` and `block_hash` fields.
+
+**Migration:**
+
+```diff
+- use aztec::facts::{OriginBlock, record_retractable_fact};
++ use aztec::facts::record_retractable_fact;
++ use aztec::oracle::block_reference::BlockReference;
+
+- let origin_block = OriginBlock { block_number, block_hash };
++ let origin_block = BlockReference { block_number, block_hash };
+```
+
 ### [AztecNode] `getBlockHashMembershipWitness` requires an existing reference block; new `getBlockHashMembershipWitnessAtArchive`
 
 `getBlockHashMembershipWitness(referenceBlock, blockHash)` returns a witness against the reference block header's `lastArchive.root`, the archive before the reference block was appended. v5 nodes also accepted a number-only reference one past the latest block, answering against the latest block's archive without that block existing. v6 does not: every reference, including a bare number, must name a block the node has, and a number past the tip fails once the node's hold-off for unseen blocks runs out.
@@ -25,9 +46,9 @@ To prove membership against a given archive root, including a block's own post-b
 
 Callers that anchor on a block header, such as PXE and its oracles, keep using `getBlockHashMembershipWitness`.
 
-### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
+### [Aztec.nr] `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` re-pinned at new addresses
 
-The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.
+The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain and oracle interface version 32. The canonical `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` move to new addresses and class ids; `PublicChecks` keeps its own. Handshakes established with the previous registry instance are not visible to the new one and must be re-established, and authorizations set on the previous `AuthRegistry` instance must be set again on the new one.
 
 ### [Protocol] The protocol nullifier is derived from the tx request's salt alone; `tx_request_salt` becomes `protocol_nullifier`
 
