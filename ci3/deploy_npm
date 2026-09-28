@@ -42,9 +42,9 @@ fi
 
 # A version older than what its dist-tag already points at must not take it: publishing a patch to
 # an old release line, or re-running an old tag's workflow, would otherwise repoint 'latest' (or
-# 'prerelease', or a channel's own tag) backwards for everyone. Such a version is published with no
-# dist-tag at all, which costs nothing: an exact version and a range like '@5' both resolve against
-# the published versions and consult no tag.
+# 'prerelease', or a channel's own tag) backwards for everyone. Such a version is published without
+# a dist-tag anyone reads, which costs nothing: an exact version and a range like '@5' both resolve
+# against the published versions and consult no tag.
 take_tag=1
 if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$version" | tail -1)" != "$version" ]; then
   take_tag=0
@@ -54,7 +54,7 @@ fi
 
 # npm attaches a dist-tag to every publish — omitting --tag means 'latest' — so publishing untagged
 # means taking one that nothing reads. The tag stays on the registry: the release token can publish
-# but is refused `npm dist-tag rm`, and npmjs applies a staged upload's tag only when the version
+# but gets a 403 from `npm dist-tag rm`, and npmjs applies a staged upload's tag only when the version
 # goes live, after this script has exited. The name is fixed rather than derived from the version,
 # so each package carries one such tag, pointing at its most recent superseded publish. It is also
 # not a bare 'v<major>': npm rejects any dist-tag that parses as a semver range, and 'v5' is
