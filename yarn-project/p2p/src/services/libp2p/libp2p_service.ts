@@ -1272,14 +1272,14 @@ export class LibP2PService extends WithTracer implements P2PService {
 
   // Bounded set of accepted checkpoint-attestation identities (slot, payload hash, signature bytes), so a
   // re-encoded copy of an accepted attestation is ignored before the expensive signature recovery.
-  private readonly recentAcceptedAttestations = new Map<string, true>();
+  private readonly recentAcceptedAttestations = new Set<string>();
   private static readonly MAX_RECENT_ATTESTATIONS = 8192;
 
   private rememberAcceptedAttestation(key: string): void {
     if (this.recentAcceptedAttestations.has(key)) {
       return;
     }
-    this.recentAcceptedAttestations.set(key, true);
+    this.recentAcceptedAttestations.add(key);
     if (this.recentAcceptedAttestations.size > LibP2PService.MAX_RECENT_ATTESTATIONS) {
       const oldest = this.recentAcceptedAttestations.keys().next().value;
       if (oldest !== undefined) {
