@@ -9,28 +9,30 @@ function notImplemented(): Promise<never> {
   return Promise.reject(new Error('Not implemented by FakeBBJsInstance'));
 }
 
-/** A {@link BBJsApi} double whose bb process can die. Only `verifyChonkProof` is implemented. */
+/** An error shaped like the one bb.js raises when the bb process died: retrying may help. */
+function retryable(message: string): Error {
+  return Object.assign(new Error(message), { retry: true });
+}
+
+/**
+ * A {@link BBJsApi} double whose bb process can die.
+ *
+ * A pooled instance is created with respawn, so a death fails only the call that was in flight and
+ * the next call is served by a replacement process. The double behaves the same way: `die` rejects
+ * once, retryably, and leaves the instance usable. Only `verifyChonkProof` is implemented.
+ */
 export class FakeBBJsInstance implements BBJsApi {
   public destroyCount = 0;
   public chonkVerifyCalls = 0;
-  private alive = true;
+  private destroyed = false;
 
   /** @param outcomes - Answers to successive `verifyChonkProof` calls; `valid` once they run out. */
   constructor(private readonly outcomes: FakeChonkVerifyOutcome[] = []) {}
 
-  /** Simulates the bb process dying: every later call fails as it does on a closed socket. */
-  public kill(): void {
-    this.alive = false;
-  }
-
-  public isAlive(): boolean {
-    return this.alive;
-  }
-
   public verifyChonkProof(): Promise<{ verified: boolean; durationMs: number }> {
     this.chonkVerifyCalls++;
-    if (!this.alive) {
-      return Promise.reject(new Error('Socket not connected'));
+    if (this.destroyed) {
+      return Promise.reject(new Error('Backend connection closed'));
     }
     switch (this.outcomes.shift() ?? 'valid') {
       case 'valid':
@@ -40,13 +42,12 @@ export class FakeBBJsInstance implements BBJsApi {
       case 'bb-error':
         return Promise.reject(new Error('bb rejected the proof input'));
       case 'die':
-        this.kill();
-        return Promise.reject(new Error('Socket connection ended unexpectedly'));
+        return Promise.reject(retryable('Socket connection ended unexpectedly'));
     }
   }
 
   public destroy(): Promise<void> {
-    this.alive = false;
+    this.destroyed = true;
     this.destroyCount++;
     return Promise.resolve();
   }
@@ -92,7 +93,6 @@ type PlannedSpawn = {
 export class FakeBBJsFactory extends BBJsFactory {
   /** Every instance created, in creation order. */
   public readonly created: FakeBBJsInstance[] = [];
-  protected override readonly maintenanceIntervalMs = 5;
   private readonly plan: PlannedSpawn[] = [];
 
   /** @param poolSize - Pooled instances to keep; when omitted, every borrow creates a fresh instance. */

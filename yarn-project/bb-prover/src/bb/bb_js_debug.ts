@@ -221,10 +221,6 @@ export class DebugBBJsInstance implements BBJsApi {
     return this.inner.generateContract(verificationKey);
   }
 
-  isAlive(): boolean {
-    return this.inner.isAlive();
-  }
-
   destroy(): Promise<void> {
     return this.inner.destroy();
   }
