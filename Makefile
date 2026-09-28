@@ -54,7 +54,7 @@ endef
 # PHONY TARGETS - List every target that has a file/dir of the same name.
 #==============================================================================
 
-.PHONY: noir-projects release-image playground docs aztec-up spartan labs-aztec-toolchain
+.PHONY: noir-projects release-image playground docs aztec-up spartan labs-aztec-toolchain yarn-project
 
 #==============================================================================
 # BOOTSTRAP TARGETS
