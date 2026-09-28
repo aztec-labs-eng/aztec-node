@@ -55,15 +55,5 @@ This also skips downloading the lock artifact. npm then resolves dependencies us
 configuration, so versions can differ from those approved for the release. A failed locked install
 does not automatically enable the opt-out.
 
-`scripts/generate-package-lock.mjs` uses the monorepo `yarn-project/yarn.lock` as the approved
-version list. It prepares a temporary npm-readable resolution seed and the published Aztec
-package versions, then generates an npm lock. Required peer dependencies are supplied at
-approved versions. Generation rejects packages absent from the approved graph or missing
-integrity data, and checks a clean `npm ci` before packaging the lock. The temporary seed is
-not distributed.
-
-The build generates an artifact for the fake `0.0.1` packages and fetches its dependencies into
-Verdaccio before creating the offline test image. Release generation runs after the real npm
-packages are published; the archive is uploaded separately from the version-stamped scripts.
-Native optional packages are selected by npm for the user's platform. Node, Noir, Foundry, and
-package lifecycle downloads remain outside the npm lock.
+Native optional packages are selected by npm for your platform. The npm lock does not cover
+Node, Noir, Foundry, or additional downloads performed by package installation scripts.
