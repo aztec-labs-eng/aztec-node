@@ -717,7 +717,7 @@ describe('LibP2PService', () => {
       expect(duplicateProposalCallback).not.toHaveBeenCalled();
     });
 
-    it('cap exceeded: penalizes peer and rejects', async () => {
+    it('cap exceeded: ignores without penalizing the relaying peer', async () => {
       const header = makeBlockHeader(1, { slotNumber: targetSlot });
       const indexWithinCheckpoint = IndexWithinCheckpoint(0);
 
@@ -751,14 +751,14 @@ describe('LibP2PService', () => {
 
       await service.processBlockFromPeer(extraProposal.toBuffer(), 'msg-extra', mockPeerId);
 
-      // Verify peer was penalized
-      expect(mockPeerManager.penalizePeer).toHaveBeenCalledWith(mockPeerId, PeerErrorSeverity.HighToleranceError);
+      // A full local cap is receiver-local state, not sender fault: do not penalize the relayer.
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
 
-      // Verify message was rejected
+      // The extra payload is ignored (dropped, non-scoring), not rejected.
       expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
         'msg-extra',
         MOCK_PEER_ID,
-        TopicValidatorResult.Reject,
+        TopicValidatorResult.Ignore,
       );
 
       // Verify callback was NOT invoked
@@ -1186,12 +1186,14 @@ describe('LibP2PService', () => {
 
       await service.handleGossipedCheckpointProposal(extraProposal.toBuffer(), 'msg-extra', mockPeerId);
 
-      // Verify checkpoint was rejected
+      // The checkpoint cap is full: ignore without penalizing the relaying peer (a full local cache is
+      // receiver-local state), but still process the valid lastBlock below.
       expect(reportMessageValidationResultSpy).toHaveBeenCalledWith(
         'msg-extra',
         MOCK_PEER_ID,
-        TopicValidatorResult.Reject,
+        TopicValidatorResult.Ignore,
       );
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
 
       // Verify checkpoint callback was NOT invoked
       expect(allNodesCheckpointReceivedCallback).not.toHaveBeenCalled();
@@ -1212,12 +1214,14 @@ describe('LibP2PService', () => {
       expect(mockTxPool.protectTxs).toHaveBeenCalled();
     });
 
-    it('checkpoint rejected when lastBlock is equivocated', async () => {
+    it('checkpoint whose lastBlock equivocates receiver-local state: ignores, does not penalize the relayer', async () => {
       const checkpointHeader = makeCheckpointHeader(1, { slotNumber: targetSlot });
       const blockHeader = makeBlockHeader(1, { slotNumber: targetSlot });
       const indexWithinCheckpoint = IndexWithinCheckpoint(4);
 
-      // Pre-add a block at same position
+      // Pre-add a block at the same position, so the checkpoint's terminal block is a second proposal
+      // at (slot, index) as seen from OUR local cache - a receiver-local equivocation, not the
+      // relaying peer's fault.
       const existingBlock = await makeBlockProposal({
         signer,
         blockHeader,
@@ -1231,8 +1235,9 @@ describe('LibP2PService', () => {
       allNodesCheckpointReceivedCallback.mockClear();
       validatorCheckpointReceivedCallback.mockClear();
       reportMessageValidationResultSpy.mockClear();
+      mockPeerManager.penalizePeer.mockClear();
 
-      // Create checkpoint with different lastBlock at same position
+      // Create checkpoint with a different lastBlock at the same position
       const proposal = await makeCheckpointProposal({
         signer,
         checkpointHeader,
@@ -1242,10 +1247,13 @@ describe('LibP2PService', () => {
 
       await service.handleGossipedCheckpointProposal(proposal.toBuffer(), 'msg-1', mockPeerId);
 
-      // Verify message was rejected
-      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Reject);
+      // Receiver-local equivocation is dropped, not rejected: the checkpoint is ignored and the relaying
+      // peer is NOT penalized (it cannot know our cache already holds a block at this index). Any real
+      // equivocation evidence was already captured and its slash callback fired at the block level.
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
 
-      // Verify neither callback was invoked
+      // Not processed or attested to.
       expect(allNodesCheckpointReceivedCallback).not.toHaveBeenCalled();
       expect(validatorCheckpointReceivedCallback).not.toHaveBeenCalled();
       expect(blockReceivedCallback).not.toHaveBeenCalled();
@@ -1522,7 +1530,7 @@ describe('LibP2PService', () => {
       expect(oversizedProposalCallback).not.toHaveBeenCalled();
     });
 
-    it('oversized block proposal at the per-position cap: rejects and penalizes the relaying peer', async () => {
+    it('oversized block proposal at the per-position cap: ignores without penalizing the relaying peer', async () => {
       // Fill the (slot, index) position to its cap directly in the pool.
       for (let i = 0; i < 2; i++) {
         const existing = await makeBlockProposal({
@@ -1543,17 +1551,17 @@ describe('LibP2PService', () => {
       });
       await service.processBlockFromPeer(third.toBuffer(), 'msg-1', mockPeerId);
 
-      // A peer should not relay more than the cap per slot+index, even for an oversized proposal: reject
-      // and penalize the relaying peer, do not re-broadcast, do not process.
-      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Reject);
-      expect(mockPeerManager.penalizePeer).toHaveBeenCalledWith(mockPeerId, PeerErrorSeverity.HighToleranceError);
+      // A full local cap is receiver-local state, not sender fault: ignore without penalizing the
+      // relaying peer, do not re-broadcast, do not process.
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
       expect(blockReceivedCallback).not.toHaveBeenCalled();
       const stored = await attestationPool.getBlockProposalByArchive(third.archive.toString());
       expect(stored).toBeUndefined();
       expect(oversizedProposalCallback).not.toHaveBeenCalled();
     });
 
-    it('oversized checkpoint at the per-slot checkpoint cap: rejects and penalizes the relaying peer', async () => {
+    it('oversized checkpoint at the per-slot checkpoint cap: ignores without penalizing the relaying peer', async () => {
       // Fill the slot's checkpoint-proposal cap directly in the pool (e.g. a proposer that equivocated
       // two checkpoints before sending an oversized one).
       for (let i = 0; i < 2; i++) {
@@ -1577,11 +1585,11 @@ describe('LibP2PService', () => {
       });
       await service.handleGossipedCheckpointProposal(oversized.toBuffer(), 'msg-1', mockPeerId);
 
-      // The per-slot cap is about checkpoint proposals, not block proposals: reject and penalize the
+      // A full local cap is receiver-local state, not sender fault: ignore without penalizing the
       // relaying peer. The oversized terminal block was added before the cap check, so it is still
       // retained as evidence and reported for slashing.
-      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Reject);
-      expect(mockPeerManager.penalizePeer).toHaveBeenCalledWith(mockPeerId, PeerErrorSeverity.HighToleranceError);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
       expect(blockReceivedCallback).not.toHaveBeenCalled();
       expect(allNodesCheckpointReceivedCallback).not.toHaveBeenCalled();
       expect(validatorCheckpointReceivedCallback).not.toHaveBeenCalled();
@@ -1590,6 +1598,42 @@ describe('LibP2PService', () => {
       );
       expect(storedBlock).toBeDefined();
       expect(oversizedProposalCallback).toHaveBeenCalledWith({ slot: targetSlot, proposer: signer.address });
+    });
+
+    it('checkpoint whose terminal block hits the per-position block cap: does not penalize the relaying peer', async () => {
+      // Fill the terminal block's (slot, index) position cap directly in the pool.
+      const idx = IndexWithinCheckpoint(0);
+      for (let i = 0; i < MAX_BLOCK_PROPOSALS_PER_POSITION; i++) {
+        const existing = await makeBlockProposal({
+          signer,
+          blockHeader: makeBlockHeader(1, { slotNumber: targetSlot }),
+          indexWithinCheckpoint: idx,
+          archiveRoot: Fr.random(),
+        });
+        const { added } = await attestationPool.tryAddBlockProposal(existing);
+        expect(added).toBe(true);
+      }
+
+      // A checkpoint whose terminal block is another distinct proposal at that already-full position.
+      const checkpoint = await makeCheckpointProposal({
+        signer,
+        checkpointHeader: makeCheckpointHeader(1, { slotNumber: targetSlot }),
+        lastBlock: { blockHeader: makeBlockHeader(1, { slotNumber: targetSlot }), indexWithinCheckpoint: idx },
+        archiveRoot: Fr.random(),
+      });
+      await service.handleGossipedCheckpointProposal(checkpoint.toBuffer(), 'msg-1', mockPeerId);
+
+      // The terminal block cap-fulls, so the whole checkpoint is ignored: not rejected (no relayer
+      // penalty), but also not stored or re-broadcast, and no callback fires. Accepting and
+      // re-broadcasting it while the terminal block was silently dropped is what let a node with a
+      // different local cache flag the checkpoint as equivocation and penalize this honest relayer.
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
+      expect(await attestationPool.getCheckpointProposal(targetSlot)).toBeUndefined();
+      expect(duplicateProposalCallback).not.toHaveBeenCalled();
+      expect(blockReceivedCallback).not.toHaveBeenCalled();
+      expect(allNodesCheckpointReceivedCallback).not.toHaveBeenCalled();
+      expect(validatorCheckpointReceivedCallback).not.toHaveBeenCalled();
     });
   });
 
