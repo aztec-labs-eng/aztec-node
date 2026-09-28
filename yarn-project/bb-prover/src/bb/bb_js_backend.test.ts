@@ -19,7 +19,7 @@ describe('BBJsFactory pool', () => {
 
   const verify = (instance: BBJsApi) => instance.verifyChonkProof([], new Uint8Array());
   const verified = { verified: true, durationMs: 1 };
-  // Runs the pending microtasks, such as a released fake spawn or a borrow taking an idle instance.
+  // Runs the pending microtasks, such as those of a released fake spawn.
   const settle = () => new Promise(resolve => setImmediate(resolve));
 
   afterEach(async () => {
@@ -87,6 +87,7 @@ describe('BBJsFactory pool', () => {
     await using second = await waiting;
     await expect(verify(second)).resolves.toEqual(verified);
     expect(factory.created).toHaveLength(2);
+    expect(factory.created[0].destroyCount).toBe(1);
   });
 
   it('waits for the first instance when bb cannot start yet', async () => {
@@ -109,18 +110,19 @@ describe('BBJsFactory pool', () => {
     expect(factory.created).toHaveLength(2);
   });
 
-  it('does not spawn past poolSize while instances are borrowed or being spawned', async () => {
-    factory = new FakeBBJsFactory(2);
+  it('does not spawn past poolSize while instances are idle, borrowed or being spawned', async () => {
+    factory = new FakeBBJsFactory(3);
     const spawned = promiseWithResolvers<void>();
+    factory.planNextInstance([]);
     factory.planNextInstance([]);
     factory.planNextInstance([], spawned.promise);
     await using _borrowed = await factory.getInstance();
-    // Several maintenance runs happen while one instance is borrowed and the other is being spawned.
+    // Several maintenance runs happen while one instance is borrowed, one is idle and one is being spawned.
     await sleep(50);
     spawned.resolve();
     await settle();
 
-    expect(factory.created).toHaveLength(2);
+    expect(factory.created).toHaveLength(3);
   });
 
   it('does not wait for a spawn in flight when destroyed, and destroys its instance once it arrives', async () => {
@@ -133,23 +135,6 @@ describe('BBJsFactory pool', () => {
     await borrowFails;
     spawned.resolve();
     await settle();
-    expect(factory.created).toHaveLength(1);
-    expect(factory.created[0].destroyCount).toBe(1);
-  });
-
-  it('destroys a dead instance that a borrow dropped before maintenance could', async () => {
-    // Maintenance runs only once, when the pool starts.
-    factory = new FakeBBJsFactory(1, 60_000);
-    {
-      await using _first = await factory.getInstance();
-      factory.created[0].kill();
-    }
-    const borrowFails = expect(factory.getInstance()).rejects.toThrow('destroyed while waiting');
-    // Let the borrow take the dead instance and drop it.
-    await settle();
-
-    await factory.destroy();
-    await borrowFails;
     expect(factory.created).toHaveLength(1);
     expect(factory.created[0].destroyCount).toBe(1);
   });
