@@ -291,7 +291,7 @@ export class BBJsFactory {
 
   /** Idle pooled instances, created by the first `getInstance()` call when poolSize is set. May hold dead ones. */
   private pool?: FifoMemoryQueue<BBJsApi>;
-  /** Every pooled instance, idle or borrowed, that has not been destroyed. */
+  /** Every pooled instance that has not been destroyed, whether idle, borrowed, or dead and waiting to be destroyed. */
   private members: BBJsApi[] = [];
   /** Pooled instances being spawned. */
   private spawning = 0;
@@ -335,15 +335,15 @@ export class BBJsFactory {
         throw new Error('BBJsFactory was destroyed while waiting for an instance');
       }
       if (instance.isAlive()) {
-        return this.makeBorrowed(instance, pool);
+        return this.makeBorrowed(instance);
       }
-      // Dropped from the idle queue; pool maintenance destroys and replaces it.
+      // Dropped; pool maintenance or destroy() destroys it.
     }
   }
 
   /**
-   * Tear down all pooled instances. Idempotent. No-op when no pool is configured (fresh-per-call
-   * instances are destroyed by their own dispose callbacks). Instances currently held by an
+   * Tear down the idle and dead pooled instances. Idempotent. No-op when no pool is configured (fresh-per-call
+   * instances are destroyed by their own dispose callbacks). Live instances currently held by an
    * in-flight pooled borrow are destroyed by their dispose callback when released. Does not wait for a pooled instance
    * being spawned, which is destroyed when its spawn completes.
    */
@@ -366,8 +366,9 @@ export class BBJsFactory {
       }
     }
     pool.cancel();
+    const dead = this.members.filter(member => !member.isAlive());
     // Aggregate teardown failures so a single bb child that fails to shut down doesn't mask others.
-    const results = await Promise.allSettled(idle.map(item => this.retire(item)));
+    const results = await Promise.allSettled([...idle, ...dead].map(item => this.retire(item)));
     const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map(r => r.reason);
     if (errors.length > 0) {
       throw new AggregateError(errors, `BBJsFactory.destroy: ${errors.length} bb instance(s) failed to shut down`);
@@ -463,16 +464,16 @@ export class BBJsFactory {
   }
 
   /**
-   * Wrap a pooled instance with an `AsyncDisposable` that returns it to the pool if it is alive, or destroys it if the
-   * factory was destroyed in the meantime. A dead instance is not returned, and pool maintenance destroys and replaces
-   * it. Destroy errors are propagated.
+   * Wrap a pooled instance with an `AsyncDisposable` that returns it to the pool (or destroys it
+   * if the factory was destroyed in the meantime). Destroy errors are propagated.
    */
-  private makeBorrowed(instance: BBJsApi, pool: FifoMemoryQueue<BBJsApi>): BBJsApi & AsyncDisposable {
+  private makeBorrowed(instance: BBJsApi): BBJsApi & AsyncDisposable {
     return this.makeDisposable(instance, async () => {
-      if (this.destroyed) {
-        await this.retire(instance);
-      } else if (instance.isAlive()) {
+      const pool = this.pool;
+      if (pool && !this.destroyed) {
         pool.put(instance);
+      } else {
+        await this.retire(instance);
       }
     });
   }
