@@ -53,8 +53,10 @@ import {
   CheckpointNumberNotSequentialError,
   DuplicateTxHashError,
   InitialCheckpointNumberNotSequentialError,
+  MAX_PIPELINE_DEPTH,
   NoProposedCheckpointToPromoteError,
   ProposedCheckpointArchiveRootMismatchError,
+  ProposedCheckpointExceedsPipelineDepthError,
   ProposedCheckpointNotSequentialError,
   ProposedCheckpointPromotionNotSequentialError,
   UndecodableCheckpointAttestationsError,
@@ -1575,6 +1577,10 @@ export class BlockStore {
 
       if (proposed.checkpointNumber !== latestTip + 1) {
         throw new ProposedCheckpointNotSequentialError(proposed.checkpointNumber, latestTip);
+      }
+
+      if (proposed.checkpointNumber > confirmed + MAX_PIPELINE_DEPTH) {
+        throw new ProposedCheckpointExceedsPipelineDepthError(proposed.checkpointNumber, confirmed);
       }
 
       // Ensure the predecessor block (from pending or confirmed chain) exists

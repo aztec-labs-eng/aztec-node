@@ -238,6 +238,21 @@ export class ProposedCheckpointNotSequentialError extends Error {
   }
 }
 
+/** At most this many checkpoints beyond the L1-confirmed tip may be held or accepted (pipeline depth). */
+export const MAX_PIPELINE_DEPTH = 2;
+
+export class ProposedCheckpointExceedsPipelineDepthError extends Error {
+  constructor(
+    public readonly proposedCheckpointNumber: number,
+    public readonly confirmedCheckpointNumber: number,
+  ) {
+    super(
+      `Proposed checkpoint ${proposedCheckpointNumber} exceeds the pipeline depth: at most ${MAX_PIPELINE_DEPTH} checkpoints beyond the confirmed tip ${confirmedCheckpointNumber} are allowed`,
+    );
+    this.name = 'ProposedCheckpointExceedsPipelineDepthError';
+  }
+}
+
 /** Thrown when a proposed checkpoint or block L2 slot has already expired on L1. */
 export class BlockOrCheckpointSlotExpiredError extends Error {
   constructor(
