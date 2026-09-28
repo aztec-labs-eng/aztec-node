@@ -464,9 +464,12 @@ describe('Discv5Service', () => {
     expect(allowed).toBeLessThan(5000);
     expect(limiter.allowEncodedPacket(attackerIp)).toBe(false);
 
-    // Expected responses are exempt: a queried peer's replies are never limited.
+    // Expected responses are exempt, driven through the SessionService wrapper (the layer the
+    // request flow uses) rather than the transport hook directly, so a reversed wrapper is caught.
     const honestIp = '198.51.100.7';
-    transport.addExpectedResponse(honestIp);
+    const honestAddr = multiaddr(`/ip4/${honestIp}/udp/30303`);
+    const sessionService = (node as any).discv5.sessionService;
+    sessionService.addExpectedResponse(honestAddr);
     let honestAllowed = 0;
     for (let i = 0; i < 5000; i++) {
       if (limiter.allowEncodedPacket(honestIp)) {
@@ -474,6 +477,16 @@ describe('Discv5Service', () => {
       }
     }
     expect(honestAllowed).toBe(5000);
+
+    // Once the exchange ends the exemption is cleared and the source is metered again.
+    sessionService.removeExpectedResponse(honestAddr);
+    let afterExchange = 0;
+    for (let i = 0; i < 5000; i++) {
+      if (limiter.allowEncodedPacket(honestIp)) {
+        afterExchange++;
+      }
+    }
+    expect(afterExchange).toBeLessThan(5000);
   });
 
   const createNode = async (overrides: Partial<P2PConfig & IDiscv5CreateOptions> = {}, useBootnode = true) => {

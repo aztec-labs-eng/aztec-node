@@ -1856,7 +1856,7 @@ __metadata:
     "@libp2p/prometheus-metrics": "npm:^4.2.4"
     "@libp2p/tcp": "npm:9.0.24"
     "@multiformats/multiaddr": "npm:12.1.14"
-    "@nethermindeth/discv5": "npm:9.0.0-backport-306-v4"
+    "@nethermindeth/discv5": "patch:@nethermindeth/discv5@npm%3A9.0.0-backport-306-v4#~/.yarn/patches/@nethermindeth-discv5-npm-9.0.0-backport-306-v4-2f4901c773.patch"
     "@nethermindeth/enr": "npm:3.0.0-backport-306-v4"
     "@types/jest": "npm:^30.0.0"
     "@types/node": "npm:^22.15.17"
@@ -5302,6 +5302,23 @@ __metadata:
     rlp: "npm:^2.2.6"
     strict-event-emitter-types: "npm:^2.0.0"
   checksum: 10/e857582f15f62a623a6148fc245aaf536c11185b083d1d79530290c383c45c57f7ad5907fa218d531da8d50c97fc99c9b10b9378633f36967a13e56a571dea2e
+  languageName: node
+  linkType: hard
+
+"@nethermindeth/discv5@patch:@nethermindeth/discv5@npm%3A9.0.0-backport-306-v4#~/.yarn/patches/@nethermindeth-discv5-npm-9.0.0-backport-306-v4-2f4901c773.patch":
+  version: 9.0.0-backport-306-v4
+  resolution: "@nethermindeth/discv5@patch:@nethermindeth/discv5@npm%3A9.0.0-backport-306-v4#~/.yarn/patches/@nethermindeth-discv5-npm-9.0.0-backport-306-v4-2f4901c773.patch::version=9.0.0-backport-306-v4&hash=0abe1f"
+  dependencies:
+    "@libp2p/crypto": "npm:^4.0.1"
+    "@libp2p/interface": "npm:^1.1.1"
+    "@multiformats/multiaddr": "npm:^12.1.10"
+    "@nethermindeth/enr": "npm:^3.0.0-backport-306-v4"
+    bcrypto: "npm:^5.4.0"
+    debug: "npm:^4.3.1"
+    lru-cache: "npm:^10.1.0"
+    rlp: "npm:^2.2.6"
+    strict-event-emitter-types: "npm:^2.0.0"
+  checksum: 10/d38eb56b3381964292c79b32731a64d8ea9510a2a70af0e3ef26761affdc798728116b6bc0c3c77131d4e078359a3c35e151c9f810afb72a08ded0bcca568ce3
   languageName: node
   linkType: hard
 
