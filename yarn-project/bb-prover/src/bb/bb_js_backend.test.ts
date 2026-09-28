@@ -69,20 +69,65 @@ describe('BBJsFactory pool', () => {
     expect(failures).toBe(1);
   });
 
-  it('fails the borrow when a replacement cannot be spawned, and spawns it on the next borrow', async () => {
+  it('hands the replacement for a dead borrowed instance to a borrower waiting for it', async () => {
+    factory = new FakeBBJsFactory(1);
+    const first = await factory.getInstance();
+    const waiting = factory.getInstance();
+    // Let the second borrow start waiting on the full pool before the borrowed instance dies.
+    await new Promise(resolve => setImmediate(resolve));
+    factory.created[0].kill();
+    await first[Symbol.asyncDispose]();
+
+    await using second = await waiting;
+    await expect(verify(second)).resolves.toEqual(verified);
+    expect(factory.created).toHaveLength(2);
+  });
+
+  it('fails a borrow when no instance exists and none can be spawned, and spawns one on the next borrow', async () => {
     factory = new FakeBBJsFactory(1);
     {
-      await using first = await factory.getInstance();
+      await using _first = await factory.getInstance();
       factory.created[0].kill();
+      // One spawn when the dead instance is returned, one by the next borrow.
+      factory.planNextInstance(new Error('spawn failed'));
+      factory.planNextInstance(new Error('spawn failed'));
     }
-    factory.planNextInstance(new Error('spawn failed'));
 
     await expect(factory.getInstance()).rejects.toThrow('spawn failed');
     await using second = await factory.getInstance();
     await expect(verify(second)).resolves.toEqual(verified);
   });
 
-  it('retries pool initialization after a failed spawn', async () => {
+  it('waits for a borrowed instance when a replacement cannot be spawned', async () => {
+    factory = new FakeBBJsFactory(2);
+    const first = await factory.getInstance();
+    {
+      await using _second = await factory.getInstance();
+      factory.created[1].kill();
+      factory.planNextInstance(new Error('spawn failed'));
+      factory.planNextInstance(new Error('spawn failed'));
+    }
+
+    const waiting = factory.getInstance();
+    // Let the borrow fail its spawn and start waiting before the live instance comes back.
+    await new Promise(resolve => setImmediate(resolve));
+    await first[Symbol.asyncDispose]();
+
+    await using third = await waiting;
+    await expect(verify(third)).resolves.toEqual(verified);
+    expect(factory.created).toHaveLength(2);
+  });
+
+  it('keeps the instances that started when pool initialization partly fails', async () => {
+    factory = new FakeBBJsFactory(2);
+    factory.planNextInstance(new Error('spawn failed'));
+
+    await using instance = await factory.getInstance();
+    await expect(verify(instance)).resolves.toEqual(verified);
+    expect(factory.created).toHaveLength(1);
+  });
+
+  it('retries pool initialization when no instance started', async () => {
     factory = new FakeBBJsFactory(1);
     factory.planNextInstance(new Error('spawn failed'));
 
