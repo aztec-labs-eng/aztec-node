@@ -1,5 +1,6 @@
 import { type AvmStat, type BackendOptions, BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
+import { TimeoutError } from '@aztec-labs/foundation/error';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { FifoMemoryQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -271,9 +272,9 @@ export interface BBJsFactoryOptions {
  * set of long-lived bb processes that are reused across calls — useful when the per-call
  * bb startup cost dominates the workload (e.g. high-rate IVC verification).
  *
- * A pooled instance whose bb process died is never handed out again: it is destroyed when it is returned or found idle.
- * A replacement is spawned when a dead instance is returned, and when a borrower finds no idle instance while the pool
- * is below `poolSize`.
+ * A pooled instance whose bb process died is never handed out again: it is destroyed when it is returned or found idle,
+ * and a replacement is spawned in the background. A borrower that finds no idle instance while the pool is below
+ * `poolSize` also spawns one.
  *
  * Idiomatic usage:
  * ```
@@ -295,6 +296,8 @@ export class BBJsFactory {
   /** Pooled instances that exist, idle or borrowed, plus spawns in flight. Below `poolSize` after an eviction. */
   private pooledCount = 0;
   private destroyed = false;
+  /** How often a borrower waiting on an empty pool re-checks whether it must spawn an instance itself or give up. */
+  protected readonly waitRecheckSeconds: number = 1;
 
   constructor(
     private bbPath: string,
@@ -313,8 +316,7 @@ export class BBJsFactory {
    * Acquire a bb instance. The returned object implements `BBJsApi` and `AsyncDisposable`.
    * With no pool: spawns a fresh bb that is destroyed on dispose. With a pool: borrows a live instance from
    * the pool and returns it on dispose, spawning a replacement first if the pool has no idle instance and is below
-   * `poolSize`. If that spawn fails, waits for a borrowed instance, or throws when there is none; the next call tries
-   * the spawn again.
+   * `poolSize`. Throws when no instance exists, none is being spawned, and a spawn fails; the next call tries again.
    */
   async getInstance(): Promise<BBJsApi & AsyncDisposable> {
     if (this.destroyed) {
@@ -333,27 +335,14 @@ export class BBJsFactory {
       if (!pool) {
         throw new Error('BBJsFactory has been destroyed');
       }
-      if (pool.length() === 0) {
-        try {
-          await this.replenish(pool);
-        } catch (err) {
-          if (this.pooledCount === 0) {
-            throw err;
-          }
-          this.logger?.warn('Failed to spawn a bb instance; waiting for a borrowed one', {
-            pooledCount: this.pooledCount,
-            err,
-          });
-        }
-      }
-      const instance = await pool.get();
+      const instance = await this.takeIdle(pool);
       if (!instance) {
         throw new Error('BBJsFactory was destroyed while waiting for an instance');
       }
       if (instance.isAlive()) {
         return this.makeBorrowed(instance);
       }
-      await this.evict(instance);
+      await this.evict(instance, pool);
     }
     throw new Error(`BBJsFactory found no live bb instance after ${this.poolSize + 1} attempts`);
   }
@@ -468,8 +457,40 @@ export class BBJsFactory {
     pool.put(instance);
   }
 
-  /** Destroys a pooled instance whose bb process died, making room in the pool for a replacement. */
-  private async evict(instance: BBJsApi): Promise<void> {
+  /**
+   * Takes an idle instance from `pool`, spawning one first when none is idle and the pool is below `poolSize`. While
+   * the pool stays empty it re-checks every `waitRecheckSeconds`: the instance it waits for may never come back (a
+   * spawn in flight fails, or a borrowed instance dies and its replacement fails), and it then spawns one itself.
+   * Throws when that spawn fails while no instance exists or is being spawned. Resolves to null once the factory is
+   * destroyed.
+   */
+  private async takeIdle(pool: FifoMemoryQueue<BBJsApi>): Promise<BBJsApi | null> {
+    for (;;) {
+      if (pool.length() === 0) {
+        try {
+          await this.replenish(pool);
+        } catch (err) {
+          if (this.pooledCount === 0) {
+            throw err;
+          }
+          this.logger?.warn('Failed to spawn a bb instance; waiting for another one', {
+            pooledCount: this.pooledCount,
+            err,
+          });
+        }
+      }
+      try {
+        return await pool.get(this.waitRecheckSeconds);
+      } catch (err) {
+        if (!(err instanceof TimeoutError)) {
+          throw err;
+        }
+      }
+    }
+  }
+
+  /** Destroys a pooled instance whose bb process died and starts spawning its replacement. */
+  private async evict(instance: BBJsApi, pool: FifoMemoryQueue<BBJsApi>): Promise<void> {
     this.pooledCount--;
     this.logger?.warn('Evicting a pooled bb instance whose process died', {
       poolSize: this.poolSize,
@@ -477,6 +498,11 @@ export class BBJsFactory {
     });
     // bb is already gone, so a teardown error is not actionable and must not fail the borrow that found it.
     await instance.destroy().catch(err => this.logger?.warn('Failed to destroy a dead bb instance', { err }));
+    // Not awaited: a waiting borrower is served when the replacement arrives, and one that fails leaves the pool short
+    // until a borrower finds it empty and spawns again.
+    void this.replenish(pool).catch(err =>
+      this.logger?.warn('Failed to spawn a replacement for a dead bb instance', { err }),
+    );
   }
 
   /** Wrap the instance in a debug wrapper if debugDir is configured. */
@@ -509,11 +535,7 @@ export class BBJsFactory {
       } else if (instance.isAlive()) {
         pool.put(instance);
       } else {
-        await this.evict(instance);
-        // A borrower may be waiting for this instance to come back, so replace it now rather than on the next borrow.
-        await this.replenish(pool).catch(err =>
-          this.logger?.warn('Failed to spawn a replacement for a dead bb instance', { err }),
-        );
+        await this.evict(instance, pool);
       }
     });
   }
