@@ -6,9 +6,7 @@ version=$1
 dry_run=${DRY_RUN:-0}
 
 # A stable release takes 'latest', the rc channel takes 'prerelease', and every other channel takes
-# a dist-tag named after itself ('nightly', 'commit', ...). No two channels share a tag: a nightly
-# of X.Y.Z sorts below an rc of X.Y.Z, and an off-mainline channel carries its own manifest version,
-# so a shared tag would stop following one channel whenever the other held a higher version.
+# a dist-tag named after itself ('nightly', 'commit', ...), so each tag follows exactly one channel.
 prerelease=$(semver prerelease $version)
 channel=${prerelease%%.*}
 case "$channel" in
@@ -53,12 +51,9 @@ if [ -n "$published_version" ] && [ "$(semver sort "$published_version" "$versio
 fi
 
 # npm attaches a dist-tag to every publish — omitting --tag means 'latest' — so publishing untagged
-# means taking one that nothing reads. The tag stays on the registry: the release token can publish
-# but gets a 403 from `npm dist-tag rm`, and npmjs applies a staged upload's tag only when the version
-# goes live, after this script has exited. The name is fixed rather than derived from the version,
-# so each package carries one such tag, pointing at its most recent superseded publish. It is also
-# not a bare 'v<major>': npm rejects any dist-tag that parses as a semver range, and 'v5' is
-# '>=5.0.0 <6.0.0-0'.
+# means taking one that nothing reads. Its name is fixed, so each package carries one such tag,
+# pointing at its most recent superseded publish, and it must not parse as a semver range, which npm
+# rejects as a dist-tag.
 tmp_tag=tmp-publish
 if [ "$take_tag" -eq 1 ]; then
   publish_tag=$npm_tag
