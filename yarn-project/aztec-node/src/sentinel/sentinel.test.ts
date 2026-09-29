@@ -465,16 +465,10 @@ describe('sentinel', () => {
         expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
       });
 
-      it('flags checkpoint-orphaned when an earlier slot already took the checkpoint position (case 5b)', async () => {
+      // An earlier slot landing the same checkpoint number means this proposer missed that slot's gossiped proposal
+      // and built on a stale parent, which is its own fault.
+      it('flags checkpoint-unpublished when an earlier slot already landed its checkpoint number (case 5a)', async () => {
         const sibling = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: SlotNumber(slot - 1) });
-        confirmedByNumber.set(checkpointNumber, publish(sibling));
-
-        const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
-        expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
-      });
-
-      it('flags checkpoint-unpublished when only a later slot took the checkpoint position (case 5a)', async () => {
-        const sibling = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: SlotNumber(slot + 1) });
         confirmedByNumber.set(checkpointNumber, publish(sibling));
 
         const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
