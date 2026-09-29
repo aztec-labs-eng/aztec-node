@@ -238,9 +238,8 @@ describe('CheckpointProver', () => {
     });
 
     it('does not surface an error when cancel races ahead of gather', async () => {
-      // Hold gather pending until after cancel — the cancelled guard in gatherAndExecute
-      // swallows the abort-induced rejection silently; no unhandled rejection should
-      // escape whenDone().
+      // Hold gather pending until after cancel. Its eventual rejection must be observed,
+      // and whenDone() must still resolve after the lifecycle unwinds.
       const gate = promiseWithResolvers<{ txs: Tx[]; missingTxs: never[] }>();
       txProvider.getTxsForBlock.mockReset();
       txProvider.getTxsForBlock.mockReturnValue(gate.promise);
@@ -286,7 +285,7 @@ describe('CheckpointProver', () => {
   // ---------------- teardown on completion ----------------
 
   describe('teardown on completion', () => {
-    it.each(['success', 'failure', 'cancel'] as const)(
+    it.each(['success', 'failure', 'cancel', 'proof failure'] as const)(
       'waits for empty-block execution after proofs arrive: %s',
       async outcome => {
         checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, txsPerBlock: 0 });
@@ -331,17 +330,21 @@ describe('CheckpointProver', () => {
         const prover = makeProver();
         const proofs = prover.whenSubTreeProofsReady();
         await processingStarted.promise;
-        resultGate.resolve(result);
-        // Run the proof callback while the execution loop is still suspended in processing.
-        await Promise.resolve();
+        if (outcome === 'proof failure') {
+          resultGate.reject(new Error('Proof failed during block processing'));
+        } else {
+          resultGate.resolve(result);
+        }
+        // Let proof settlement run while execution remains suspended in processing.
+        await sleep(0);
         if (outcome === 'cancel') {
           prover.cancel();
         }
         resumeProcessing.resolve();
         await prover.whenDone();
 
-        expect(prover.isFailed()).toBe(outcome === 'failure');
-        expect(blockCompleted).toBe(outcome === 'success');
+        expect(prover.isFailed()).toBe(outcome === 'failure' || outcome === 'proof failure');
+        expect(blockCompleted).toBe(outcome === 'success' || outcome === 'proof failure');
         expect(stopped).toBe(true);
         if (outcome === 'success') {
           await expect(proofs).resolves.toEqual({
@@ -349,8 +352,78 @@ describe('CheckpointProver', () => {
             inboxParityProof: result.inboxParityProof,
           });
         } else {
-          await expect(proofs).rejects.toThrow(outcome === 'cancel' ? /cancelled/ : /did not complete/);
+          await expect(proofs).rejects.toThrow(
+            outcome === 'cancel' ? /cancelled/ : outcome === 'failure' ? /Block processing failed/ : /Proof failed/,
+          );
         }
+      },
+    );
+
+    it.each(['creation', 'proving', 'cleanup'] as const)(
+      'rejects promptly on cancellation during %s but waits for cleanup',
+      async stage => {
+        checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, txsPerBlock: 0 });
+        txProvider.getTxsForBlock.mockResolvedValue({ txs: [], missingTxs: [] });
+        const creationStarted = promiseWithResolvers<void>();
+        const resumeCreation = promiseWithResolvers<void>();
+        const blockCompleted = promiseWithResolvers<void>();
+        const resultGate = promiseWithResolvers<SubTreeResult>();
+        const stopStarted = promiseWithResolvers<void>();
+        const resumeStop = promiseWithResolvers<void>();
+        let stopCount = 0;
+        const subTree = mock<CheckpointSubTreeOrchestrator>();
+        subTree.getSubTreeResult.mockReturnValue(resultGate.promise);
+        subTree.setBlockCompleted.mockImplementation(() => {
+          blockCompleted.resolve();
+          return Promise.resolve(checkpoint.blocks[0].header);
+        });
+        subTree.stop.mockImplementation(async () => {
+          stopCount++;
+          stopStarted.resolve();
+          await resumeStop.promise;
+        });
+        proverFactory.createCheckpointSubTreeOrchestrator.mockImplementation(async () => {
+          creationStarted.resolve();
+          if (stage === 'creation') {
+            await resumeCreation.promise;
+          }
+          return subTree;
+        });
+        dbProvider.fork.mockResolvedValue(mock<Awaited<ReturnType<typeof dbProvider.fork>>>());
+        const processor = mock<PublicProcessor>();
+        processor.process.mockResolvedValue([[], [], [], [], []]);
+        publicProcessorFactory.create.mockReturnValue(processor);
+
+        const prover = makeProver();
+        await creationStarted.promise;
+        if (stage !== 'creation') {
+          await blockCompleted.promise;
+          await sleep(0);
+        }
+        if (stage === 'cleanup') {
+          resultGate.resolve({
+            blockProofOutputs: [],
+            inboxParityProof: mock<SubTreeResult['inboxParityProof']>(),
+            previousArchiveSiblingPath: makeTuple(ARCHIVE_HEIGHT, () => Fr.ZERO),
+          });
+          await stopStarted.promise;
+        }
+
+        prover.cancel();
+        await expect(prover.whenSubTreeProofsReady()).rejects.toThrow(/cancelled/);
+        let done = false;
+        const donePromise = prover.whenDone().then(() => {
+          done = true;
+        });
+        resumeCreation.resolve();
+        await stopStarted.promise;
+        await sleep(0);
+        expect(done).toBe(false);
+        resumeStop.resolve();
+        await donePromise;
+        expect(done).toBe(true);
+        expect(stopCount).toBe(1);
+        expect(prover.isFailed()).toBe(false);
       },
     );
 
@@ -413,7 +486,7 @@ describe('CheckpointProver', () => {
 
     it('whenDone() stays pending until the sub-tree result lands and teardown completes', async () => {
       // Decouple the sub-tree result from the block-completion loop: the execute loop finishes
-      // enqueueing block-level proving (so runPromise resolves) while the sub-tree's proofs — and the
+      // enqueueing block-level proving while the sub-tree's proofs — and the
       // success-driven teardown they trigger — are still outstanding. whenDone() must not report
       // completion during that window, or a caller (reap/shutdown) would consider the prover unwound
       // while its sub-tree is still proving and holding memory.
@@ -454,7 +527,7 @@ describe('CheckpointProver', () => {
 
       const prover = makeProver();
 
-      // Block-level proving is now fully enqueued (runPromise about to resolve) with proofs still pending.
+      // The final block has reached completion with proofs still pending.
       await lastBlockCompleted.promise;
 
       let settled = false;
@@ -463,7 +536,7 @@ describe('CheckpointProver', () => {
       });
 
       // whenDone() must remain pending: enqueueing is done, but proofs and teardown are not. The gate is
-      // still closed, so this cannot flake true early — with the bug, whenDone() resolves off runPromise.
+      // still closed, so this cannot flake true early.
       await sleep(50);
       expect(settled).toBe(false);
       expect(stop).not.toHaveBeenCalled();
@@ -492,19 +565,25 @@ describe('CheckpointProver', () => {
       txProvider.getTxsForBlock.mockResolvedValue({ txs: [], missingTxs: [] });
       const startNewBlock = jest.fn((..._args: unknown[]) => Promise.resolve());
       const appendLeaves = jest.fn((..._args: unknown[]) => Promise.resolve());
+      const blocksCompleted = promiseWithResolvers<void>();
       const subTree = {
         getSubTreeResult: () => new Promise<never>(() => {}),
         startNewBlock,
         startChonkVerifierCircuits: () => Promise.resolve(),
         addTxs: () => Promise.resolve(),
-        setBlockCompleted: () => Promise.resolve(),
+        setBlockCompleted: (blockNumber: number) => {
+          if (blockNumber === checkpoint.blocks.at(-1)!.number) {
+            blocksCompleted.resolve();
+          }
+          return Promise.resolve();
+        },
         cancel: () => {},
         stop: () => Promise.resolve(),
       };
       proverFactory.createCheckpointSubTreeOrchestrator.mockResolvedValue(subTree as any);
       dbProvider.fork.mockResolvedValue({ appendLeaves, close: () => Promise.resolve() } as any);
       publicProcessorFactory.create.mockReturnValue({ process: () => Promise.resolve([[], []]) } as any);
-      return { startNewBlock, appendLeaves };
+      return { startNewBlock, appendLeaves, blocksCompleted: blocksCompleted.promise };
     }
 
     /** As {@link stubExecution}, but serving each block's txs as public ones so they reach the verifier circuits. */
@@ -538,10 +617,10 @@ describe('CheckpointProver', () => {
       // The parent consumed 10 messages; the blocks consume 2, 0 and 1 more.
       pinConsumedMessageCounts(checkpoint, [12, 12, 13]);
       const messages = [Fr.random(), Fr.random(), Fr.random()];
-      const { startNewBlock, appendLeaves } = stubExecution();
+      const { startNewBlock, appendLeaves, blocksCompleted } = stubExecution();
 
       const prover = makeProver({ previousBlockHeader: makePreviousBlockHeader(10), l1ToL2Messages: messages });
-      await (prover as any).runPromise;
+      await blocksCompleted;
 
       expect(startNewBlock.mock.calls.map(call => call[3])).toEqual([messages.slice(0, 2), [], messages.slice(2)]);
       expect(appendLeaves.mock.calls.map(call => call[1])).toEqual([messages.slice(0, 2), [], messages.slice(2)]);
@@ -554,7 +633,6 @@ describe('CheckpointProver', () => {
       checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2, txsPerBlock: 0 });
       pinConsumedMessageCounts(checkpoint, [12, 13]);
       const { startNewBlock } = stubExecution();
-      const causes = recordLoggedCauses();
 
       // The parent consumed 10, the blocks reach 13, but only two messages are supplied.
       const prover = makeProver({
@@ -562,10 +640,11 @@ describe('CheckpointProver', () => {
         l1ToL2Messages: [Fr.random(), Fr.random()],
       });
 
-      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow();
+      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow(
+        /consumed 3 L1 to L2 messages .* but 2 were supplied/,
+      );
       // The span is checked before any block is enqueued, so nothing was re-executed against a wrong slice.
       expect(startNewBlock).not.toHaveBeenCalled();
-      expect(causes()).toContainEqual(expect.stringMatching(/consumed 3 L1 to L2 messages .* but 2 were supplied/));
       expect(prover.isFailed()).toBe(true);
       expect(onFailed).toHaveBeenCalledWith(prover);
 
@@ -576,18 +655,16 @@ describe('CheckpointProver', () => {
       checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2, txsPerBlock: 0 });
       pinConsumedMessageCounts(checkpoint, [13, 12]);
       const { startNewBlock } = stubExecution();
-      const causes = recordLoggedCauses();
 
       const prover = makeProver({
         previousBlockHeader: makePreviousBlockHeader(10),
         l1ToL2Messages: [Fr.random(), Fr.random()],
       });
 
-      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow();
+      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow(/leaf count 12 is below its parent's 13/);
       // Every block's count is checked before any block is enqueued, so a rewind later in the checkpoint still
       // leaves no block re-executing against a slice derived from it.
       expect(startNewBlock).not.toHaveBeenCalled();
-      expect(causes()).toContainEqual(expect.stringMatching(/leaf count 12 is below its parent's 13/));
       expect(prover.isFailed()).toBe(true);
 
       await cleanup(prover);
@@ -642,9 +719,7 @@ describe('CheckpointProver', () => {
 
       const prover = makeProver();
 
-      // subTreeProofs rejects: the fork error aborts the block loop before completion, so the sub-tree
-      // never yields proofs. (The raw fork error is logged; the promise settles as not-completed.)
-      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow(/did not complete block processing/);
+      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow('Unable to get meta data for block 0');
       expect(dbProvider.fork).toHaveBeenCalled();
       expect(prover.isFailed()).toBe(true);
       // The owner is notified exactly once, with this prover, so it can upload a checkpoint post-mortem.
@@ -706,18 +781,6 @@ describe('CheckpointProver', () => {
     target.blocks.forEach((block, i) => {
       block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(counts[i]);
     });
-  }
-
-  /**
-   * Captures the error the prover logs as the cause of a failed run. `whenSubTreeProofsReady()` rejects with the
-   * generic not-completed error rather than the cause, so the logged error is where the diagnostic is observable.
-   */
-  function recordLoggedCauses(): () => string[] {
-    const causes: string[] = [];
-    jest.spyOn(log, 'error').mockImplementation((_msg: string, err?: unknown) => {
-      causes.push(err instanceof Error ? err.message : String(err));
-    });
-    return () => causes;
   }
 
   /** A previous block header whose L1-to-L2 leaf count is `consumedMessageCount`. */
