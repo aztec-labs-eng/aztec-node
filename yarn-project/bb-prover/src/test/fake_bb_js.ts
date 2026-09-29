@@ -114,7 +114,9 @@ export class FakeBBJsFactory extends BBJsFactory {
       await spawned;
     }
     if (next instanceof Error) {
-      throw next;
+      // BBJsInstance.create wraps a failed spawn as retryable; the double must too, or a test
+      // sees a permanent failure where production sees a transient one.
+      throw Object.assign(next, { retry: true });
     }
     const instance = new FakeBBJsInstance(next);
     this.created.push(instance);
