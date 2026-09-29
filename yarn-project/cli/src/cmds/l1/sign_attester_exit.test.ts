@@ -1,3 +1,4 @@
+import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
@@ -11,7 +12,7 @@ import { join } from 'node:path';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 import { injectCommands } from './index.js';
-import { readAttesterExitAuthorizations, signAttesterExit, validateAttesterExits } from './update_l1_validators.js';
+import { readAttesterExitAuthorizations, signAttesterExit } from './update_l1_validators.js';
 
 const privateKey = `0x${'01'.repeat(32)}` as const;
 const secondPrivateKey = `0x${'02'.repeat(32)}` as const;
@@ -222,15 +223,8 @@ describe('sign-attester-exit with real signatures', () => {
   const expectValidAuthorizationFor = async (output: string, signer: string, chainId = args.chainId) => {
     const [entry] = await readAttesterExitAuthorizations(output);
     expect(entry.attester).toEqual(EthAddress.fromString(signer));
-    await expect(
-      validateAttesterExits({
-        rpcUrls: args.rpcUrls,
-        chainId,
-        rollupAddress,
-        authorizationsPath: output,
-        log: () => {},
-      }),
-    ).resolves.toBeUndefined();
+    const rollup = new RollupContract(getPublicClient({ l1RpcUrls: args.rpcUrls, l1ChainId: chainId }), rollupAddress);
+    await expect(rollup.validateAttesterExitAuthorizations([entry])).resolves.toBeUndefined();
   };
 
   it.each([

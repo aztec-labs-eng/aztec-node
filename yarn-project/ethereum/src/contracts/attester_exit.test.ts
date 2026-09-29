@@ -3,13 +3,15 @@ import { GovernanceAbi, RollupAbi, TestERC20Abi } from '@aztec-foundation/l1-art
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { getContract, toHex } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
-import { createExtendedL1Client } from '../client.js';
+import { createExtendedL1Client, getPublicClient } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { createL1TxUtils } from '../l1_tx_utils/index.js';
@@ -63,6 +65,10 @@ describe('attester exit client integration', () => {
       const attesterClient = createExtendedL1Client([rpcUrl], attester, foundry);
       const withdrawerClient = createExtendedL1Client([rpcUrl], withdrawer, foundry);
       const rollup = new RollupContract(attesterClient, l1ContractAddresses.rollupAddress);
+      const publicRollup = new RollupContract(
+        getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: foundry.id }),
+        l1ContractAddresses.rollupAddress,
+      );
       const target = EthAddress.fromString(attester.address);
       const recipient = mnemonicToAccount(mnemonic, { addressIndex: 2 }).address;
       const token = getContract({
@@ -112,19 +118,44 @@ describe('attester exit client integration', () => {
           );
           expect(receipt.status).toBe('success');
         } else {
-          const toViem = (authorization: (typeof authorizations)[number]) => ({
-            ...authorization,
-            attester: authorization.attester.toString(),
-          });
           if (mode === 'batch') {
-            await expect(
-              withdrawerClient.simulateContract({
-                address: rollup.address,
-                abi: RollupAbi,
-                functionName: 'initiateWithdrawByAttesterBatch',
-                args: [authorizations.map(toViem)],
+            const authorization = authorizations[0];
+            const typedData = rollup.buildAttesterExitTypedData(target, deadline);
+            const wrongChain = Signature.fromString(
+              await attester.signTypedData({
+                ...typedData,
+                domain: { ...typedData.domain, chainId: 1 },
               }),
-            ).rejects.toThrow('Staking__AttesterExitLimitExceeded');
+            ).toViemSignature();
+            const wrongRollup = Signature.fromString(
+              await attester.signTypedData({
+                ...typedData,
+                domain: { ...typedData.domain, verifyingContract: deployer.address },
+              }),
+            ).toViemSignature();
+            const highS = {
+              ...authorization.signature,
+              s: toHex(secp256k1.CURVE.n - BigInt(authorization.signature.s), { size: 32 }),
+              v: authorization.signature.v === 27 ? 28 : 27,
+            };
+            const ineligible = await rollup.createAttesterExitAuthorization(
+              EthAddress.fromString(deployer.address),
+              deadline,
+              data => deployer.signTypedData(data),
+            );
+            for (const invalid of [
+              { ...authorization, signature: wrongChain },
+              { ...authorization, signature: wrongRollup },
+              { ...authorization, signature: highS },
+              { ...authorization, deadline: 0n },
+              ineligible,
+            ]) {
+              await expect(publicRollup.simulateAttesterExitBatch([invalid])).rejects.toThrow();
+            }
+            await expect(publicRollup.simulateAttesterExitBatch([authorization, authorization])).rejects.toThrow();
+            await expect(publicRollup.simulateAttesterExitBatch(authorizations)).rejects.toThrow(
+              'Staking__AttesterExitLimitExceeded',
+            );
             for (const account of attesters) {
               expect((await rollup.getAttesterView(EthAddress.fromString(account.address))).exit.exists).toBe(false);
             }
@@ -132,6 +163,9 @@ describe('attester exit client integration', () => {
           }
           // Atomic batches must fit in full; up-to-limit receives all three so we can check the unprocessed suffix.
           const batch = mode === 'batch' ? authorizations.slice(0, exitCount) : authorizations;
+          expect(await publicRollup.simulateAttesterExitBatch(batch, mode === 'up-to-limit')).toBe(exitCount);
+          expect(await rollup.getAttesterExitLimitState()).toMatchObject({ used: 0n });
+          expect((await rollup.getAttesterView(target)).exit.exists).toBe(false);
           const result = await rollup.submitAttesterExitBatch(
             createL1TxUtils(withdrawerClient, { logger }),
             batch,
@@ -146,12 +180,16 @@ describe('attester exit client integration', () => {
           });
           if (mode === 'up-to-limit') {
             // Capacity is exhausted in this window: retrying the suffix must report zero processed exits.
+            expect(await publicRollup.simulateAttesterExitBatch(batch.slice(exitCount), true)).toBe(0);
+            const retryNonce = await withdrawerClient.getTransactionCount({ address: withdrawer.address });
             const retry = await rollup.submitAttesterExitBatch(
               createL1TxUtils(withdrawerClient, { logger }),
               batch.slice(exitCount),
               true,
             );
+            expect(await withdrawerClient.getTransactionCount({ address: withdrawer.address })).toBe(retryNonce + 1);
             expect(retry).toMatchObject({
+              receipt: { status: 'success' },
               processedCount: 0,
               remainingCount: 1,
               remainingStartIndex: 0,

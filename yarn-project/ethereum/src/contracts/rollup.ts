@@ -1541,6 +1541,30 @@ export class RollupContract {
     });
   }
 
+  /** Simulates the selected batch endpoint without sending a transaction and returns the prefix that fits now. */
+  public async simulateAttesterExitBatch(
+    authorizations: AttesterExitAuthorization[],
+    upToLimit = false,
+  ): Promise<number> {
+    const args = [authorizations.map(toViemAttesterExitAuthorization)] as const;
+    if (upToLimit) {
+      const { result } = await this.client.simulateContract({
+        address: this.address,
+        abi: RollupAbi,
+        functionName: 'initiateWithdrawByAttesterBatchUpToLimit',
+        args,
+      });
+      return Number(result);
+    }
+    await this.client.simulateContract({
+      address: this.address,
+      abi: RollupAbi,
+      functionName: 'initiateWithdrawByAttesterBatch',
+      args,
+    });
+    return authorizations.length;
+  }
+
   /** Relays a signed attester exit batch that reverts unless every authorization can be processed. */
   public initiateWithdrawByAttesterBatch(
     l1TxUtils: L1TxUtils,
