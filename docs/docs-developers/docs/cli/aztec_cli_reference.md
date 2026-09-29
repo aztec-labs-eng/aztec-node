@@ -562,12 +562,12 @@ aztec initiate-withdraw-by-attester [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
-- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
 - `-m, --mnemonic <string>` - Mnemonic for the attester account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
 - `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
 - `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
+- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `--attester <address>` - Attester address of the position to exit
 - `--rollup <address>` - Rollup holding the position
 - `-h, --help` - display help for command
@@ -583,12 +583,12 @@ aztec initiate-withdraw-by-attester-batch [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
-- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The relayer private key; supply this or --mnemonic (env: PRIVATE_KEY)
 - `-m, --mnemonic <string>` - Mnemonic for the relayer account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
 - `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
 - `--address-index <number>` - Mnemonic address index for the relayer paying for the transaction; attesters sign authorizations separately (default: 0; requires --mnemonic)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
+- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `--authorizations <path>` - JSON file containing attester, decimal deadline, and signature fields
 - `--rollup <address>` - Rollup holding the positions
 - `--up-to-limit` - Process the largest permitted prefix instead of reverting when the whole batch is too large
@@ -861,14 +861,15 @@ aztec sign-attester-exit [options]
 
 **Options:**
 
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
-- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
 - `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
 - `-m, --mnemonic <string>` - Mnemonic for the attester account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
 - `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
 - `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
+- `--l1-rpc-urls <string>` - Ethereum host URLs (comma separated); used only to read the chain ID or look up the rollup when they are not given (env: ETHEREUM_HOSTS)
+- `-c, --l1-chain-id <number>` - Chain ID to sign for; required unless --network or --l1-rpc-urls supplies it (env: L1_CHAIN_ID)
+- `--network <string>` - Network to execute against (env: NETWORK)
 - `--attester <address>` - Attester address of the position to exit
-- `--rollup <address>` - Rollup holding the position
+- `--rollup <address>` - Rollup holding the position; defaults to the canonical rollup of --network
 - `--deadline <timestamp>` - Authorization expiry as Unix seconds
 - `--output <path>` - JSON output file (must be new unless --append is used)
 - `--append` - Append or create if missing, without validating existing authorizations; run validate-attester-exits after the batch is complete

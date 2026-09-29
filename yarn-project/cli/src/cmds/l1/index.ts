@@ -371,10 +371,29 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
       .description('Signs an exit authorization locally and writes a JSON array for batch submission.'),
     'attester',
   )
-    .addOption(l1RpcUrlsOption)
-    .addOption(l1ChainIdOption)
+    .addOption(
+      new Option(
+        '--l1-rpc-urls <string>',
+        'Ethereum host URLs (comma separated); used only to read the chain ID or look up the rollup when they are not given',
+      )
+        .env('ETHEREUM_HOSTS')
+        .argParser((arg: string) => arg.split(',').map(url => url.trim())),
+    )
+    .addOption(
+      new Option(
+        '-c, --l1-chain-id <number>',
+        'Chain ID to sign for; required unless --network or --l1-rpc-urls supplies it',
+      )
+        .env('L1_CHAIN_ID')
+        .argParser(Number),
+    )
+    .addOption(networkOption)
     .requiredOption('--attester <address>', 'Attester address of the position to exit', parseEthereumAddress)
-    .requiredOption('--rollup <address>', 'Rollup holding the position', parseEthereumAddress)
+    .option(
+      '--rollup <address>',
+      'Rollup holding the position; defaults to the canonical rollup of --network',
+      parseEthereumAddress,
+    )
     .requiredOption('--deadline <timestamp>', 'Authorization expiry as Unix seconds', parseBigint)
     .requiredOption('--output <path>', 'JSON output file (must be new unless --append is used)')
     .option(
@@ -388,6 +407,7 @@ Examples:
   aztec sign-attester-exit --private-key "$ATTESTER_KEY_0" --attester "$ATTESTER_0" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
   aztec sign-attester-exit --private-key "$ATTESTER_KEY_1" --attester "$ATTESTER_1" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
   aztec sign-attester-exit --mnemonic "$VALIDATOR_MNEMONIC" --account-index 0 --address-index 2 --attester "$ATTESTER_2" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
+  aztec sign-attester-exit --network testnet --l1-rpc-urls "$L1_RPC_URL" --private-key "$ATTESTER_KEY_3" --attester "$ATTESTER_3" --deadline "$DEADLINE" --output exits.json --append
   aztec validate-attester-exits --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID"
   aztec initiate-withdraw-by-attester-batch --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --l1-rpc-urls "$L1_RPC_URL" --private-key "$RELAYER_PRIVATE_KEY"
 Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequentially.
@@ -395,16 +415,23 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
     )
 
     .action(async options => {
-      const { signAttesterExit } = await import('./update_l1_validators.js');
-      await signAttesterExit({
-        rpcUrls: options.l1RpcUrls,
+      const { resolveAttesterExitTarget, signAttesterExit } = await import('./update_l1_validators.js');
+      const { chainId, rollupAddress } = await resolveAttesterExitTarget({
         chainId: options.l1ChainId,
+        rpcUrls: options.l1RpcUrls,
+        network: options.network,
+        rollupAddress: options.rollup,
+        log,
+      });
+      await signAttesterExit({
+        rpcUrls: options.l1RpcUrls ?? [],
+        chainId,
         privateKey: options.privateKey,
         mnemonic: options.mnemonic,
         accountIndex: options.accountIndex,
         addressIndex: options.addressIndex,
         attesterAddress: options.attester,
-        rollupAddress: options.rollup,
+        rollupAddress,
         deadline: options.deadline,
         output: options.output,
         append: options.append,
