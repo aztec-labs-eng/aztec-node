@@ -374,7 +374,7 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
     .addOption(
       new Option(
         '--l1-rpc-urls <string>',
-        'Ethereum host URLs (comma separated); used only to read the chain ID or look up the rollup when they are not given',
+        'Ethereum host URLs (comma separated); when given, the chain ID they report must match, and they supply it or the rollup when those are not given',
       )
         .env('ETHEREUM_HOSTS')
         .argParser((arg: string) => arg.split(',').map(url => url.trim())),
@@ -382,7 +382,7 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
     .addOption(
       new Option(
         '-c, --l1-chain-id <number>',
-        'Chain ID to sign for; required unless --network or --l1-rpc-urls supplies it',
+        'Chain ID to sign for; required unless --network or --l1-rpc-urls supplies it, and a value from L1_CHAIN_ID alone must be confirmed by one of them',
       )
         .env('L1_CHAIN_ID')
         .argParser(Number),
@@ -414,12 +414,13 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
 `,
     )
 
-    .action(async options => {
+    .action(async (options, command: Command) => {
       const { getAttesterExitNetwork, resolveAttesterExitTarget, signAttesterExit } = await import(
         './update_l1_validators.js'
       );
       const { chainId, rollupAddress } = await resolveAttesterExitTarget({
         chainId: options.l1ChainId,
+        chainIdFromEnv: command.getOptionValueSource('l1ChainId') === 'env',
         rpcUrls: options.l1RpcUrls,
         network: options.network ? await getAttesterExitNetwork(options.network) : undefined,
         rollupAddress: options.rollup,

@@ -357,6 +357,40 @@ describe('sign-attester-exit with real signatures', () => {
     }
   });
 
+  it('rejects an exported L1_CHAIN_ID that neither --network nor an RPC confirms', async () => {
+    process.env.L1_CHAIN_ID = '31337';
+    const output = join(directory, 'exit.json');
+    await expect(runCli([], attester.address, output, ['--rollup', rollupAddress.toString()])).rejects.toThrow(
+      'Chain ID 31337 comes only from L1_CHAIN_ID',
+    );
+    await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('signs for an exported L1_CHAIN_ID that the RPC confirms', async () => {
+    process.env.L1_CHAIN_ID = String(testnetChainId);
+    const rpc = await serveL1Rpc(testnetChainId);
+    try {
+      const output = join(directory, 'exit.json');
+      await runCli([], attester.address, output, ['--l1-rpc-urls', rpc.url, '--rollup', rollupAddress.toString()]);
+      await expectValidAuthorizationFor(output, attester.address, testnetChainId);
+    } finally {
+      await rpc.close();
+    }
+  });
+
+  it('rejects an RPC on a different chain from --l1-chain-id when --rollup is given', async () => {
+    const rpc = await serveL1Rpc(1);
+    try {
+      const output = join(directory, 'exit.json');
+      await expect(
+        runCli([], attester.address, output, [...offlineTarget, '--l1-rpc-urls', rpc.url]),
+      ).rejects.toThrow(`The L1 RPC reports chain ID 1, but chain ID ${args.chainId} was requested`);
+      await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await rpc.close();
+    }
+  });
+
   it('rejects a named network with no published config even when an Anvil chain ID is exported', async () => {
     await writeFile(process.env.NETWORK_CONFIG_LOCATION!, '{}');
     process.env.L1_CHAIN_ID = '31337';

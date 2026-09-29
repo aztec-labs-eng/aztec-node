@@ -864,8 +864,8 @@ aztec sign-attester-exit [options]
 - `-m, --mnemonic <string>` - Mnemonic for the attester account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment (env: MNEMONIC)
 - `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
 - `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
-- `--l1-rpc-urls <string>` - Ethereum host URLs (comma separated); used only to read the chain ID or look up the rollup when they are not given (env: ETHEREUM_HOSTS)
-- `-c, --l1-chain-id <number>` - Chain ID to sign for; required unless --network or --l1-rpc-urls supplies it (env: L1_CHAIN_ID)
+- `--l1-rpc-urls <string>` - Ethereum host URLs (comma separated); when given, the chain ID they report must match, and they supply it or the rollup when those are not given (env: ETHEREUM_HOSTS)
+- `-c, --l1-chain-id <number>` - Chain ID to sign for; required unless --network or --l1-rpc-urls supplies it, and a value from L1_CHAIN_ID alone must be confirmed by one of them (env: L1_CHAIN_ID)
 - `--network <string>` - Network to execute against (env: NETWORK)
 - `--attester <address>` - Attester address of the position to exit
 - `--rollup <address>` - Rollup holding the position; defaults to the canonical rollup of --network

@@ -300,6 +300,8 @@ export async function getAttesterExitNetwork(name: string): Promise<AttesterExit
 /** Inputs that select the chain and rollup an attester exit is signed for; each is undefined when not supplied. */
 export type AttesterExitTargetArgs = {
   chainId?: number;
+  /** Whether `chainId` came from the L1_CHAIN_ID environment variable rather than a flag. */
+  chainIdFromEnv?: boolean;
   rpcUrls?: string[];
   network?: AttesterExitNetwork;
   rollupAddress?: EthAddress;
@@ -308,10 +310,12 @@ export type AttesterExitTargetArgs = {
 
 /**
  * Resolves the chain ID and rollup an attester exit is signed for, without falling back to the Anvil chain ID.
- * Contacts the RPC only when it must supply the chain ID or the rollup, and then checks that its chain ID matches.
+ * Whenever an RPC is given, its chain ID must match. Without one, signing is offline and needs the chain ID from a flag
+ * or --network; an L1_CHAIN_ID left in the environment alone is rejected because nothing confirms it.
  */
 export async function resolveAttesterExitTarget({
   chainId,
+  chainIdFromEnv = false,
   rpcUrls,
   network,
   rollupAddress,
@@ -330,15 +334,19 @@ export async function resolveAttesterExitTarget({
     }
   }
   const expectedChainId = chainId ?? network?.l1ChainId;
-  if (expectedChainId !== undefined && rollupAddress) {
-    return { chainId: expectedChainId, rollupAddress };
-  }
   if (!rpcUrls) {
-    throw new Error(
-      expectedChainId === undefined
-        ? 'Provide --l1-chain-id, --network, or --l1-rpc-urls to select the chain to sign for'
-        : 'Looking up the rollup in the network registry requires --l1-rpc-urls',
-    );
+    if (expectedChainId === undefined) {
+      throw new Error('Provide --l1-chain-id, --network, or --l1-rpc-urls to select the chain to sign for');
+    }
+    if (!rollupAddress) {
+      throw new Error('Looking up the rollup in the network registry requires --l1-rpc-urls');
+    }
+    if (chainIdFromEnv && network?.l1ChainId === undefined) {
+      throw new Error(
+        `Chain ID ${expectedChainId} comes only from L1_CHAIN_ID; confirm it with --l1-chain-id, --network, or --l1-rpc-urls`,
+      );
+    }
+    return { chainId: expectedChainId, rollupAddress };
   }
   const rpcChainId = await createPublicClient({ transport: makeL1HttpTransport(rpcUrls) }).getChainId();
   if (expectedChainId !== undefined && rpcChainId !== expectedChainId) {
