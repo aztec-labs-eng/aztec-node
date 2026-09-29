@@ -564,7 +564,10 @@ aztec initiate-withdraw-by-attester [options]
 
 - `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
-- `-pk, --private-key <string>` - The attester private key
+- `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
+- `-m, --mnemonic <string>` - Mnemonic for the attester account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
+- `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
+- `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
 - `--attester <address>` - Attester address of the position to exit
 - `--rollup <address>` - Rollup holding the position
 - `-h, --help` - display help for command
@@ -582,7 +585,10 @@ aztec initiate-withdraw-by-attester-batch [options]
 
 - `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
-- `-pk, --private-key <string>` - The relayer private key
+- `-pk, --private-key <string>` - The relayer private key; supply this or --mnemonic (env: PRIVATE_KEY)
+- `-m, --mnemonic <string>` - Mnemonic for the relayer account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
+- `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
+- `--address-index <number>` - Mnemonic address index for the relayer paying for the transaction; attesters sign authorizations separately (default: 0; requires --mnemonic)
 - `--authorizations <path>` - JSON file containing attester, decimal deadline, and signature fields
 - `--rollup <address>` - Rollup holding the positions
 - `--up-to-limit` - Process the largest permitted prefix instead of reverting when the whole batch is too large
@@ -857,7 +863,10 @@ aztec sign-attester-exit [options]
 
 - `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
 - `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
-- `-pk, --private-key <string>` - The attester private key
+- `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
+- `-m, --mnemonic <string>` - Mnemonic for the attester account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
+- `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
+- `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
 - `--attester <address>` - Attester address of the position to exit
 - `--rollup <address>` - Rollup holding the position
 - `--deadline <timestamp>` - Authorization expiry as Unix seconds

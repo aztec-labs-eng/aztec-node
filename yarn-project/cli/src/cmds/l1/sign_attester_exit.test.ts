@@ -1,13 +1,16 @@
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
+import { Command } from 'commander';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { privateKeyToAccount } from 'viem/accounts';
+import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
-import { readAttesterExitAuthorizations, signAttesterExit } from './update_l1_validators.js';
+import { injectCommands } from './index.js';
+import { readAttesterExitAuthorizations, signAttesterExit, validateAttesterExits } from './update_l1_validators.js';
 
 const privateKey = `0x${'01'.repeat(32)}` as const;
 const secondPrivateKey = `0x${'02'.repeat(32)}` as const;
@@ -38,6 +41,43 @@ describe('sign-attester-exit', () => {
   afterEach(async () => {
     jest.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
+  });
+
+  it.each([
+    [{ privateKey: undefined, mnemonic: undefined }, 'Provide either a private key or a mnemonic'],
+    [
+      { privateKey, mnemonic: 'test test test test test test test test test test test junk' },
+      'Provide either a private key or a mnemonic',
+    ],
+    [{ privateKey, addressIndex: 1 }, 'Account and address indices require a mnemonic'],
+    [
+      {
+        privateKey: undefined,
+        mnemonic: 'test test test test test test test test test test test junk',
+        accountIndex: -1,
+      },
+      'non-negative safe integers',
+    ],
+  ])('rejects invalid signer options: %p', async (credentials, message) => {
+    await expect(
+      signAttesterExit({ ...args, ...credentials, output: join(directory, 'invalid.json') }),
+    ).rejects.toThrow(message);
+  });
+
+  it('rejects an attester address derived from a different mnemonic index', async () => {
+    const mnemonic = 'test test test test test test test test test test test junk';
+    const selected = mnemonicToAccount(mnemonic, { accountIndex: 1, addressIndex: 2 });
+    await expect(
+      signAttesterExit({
+        ...args,
+        privateKey: undefined,
+        mnemonic,
+        accountIndex: 1,
+        addressIndex: 3,
+        attesterAddress: EthAddress.fromString(selected.address),
+        output: join(directory, 'mismatch.json'),
+      }),
+    ).rejects.toThrow('The signing account must match the attester address');
   });
 
   it('appends another attester without changing the existing authorization', async () => {
@@ -114,5 +154,100 @@ describe('sign-attester-exit', () => {
     await writeFile(output, 'existing authorization');
     await expect(signAttesterExit({ ...args, output })).rejects.toMatchObject({ code: 'EEXIST' });
     expect(await readFile(output, 'utf8')).toBe('existing authorization');
+  });
+});
+
+describe('sign-attester-exit with real signatures', () => {
+  const mnemonic = 'test test test test test test test test test test test junk';
+  let directory: string;
+  let previousKey: string | undefined;
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'sign-attester-exit-signed-'));
+    previousKey = process.env.PRIVATE_KEY;
+    process.env.PRIVATE_KEY = privateKey;
+  });
+  afterEach(async () => {
+    if (previousKey === undefined) {
+      delete process.env.PRIVATE_KEY;
+    } else {
+      process.env.PRIVATE_KEY = previousKey;
+    }
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const runCli = (credentials: string[], attesterAddress: string, output: string) => {
+    const program = new Command().name('aztec').exitOverride();
+    injectCommands(program, () => {}, createLogger('cli:test:signer'));
+    return program.parseAsync(
+      [
+        'sign-attester-exit',
+        ...credentials,
+        '--attester',
+        attesterAddress,
+        '--rollup',
+        rollupAddress.toString(),
+        '--deadline',
+        deadline.toString(),
+        '--output',
+        output,
+      ],
+      { from: 'user' },
+    );
+  };
+
+  const expectValidAuthorizationFor = async (output: string, signer: string) => {
+    const [entry] = await readAttesterExitAuthorizations(output);
+    expect(entry.attester).toEqual(EthAddress.fromString(signer));
+    await expect(
+      validateAttesterExits({
+        rpcUrls: args.rpcUrls,
+        chainId: args.chainId,
+        rollupAddress,
+        authorizationsPath: output,
+        log: () => {},
+      }),
+    ).resolves.toBeUndefined();
+  };
+
+  it.each([
+    [
+      'the mnemonic over the exported PRIVATE_KEY',
+      ['--mnemonic', mnemonic, '--account-index', '1', '--address-index', '2'],
+      mnemonicToAccount(mnemonic, { accountIndex: 1, addressIndex: 2 }).address,
+    ],
+    ['the exported PRIVATE_KEY', [], privateKeyToAccount(privateKey).address],
+    [
+      'an explicit key over the exported PRIVATE_KEY',
+      ['--private-key', secondPrivateKey],
+      privateKeyToAccount(secondPrivateKey).address,
+    ],
+  ])('signs with %s', async (_label, credentials, signer) => {
+    const output = join(directory, 'exit.json');
+    await runCli(credentials, signer, output);
+    await expectValidAuthorizationFor(output, signer);
+  });
+
+  it('rejects an explicit key combined with a mnemonic', async () => {
+    await expect(
+      runCli(['--private-key', privateKey, '--mnemonic', mnemonic], attester.address, join(directory, 'exit.json')),
+    ).rejects.toThrow('Provide either a private key or a mnemonic for the signer');
+  });
+
+  it.each([
+    [0, 0],
+    [2, 3],
+  ])('signs with the mnemonic key at account index %s and address index %s', async (accountIndex, addressIndex) => {
+    const signer = mnemonicToAccount(mnemonic, { accountIndex, addressIndex }).address;
+    const output = join(directory, 'mnemonic.json');
+    await signAttesterExit({
+      ...args,
+      privateKey: undefined,
+      mnemonic,
+      accountIndex,
+      addressIndex,
+      attesterAddress: EthAddress.fromString(signer),
+      output,
+    });
+    await expectValidAuthorizationFor(output, signer);
   });
 });
