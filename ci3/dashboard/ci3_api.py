@@ -25,7 +25,8 @@ MAX_EXPANDED = 256 << 20  # after gzip
 
 
 def log_id(key):
-    if key in (".", "..") or not LOG_ID.fullmatch(key) or key.startswith(RESERVED):
+    # The /<id>.txt view strips .txt, so such an id could be written but not read back.
+    if key in (".", "..") or not LOG_ID.fullmatch(key) or key.startswith(RESERVED) or key.endswith(".txt"):
         abort(400, "bad log id")
     return key
 
@@ -93,10 +94,10 @@ def register(app, protect, s3, logs_bucket, logs_prefix, password):
         log_id(key)
         ttl = ttl_arg()
         packed = deflate(body())
-        # Either store failing must not stop the other: S3 holds the durable copy, redis the one read first.
+        # Redis first, as the view reads it first; either store failing must not stop the other.
         try:
+            r.setex(key, ttl, packed)
+        finally:
             if request.args.get("final") == "1":
                 s3.put_object(Bucket=logs_bucket, Key="%s/%s/%s.log.gz" % (logs_prefix, key[:4], key), Body=packed)
-        finally:
-            r.setex(key, ttl, packed)
         return "", 204

@@ -5,10 +5,15 @@
 """
 import base64
 import gzip
+import io
 import os
 import unittest
 
 os.environ.setdefault("REDIS_HOST", "127.0.0.1")
+PASSWORD = "secret"
+# What rk reads at import: the dashboard view under test shares this password and bucket.
+os.environ["DASHBOARD_PASSWORD"] = PASSWORD
+os.environ["S3_LOGS_BUCKET"] = "logs-bucket"
 from botocore.exceptions import ClientError
 from flask import Flask
 from flask_httpauth import HTTPBasicAuth
@@ -17,12 +22,11 @@ from redis.exceptions import RedisError
 import ci3_api
 from rk_core import r
 
-PASSWORD = "secret"
 AUTH = {"Authorization": "Basic " + base64.b64encode(b"aztec:" + PASSWORD.encode()).decode()}
 
 
 class FakeS3:
-    """put_object on a dict. `failing` makes it raise."""
+    """put_object and get_object on a dict. `failing` makes put_object raise."""
 
     def __init__(self):
         self.objects, self.failing = {}, None
@@ -31,6 +35,11 @@ class FakeS3:
         if self.failing:
             raise self.failing
         self.objects[(Bucket, Key)] = Body
+
+    def get_object(self, Bucket, Key):
+        if (Bucket, Key) not in self.objects:
+            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+        return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
 
 
 class FailingRedis:
@@ -110,7 +119,33 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(self.put("/logs/" + reserved, b"x").status_code, 400, reserved)
         self.assertEqual(r.type("ci-run-prs"), b"zset")
         self.assertEqual(self.put("/logs/..", b"x").status_code, 400)
+        self.assertEqual(self.put("/logs/report.txt", b"x").status_code, 400)
         self.assertEqual(self.c.put("/logs/k", headers={**AUTH, "Transfer-Encoding": "chunked"}, data=b"v").status_code, 411)
+
+    def test_slow_s3_does_not_hold_back_the_final_log(self):
+        in_redis = []
+        put_object = self.s3.put_object
+
+        def put_after_redis(Bucket, Key, Body):
+            in_redis.append(gzip.decompress(r.get("slow")))
+            put_object(Bucket, Key, Body)
+        self.s3.put_object = put_after_redis
+        self.put("/logs/slow", b"live\n")
+        self.put("/logs/slow?final=1", b"done\n")
+        self.assertEqual(in_redis, [b"done\n"])
+
+    def test_dashboard_view_reads_live_logs_then_s3(self):
+        import rk  # its import starts the dashboard's side services, so only this test pays for it
+        real, rk._s3 = rk._s3, self.s3
+        try:
+            view = rk.app.test_client()
+            self.put("/logs/abcdef0123456789", b"live\n")
+            self.assertEqual(view.get("/abcdef0123456789.txt", headers=AUTH).data, b"live\n")
+            self.put("/logs/abcdef0123456789?final=1", b"done\n")
+            r.delete("abcdef0123456789")
+            self.assertEqual(view.get("/abcdef0123456789.txt", headers=AUTH).data, b"done\n")
+        finally:
+            rk._s3 = real
 
     def test_s3_down_still_updates_redis(self):
         self.s3.failing = ClientError({"Error": {"Code": "AccessDenied"}}, "PutObject")
