@@ -3,7 +3,12 @@ import { RollupAbi, StakingAssetHandlerAbi, TestERC20Abi } from '@aztec-foundati
 import { createEthereumChain, isAnvilTestChain } from '@aztec-labs/ethereum/chain';
 import { createExtendedL1Client, getPublicClient, makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
-import { type AttesterExitAuthorization, GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
+import {
+  type AttesterExitAuthorization,
+  GSEContract,
+  RegistryContract,
+  RollupContract,
+} from '@aztec-labs/ethereum/contracts';
 import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EthCheatCodes } from '@aztec-labs/ethereum/test';
 import { getActiveNetworkName } from '@aztec-labs/foundation/config';
@@ -17,7 +22,6 @@ import { join } from 'node:path';
 import { createPublicClient, encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
-import { getL1Config } from '../../config/get_l1_config.js';
 import { getNetworkConfig } from '../../config/network_config.js';
 import { atomicUpdateFile } from '../../utils/commands.js';
 import { deriveEthAttester } from '../validator_keys/shared.js';
@@ -283,6 +287,9 @@ export async function getAttesterExitNetwork(name: string): Promise<AttesterExit
   const networkName = getActiveNetworkName(name);
   const cacheDir = process.env.DATA_DIRECTORY ? join(process.env.DATA_DIRECTORY, 'cache') : undefined;
   const config = networkName === 'local' ? undefined : await getNetworkConfig(networkName, cacheDir);
+  if (networkName !== 'local' && !config) {
+    throw new Error(`Network ${networkName} has no published config`);
+  }
   return {
     name: networkName,
     l1ChainId: config?.l1ChainId,
@@ -341,9 +348,10 @@ export async function resolveAttesterExitTarget({
     return { chainId: rpcChainId, rollupAddress };
   }
   const registryAddress = network!.registryAddress!;
-  const { addresses } = await getL1Config(registryAddress, rpcUrls, rpcChainId);
-  log(`Using canonical rollup ${addresses.rollupAddress} from the ${network!.name} registry ${registryAddress}`);
-  return { chainId: rpcChainId, rollupAddress: addresses.rollupAddress };
+  const client = getPublicClient({ l1RpcUrls: rpcUrls, l1ChainId: rpcChainId });
+  const canonicalRollup = await new RegistryContract(client, registryAddress).getCanonicalAddress();
+  log(`Using canonical rollup ${canonicalRollup} from the ${network!.name} registry ${registryAddress}`);
+  return { chainId: rpcChainId, rollupAddress: canonicalRollup };
 }
 
 /** Signs an exit authorization locally and writes a JSON array accepted by the batch command. */
