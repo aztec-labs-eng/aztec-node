@@ -561,7 +561,7 @@ aztec initiate-withdraw-by-attester [options]
 **Options:**
 
 - `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
-- `-m, --mnemonic <string>` - Mnemonic for the attester account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
+- `-m, --mnemonic <string>` - Mnemonic for the attester account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment (env: MNEMONIC)
 - `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
 - `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
 - `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
@@ -582,7 +582,7 @@ aztec initiate-withdraw-by-attester-batch [options]
 **Options:**
 
 - `-pk, --private-key <string>` - The relayer private key; supply this or --mnemonic (env: PRIVATE_KEY)
-- `-m, --mnemonic <string>` - Mnemonic for the relayer account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
+- `-m, --mnemonic <string>` - Mnemonic for the relayer account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment (env: MNEMONIC)
 - `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
 - `--address-index <number>` - Mnemonic address index for the relayer paying for the transaction; attesters sign authorizations separately (default: 0; requires --mnemonic)
 - `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
@@ -861,7 +861,7 @@ aztec sign-attester-exit [options]
 **Options:**
 
 - `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
-- `-m, --mnemonic <string>` - Mnemonic for the attester account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key
+- `-m, --mnemonic <string>` - Mnemonic for the attester account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment (env: MNEMONIC)
 - `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
 - `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
 - `--l1-rpc-urls <string>` - Ethereum host URLs (comma separated); used only to read the chain ID or look up the rollup when they are not given (env: ETHEREUM_HOSTS)

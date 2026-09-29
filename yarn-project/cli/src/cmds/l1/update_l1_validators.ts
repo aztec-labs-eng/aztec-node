@@ -6,16 +6,19 @@ import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { type AttesterExitAuthorization, GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EthCheatCodes } from '@aztec-labs/ethereum/test';
+import { getActiveNetworkName } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
 import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createPublicClient, encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
-import { getL1RollupAddressFromEnv } from '../../config/get_l1_config.js';
+import { getL1Config } from '../../config/get_l1_config.js';
+import { getNetworkConfig } from '../../config/network_config.js';
 import { atomicUpdateFile } from '../../utils/commands.js';
 import { deriveEthAttester } from '../validator_keys/shared.js';
 
@@ -268,11 +271,30 @@ export async function removeL1Validator({
   dualLog(`Transaction hash: ${receipt.transactionHash}`);
 }
 
+/** Chain ID and registry published for a network; both are undefined when it publishes none, as for `local`. */
+export type AttesterExitNetwork = {
+  name: string;
+  l1ChainId?: number;
+  registryAddress?: EthAddress;
+};
+
+/** Loads the published config of the network selected with --network, which takes precedence over the environment. */
+export async function getAttesterExitNetwork(name: string): Promise<AttesterExitNetwork> {
+  const networkName = getActiveNetworkName(name);
+  const cacheDir = process.env.DATA_DIRECTORY ? join(process.env.DATA_DIRECTORY, 'cache') : undefined;
+  const config = networkName === 'local' ? undefined : await getNetworkConfig(networkName, cacheDir);
+  return {
+    name: networkName,
+    l1ChainId: config?.l1ChainId,
+    registryAddress: config ? EthAddress.fromString(config.registryAddress) : undefined,
+  };
+}
+
 /** Inputs that select the chain and rollup an attester exit is signed for; each is undefined when not supplied. */
 export type AttesterExitTargetArgs = {
   chainId?: number;
   rpcUrls?: string[];
-  network?: string;
+  network?: AttesterExitNetwork;
   rollupAddress?: EthAddress;
   log: LogFn;
 };
@@ -291,29 +313,37 @@ export async function resolveAttesterExitTarget({
   if (!rollupAddress && !network) {
     throw new Error('Provide --rollup, or --network to use the canonical rollup from the network registry');
   }
+  if (!rollupAddress && !network?.registryAddress) {
+    throw new Error(`Network ${network?.name} publishes no registry address; provide --rollup`);
+  }
   if (chainId !== undefined) {
     assertValidChainId(chainId);
-    if (rollupAddress) {
-      return { chainId, rollupAddress };
+    if (network?.l1ChainId !== undefined && chainId !== network.l1ChainId) {
+      throw new Error(`Chain ID ${chainId} does not match ${network.name}, which uses chain ID ${network.l1ChainId}`);
     }
+  }
+  const expectedChainId = chainId ?? network?.l1ChainId;
+  if (expectedChainId !== undefined && rollupAddress) {
+    return { chainId: expectedChainId, rollupAddress };
   }
   if (!rpcUrls) {
     throw new Error(
-      chainId === undefined
+      expectedChainId === undefined
         ? 'Provide --l1-chain-id, --network, or --l1-rpc-urls to select the chain to sign for'
         : 'Looking up the rollup in the network registry requires --l1-rpc-urls',
     );
   }
   const rpcChainId = await createPublicClient({ transport: makeL1HttpTransport(rpcUrls) }).getChainId();
-  if (chainId !== undefined && rpcChainId !== chainId) {
-    throw new Error(`The L1 RPC reports chain ID ${rpcChainId}, but chain ID ${chainId} was requested`);
+  if (expectedChainId !== undefined && rpcChainId !== expectedChainId) {
+    throw new Error(`The L1 RPC reports chain ID ${rpcChainId}, but chain ID ${expectedChainId} was requested`);
   }
   if (rollupAddress) {
     return { chainId: rpcChainId, rollupAddress };
   }
-  const canonicalRollup = await getL1RollupAddressFromEnv(rpcUrls, rpcChainId);
-  log(`Using canonical rollup ${canonicalRollup} from the ${network} registry`);
-  return { chainId: rpcChainId, rollupAddress: canonicalRollup };
+  const registryAddress = network!.registryAddress!;
+  const { addresses } = await getL1Config(registryAddress, rpcUrls, rpcChainId);
+  log(`Using canonical rollup ${addresses.rollupAddress} from the ${network!.name} registry ${registryAddress}`);
+  return { chainId: rpcChainId, rollupAddress: addresses.rollupAddress };
 }
 
 /** Signs an exit authorization locally and writes a JSON array accepted by the batch command. */
