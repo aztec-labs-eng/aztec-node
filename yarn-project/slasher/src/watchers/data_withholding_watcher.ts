@@ -97,6 +97,33 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
     // fully ingested yet (archiver may lag behind L1).
     const tolerance = this.config.slashDataWithholdingToleranceSlots;
     const currentSlot = (await this.l2BlockSource.getSyncedL2SlotNumber()) ?? this.epochCache.getSlotNow();
+
+    // Bound outages by wallclock time too: the archiver may be stalled while peers are disconnected.
+    // Keep the cursor monotonic across sync rollbacks and include startup and tolerance windows.
+    const connectivity = await this.p2p.getP2PConnectivity();
+    if (connectivity.connectedPeers === 0) {
+      const outageSlot = SlotNumber(Math.max(currentSlot, this.epochCache.getSlotNow()));
+      if (!this.gossipDegraded) {
+        this.gossipDegraded = true;
+        this.log.warn(`Skipping data-withholding checks while no peers are connected`, {
+          currentSlot,
+          lastCheckedSlot: this.lastCheckedSlot,
+        });
+      }
+      if (this.lastCheckedSlot === undefined || outageSlot > this.lastCheckedSlot) {
+        this.lastCheckedSlot = outageSlot;
+      }
+      return;
+    }
+
+    if (this.gossipDegraded) {
+      this.gossipDegraded = false;
+      this.log.info(`Resuming data-withholding checks now that peers are connected`, {
+        currentSlot,
+        connectedPeers: connectivity.connectedPeers,
+      });
+    }
+
     if (currentSlot <= tolerance) {
       return;
     }
@@ -104,32 +131,6 @@ export class DataWithholdingWatcher extends (EventEmitter as new () => WatcherEm
     const targetSlot = SlotNumber(currentSlot - tolerance - 1);
     if (targetSlot <= this.initialSlot) {
       return;
-    }
-
-    // Missing txs are only evidence of withholding if we could have received them. Slots probed
-    // while gossip is down are skipped for good rather than deferred: once peers return, txs from
-    // those checkpoints may already have been evicted from the pool as mined, so a late probe would
-    // still report them missing. An unknown must not turn into an offense. Note this deliberately
-    // ignores whether p2p is enabled: a node with no p2p stack sees even less than a peerless one.
-    const connectivity = await this.p2p.getP2PConnectivity();
-    if (connectivity.connectedPeers === 0) {
-      if (!this.gossipDegraded) {
-        this.gossipDegraded = true;
-        this.log.warn(`Skipping data-withholding checks while no peers are connected`, {
-          targetSlot,
-          lastCheckedSlot: this.lastCheckedSlot,
-        });
-      }
-      this.lastCheckedSlot = targetSlot;
-      return;
-    }
-
-    if (this.gossipDegraded) {
-      this.gossipDegraded = false;
-      this.log.info(`Resuming data-withholding checks now that peers are connected`, {
-        targetSlot,
-        connectedPeers: connectivity.connectedPeers,
-      });
     }
 
     const startSlot = this.lastCheckedSlot === undefined ? this.initialSlot : this.lastCheckedSlot;

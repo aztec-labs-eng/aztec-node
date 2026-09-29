@@ -39,6 +39,7 @@ describe('DataWithholdingWatcher', () => {
 
   beforeEach(() => {
     epochCache = mock<EpochCache>();
+    epochCache.getSlotNow.mockReturnValue(SlotNumber(0));
     l2BlockSource = mock<Pick<L2BlockSource, 'getCheckpoint' | 'getSyncedL2SlotNumber'>>();
     txProvider = mock<Pick<ITxProvider, 'hasTxs'>>();
     p2p = mock<Pick<P2PApi, 'getCheckpointAttestationsForSlot' | 'getP2PConnectivity'>>();
@@ -355,41 +356,114 @@ describe('DataWithholdingWatcher', () => {
     expect(txProvider.hasTxs).not.toHaveBeenCalled();
     expect(captured).toHaveLength(0);
 
-    // The skipped slots are marked as checked, so a later tick does not reprocess them.
+    // The skipped slots are marked as checked through the synced slot during the outage.
     await watcher.work();
     expect(l2BlockSource.getCheckpoint).not.toHaveBeenCalled();
     expect(captured).toHaveLength(0);
   });
 
-  it('does not revisit slots skipped while peerless, but processes slots after recovery', async () => {
+  it('does not revisit slots skipped while peerless, but resumes after recovery', async () => {
     await startAtSlot(10);
     setSyncedSlot(11 + TOLERANCE + 1);
     p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 0 });
 
     const skippedCheckpoint = makePublished(11, 1);
-    const laterCheckpoint = makePublished(12, 1);
+    const laterCheckpoint = makePublished(16, 1);
     l2BlockSource.getCheckpoint.mockImplementation(query =>
-      Promise.resolve('slot' in query ? { 11: skippedCheckpoint, 12: laterCheckpoint }[Number(query.slot)] : undefined),
+      Promise.resolve('slot' in query ? { 11: skippedCheckpoint, 16: laterCheckpoint }[Number(query.slot)] : undefined),
     );
     mockMissing([
       skippedCheckpoint.checkpoint.blocks[0].body.txEffects[0].txHash,
       laterCheckpoint.checkpoint.blocks[0].body.txEffects[0].txHash,
     ]);
     watcher.attestersBySlot.set(11, [EthAddress.random()]);
-    watcher.attestersBySlot.set(12, [EthAddress.random()]);
+    watcher.attestersBySlot.set(16, [EthAddress.random()]);
     const captured = captureEmits();
 
     await watcher.work();
     expect(captured).toHaveLength(0);
 
     p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 4 });
-    setSyncedSlot(12 + TOLERANCE + 1);
+    setSyncedSlot(16);
+    await watcher.work();
+
+    expect(l2BlockSource.getCheckpoint).not.toHaveBeenCalled();
+    expect(captured).toHaveLength(0);
+
+    setSyncedSlot(16 + TOLERANCE + 1);
     await watcher.work();
 
     expect(l2BlockSource.getCheckpoint).toHaveBeenCalledTimes(1);
-    expect(l2BlockSource.getCheckpoint).toHaveBeenCalledWith({ slot: SlotNumber(12) });
+    expect(l2BlockSource.getCheckpoint).toHaveBeenCalledWith({ slot: SlotNumber(16) });
     expect(captured).toHaveLength(1);
-    expect(captured[0][0].epochOrSlot).toEqual(BigInt(12));
+    expect(captured[0][0].epochOrSlot).toEqual(BigInt(16));
+  });
+
+  it('does not slash checkpoints published while peerless after peers return', async () => {
+    await startAtSlot(19);
+
+    const publishedBySlot = new Map<number, PublishedCheckpoint>();
+    const missingHashes: TxHash[] = [];
+    for (let slot = 20; slot <= 25; slot++) {
+      const published = makePublished(slot, 1);
+      publishedBySlot.set(slot, published);
+      missingHashes.push(published.checkpoint.blocks[0].body.txEffects[0].txHash);
+      watcher.attestersBySlot.set(slot, [EthAddress.random()]);
+    }
+    l2BlockSource.getCheckpoint.mockImplementation(query =>
+      Promise.resolve('slot' in query ? publishedBySlot.get(Number(query.slot)) : undefined),
+    );
+    mockMissing(missingHashes);
+
+    const captured = captureEmits();
+    for (let wallSlot = 20; wallSlot <= 24; wallSlot++) {
+      setSyncedSlot(wallSlot);
+      p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 0 });
+      await watcher.work();
+    }
+
+    setSyncedSlot(22);
+    await watcher.work();
+
+    for (let wallSlot = 25; wallSlot <= 33; wallSlot++) {
+      setSyncedSlot(wallSlot);
+      p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 5 });
+      await watcher.work();
+    }
+
+    expect(captured.flatMap(args => args.map(arg => arg.epochOrSlot))).toEqual([BigInt(25)]);
+  });
+
+  it('covers the peer outage when the archiver stalls and resumes checks after recovery', async () => {
+    await startAtSlot(19);
+    const publishedBySlot = new Map<number, PublishedCheckpoint>();
+    const missingHashes: TxHash[] = [];
+    for (let slot = 21; slot <= 26; slot++) {
+      const published = makePublished(slot, 1);
+      publishedBySlot.set(slot, published);
+      missingHashes.push(published.checkpoint.blocks[0].body.txEffects[0].txHash);
+      watcher.attestersBySlot.set(slot, [EthAddress.random()]);
+    }
+    l2BlockSource.getCheckpoint.mockImplementation(query =>
+      Promise.resolve('slot' in query ? publishedBySlot.get(Number(query.slot)) : undefined),
+    );
+    mockMissing(missingHashes);
+    const captured = captureEmits();
+
+    setSyncedSlot(20);
+    epochCache.getSlotNow.mockReturnValue(SlotNumber(25));
+    p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 0 });
+    await watcher.work();
+
+    p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 5 });
+    epochCache.getSlotNow.mockReturnValue(SlotNumber(30));
+    setSyncedSlot(29);
+    await watcher.work();
+    expect(captured).toEqual([]);
+
+    setSyncedSlot(30);
+    await watcher.work();
+    expect(captured.flatMap(args => args.map(arg => arg.epochOrSlot))).toEqual([26n]);
   });
 
   it('does not probe or slash when p2p is disabled by configuration', async () => {
