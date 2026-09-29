@@ -50,8 +50,8 @@ For each slot, the proposer is assigned one of six statuses, ranked highest-conf
 | # | Status | Trigger | Inactive party |
 |---|---|---|---|
 | 6 | `checkpoint-mined` | `archiver.getCheckpoint({ slot })` returns a checkpoint (one covering this slot has landed on L1) | Attestors who didn't attest |
-| 5a | `checkpoint-unpublished` | Case 5, and the proposal's parent is on L1, no earlier slot took its checkpoint number, and a quorum of the committee attested | Attestors who didn't attest (proposer fault recorded, not yet penalized) |
-| 5b | `checkpoint-orphaned` | Case 5, and the proposal's parent is not on L1 (missing or different archive root), or an earlier slot already took its checkpoint number | Attestors who didn't attest |
+| 5a | `checkpoint-unpublished` | Case 5, and the proposal's parent is on L1 and a quorum of the committee attested | Attestors who didn't attest (proposer fault recorded, not yet penalized) |
+| 5b | `checkpoint-orphaned` | Case 5, and the parent the proposal built on never landed on L1 (missing or different archive root) | Attestors who didn't attest |
 | 5 | `checkpoint-valid` | `tracker.getOutcomeForSlot(slot) === 'valid'`, not refined into 5a or 5b | Attestors who didn't attest |
 | 4 | `checkpoint-invalid` | `tracker.getOutcomeForSlot(slot) === 'invalid'` (re-executed and rejected) | Proposer |
 | 3 | `checkpoint-unvalidated` | `tracker.getOutcomeForSlot(slot) === 'unvalidated'` (validation aborted: missing data, timeout, etc.) | Proposer |
@@ -66,9 +66,10 @@ Under proposer pipelining, the proposer for slot N+1 builds on slot N's gossiped
 
 1. If the slot had a proposal equivocation, or the record has no checkpoint number or parent archive root, the status stays `checkpoint-valid`.
 2. If the parent checkpoint (`checkpointNumber - 1`) is not on L1, or its archive root differs from the proposal's `lastArchiveRoot`, the status is `checkpoint-orphaned`. The first checkpoint builds on genesis, which always counts as on L1.
-3. If a checkpoint with the same number landed from an earlier slot, the position was taken before this slot could publish: `checkpoint-orphaned`. A checkpoint from a later slot does not exempt the proposer.
-4. If fewer than `computeQuorum(committee.length)` distinct committee members attested on P2P (the proposer's own attestation counts, as it does for the sequencer), the status stays `checkpoint-valid`: the proposer could not publish, and the attestors are at fault.
-5. Otherwise the status is `checkpoint-unpublished`, logged at `info` with the attestation count and quorum.
+3. If fewer than `computeQuorum(committee.length)` distinct committee members attested on P2P (the proposer's own attestation counts, as it does for the sequencer), the status stays `checkpoint-valid`: the proposer could not publish, and the attestors are at fault.
+4. Otherwise the status is `checkpoint-unpublished`, logged at `info` with the attestation count and quorum.
+
+A checkpoint from another slot that already holds the proposal's checkpoint number does not exempt the proposer. If it came from an earlier slot, the proposer missed that slot's gossiped proposal and built on a stale parent, which is its own fault.
 
 Neither `checkpoint-unpublished` nor `checkpoint-orphaned` counts toward `missedProposals` or inactivity slashing yet. Like `checkpoint-valid`, both only add to the proposer's slot total.
 

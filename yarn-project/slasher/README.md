@@ -203,7 +203,7 @@ Inactivity slashing is handled by the `Sentinel` (in `aztec-node/src/sentinel/`)
 
 - `checkpoint-mined` — a checkpoint covering this slot has landed on L1
 - `checkpoint-unpublished` — a valid checkpoint proposal built on a parent that is on L1 reached quorum, yet the proposer did not land it
-- `checkpoint-orphaned` — a valid checkpoint proposal could not land because of other proposers: its parent never reached L1, or an earlier slot already took its checkpoint number
+- `checkpoint-orphaned` — a valid checkpoint proposal could not land because the parent it built on never landed on L1
 - `checkpoint-valid` — the local node re-executed a checkpoint proposal for this slot successfully, and it could not be classified as unpublished or orphaned
 - `checkpoint-invalid` — the local node re-executed a checkpoint proposal for this slot and rejected it (header / archive / out-hash mismatch, limit breach, etc.). Proposer-fault
 - `checkpoint-unvalidated` — a checkpoint proposal arrived but the local node could not validate it (missing blocks/txs, timeout). Treated as proposer-fault
