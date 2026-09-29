@@ -66,6 +66,42 @@ describe('CheckpointReexecutionTracker', () => {
     expect(tracker.getOutcomeForSlot(SlotNumber(99))).toBeUndefined();
   });
 
+  it('returns the full record for a slot, including the parent archive root', () => {
+    const slot = SlotNumber(42);
+    const archive = Fr.random();
+    const lastArchive = Fr.random();
+    tracker.recordOutcome(slot, archive, 'valid', CheckpointNumber(7), lastArchive);
+
+    expect(tracker.getRecordForSlot(slot)).toEqual({
+      outcome: 'valid',
+      checkpointNumber: CheckpointNumber(7),
+      archiveRoot: archive.toString(),
+      lastArchiveRoot: lastArchive.toString(),
+    });
+    expect(tracker.getRecordForSlot(SlotNumber(43))).toBeUndefined();
+  });
+
+  it('returns a record without parent archive root when none was recorded', () => {
+    const slot = SlotNumber(42);
+    const archive = Fr.random();
+    tracker.recordOutcome(slot, archive, 'unvalidated');
+
+    expect(tracker.getRecordForSlot(slot)).toEqual({
+      outcome: 'unvalidated',
+      checkpointNumber: undefined,
+      archiveRoot: archive.toString(),
+      lastArchiveRoot: undefined,
+    });
+  });
+
+  it('returns no record for a slot that only has tx-collection or equivocation data', () => {
+    tracker.recordTxsCollected(SlotNumber(1), 0, true);
+    tracker.recordEquivocation(SlotNumber(2));
+
+    expect(tracker.getRecordForSlot(SlotNumber(1))).toBeUndefined();
+    expect(tracker.getRecordForSlot(SlotNumber(2))).toBeUndefined();
+  });
+
   it('records and queries proposal equivocation by slot', () => {
     expect(tracker.hasEquivocation(SlotNumber(7))).toBe(false);
 

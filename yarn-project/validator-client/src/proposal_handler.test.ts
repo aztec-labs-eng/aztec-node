@@ -1442,6 +1442,21 @@ describe('ProposalHandler checkpoint validation', () => {
         expect(reexecutionTracker.getOutcomeForSlot(SlotNumber(1))).toEqual('valid');
       });
 
+      // The sentinel judges a valid proposal that never landed by whether the parent it built on is on L1.
+      it('records the parent archive root of the evaluated proposal', async () => {
+        const { header, inboxRollingHash } = setupContentValidCheckpoint({ midLeafCount: 5, lastLeafCount: 7 });
+        inbox.setBuckets([{ seq: 4n, total: 7n, rollingHash: inboxRollingHash }]);
+        const proposal = await makeProposal({ archiveRoot, checkpointHeader: header });
+        await handler.handleCheckpointProposal(proposal, proposalInfo);
+
+        expect(reexecutionTracker.getRecordForSlot(SlotNumber(1))).toEqual({
+          outcome: 'valid',
+          checkpointNumber: CheckpointNumber(1),
+          archiveRoot: proposal.archive.toString(),
+          lastArchiveRoot: header.lastArchiveRoot.toString(),
+        });
+      });
+
       // The all-nodes callback and the attestation evaluate the same proposal twice. A local inability on a later
       // call is this node's problem, and must not retract the validation an earlier call completed.
       it('keeps the slot recorded as valid when a later call cannot read the L1 view', async () => {

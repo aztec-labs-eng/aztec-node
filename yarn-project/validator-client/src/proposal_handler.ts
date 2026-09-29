@@ -536,9 +536,16 @@ export class ProposalHandler {
    * This is the one path that records a `valid` outcome without running the live Inbox endpoint gate: the
    * checkpoint ends at the bucket end its own sequencer resolved against the Inbox when it built the last block,
    * so the evidence exists — it was gathered while building rather than while validating.
+   *
+   * `lastArchiveRoot` is the archive root of the parent checkpoint the proposal builds on.
    */
-  public recordOwnCheckpointProposalAsValid(slot: SlotNumber, archive: Fr, checkpointNumber: CheckpointNumber): void {
-    this.reexecutionTracker.recordOutcome(slot, archive, 'valid', checkpointNumber);
+  public recordOwnCheckpointProposalAsValid(
+    slot: SlotNumber,
+    archive: Fr,
+    checkpointNumber: CheckpointNumber,
+    lastArchiveRoot: Fr,
+  ): void {
+    this.reexecutionTracker.recordOutcome(slot, archive, 'valid', checkpointNumber, lastArchiveRoot);
   }
 
   /**
@@ -1946,7 +1953,13 @@ export class ProposalHandler {
         (result.checkpointNumber !== undefined &&
           this.reexecutionTracker.hasReexecuted(result.checkpointNumber, proposal.archive)));
     if (outcome !== undefined && !wouldForgetVerdict) {
-      this.reexecutionTracker.recordOutcome(slot, proposal.archive, outcome, result.checkpointNumber);
+      this.reexecutionTracker.recordOutcome(
+        slot,
+        proposal.archive,
+        outcome,
+        result.checkpointNumber,
+        proposal.checkpointHeader.lastArchiveRoot,
+      );
     }
 
     // Drop tracker entries for checkpoints that have reached L1 finality.

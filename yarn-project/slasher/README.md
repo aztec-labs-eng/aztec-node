@@ -202,7 +202,9 @@ Inactivity slashing is one of the most critical, since it allows purging validat
 Inactivity slashing is handled by the `Sentinel` (in `aztec-node/src/sentinel/`), which monitors performance of all validators slot-by-slot. With the multiple-blocks-per-slot model, block proposals and checkpoints are distinct concepts: proposers build multiple blocks per slot, but attestations are only for checkpoints. After each slot, the sentinel assigns one of the following to the proposer for the slot, in highest-confidence order:
 
 - `checkpoint-mined` — a checkpoint covering this slot has landed on L1
-- `checkpoint-valid` — the local node re-executed a checkpoint proposal for this slot successfully
+- `checkpoint-unpublished` — a valid checkpoint proposal built on a parent that is on L1 reached quorum, yet the proposer did not land it
+- `checkpoint-orphaned` — a valid checkpoint proposal could not land because of other proposers: its parent never reached L1, or an earlier slot already took its checkpoint number
+- `checkpoint-valid` — the local node re-executed a checkpoint proposal for this slot successfully, and it could not be classified as unpublished or orphaned
 - `checkpoint-invalid` — the local node re-executed a checkpoint proposal for this slot and rejected it (header / archive / out-hash mismatch, limit breach, etc.). Proposer-fault
 - `checkpoint-unvalidated` — a checkpoint proposal arrived but the local node could not validate it (missing blocks/txs, timeout). Treated as proposer-fault
 - `checkpoint-missed` — block proposals seen on P2P but no checkpoint proposal at all
@@ -212,10 +214,10 @@ Re-execution outcomes are read from the `CheckpointReexecutionTracker`, which th
 
 Each non-proposer committee member is assigned one of:
 - `attestation-sent` if their checkpoint attestation was seen on L1 or on the P2P network
-- `attestation-missed` if the proposer status was `checkpoint-mined` or `checkpoint-valid` but no checkpoint attestation was seen
+- `attestation-missed` if the proposer status was `checkpoint-mined`, `checkpoint-unpublished`, `checkpoint-orphaned` or `checkpoint-valid` but no checkpoint attestation was seen
 - none in any other case
 
-`blocks-missed`, `checkpoint-missed`, `checkpoint-invalid`, and `checkpoint-unvalidated` all count as proposer inactivity for the slot.
+`blocks-missed`, `checkpoint-missed`, `checkpoint-invalid`, and `checkpoint-unvalidated` all count as proposer inactivity for the slot. `checkpoint-unpublished` and `checkpoint-orphaned` do not count toward inactivity yet: they are recorded in the sentinel's history and stats only.
 
 The sentinel evaluates an epoch once `sentinelEpochEndBufferSlots` (default 2) L2 slots have elapsed past the epoch's last slot AND the per-slot recorder has covered that last slot. Epoch evaluation does not wait for an L1 proof — it relies on local-state evidence (the re-execution tracker plus L1 checkpoint landings) — so inactive validators are slashed promptly regardless of prover availability.
 

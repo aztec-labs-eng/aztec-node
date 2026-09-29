@@ -1,3 +1,4 @@
+import { INITIAL_CHECKPOINT_NUMBER } from '@aztec-labs/constants';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import {
   CheckpointNumber,
@@ -22,7 +23,12 @@ import type { SlasherConfig } from '@aztec-labs/slasher/config';
 import { type L2BlockSource, getAttestationInfoFromPublishedCheckpoint } from '@aztec-labs/stdlib/block';
 import type { CheckpointReexecutionTracker } from '@aztec-labs/stdlib/checkpoint';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
-import { getEpochAtSlot, getSlotRangeForEpoch, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import {
+  computeQuorum,
+  getEpochAtSlot,
+  getSlotRangeForEpoch,
+  getTimestampForSlot,
+} from '@aztec-labs/stdlib/epoch-helpers';
 import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import type {
   SingleValidatorStats,
@@ -44,6 +50,15 @@ export type SentinelRuntimeConfig = Pick<
 > &
   Pick<SentinelConfig, 'sentinelEpochEndBufferSlots'> &
   Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>;
+
+/** Why a valid checkpoint proposal that never reached L1 could not have landed, regardless of its proposer. */
+type OrphanedProposalReason = 'parent-not-on-l1' | 'parent-hash-mismatch' | 'position-taken-by-earlier-slot';
+
+/** Refined status of a valid checkpoint proposal for a slot whose checkpoint never reached L1. */
+type UnpublishedProposalClassification =
+  | { status: 'checkpoint-unpublished' }
+  | { status: 'checkpoint-orphaned'; reason: OrphanedProposalReason }
+  | { status: 'checkpoint-valid'; reason: 'equivocation' | 'no-parent-data' | 'below-quorum' };
 
 /** Maps a validator status to its category: proposer or attestation. */
 function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
@@ -85,12 +100,18 @@ function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
  * ## Six-case taxonomy in `getSlotActivity`
  *
  * For each slot, the sentinel assigns the proposer one of six statuses, ranked highest-confidence
- * first:
+ * first, with case 5 refined into 5a and 5b:
  *
  *  - `checkpoint-mined`        — a checkpoint covering this slot has landed on L1
  *                                (fetched on demand via `archiver.getCheckpoint({ slot })`).
+ *  - `checkpoint-unpublished`  — (5a) a valid checkpoint proposal built on a parent that is on L1
+ *                                reached quorum, yet the proposer did not land it.
+ *  - `checkpoint-orphaned`     — (5b) a valid checkpoint proposal could not land because of other
+ *                                proposers: its parent never reached L1, or an earlier slot already
+ *                                took its checkpoint number (the proposer pipelining cascade).
  *  - `checkpoint-valid`        — the local node re-executed a checkpoint proposal for this slot
- *                                successfully (consulted via `CheckpointReexecutionTracker`).
+ *                                successfully (consulted via `CheckpointReexecutionTracker`), and it
+ *                                could not be refined into 5a or 5b.
  *  - `checkpoint-invalid`      — the local node re-executed a checkpoint proposal for this slot
  *                                and rejected it (e.g. header/archive/out-hash mismatch, limit
  *                                breach). Proposer-fault.
@@ -100,9 +121,13 @@ function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
  *  - `checkpoint-missed`       — block proposals seen on P2P but no checkpoint proposal at all.
  *  - `blocks-missed`           — no block proposals seen for this slot.
  *
- * Missing-attestor faults are recorded only in `checkpoint-mined` and `checkpoint-valid`, where
- * the local node has positive evidence the checkpoint was canonical or valid. In the other four
- * cases the proposer is at fault and no attestor penalty applies.
+ * Missing-attestor faults are recorded only in `checkpoint-mined` and the three valid-proposal
+ * statuses (`checkpoint-unpublished`, `checkpoint-orphaned`, `checkpoint-valid`), where the local
+ * node has positive evidence the checkpoint was canonical or valid. In the other four cases the
+ * proposer is at fault and no attestor penalty applies.
+ *
+ * `checkpoint-unpublished` and `checkpoint-orphaned` are neutral for the proposer, like
+ * `checkpoint-valid`: neither counts toward `missedProposals` or inactivity slashing.
  *
  * ## Re-execution tracker
  *
@@ -483,8 +508,12 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    *
    * Proposer status:
    *  - case 6 `checkpoint-mined`        — a checkpoint covering this slot has landed on L1.
+   *  - case 5a `checkpoint-unpublished` — a valid proposal with its parent on L1 reached quorum but
+   *                                       was not landed by the proposer.
+   *  - case 5b `checkpoint-orphaned`    — a valid proposal could not land because its parent never
+   *                                       reached L1 or an earlier slot took its checkpoint number.
    *  - case 5 `checkpoint-valid`        — the local node re-executed a checkpoint proposal for this
-   *                                       slot successfully.
+   *                                       slot successfully, and it could not be refined into 5a or 5b.
    *  - case 4 `checkpoint-invalid`      — the local node re-executed a checkpoint proposal for this
    *                                       slot and rejected it.
    *  - case 3 `checkpoint-unvalidated`  — the local node observed a checkpoint proposal for this
@@ -492,8 +521,8 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    *  - case 2 `checkpoint-missed`       — block proposals seen on P2P but no checkpoint proposal.
    *  - case 1 `blocks-missed`           — no block proposals seen for this slot.
    *
-   * Missing-attestor penalties apply only in cases 5 and 6, where the local node has positive
-   * evidence the checkpoint was valid or has been canonicalised on L1.
+   * Missing-attestor penalties apply only in cases 5 (including 5a and 5b) and 6, where the local
+   * node has positive evidence the checkpoint was valid or has been canonicalised on L1.
    */
   protected async getSlotActivity(slot: SlotNumber, epoch: EpochNumber, proposer: EthAddress, committee: EthAddress[]) {
     this.logger.debug(`Computing stats for slot ${slot} at epoch ${epoch}`, { slot, epoch, proposer, committee });
@@ -510,10 +539,13 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
       ),
     );
 
-    // Determine the proposer status from the six-case taxonomy.
+    // Determine the proposer status from the six-case taxonomy. A valid proposal that never reached L1 (case 5) is
+    // refined into `checkpoint-unpublished` (5a) or `checkpoint-orphaned` (5b) when the evidence allows it.
     const reexecutionOutcome = this.reexecutionTracker.getOutcomeForSlot(slot);
     let status:
       | 'checkpoint-mined'
+      | 'checkpoint-unpublished'
+      | 'checkpoint-orphaned'
       | 'checkpoint-valid'
       | 'checkpoint-invalid'
       | 'checkpoint-unvalidated'
@@ -522,7 +554,7 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     if (checkpoint) {
       status = 'checkpoint-mined';
     } else if (reexecutionOutcome === 'valid') {
-      status = 'checkpoint-valid';
+      ({ status } = await this.classifyUnpublishedProposal(slot, proposer, committee, p2pAttestors));
     } else if (reexecutionOutcome === 'invalid') {
       status = 'checkpoint-invalid';
     } else if (reexecutionOutcome === 'unvalidated') {
@@ -542,7 +574,10 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     // declined, so neither must count as a missed attestor (inactivity slashing).
     const hasEquivocation = this.reexecutionTracker.hasEquivocation(slot);
     const attestorsExpected =
-      (status === 'checkpoint-mined' || status === 'checkpoint-valid') &&
+      (status === 'checkpoint-mined' ||
+        status === 'checkpoint-unpublished' ||
+        status === 'checkpoint-orphaned' ||
+        status === 'checkpoint-valid') &&
       reexecutionOutcome !== 'invalid' &&
       !hasEquivocation;
     const missedAttestors = new Set(
@@ -575,6 +610,78 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     };
 
     return Object.fromEntries(committee.map(v => v.toString()).map(who => [who, statusFor(who)]));
+  }
+
+  /**
+   * Refines case 5 (a checkpoint proposal for the slot re-executed as valid, with no checkpoint for the slot on L1)
+   * into whose fault it was that the proposal did not land:
+   *
+   *  - `checkpoint-orphaned` (5b) when other proposers prevented it: the parent it built on is not on L1 (or a
+   *    different checkpoint holds that position), or an earlier slot already took its checkpoint number.
+   *  - `checkpoint-unpublished` (5a) when its parent is on L1 and a quorum of the committee attested, so the proposer
+   *    had everything it needed to publish.
+   *  - `checkpoint-valid` (5) otherwise: the slot had an equivocation, the tracker has no parent data to judge by, or
+   *    attestations fell short of quorum (a fault of the attestors, who are tagged `attestation-missed`).
+   */
+  protected async classifyUnpublishedProposal(
+    slot: SlotNumber,
+    proposer: EthAddress,
+    committee: EthAddress[],
+    p2pAttestors: EthAddress[],
+  ): Promise<UnpublishedProposalClassification> {
+    if (this.reexecutionTracker.hasEquivocation(slot)) {
+      return { status: 'checkpoint-valid', reason: 'equivocation' };
+    }
+    const record = this.reexecutionTracker.getRecordForSlot(slot);
+    const checkpointNumber = record?.checkpointNumber;
+    const lastArchiveRoot = record?.lastArchiveRoot;
+    if (checkpointNumber === undefined || lastArchiveRoot === undefined) {
+      return { status: 'checkpoint-valid', reason: 'no-parent-data' };
+    }
+
+    const logData = { slot, proposer: proposer.toString(), checkpointNumber };
+    const orphaned = (reason: OrphanedProposalReason): UnpublishedProposalClassification => {
+      this.logger.verbose(`Valid checkpoint proposal for slot ${slot} was orphaned (${reason})`, {
+        ...logData,
+        reason,
+      });
+      return { status: 'checkpoint-orphaned', reason };
+    };
+
+    // The first checkpoint builds on genesis, which is always on L1.
+    const parentNumber = checkpointNumber - 1;
+    if (parentNumber >= INITIAL_CHECKPOINT_NUMBER) {
+      const parent = await this.archiver.getCheckpoint({ number: CheckpointNumber(parentNumber) });
+      if (!parent) {
+        return orphaned('parent-not-on-l1');
+      }
+      if (parent.checkpoint.archive.root.toString() !== lastArchiveRoot) {
+        return orphaned('parent-hash-mismatch');
+      }
+    }
+
+    // A later slot filling the position does not exempt the proposer: it had its own window to publish first.
+    const sibling = await this.archiver.getCheckpoint({ number: checkpointNumber });
+    if (sibling && sibling.checkpoint.header.slotNumber < slot) {
+      return orphaned('position-taken-by-earlier-slot');
+    }
+
+    // The proposer's own attestation counts, as it does when its sequencer collects attestations for L1.
+    const committeeMembers = new Set(committee.map(member => member.toString()));
+    const attestationCount = new Set(
+      p2pAttestors.map(attestor => attestor.toString()).filter(attestor => committeeMembers.has(attestor)),
+    ).size;
+    const quorum = computeQuorum(committee.length);
+    if (attestationCount < quorum) {
+      return { status: 'checkpoint-valid', reason: 'below-quorum' };
+    }
+
+    this.logger.info(`Proposer did not publish checkpoint ${checkpointNumber} for slot ${slot} despite quorum`, {
+      ...logData,
+      attestationCount,
+      quorum,
+    });
+    return { status: 'checkpoint-unpublished' };
   }
 
   /** Push the status for each slot for each validator. */
@@ -678,7 +785,15 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
   ): ValidatorStats {
     let history = fromSlot ? allHistory.filter(h => BigInt(h.slot) >= fromSlot) : allHistory;
     history = toSlot ? history.filter(h => BigInt(h.slot) <= toSlot) : history;
-    const lastProposal = history.filter(h => h.status === 'checkpoint-valid' || h.status === 'checkpoint-mined').at(-1);
+    const lastProposal = history
+      .filter(
+        h =>
+          h.status === 'checkpoint-valid' ||
+          h.status === 'checkpoint-unpublished' ||
+          h.status === 'checkpoint-orphaned' ||
+          h.status === 'checkpoint-mined',
+      )
+      .at(-1);
     const lastAttestation = history.filter(h => h.status === 'attestation-sent').at(-1);
     return {
       address: EthAddress.fromString(address),
