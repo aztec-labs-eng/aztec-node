@@ -1,5 +1,6 @@
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { recoverTypedDataAddress } from 'viem';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { recoverTypedDataAddress, toHex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 import { getPublicClient } from '../client.js';
@@ -49,6 +50,39 @@ describe('attester exit authorizations', () => {
   it('rejects duplicate attesters', async () => {
     const entry = await sign();
     await expect(rollup.validateAttesterExitAuthorizations([entry, entry])).rejects.toThrow('Duplicate attester');
+  });
+
+  it.each([0, 1])('rejects v=%s in the second authorization', async v => {
+    const first = await sign();
+    const second = await rollup.createAttesterExitAuthorization(
+      EthAddress.fromString(otherAccount.address),
+      deadline,
+      data => otherAccount.signTypedData(data),
+    );
+    const yParity = { ...second, signature: { ...second.signature, v } };
+    await expect(rollup.validateAttesterExitAuthorizations([first, yParity])).rejects.toThrow(
+      `Invalid v in authorization 1 for attester ${otherAccount.address.toLowerCase()}: expected 27 or 28`,
+    );
+  });
+
+  it('rejects a high-s signature in the second authorization', async () => {
+    const first = await sign();
+    const second = await rollup.createAttesterExitAuthorization(
+      EthAddress.fromString(otherAccount.address),
+      deadline,
+      data => otherAccount.signTypedData(data),
+    );
+    const highS = {
+      ...second,
+      signature: {
+        ...second.signature,
+        s: toHex(secp256k1.CURVE.n - BigInt(second.signature.s), { size: 32 }),
+        v: second.signature.v === 27 ? 28 : 27,
+      },
+    };
+    await expect(rollup.validateAttesterExitAuthorizations([first, highS])).rejects.toThrow(
+      `High-s signature in authorization 1 for attester ${otherAccount.address.toLowerCase()}`,
+    );
   });
 
   it.each(['chain', 'rollup'])('rejects a signature from another %s', async domain => {
