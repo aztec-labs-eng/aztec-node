@@ -24,8 +24,6 @@ from rk_core import (
 )
 S3_LOGS_BUCKET = os.getenv('S3_LOGS_BUCKET', 'aztec-ci-artifacts')
 S3_LOGS_PREFIX = os.getenv('S3_LOGS_PREFIX', 'logs')
-# Where build-cache artifacts are read from (the ci3 API redirects there); a test points it at a local bucket.
-S3_CACHE_PUBLIC_URL = os.getenv('S3_CACHE_PUBLIC_URL', 'https://aztec-ci-artifacts.s3.amazonaws.com/build-cache')
 
 _s3 = boto3.client('s3', region_name='us-east-2', config=Config(connect_timeout=10, read_timeout=60, retries={'max_attempts': 3}))
 DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD', '')
@@ -557,9 +555,9 @@ def proxy_dashboard():
 def proxy_api(path):
     return _proxy(f'/api/{path}')
 
-# The ci3 server API (ci3/CI3_SERVER_API.md in aztec-packages): what the ci3 scripts talk to.
+# The log API ci3 publishes logs through (ci3/source_logs in aztec-packages).
 import ci3_api
-ci3_api.register(app, optional_auth, _s3, S3_LOGS_BUCKET, S3_LOGS_PREFIX, DASHBOARD_PASSWORD, S3_CACHE_PUBLIC_URL)
+ci3_api.register(app, optional_auth, _s3, S3_LOGS_BUCKET, S3_LOGS_PREFIX, DASHBOARD_PASSWORD)
 
 @app.route('/<key>')
 @optional_auth
