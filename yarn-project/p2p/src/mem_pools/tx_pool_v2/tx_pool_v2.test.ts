@@ -40,6 +40,7 @@ import {
 } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, Tx, TxEffect, TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { AggregateTxValidator } from '../../msg_validators/tx_validator/aggregate_tx_validator.js';
@@ -600,6 +601,58 @@ describe('TxPoolV2', () => {
 
       expect(await txsDB.getAsync(txHashStr)).toBeUndefined();
       expect(await proofsDB.getAsync(txHashStr)).toBeUndefined();
+    });
+
+    it('reads a tx body and its proof inside one store transaction', async () => {
+      // The body (txs) and proof (tx_proofs) are two sub-databases that writers delete in lockstep
+      // inside one transaction. getTxByHash must read both inside one snapshot too; otherwise an
+      // eviction that commits between the two reads leaves the body present and the proof gone, and
+      // we serve a proofless tx that an honest requester then penalises us for. The race has no
+      // deterministic public seam (the two reads cannot be paused from outside), so assert the
+      // guarantee that prevents it: the proof read happens inside a store transaction.
+      const spyStore = await openTmpStore('p2p-txn-read');
+      const spyArchive = await openTmpStore('archive-txn-read');
+
+      let txnDepth = 0;
+      const realTxnAsync = spyStore.transactionAsync.bind(spyStore);
+      jest.spyOn(spyStore, 'transactionAsync').mockImplementation(cb => {
+        txnDepth++;
+        return realTxnAsync(cb).finally(() => {
+          txnDepth--;
+        });
+      });
+
+      let proofReadTxnDepth = -1;
+      const realOpenMap = spyStore.openMap.bind(spyStore);
+      jest.spyOn(spyStore, 'openMap').mockImplementation((name: string) => {
+        const map = realOpenMap(name);
+        if (name !== 'tx_proofs') {
+          return map;
+        }
+        const realGetAsync = map.getAsync.bind(map);
+        jest.spyOn(map, 'getAsync').mockImplementation(key => {
+          proofReadTxnDepth = txnDepth;
+          return realGetAsync(key);
+        });
+        return map;
+      });
+
+      const txnPool = new AztecKVTxPoolV2(spyStore, spyArchive, {
+        l2BlockSource: mockL2BlockSource,
+        worldStateSynchronizer: mockWorldState,
+        createTxValidator: () => Promise.resolve(alwaysValidValidator),
+        checkAllowedSetupCalls: () => Promise.resolve(true),
+        blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      });
+      await txnPool.start();
+
+      const tx = await mockTx(1);
+      await txnPool.addPendingTxs([tx]);
+
+      proofReadTxnDepth = -1;
+      const retrieved = await txnPool.getTxByHash(tx.getTxHash());
+      expect(retrieved).toBeDefined();
+      expect(proofReadTxnDepth).toBeGreaterThan(0);
     });
   });
 
