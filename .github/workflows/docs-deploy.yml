@@ -117,7 +117,19 @@ jobs:
           # `yarn exec` runs the binary directly. Plain `yarn netlify` would prefer
           # a `netlify` script from package.json if one existed, which is the wrong
           # thing to resolve in a step holding the token.
-          args=(deploy --dir=build --site "${NETLIFY_SITE_ID}")
+          #
+          # `--no-build` is required, not cosmetic. Since netlify-cli v23 a build is
+          # the default on `deploy` and `--dir` does not suppress it, so the CLI would
+          # pick up `[build] command = "yarn build"` from netlify.toml and build the
+          # site a second time — starting with `yarn clean`, which deletes the output
+          # the Build step just produced. What shipped would be the CLI's build, not
+          # ours, with CONTEXT resolved by @netlify/build rather than set above, and
+          # the whole of package.json's build chain would execute with
+          # NETLIFY_AUTH_TOKEN in its environment. The CLI still bundles
+          # netlify/functions and netlify/edge-functions without it, and redirects and
+          # headers still travel: they are read from netlify.toml on the deploy path,
+          # not produced by the build.
+          args=(deploy --no-build --dir=build --site "${NETLIFY_SITE_ID}")
           if [ "${{ inputs.target }}" = "production" ]; then
             args+=(--prod --message "${GITHUB_REF_NAME} @ ${GITHUB_SHA:0:7}")
           else
