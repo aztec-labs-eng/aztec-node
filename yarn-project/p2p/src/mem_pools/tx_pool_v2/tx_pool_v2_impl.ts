@@ -857,13 +857,18 @@ export class TxPoolV2Impl {
 
   // === Query Methods ===
 
-  async getTxByHash(txHash: TxHash, opts: { includeProof?: boolean } = {}): Promise<Tx | undefined> {
+  getTxByHash(txHash: TxHash, opts: { includeProof?: boolean } = {}): Promise<Tx | undefined> {
     const txHashStr = txHash.toString();
-    const buffer = await this.#txsDB.getAsync(txHashStr);
-    if (!buffer) {
-      return undefined;
-    }
-    return opts.includeProof === false ? Tx.fromBuffer(buffer) : this.#loadTxWithProof(txHashStr, buffer);
+    // Read the body and its separately-stored proof inside one snapshot. Writers delete both rows
+    // in a single transaction; without a matching read transaction an eviction can commit between
+    // the two reads, so we would serve a proofless tx and the honest requester would penalise us.
+    return this.#store.transactionAsync(async () => {
+      const buffer = await this.#txsDB.getAsync(txHashStr);
+      if (!buffer) {
+        return undefined;
+      }
+      return opts.includeProof === false ? Tx.fromBuffer(buffer) : await this.#loadTxWithProof(txHashStr, buffer);
+    });
   }
 
   async getTxsByHash(txHashes: TxHash[], opts: { includeProof?: boolean } = {}): Promise<(Tx | undefined)[]> {
