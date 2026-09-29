@@ -156,10 +156,26 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
     txHash: string,
   ): Promise<{ verified: boolean; durationMs: number }> {
     for (let attempt = 1; ; attempt++) {
-      await using instance = await this.borrowInstance();
+      let borrowed: BBJsApi & AsyncDisposable;
+      try {
+        borrowed = await this.bbJsFactory.getInstance();
+      } catch (err) {
+        // A bb that could not be started is worth another go, within the same budget a death gets.
+        // Anything else — the factory destroyed under us — will not improve by asking again. Either
+        // way no proof was checked, so this is never the proof's fault.
+        if (isRetryableFailure(err) && attempt < BBCircuitVerifier.MAX_CHONK_VERIFY_ATTEMPTS) {
+          this.logger.warn('no bb instance available to verify a proof; retrying', { txHash, attempt });
+          continue;
+        }
+        throw new ProofVerifierUnavailableError('No bb instance available to verify the proof', { cause: err });
+      }
+
+      await using instance = borrowed;
       try {
         return await instance.verifyChonkProof(fieldsWithPublicInputs, verificationKey);
       } catch (err) {
+        // Only an environmental failure is worth retrying; anything else is the verification's own
+        // verdict and belongs to the caller.
         if (!isRetryableFailure(err)) {
           throw err;
         }
@@ -170,14 +186,6 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
         }
         this.logger.warn('bb died while verifying a proof; retrying on another instance', { txHash, attempt });
       }
-    }
-  }
-
-  private async borrowInstance(): Promise<BBJsApi & AsyncDisposable> {
-    try {
-      return await this.bbJsFactory.getInstance();
-    } catch (err) {
-      throw new ProofVerifierUnavailableError('No bb instance available to verify the proof', { cause: err });
     }
   }
 }

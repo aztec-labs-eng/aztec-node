@@ -69,7 +69,7 @@ describe('BBCircuitVerifier', () => {
     await expect(verifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
   });
 
-  it('waits for a bb instance to start rather than rejecting the proof', async () => {
+  it('retries a failed spawn rather than rejecting the proof', async () => {
     factory.planNextInstance(new Error('spawn failed'));
     await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: true });
   });
