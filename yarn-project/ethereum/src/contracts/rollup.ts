@@ -343,6 +343,7 @@ const INSUFFICIENT_VALIDATOR_SET_SIZE_ERROR = 'ValidatorSelection__InsufficientV
 
 /** SlasherUpdated events are rare governance operations, so their watcher polls well below the client's interval. */
 const SLASHER_UPDATED_POLLING_INTERVAL_MS = 60_000;
+const SECP256K1_HALF_ORDER = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0n;
 
 function isValidatorSelectionError(err: unknown, errorName: string): boolean {
   return (
@@ -1490,7 +1491,7 @@ export class RollupContract {
   public async validateAttesterExitAuthorizations(authorizations: AttesterExitAuthorization[]): Promise<void> {
     const seen = new Set<string>();
     const now = BigInt(Math.floor(Date.now() / 1000));
-    for (const authorization of authorizations) {
+    for (const [index, authorization] of authorizations.entries()) {
       const attester = authorization.attester.toString().toLowerCase();
       if (seen.has(attester)) {
         throw new Error(`Duplicate attester: ${attester}`);
@@ -1498,6 +1499,12 @@ export class RollupContract {
       seen.add(attester);
       if (authorization.deadline <= now || authorization.deadline > maxUint256) {
         throw new Error(`Invalid or expired deadline for attester ${attester}`);
+      }
+      if (authorization.signature.v !== 27 && authorization.signature.v !== 28) {
+        throw new Error(`Invalid v in authorization ${index} for attester ${attester}: expected 27 or 28`);
+      }
+      if (BigInt(authorization.signature.s) > SECP256K1_HALF_ORDER) {
+        throw new Error(`High-s signature in authorization ${index} for attester ${attester}`);
       }
       const signer = await recoverTypedDataAddress({
         ...this.buildAttesterExitTypedData(authorization.attester, authorization.deadline),
