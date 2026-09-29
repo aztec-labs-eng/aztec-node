@@ -5,6 +5,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 import { Command } from 'commander';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
@@ -159,33 +160,37 @@ describe('sign-attester-exit', () => {
 
 describe('sign-attester-exit with real signatures', () => {
   const mnemonic = 'test test test test test test test test test test test junk';
+  const envVars = ['PRIVATE_KEY', 'L1_CHAIN_ID', 'ETHEREUM_HOSTS', 'NETWORK', 'REGISTRY_CONTRACT_ADDRESS'];
+  const offlineTarget = ['--l1-chain-id', String(args.chainId), '--rollup', rollupAddress.toString()];
   let directory: string;
-  let previousKey: string | undefined;
+  let previousEnv: Record<string, string | undefined>;
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'sign-attester-exit-signed-'));
-    previousKey = process.env.PRIVATE_KEY;
+    previousEnv = Object.fromEntries(envVars.map(name => [name, process.env[name]]));
+    envVars.forEach(name => delete process.env[name]);
     process.env.PRIVATE_KEY = privateKey;
   });
   afterEach(async () => {
-    if (previousKey === undefined) {
-      delete process.env.PRIVATE_KEY;
-    } else {
-      process.env.PRIVATE_KEY = previousKey;
+    for (const [name, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
     }
     await rm(directory, { recursive: true, force: true });
   });
 
-  const runCli = (credentials: string[], attesterAddress: string, output: string) => {
+  const runCli = (credentials: string[], attesterAddress: string, output: string, target = offlineTarget) => {
     const program = new Command().name('aztec').exitOverride();
     injectCommands(program, () => {}, createLogger('cli:test:signer'));
     return program.parseAsync(
       [
         'sign-attester-exit',
         ...credentials,
+        ...target,
         '--attester',
         attesterAddress,
-        '--rollup',
-        rollupAddress.toString(),
         '--deadline',
         deadline.toString(),
         '--output',
@@ -195,13 +200,32 @@ describe('sign-attester-exit with real signatures', () => {
     );
   };
 
-  const expectValidAuthorizationFor = async (output: string, signer: string) => {
+  /** Starts a JSON-RPC server that answers only eth_chainId. */
+  const serveChainId = async (chainId: number) => {
+    const server = createServer((request, response) => {
+      let body = '';
+      request.on('data', chunk => (body += chunk));
+      request.on('end', () => {
+        const { id } = JSON.parse(body);
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ jsonrpc: '2.0', id, result: `0x${chainId.toString(16)}` }));
+      });
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected a TCP server address');
+    }
+    return { url: `http://127.0.0.1:${address.port}`, close: () => new Promise(resolve => server.close(resolve)) };
+  };
+
+  const expectValidAuthorizationFor = async (output: string, signer: string, chainId = args.chainId) => {
     const [entry] = await readAttesterExitAuthorizations(output);
     expect(entry.attester).toEqual(EthAddress.fromString(signer));
     await expect(
       validateAttesterExits({
         rpcUrls: args.rpcUrls,
-        chainId: args.chainId,
+        chainId,
         rollupAddress,
         authorizationsPath: output,
         log: () => {},
@@ -249,5 +273,53 @@ describe('sign-attester-exit with real signatures', () => {
       output,
     });
     await expectValidAuthorizationFor(output, signer);
+  });
+
+  it.each([
+    [
+      'no chain ID source',
+      ['--rollup', rollupAddress.toString()],
+      'Provide --l1-chain-id, --network, or --l1-rpc-urls',
+    ],
+    ['chain ID 0', ['--l1-chain-id', '0', '--rollup', rollupAddress.toString()], 'positive safe integer'],
+    ['neither --rollup nor --network', ['--l1-chain-id', '1'], 'Provide --rollup, or --network'],
+    [
+      '--network without an RPC for the registry',
+      ['--l1-chain-id', '1', '--network', 'testnet'],
+      'requires --l1-rpc-urls',
+    ],
+  ])('rejects %s', async (_label, target, message) => {
+    const output = join(directory, 'exit.json');
+    await expect(runCli([], attester.address, output, target)).rejects.toThrow(message);
+    await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('signs for the chain ID reported by the RPC when no chain ID is given', async () => {
+    const rpc = await serveChainId(11155111);
+    try {
+      const output = join(directory, 'exit.json');
+      await runCli([], attester.address, output, ['--l1-rpc-urls', rpc.url, '--rollup', rollupAddress.toString()]);
+      await expectValidAuthorizationFor(output, attester.address, 11155111);
+    } finally {
+      await rpc.close();
+    }
+  });
+
+  it('rejects a chain ID that differs from the one the RPC reports', async () => {
+    const rpc = await serveChainId(11155111);
+    try {
+      await expect(
+        runCli([], attester.address, join(directory, 'exit.json'), [
+          '--l1-rpc-urls',
+          rpc.url,
+          '--l1-chain-id',
+          '1',
+          '--network',
+          'testnet',
+        ]),
+      ).rejects.toThrow('The L1 RPC reports chain ID 11155111, but chain ID 1 was requested');
+    } finally {
+      await rpc.close();
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { RollupAbi, StakingAssetHandlerAbi, TestERC20Abi } from '@aztec-foundation/l1-artifacts';
 
 import { createEthereumChain, isAnvilTestChain } from '@aztec-labs/ethereum/chain';
-import { createExtendedL1Client, getPublicClient } from '@aztec-labs/ethereum/client';
+import { createExtendedL1Client, getPublicClient, makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import { getL1ContractsConfigEnvVars } from '@aztec-labs/ethereum/config';
 import { type AttesterExitAuthorization, GSEContract, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
@@ -12,9 +12,10 @@ import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { ZkPassportProofParams } from '@aztec-labs/stdlib/zkpassport';
 import { readFile, writeFile } from 'node:fs/promises';
-import { encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 'viem';
+import { createPublicClient, encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 'viem';
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
+import { getL1RollupAddressFromEnv } from '../../config/get_l1_config.js';
 import { atomicUpdateFile } from '../../utils/commands.js';
 import { deriveEthAttester } from '../validator_keys/shared.js';
 
@@ -267,6 +268,54 @@ export async function removeL1Validator({
   dualLog(`Transaction hash: ${receipt.transactionHash}`);
 }
 
+/** Inputs that select the chain and rollup an attester exit is signed for; each is undefined when not supplied. */
+export type AttesterExitTargetArgs = {
+  chainId?: number;
+  rpcUrls?: string[];
+  network?: string;
+  rollupAddress?: EthAddress;
+  log: LogFn;
+};
+
+/**
+ * Resolves the chain ID and rollup an attester exit is signed for, without falling back to the Anvil chain ID.
+ * Contacts the RPC only when it must supply the chain ID or the rollup, and then checks that its chain ID matches.
+ */
+export async function resolveAttesterExitTarget({
+  chainId,
+  rpcUrls,
+  network,
+  rollupAddress,
+  log,
+}: AttesterExitTargetArgs): Promise<{ chainId: number; rollupAddress: EthAddress }> {
+  if (!rollupAddress && !network) {
+    throw new Error('Provide --rollup, or --network to use the canonical rollup from the network registry');
+  }
+  if (chainId !== undefined) {
+    assertValidChainId(chainId);
+    if (rollupAddress) {
+      return { chainId, rollupAddress };
+    }
+  }
+  if (!rpcUrls) {
+    throw new Error(
+      chainId === undefined
+        ? 'Provide --l1-chain-id, --network, or --l1-rpc-urls to select the chain to sign for'
+        : 'Looking up the rollup in the network registry requires --l1-rpc-urls',
+    );
+  }
+  const rpcChainId = await createPublicClient({ transport: makeL1HttpTransport(rpcUrls) }).getChainId();
+  if (chainId !== undefined && rpcChainId !== chainId) {
+    throw new Error(`The L1 RPC reports chain ID ${rpcChainId}, but chain ID ${chainId} was requested`);
+  }
+  if (rollupAddress) {
+    return { chainId: rpcChainId, rollupAddress };
+  }
+  const canonicalRollup = await getL1RollupAddressFromEnv(rpcUrls, rpcChainId);
+  log(`Using canonical rollup ${canonicalRollup} from the ${network} registry`);
+  return { chainId: rpcChainId, rollupAddress: canonicalRollup };
+}
+
 /** Signs an exit authorization locally and writes a JSON array accepted by the batch command. */
 export async function signAttesterExit({
   rpcUrls,
@@ -289,6 +338,7 @@ export async function signAttesterExit({
     append?: boolean;
     log: LogFn;
   }) {
+  assertValidChainId(chainId);
   const account = getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex });
   if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
     throw new Error('The signing account must match the attester address');
@@ -333,9 +383,7 @@ export async function validateAttesterExits({
   authorizationsPath: string;
   log: LogFn;
 }) {
-  if (!Number.isSafeInteger(chainId) || chainId <= 0) {
-    throw new Error('Chain ID must be a positive safe integer');
-  }
+  assertValidChainId(chainId);
   const client = getPublicClient({ l1RpcUrls: rpcUrls, l1ChainId: chainId });
   const rollup = new RollupContract(client, rollupAddress);
   const authorizations = await readAttesterExitAuthorizations(authorizationsPath);
@@ -573,6 +621,13 @@ function makeDualLog(log: LogFn, debugLogger: Logger) {
     log(msg);
     debugLogger.info(msg);
   };
+}
+
+/** `createEthereumChain` maps a falsy chain ID to Anvil, so reject it before a chain is built from it. */
+function assertValidChainId(chainId: number) {
+  if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+    throw new Error('Chain ID must be a positive safe integer');
+  }
 }
 
 function getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex }: SignerAccountArgs) {
