@@ -154,8 +154,6 @@ describe('PeerManager', () => {
 
   describe('peer timeout functionality', () => {
     const discoverOnce = () => (peerManager as unknown as { discover(): Promise<void> }).discover();
-    const callDialPeer = (peer: unknown) =>
-      (peerManager as unknown as { dialPeer(p: unknown): Promise<void> }).dialPeer(peer);
     const timedOutPeersOf = () => (peerManager as unknown as { timedOutPeers: Map<string, unknown> }).timedOutPeers;
     it('should attempt to dial a discovered peer', async () => {
       const enr = await createMockENR();
@@ -250,38 +248,26 @@ describe('PeerManager', () => {
       expect(mockLibP2PNode.peerStore.delete).not.toHaveBeenCalled();
     });
 
-    it('keeps a peer whose address a concurrent rediscovery refreshed while a stale dial was failing', async () => {
+    it('keeps a peer it is still connected to when its dials fail', async () => {
       const enr = await createMockENR();
       const peerId = await enr.peerId();
-      const staleAddr = multiaddr('/ip4/127.0.0.1/tcp/8000');
-      const freshAddr = multiaddr('/ip4/127.0.0.1/tcp/9000');
-
-      // Hold the stale dial (already at its final attempt) open until we release it.
-      let failStaleDial: (reason: Error) => void = () => {};
-      mockLibP2PNode.dial.mockImplementationOnce(
-        () => new Promise<never>((_resolve, reject) => (failStaleDial = reject)),
+      mockLibP2PNode.dial.mockRejectedValue(new Error('Connection failed'));
+      // An inbound connect or a concurrent rediscovery can hold the peer while our dial fails.
+      // Report the connection per-peer while the global count stays empty so dialing still runs.
+      mockLibP2PNode.getConnections.mockImplementation((pid?: PeerId) =>
+        pid?.toString() === peerId.toString() ? [{ remotePeer: peerId }] : [],
       );
-      // MAX_DIAL_ATTEMPTS is 3, so dialAttempts 2 means the next failure exhausts the retries.
-      const staleDial = callDialPeer({
-        peerId,
-        enr,
-        multiaddrTcp: staleAddr,
-        dialAttempts: 2,
-        addedUnixMs: Date.now(),
-      });
-      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 1, 'stale dial to start');
 
-      // A concurrent rediscovery merges a fresh address and starts a newer dial for the same peer.
-      mockLibP2PNode.dial.mockImplementationOnce(() => Promise.reject(new Error('fresh dial failed')));
-      await callDialPeer({ peerId, enr, multiaddrTcp: freshAddr, dialAttempts: 0, addedUnixMs: Date.now() });
+      await discoveredPeerCallback(enr);
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 1, 'first dial to complete');
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 2, 'second dial to complete');
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 3, 'third dial to complete');
+      await retryFastUntil(() => timedOutPeersOf().has(peerId.toString()), 'exhaustion handling to complete');
 
-      // The stale dial now fails and reaches exhaustion.
-      failStaleDial(new Error('Connection failed'));
-      await staleDial;
-
-      // The stale failure must not wipe the record the concurrent rediscovery just refreshed.
+      // We hold a live connection, so the record (identity, gossipsub tags, redial addresses) must stay.
       expect(mockLibP2PNode.peerStore.delete).not.toHaveBeenCalled();
-      expect(mockLibP2PNode.peerStore.merge).toHaveBeenCalled();
     });
 
     const triggerTimeout = async (enr: ENR) => {
