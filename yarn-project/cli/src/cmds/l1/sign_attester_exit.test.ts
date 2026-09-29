@@ -382,9 +382,9 @@ describe('sign-attester-exit with real signatures', () => {
     const rpc = await serveL1Rpc(1);
     try {
       const output = join(directory, 'exit.json');
-      await expect(
-        runCli([], attester.address, output, [...offlineTarget, '--l1-rpc-urls', rpc.url]),
-      ).rejects.toThrow(`The L1 RPC reports chain ID 1, but chain ID ${args.chainId} was requested`);
+      await expect(runCli([], attester.address, output, [...offlineTarget, '--l1-rpc-urls', rpc.url])).rejects.toThrow(
+        `The L1 RPC reports chain ID 1, but chain ID ${args.chainId} was requested`,
+      );
       await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await rpc.close();
