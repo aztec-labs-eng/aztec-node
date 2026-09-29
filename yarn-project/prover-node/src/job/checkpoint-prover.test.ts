@@ -8,8 +8,8 @@ import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { EpochProverFactory } from '@aztec-labs/prover-client';
-import type { ChonkCache, SubTreeResult } from '@aztec-labs/prover-client/orchestrator';
-import type { PublicProcessorFactory } from '@aztec-labs/simulator/server';
+import type { CheckpointSubTreeOrchestrator, ChonkCache, SubTreeResult } from '@aztec-labs/prover-client/orchestrator';
+import type { PublicProcessor, PublicProcessorFactory } from '@aztec-labs/simulator/server';
 import { CommitteeAttestationsAndSigners, type L2Block } from '@aztec-labs/stdlib/block';
 import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import type { ForkMerkleTreeOperations, ITxProvider } from '@aztec-labs/stdlib/interfaces/server';
@@ -286,6 +286,74 @@ describe('CheckpointProver', () => {
   // ---------------- teardown on completion ----------------
 
   describe('teardown on completion', () => {
+    it.each(['success', 'failure', 'cancel'] as const)(
+      'waits for empty-block execution after proofs arrive: %s',
+      async outcome => {
+        checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 1, txsPerBlock: 0 });
+        txProvider.getTxsForBlock.mockResolvedValue({ txs: [], missingTxs: [] });
+
+        const result: SubTreeResult = {
+          blockProofOutputs: [],
+          inboxParityProof: mock<SubTreeResult['inboxParityProof']>(),
+          previousArchiveSiblingPath: makeTuple(ARCHIVE_HEIGHT, () => Fr.ZERO),
+        };
+        const resultGate = promiseWithResolvers<SubTreeResult>();
+        const processingStarted = promiseWithResolvers<void>();
+        const resumeProcessing = promiseWithResolvers<void>();
+        let stopped = false;
+        let blockCompleted = false;
+        const subTree = mock<CheckpointSubTreeOrchestrator>();
+        subTree.getSubTreeResult.mockReturnValue(resultGate.promise);
+        subTree.stop.mockImplementation(() => {
+          stopped = true;
+          return Promise.resolve();
+        });
+        subTree.setBlockCompleted.mockImplementation(() => {
+          if (stopped) {
+            throw new Error('Sub-tree stopped before block completion');
+          }
+          blockCompleted = true;
+          return Promise.resolve(checkpoint.blocks[0].header);
+        });
+        proverFactory.createCheckpointSubTreeOrchestrator.mockResolvedValue(subTree);
+        dbProvider.fork.mockResolvedValue(mock<Awaited<ReturnType<typeof dbProvider.fork>>>());
+        const processor = mock<PublicProcessor>();
+        processor.process.mockImplementation(async () => {
+          processingStarted.resolve();
+          await resumeProcessing.promise;
+          if (outcome === 'failure') {
+            throw new Error('Block processing failed after proofs arrived');
+          }
+          return [[], [], [], [], []];
+        });
+        publicProcessorFactory.create.mockReturnValue(processor);
+
+        const prover = makeProver();
+        const proofs = prover.whenSubTreeProofsReady();
+        await processingStarted.promise;
+        resultGate.resolve(result);
+        // Run the proof callback while the execution loop is still suspended in processing.
+        await Promise.resolve();
+        if (outcome === 'cancel') {
+          prover.cancel();
+        }
+        resumeProcessing.resolve();
+        await prover.whenDone();
+
+        expect(prover.isFailed()).toBe(outcome === 'failure');
+        expect(blockCompleted).toBe(outcome === 'success');
+        expect(stopped).toBe(true);
+        if (outcome === 'success') {
+          await expect(proofs).resolves.toEqual({
+            blockProofOutputs: result.blockProofOutputs,
+            inboxParityProof: result.inboxParityProof,
+          });
+        } else {
+          await expect(proofs).rejects.toThrow(outcome === 'cancel' ? /cancelled/ : /did not complete/);
+        }
+      },
+    );
+
     it('releases the sub-tree once block proofs are ready, still returning the outputs', async () => {
       // Empty-tx blocks let the execute loop complete without real public processing. The sub-tree
       // result is gated on the final block completing, so resolution happens after the loop's work.
@@ -305,8 +373,7 @@ describe('CheckpointProver', () => {
         startNewBlock: () => Promise.resolve(),
         startChonkVerifierCircuits: () => Promise.resolve(),
         addTxs: () => Promise.resolve(),
-        // Resolve the sub-tree result only after the final block finishes, mirroring production
-        // where proofs land after every block has been added.
+        // Exercise proofs arriving after the final block finishes enqueueing.
         setBlockCompleted: (blockNumber: number) => {
           if (blockNumber === lastBlockNumber) {
             resultGate.resolve({

@@ -343,7 +343,13 @@ export class CheckpointProver {
       subTreeStarted = true;
       // Bridge the sub-tree's result onto subTreeProofs.
       void this.subTree.getSubTreeResult().then(
-        result => {
+        async result => {
+          // Empty-block proofs can finish before execution reaches addTxs or setBlockCompleted.
+          // Keep the sub-tree alive and withhold success until block processing has also succeeded.
+          await this.runPromise;
+          if (!this.completed || this.failed || signal.aborted) {
+            return;
+          }
           this.deps.log.info(`Sub-tree block proofs ready for checkpoint ${this.checkpoint.number}`, {
             checkpointNumber: this.checkpoint.number,
             blockProofCount: result.blockProofOutputs.length,
