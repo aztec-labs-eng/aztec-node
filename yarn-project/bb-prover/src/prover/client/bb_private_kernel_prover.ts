@@ -74,6 +74,20 @@ export type BBPrivateKernelProverOptions = Omit<BackendOptions, 'logger'> & { lo
 export abstract class BBPrivateKernelProver implements PrivateKernelProver {
   private log: Logger;
 
+  /**
+   * The bb this prover accumulates on, created on first use and kept for the life of the prover.
+   *
+   * Its own rather than the process-wide singleton. Accumulation is a session — chonkStart, a load
+   * and an accumulate per circuit, then chonkProve — while the singleton is shared with every
+   * protocol hash on a node, so a hash would queue behind a whole proof and two proofs would
+   * interleave into one session and corrupt each other. Stateless callers, gate counting included,
+   * stay on the singleton where they belong.
+   */
+  private chonkBb: Barretenberg | undefined;
+
+  /** Serialises accumulation: bb holds one session, so two proofs cannot share a process. */
+  private accumulating: Promise<unknown> = Promise.resolve();
+
   constructor(
     protected artifactProvider: ArtifactProvider,
     protected simulator: CircuitSimulator,
@@ -480,42 +494,67 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
     return kernelProofOutput;
   }
 
-  public async createChonkProof(executionSteps: PrivateExecutionStep[]): Promise<ChonkProofWithPublicInputs> {
-    const timer = new Timer();
-    this.log.info(`Generating ClientIVC proof...`);
-    const barretenberg = await Barretenberg.initSingleton({
-      ...this.options,
-      logger: this.options.logger?.verbose,
+  /**
+   * Runs one accumulation at a time on this prover's own bb, starting it on first use.
+   *
+   * A failure drops the instance: the session lives in the process, and after a failed accumulation
+   * there is no way to tell what bb still holds, so the next proof starts a fresh one. On a native
+   * backend that costs a spawn and a connect, with no SRS to reload, which is noise against a proof.
+   */
+  private accumulate<T>(fn: (bb: Barretenberg) => Promise<T>): Promise<T> {
+    const run = this.accumulating.then(async () => {
+      this.chonkBb ??= await Barretenberg.new({ ...this.options, logger: this.options.logger?.verbose });
+      try {
+        return await fn(this.chonkBb);
+      } catch (err) {
+        const dead = this.chonkBb;
+        this.chonkBb = undefined;
+        await dead?.destroy().catch(() => {});
+        throw err;
+      }
     });
-    const backend = new AztecClientBackend(
-      executionSteps.map(step => ungzip(step.bytecode)),
-      barretenberg,
-      executionSteps.map(step => step.functionName),
-      executionSteps.map(step => step.kind),
+    // The queue must survive a failed proof, so the next caller is not chained to a rejection.
+    this.accumulating = run.then(
+      () => {},
+      () => {},
     );
+    return run;
+  }
 
-    // Use compressed prove path to get both proof fields and compressed proof bytes
-    const result = await backend.prove(
-      executionSteps.map(step => ungzip(serializeWitness(step.witness))),
-      executionSteps.map(step => step.vk),
-      { compress: true },
-    );
-    this.log.info(`Generated ClientIVC proof`, {
-      eventName: 'client-ivc-proof-generation',
-      duration: timer.ms(),
-      proofSize: result.proofFields.length,
-      compressedSize: result.compressedProof?.length,
+  public createChonkProof(executionSteps: PrivateExecutionStep[]): Promise<ChonkProofWithPublicInputs> {
+    return this.accumulate(async barretenberg => {
+      const timer = new Timer();
+      this.log.info(`Generating ClientIVC proof...`);
+      const backend = new AztecClientBackend(
+        executionSteps.map(step => ungzip(step.bytecode)),
+        barretenberg,
+        executionSteps.map(step => step.functionName),
+        executionSteps.map(step => step.kind),
+      );
+
+      // Use compressed prove path to get both proof fields and compressed proof bytes
+      const result = await backend.prove(
+        executionSteps.map(step => ungzip(serializeWitness(step.witness))),
+        executionSteps.map(step => step.vk),
+        { compress: true },
+      );
+      this.log.info(`Generated ClientIVC proof`, {
+        eventName: 'client-ivc-proof-generation',
+        duration: timer.ms(),
+        proofSize: result.proofFields.length,
+        compressedSize: result.compressedProof?.length,
+      });
+
+      // Create ChonkProofWithPublicInputs from the flat field elements
+      const proofWithPubInputs = ChonkProofWithPublicInputs.fromBufferArray(result.proofFields);
+
+      // Attach compressed proof bytes to the ChonkProof (without public inputs).
+      // The compressed bytes are for the full proof WITH public inputs from bb;
+      // when deserializing, the decompressor will strip them to match CHONK_PROOF_LENGTH.
+      proofWithPubInputs.compressedProof = result.compressedProof ? Buffer.from(result.compressedProof) : undefined;
+
+      return proofWithPubInputs;
     });
-
-    // Create ChonkProofWithPublicInputs from the flat field elements
-    const proofWithPubInputs = ChonkProofWithPublicInputs.fromBufferArray(result.proofFields);
-
-    // Attach compressed proof bytes to the ChonkProof (without public inputs).
-    // The compressed bytes are for the full proof WITH public inputs from bb;
-    // when deserializing, the decompressor will strip them to match CHONK_PROOF_LENGTH.
-    proofWithPubInputs.compressedProof = result.compressedProof ? Buffer.from(result.compressedProof) : undefined;
-
-    return proofWithPubInputs;
   }
 
   public async computeGateCountForCircuit(
