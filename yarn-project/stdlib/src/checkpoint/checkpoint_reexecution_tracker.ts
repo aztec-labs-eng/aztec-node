@@ -13,6 +13,16 @@ import type { Fr } from '@aztec-labs/foundation/curves/bn254';
  */
 export type ReexecutionOutcome = 'valid' | 'invalid' | 'unvalidated';
 
+/** What the tracker recorded about the checkpoint proposal evaluated for a slot. */
+export type ReexecutionRecord = {
+  outcome: ReexecutionOutcome;
+  checkpointNumber?: CheckpointNumber;
+  /** Archive root in the evaluated proposal. */
+  archiveRoot?: string;
+  /** Archive root of the parent checkpoint the proposal builds on, when known. */
+  lastArchiveRoot?: string;
+};
+
 /**
  * Tracks two pieces of per-slot state collected during proposal handling:
  *
@@ -20,7 +30,7 @@ export type ReexecutionOutcome = 'valid' | 'invalid' | 'unvalidated';
  *     (keyed by `slot` + `indexWithinCheckpoint`). Consumed by the data-withholding watcher.
  *  2. The outcome of locally re-executing each checkpoint proposal (keyed by
  *     `(checkpointNumber, archiveRoot)` and by `slot`). Consumed by the data-withholding
- *     watcher (via `hasReexecuted`) and the sentinel (via `getOutcomeForSlot`).
+ *     watcher (via `hasReexecuted`) and the sentinel (via `getOutcomeForSlot` and `getRecordForSlot`).
  *
  * Both pieces of state live on the same per-slot `Entry`, so cleanup via `removeBefore`
  * naturally drops everything for a pruned slot in one step.
@@ -30,6 +40,7 @@ interface Entry {
   // evaluated. recordTxsCollected may create an Entry before any of them are known.
   checkpointNumber: CheckpointNumber | undefined;
   archiveRoot: string | undefined;
+  lastArchiveRoot: string | undefined;
   outcome: ReexecutionOutcome | undefined;
 
   slot: SlotNumber;
@@ -54,12 +65,16 @@ export class CheckpointReexecutionTracker {
    * @param outcome - Outcome of evaluation.
    * @param checkpointNumber - Checkpoint number, if known. Required for `valid` outcomes; optional
    *   for `invalid`/`unvalidated` because some early rejections fire before blocks are loaded.
+   * @param lastArchiveRoot - Archive root of the parent checkpoint the proposal builds on (the checkpoint header's
+   *   `lastArchiveRoot`), if known. Lets the sentinel tell whether a valid proposal that never landed was built on a
+   *   parent that is on L1.
    */
   public recordOutcome(
     slot: SlotNumber,
     archiveRoot: Fr,
     outcome: ReexecutionOutcome,
     checkpointNumber?: CheckpointNumber,
+    lastArchiveRoot?: Fr,
   ): void {
     const archiveRootStr = archiveRoot.toString();
 
@@ -68,6 +83,7 @@ export class CheckpointReexecutionTracker {
     const entry: Entry = {
       checkpointNumber,
       archiveRoot: archiveRootStr,
+      lastArchiveRoot: lastArchiveRoot?.toString(),
       slot,
       outcome,
       txsCollected: existing?.txsCollected ?? new Map(),
@@ -104,6 +120,7 @@ export class CheckpointReexecutionTracker {
       entry = {
         checkpointNumber: undefined,
         archiveRoot: undefined,
+        lastArchiveRoot: undefined,
         slot,
         outcome: undefined,
         txsCollected: new Map(),
@@ -125,6 +142,7 @@ export class CheckpointReexecutionTracker {
       this.bySlot.set(slot, {
         checkpointNumber: undefined,
         archiveRoot: undefined,
+        lastArchiveRoot: undefined,
         slot,
         outcome: undefined,
         txsCollected: new Map(),
@@ -151,6 +169,20 @@ export class CheckpointReexecutionTracker {
   /** Returns the recorded outcome for a given slot, or undefined if no proposal was evaluated. */
   public getOutcomeForSlot(slot: SlotNumber): ReexecutionOutcome | undefined {
     return this.bySlot.get(slot)?.outcome;
+  }
+
+  /** Returns the full record of the proposal evaluated for a slot, or undefined if none was evaluated. */
+  public getRecordForSlot(slot: SlotNumber): ReexecutionRecord | undefined {
+    const entry = this.bySlot.get(slot);
+    if (entry?.outcome === undefined) {
+      return undefined;
+    }
+    return {
+      outcome: entry.outcome,
+      checkpointNumber: entry.checkpointNumber,
+      archiveRoot: entry.archiveRoot,
+      lastArchiveRoot: entry.lastArchiveRoot,
+    };
   }
 
   /**
