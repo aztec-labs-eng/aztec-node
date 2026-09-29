@@ -555,7 +555,7 @@ def proxy_dashboard():
 def proxy_api(path):
     return _proxy(f'/api/{path}')
 
-# The log API ci3 publishes logs through (ci3/source_logs in aztec-packages).
+# The ci3 server API (ci3/CI3_SERVER_API.md in aztec-packages): what the ci3 scripts talk to.
 import ci3_api
 ci3_api.register(app, optional_auth, _s3, S3_LOGS_BUCKET, S3_LOGS_PREFIX, DASHBOARD_PASSWORD)
 
