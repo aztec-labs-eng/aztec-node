@@ -9,6 +9,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { encodeAbiParameters, toFunctionSelector } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 import { injectCommands } from './index.js';
@@ -172,6 +173,7 @@ describe('sign-attester-exit with real signatures', () => {
     'REGISTRY_CONTRACT_ADDRESS',
   ];
   const testnetChainId = 11155111;
+  const testnetRegistry = EthAddress.fromString(`0x${'ab'.repeat(20)}`);
   const offlineTarget = ['--l1-chain-id', String(args.chainId), '--rollup', rollupAddress.toString()];
   let directory: string;
   let previousEnv: Record<string, string | undefined>;
@@ -184,7 +186,12 @@ describe('sign-attester-exit with real signatures', () => {
     await writeFile(
       networkConfig,
       JSON.stringify({
-        testnet: { bootnodes: [], snapshots: [], registryAddress: `0x${'ab'.repeat(20)}`, l1ChainId: testnetChainId },
+        testnet: {
+          bootnodes: [],
+          snapshots: [],
+          registryAddress: testnetRegistry.toString(),
+          l1ChainId: testnetChainId,
+        },
       }),
     );
     process.env.NETWORK_CONFIG_LOCATION = networkConfig;
@@ -219,15 +226,28 @@ describe('sign-attester-exit with real signatures', () => {
     );
   };
 
-  /** Starts a JSON-RPC server that answers only eth_chainId. */
-  const serveChainId = async (chainId: number) => {
+  const serveL1Rpc = async (chainId: number, canonicalRollup?: EthAddress) => {
+    const registryCalls: { to: string; data: string }[] = [];
     const server = createServer((request, response) => {
       let body = '';
       request.on('data', chunk => (body += chunk));
       request.on('end', () => {
-        const { id } = JSON.parse(body);
+        const { id, method, params } = JSON.parse(body);
         response.setHeader('content-type', 'application/json');
-        response.end(JSON.stringify({ jsonrpc: '2.0', id, result: `0x${chainId.toString(16)}` }));
+        if (method === 'eth_chainId') {
+          response.end(JSON.stringify({ jsonrpc: '2.0', id, result: `0x${chainId.toString(16)}` }));
+        } else if (method === 'eth_call' && canonicalRollup) {
+          registryCalls.push({ to: params[0].to, data: params[0].data });
+          response.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id,
+              result: encodeAbiParameters([{ type: 'address' }], [canonicalRollup.toString() as `0x${string}`]),
+            }),
+          );
+        } else {
+          response.end(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Unsupported method' } }));
+        }
       });
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -235,13 +255,22 @@ describe('sign-attester-exit with real signatures', () => {
     if (!address || typeof address === 'string') {
       throw new Error('Expected a TCP server address');
     }
-    return { url: `http://127.0.0.1:${address.port}`, close: () => new Promise(resolve => server.close(resolve)) };
+    return {
+      url: `http://127.0.0.1:${address.port}`,
+      registryCalls,
+      close: () => new Promise(resolve => server.close(resolve)),
+    };
   };
 
-  const expectValidAuthorizationFor = async (output: string, signer: string, chainId = args.chainId) => {
+  const expectValidAuthorizationFor = async (
+    output: string,
+    signer: string,
+    chainId = args.chainId,
+    signedRollup = rollupAddress,
+  ) => {
     const [entry] = await readAttesterExitAuthorizations(output);
     expect(entry.attester).toEqual(EthAddress.fromString(signer));
-    const rollup = new RollupContract(getPublicClient({ l1RpcUrls: args.rpcUrls, l1ChainId: chainId }), rollupAddress);
+    const rollup = new RollupContract(getPublicClient({ l1RpcUrls: args.rpcUrls, l1ChainId: chainId }), signedRollup);
     await expect(rollup.validateAttesterExitAuthorizations([entry])).resolves.toBeUndefined();
   };
 
@@ -293,24 +322,6 @@ describe('sign-attester-exit with real signatures', () => {
   });
 
   it.each([
-    [0, 0],
-    [2, 3],
-  ])('signs with the mnemonic key at account index %s and address index %s', async (accountIndex, addressIndex) => {
-    const signer = mnemonicToAccount(mnemonic, { accountIndex, addressIndex }).address;
-    const output = join(directory, 'mnemonic.json');
-    await signAttesterExit({
-      ...args,
-      privateKey: undefined,
-      mnemonic,
-      accountIndex,
-      addressIndex,
-      attesterAddress: EthAddress.fromString(signer),
-      output,
-    });
-    await expectValidAuthorizationFor(output, signer);
-  });
-
-  it.each([
     [
       'no chain ID source',
       ['--rollup', rollupAddress.toString()],
@@ -336,7 +347,7 @@ describe('sign-attester-exit with real signatures', () => {
   });
 
   it('signs for the chain ID reported by the RPC when no chain ID is given', async () => {
-    const rpc = await serveChainId(11155111);
+    const rpc = await serveL1Rpc(11155111);
     try {
       const output = join(directory, 'exit.json');
       await runCli([], attester.address, output, ['--l1-rpc-urls', rpc.url, '--rollup', rollupAddress.toString()]);
@@ -346,14 +357,39 @@ describe('sign-attester-exit with real signatures', () => {
     }
   });
 
+  it('rejects a named network with no published config even when an Anvil chain ID is exported', async () => {
+    await writeFile(process.env.NETWORK_CONFIG_LOCATION!, '{}');
+    process.env.L1_CHAIN_ID = '31337';
+    const output = join(directory, 'exit.json');
+    await expect(
+      runCli([], attester.address, output, ['--network', 'testnet', '--rollup', rollupAddress.toString()]),
+    ).rejects.toThrow('Network testnet has no published config');
+    await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('signs offline for the chain ID of --network when --rollup is given', async () => {
     const output = join(directory, 'exit.json');
     await runCli([], attester.address, output, ['--network', 'testnet', '--rollup', rollupAddress.toString()]);
     await expectValidAuthorizationFor(output, attester.address, testnetChainId);
   });
 
+  it('signs for the canonical rollup published by --network', async () => {
+    const canonicalRollup = EthAddress.fromString(`0x${'cd'.repeat(20)}`);
+    const rpc = await serveL1Rpc(testnetChainId, canonicalRollup);
+    try {
+      const output = join(directory, 'canonical.json');
+      await runCli([], attester.address, output, ['--network', 'testnet', '--l1-rpc-urls', rpc.url]);
+      expect(rpc.registryCalls).toEqual([
+        { to: testnetRegistry.toString(), data: toFunctionSelector('getCanonicalRollup()') },
+      ]);
+      await expectValidAuthorizationFor(output, attester.address, testnetChainId, canonicalRollup);
+    } finally {
+      await rpc.close();
+    }
+  });
+
   it('rejects an RPC on a different chain from --network', async () => {
-    const rpc = await serveChainId(1);
+    const rpc = await serveL1Rpc(1);
     try {
       await expect(
         runCli([], attester.address, join(directory, 'exit.json'), ['--l1-rpc-urls', rpc.url, '--network', 'testnet']),

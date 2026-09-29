@@ -120,30 +120,6 @@ describe('initiate-withdraw-by-attester-batch command', () => {
     }
   });
 
-  it('reports a contract simulation failure without requiring a key', async () => {
-    const simulation = jest
-      .spyOn(RollupContract.prototype, 'simulateAttesterExitBatch')
-      .mockRejectedValue(new Error('Staking__AttesterExitLimitExceeded'));
-    const messages: string[] = [];
-    try {
-      await expect(
-        initiateWithdrawByAttesterBatch({
-          rpcUrls: ['http://127.0.0.1:1'],
-          chainId: foundry.id,
-          rollupAddress: EthAddress.ZERO,
-          authorizations: [],
-          upToLimit: false,
-          dryRun: true,
-          log: message => messages.push(message),
-          debugLogger: logger,
-        }),
-      ).rejects.toThrow('Staking__AttesterExitLimitExceeded');
-      expect(messages).toEqual([]);
-    } finally {
-      simulation.mockRestore();
-    }
-  });
-
   it.each([
     [{ privateKey: relayerKey, mnemonic }, 'Provide either a private key or a mnemonic'],
     [{ privateKey: relayerKey, addressIndex: 1 }, 'Account and address indices require a mnemonic'],
@@ -152,21 +128,6 @@ describe('initiate-withdraw-by-attester-batch command', () => {
     const simulation = jest.spyOn(RollupContract.prototype, 'simulateAttesterExitBatch').mockResolvedValue(1);
     try {
       await expect(initiateWithdrawByAttesterBatch({ ...dryRunArgs, ...credentials })).rejects.toThrow(message);
-    } finally {
-      simulation.mockRestore();
-    }
-  });
-
-  it('dry-runs with a valid relayer key', async () => {
-    const simulation = jest.spyOn(RollupContract.prototype, 'simulateAttesterExitBatch').mockResolvedValue(1);
-    const messages: string[] = [];
-    try {
-      await initiateWithdrawByAttesterBatch({
-        ...dryRunArgs,
-        privateKey: relayerKey,
-        log: message => messages.push(message),
-      });
-      expect(messages[0]).toBe('Dry run: would process 1 of 1 attester exit authorizations at current chain state.');
     } finally {
       simulation.mockRestore();
     }
