@@ -415,11 +415,13 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
     )
 
     .action(async options => {
-      const { resolveAttesterExitTarget, signAttesterExit } = await import('./update_l1_validators.js');
+      const { getAttesterExitNetwork, resolveAttesterExitTarget, signAttesterExit } = await import(
+        './update_l1_validators.js'
+      );
       const { chainId, rollupAddress } = await resolveAttesterExitTarget({
         chainId: options.l1ChainId,
         rpcUrls: options.l1RpcUrls,
-        network: options.network,
+        network: options.network ? await getAttesterExitNetwork(options.network) : undefined,
         rollupAddress: options.rollup,
         log,
       });
@@ -642,9 +644,11 @@ function addSignerOptions(command: Command, role: 'attester' | 'relayer'): Comma
         'PRIVATE_KEY',
       ),
     )
-    .option(
-      '-m, --mnemonic <string>',
-      `Mnemonic for the ${role} account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key`,
+    .addOption(
+      new Option(
+        '-m, --mnemonic <string>',
+        `Mnemonic for the ${role} account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment`,
+      ).env('MNEMONIC'),
     )
     .option(
       '--account-index <number>',
@@ -659,7 +663,14 @@ function addSignerOptions(command: Command, role: 'attester' | 'relayer'): Comma
       value => parseOptionalInteger(value, 0),
     )
     .hook('preAction', (_, actionCommand) => {
-      if (actionCommand.getOptionValueSource('privateKey') === 'env' && actionCommand.opts().mnemonic) {
+      const { privateKey, mnemonic } = actionCommand.opts();
+      if (!privateKey || !mnemonic) {
+        return;
+      }
+      // Only two credentials passed as flags are a conflict; otherwise drop the one that came from the environment.
+      if (actionCommand.getOptionValueSource('mnemonic') === 'env') {
+        actionCommand.setOptionValue('mnemonic', undefined);
+      } else if (actionCommand.getOptionValueSource('privateKey') === 'env') {
         actionCommand.setOptionValue('privateKey', undefined);
       }
     });

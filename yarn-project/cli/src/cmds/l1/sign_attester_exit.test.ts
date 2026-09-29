@@ -161,7 +161,17 @@ describe('sign-attester-exit', () => {
 
 describe('sign-attester-exit with real signatures', () => {
   const mnemonic = 'test test test test test test test test test test test junk';
-  const envVars = ['PRIVATE_KEY', 'L1_CHAIN_ID', 'ETHEREUM_HOSTS', 'NETWORK', 'REGISTRY_CONTRACT_ADDRESS'];
+  const envVars = [
+    'PRIVATE_KEY',
+    'MNEMONIC',
+    'L1_CHAIN_ID',
+    'ETHEREUM_HOSTS',
+    'NETWORK',
+    'NETWORK_CONFIG_LOCATION',
+    'DATA_DIRECTORY',
+    'REGISTRY_CONTRACT_ADDRESS',
+  ];
+  const testnetChainId = 11155111;
   const offlineTarget = ['--l1-chain-id', String(args.chainId), '--rollup', rollupAddress.toString()];
   let directory: string;
   let previousEnv: Record<string, string | undefined>;
@@ -170,6 +180,14 @@ describe('sign-attester-exit with real signatures', () => {
     previousEnv = Object.fromEntries(envVars.map(name => [name, process.env[name]]));
     envVars.forEach(name => delete process.env[name]);
     process.env.PRIVATE_KEY = privateKey;
+    const networkConfig = join(directory, 'network_config.json');
+    await writeFile(
+      networkConfig,
+      JSON.stringify({
+        testnet: { bootnodes: [], snapshots: [], registryAddress: `0x${'ab'.repeat(20)}`, l1ChainId: testnetChainId },
+      }),
+    );
+    process.env.NETWORK_CONFIG_LOCATION = networkConfig;
   });
   afterEach(async () => {
     for (const [name, value] of Object.entries(previousEnv)) {
@@ -227,19 +245,42 @@ describe('sign-attester-exit with real signatures', () => {
     await expect(rollup.validateAttesterExitAuthorizations([entry])).resolves.toBeUndefined();
   };
 
+  const onlyMnemonicExported = { PRIVATE_KEY: undefined, MNEMONIC: mnemonic };
   it.each([
     [
       'the mnemonic over the exported PRIVATE_KEY',
+      {},
       ['--mnemonic', mnemonic, '--account-index', '1', '--address-index', '2'],
       mnemonicToAccount(mnemonic, { accountIndex: 1, addressIndex: 2 }).address,
     ],
-    ['the exported PRIVATE_KEY', [], privateKeyToAccount(privateKey).address],
+    ['the exported PRIVATE_KEY', {}, [], privateKeyToAccount(privateKey).address],
     [
       'an explicit key over the exported PRIVATE_KEY',
+      {},
       ['--private-key', secondPrivateKey],
       privateKeyToAccount(secondPrivateKey).address,
     ],
-  ])('signs with %s', async (_label, credentials, signer) => {
+    ['the exported MNEMONIC', onlyMnemonicExported, [], mnemonicToAccount(mnemonic).address],
+    [
+      'the exported PRIVATE_KEY over the exported MNEMONIC',
+      { MNEMONIC: mnemonic },
+      [],
+      privateKeyToAccount(privateKey).address,
+    ],
+    [
+      'an explicit key over the exported MNEMONIC',
+      onlyMnemonicExported,
+      ['--private-key', secondPrivateKey],
+      privateKeyToAccount(secondPrivateKey).address,
+    ],
+  ])('signs with %s', async (_label, env: Record<string, string | undefined>, credentials, signer) => {
+    for (const [name, value] of Object.entries(env)) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
     const output = join(directory, 'exit.json');
     await runCli(credentials, signer, output);
     await expectValidAuthorizationFor(output, signer);
@@ -277,10 +318,16 @@ describe('sign-attester-exit with real signatures', () => {
     ],
     ['chain ID 0', ['--l1-chain-id', '0', '--rollup', rollupAddress.toString()], 'positive safe integer'],
     ['neither --rollup nor --network', ['--l1-chain-id', '1'], 'Provide --rollup, or --network'],
+    ['--network without an RPC for the registry', ['--network', 'testnet'], 'requires --l1-rpc-urls'],
     [
-      '--network without an RPC for the registry',
-      ['--l1-chain-id', '1', '--network', 'testnet'],
-      'requires --l1-rpc-urls',
+      'a chain ID that differs from --network',
+      ['--l1-chain-id', '1', '--network', 'testnet', '--rollup', rollupAddress.toString()],
+      `Chain ID 1 does not match testnet, which uses chain ID ${testnetChainId}`,
+    ],
+    [
+      '--network local without --rollup',
+      ['--l1-chain-id', '31337', '--network', 'local'],
+      'Network local publishes no registry address; provide --rollup',
     ],
   ])('rejects %s', async (_label, target, message) => {
     const output = join(directory, 'exit.json');
@@ -299,19 +346,18 @@ describe('sign-attester-exit with real signatures', () => {
     }
   });
 
-  it('rejects a chain ID that differs from the one the RPC reports', async () => {
-    const rpc = await serveChainId(11155111);
+  it('signs offline for the chain ID of --network when --rollup is given', async () => {
+    const output = join(directory, 'exit.json');
+    await runCli([], attester.address, output, ['--network', 'testnet', '--rollup', rollupAddress.toString()]);
+    await expectValidAuthorizationFor(output, attester.address, testnetChainId);
+  });
+
+  it('rejects an RPC on a different chain from --network', async () => {
+    const rpc = await serveChainId(1);
     try {
       await expect(
-        runCli([], attester.address, join(directory, 'exit.json'), [
-          '--l1-rpc-urls',
-          rpc.url,
-          '--l1-chain-id',
-          '1',
-          '--network',
-          'testnet',
-        ]),
-      ).rejects.toThrow('The L1 RPC reports chain ID 11155111, but chain ID 1 was requested');
+        runCli([], attester.address, join(directory, 'exit.json'), ['--l1-rpc-urls', rpc.url, '--network', 'testnet']),
+      ).rejects.toThrow(`The L1 RPC reports chain ID 1, but chain ID ${testnetChainId} was requested`);
     } finally {
       await rpc.close();
     }
