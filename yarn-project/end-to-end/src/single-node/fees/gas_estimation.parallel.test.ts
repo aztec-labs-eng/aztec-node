@@ -2,6 +2,7 @@ import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { type FeePaymentMethod, PublicFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
+import { FIXED_AVM_STARTUP_L2_GAS } from '@aztec-labs/constants';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
 import { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
@@ -195,7 +196,12 @@ describe('single-node/fees/gas_estimation', () => {
     const gasFeesForBlockInWhichTxWithEstimateLanded = block!.header.globalVariables.gasFees;
 
     const estimatedFee = estimatedGas.gasLimits.computeFee(gasFeesForBlockInWhichTxWithEstimateLanded).toBigInt();
-    expect(estimatedFee).toEqual(withEstimate.transactionFee!);
+    // Gas estimation always charges the teardown call's AVM startup gas, but a private kernel that does not charge it
+    // bills the tx that much less, so the estimate is either exact or over by exactly the startup gas.
+    const teardownStartupFee = new Gas(0, FIXED_AVM_STARTUP_L2_GAS)
+      .computeFee(gasFeesForBlockInWhichTxWithEstimateLanded)
+      .toBigInt();
+    expect([withEstimate.transactionFee!, withEstimate.transactionFee! + teardownStartupFee]).toContain(estimatedFee);
   });
 
   // Deploys a BananaCoin contract, simulating with includeMetadata=true and deriving zero-padded gas
