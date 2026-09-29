@@ -17,6 +17,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 
 import type { BBConfig } from '../config.js';
+import { ProofVerifierUnavailableError } from './bb_verifier.js';
 import { IVCVerifierMetrics } from './queued_chonk_verifier.js';
 
 const execFileAsync = promisify(execFile);
@@ -67,6 +68,11 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   private exitCleanup: (() => void) | null = null;
   private stopped = false;
   private fatalError: Error | undefined;
+  /** Shared by every caller that finds the verifier dead, so one death causes one rebuild. */
+  private rebuilding: Promise<void> | undefined;
+  private lastRebuildAt = 0;
+  /** Shortest gap between rebuild attempts. Overridden in tests. */
+  protected readonly rebuildIntervalMs = 1000;
   private pendingDrainedResolvers = new Set<() => void>();
 
   private constructor(
@@ -146,6 +152,52 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     this.logger.info('BatchChonkVerifier started', { fifoPath: this.fifoPath });
   }
 
+  /**
+   * Bring the verifier back after a fatal error, by replacing the bb process and starting a fresh
+   * session on it. Everything the session holds — the verification keys, the batch size, the core
+   * count — comes from configuration, so nothing is lost by rebuilding; only proofs that were in
+   * flight are, and those were rejected when the verifier failed.
+   *
+   * Rebuilds are attempted no more than once a rebuildIntervalMs, indefinitely rather than a bounded
+   * number of times, on a flat cadence rather than a backoff: the same convention the AVM simulator
+   * pool uses, so a node recovers as soon as bb is healthy again instead of staying down for a
+   * backoff it has already outlived.
+   */
+  private async ensureRunning(): Promise<void> {
+    if (!this.fatalError) {
+      return;
+    }
+    if (this.stopped) {
+      throw new Error('BatchChonkVerifier stopped');
+    }
+    if (!this.rebuilding) {
+      if (Date.now() - this.lastRebuildAt < this.rebuildIntervalMs) {
+        throw new ProofVerifierUnavailableError('BatchChonkVerifier is down', { cause: this.fatalError });
+      }
+      this.lastRebuildAt = Date.now();
+      this.rebuilding = this.rebuild().finally(() => {
+        this.rebuilding = undefined;
+      });
+    }
+    try {
+      await this.rebuilding;
+    } catch (err) {
+      throw new ProofVerifierUnavailableError('BatchChonkVerifier could not be rebuilt', { cause: err });
+    }
+  }
+
+  private async rebuild(): Promise<void> {
+    this.logger.warn('Rebuilding BatchChonkVerifier after a fatal error', { err: this.fatalError });
+    // Release what the dead session held. Its bb is gone or unusable, so this is best effort.
+    this.fifoReader.stop();
+    this.deregisterExitCleanup();
+    await this.cleanupFifo();
+    await this.bb?.destroy().catch(() => {});
+    await this.start();
+    this.fatalError = undefined;
+    this.logger.info('BatchChonkVerifier rebuilt');
+  }
+
   public verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const totalTimer = new Timer();
     return (async () => {
@@ -158,19 +210,23 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       const proofFields = proofWithPubInputs.fieldsWithPublicInputs.map(f => f.toBuffer());
       return await this.enqueueProof(vkIndex, proofFields);
     })().catch(err => {
+      // A verifier that could not check the proof has not judged it. Saying otherwise makes a dead
+      // bb look like a bad transaction, and this result feeds gossip validation, so the peer that
+      // sent a perfectly good proof is the one penalised for it.
+      if (err instanceof ProofVerifierUnavailableError) {
+        throw err;
+      }
       this.logger.warn(`Failed to verify Chonk proof for tx ${tx.getTxHash().toString()}: ${String(err)}`);
       return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
     });
   }
 
   /** Enqueue raw proof fields for verification. Used directly by tests with custom VKs. */
-  public enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
+  public async enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
     if (this.stopped) {
-      return Promise.reject(new Error('BatchChonkVerifier stopped'));
+      throw new Error('BatchChonkVerifier stopped');
     }
-    if (this.fatalError) {
-      return Promise.reject(this.fatalError);
-    }
+    await this.ensureRunning();
 
     const totalTimer = new Timer();
     const requestId = this.nextRequestId++;
