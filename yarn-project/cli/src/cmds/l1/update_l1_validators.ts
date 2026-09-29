@@ -372,27 +372,6 @@ export async function signAttesterExit({
   log(`Wrote attester exit authorization to ${output}`);
 }
 
-/** Checks batch structure, unique attesters, deadlines, and signatures without submitting a transaction. */
-export async function validateAttesterExits({
-  rpcUrls,
-  chainId,
-  rollupAddress,
-  authorizationsPath,
-  log,
-}: Pick<RollupCommandArgs, 'rpcUrls' | 'chainId' | 'rollupAddress'> & {
-  authorizationsPath: string;
-  log: LogFn;
-}) {
-  assertValidChainId(chainId);
-  const client = getPublicClient({ l1RpcUrls: rpcUrls, l1ChainId: chainId });
-  const rollup = new RollupContract(client, rollupAddress);
-  const authorizations = await readAttesterExitAuthorizations(authorizationsPath);
-  await rollup.validateAttesterExitAuthorizations(authorizations);
-  log(
-    `Validated ${authorizations.length} attester exit authorizations. On-chain eligibility and capacity were not checked.`,
-  );
-}
-
 /** Reads relayed attester exit authorizations from a JSON array. */
 export async function readAttesterExitAuthorizations(path: string): Promise<AttesterExitAuthorization[]> {
   const parsed = await readAttesterExitAuthorizationJson(path);
@@ -451,6 +430,7 @@ export async function initiateWithdrawByAttesterBatch({
   addressIndex,
   authorizations,
   upToLimit,
+  dryRun = false,
   rollupAddress,
   log,
   debugLogger,
@@ -459,10 +439,25 @@ export async function initiateWithdrawByAttesterBatch({
   LoggerArgs & {
     authorizations: AttesterExitAuthorization[];
     upToLimit: boolean;
+    dryRun?: boolean;
   }) {
+  if (dryRun) {
+    assertValidChainId(chainId);
+    // A dry run needs no key, but check any signer options given so the same command can later run without --dry-run.
+    if (privateKey || mnemonic || accountIndex !== undefined || addressIndex !== undefined) {
+      getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex });
+    }
+    const client = getPublicClient({ l1RpcUrls: rpcUrls, l1ChainId: chainId });
+    const rollup = new RollupContract(client, rollupAddress);
+    const processedCount = await rollup.simulateAttesterExitBatch(authorizations, upToLimit);
+    log(
+      `Dry run: would process ${processedCount} of ${authorizations.length} attester exit authorizations at current chain state.`,
+    );
+    logRemainingAttesterExits(log, processedCount, authorizations.length);
+    return;
+  }
   const account = getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex });
-  const chain = createEthereumChain(rpcUrls, chainId);
-  const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
+  const client = createExtendedL1Client(rpcUrls, account, createEthereumChain(rpcUrls, chainId).chainInfo);
   const rollup = new RollupContract(client, rollupAddress);
   const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
   const { receipt, processedCount, remainingCount } = await rollup.submitAttesterExitBatch(
@@ -473,11 +468,7 @@ export async function initiateWithdrawByAttesterBatch({
   log(
     `Processed ${processedCount} of ${authorizations.length} attester exit authorizations. Transaction hash: ${receipt.transactionHash}`,
   );
-  log(
-    remainingCount > 0
-      ? `Remaining authorizations: ${remainingCount}. Zero-based JSON array indices ${processedCount} through ${authorizations.length - 1} (inclusive).`
-      : 'Remaining authorizations: 0 (none).',
-  );
+  logRemainingAttesterExits(log, processedCount, authorizations.length);
   debugLogger.info('Attester exit batch processed', {
     authorizationCount: authorizations.length,
     processedCount,
@@ -614,6 +605,15 @@ export async function debugRollup({ rpcUrls, chainId, rollupAddress, log }: Roll
   const nextBlockTS = BigInt((await publicClient.getBlock()).timestamp + BigInt(config.ethereumSlotDuration));
   const proposer = await rollup.getProposerAt(nextBlockTS);
   log(`Proposer NOW: ${proposer.toString()}`);
+}
+
+function logRemainingAttesterExits(log: LogFn, processedCount: number, authorizationCount: number) {
+  const remainingCount = authorizationCount - processedCount;
+  log(
+    remainingCount > 0
+      ? `Remaining authorizations: ${remainingCount}. Zero-based JSON array indices ${processedCount} through ${authorizationCount - 1} (inclusive).`
+      : 'Remaining authorizations: 0 (none).',
+  );
 }
 
 function makeDualLog(log: LogFn, debugLogger: Logger) {

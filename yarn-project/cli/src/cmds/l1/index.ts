@@ -398,7 +398,7 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
     .requiredOption('--output <path>', 'JSON output file (must be new unless --append is used)')
     .option(
       '--append',
-      'Append or create if missing, without validating existing authorizations; run validate-attester-exits after the batch is complete',
+      'Append or create if missing, without validating existing authorizations; run initiate-withdraw-by-attester-batch --dry-run after the batch is complete',
     )
     .addHelpText(
       'after',
@@ -408,7 +408,7 @@ Examples:
   aztec sign-attester-exit --private-key "$ATTESTER_KEY_1" --attester "$ATTESTER_1" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
   aztec sign-attester-exit --mnemonic "$VALIDATOR_MNEMONIC" --account-index 0 --address-index 2 --attester "$ATTESTER_2" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
   aztec sign-attester-exit --network testnet --l1-rpc-urls "$L1_RPC_URL" --private-key "$ATTESTER_KEY_3" --attester "$ATTESTER_3" --deadline "$DEADLINE" --output exits.json --append
-  aztec validate-attester-exits --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID"
+  aztec initiate-withdraw-by-attester-batch --dry-run --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --l1-rpc-urls "$L1_RPC_URL"
   aztec initiate-withdraw-by-attester-batch --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --l1-rpc-urls "$L1_RPC_URL" --private-key "$RELAYER_PRIVATE_KEY"
 Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequentially.
 `,
@@ -439,26 +439,6 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
       });
     });
 
-  program
-    .command('validate-attester-exits')
-    .description(
-      'Checks batch format, duplicate attesters, deadlines, and signatures locally; does not check on-chain eligibility or capacity.',
-    )
-    .addOption(l1RpcUrlsOption)
-    .addOption(l1ChainIdOption)
-    .requiredOption('--authorizations <path>', 'JSON authorization array to validate')
-    .requiredOption('--rollup <address>', 'Rollup the authorizations were signed for', parseEthereumAddress)
-    .action(async options => {
-      const { validateAttesterExits } = await import('./update_l1_validators.js');
-      await validateAttesterExits({
-        rpcUrls: options.l1RpcUrls,
-        chainId: options.l1ChainId,
-        rollupAddress: options.rollup,
-        authorizationsPath: options.authorizations,
-        log,
-      });
-    });
-
   addSignerOptions(
     program
       .command('initiate-withdraw-by-attester-batch')
@@ -473,6 +453,7 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
       '--up-to-limit',
       'Process the largest permitted prefix instead of reverting when the whole batch is too large',
     )
+    .option('--dry-run', 'Simulate against current chain state without sending; no relayer key is required')
     .action(async options => {
       const { initiateWithdrawByAttesterBatch, readAttesterExitAuthorizations } = await import(
         './update_l1_validators.js'
@@ -486,6 +467,7 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
         addressIndex: options.addressIndex,
         authorizations: await readAttesterExitAuthorizations(options.authorizations),
         upToLimit: options.upToLimit,
+        dryRun: options.dryRun,
         rollupAddress: options.rollup,
         log,
         debugLogger,

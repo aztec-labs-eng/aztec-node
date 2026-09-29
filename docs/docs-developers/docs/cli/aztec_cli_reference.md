@@ -63,7 +63,6 @@ sidebar_position: 1
   - [aztec start](#aztec-start)
   - [aztec trigger-seed-snapshot](#aztec-trigger-seed-snapshot)
   - [aztec update](#aztec-update)
-  - [aztec validate-attester-exits](#aztec-validate-attester-exits)
   - [aztec validator-keys|valKeys](#aztec-validator-keys|valkeys)
   - [aztec vote-on-governance-proposal](#aztec-vote-on-governance-proposal)
 ## aztec
@@ -118,7 +117,6 @@ aztec [options] [command]
 - `start [options]` - Starts Aztec modules. Options for each module can be set as key-value pairs (e.g. "option1=value1,option2=value2") or as environment variables.
 - `trigger-seed-snapshot [options]` - Triggers a seed snapshot for the next epoch.
 - `update [options] [projectPath]` - Updates Nodejs and Noir dependencies
-- `validate-attester-exits [options]` - Checks batch format, duplicate attesters, deadlines, and signatures locally; does not check onchain eligibility or capacity.
 - `validator-keys|valKeys` - Manage validator keystores for node operators
 - `vote-on-governance-proposal [options]` - Votes on a governance proposal.
 
@@ -592,6 +590,7 @@ aztec initiate-withdraw-by-attester-batch [options]
 - `--authorizations <path>` - JSON file containing attester, decimal deadline, and signature fields
 - `--rollup <address>` - Rollup holding the positions
 - `--up-to-limit` - Process the largest permitted prefix instead of reverting when the whole batch is too large
+- `--dry-run` - Simulate against current chain state without sending; no relayer key is required
 - `-h, --help` - display help for command
 
 ### aztec migrate-ha-db
@@ -872,7 +871,7 @@ aztec sign-attester-exit [options]
 - `--rollup <address>` - Rollup holding the position; defaults to the canonical rollup of --network
 - `--deadline <timestamp>` - Authorization expiry as Unix seconds
 - `--output <path>` - JSON output file (must be new unless --append is used)
-- `--append` - Append or create if missing, without validating existing authorizations; run validate-attester-exits after the batch is complete
+- `--append` - Append or create if missing, without validating existing authorizations; run initiate-withdraw-by-attester-batch --dry-run after the batch is complete
 - `-h, --help` - display help for command
 
 ### aztec start
@@ -2318,23 +2317,6 @@ aztec update [options] [projectPath]
 
 - `--contract [paths...]` - Paths to contracts to update dependencies (default: [])
 - `--aztec-version <semver>` - The version to update Aztec packages to. Defaults to latest (default: "latest")
-- `-h, --help` - display help for command
-
-### aztec validate-attester-exits
-
-Checks batch format, duplicate attesters, deadlines, and signatures locally; does not check onchain eligibility or capacity.
-
-**Usage:**
-```bash
-aztec validate-attester-exits [options]
-```
-
-**Options:**
-
-- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
-- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
-- `--authorizations <path>` - JSON authorization array to validate
-- `--rollup <address>` - Rollup the authorizations were signed for
 - `-h, --help` - display help for command
 
 ### aztec validator-keys|valKeys
