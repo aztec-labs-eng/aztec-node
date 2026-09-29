@@ -15,6 +15,23 @@ const withdrawer = mnemonicToAccount(mnemonic, { addressIndex: 1 });
 const logger = createLogger('cli:test:attester-exit');
 
 describe('initiate-withdraw-by-attester command', () => {
+  it('rejects a mnemonic signer from the wrong validator-key index before contacting L1', async () => {
+    const selected = mnemonicToAccount(mnemonic, { accountIndex: 1, addressIndex: 2 });
+    await expect(
+      initiateWithdrawByAttester({
+        rpcUrls: ['http://127.0.0.1:1'],
+        chainId: foundry.id,
+        mnemonic,
+        accountIndex: 1,
+        addressIndex: 3,
+        attesterAddress: EthAddress.fromString(selected.address),
+        rollupAddress: EthAddress.ZERO,
+        log: () => {},
+        debugLogger: logger,
+      }),
+    ).rejects.toThrow('The transaction signer must match the attester address');
+  });
+
   it('rejects a signer that does not match the attester before contacting L1', async () => {
     await expect(
       initiateWithdrawByAttester({

@@ -16,6 +16,7 @@ import { encodeFunctionData, formatEther, getContract, isHex, maxUint256 } from 
 import { generatePrivateKey, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 import { atomicUpdateFile } from '../../utils/commands.js';
+import { deriveEthAttester } from '../validator_keys/shared.js';
 
 export interface RollupCommandArgs {
   rpcUrls: string[];
@@ -25,6 +26,14 @@ export interface RollupCommandArgs {
   rollupAddress: EthAddress;
   withdrawerAddress?: EthAddress;
 }
+
+/** Credentials and derivation indices for a local Ethereum signer. */
+export type SignerAccountArgs = {
+  privateKey?: string;
+  mnemonic?: string;
+  accountIndex?: number;
+  addressIndex?: number;
+};
 
 export interface StakingAssetHandlerCommandArgs {
   rpcUrls: string[];
@@ -263,20 +272,24 @@ export async function signAttesterExit({
   rpcUrls,
   chainId,
   privateKey,
+  mnemonic,
+  accountIndex,
+  addressIndex,
   rollupAddress,
   attesterAddress,
   deadline,
   output,
   append = false,
   log,
-}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> & { privateKey: string } & {
-  attesterAddress: EthAddress;
-  deadline: bigint;
-  output: string;
-  append?: boolean;
-  log: LogFn;
-}) {
-  const account = getAccount(privateKey, undefined);
+}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> &
+  SignerAccountArgs & {
+    attesterAddress: EthAddress;
+    deadline: bigint;
+    output: string;
+    append?: boolean;
+    log: LogFn;
+  }) {
+  const account = getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex });
   if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
     throw new Error('The signing account must match the attester address');
   }
@@ -385,16 +398,21 @@ export async function initiateWithdrawByAttesterBatch({
   rpcUrls,
   chainId,
   privateKey,
+  mnemonic,
+  accountIndex,
+  addressIndex,
   authorizations,
   upToLimit,
   rollupAddress,
   log,
   debugLogger,
-}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> & { privateKey: string } & LoggerArgs & {
+}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> &
+  SignerAccountArgs &
+  LoggerArgs & {
     authorizations: AttesterExitAuthorization[];
     upToLimit: boolean;
   }) {
-  const account = getAccount(privateKey, undefined);
+  const account = getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex });
   const chain = createEthereumChain(rpcUrls, chainId);
   const client = createExtendedL1Client(rpcUrls, account, chain.chainInfo);
   const rollup = new RollupContract(client, rollupAddress);
@@ -430,14 +448,19 @@ export async function initiateWithdrawByAttester({
   rpcUrls,
   chainId,
   privateKey,
+  mnemonic,
+  accountIndex,
+  addressIndex,
   attesterAddress,
   rollupAddress,
   log,
   debugLogger,
-}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> & { privateKey: string } & LoggerArgs & {
+}: Omit<RollupCommandArgs, 'withdrawerAddress' | 'mnemonic' | 'privateKey'> &
+  SignerAccountArgs &
+  LoggerArgs & {
     attesterAddress: EthAddress;
   }) {
-  const account = getAccount(privateKey, undefined);
+  const account = getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex });
   if (account.address.toLowerCase() !== attesterAddress.toString().toLowerCase()) {
     throw new Error('The transaction signer must match the attester address');
   }
@@ -550,6 +573,33 @@ function makeDualLog(log: LogFn, debugLogger: Logger) {
     log(msg);
     debugLogger.info(msg);
   };
+}
+
+function getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex }: SignerAccountArgs) {
+  if (Boolean(privateKey) === Boolean(mnemonic)) {
+    throw new Error('Provide either a private key or a mnemonic for the signer');
+  }
+  if (privateKey) {
+    if (accountIndex !== undefined || addressIndex !== undefined) {
+      throw new Error('Account and address indices require a mnemonic');
+    }
+    return getAccount(privateKey, undefined);
+  }
+  const selectedAccountIndex = accountIndex ?? 0;
+  const selectedAddressIndex = addressIndex ?? 0;
+  if (
+    !Number.isSafeInteger(selectedAccountIndex) ||
+    selectedAccountIndex < 0 ||
+    !Number.isSafeInteger(selectedAddressIndex) ||
+    selectedAddressIndex < 0
+  ) {
+    throw new Error('Account and address indices must be non-negative safe integers');
+  }
+  const derivedKey = deriveEthAttester(mnemonic!, selectedAccountIndex, selectedAddressIndex);
+  if (typeof derivedKey !== 'string') {
+    throw new Error('Expected a local signer private key');
+  }
+  return privateKeyToAccount(derivedKey);
 }
 
 function getAccount(privateKey: string | undefined, mnemonic: string | undefined) {

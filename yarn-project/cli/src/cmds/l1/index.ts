@@ -11,6 +11,7 @@ import {
   nodeOption,
   parseBigint,
   parseEthereumAddress,
+  parseOptionalInteger,
 } from '../../utils/commands.js';
 
 const l1RpcUrlsOption = new Option(
@@ -338,12 +339,14 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
       });
     });
 
-  program
-    .command('initiate-withdraw-by-attester')
-    .description("Initiates a withdrawal signed by the position's attester.")
+  addSignerOptions(
+    program
+      .command('initiate-withdraw-by-attester')
+      .description("Initiates a withdrawal signed by the position's attester."),
+    'attester',
+  )
     .addOption(l1RpcUrlsOption)
     .addOption(l1ChainIdOption)
-    .requiredOption('-pk, --private-key <string>', 'The attester private key', PRIVATE_KEY)
     .requiredOption('--attester <address>', 'Attester address of the position to exit', parseEthereumAddress)
     .requiredOption('--rollup <address>', 'Rollup holding the position', parseEthereumAddress)
     .action(async options => {
@@ -352,6 +355,9 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
         rpcUrls: options.l1RpcUrls,
         chainId: options.l1ChainId,
         privateKey: options.privateKey,
+        mnemonic: options.mnemonic,
+        accountIndex: options.accountIndex,
+        addressIndex: options.addressIndex,
         attesterAddress: options.attester,
         rollupAddress: options.rollup,
         log,
@@ -359,12 +365,14 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
       });
     });
 
-  program
-    .command('sign-attester-exit')
-    .description('Signs an exit authorization locally and writes a JSON array for batch submission.')
+  addSignerOptions(
+    program
+      .command('sign-attester-exit')
+      .description('Signs an exit authorization locally and writes a JSON array for batch submission.'),
+    'attester',
+  )
     .addOption(l1RpcUrlsOption)
     .addOption(l1ChainIdOption)
-    .requiredOption('-pk, --private-key <string>', 'The attester private key', PRIVATE_KEY)
     .requiredOption('--attester <address>', 'Attester address of the position to exit', parseEthereumAddress)
     .requiredOption('--rollup <address>', 'Rollup holding the position', parseEthereumAddress)
     .requiredOption('--deadline <timestamp>', 'Authorization expiry as Unix seconds', parseBigint)
@@ -379,6 +387,7 @@ export function injectCommands(program: Command, log: LogFn, debugLogger: Logger
 Examples:
   aztec sign-attester-exit --private-key "$ATTESTER_KEY_0" --attester "$ATTESTER_0" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
   aztec sign-attester-exit --private-key "$ATTESTER_KEY_1" --attester "$ATTESTER_1" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
+  aztec sign-attester-exit --mnemonic "$VALIDATOR_MNEMONIC" --account-index 0 --address-index 2 --attester "$ATTESTER_2" --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --deadline "$DEADLINE" --output exits.json --append
   aztec validate-attester-exits --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID"
   aztec initiate-withdraw-by-attester-batch --authorizations exits.json --rollup "$ROLLUP" --l1-chain-id "$CHAIN_ID" --l1-rpc-urls "$L1_RPC_URL" --private-key "$RELAYER_PRIVATE_KEY"
 Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequentially.
@@ -391,6 +400,9 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
         rpcUrls: options.l1RpcUrls,
         chainId: options.l1ChainId,
         privateKey: options.privateKey,
+        mnemonic: options.mnemonic,
+        accountIndex: options.accountIndex,
+        addressIndex: options.addressIndex,
         attesterAddress: options.attester,
         rollupAddress: options.rollup,
         deadline: options.deadline,
@@ -420,12 +432,14 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
       });
     });
 
-  program
-    .command('initiate-withdraw-by-attester-batch')
-    .description('Relays a JSON array of attester-signed withdrawal authorizations.')
+  addSignerOptions(
+    program
+      .command('initiate-withdraw-by-attester-batch')
+      .description('Relays a JSON array of attester-signed withdrawal authorizations.'),
+    'relayer',
+  )
     .addOption(l1RpcUrlsOption)
     .addOption(l1ChainIdOption)
-    .requiredOption('-pk, --private-key <string>', 'The relayer private key', PRIVATE_KEY)
     .requiredOption('--authorizations <path>', 'JSON file containing attester, decimal deadline, and signature fields')
     .requiredOption('--rollup <address>', 'Rollup holding the positions', parseEthereumAddress)
     .option(
@@ -440,6 +454,9 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
         rpcUrls: options.l1RpcUrls,
         chainId: options.l1ChainId,
         privateKey: options.privateKey,
+        mnemonic: options.mnemonic,
+        accountIndex: options.accountIndex,
+        addressIndex: options.addressIndex,
         authorizations: await readAttesterExitAuthorizations(options.authorizations),
         upToLimit: options.upToLimit,
         rollupAddress: options.rollup,
@@ -607,4 +624,34 @@ Note: DEADLINE is a future Unix timestamp in seconds. Run append commands sequen
     });
 
   return program;
+}
+
+function addSignerOptions(command: Command, role: 'attester' | 'relayer'): Command {
+  return command
+    .addOption(
+      new Option('-pk, --private-key <string>', `The ${role} private key; supply this or --mnemonic`).env(
+        'PRIVATE_KEY',
+      ),
+    )
+    .option(
+      '-m, --mnemonic <string>',
+      `Mnemonic for the ${role} account; overrides PRIVATE_KEY from the environment; cannot be combined with an explicit --private-key`,
+    )
+    .option(
+      '--account-index <number>',
+      'Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)',
+      value => parseOptionalInteger(value, 0),
+    )
+    .option(
+      '--address-index <number>',
+      role === 'attester'
+        ? 'Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)'
+        : 'Mnemonic address index for the relayer paying for the transaction; attesters sign authorizations separately (default: 0; requires --mnemonic)',
+      value => parseOptionalInteger(value, 0),
+    )
+    .hook('preAction', (_, actionCommand) => {
+      if (actionCommand.getOptionValueSource('privateKey') === 'env' && actionCommand.opts().mnemonic) {
+        actionCommand.setOptionValue('privateKey', undefined);
+      }
+    });
 }
