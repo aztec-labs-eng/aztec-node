@@ -153,6 +153,8 @@ describe('PeerManager', () => {
   });
 
   describe('peer timeout functionality', () => {
+    const discoverOnce = () => (peerManager as unknown as { discover(): Promise<void> }).discover();
+    const timedOutPeersOf = () => (peerManager as unknown as { timedOutPeers: Map<string, unknown> }).timedOutPeers;
     it('should attempt to dial a discovered peer', async () => {
       const enr = await createMockENR();
       await discoveredPeerCallback(enr);
@@ -166,7 +168,7 @@ describe('PeerManager', () => {
 
       mockLibP2PNode.getConnections.mockReturnValue([{ remotePeer: peerId }]);
 
-      await (peerManager as any).discover();
+      await discoverOnce();
 
       await retryFastUntil(() => recordPeerCountSpy.mock.calls.length > 0, 'peer count metric to be recorded');
 
@@ -185,12 +187,12 @@ describe('PeerManager', () => {
       await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 1, 'first dial to complete');
 
       // Second attempt
-      await (peerManager as any).discover();
+      await discoverOnce();
       await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 2, 'second dial to complete');
       expect(mockLibP2PNode.dial).toHaveBeenCalledTimes(2);
 
       // Third attempt
-      await (peerManager as any).discover();
+      await discoverOnce();
       await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 3, 'third dial to complete');
       expect(mockLibP2PNode.dial).toHaveBeenCalledTimes(3);
 
@@ -200,15 +202,83 @@ describe('PeerManager', () => {
       expect(mockLibP2PNode.dial).toHaveBeenCalledTimes(3);
     });
 
+    it('removes an exhausted discovered peer from the durable peer store', async () => {
+      const enr = await createMockENR();
+      const peerId = await enr.peerId();
+      mockLibP2PNode.dial.mockRejectedValue(new Error('Connection failed'));
+
+      // First attempt caches the peer for retry; the record must not be dropped yet.
+      await discoveredPeerCallback(enr);
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 1, 'first dial to complete');
+      expect(mockLibP2PNode.peerStore.delete).not.toHaveBeenCalled();
+
+      // Exhaust the remaining retries.
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 2, 'second dial to complete');
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 3, 'third dial to complete');
+
+      // Once retries are exhausted the address-book record is removed, so a stream of
+      // unreachable discovered peers cannot grow the durable peerstore without bound.
+      await retryFastUntil(
+        () => mockLibP2PNode.peerStore.delete.mock.calls.length >= 1,
+        'peer store delete to complete',
+      );
+      expect(mockLibP2PNode.peerStore.delete).toHaveBeenCalledTimes(1);
+      expect(mockLibP2PNode.peerStore.delete.mock.calls[0][0].toString()).toBe(peerId.toString());
+    });
+
+    it('keeps a preferred peer in the peer store after its dials fail', async () => {
+      const enr = await createMockENR();
+      const peerId = await enr.peerId();
+      peerManager.addPreferredPeer(peerId);
+      mockLibP2PNode.dial.mockRejectedValue(new Error('Connection failed'));
+
+      await discoveredPeerCallback(enr);
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 1, 'first dial to complete');
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 2, 'second dial to complete');
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 3, 'third dial to complete');
+      // The peer is moved to the timeout set just before the delete decision, so waiting for it makes
+      // the no-deletion assertion fire after exhaustion handling rather than before it could delete.
+      await retryFastUntil(() => timedOutPeersOf().has(peerId.toString()), 'exhaustion handling to complete');
+
+      // A configured preferred peer must survive dial failure so the operator's peer stays durable.
+      expect(mockLibP2PNode.peerStore.delete).not.toHaveBeenCalled();
+    });
+
+    it('keeps a peer it is still connected to when its dials fail', async () => {
+      const enr = await createMockENR();
+      const peerId = await enr.peerId();
+      mockLibP2PNode.dial.mockRejectedValue(new Error('Connection failed'));
+      // An inbound connect or a concurrent rediscovery can hold the peer while our dial fails.
+      // Report the connection per-peer while the global count stays empty so dialing still runs.
+      mockLibP2PNode.getConnections.mockImplementation((pid?: PeerId) =>
+        pid?.toString() === peerId.toString() ? [{ remotePeer: peerId }] : [],
+      );
+
+      await discoveredPeerCallback(enr);
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 1, 'first dial to complete');
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 2, 'second dial to complete');
+      await discoverOnce();
+      await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 3, 'third dial to complete');
+      await retryFastUntil(() => timedOutPeersOf().has(peerId.toString()), 'exhaustion handling to complete');
+
+      // We hold a live connection, so the record (identity, gossipsub tags, redial addresses) must stay.
+      expect(mockLibP2PNode.peerStore.delete).not.toHaveBeenCalled();
+    });
+
     const triggerTimeout = async (enr: ENR) => {
       // First attempt - adds it to the cache
       await discoveredPeerCallback(enr);
       await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 1, 'first dial to complete');
       // Second attempt - on heartbeat
-      await (peerManager as any).discover();
+      await discoverOnce();
       await retryFastUntil(() => mockLibP2PNode.dial.mock.calls.length >= 2, 'second dial to complete');
       // Third attempt - on heartbeat
-      await (peerManager as any).discover();
+      await discoverOnce();
     };
 
     it('should timeout a peer after max dial attempts and ignore it for the timeout period', async () => {
@@ -2327,7 +2397,7 @@ describe('PeerManager', () => {
       getPeers: jest.fn().mockReturnValue(peers),
       getDialQueue: jest.fn().mockReturnValue([]),
       getConnections: jest.fn().mockReturnValue(connections),
-      peerStore: { merge: jest.fn() },
+      peerStore: { merge: jest.fn(), delete: jest.fn() },
       dial: jest.fn().mockImplementation(() => Promise.resolve()),
       hangUp: jest.fn(),
       services: { pubsub: { direct: new Set() } },

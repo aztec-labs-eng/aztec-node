@@ -923,6 +923,20 @@ export class PeerManager implements PeerManagerInterface {
           timeoutUntilMs:
             this.dateProvider.now() + (this.config.peerFailedBanTimeMs ?? DEFAULT_FAILED_PEER_BAN_TIME_MS),
         });
+        // Drop the address-book record written before the dial. Nothing else deletes /peers/
+        // rows, so a stream of unreachable discovered peers would otherwise grow the durable
+        // peerstore without bound. Keep operator-configured peers (trusted, private, preferred),
+        // and keep any peer we currently hold a connection to: an inbound connect or a concurrent
+        // rediscovery may have refreshed the record while this dial was failing.
+        if (!this.isProtectedPeer(peer.peerId) && this.libP2PNode.getConnections(peer.peerId).length === 0) {
+          try {
+            await this.libP2PNode.peerStore.delete(peer.peerId);
+          } catch (deleteError) {
+            this.logger.trace(`Failed to remove dropped peer ${id} from the peer store`, {
+              error: inspect(deleteError),
+            });
+          }
+        }
       }
     }
   }
