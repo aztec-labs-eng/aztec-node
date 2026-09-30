@@ -194,16 +194,31 @@ function test {
 function release {
   echo_header "aztec-up release"
   local version=${REF_NAME#v}
-  # e.g. "nightly", or "latest" for bare releases
-  local dist_tag=$(dist_tag)
-  # e.g. "4" from v4.1.0-nightly.20260319
-  local major=$(semver major $REF_NAME)
 
   # Upload each file in bin/0.0.1/, replacing VERSION= lines with the release version.
   for file in bin/0.0.1/*; do
     sed "s/^VERSION=.*/VERSION=$version/" "$file" | \
       do_or_dryrun aws s3 cp - "s3://install.aztec.network/$version/$(basename $file)"
   done
+
+  # The aliases are what point users at this version, and the installer they resolve to runs
+  # `npm install @aztec-labs/aztec@$version`. When the npm packages are only packed by this build
+  # (NPM_PACK_DIR set) and published afterwards by release.yml's publish-npm job, that job moves
+  # the aliases once the packages are live; moving them here would break every install in between.
+  if [ -z "${NPM_PACK_DIR:-}" ]; then
+    release_aliases
+  fi
+}
+
+# Point the channel aliases at REF_NAME's version. Needs only the tag and AWS access, so it can run
+# from a GitHub runner as well as from the release build.
+function release_aliases {
+  echo_header "aztec-up release aliases"
+  local version=${REF_NAME#v}
+  # e.g. "nightly", or "latest" for bare releases
+  local dist_tag=$(dist_tag)
+  # e.g. "4" from v4.1.0-nightly.20260319
+  local major=$(semver major $REF_NAME)
 
   # Update versioned alias (e.g. v4-nightly, v5-latest).
   do_or_dryrun aws s3 cp - "s3://install.aztec.network/aliases/v${major}-${dist_tag}" <<< "$version"
