@@ -1,0 +1,21 @@
+{{- if .Values.node.node.oxideSidecar.enabled }}
+{{- $node := .Subcharts.node }}
+{{- include "prover.oxideSidecar.validate" $node }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "chart.fullname" $node }}-oxide-startup
+data:
+  wait.mjs: |
+    {{- $node.Files.Get "scripts/oxide-wait.mjs" | nindent 4 }}
+  derive-prover-identity.sh: |
+    {{- $node.Files.Get "scripts/derive-prover-identity.sh" | nindent 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "chart.fullname" $node }}-oxide-rpc
+type: Opaque
+data:
+  READ_L1_RPC_URL: {{ first .Values.global.l1ExecutionUrls | b64enc }}
+{{- end }}
