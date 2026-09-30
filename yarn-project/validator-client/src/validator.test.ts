@@ -498,15 +498,6 @@ describe('ValidatorClient', () => {
           Array.isArray(args) &&
           args[0]?.offenseType === OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
       );
-    const getAttestedToInvalidCheckpointProposalSlashEvents = (
-      emitSpy: jest.SpiedFunction<typeof validatorClient.emit>,
-    ) =>
-      emitSpy.mock.calls.filter(
-        ([event, args]) =>
-          event === WANT_TO_SLASH_EVENT &&
-          Array.isArray(args) &&
-          args[0]?.offenseType === OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
-      );
     // Streaming Inbox: an empty-consumption streaming setup. Proposals reference the empty message prefix and the
     // parent block's L1-to-L2 leaf count is 0, so the derived per-block bundle is empty.
     const genesisPrefixRef = InboxMessagePrefixRef.empty();
@@ -1434,40 +1425,6 @@ describe('ValidatorClient', () => {
 
       expect(isValid).toBe(false);
       expect(checkpointsBuilder.openCheckpoint).toHaveBeenCalled();
-    });
-
-    it('emits zero-amount bad attestation offenses when the bad attestation penalty is zero', async () => {
-      await validatorClient.registerHandlers();
-      const attestationCallback = p2pClient.registerCheckpointAttestationCallback.mock.calls[0][0];
-      validatorClient.updateConfig({
-        slashBroadcastedInvalidBlockPenalty: 0n,
-        slashAttestInvalidCheckpointProposalPenalty: 0n,
-      });
-      const emitSpy = jest.spyOn(validatorClient, 'emit');
-      const attesterSigner = Secp256k1Signer.random();
-      const attestation = makeCheckpointAttestation({
-        header: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
-        attesterSigner,
-      });
-      blockBuildResult.block.archive.root = Fr.random();
-
-      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
-      attestationCallback(attestation);
-
-      expect(isValid).toBe(false);
-      expect(getAttestedToInvalidCheckpointProposalSlashEvents(emitSpy)).toEqual([
-        [
-          WANT_TO_SLASH_EVENT,
-          [
-            {
-              validator: attesterSigner.address,
-              amount: 0n,
-              offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
-              epochOrSlot: BigInt(proposal.slotNumber),
-            },
-          ],
-        ],
-      ]);
     });
 
     it('emits WANT_TO_SLASH_EVENT for checkpoint_header_mismatch checkpoint proposals', async () => {

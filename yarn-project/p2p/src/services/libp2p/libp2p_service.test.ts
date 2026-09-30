@@ -1643,7 +1643,6 @@ describe('LibP2PService', () => {
     let mockEpochCache: MockProxy<EpochCacheInterface>;
     let proposerSigner: Secp256k1Signer;
     let duplicateAttestationCallback: jest.Mock;
-    let checkpointAttestationCallback: jest.Mock;
 
     const targetSlot = SlotNumber(100);
     const nextSlot = SlotNumber(101);
@@ -1673,8 +1672,6 @@ describe('LibP2PService', () => {
 
       duplicateAttestationCallback = jest.fn();
       service.registerDuplicateAttestationCallback(duplicateAttestationCallback);
-      checkpointAttestationCallback = jest.fn();
-      service.registerCheckpointAttestationCallback(checkpointAttestationCallback);
     });
 
     // Regression for A-1013: attestations sharing (slot, signer, archive) but differing on
@@ -1712,9 +1709,6 @@ describe('LibP2PService', () => {
         slot: targetSlot,
         attester: attesterSigner.address,
       });
-      expect(checkpointAttestationCallback).toHaveBeenCalledTimes(2);
-      expect(checkpointAttestationCallback).toHaveBeenNthCalledWith(1, attestation1);
-      expect(checkpointAttestationCallback).toHaveBeenNthCalledWith(2, attestation2);
     });
 
     it('different signers are not equivocations and do not trigger slash callback', async () => {
@@ -1743,10 +1737,10 @@ describe('LibP2PService', () => {
 
       // Two distinct signers are not an equivocation; the pool tracks per-(slot, signer).
       expect(duplicateAttestationCallback).not.toHaveBeenCalled();
-      expect(checkpointAttestationCallback).toHaveBeenCalledTimes(2);
+      expect((await attestationPool.getCheckpointAttestationsForSlot(targetSlot)).length).toBe(2);
     });
 
-    it('does not trigger accepted-attestation callback for exact duplicates', async () => {
+    it('stores an exact duplicate attestation only once', async () => {
       const attesterSigner = Secp256k1Signer.random();
       const attestation = makeCheckpointAttestation({
         header: makeCheckpointHeader(1, { slotNumber: targetSlot }),
@@ -1758,7 +1752,7 @@ describe('LibP2PService', () => {
       await service.validateAndStoreCheckpointAttestation(mockPeerId, attestation);
       await service.validateAndStoreCheckpointAttestation(mockPeerId, attestation);
 
-      expect(checkpointAttestationCallback).toHaveBeenCalledTimes(1);
+      expect((await attestationPool.getCheckpointAttestationsForSlot(targetSlot)).length).toBe(1);
     });
 
     it('cap exceeded: ignores without penalizing the relaying peer', async () => {
@@ -1798,7 +1792,6 @@ describe('LibP2PService', () => {
       );
       expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
       expect(duplicateAttestationCallback).toHaveBeenCalledTimes(1);
-      expect(checkpointAttestationCallback).toHaveBeenCalledTimes(MAX_ATTESTATIONS_PER_SLOT_AND_SIGNER);
     });
   });
 
