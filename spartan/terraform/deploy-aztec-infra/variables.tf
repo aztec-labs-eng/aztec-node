@@ -1219,3 +1219,32 @@ variable "WAIT_FOR_PROVER_DEPLOY" {
   type        = bool
   default     = true
 }
+
+variable "PROVER_OXIDE_SIDECAR" {
+  description = "Optional epoch-proof sidecar."
+  type = object({
+    enabled                     = optional(bool, false)
+    image                       = optional(string, "azteclabs/oxide-relayer@sha256:e3bc6eb730aad40ec0ec46c8f16c09484bbc18e79cd17a364cb83f7e6571762f")
+    manifest_url                = optional(string, "")
+    portal                      = optional(string, "")
+    proof_submission_target     = optional(string, "")
+    proving_cost_per_checkpoint = optional(string, "")
+    min_profit                  = optional(string, "")
+    min_profit_margin_bps       = optional(string, "")
+    startup_timeout_seconds     = optional(number, 1200)
+  })
+  default = {}
+
+  validation {
+    condition     = !var.PROVER_OXIDE_SIDECAR.enabled || !var.PROVER_NODE_DISABLE_PROOF_PUBLISH
+    error_message = "PROVER_OXIDE_SIDECAR cannot be enabled when PROVER_NODE_DISABLE_PROOF_PUBLISH is true."
+  }
+}
+
+
+
+variable "PROVER_ID_MNEMONIC_INDEX" {
+  description = "Mnemonic index for prover identity. Unset preserves the existing publisher-start index fallback."
+  type        = number
+  default     = null
+}

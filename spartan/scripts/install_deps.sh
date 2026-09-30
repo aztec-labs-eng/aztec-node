@@ -99,7 +99,7 @@ if ! command -v cast &> /dev/null; then
   sudo chmod +x /usr/local/bin/cast
 fi
 
-TERRAFORM_VERSION="1.7.5"
+TERRAFORM_VERSION="1.16.5"
 if ! command -v terraform &> /dev/null; then
   log "Installing terraform ${TERRAFORM_VERSION}..."
   tf_os="$(os)"

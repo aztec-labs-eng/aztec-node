@@ -150,7 +150,7 @@ RUN apt-get update && apt-get install apt-transport-https gnupg -y \
     && apt-get update && apt-get -y install google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
 
 # Install terraform.
-RUN curl -fsSL https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_$(dpkg --print-architecture).zip -o terraform.zip \
+RUN curl -fsSL https://releases.hashicorp.com/terraform/1.16.5/terraform_1.16.5_linux_$(dpkg --print-architecture).zip -o terraform.zip \
     && unzip terraform.zip -d /usr/local/bin \
     && chmod +x /usr/local/bin/terraform \
     && rm terraform.zip
