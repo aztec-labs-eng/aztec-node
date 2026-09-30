@@ -87,8 +87,6 @@ export type DuplicateAttestationInfo = {
  */
 export type P2PDuplicateAttestationCallback = (info: DuplicateAttestationInfo) => void;
 
-export type P2PCheckpointAttestationCallback = (attestation: CheckpointAttestation) => void;
-
 /**
  * The interface for a P2P service implementation.
  */
@@ -136,8 +134,6 @@ export interface P2PService {
    * The callback is triggered on the first duplicate (when count goes from 1 to 2).
    */
   registerDuplicateAttestationCallback(callback: P2PDuplicateAttestationCallback): void;
-
-  registerCheckpointAttestationCallback(callback: P2PCheckpointAttestationCallback): void;
 
   getEnr(): ENR | undefined;
 

@@ -102,6 +102,24 @@ describe('AttestedInvalidProposalWatcher', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('does not slash an attester whose signed payload differs from the recorded invalid checkpoint hash', async () => {
+    const slot = SlotNumber(10);
+    invalidProposalSlots.add(slot);
+    // A different checkpoint payload was rejected as invalid for this slot...
+    const rejected = await makeAttestation(slot);
+    invalidCheckpointHashes.set(slot, [rejected.getPayloadHash()]);
+    // ...but this attester signed a different payload in the same slot, so it must not be slashed.
+    // Guards against a regression that slashes whenever any invalid checkpoint hash is recorded.
+    const attesterSigner = Secp256k1Signer.random();
+    const honest = await makeAttestation(slot, attesterSigner);
+    expect(honest.getPayloadHash().toString()).not.toEqual(rejected.getPayloadHash().toString());
+    p2pClient.getCheckpointAttestationsForSlot.mockResolvedValue([honest]);
+
+    await watcher.scanSlot(slot);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('emits zero-amount offenses when the penalty is zero', async () => {
     const slot = SlotNumber(10);
     const attesterSigner = Secp256k1Signer.random();
