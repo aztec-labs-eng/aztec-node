@@ -46,7 +46,7 @@ provider "google" {
 
 module "web3signer" {
   # Only deploy web3signer if we have validators or provers that need to publish to L1
-  count = tonumber(var.VALIDATOR_REPLICAS) > 0 || (var.PROVER_ENABLED && !var.PROVER_NODE_DISABLE_PROOF_PUBLISH) ? 1 : 0
+  count = tonumber(var.VALIDATOR_REPLICAS) > 0 || (var.PROVER_ENABLED && (var.PROVER_OXIDE_SIDECAR.enabled || !var.PROVER_NODE_DISABLE_PROOF_PUBLISH)) ? 1 : 0
 
   source                                   = "../modules/web3signer"
   NAMESPACE                                = var.NAMESPACE
@@ -422,6 +422,17 @@ locals {
           node = {
             logLevel           = var.LOG_LEVEL
             disableAdminApiKey = true
+            oxideSidecar = {
+              enabled                  = var.PROVER_OXIDE_SIDECAR.enabled
+              image                    = var.PROVER_OXIDE_SIDECAR.image
+              manifestUrl              = var.PROVER_OXIDE_SIDECAR.manifest_url
+              portal                   = var.PROVER_OXIDE_SIDECAR.portal
+              proofSubmissionTarget    = var.PROVER_OXIDE_SIDECAR.proof_submission_target
+              provingCostPerCheckpoint = var.PROVER_OXIDE_SIDECAR.proving_cost_per_checkpoint
+              minProfit                = var.PROVER_OXIDE_SIDECAR.min_profit
+              minProfitMarginBps       = var.PROVER_OXIDE_SIDECAR.min_profit_margin_bps
+              startupTimeoutSeconds    = var.PROVER_OXIDE_SIDECAR.startup_timeout_seconds
+            }
           }
         }
         broker = {
@@ -463,10 +474,9 @@ locals {
           "node.node.env.PROVER_PROOF_STORE"                    = var.PROVER_PROOF_STORE
           "node.node.env.L1_TX_FAILED_STORE"                    = var.L1_TX_FAILED_STORE
           "node.node.env.DEBUG_FORCE_TX_PROOF_VERIFICATION"     = var.DEBUG_FORCE_TX_PROOF_VERIFICATION
-          "node.node.env.KEY_INDEX_START"                       = var.PROVER_PUBLISHER_MNEMONIC_START_INDEX
+          "node.node.env.KEY_INDEX_START"                       = coalesce(var.PROVER_ID_MNEMONIC_INDEX, tonumber(var.PROVER_PUBLISHER_MNEMONIC_START_INDEX))
           "node.node.env.PUBLISHER_KEY_INDEX_START"             = var.PROVER_PUBLISHER_MNEMONIC_START_INDEX
           "node.node.env.PUBLISHERS_PER_PROVER"                 = var.PROVER_PUBLISHERS_PER_PROVER
-          "node.node.env.PROVER_NODE_DISABLE_PROOF_PUBLISH"     = var.PROVER_NODE_DISABLE_PROOF_PUBLISH
           "node.node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG"    = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
           "node.node.env.BLOB_ALLOW_EMPTY_SOURCES"              = var.BLOB_ALLOW_EMPTY_SOURCES
           "node.node.secret.envEnabled"                         = true
@@ -506,8 +516,11 @@ locals {
           "node.service.p2p.announcePort"                       = local.p2p_port_prover
           "node.service.p2p.port"                               = local.p2p_port_prover
         },
+        var.PROVER_OXIDE_SIDECAR.enabled ? {} : {
+          "node.node.env.PROVER_NODE_DISABLE_PROOF_PUBLISH" = var.PROVER_NODE_DISABLE_PROOF_PUBLISH
+        },
         # Only set web3signerUrl if proof publishing is enabled
-        !var.PROVER_NODE_DISABLE_PROOF_PUBLISH ? {
+        (var.PROVER_OXIDE_SIDECAR.enabled || !var.PROVER_NODE_DISABLE_PROOF_PUBLISH) ? {
           "node.node.web3signerUrl" = "http://${var.RELEASE_PREFIX}-signer-web3signer.${var.NAMESPACE}.svc.cluster.local:9000/"
         } : {}
       )

@@ -23,6 +23,10 @@ node:
 
   replicaCount: 1
 
+  extraContainers: '{{ include "prover.oxideSidecar.container" . }}'
+  initContainers: '{{ include "prover.oxideSidecar.initContainer" . }}'
+  extraVolumes: '{{ include "prover.oxideSidecar.volumes" . }}'
+
   node:
     env:
       OTEL_SERVICE_NAME: "prover-node"
@@ -32,6 +36,25 @@ node:
       # Derivation for publisher addresses when using web3signer
       PUBLISHERS_PER_PROVER: "1"
       PUBLISHER_KEY_INDEX_START: "8000"
+    # -- Optional epoch-proof worker; see oxide-relayer.md for activation requirements.
+    oxideSidecar:
+      enabled: false
+      image: "azteclabs/oxide-relayer@sha256:e3bc6eb730aad40ec0ec46c8f16c09484bbc18e79cd17a364cb83f7e6571762f"
+      manifestUrl: ""
+      portal: ""
+      proofSubmissionTarget: ""
+      provingCostPerCheckpoint: ""
+      minProfit: ""
+      minProfitMarginBps: ""
+      startupTimeoutSeconds: 1200
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+
     web3signerUrl: ""
 
     preStartScript: |
