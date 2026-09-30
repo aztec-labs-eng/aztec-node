@@ -20,7 +20,14 @@ import {
   makeCheckpointProposal,
   mockTx,
 } from '@aztec-labs/stdlib/testing';
-import { TX_ERROR_INCORRECT_VK_TREE_ROOT, TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
+import {
+  TX_ERROR_INCORRECT_VK_TREE_ROOT,
+  TX_ERROR_INVALID_EXPIRATION_TIMESTAMP,
+  TX_ERROR_INVALID_PROOF,
+  TxArray,
+  TxHash,
+  TxHashArray,
+} from '@aztec-labs/stdlib/tx';
 import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { ServerWorldStateSynchronizer } from '@aztec-labs/world-state';
@@ -223,6 +230,60 @@ describe('LibP2PService', () => {
 
       expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
       expect(txPool.addPendingTxs).toHaveBeenCalled();
+    });
+
+    it('should NOT penalize the relayer (Ignore) when the pool rejects on receiver-local state drift', async () => {
+      const tx = await mockTx();
+      const txHash = tx.getTxHash();
+
+      // The tx passed the earlier checks + proof, then the fresh pool validator rejected it because
+      // the receiver's own state advanced (here: the tx expired). The relayer is not at fault.
+      txPool.addPendingTxs.mockResolvedValue({
+        accepted: [],
+        ignored: [],
+        rejected: [txHash],
+        rejectionReasons: new Map([[txHash.toString(), [TX_ERROR_INVALID_EXPIRATION_TIMESTAMP]]]),
+      });
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
+    });
+
+    it('should still Reject when a pool rejection is sender-attributable', async () => {
+      const tx = await mockTx();
+      const txHash = tx.getTxHash();
+
+      txPool.addPendingTxs.mockResolvedValue({
+        accepted: [],
+        ignored: [],
+        rejected: [txHash],
+        rejectionReasons: new Map([[txHash.toString(), [TX_ERROR_INVALID_PROOF]]]),
+      });
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+    });
+
+    it('should Reject when a pool rejection mixes state drift with a sender-attributable reason', async () => {
+      const tx = await mockTx();
+      const txHash = tx.getTxHash();
+
+      // A single blameable reason keeps the whole rejection blameable - do not let a drift reason mask it.
+      txPool.addPendingTxs.mockResolvedValue({
+        accepted: [],
+        ignored: [],
+        rejected: [txHash],
+        rejectionReasons: new Map([
+          [txHash.toString(), [TX_ERROR_INVALID_EXPIRATION_TIMESTAMP, TX_ERROR_INVALID_PROOF]],
+        ]),
+      });
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
     });
 
     it('should NOT propagate (Reject) when gossip validation fails', async () => {
