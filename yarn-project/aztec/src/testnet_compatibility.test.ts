@@ -1,13 +1,9 @@
-import type { InitialAccountData } from '@aztec-labs/accounts/testing';
 import { Fr } from '@aztec-labs/aztec.js/fields';
-import { getSponsoredFPCAddress } from '@aztec-labs/cli/cli-utils';
+import { testnetConfig } from '@aztec-labs/cli/config';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
-import { computeFeePayerBalanceLeafSlot } from '@aztec-labs/protocol-contracts/fee-juice';
-import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
-import { MerkleTreeId, PublicDataTreeLeaf } from '@aztec-labs/stdlib/trees';
-import { NativeWorldStateService } from '@aztec-labs/world-state';
-import { defaultInitialAccountFeeJuice } from '@aztec-labs/world-state/testing';
+
+import { computeExpectedGenesisRoot } from './cli/cmds/standby.js';
 
 /**
  * This test suit makes sure that the code in the monorepo is still compatible with the latest version of testnet
@@ -23,41 +19,16 @@ describe('Testnet compatibility', () => {
       Fr.fromHexString('0x0030cdae9792549b9edb5b865f4e10e91bb87565f22ab80d405213f7e991b378'),
     );
   });
-  // Testnet was initialized before the protocol contract registration nullifiers were seeded at genesis, so its root
-  // is rebuilt from an empty nullifier tree rather than from today's default genesis.
+  // A node computes this at startup from the network's genesis flags, and stays in standby until the rollup's archive
+  // root at block 0 matches it.
   it('has expected Genesis tree roots', async () => {
-    const initialAccounts: InitialAccountData[] = [];
-    const sponsoredFPCAddress = await getSponsoredFPCAddress();
-    const initialFundedAccounts = initialAccounts.map(a => a.address).concat(sponsoredFPCAddress);
-    const genesisArchiveRoot = await historicalGenesisArchiveRoot(initialFundedAccounts, defaultInitialAccountFeeJuice);
+    const { genesisArchiveRoot } = await computeExpectedGenesisRoot(
+      { testAccounts: testnetConfig.TEST_ACCOUNTS, sponsoredFPC: testnetConfig.SPONSORED_FPC, prefundAddresses: [] },
+      () => {},
+    );
 
     expect(genesisArchiveRoot).toEqual(
-      Fr.fromHexString('0x271f7321aa0cb733bdee9ddd1b0497bb1b4b97eea2182cee0f516c19005ab2bf'),
+      Fr.fromHexString('0x2ef904bbd5edc11a43cf48c4270edbf631d14aeaddafe307f8fa959e8113bfb6'),
     );
   });
 });
-
-/**
- * Rebuilds the genesis archive root of a network that was initialized before the protocol contract registration
- * nullifiers were seeded at genesis: an empty nullifier tree, only the deployment's fee-juice prefunding, timestamp 0.
- * `getGenesisValues` cannot express this any more, because it always seeds the canonical protocol baseline.
- */
-async function historicalGenesisArchiveRoot(fundedAccounts: AztecAddress[], initialAccountFeeJuice: Fr) {
-  const prefilledPublicData = await Promise.all(
-    fundedAccounts.map(
-      async address => new PublicDataTreeLeaf(await computeFeePayerBalanceLeafSlot(address), initialAccountFeeJuice),
-    ),
-  );
-  prefilledPublicData.sort((a, b) => (b.slot.lt(a.slot) ? 1 : -1));
-
-  const ws = await NativeWorldStateService.ephemeral({
-    prefilledPublicData,
-    prefilledNullifiers: [],
-    genesisTimestamp: 0n,
-  });
-  try {
-    return new Fr((await ws.getCommitted().getTreeInfo(MerkleTreeId.ARCHIVE)).root);
-  } finally {
-    await ws.close();
-  }
-}
