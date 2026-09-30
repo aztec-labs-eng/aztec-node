@@ -41,3 +41,7 @@ __pycache__
 
 # Local opt-in: install nargo from the matching official noir release instead of building from source.
 noir-from-release.flag
+
+# Packed npm tarballs a release hands to its publish job (bootstrap.sh release).
+npm-release/
+npm-release.tar.gz
