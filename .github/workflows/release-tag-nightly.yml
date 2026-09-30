@@ -20,7 +20,8 @@
 # with kind=nightly, which is gated like any other dispatch.
 #
 # To start nightlies for a new release line, add it to the matrix list below,
-# and to the `branch` options in release-tag.yml for on-demand tagging.
+# and to the `branch` options in release-tag.yml for on-demand tagging. Move
+# main's manifest to the next major first, or both legs cut the same tag.
 
 name: Nightly Release Tag
 
