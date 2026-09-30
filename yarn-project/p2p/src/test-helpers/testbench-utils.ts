@@ -1,5 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import type { CheckpointProposalHash } from '@aztec-labs/foundation/branded-types';
+import type { BlockProposalHash, CheckpointProposalHash } from '@aztec-labs/foundation/branded-types';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { L2Block, L2BlockId } from '@aztec-labs/stdlib/block';
@@ -278,6 +278,18 @@ export class InMemoryAttestationPool {
   }
 
   hasBlockProposalsForSlot(_slot: SlotNumber): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  hasBlockProposal(
+    _slot: SlotNumber,
+    _indexWithinCheckpoint: number,
+    _payloadHash: BlockProposalHash,
+  ): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  hasCheckpointProposal(_slot: SlotNumber, _payloadHash: CheckpointProposalHash): Promise<boolean> {
     return Promise.resolve(false);
   }
 

@@ -14,6 +14,15 @@ describe('p2p message', () => {
     expect(deserializedP2PMessage.payload).toEqual(txAsBuffer);
   });
 
+  it('rejects a message with trailing bytes after the payload', () => {
+    const tx = Tx.random({ randomProof: true });
+    const serialized = P2PMessage.fromGossipable(tx).toMessageData();
+    // A trailing byte leaves the same payload but a new message id, which would evade the
+    // seen-message dedup and duplicate-delivery scoring; deserialization must reject it first.
+    const padded = Buffer.concat([serialized, Buffer.from([0x00])]);
+    expect(() => P2PMessage.fromMessageData(padded)).toThrow('trailing bytes');
+  });
+
   it('serializes and deserializes with instrumentation', () => {
     const tx = Tx.random({ randomProof: true });
     const txAsBuffer = tx.toBuffer();
