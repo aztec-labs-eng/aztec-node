@@ -35,9 +35,13 @@
 # that drops the `environment:` line below mints nothing.
 #
 # To start a new release line, add it to the `branch` options below, and to the
-# matrix in release-tag-nightly.yml for nightlies.
+# matrix in release-tag-nightly.yml for nightlies. Move main's manifest to the
+# next major before tagging the new line: each line takes its version from its
+# own manifest, so while the two agree they cut the same tag names.
 
 name: Release Tag
+# The approval screen shows the run title, not the inputs.
+run-name: Release Tag (${{ inputs.kind }} on ${{ inputs.branch }})
 
 on:
   workflow_dispatch:
@@ -52,7 +56,7 @@ on:
       branch:
         description: "release line to tag (its manifest supplies the version)"
         type: choice
-        options: [main]
+        options: [main, v6]
         default: main
       # Free text, unlike the two above, because it can afford to be. `branch`
       # steers what actions/checkout puts on disk before any of this file's own
@@ -70,12 +74,12 @@ jobs:
     runs-on: ubuntu-latest
     # Shared with release-tag-nightly.yml, so a dispatched tag and a scheduled
     # nightly on the same line queue rather than race; it also keeps two rc or
-    # private dispatches from computing the same number.
+    # private dispatches on the same line from computing the same number.
     concurrency:
       group: release-tag-${{ inputs.branch }}
-    # A re-run replays the original inputs against main's current tip, so an old
-    # stable dispatch re-run after a version bump would cut a release nobody asked
-    # for. Dispatch again instead, which asks for approval afresh.
+    # A re-run replays the original inputs against the branch's current tip, so
+    # an old stable dispatch re-run after a version bump would cut a release
+    # nobody asked for. Dispatch again instead, which asks for approval afresh.
     if: github.run_attempt == 1
     # A literal, not an expression: no input or event can route this job to
     # `tagger`, whatever the kind.
@@ -93,7 +97,8 @@ jobs:
       # Do NOT bump to checkout v6 (see the pinning rationale in ci3.yml).
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          ref: ${{ inputs.branch }}
+          # Qualified, since a bare `v6` would also fetch every `v6.*` tag.
+          ref: refs/heads/${{ inputs.branch }}
           token: ${{ steps.app.outputs.token }}
 
       - name: Create and push tag
