@@ -3,6 +3,8 @@ import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-ty
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { InterruptibleSleep } from '@aztec-labs/foundation/sleep';
 import { elapsed } from '@aztec-labs/foundation/timer';
 import {
   type BlockHash,
@@ -34,6 +36,9 @@ import { WorldStateSynchronizerError } from './errors.js';
 
 export type { SnapshotDataKeys };
 
+// four checkpoint's worth of blocks
+const MAX_BLOCK_PRUNE = 40;
+
 /**
  * Synchronizes the world state with the L2 blocks from a L2BlockSource via a block stream.
  * The synchronizer will download the L2 blocks from the L2BlockSource and update the merkle trees.
@@ -55,6 +60,14 @@ export class ServerWorldStateSynchronizer
   // store the proven block number here, in the synchronizer, so that we don't end up spamming the logs with 'chain-proved' events
   private provenBlockNumber: BlockNumber | undefined;
 
+  private readonly mutationQueue = new SerialQueue();
+  private readonly pruningSleep = new InterruptibleSleep();
+  private pruningCutoff: BlockNumber | undefined;
+  private pruningPromise: Promise<void> | undefined;
+  private pruningPaused = false;
+  private stopping = false;
+  private stopPromise: Promise<void> | undefined;
+
   constructor(
     private readonly merkleTreeDb: MerkleTreeAdminDatabase,
     private readonly l2BlockSource: L2BlockSource & L1ToL2MessageSource,
@@ -63,6 +76,7 @@ export class ServerWorldStateSynchronizer
     private readonly log: Logger = createLogger('world_state'),
   ) {
     this.merkleTreeCommitted = this.merkleTreeDb.getCommitted();
+    this.mutationQueue.start();
     this.historyToKeep = config.worldStateCheckpointHistory < 1 ? undefined : config.worldStateCheckpointHistory;
     this.log.info(
       `Created world state synchroniser with block history of ${
@@ -124,11 +138,26 @@ export class ServerWorldStateSynchronizer
   }
 
   public backupTo(dstPath: string, compact?: boolean): Promise<Record<Exclude<SnapshotDataKeys, 'archiver'>, string>> {
-    return this.merkleTreeDb.backupTo(dstPath, compact);
+    return this.mutationQueue.put(() => this.merkleTreeDb.backupTo(dstPath, compact));
   }
 
-  public clear(): Promise<void> {
-    return this.merkleTreeDb.clear();
+  public async clear(): Promise<void> {
+    const wasPaused = this.pruningPaused;
+    await this.stopSync();
+    try {
+      await this.mutationQueue.put(async () => {
+        this.pruningCutoff = undefined;
+        await this.merkleTreeDb.clear();
+      });
+    } finally {
+      if (!wasPaused && !this.stopping) {
+        if (this.blockStream) {
+          this.resumeSync();
+        } else {
+          this.pruningPaused = false;
+        }
+      }
+    }
   }
 
   public async start() {
@@ -158,6 +187,9 @@ export class ServerWorldStateSynchronizer
     this.blockStream = this.createBlockStream();
     this.blockStream.start();
     this.log.info(`Started world state synchronizer from block ${blockToDownloadFrom}`);
+
+    this.startPruning();
+
     return this.syncPromise.promise;
   }
 
@@ -170,11 +202,16 @@ export class ServerWorldStateSynchronizer
     });
   }
 
-  public async stop() {
-    this.log.debug('Stopping block stream...');
-    await this.blockStream?.stop();
+  public stop(): Promise<void> {
+    return (this.stopPromise ??= this.stopInternal());
+  }
+
+  private async stopInternal() {
+    this.stopping = true;
+    await this.stopSync();
     this.log.debug('Stopping merkle trees...');
-    await this.merkleTreeDb.close();
+    await this.mutationQueue.put(() => this.merkleTreeDb.close());
+    await this.mutationQueue.end();
     this.setCurrentState(WorldStateRunningState.STOPPED);
     this.log.info(`Stopped world state synchronizer`);
   }
@@ -200,16 +237,24 @@ export class ServerWorldStateSynchronizer
 
   public async stopSync() {
     this.log.debug('Stopping sync...');
+    this.pruningPaused = true;
+    this.pruningSleep.interrupt();
     await this.blockStream?.stop();
+    await this.pruningPromise;
     this.log.info('Stopped sync');
   }
 
   public resumeSync() {
+    if (this.stopping) {
+      throw new Error('Cannot resume sync after stopping');
+    }
     if (!this.blockStream) {
       throw new Error('Cannot resume sync as block stream is not initialized');
     }
     this.log.debug('Resuming sync...');
     this.blockStream.start();
+    this.pruningPaused = false;
+    this.startPruning();
     this.log.info('Resumed sync');
   }
 
@@ -336,6 +381,10 @@ export class ServerWorldStateSynchronizer
 
   /** Handles an event emitted by the block stream. */
   public async handleBlockStreamEvent(event: L2BlockStreamEvent): Promise<void> {
+    await this.mutationQueue.put(() => this.handleBlockStreamEventInternal(event));
+  }
+
+  private async handleBlockStreamEventInternal(event: L2BlockStreamEvent): Promise<void> {
     switch (event.type) {
       case 'blocks-added':
         await this.handleL2Blocks(event.blocks);
@@ -493,8 +542,8 @@ export class ServerWorldStateSynchronizer
       return;
     }
     this.log.verbose(`Pruning historic blocks to ${newHistoricBlock.number}`);
-    const status = await this.merkleTreeDb.removeHistoricalBlocks(BlockNumber(newHistoricBlock.number));
-    this.log.debug(`World state summary `, status.summary);
+    this.pruningCutoff = BlockNumber(Math.max(this.pruningCutoff ?? 0, newHistoricBlock.number));
+    this.startPruning();
   }
 
   private handleChainProven(blockNumber: BlockNumber) {
@@ -519,5 +568,53 @@ export class ServerWorldStateSynchronizer
   private setCurrentState(newState: WorldStateRunningState) {
     this.currentState = newState;
     this.log.debug(`Moved to state ${WorldStateRunningState[this.currentState]}`);
+  }
+
+  private startPruning() {
+    // allow only one active worker
+    if (this.pruningPromise === undefined && !this.pruningPaused && !this.stopping && this.pruningCutoff) {
+      this.pruningPromise = this.pruneHistory();
+    }
+  }
+
+  private async pruneHistory() {
+    try {
+      while (!this.pruningPaused && this.pruningCutoff !== undefined) {
+        // Yield between native requests so forks and block sync can acquire canonical exclusivity.
+        await this.pruningSleep.sleep(0);
+        try {
+          await this.mutationQueue.put(async () => {
+            if (this.pruningPaused || this.pruningCutoff === undefined) {
+              return;
+            }
+            const summary = await this.merkleTreeDb.getStatusSummary();
+            const cutoff = Math.min(this.pruningCutoff, summary.finalizedBlockNumber);
+            if (cutoff <= summary.oldestHistoricalBlock) {
+              this.pruningCutoff = undefined;
+              return;
+            }
+            // Native history starts at block 1 even when the summary still reports the genesis sentinel 0.
+            const nextBlock = BlockNumber(
+              Math.min(cutoff, Math.max(1, summary.oldestHistoricalBlock) + MAX_BLOCK_PRUNE),
+            );
+            const status = await this.merkleTreeDb.removeHistoricalBlocks(nextBlock);
+            if (status.summary.oldestHistoricalBlock <= summary.oldestHistoricalBlock) {
+              throw new Error('Historical pruning did not advance the oldest block');
+            }
+            this.log.debug('Pruned world state history', {
+              blocksPruned: BlockNumber.diff(summary.oldestHistoricalBlock, status.summary.oldestHistoricalBlock),
+              ...status.summary,
+            });
+          });
+        } catch (err) {
+          this.log.error('Failed to prune historical world state', err, { cutoff: this.pruningCutoff });
+          if (!this.pruningPaused) {
+            await this.pruningSleep.sleep(Math.max(1000, this.config.worldStateBlockCheckIntervalMS));
+          }
+        }
+      }
+    } finally {
+      this.pruningPromise = undefined;
+    }
   }
 }

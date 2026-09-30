@@ -2,8 +2,10 @@ import { BlockNumber, CheckpointNumber, TreeLeafIndex } from '@aztec-labs/founda
 import { timesParallel } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { BlockHash, type EventDrivenL2BlockStream, L2Block, type L2BlockSource } from '@aztec-labs/stdlib/block';
-import type { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
+import { type Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { type MerkleTreeReadOperations, WorldStateRunningState } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
@@ -262,6 +264,250 @@ describe('ServerWorldStateSynchronizer', () => {
     void server.start();
     merkleTreeDb.handleL2BlockAndMessages.mockRejectedValue(new Error('Test error'));
     await expect(pushBlocks(1, 5)).rejects.toThrow(/Test error/i);
+  });
+
+  describe('background history pruning lifecycle', () => {
+    let summary: WorldStateStatusSummary;
+    let pruned: ReturnType<typeof promiseWithResolvers<void>>;
+
+    beforeEach(async () => {
+      summary = {
+        unfinalizedBlockNumber: BlockNumber(10),
+        finalizedBlockNumber: BlockNumber(9),
+        oldestHistoricalBlock: BlockNumber(1),
+        treesAreSynched: true,
+      };
+      pruned = promiseWithResolvers<void>();
+      merkleTreeDb.getStatusSummary.mockImplementation(() => Promise.resolve({ ...summary }));
+      merkleTreeDb.setFinalized.mockImplementation(() => Promise.resolve({ ...summary }));
+      merkleTreeDb.removeHistoricalBlocks.mockImplementation(number => {
+        summary.oldestHistoricalBlock = number;
+        pruned.resolve();
+        return Promise.resolve({ ...buildEmptyWorldStateStatusFull(), summary: { ...summary } });
+      });
+      blockAndMessagesSource.getCheckpoint.mockImplementation(query => {
+        const checkpoint = checkpoints.find(c => 'number' in query && c.checkpoint.number === query.number)?.checkpoint;
+        return Promise.resolve(
+          checkpoint &&
+            new PublishedCheckpoint(checkpoint, L1PublishedData.random(), [], {
+              signatureIndices: '0x',
+              signaturesOrAddresses: '0x',
+            }),
+        );
+      });
+      server = new TestWorldStateSynchronizer(
+        merkleTreeDb,
+        blockAndMessagesSource,
+        {
+          worldStateBlockCheckIntervalMS: 100,
+          worldStateDbMapSizeKb: 1024 * 1024,
+          worldStateCheckpointHistory: 1,
+        },
+        l2BlockStream,
+      );
+      blockAndMessagesSource.getBlockNumber.mockResolvedValue(BlockNumber.ZERO);
+      await server.start();
+    });
+
+    const finalize = (number = 9) =>
+      server.handleBlockStreamEvent({
+        type: 'chain-finalized',
+        block: { number: BlockNumber(number), hash: server.latest.hash },
+        checkpoint: { number: CheckpointNumber(number), hash: server.latest.hash },
+      });
+
+    it('coalesces pending cutoffs to the highest target', async () => {
+      summary.finalizedBlockNumber = BlockNumber.ZERO;
+      merkleTreeDb.setFinalized.mockImplementation(number => {
+        summary.finalizedBlockNumber = BlockNumber(Math.max(summary.finalizedBlockNumber, number));
+        return Promise.resolve({ ...summary });
+      });
+      const cutoffs: number[] = [];
+      merkleTreeDb.removeHistoricalBlocks.mockImplementation(number => {
+        cutoffs.push(number);
+        summary.oldestHistoricalBlock = number;
+        if (number === 9) {
+          pruned.resolve();
+        }
+        return Promise.resolve({ ...buildEmptyWorldStateStatusFull(), summary: { ...summary } });
+      });
+      await server.stopSync();
+      await finalize(3);
+      await finalize(9);
+      await finalize(5);
+      server.resumeSync();
+      await pruned.promise;
+      expect(cutoffs).toEqual([9]);
+    });
+
+    it('serializes block sync behind an in-flight prune', async () => {
+      const started = promiseWithResolvers<void>();
+      const release = promiseWithResolvers<void>();
+      const prune = merkleTreeDb.removeHistoricalBlocks.getMockImplementation()!;
+      merkleTreeDb.removeHistoricalBlocks.mockImplementationOnce(async number => {
+        started.resolve();
+        await release.promise;
+        return prune(number);
+      });
+      await finalize();
+      await started.promise;
+      const sync = pushBlocks(10, 10);
+      try {
+        await sleep(10);
+        expect(latestHandledBlockNumber).toBe(0);
+      } finally {
+        release.resolve();
+        await sync;
+      }
+      expect(latestHandledBlockNumber).toBe(10);
+    });
+
+    it('caps native batches at 40 blocks and drains the remaining history', async () => {
+      const { checkpoint } = await mockCheckpointAndMessages(CheckpointNumber(9), {
+        startBlockNumber: BlockNumber(101),
+        numBlocks: 1,
+        numL1ToL2Messages: 0,
+      });
+      const block = checkpoint.blocks[0];
+      summary.finalizedBlockNumber = BlockNumber(101);
+      summary.unfinalizedBlockNumber = BlockNumber(101);
+      blockAndMessagesSource.getBlockData.mockResolvedValue({
+        header: block.header,
+        archive: block.archive,
+        blockHash: await block.hash(),
+        checkpointNumber: block.checkpointNumber,
+        indexWithinCheckpoint: block.indexWithinCheckpoint,
+      });
+      blockAndMessagesSource.getCheckpoint.mockResolvedValue(
+        new PublishedCheckpoint(checkpoint, L1PublishedData.random(), [], {
+          signatureIndices: '0x',
+          signaturesOrAddresses: '0x',
+        }),
+      );
+      const cutoffs: number[] = [];
+      merkleTreeDb.removeHistoricalBlocks.mockImplementation(number => {
+        cutoffs.push(number);
+        summary.oldestHistoricalBlock = number;
+        if (number === 101) {
+          pruned.resolve();
+        }
+        return Promise.resolve({ ...buildEmptyWorldStateStatusFull(), summary: { ...summary } });
+      });
+      await finalize();
+      await pruned.promise;
+      expect(cutoffs).toEqual([41, 81, 101]);
+    });
+
+    it('retries a failed final batch without another finalization event', async () => {
+      merkleTreeDb.removeHistoricalBlocks.mockRejectedValueOnce(new Error('prune failed'));
+      await finalize();
+      expect(await Promise.race([pruned.promise.then(() => true), sleep(2500, false)])).toBe(true);
+      expect(summary.oldestHistoricalBlock).toBe(9);
+    });
+
+    it('waits for an active prune when pausing, including repeated pauses', async () => {
+      const started = promiseWithResolvers<void>();
+      const release = promiseWithResolvers<void>();
+      const prune = merkleTreeDb.removeHistoricalBlocks.getMockImplementation()!;
+      merkleTreeDb.removeHistoricalBlocks.mockImplementationOnce(async number => {
+        started.resolve();
+        await release.promise;
+        return prune(number);
+      });
+      await finalize();
+      await started.promise;
+      let paused = false;
+      const pause = Promise.all([server.stopSync(), server.stopSync()]).then(() => {
+        paused = true;
+      });
+      try {
+        await sleep(10);
+        expect(paused).toBe(false);
+      } finally {
+        release.resolve();
+        await pause;
+      }
+      expect(summary.oldestHistoricalBlock).toBe(9);
+    });
+
+    it('resumes a queued prune after repeated pauses', async () => {
+      await server.stopSync();
+      await finalize();
+      await sleep(0);
+      await server.stopSync();
+      server.resumeSync();
+      expect(await Promise.race([pruned.promise.then(() => true), sleep(200, false)])).toBe(true);
+    });
+
+    it('waits for the complete handler before closing the database', async () => {
+      const reading = promiseWithResolvers<void>();
+      const release = promiseWithResolvers<void>();
+      merkleTreeDb.getStatusSummary.mockResolvedValueOnce({ ...summary }).mockImplementationOnce(async () => {
+        reading.resolve();
+        await release.promise;
+        return { ...summary };
+      });
+      let closed = false;
+      merkleTreeDb.close.mockImplementation(() => {
+        closed = true;
+        return Promise.resolve();
+      });
+      await finalize();
+      await reading.promise;
+      const stop = server.stop();
+      try {
+        await sleep(10);
+        expect(closed).toBe(false);
+      } finally {
+        release.resolve();
+        await stop;
+      }
+      expect(closed).toBe(true);
+    });
+
+    it('can stop a worker waiting for resume', async () => {
+      await server.stopSync();
+      await finalize();
+      await sleep(0);
+      await server.stop();
+      expect(summary.oldestHistoricalBlock).toBe(1);
+    });
+
+    it('retries failed summary reads instead of abandoning the consumer', async () => {
+      merkleTreeDb.getStatusSummary
+        .mockResolvedValueOnce({ ...summary })
+        .mockRejectedValueOnce(new Error('read failed'));
+      await finalize();
+      expect(await Promise.race([pruned.promise.then(() => true), sleep(2500, false)])).toBe(true);
+      expect(summary.oldestHistoricalBlock).toBe(9);
+    });
+
+    it('can shut down after a failed native prune', async () => {
+      const failed = promiseWithResolvers<void>();
+      merkleTreeDb.removeHistoricalBlocks.mockImplementationOnce(() => {
+        failed.resolve();
+        return Promise.reject(new Error('prune failed'));
+      });
+      await finalize();
+      await failed.promise;
+      await sleep(0);
+      await expect(server.stop()).resolves.toBeUndefined();
+    });
+
+    it('discards queued cutoffs when clearing while paused', async () => {
+      await server.stopSync();
+      await finalize();
+      await sleep(0);
+      merkleTreeDb.clear.mockImplementation(() => {
+        summary.oldestHistoricalBlock = BlockNumber.ZERO;
+        summary.finalizedBlockNumber = BlockNumber.ZERO;
+        return Promise.resolve();
+      });
+      await server.clear();
+      server.resumeSync();
+      await sleep(20);
+      expect(summary.oldestHistoricalBlock).toBe(0);
+    });
   });
 
   describe('L1 to L2 message replay', () => {
