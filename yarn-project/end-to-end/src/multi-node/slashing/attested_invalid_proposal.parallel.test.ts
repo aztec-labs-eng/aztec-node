@@ -401,9 +401,11 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
   });
 
   // Runs createInvalidProposalSlashingScenario with broadcastEquivocatedProposals=true so the bad
-  // proposer equivocates. Asserts lazy attester is initially slashed; then broadcasts a delayed
-  // equivocated proposal and verifies the attestation offense is cleared and a DUPLICATE_PROPOSAL
-  // offense replaces it on the honest node.
+  // proposer equivocates, and broadcastInvalidCheckpointProposalOnly=true so the CHECKPOINT the lazy
+  // attester signs is itself invalid: the attester is slashed only for the payload it signed, so the
+  // invalid thing must be the checkpoint (a bad block in the slot alone does not slash the attester).
+  // Asserts the lazy attester is initially slashed; then broadcasts a delayed equivocated proposal and
+  // verifies the attestation offense is cleared and a DUPLICATE_PROPOSAL offense replaces it.
   it('slashes a lazy attester for an invalid checkpoint and clears it on delayed equivocation', async () => {
     const {
       rollup,
@@ -416,6 +418,7 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
     } = await createInvalidProposalSlashingScenario({
       badProposerConfig: {
         broadcastEquivocatedProposals: true,
+        broadcastInvalidCheckpointProposalOnly: true,
       },
     });
 
