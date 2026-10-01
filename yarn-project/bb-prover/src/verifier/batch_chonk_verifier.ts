@@ -1,10 +1,12 @@
 import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
+import { isRetryableError } from '@aztec-labs/foundation/error';
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -67,6 +69,11 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   private exitCleanup: (() => void) | null = null;
   private stopped = false;
   private fatalError: Error | undefined;
+  /** Shared by every caller that finds the verifier dead, so one death causes one rebuild. */
+  private rebuilding: Promise<void> | undefined;
+  private lastRebuildAt = 0;
+  /** Shortest gap between rebuild attempts. Overridden in tests. */
+  protected readonly rebuildIntervalMs = 1000;
   private pendingDrainedResolvers = new Set<() => void>();
 
   private constructor(
@@ -146,6 +153,52 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     this.logger.info('BatchChonkVerifier started', { fifoPath: this.fifoPath });
   }
 
+  /**
+   * Bring the verifier back after a fatal error, by replacing the bb process and starting a fresh
+   * session on it. Everything the session holds — the verification keys, the batch size, the core
+   * count — comes from configuration, so nothing is lost by rebuilding; only proofs that were in
+   * flight are, and those were rejected when the verifier failed.
+   *
+   * Rebuilds are attempted no more than once a rebuildIntervalMs, indefinitely rather than a bounded
+   * number of times, on a flat cadence rather than a backoff: the same convention the AVM simulator
+   * pool uses, so a node recovers as soon as bb is healthy again instead of staying down for a
+   * backoff it has already outlived.
+   */
+  private async ensureRunning(): Promise<void> {
+    if (!this.fatalError) {
+      return;
+    }
+    if (this.stopped) {
+      throw new Error('BatchChonkVerifier stopped');
+    }
+    if (!this.rebuilding) {
+      if (Date.now() - this.lastRebuildAt < this.rebuildIntervalMs) {
+        throw new ProofVerifierUnavailableError('BatchChonkVerifier is down', { cause: this.fatalError });
+      }
+      this.lastRebuildAt = Date.now();
+      this.rebuilding = this.rebuild().finally(() => {
+        this.rebuilding = undefined;
+      });
+    }
+    try {
+      await this.rebuilding;
+    } catch (err) {
+      throw new ProofVerifierUnavailableError('BatchChonkVerifier could not be rebuilt', { cause: err });
+    }
+  }
+
+  private async rebuild(): Promise<void> {
+    this.logger.warn('Rebuilding BatchChonkVerifier after a fatal error', { err: this.fatalError });
+    // Release what the dead session held. Its bb is gone or unusable, so this is best effort.
+    this.fifoReader.stop();
+    this.deregisterExitCleanup();
+    await this.cleanupFifo();
+    await this.bb?.destroy().catch(() => {});
+    await this.start();
+    this.fatalError = undefined;
+    this.logger.info('BatchChonkVerifier rebuilt');
+  }
+
   public verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const totalTimer = new Timer();
     return (async () => {
@@ -158,6 +211,12 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       const proofFields = proofWithPubInputs.fieldsWithPublicInputs.map(f => f.toBuffer());
       return await this.enqueueProof(vkIndex, proofFields);
     })().catch(err => {
+      // A verifier that could not check the proof has not judged it. Saying otherwise makes a dead
+      // bb look like a bad transaction, and this result feeds gossip validation, so the peer that
+      // sent a perfectly good proof is the one penalised for it.
+      if (err instanceof ProofVerifierUnavailableError) {
+        throw err;
+      }
       this.logger.warn(`Failed to verify Chonk proof for tx ${tx.getTxHash().toString()}: ${String(err)}`);
       return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
     });
@@ -168,10 +227,15 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     if (this.stopped) {
       return Promise.reject(new Error('BatchChonkVerifier stopped'));
     }
+    // Queue a proof on a live verifier synchronously, so a stop() issued after it was submitted
+    // still drains it rather than finding the queue already closed.
     if (this.fatalError) {
-      return Promise.reject(this.fatalError);
+      return this.ensureRunning().then(() => this.enqueueProof(vkIndex, proofFields));
     }
+    return this.submitProof(vkIndex, proofFields);
+  }
 
+  private submitProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
     const totalTimer = new Timer();
     const requestId = this.nextRequestId++;
 
@@ -208,7 +272,14 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
         if (pending) {
           this.pendingRequests.delete(requestId);
           clearTimeout(pending.timeout);
-          pending.reject(err instanceof Error ? err : new Error(String(err)));
+          // bb failing to take the proof is not a verdict on it.
+          pending.reject(
+            isRetryableError(err)
+              ? new ProofVerifierUnavailableError('bb failed while queueing the proof', { cause: err })
+              : err instanceof Error
+                ? err
+                : new Error(String(err)),
+          );
           this.notifyPendingDrained();
         }
       });
@@ -219,6 +290,9 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   public async stop(): Promise<void> {
     this.logger.info('Stopping BatchChonkVerifier');
     this.stopped = true;
+    // A rebuild already under way would otherwise finish after this teardown and leave its bb process, FIFO reader
+    // and exit handler running. Let it settle so the teardown below releases what it built.
+    await this.rebuilding?.catch(() => {});
 
     try {
       // Stop accepting new proofs and flush the send queue. Bound it so an unresponsive
@@ -274,8 +348,15 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
 
   private startFifoReader(): void {
     const unpackr = new Unpackr({ useRecords: false });
+    // A fresh reader per session, whose events are ignored once it is replaced: a rebuild stops the old reader, and
+    // its late 'end' must not fail the session that replaced it.
+    const reader = new FifoFrameReader();
+    this.fifoReader = reader;
 
-    this.fifoReader.on('frame', (payload: Buffer) => {
+    reader.on('frame', (payload: Buffer) => {
+      if (reader !== this.fifoReader) {
+        return;
+      }
       try {
         const result = unpackr.unpack(payload) as FifoVerifyResult;
         this.handleResult(result);
@@ -286,19 +367,25 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       }
     });
 
-    this.fifoReader.on('error', (err: Error) => {
+    reader.on('error', (err: Error) => {
+      if (reader !== this.fifoReader) {
+        return;
+      }
       this.logger.error(`FIFO reader error: ${err}`);
       this.failVerifier(err);
     });
 
-    this.fifoReader.on('end', () => {
+    reader.on('end', () => {
+      if (reader !== this.fifoReader) {
+        return;
+      }
       this.logger.debug('FIFO reader: stream ended');
       if (!this.stopped) {
         this.failVerifier(new Error('FIFO stream ended unexpectedly'));
       }
     });
 
-    this.fifoReader.start(this.fifoPath);
+    reader.start(this.fifoPath);
   }
 
   private handleResult(result: FifoVerifyResult): void {
@@ -355,10 +442,12 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   }
 
   private failVerifier(error: Error): void {
+    // Proofs in flight were never checked, so they fail as unavailable rather than as a verdict on the proof.
+    const unavailable = new ProofVerifierUnavailableError('BatchChonkVerifier failed', { cause: error });
     if (!this.fatalError) {
-      this.fatalError = error;
+      this.fatalError = unavailable;
     }
-    this.rejectPendingRequests(error);
+    this.rejectPendingRequests(unavailable);
   }
 
   private waitForPendingRequestsToDrain(timeoutMs: number): Promise<boolean> {
