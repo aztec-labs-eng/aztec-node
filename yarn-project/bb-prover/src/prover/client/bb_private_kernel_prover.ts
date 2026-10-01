@@ -503,7 +503,9 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
    */
   private accumulate<T>(fn: (bb: Barretenberg) => Promise<T>): Promise<T> {
     const run = this.accumulating.then(async () => {
-      this.chonkBb ??= await Barretenberg.new({ ...this.options, logger: this.options.logger?.verbose });
+      // Nothing tears the prover down, so like the singleton this instance must not keep the host
+      // process alive while idle; a call in flight still does.
+      this.chonkBb ??= await Barretenberg.new({ ...this.options, logger: this.options.logger?.verbose, unref: true });
       try {
         return await fn(this.chonkBb);
       } catch (err) {
