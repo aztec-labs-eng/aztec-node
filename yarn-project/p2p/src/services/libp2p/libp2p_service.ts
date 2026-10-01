@@ -9,6 +9,7 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import { type TxAdmissionMinFeesProvider, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
@@ -1193,7 +1194,21 @@ export class LibP2PService extends WithTracer implements P2PService {
 
       // Stage 2: expensive proof verification
       const secondStageValidators = this.createSecondStageMessageValidators();
-      const secondStageOutcome = await timed('proof_verify', () => this.runValidations(tx, secondStageValidators));
+      let secondStageOutcome: ValidationOutcome<PeerErrorSeverity>;
+      try {
+        secondStageOutcome = await timed('proof_verify', () => this.runValidations(tx, secondStageValidators));
+      } catch (err) {
+        // A verifier that could not check the proof has not judged it, so this must not reach peer scoring: a dead
+        // local backend would otherwise have the node penalise every peer that sends it a transaction.
+        if (err instanceof ProofVerifierUnavailableError) {
+          this.logger.warn(`Ignoring gossiped tx ${tx.getTxHash().toString()}: proof verifier unavailable`, {
+            source: source.toString(),
+            err,
+          });
+          return { result: TopicValidatorResult.Ignore, obj: tx };
+        }
+        throw err;
+      }
       if (!secondStageOutcome.allPassed) {
         const { severity, name } = secondStageOutcome.failure;
         this.logger.verbose(`Rejecting gossiped tx ${tx.getTxHash().toString()}: stage 2 validation failed`, {

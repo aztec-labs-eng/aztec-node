@@ -1,10 +1,12 @@
 import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
+import { isRetryableError } from '@aztec-labs/foundation/error';
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -17,7 +19,6 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 
 import type { BBConfig } from '../config.js';
-import { ProofVerifierUnavailableError } from './bb_verifier.js';
 import { IVCVerifierMetrics } from './queued_chonk_verifier.js';
 
 const execFileAsync = promisify(execFile);
@@ -271,7 +272,14 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
         if (pending) {
           this.pendingRequests.delete(requestId);
           clearTimeout(pending.timeout);
-          pending.reject(err instanceof Error ? err : new Error(String(err)));
+          // bb failing to take the proof is not a verdict on it.
+          pending.reject(
+            isRetryableError(err)
+              ? new ProofVerifierUnavailableError('bb failed while queueing the proof', { cause: err })
+              : err instanceof Error
+                ? err
+                : new Error(String(err)),
+          );
           this.notifyPendingDrained();
         }
       });
@@ -282,6 +290,9 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   public async stop(): Promise<void> {
     this.logger.info('Stopping BatchChonkVerifier');
     this.stopped = true;
+    // A rebuild already under way would otherwise finish after this teardown and leave its bb process, FIFO reader
+    // and exit handler running. Let it settle so the teardown below releases what it built.
+    await this.rebuilding?.catch(() => {});
 
     try {
       // Stop accepting new proofs and flush the send queue. Bound it so an unresponsive
@@ -337,8 +348,15 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
 
   private startFifoReader(): void {
     const unpackr = new Unpackr({ useRecords: false });
+    // A fresh reader per session, whose events are ignored once it is replaced: a rebuild stops the old reader, and
+    // its late 'end' must not fail the session that replaced it.
+    const reader = new FifoFrameReader();
+    this.fifoReader = reader;
 
-    this.fifoReader.on('frame', (payload: Buffer) => {
+    reader.on('frame', (payload: Buffer) => {
+      if (reader !== this.fifoReader) {
+        return;
+      }
       try {
         const result = unpackr.unpack(payload) as FifoVerifyResult;
         this.handleResult(result);
@@ -349,19 +367,25 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       }
     });
 
-    this.fifoReader.on('error', (err: Error) => {
+    reader.on('error', (err: Error) => {
+      if (reader !== this.fifoReader) {
+        return;
+      }
       this.logger.error(`FIFO reader error: ${err}`);
       this.failVerifier(err);
     });
 
-    this.fifoReader.on('end', () => {
+    reader.on('end', () => {
+      if (reader !== this.fifoReader) {
+        return;
+      }
       this.logger.debug('FIFO reader: stream ended');
       if (!this.stopped) {
         this.failVerifier(new Error('FIFO stream ended unexpectedly'));
       }
     });
 
-    this.fifoReader.start(this.fifoPath);
+    reader.start(this.fifoPath);
   }
 
   private handleResult(result: FifoVerifyResult): void {
@@ -418,10 +442,12 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   }
 
   private failVerifier(error: Error): void {
+    // Proofs in flight were never checked, so they fail as unavailable rather than as a verdict on the proof.
+    const unavailable = new ProofVerifierUnavailableError('BatchChonkVerifier failed', { cause: error });
     if (!this.fatalError) {
-      this.fatalError = error;
+      this.fatalError = unavailable;
     }
-    this.rejectPendingRequests(error);
+    this.rejectPendingRequests(unavailable);
   }
 
   private waitForPendingRequestsToDrain(timeoutMs: number): Promise<boolean> {
