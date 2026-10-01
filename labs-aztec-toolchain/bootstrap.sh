@@ -447,6 +447,10 @@ case "$cmd" in
     ;;
   "set-pins")
     set-pins "$@"
+    # set-pins rewrites this file. Bash has already parsed this case statement but reads
+    # past it from the old byte offset, so a rewrite that lengthens the file would make it
+    # run a fragment of the new content: exit from inside the parsed statement instead.
+    exit
     ;;
   "use-local")
     use-local "$@"
