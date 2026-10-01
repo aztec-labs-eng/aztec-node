@@ -8,6 +8,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import { GasFees } from '@aztec-labs/stdlib/gas';
 import type { ClientProtocolCircuitVerifier } from '@aztec-labs/stdlib/interfaces/server';
 import { BlockProposal, type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
@@ -287,6 +288,18 @@ describe('LibP2PService', () => {
       expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.LowToleranceError);
       // canAddPendingTx was called (first stage passed), but addPendingTxs was NOT (second stage failed)
       expect(txPool.canAddPendingTx).toHaveBeenCalled();
+      expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+    });
+
+    it('should Ignore without penalty when the proof verifier is unavailable', async () => {
+      const tx = await mockTx();
+
+      txService.secondStageError = new ProofVerifierUnavailableError('bb is down');
+
+      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+      expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
       expect(txPool.addPendingTxs).not.toHaveBeenCalled();
     });
 
@@ -2011,6 +2024,9 @@ class TestLibP2PService extends LibP2PService {
   /** Controls whether second-stage gossip validation passes. Set to false to simulate proof verification failure. */
   public secondStageValidationPasses = true;
 
+  /** When set, the second-stage (proof) validator throws this instead of returning a verdict. */
+  public secondStageError: Error | undefined;
+
   /** Controls the name of the failing first-stage validator (e.g., 'doubleSpendValidator' to trigger special handling). */
   public firstStageFailingValidatorName = 'failingValidator';
 
@@ -2098,6 +2114,15 @@ class TestLibP2PService extends LibP2PService {
 
   /** Override to use test flag for second-stage validators. Returns a failing validator when secondStageValidationPasses is false. */
   protected override createSecondStageMessageValidators(): Record<string, TransactionValidator> {
+    const error = this.secondStageError;
+    if (error) {
+      return {
+        proofValidator: {
+          validator: { validateTx: () => Promise.reject(error) },
+          severity: PeerErrorSeverity.LowToleranceError,
+        },
+      };
+    }
     if (this.secondStageValidationPasses) {
       return {};
     }

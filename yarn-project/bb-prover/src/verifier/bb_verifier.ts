@@ -8,6 +8,7 @@ import {
   type ServerProtocolArtifact,
   mapProtocolArtifactNameToCircuitName,
 } from '@aztec-labs/noir-protocol-circuits-types/types';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CircuitVerificationStats } from '@aztec-labs/stdlib/stats';
@@ -19,13 +20,7 @@ import { type BBJsApi, BBJsFactory } from '../bb/bb_js_backend.js';
 import type { BBConfig } from '../config.js';
 import { getUltraHonkFlavorForCircuit } from '../honk.js';
 
-/** Thrown when no live bb process could check a proof, so the proof was neither accepted nor rejected. */
-export class ProofVerifierUnavailableError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'ProofVerifierUnavailableError';
-  }
-}
+export { ProofVerifierUnavailableError };
 
 export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
   /** bb instances a Chonk verification tries, while each one's bb dies under it, before the verifier is unavailable. */
