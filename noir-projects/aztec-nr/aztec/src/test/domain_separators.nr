@@ -13,6 +13,7 @@ use crate::authwit::auth::DOM_SEP__AUTHWIT_NULLIFIER;
 use crate::keys::ecdh_shared_secret::{DOM_SEP__ECDH_FIELD_MASK, DOM_SEP__ECDH_SUBKEY};
 use crate::macros::functions::initialization_utils::DOM_SEP__INITIALIZATION_NULLIFIER;
 use crate::messages::delivery::constrained_delivery::DOM_SEP__CONSTRAINED_MSG_NULLIFIER;
+use crate::note::lifecycle::DOM_SEP__NOTE_RANDOMNESS;
 use crate::note::partial_note::{DOM_SEP__NOTE_COMPLETION_LOG_TAG, DOM_SEP__PARTIAL_NOTE_COMMITMENT};
 use crate::state_vars::single_use_claim::DOM_SEP__SINGLE_USE_CLAIM_NULLIFIER;
 
@@ -114,6 +115,7 @@ unconstrained fn domain_separators_are_valid() {
     // aztec-nr-owned separators
     all = all.push_back(derived(DOM_SEP__PARTIAL_NOTE_COMMITMENT, "partial_note_commitment"));
     all = all.push_back(derived(DOM_SEP__NOTE_COMPLETION_LOG_TAG, "note_completion_log_tag"));
+    all = all.push_back(derived(DOM_SEP__NOTE_RANDOMNESS, "note_randomness"));
     all = all
         .push_back(
             derived(
