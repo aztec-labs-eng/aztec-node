@@ -76,6 +76,8 @@ describe('BBCircuitVerifier', () => {
 
   it('reports the verifier unavailable when a per-call bb instance cannot be started', async () => {
     const perCallFactory = new FakeBBJsFactory();
+    // A failed spawn is retried, so the instance must fail to start on every attempt.
+    perCallFactory.planNextInstance(new Error('spawn failed'));
     perCallFactory.planNextInstance(new Error('spawn failed'));
     const perCallVerifier = new TestBBCircuitVerifier(perCallFactory);
     await expect(perCallVerifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
