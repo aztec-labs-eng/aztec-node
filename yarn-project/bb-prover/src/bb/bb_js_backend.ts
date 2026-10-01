@@ -71,18 +71,6 @@ export interface BBJsApi {
 }
 
 /**
- * Whether a failure was environmental, and so may be retried: the bb process died, its connection
- * broke, or it could not be started.
- *
- * The bare `retry` property is the contract, feature-detected rather than imported, so the same
- * check holds for errors from bb.js, from ipc-runtime and from ProvingError alike. An error
- * without it failed for a reason retrying cannot fix.
- */
-export function isRetryableFailure(err: unknown): boolean {
-  return err instanceof Error && (err as Error & { retry?: unknown }).retry === true;
-}
-
-/**
  * Thin wrapper around a single Barretenberg instance.
  * Each instance spawns its own bb process via the NativeUnixSocket backend.
  */
@@ -271,6 +259,12 @@ export interface BBJsFactoryOptions {
    * If omitted, every `getInstance()` call spawns a fresh bb that is destroyed on dispose.
    */
   poolSize?: number;
+  /**
+   * Let each instance replace its bb process when it dies. Only for callers whose calls stand alone:
+   * a replacement process remembers nothing, so state held across calls (a Chonk accumulation, a
+   * batch-verifier session) would be silently lost.
+   */
+  respawn?: boolean;
   logger?: Logger;
   threads?: number;
   debugDir?: string;
@@ -300,6 +294,7 @@ export class BBJsFactory {
   /** Lazily-resolved on first `getInstance()` call to prevent racing pool initialization. */
   private initPromise?: Promise<void>;
   private destroyed = false;
+  private readonly respawn: boolean;
   /** Resolved by destroy(), so a borrow waiting on a pool that never starts does not wait forever. */
   private readonly destroyedSignal = promiseWithResolvers<void>();
 
@@ -308,6 +303,7 @@ export class BBJsFactory {
     options: BBJsFactoryOptions = {},
   ) {
     this.poolSize = options.poolSize;
+    this.respawn = options.respawn ?? false;
     this.logger = options.logger;
     this.threads = options.threads;
     this.debugDir = options.debugDir;
@@ -418,11 +414,7 @@ export class BBJsFactory {
 
   protected async createInstance(): Promise<BBJsApi> {
     const logFn = this.logger ? (msg: string) => this.logger!.verbose(`bb.js - ${msg}`) : undefined;
-    // A pooled instance outlives the call that borrowed it, so it replaces a bb process that dies
-    // under it and the next borrower gets a working one. Each verification stands alone, so a
-    // replacement has nothing to carry over. A fresh-per-call instance has nothing to heal.
-    const respawn = this.poolSize !== undefined;
-    const raw = await BBJsInstance.create(this.bbPath, logFn, this.threads, respawn);
+    const raw = await BBJsInstance.create(this.bbPath, logFn, this.threads, this.respawn);
     return this.maybeWrapDebug(raw);
   }
 

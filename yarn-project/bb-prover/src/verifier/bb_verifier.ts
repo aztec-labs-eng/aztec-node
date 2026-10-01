@@ -1,3 +1,4 @@
+import { isRetryableError } from '@aztec-labs/foundation/error';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
@@ -14,7 +15,7 @@ import { Tx } from '@aztec-labs/stdlib/tx';
 import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { promises as fs } from 'fs';
 
-import { type BBJsApi, BBJsFactory, isRetryableFailure } from '../bb/bb_js_backend.js';
+import { type BBJsApi, BBJsFactory } from '../bb/bb_js_backend.js';
 import type { BBConfig } from '../config.js';
 import { getUltraHonkFlavorForCircuit } from '../honk.js';
 
@@ -39,10 +40,15 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
   ) {
     // BB_NUM_IVC_VERIFIERS bounds the number of long-lived bb processes the pool keeps alive.
     // If 0, fall back to spawning a fresh bb per verification.
+    const poolSize = config.numConcurrentIVCVerifiers > 0 ? config.numConcurrentIVCVerifiers : undefined;
     this.bbJsFactory =
       bbJsFactory ??
       new BBJsFactory(config.bbBinaryPath, {
-        poolSize: config.numConcurrentIVCVerifiers > 0 ? config.numConcurrentIVCVerifiers : undefined,
+        poolSize,
+        // A pooled instance outlives the call that borrowed it, so it replaces a bb process that dies
+        // under it and the next borrower gets a working one. Each verification stands alone, so a
+        // replacement has nothing to carry over. A fresh-per-call instance has nothing to heal.
+        respawn: poolSize !== undefined,
         logger,
         debugDir: config.bbDebugOutputDir,
       });
@@ -163,7 +169,7 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
         // A bb that could not be started is worth another go, within the same budget a death gets.
         // Anything else — the factory destroyed under us — will not improve by asking again. Either
         // way no proof was checked, so this is never the proof's fault.
-        if (isRetryableFailure(err) && attempt < BBCircuitVerifier.MAX_CHONK_VERIFY_ATTEMPTS) {
+        if (isRetryableError(err) && attempt < BBCircuitVerifier.MAX_CHONK_VERIFY_ATTEMPTS) {
           this.logger.warn('no bb instance available to verify a proof; retrying', { txHash, attempt });
           continue;
         }
@@ -176,15 +182,15 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
       } catch (err) {
         // Only an environmental failure is worth retrying; anything else is the verification's own
         // verdict and belongs to the caller.
-        if (!isRetryableFailure(err)) {
+        if (!isRetryableError(err)) {
           throw err;
         }
         if (attempt >= BBCircuitVerifier.MAX_CHONK_VERIFY_ATTEMPTS) {
-          throw new ProofVerifierUnavailableError(`bb died while verifying the proof, on ${attempt} instances`, {
+          throw new ProofVerifierUnavailableError(`bb died while verifying the proof, on ${attempt} attempts`, {
             cause: err,
           });
         }
-        this.logger.warn('bb died while verifying a proof; retrying on another instance', { txHash, attempt });
+        this.logger.warn('bb died while verifying a proof; retrying', { txHash, attempt });
       }
     }
   }
