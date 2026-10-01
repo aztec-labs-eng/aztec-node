@@ -210,7 +210,10 @@ function finalize_test {
     # If the test succeeded and we're logging passes, save the test log.
     # If the test failed, save the test log.
     if [ $code -eq 0 ]; then
-      if [ "$CI" -eq 1 ]; then
+      # A run that uploads nothing to the caches (a private release) records no passes either: the
+      # key does not encode which registry the build read its packages from, so other runs would
+      # skip tests on the strength of results against different packages.
+      if [ "$CI" -eq 1 ] && [ "${NO_CACHE_UPLOAD:-0}" -ne 1 ]; then
         redis_cli SETEX $key 604800 $log_key &>/dev/null
       fi
       if [ "$pass_log" -eq 1 ]; then
