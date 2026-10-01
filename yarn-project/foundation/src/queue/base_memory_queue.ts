@@ -92,6 +92,11 @@ export abstract class BaseMemoryQueue<T> {
     }
   }
 
+  /** Discards pending items without affecting waiting consumers, active handlers, or the queue's open/closed state. */
+  public clear(): void {
+    this.items.clear();
+  }
+
   /**
    * Once ended, no further items are added to queue. Consumers will consume remaining items within the queue.
    * The queue is not reusable after calling `end()`.

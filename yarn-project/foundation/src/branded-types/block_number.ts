@@ -105,6 +105,25 @@ BlockNumber.add = function (bn: BlockNumber, increment: number): BlockNumber {
   return BlockNumber(bn + increment);
 };
 
+/** Returnns the difference between two block numbers. */
+BlockNumber.diff = function (a: BlockNumber, b: BlockNumber): number {
+  const diff = a - b;
+  return diff < 0 ? -diff : diff;
+};
+
+/** Returns the smallest block number out of a list */
+BlockNumber.min = function (...bns: readonly BlockNumber[]): BlockNumber {
+  let min = bns[0];
+  const len = bns.length;
+  for (let i = 1; i < len; i++) {
+    if (bns[i] < min) {
+      min = bns[i];
+    }
+  }
+
+  return min ?? BlockNumber.ZERO;
+};
+
 /**
  * The zero block value (genesis block).
  */
