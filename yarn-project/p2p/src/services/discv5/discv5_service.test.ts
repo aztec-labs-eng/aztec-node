@@ -444,6 +444,51 @@ describe('Discv5Service', () => {
   });
 
   const testPackageVersion = 'test-discv5-service';
+  it('rate-limits unsolicited discovery packets per source IP while exempting expected responses', async () => {
+    // Regression guard: without rateLimiterOpts the transport limiter is undefined and every
+    // unauthenticated packet reaches decode. Assert it is wired.
+    const node = await createNode();
+    const transport = (node as any).discv5.sessionService.transport;
+    const limiter = transport.rateLimiter;
+    expect(limiter).toBeDefined();
+
+    // A single source gets a bounded burst, then is refused.
+    const attackerIp = '203.0.113.1';
+    let allowed = 0;
+    for (let i = 0; i < 5000; i++) {
+      if (limiter.allowEncodedPacket(attackerIp)) {
+        allowed++;
+      }
+    }
+    expect(allowed).toBeGreaterThan(0);
+    expect(allowed).toBeLessThan(5000);
+    expect(limiter.allowEncodedPacket(attackerIp)).toBe(false);
+
+    // Expected responses are exempt, driven through the SessionService wrapper (the layer the
+    // request flow uses) rather than the transport hook directly, so a reversed wrapper is caught.
+    const honestIp = '198.51.100.7';
+    const honestAddr = multiaddr(`/ip4/${honestIp}/udp/30303`);
+    const sessionService = (node as any).discv5.sessionService;
+    sessionService.addExpectedResponse(honestAddr);
+    let honestAllowed = 0;
+    for (let i = 0; i < 5000; i++) {
+      if (limiter.allowEncodedPacket(honestIp)) {
+        honestAllowed++;
+      }
+    }
+    expect(honestAllowed).toBe(5000);
+
+    // Once the exchange ends the exemption is cleared and the source is metered again.
+    sessionService.removeExpectedResponse(honestAddr);
+    let afterExchange = 0;
+    for (let i = 0; i < 5000; i++) {
+      if (limiter.allowEncodedPacket(honestIp)) {
+        afterExchange++;
+      }
+    }
+    expect(afterExchange).toBeLessThan(5000);
+  });
+
   const createNode = async (overrides: Partial<P2PConfig & IDiscv5CreateOptions> = {}, useBootnode = true) => {
     const port = ++basePort;
     const bootnodeAddr = bootNode.getENR().encodeTxt();

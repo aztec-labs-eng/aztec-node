@@ -1,0 +1,17 @@
+diff --git a/lib/session/service.js b/lib/session/service.js
+index d0357a007456d7639b6d479a770384a890dcbe6c..22577a170dfe58cdecce0094918d66e42fc2c7b0 100644
+--- a/lib/session/service.js
++++ b/lib/session/service.js
+@@ -599,10 +599,10 @@ export class SessionService extends EventEmitter {
+         }
+     }
+     removeExpectedResponse(socketAddr) {
+-        this.transport.addExpectedResponse?.(socketAddr.toOptions().host);
++        this.transport.removeExpectedResponse?.(socketAddr.toOptions().host);
+     }
+     addExpectedResponse(socketAddr) {
+-        this.transport.removeExpectedResponse?.(socketAddr.toOptions().host);
++        this.transport.addExpectedResponse?.(socketAddr.toOptions().host);
+     }
+     handleRequestTimeout(nodeAddr, requestCall) {
+         if (requestCall.retries >= this.config.requestRetries) {
