@@ -23,6 +23,11 @@ describe('AdmissionMinFeesProvider', () => {
     await expect(provider.getAdmissionMinFees()).resolves.toEqual(L1_FORWARD_FEES);
   });
 
+  it('reports the L1-forward fee whether or not the next block can be priced', async () => {
+    await expect(makeProvider(new GasFees(7, 70)).getL1ForwardMinFees()).resolves.toEqual(L1_FORWARD_FEES);
+    await expect(makeProvider(undefined).getL1ForwardMinFees()).resolves.toEqual(L1_FORWARD_FEES);
+  });
+
   it('reports the next-block fee unchanged, unavailability included', async () => {
     await expect(makeProvider(new GasFees(7, 70)).getNextBlockMinFees()).resolves.toEqual(new GasFees(7, 70));
     await expect(makeProvider(undefined).getNextBlockMinFees()).resolves.toBeUndefined();

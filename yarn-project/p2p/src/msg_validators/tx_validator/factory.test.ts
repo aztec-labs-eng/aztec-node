@@ -26,6 +26,7 @@ import { ContractInstanceTxValidator } from './contract_instance_validator.js';
 import { DataTxValidator } from './data_validator.js';
 import { DoubleSpendTxValidator } from './double_spend_validator.js';
 import {
+  IgnoreWithoutPenalty,
   createFirstStageTxValidationsForGossipedTransactions,
   createSecondStageTxValidationsForGossipedTransactions,
   createTxValidatorForAcceptingTxsOverRPC,
@@ -94,7 +95,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -112,7 +113,9 @@ describe('Validator factory functions', () => {
         'doubleSpendValidator',
         'minGasLimitsValidator',
         'maxGasLimitsValidator',
-        'gasValidator',
+        'maxFeePerGasValidator',
+        'maxFeePerGasFloorValidator',
+        'feePayerBalanceValidator',
         'dataValidator',
         'contractInstanceValidator',
       ]);
@@ -124,7 +127,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -150,7 +153,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -178,7 +181,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -194,7 +197,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
@@ -213,7 +216,12 @@ describe('Validator factory functions', () => {
       expect(validators.doubleSpendValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.minGasLimitsValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.maxGasLimitsValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
-      expect(validators.gasValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
+      expect(validators.feePayerBalanceValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
+
+      // A tx below our admission fee may be valid for a peer ahead of us, so the sender is not penalized unless
+      // the tx is below the penalty floor as well.
+      expect(validators.maxFeePerGasValidator.severity).toBe(IgnoreWithoutPenalty);
+      expect(validators.maxFeePerGasFloorValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
       expect(validators.phasesValidator.severity).toBe(PeerErrorSeverity.MidToleranceError);
     });
 
@@ -222,7 +230,7 @@ describe('Validator factory functions', () => {
         0n,
         BlockNumber(2),
         synchronizer,
-        new GasFees(1, 1),
+        { admission: new GasFees(1, 1), penaltyFloor: new GasFees(1, 1) },
         1,
         2,
         Fr.ZERO,
