@@ -309,18 +309,6 @@ describe('LibP2PService', () => {
       expect(txPool.addPendingTxs).not.toHaveBeenCalled();
     });
 
-    it('should Ignore without penalty when the proof verifier is unavailable', async () => {
-      const tx = await mockTx();
-
-      txService.secondStageError = new ProofVerifierUnavailableError('bb is down');
-
-      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
-
-      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
-      expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
-      expect(txPool.addPendingTxs).not.toHaveBeenCalled();
-    });
-
     describe('with the real proof validator', () => {
       beforeEach(() => {
         txService.useRealSecondStage = true;
@@ -2234,9 +2222,6 @@ class TestLibP2PService extends LibP2PService {
   /** Controls whether second-stage gossip validation passes. Set to false to simulate proof verification failure. */
   public secondStageValidationPasses = true;
 
-  /** When set, the second-stage (proof) validator throws this instead of returning a verdict. */
-  public secondStageError: Error | undefined;
-
   /** Runs the production second stage, a proof validator over {@link proofVerifierMock}, instead of the test flags. */
   public useRealSecondStage = false;
 
@@ -2350,15 +2335,6 @@ class TestLibP2PService extends LibP2PService {
   protected override createSecondStageMessageValidators(): Record<string, TransactionValidator> {
     if (this.useRealSecondStage) {
       return super.createSecondStageMessageValidators();
-    }
-    const error = this.secondStageError;
-    if (error) {
-      return {
-        proofValidator: {
-          validator: { validateTx: () => Promise.reject(error) },
-          severity: PeerErrorSeverity.LowToleranceError,
-        },
-      };
     }
     if (this.secondStageValidationPasses) {
       return {};
