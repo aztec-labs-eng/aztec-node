@@ -166,4 +166,33 @@ describe('NextBlockPredictor', () => {
       await expect(predictor.quoteMinFees()).resolves.toBeUndefined();
     });
   });
+
+  describe('getNextBlockMinFees', () => {
+    it('reports the fee the in-progress checkpoint froze', async () => {
+      setMidCheckpointFrontier();
+
+      await expect(predictor.getNextBlockMinFees()).resolves.toEqual(new GasFees(0, 777));
+    });
+
+    it('reports the boundary fee without waiting on a refresh', async () => {
+      setBoundaryFrontier();
+
+      await expect(predictor.getNextBlockMinFees()).resolves.toEqual(BOUNDARY_FEES);
+      const [, , opts] = feeCache.getBoundaryGlobals.mock.calls[0];
+      expect(opts).toEqual({ maxWaitMs: 0 });
+    });
+
+    it('reports nothing when the cache has nothing usable', async () => {
+      setBoundaryFrontier();
+      feeCache.getBoundaryGlobals.mockResolvedValue(undefined);
+
+      await expect(predictor.getNextBlockMinFees()).resolves.toBeUndefined();
+    });
+
+    it('reports nothing rather than throwing when the snapshot cannot be read', async () => {
+      blockSource.getL2Frontier.mockRejectedValue(new Error('archiver is down'));
+
+      await expect(predictor.getNextBlockMinFees()).resolves.toBeUndefined();
+    });
+  });
 });

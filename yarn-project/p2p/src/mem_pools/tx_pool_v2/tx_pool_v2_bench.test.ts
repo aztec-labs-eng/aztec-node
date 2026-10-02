@@ -151,7 +151,7 @@ describe('TxPoolV2: benchmarks', () => {
       worldStateSynchronizer: mockWorldState,
       createTxValidator: () => Promise.resolve(alwaysValidValidator),
       checkAllowedSetupCalls: () => Promise.resolve(true),
-      blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
     });
     await pool.start();
     const cleanup = async () => {
@@ -503,7 +503,7 @@ describe('TxPoolV2: benchmarks', () => {
           worldStateSynchronizer: mockWorldState,
           createTxValidator: () => Promise.resolve(alwaysValidValidator),
           checkAllowedSetupCalls: () => Promise.resolve(true),
-          blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+          nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
         });
         await pool1.start();
 
@@ -522,7 +522,7 @@ describe('TxPoolV2: benchmarks', () => {
             worldStateSynchronizer: mockWorldState,
             createTxValidator: () => Promise.resolve(alwaysValidValidator),
             checkAllowedSetupCalls: () => Promise.resolve(true),
-            blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+            nextBlockMinFeesProvider: { getNextBlockMinFees: () => Promise.resolve(GasFees.empty()) },
           });
 
           const startTime = performance.now();

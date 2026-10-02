@@ -133,7 +133,10 @@ class TestLibP2PService extends LibP2PService {
       epochCache,
       proofVerifier,
       worldStateSynchronizer,
-      { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      {
+        getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+        getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+      },
       telemetry,
       logger,
     );
@@ -425,7 +428,10 @@ process.on('message', async msg => {
         proofVerifier as ClientProtocolCircuitVerifier,
         worldState,
         epochCache,
-        { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+        {
+          getNextBlockMinFees: () => Promise.resolve(GasFees.empty()),
+          getAdmissionMinFees: () => Promise.resolve(GasFees.empty()),
+        },
         'test-p2p-bench-worker',
         undefined,
         telemetry as TelemetryClient,

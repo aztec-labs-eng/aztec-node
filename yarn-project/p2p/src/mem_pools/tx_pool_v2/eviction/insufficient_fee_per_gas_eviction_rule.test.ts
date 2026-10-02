@@ -29,7 +29,7 @@ describe('InsufficientFeePerGasEvictionRule', () => {
 
   beforeEach(() => {
     pool = createPoolOps([]);
-    rule = new InsufficientFeePerGasEvictionRule({ getCurrentMinFees: () => Promise.resolve(blockGasFees) });
+    rule = new InsufficientFeePerGasEvictionRule({ getNextBlockMinFees: () => Promise.resolve(blockGasFees) });
   });
 
   describe('non-BLOCK_MINED events', () => {
@@ -155,10 +155,9 @@ describe('InsufficientFeePerGasEvictionRule', () => {
       expect(deleteTxsMock).not.toHaveBeenCalled();
     });
 
-    it('uses blockMinFeesProvider to determine eviction threshold', async () => {
-      // blockMinFeesProvider returns lower projected fees (5, 10) than block header (10, 20)
-      const getCurrentMinFees = jest.fn(() => Promise.resolve(new GasFees(5, 10)));
-      rule = new InsufficientFeePerGasEvictionRule({ getCurrentMinFees });
+    it('uses the next-block min fee to determine the eviction threshold', async () => {
+      // The next-block fee (5, 10) is lower than the block header's (10, 20).
+      rule = new InsufficientFeePerGasEvictionRule({ getNextBlockMinFees: () => Promise.resolve(new GasFees(5, 10)) });
 
       const tx1 = stubTxMetaData('0x1111', { maxFeesPerGas: new GasFees(5, 10) }); // Sufficient for projected fees
       const tx2 = stubTxMetaData('0x2222', { maxFeesPerGas: new GasFees(4, 10) }); // DA too low for projected fees
@@ -174,11 +173,30 @@ describe('InsufficientFeePerGasEvictionRule', () => {
 
       const result = await rule.evict(context, pool);
 
-      expect(getCurrentMinFees).toHaveBeenCalled();
       expect(result.success).toBe(true);
       // Only tx2 is evicted (DA fee 4 < projected 5), tx1 is kept despite block header fees being higher
       expect(result.txsEvicted).toEqual([tx2.txHash]);
       expect(deleteTxsMock).toHaveBeenCalledWith([tx2.txHash], 'InsufficientFeePerGas');
+    });
+
+    it('skips the sweep when the next-block min fee is unavailable', async () => {
+      rule = new InsufficientFeePerGasEvictionRule({ getNextBlockMinFees: () => Promise.resolve(undefined) });
+
+      // Priced below every plausible fee, so only unavailability can save it.
+      const tx = stubTxMetaData('0x1111', { maxFeesPerGas: new GasFees(0, 0) });
+      pool = createPoolOps([tx]);
+
+      const context: EvictionContext = {
+        event: EvictionEvent.BLOCK_MINED,
+        block: blockHeader,
+        newNullifiers: [],
+        feePayers: [],
+      };
+
+      const result = await rule.evict(context, pool);
+
+      expect(result).toEqual({ reason: 'insufficient_fee_per_gas', success: true, txsEvicted: [] });
+      expect(deleteTxsMock).not.toHaveBeenCalled();
     });
   });
 });
