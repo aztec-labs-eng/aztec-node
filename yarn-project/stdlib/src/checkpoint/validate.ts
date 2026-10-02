@@ -56,6 +56,7 @@ export function validateCheckpoint(
  * - Archive root chaining between consecutive blocks
  * - Consistent slot number across all blocks
  * - Global variables (slot, timestamp, coinbase, feeRecipient, gasFees) match checkpoint header for each block
+ * - No tx hash appears more than once across all blocks of the checkpoint
  */
 export function validateCheckpointStructure(
   checkpoint: Checkpoint,
@@ -77,6 +78,7 @@ export function validateCheckpointStructure(
   }
 
   const firstBlock = blocks[0];
+  const seenTxHashes = new Set<string>();
 
   if (!checkpoint.header.lastArchiveRoot.equals(firstBlock.header.lastArchive.root)) {
     throw new CheckpointValidationError(
@@ -130,6 +132,18 @@ export function validateCheckpointStructure(
           slot,
         );
       }
+    }
+
+    for (const txEffect of block.body.txEffects) {
+      const txHash = txEffect.txHash.toString();
+      if (seenTxHashes.has(txHash)) {
+        throw new CheckpointValidationError(
+          `Tx ${txHash} in block ${block.number} appears more than once in the checkpoint`,
+          number,
+          slot,
+        );
+      }
+      seenTxHashes.add(txHash);
     }
   }
 }
