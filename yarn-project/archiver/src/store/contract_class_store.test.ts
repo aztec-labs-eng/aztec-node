@@ -68,6 +68,16 @@ describe('ContractClassStore', () => {
     it('returns undefined if contract class is not found', async () => {
       await expect(contractClassStore.getContractClass(Fr.random())).resolves.toBeUndefined();
     });
+
+    it('reports success for batch adds and deletes', async () => {
+      const other = await makeContractClassPublic();
+      await expect(
+        contractClassStore.addContractClasses([await withCommitment(other)], BlockNumber(blockNum)),
+      ).resolves.toBe(true);
+      await expect(
+        contractClassStore.deleteContractClasses([contractClass, other], BlockNumber(blockNum)),
+      ).resolves.toBe(true);
+    });
   });
 
   describe('protocol contract classes (A-1257)', () => {
