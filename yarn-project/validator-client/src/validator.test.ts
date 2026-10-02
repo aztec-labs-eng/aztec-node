@@ -421,12 +421,16 @@ describe('ValidatorClient', () => {
           txHashes: proposal.txHashes,
         },
       });
-    const makeCheckpointProposalWithHeaderMismatch = async () => {
-      const proposalHeader = makeCheckpointHeader(0, { slotNumber: proposal.slotNumber });
+    const makeCheckpointProposalWithHeaderMismatch = async (
+      proposalHeaderOverrides: Parameters<typeof makeCheckpointHeader>[1] = {},
+    ) => {
+      const proposalHeader = makeCheckpointHeader(0, { slotNumber: proposal.slotNumber, ...proposalHeaderOverrides });
       const computedHeader = makeCheckpointHeader(0, {
         slotNumber: proposal.slotNumber,
         totalManaUsed: new Fr(999),
       });
+      // The archive the local chain's checkpoint builds on, which an honest proposal header repeats.
+      const chainLastArchiveRoot = computedHeader.lastArchiveRoot;
       const checkpointProposal = await makeCheckpointProposal({
         archiveRoot: proposal.archive,
         checkpointHeader: proposalHeader,
@@ -439,7 +443,11 @@ describe('ValidatorClient', () => {
       const checkpointBlock = {
         ...blockBuildResult.block,
         number: blockNumber,
-        header: makeBlockHeader(1, { blockNumber, slotNumber: proposal.slotNumber }),
+        header: makeBlockHeader(1, {
+          blockNumber,
+          slotNumber: proposal.slotNumber,
+          lastArchive: new AppendOnlyTreeSnapshot(chainLastArchiveRoot, TreeLeafIndex(blockNumber - 1)),
+        }),
         archive: new AppendOnlyTreeSnapshot(proposal.archive, TreeLeafIndex(blockNumber)),
         checkpointNumber: CheckpointNumber(1),
       } as unknown as L2Block;
@@ -459,9 +467,9 @@ describe('ValidatorClient', () => {
       });
       checkpointsBuilder.getFork.mockResolvedValue({
         [Symbol.asyncDispose]: disposeFork,
-        // Match the proposal's expected starting archive so the fork archive check passes and validation
-        // reaches the header-mismatch offense under test.
-        getTreeInfo: () => Promise.resolve({ root: proposalHeader.lastArchiveRoot.toBuffer() }),
+        // Match the first block's starting archive so the fork archive check passes and validation reaches the
+        // header-mismatch offense under test.
+        getTreeInfo: () => Promise.resolve({ root: chainLastArchiveRoot.toBuffer() }),
       } as any);
       mockCheckpointBuilder.completeCheckpoint.mockResolvedValue({
         header: computedHeader,
@@ -1085,15 +1093,24 @@ describe('ValidatorClient', () => {
       const didValidate = await validatorClient.validateBlockProposal(proposal, sender);
       expect(didValidate).toBe(true);
 
-      // Create 3 blocks for the slot, each with a distinct archive root
+      // Create 3 blocks of one checkpoint for the slot, each with a distinct archive root and chaining onto the last
       const block1Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(1));
       const block2Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(2));
       const block3Archive = new AppendOnlyTreeSnapshot(Fr.random(), TreeLeafIndex(3));
-      const blocks = [
-        { archive: block1Archive, number: 1 },
-        { archive: block2Archive, number: 2 },
-        { archive: block3Archive, number: 3 },
-      ] as unknown as L2Block[];
+      const blocks = [block1Archive, block2Archive, block3Archive].map(
+        (archive, i, archives) =>
+          ({
+            archive,
+            number: i + 1,
+            checkpointNumber: CheckpointNumber(1),
+            indexWithinCheckpoint: IndexWithinCheckpoint(i),
+            header: makeBlockHeader(1, {
+              blockNumber: BlockNumber(i + 1),
+              slotNumber: proposal.slotNumber,
+              ...(i > 0 ? { lastArchive: archives[i - 1] } : {}),
+            }),
+          }) as unknown as L2Block,
+      );
 
       // Proposal references the middle block's archive (block 2), not the last (block 3)
       const checkpointProposal = await makeCheckpointProposal({
@@ -1110,6 +1127,8 @@ describe('ValidatorClient', () => {
       blockSource.getBlockData.mockResolvedValue({ header: makeBlockHeader() } as any);
       blockSource.getBlocksForSlot.mockResolvedValue(blocks);
 
+      const validateCheckpointSpy = jest.spyOn(validatorClient.getProposalHandler(), 'validateCheckpointProposal');
+
       // Checkpoint validation should fail: proposal points to block 2 but last block in slot is block 3
       const attestations = await validatorClient.attestToCheckpointProposal(
         ValidatedCheckpointProposalCore(checkpointProposal),
@@ -1117,6 +1136,11 @@ describe('ValidatorClient', () => {
       );
       expect(attestations).toBeUndefined();
       expect(addCheckpointAttestationsSpy).not.toHaveBeenCalled();
+      await expect(validateCheckpointSpy.mock.results[0].value).resolves.toEqual({
+        isValid: false,
+        reason: 'last_block_archive_mismatch',
+        checkpointNumber: CheckpointNumber(1),
+      });
     });
 
     it('should wait for previous block to sync', async () => {
@@ -1490,6 +1514,31 @@ describe('ValidatorClient', () => {
       ]);
     });
 
+    it('emits WANT_TO_SLASH_EVENT for a checkpoint proposal claiming the wrong last archive root', async () => {
+      const checkpointHandler = registerAllNodesCheckpointHandler();
+      const { checkpointProposal, disposeFork } = await makeCheckpointProposalWithHeaderMismatch({
+        lastArchiveRoot: Fr.random(),
+      });
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+
+      await checkpointHandler(checkpointProposal, sender);
+
+      const proposer = checkpointProposal.getSender();
+      expect(proposer).toBeDefined();
+      // Rejected from the header and the local blocks alone, without forking world state for a rebuild.
+      expect(checkpointsBuilder.getFork).not.toHaveBeenCalled();
+      expect(disposeFork).not.toHaveBeenCalled();
+      expect(emitSpy).toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, [
+        {
+          validator: proposer!,
+          amount: config.slashBroadcastedInvalidCheckpointProposalPenalty,
+          offenseType: OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+          epochOrSlot: BigInt(checkpointProposal.slotNumber),
+        },
+      ]);
+      expect(validatorClient.hasInvalidProposals(checkpointProposal.slotNumber)).toBe(true);
+    });
+
     it('emits WANT_TO_SLASH_EVENT for invalid fee asset price modifiers', async () => {
       const checkpointHandler = registerAllNodesCheckpointHandler();
       const checkpointProposal = await makeCheckpointProposal({
@@ -1522,6 +1571,7 @@ describe('ValidatorClient', () => {
       'archive_mismatch',
       'out_hash_mismatch',
       'last_block_archive_mismatch',
+      'last_archive_root_mismatch',
       'checkpoint_validation_failed',
     ])('emits checkpoint proposal slash event for %s', async reason => {
       const checkpointHandler = registerAllNodesCheckpointHandler();

@@ -136,6 +136,8 @@ export type CheckpointProposalValidationFailureReason =
   | 'last_block_archive_mismatch'
   | 'too_many_blocks_in_checkpoint'
   | 'initial_archive_mismatch'
+  // The header's lastArchiveRoot is not the archive the checkpoint's first block builds on.
+  | 'last_archive_root_mismatch'
   | 'checkpoint_header_mismatch'
   | 'archive_mismatch'
   | 'out_hash_mismatch'
@@ -208,6 +210,7 @@ const CHECKPOINT_VALIDATION_REASON_TO_OUTCOME: Record<
   block_fetch_error: 'unvalidated',
   world_state_not_synced: 'unvalidated',
   initial_archive_mismatch: 'unvalidated',
+  last_archive_root_mismatch: 'invalid',
   last_block_archive_mismatch: 'invalid',
   too_many_blocks_in_checkpoint: 'invalid',
   checkpoint_header_mismatch: 'invalid',
@@ -393,6 +396,8 @@ export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   // enabled
   ['invalid_fee_asset_price_modifier']: true,
   ['checkpoint_header_mismatch']: true,
+  // An unprovable header: the checkpoint circuit derives lastArchiveRoot from the first block's lastArchive.
+  ['last_archive_root_mismatch']: true,
   // These late mismatches should normally be caught by earlier checks, but if reached after validating the local
   // checkpoint inputs, the proposer-signed payload disagrees with deterministic recomputation.
   ['archive_mismatch']: true,
@@ -418,7 +423,8 @@ export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   ['last_block_pruned_during_validation']: false,
   ['block_fetch_error']: false,
   ['world_state_not_synced']: false,
-  // A reorg / divergent local chain, not a proposer offense (mirrors the block path's initial_state_mismatch).
+  // World state forked off the chain of the local archiver blocks being rebuilt (e.g. a reorg racing the fork), not
+  // a proposer offense (mirrors the block path's initial_state_mismatch).
   ['initial_archive_mismatch']: false,
   ['checkpoint_already_published']: false,
 };
@@ -1651,8 +1657,11 @@ export class ProposalHandler {
 
   /**
    * Reads the blocks of a slot as one snapshot for checkpoint validation, locating the checkpoint's last block by the
-   * signed archive. Undefined when the archive is not among the slot's blocks or the blocks do not chain onto each
-   * other, both of which are the archiver replacing or pruning blocks while they were read.
+   * signed archive. Undefined when the archive is not among the slot's blocks, the blocks do not chain onto each
+   * other, or they are not one checkpoint's blocks from its first one on. All of these are local state in motion:
+   * the archiver replacing or pruning blocks while they were read, or skipping a block whose body it cannot load.
+   * Checkpoint validation relies on `blocks[0]` being the checkpoint's first block to attribute a wrong
+   * lastArchiveRoot to the proposer.
    */
   private async readCheckpointBlocksSnapshot(
     slot: SlotNumber,
@@ -1665,8 +1674,11 @@ export class ProposalHandler {
     }
     const contiguous = blocks.every(
       (block, i) =>
-        i === 0 ||
-        (block.number === blocks[i - 1].number + 1 && block.header.lastArchive.root.equals(blocks[i - 1].archive.root)),
+        block.checkpointNumber === blocks[0].checkpointNumber &&
+        block.indexWithinCheckpoint === i &&
+        (i === 0 ||
+          (block.number === blocks[i - 1].number + 1 &&
+            block.header.lastArchive.root.equals(blocks[i - 1].archive.root))),
     );
     return contiguous ? { blocks, lastBlockIndex } : undefined;
   }
@@ -2112,9 +2124,10 @@ export class ProposalHandler {
     // runs on: the block carrying the signed archive is the checkpoint's last block, and the slot's blocks before it
     // are the checkpoint's. Reading the last block by archive and the slot's blocks separately would let a local prune
     // between the two reads look like a proposer offense; a slot read without the signed archive, or one that is not
-    // a contiguous chain, is local state in motion and is retried. The deadline is passed to retryUntil as an
-    // absolute date so the remaining budget is derived from the date provider; a deadline already in the past times
-    // out after a single attempt instead of looping (the immediate-timeout semantics of the deadline overload).
+    // a contiguous chain of one checkpoint's blocks starting at its first, is local state in motion and is retried.
+    // The deadline is passed to retryUntil as an absolute date so the remaining budget is derived from the date
+    // provider; a deadline already in the past times out after a single attempt instead of looping (the
+    // immediate-timeout semantics of the deadline overload).
     let snapshot: CheckpointBlocksSnapshot | undefined;
     try {
       snapshot = await retryUntil(
@@ -2202,6 +2215,18 @@ export class ProposalHandler {
     const constants = this.extractCheckpointConstants(firstBlock);
     const checkpointNumber = firstBlock.checkpointNumber;
 
+    // The rebuild derives the header's lastArchiveRoot from the first block's lastArchive (as does the checkpoint
+    // circuit), so any other claimed value is an unprovable header; reject it before paying for the rebuild.
+    const expectedLastArchiveRoot = firstBlock.header.lastArchive.root;
+    if (!proposal.checkpointHeader.lastArchiveRoot.equals(expectedLastArchiveRoot)) {
+      this.log.warn(`Checkpoint proposal's last archive root does not match its first block`, {
+        ...proposalInfo,
+        expectedLastArchiveRoot: expectedLastArchiveRoot.toString(),
+        proposalLastArchiveRoot: proposal.checkpointHeader.lastArchiveRoot.toString(),
+      });
+      return { isValid: false, reason: 'last_archive_root_mismatch', checkpointNumber };
+    }
+
     // The checkpoint's Inbox consumption starts at the leaf count of the block before its first block. Without that
     // block the consumed bundle cannot be derived; an empty bundle would make a valid proposal fail its rolling-hash
     // recomputation and be classified as a proposer offense, so a missing parent is a local fetch failure instead.
@@ -2275,17 +2300,15 @@ export class ProposalHandler {
     }
     await using fork = forkResult;
 
-    // Verify the fork's archive root matches the checkpoint's expected starting archive (the archive after
-    // the parent block). A mismatch means world state forked from a different chain than the proposal was
-    // built on (e.g. a reorg), so recomputing the checkpoint against it would be meaningless. This mirrors
-    // the block-proposal re-execution check and fails fast with a clean, non-slashable result instead of a
-    // confusing downstream mismatch.
+    // World state must be on the same chain as the archiver blocks being rebuilt; otherwise the rebuild would disagree
+    // with an honest proposal. This is a local race (e.g. a reorg between the hash-pinned sync and the fork), never a
+    // proposer offense. It mirrors the block-proposal re-execution check.
     const forkArchiveRoot = new Fr((await fork.getTreeInfo(MerkleTreeId.ARCHIVE)).root);
-    if (!forkArchiveRoot.equals(proposal.checkpointHeader.lastArchiveRoot)) {
-      this.log.warn(`Fork archive root does not match checkpoint proposal's last archive`, {
+    if (!forkArchiveRoot.equals(expectedLastArchiveRoot)) {
+      this.log.warn(`Fork archive root does not match the checkpoint's first block last archive`, {
         ...proposalInfo,
         forkArchiveRoot: forkArchiveRoot.toString(),
-        expectedLastArchiveRoot: proposal.checkpointHeader.lastArchiveRoot.toString(),
+        expectedLastArchiveRoot: expectedLastArchiveRoot.toString(),
       });
       return { isValid: false, reason: 'initial_archive_mismatch', checkpointNumber };
     }
