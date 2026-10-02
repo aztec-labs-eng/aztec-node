@@ -32,16 +32,15 @@ describe('AggregateTxValidator', () => {
     await expect(agg.validateTx(tx)).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
   });
 
-  it('stops at an unverifiable check and reports it as unverifiable', async () => {
+  it('reports a later invalid check rather than an earlier unverifiable one', async () => {
     const tx = await mockTx(0);
-    const unverifiable: TxValidationResult = { result: 'unverifiable', reason: ['Proof could not be verified'] };
     const agg = new AggregateTxValidator(
       new TxDenyList([]),
-      { validateTx: () => Promise.resolve(unverifiable) },
+      { validateTx: () => Promise.resolve<TxValidationResult>({ result: 'unverifiable', reason: ['down'] }) },
       new TxDenyList([tx.getTxHash()]),
     );
 
-    await expect(agg.validateTx(tx)).resolves.toEqual(unverifiable);
+    await expect(agg.validateTx(tx)).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
   });
 
   it('reports an earlier invalid check rather than a later unverifiable one', async () => {
@@ -51,6 +50,17 @@ describe('AggregateTxValidator', () => {
     });
 
     await expect(agg.validateTx(tx)).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
+  });
+
+  it('reports the first unverifiable check when no check finds the tx invalid', async () => {
+    const tx = await mockTx(0);
+    const first: TxValidationResult = { result: 'unverifiable', reason: ['first'] };
+    const second: TxValidationResult = { result: 'unverifiable', reason: ['second'] };
+    const agg = new AggregateTxValidator({ validateTx: () => Promise.resolve(first) }, new TxDenyList([]), {
+      validateTx: () => Promise.resolve(second),
+    });
+
+    await expect(agg.validateTx(tx)).resolves.toEqual(first);
   });
 
   class TxDenyList implements TxValidator<AnyTx> {
