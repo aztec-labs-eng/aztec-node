@@ -107,8 +107,9 @@ function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
  * ## Re-execution tracker
  *
  * `CheckpointReexecutionTracker` is populated by the validator client's checkpoint proposal
- * handler. Every early return in `validateCheckpointProposal` records an outcome
- * (`valid` / `invalid` / `unvalidated`) keyed by slot.
+ * handler: `handleCheckpointProposal` records an outcome (`valid` / `invalid` / `unvalidated`) keyed
+ * by slot for most validation results, but none for a proposal with an invalid signature or one
+ * whose checkpoint is already on L1.
  *
  * ## Inactivity slashing
  *
