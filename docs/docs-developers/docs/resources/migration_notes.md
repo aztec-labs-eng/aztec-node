@@ -9,6 +9,62 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Wallet SDK] `completeFeeOptions` removed; override `getDefaultFeePaymentMethod` instead
+
+`BaseWallet.completeFeeOptions` computed a transaction's gas settings and its fee payment in one call, and the `FeeOptions` and `CompleteFeeOptionsConfig` types are removed with it. The wallet now builds a transaction in three steps:
+
+- `calculateGasSettings({ gasSettings, forEstimation, congestionEstimate })` fills in gas settings from the network's current fees and limits.
+- `addDefaultFeePayment(executionPayload, from, gasSettings)` adds the wallet's default fee payment ahead of the app's calls, if the payload doesn't pay its own fee and the wallet has a default.
+- `createTxExecutionRequestFromPayload(executionPayload, from, gasSettings)` (previously `createTxExecutionRequestFromPayloadAndFee`) builds the request.
+
+The wallet no longer decides how the sender's account handles the fee: the account entrypoint derives it from the payload's fee payer (see the `AccountFeePaymentMode` note below). A wallet's default fee payment method is therefore treated exactly like one passed by the app.
+
+To pay fees on the sender's behalf, e.g. through a sponsor contract, override `getDefaultFeePaymentMethod(from, gasSettings)`. It returns `undefined` by default, so the sender's account pays with its own fee juice. `BaseWallet` only calls it when the payload has no fee payer, so overrides no longer check for one. It is called for every request built, including simulations, which use high-limit estimation gas settings.
+
+`computeAppCallOffset` is replaced by the `getAppCallOffset(from, appPayload, txPayload)` function exported from `@aztec-labs/wallet-sdk/base-wallet`, and `SimulateViaEntrypointOptions.feeOptions` is replaced by `gasSettings`.
+
+**Migration:**
+
+```diff
+- protected override async completeFeeOptions(config: CompleteFeeOptionsConfig): Promise<FeeOptions> {
+-   const base = await super.completeFeeOptions(config);
+-   if (config.feePayer) {
+-     return base;
+-   }
+-   return {
+-     ...base,
+-     walletFeePaymentMethod: new SponsoredFeePaymentMethod(sponsoredFPCAddress),
+-     accountFeePaymentMethodOptions: AccountFeePaymentMethodOptions.EXTERNAL,
+-   };
+- }
++ protected override getDefaultFeePaymentMethod() {
++   return Promise.resolve(new SponsoredFeePaymentMethod(sponsoredFPCAddress));
++ }
+```
+
+A subclass that still defines `completeFeeOptions` without the `override` keyword compiles, but `BaseWallet` never calls it, so it silently stops adding its fee payment method. Search your wallet for `completeFeeOptions` when upgrading.
+
+### [Aztec.js] `AccountFeePaymentMethodOptions` renamed to `AccountFeePaymentMode`
+
+The enum telling an account entrypoint how to handle the fee is renamed from `AccountFeePaymentMethodOptions` to `AccountFeePaymentMode` (exported from `@aztec-labs/entrypoints/account`), and the `feePaymentMethodOptions` field of `DefaultAccountEntrypointOptions` is renamed to `feePaymentMode`. The values are unchanged. `feePaymentMode` is now optional: when it is left out, `DefaultAccountEntrypoint` derives it from the execution payload's fee payer, using `PREEXISTING_FEE_JUICE` when there is none, `FEE_JUICE_WITH_CLAIM` when the account itself is the fee payer, and `EXTERNAL` otherwise.
+
+```diff
+- import { AccountFeePaymentMethodOptions } from '@aztec-labs/entrypoints/account';
++ import { AccountFeePaymentMode } from '@aztec-labs/entrypoints/account';
+
+- await account.createTxExecutionRequest(payload, gasSettings, chainInfo, { txNonce, feePaymentMethodOptions: AccountFeePaymentMethodOptions.EXTERNAL });
++ await account.createTxExecutionRequest(payload, gasSettings, chainInfo, { txNonce, feePaymentMode: AccountFeePaymentMode.EXTERNAL });
+```
+
+### [Aztec.nr] `AccountFeePaymentMethodOptions` renamed to `AccountFeePaymentMode`
+
+The matching global in `aztec::authwit::account` is renamed from `AccountFeePaymentMethodOptions` to `AccountFeePaymentMode`, and its type from `AccountFeePaymentMethodOptionsEnum` to `AccountFeePaymentModeEnum`. The values are unchanged, so compiled bytecode is not affected. Custom account contracts that reference the global by name must update the import.
+
+```diff
+- use aztec::authwit::account::AccountFeePaymentMethodOptions;
++ use aztec::authwit::account::AccountFeePaymentMode;
+```
+
 ### [Aztec.nr] Batch nullifier status oracle
 
 The single-nullifier existence oracle is replaced by `aztec::oracle::nullifiers::get_nullifier_statuses`, which checks any number of nullifiers in one call and reports, for each settled one, the block it was included in. `check_nullifier_exists` is kept and now calls the new oracle.

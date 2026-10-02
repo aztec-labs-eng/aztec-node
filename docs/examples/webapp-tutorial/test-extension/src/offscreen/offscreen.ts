@@ -187,9 +187,6 @@ async function getWallet() {
   const { BaseWallet, AztecAddress, SignerlessAccount } = await getAztecWallet();
   const { pxe, node } = await ensurePXE();
 
-  // AccountFeePaymentMethodOptions.EXTERNAL = 0 — fee is paid by an external FPC
-  const EXTERNAL_FEE_PAYMENT = 0;
-
   class OffscreenWallet extends BaseWallet {
     protected minFeePadding = 1.0; // 100% padding for fee estimation variance
     private accounts: Map<string, Account> = new Map();
@@ -232,34 +229,21 @@ async function getWallet() {
       return this.sponsoredFPCAddress;
     }
 
-    // docs:start:complete-fee-options
+    // docs:start:default-fee-payment-method
     /**
      * Always uses SponsoredFPC for fee payment, mirroring the deployment flow.
      * The tutorial wallet doesn't hold fee juice, so every tx is sponsor-paid.
      *
-     * If the execution payload already has a feePayer (e.g. DeployAccountMethod
-     * embeds SponsoredFPC in its own payload), we skip injecting a wallet-level
-     * payment method to avoid calling sponsor_unconditionally() twice, which
-     * would trigger "Cannot enter the revertible phase twice".
+     * BaseWallet only asks for this when the execution payload doesn't already
+     * pay for itself (e.g. DeployAccountMethod embeds SponsoredFPC in its own
+     * payload), so sponsor_unconditionally() never runs twice in one tx.
      */
-    protected async completeFeeOptions(config: any) {
-      const base = await super.completeFeeOptions(config);
-      // If the payload already includes a fee payer, don't inject another one
-      if (config.feePayer) {
-        return {
-          ...base,
-          accountFeePaymentMethodOptions: EXTERNAL_FEE_PAYMENT,
-        };
-      }
+    protected async getDefaultFeePaymentMethod() {
       const address = await this.ensureSponsoredFPC();
       const { SponsoredFeePaymentMethod } = await getAztecDeploy();
-      return {
-        ...base,
-        walletFeePaymentMethod: new SponsoredFeePaymentMethod(address),
-        accountFeePaymentMethodOptions: config.from ? EXTERNAL_FEE_PAYMENT : base.accountFeePaymentMethodOptions,
-      };
+      return new SponsoredFeePaymentMethod(address);
     }
-    // docs:end:complete-fee-options
+    // docs:end:default-fee-payment-method
 
     /**
      * Overrides sendTx to auto-extract auth witnesses from offchain effects.
@@ -306,18 +290,13 @@ async function getWallet() {
 
       // Step 2: Simulate with the stub account swapped in via PXE overrides
       log.info('[offscreen] Step 2: Simulating tx with stub account...');
-      const feeOptions = await this.completeFeeOptions({
-        from,
-        feePayer: executionPayload.feePayer,
-        gasSettings: feeGasSettings,
-      });
+      const gasSettings = await this.calculateGasSettings({ gasSettings: feeGasSettings });
+      const txPayload = await this.addDefaultFeePayment(executionPayload, from, gasSettings);
       const chainInfo = await this.getChainInfo();
-      const txRequest = await stubAccount.createTxExecutionRequest(
-        executionPayload,
-        feeOptions.gasSettings,
-        chainInfo,
-        { txNonce: Fr.random(), cancellable: false, feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions },
-      );
+      const txRequest = await stubAccount.createTxExecutionRequest(txPayload, gasSettings, chainInfo, {
+        txNonce: Fr.random(),
+        cancellable: false,
+      });
       log.info('[offscreen] Created tx execution request, simulating...');
 
       const simResult = await this.pxe.simulateTx(txRequest, {

@@ -21,18 +21,18 @@ impl<Context> AccountActions<Context> {
     }
 }
 
-// See AccountFeePaymentMethodOptions enum in Aztec.js for docs:
+// See AccountFeePaymentMode enum in Aztec.js for docs:
 //
 //
 // https://github.com/AztecProtocol/aztec-packages/blob/next/yarn-project/entrypoints/src/account_entrypoint.ts
-pub struct AccountFeePaymentMethodOptionsEnum {
+pub struct AccountFeePaymentModeEnum {
     pub EXTERNAL: u8,
     pub PREEXISTING_FEE_JUICE: u8,
     pub FEE_JUICE_WITH_CLAIM: u8,
 }
 
-pub global AccountFeePaymentMethodOptions: AccountFeePaymentMethodOptionsEnum =
-    AccountFeePaymentMethodOptionsEnum { EXTERNAL: 0, PREEXISTING_FEE_JUICE: 1, FEE_JUICE_WITH_CLAIM: 2 };
+pub global AccountFeePaymentMode: AccountFeePaymentModeEnum =
+    AccountFeePaymentModeEnum { EXTERNAL: 0, PREEXISTING_FEE_JUICE: 1, FEE_JUICE_WITH_CLAIM: 2 };
 
 /// An implementation of the Account Action struct for the private context.
 ///
@@ -43,7 +43,7 @@ impl AccountActions<&mut PrivateContext> {
     ///
     /// @param app_payload The payload that contains the calls to be executed in the app phase.
     ///
-    /// @param fee_payment_method The mechanism via which the account contract will pay for the transaction:
+    /// @param fee_payment_mode The mechanism via which the account contract will pay for the transaction:
     /// - EXTERNAL (0): Signals that some other contract is in charge of paying the fee, nothing needs to be done.
     /// - PREEXISTING_FEE_JUICE (1): Makes the account contract publicly pay for the transaction with its own FeeJuice
     /// balance, which it must already have prior to this transaction. The contract will set itself as the fee payer
@@ -57,7 +57,7 @@ impl AccountActions<&mut PrivateContext> {
     /// transaction to be sent with a higher priority fee. This can be used to cancel the first transaction sent,
     /// assuming it hasn't been mined yet.
     ///
-    pub fn entrypoint(self, app_payload: AppPayload, fee_payment_method: u8, cancellable: bool) {
+    pub fn entrypoint(self, app_payload: AppPayload, fee_payment_mode: u8, cancellable: bool) {
         let valid_fn = self.is_valid_impl;
 
         let message_hash = compute_authwit_message_hash(
@@ -68,11 +68,11 @@ impl AccountActions<&mut PrivateContext> {
         );
         assert(valid_fn(self.context, message_hash));
 
-        if fee_payment_method == AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE {
+        if fee_payment_mode == AccountFeePaymentMode.PREEXISTING_FEE_JUICE {
             self.context.set_as_fee_payer();
             self.context.end_setup();
         }
-        if fee_payment_method == AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM {
+        if fee_payment_mode == AccountFeePaymentMode.FEE_JUICE_WITH_CLAIM {
             self.context.set_as_fee_payer();
         }
         app_payload.execute_calls(self.context);

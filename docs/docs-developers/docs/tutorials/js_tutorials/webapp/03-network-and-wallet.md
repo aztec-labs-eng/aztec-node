@@ -66,7 +66,7 @@ The local network ships with pre-deployed test accounts. These are Schnorr-signa
 
 ### Fee payment
 
-Every Aztec transaction must pay a fee (similar to gas on Ethereum). Rather than requiring users to hold fee tokens during development, the embedded wallet overrides `completeFeeOptions` to inject SponsoredFPC as the default fee payer for every transaction. Callers never need to pass fee options manually.
+Every Aztec transaction must pay a fee (similar to gas on Ethereum). Rather than requiring users to hold fee tokens during development, the embedded wallet overrides `getDefaultFeePaymentMethod` to make SponsoredFPC pay the fee of every transaction that doesn't already pay for itself. Callers never need to pass fee options manually.
 
 :::note
 SponsoredFPC only works on the local network. Production Aztec networks deployed to Ethereum mainnet require an alternative fee payment strategy.

@@ -26,8 +26,13 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { Gas, GasUsed } from '@aztec-labs/stdlib/gas';
 import { NoteDao } from '@aztec-labs/stdlib/note';
 import type { SimulationOverrides, TxExecutionRequest, TxProvingResult } from '@aztec-labs/stdlib/tx';
-import { ExecutionPayload, mergeExecutionPayloads } from '@aztec-labs/stdlib/tx';
-import { BaseWallet, type SimulateViaEntrypointOptions, getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
+import { ExecutionPayload } from '@aztec-labs/stdlib/tx';
+import {
+  BaseWallet,
+  type SimulateViaEntrypointOptions,
+  getAppCallOffset,
+  getGasLimits,
+} from '@aztec-labs/wallet-sdk/base-wallet';
 
 import type { WalletDB } from '../storage/wallet_db.js';
 import type { AccountType } from './constants.js';
@@ -116,27 +121,15 @@ export class CLIWallet extends BaseWallet {
     txNonce: Fr,
     increasedFee: InteractionFeeOptions,
   ) {
-    const executionPayload = ExecutionPayload.empty();
-    const feeOptions = await this.completeFeeOptions({
-      from,
-      feePayer: executionPayload.feePayer,
-      gasSettings: increasedFee.gasSettings,
-    });
-    const feeExecutionPayload = await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
+    const gasSettings = await this.calculateGasSettings({ gasSettings: increasedFee.gasSettings });
+    const txPayload = await this.addDefaultFeePayment(ExecutionPayload.empty(), from, gasSettings);
     const fromAccount = await this.getAccountFromAddress(from);
     const chainInfo = await this.getChainInfo();
     const executionOptions: DefaultAccountEntrypointOptions = {
       txNonce,
       cancellable: this.cancellableTransactions,
-      // If from is an address, feeOptions include the way the account contract should handle the fee payment
-      feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
     };
-    return await fromAccount.createTxExecutionRequest(
-      feeExecutionPayload ?? executionPayload,
-      feeOptions.gasSettings,
-      chainInfo,
-      executionOptions,
-    );
+    return await fromAccount.createTxExecutionRequest(txPayload, gasSettings, chainInfo, executionOptions);
   }
 
   async proveCancellationTx(
@@ -313,19 +306,16 @@ export class CLIWallet extends BaseWallet {
     executionPayload: ExecutionPayload,
     opts: SimulateViaEntrypointOptions,
   ): Promise<TxSimulationResultWithAppOffset> {
-    const { from, feeOptions, additionalScopes, sendMessagesAs } = opts;
+    const { from, gasSettings, additionalScopes, sendMessagesAs } = opts;
     const scopes = this.scopesFrom(from, additionalScopes ?? [], sendMessagesAs);
-    const feeExecutionPayload = await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
-    const finalExecutionPayload = feeExecutionPayload
-      ? mergeExecutionPayloads([feeExecutionPayload, executionPayload])
-      : executionPayload;
+    const txPayload = await this.addDefaultFeePayment(executionPayload, from, gasSettings);
     const chainInfo = await this.getChainInfo();
 
     let overrides: SimulationOverrides | undefined;
     let txRequest: TxExecutionRequest;
     if (from === NO_FROM) {
       const entrypoint = new DefaultEntrypoint();
-      txRequest = await entrypoint.createTxExecutionRequest(finalExecutionPayload, feeOptions.gasSettings, chainInfo);
+      txRequest = await entrypoint.createTxExecutionRequest(txPayload, gasSettings, chainInfo);
     } else {
       const { account, instance } = await this.getFakeAccountDataFor(from);
       overrides = {
@@ -334,15 +324,8 @@ export class CLIWallet extends BaseWallet {
       const executionOptions: DefaultAccountEntrypointOptions = {
         txNonce: Fr.random(),
         cancellable: this.cancellableTransactions,
-        // If from is an address, feeOptions include the way the account contract should handle the fee payment
-        feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
       };
-      txRequest = await account.createTxExecutionRequest(
-        finalExecutionPayload,
-        feeOptions.gasSettings,
-        chainInfo,
-        executionOptions,
-      );
+      txRequest = await account.createTxExecutionRequest(txPayload, gasSettings, chainInfo, executionOptions);
     }
 
     const result = await this.pxe.simulateTx(txRequest, {
@@ -353,8 +336,10 @@ export class CLIWallet extends BaseWallet {
       scopes,
       senderForTags: this.senderForTagsFrom(from, sendMessagesAs),
     });
-    const appCallOffset = await this.computeAppCallOffset(from, feeOptions);
-    return TxSimulationResultWithAppOffset.fromResultAndOffset(result, appCallOffset);
+    return TxSimulationResultWithAppOffset.fromResultAndOffset(
+      result,
+      getAppCallOffset(from, executionPayload, txPayload),
+    );
   }
 
   // Exposed because of the `aztec-wallet get-tx` command. It has been decided that it's fine to keep around because

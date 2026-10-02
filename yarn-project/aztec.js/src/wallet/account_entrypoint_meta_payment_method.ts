@@ -1,4 +1,4 @@
-import { AccountFeePaymentMethodOptions } from '@aztec-labs/entrypoints/account';
+import { AccountFeePaymentMode } from '@aztec-labs/entrypoints/account';
 import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -51,15 +51,15 @@ export class AccountEntrypointMetaPaymentMethod implements FeePaymentMethod {
       const feePayer = (await this.paymentMethod?.getFeePayer()) ?? this.account.getAddress();
       const isFeePayer = feePayer.equals(this.account.getAddress());
 
-      let accountFeePaymentMethodOptions = AccountFeePaymentMethodOptions.EXTERNAL;
+      let accountFeePaymentMode = AccountFeePaymentMode.EXTERNAL;
       if (isFeePayer) {
-        accountFeePaymentMethodOptions =
+        accountFeePaymentMode =
           innerPayload.calls.length === 0
-            ? AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE
-            : AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM;
+            ? AccountFeePaymentMode.PREEXISTING_FEE_JUICE
+            : AccountFeePaymentMode.FEE_JUICE_WITH_CLAIM;
       }
 
-      options = { feePaymentMethodOptions: accountFeePaymentMethodOptions };
+      options = { feePaymentMode: accountFeePaymentMode };
     }
 
     // Use the generic wrapping mechanism from the account interface

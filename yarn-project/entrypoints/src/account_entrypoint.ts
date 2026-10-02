@@ -17,7 +17,7 @@ import type { AuthWitnessProvider, ChainInfo, EntrypointInterface } from './inte
 /**
  * The mechanism via which an account contract will pay for a transaction in which it gets invoked.
  */
-export enum AccountFeePaymentMethodOptions {
+export enum AccountFeePaymentMode {
   /**
    * Signals that some other contract is in charge of paying the fee, nothing needs to be done.
    */
@@ -52,8 +52,12 @@ export type DefaultAccountEntrypointOptions = {
    * but higher fee. The nullifier ensures only one transaction can succeed.
    */
   txNonce?: Fr;
-  /** Options that configure how the account contract behaves depending on the fee payment method of the tx */
-  feePaymentMethodOptions: AccountFeePaymentMethodOptions;
+  /**
+   * How the account contract handles the fee. Derived from the fee payer of the execution payload when not given:
+   * the account pays with its fee juice when there is no fee payer, claims fee juice when it is the fee payer itself
+   * (which only a `FeeJuicePaymentMethodWithClaim` does), and leaves the fee to any other fee payer.
+   */
+  feePaymentMode?: AccountFeePaymentMode;
 };
 
 /**
@@ -119,11 +123,22 @@ export class DefaultAccountEntrypoint implements EntrypointInterface {
   }
 
   /**
+   * Returns how this account handles the fee of a payload, based on who pays it.
+   * @param feePayer - The payload's fee payer, or undefined if nothing in it pays the fee yet.
+   */
+  #feePaymentModeFor(feePayer: AztecAddress | undefined): AccountFeePaymentMode {
+    if (!feePayer) {
+      return AccountFeePaymentMode.PREEXISTING_FEE_JUICE;
+    }
+    return feePayer.equals(this.address) ? AccountFeePaymentMode.FEE_JUICE_WITH_CLAIM : AccountFeePaymentMode.EXTERNAL;
+  }
+
+  /**
    * Builds the shared data needed for both creating a tx execution request and wrapping an execution payload.
    * This includes encoding calls, building entrypoint arguments, and creating the authwitness.
    * @param exec - The execution payload containing calls to encode
    * @param chainInfo - Chain information (chainId and version) for replay protection
-   * @param options - Account entrypoint options including tx nonce and fee payment method
+   * @param options - Account entrypoint options including tx nonce and fee payment mode
    * @returns Encoded call data, ABI, function selector, and auth witness
    */
   async #buildEntrypointCallData(
@@ -131,13 +146,14 @@ export class DefaultAccountEntrypoint implements EntrypointInterface {
     chainInfo: ChainInfo,
     options: DefaultAccountEntrypointOptions,
   ) {
-    const { calls } = exec;
-    const { cancellable, txNonce, feePaymentMethodOptions } = options;
+    const { calls, feePayer } = exec;
+    const { cancellable, txNonce } = options;
+    const feePaymentMode = options.feePaymentMode ?? this.#feePaymentModeFor(feePayer);
 
     const encodedCalls = await EncodedAppEntrypointCalls.create(calls, txNonce);
 
     const abi = this.getEntrypointAbi();
-    const args = [encodedCalls, feePaymentMethodOptions, !!cancellable];
+    const args = [encodedCalls, feePaymentMode, !!cancellable];
     const encodedArgs = encodeArguments(abi, args);
 
     const functionSelector = await FunctionSelector.fromNameAndParameters(abi.name, abi.parameters);
