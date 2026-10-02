@@ -203,7 +203,7 @@ Inactivity slashing is handled by the `Sentinel` (in `aztec-node/src/sentinel/`)
 
 - `checkpoint-mined` — a checkpoint covering this slot has landed on L1
 - `checkpoint-unpublished` — a valid checkpoint proposal built on a parent that is on L1 reached quorum, yet the proposer did not land it
-- `checkpoint-orphaned` — a valid checkpoint proposal could not land because the parent it built on never landed on L1
+- `checkpoint-orphaned` — a valid checkpoint proposal could not land because the parent it built on never landed on L1, or because an earlier slot landed its checkpoint number after it had reached quorum
 - `checkpoint-valid` — the local node re-executed a checkpoint proposal for this slot successfully, and it could not be classified as unpublished or orphaned
 - `checkpoint-invalid` — the local node re-executed a checkpoint proposal for this slot and rejected it (header / archive / out-hash mismatch, limit breach, etc.). Proposer-fault
 - `checkpoint-unvalidated` — a checkpoint proposal arrived but the local node could not validate it (missing blocks/txs, timeout). Treated as proposer-fault
@@ -214,7 +214,7 @@ Re-execution outcomes are read from the `CheckpointReexecutionTracker`, which th
 
 Each non-proposer committee member is assigned one of:
 - `attestation-sent` if their checkpoint attestation was seen on L1 or on the P2P network
-- `attestation-missed` if the proposer status was `checkpoint-mined`, `checkpoint-unpublished`, `checkpoint-orphaned` or `checkpoint-valid` but no checkpoint attestation was seen
+- `attestation-missed` if the proposer status was `checkpoint-mined`, `checkpoint-unpublished`, `checkpoint-orphaned` or `checkpoint-valid` but no checkpoint attestation was seen, unless an earlier slot landed the proposal's checkpoint number
 - none in any other case
 
 `blocks-missed`, `checkpoint-missed`, `checkpoint-invalid`, and `checkpoint-unvalidated` all count as proposer inactivity for the slot. `checkpoint-unpublished` and `checkpoint-orphaned` do not count toward inactivity yet: they are recorded in the sentinel's history and stats only.

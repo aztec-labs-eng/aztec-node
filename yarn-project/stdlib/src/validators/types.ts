@@ -15,7 +15,8 @@ export type ValidatorStatusType = 'proposer' | 'attestation';
  * - `checkpoint-valid`        — checkpoint proposal re-executed locally as valid, but it did not reach L1 and
  *                               could not be refined into 5a or 5b (e.g. below quorum, equivocation) (case 5).
  * - `checkpoint-orphaned`     — valid checkpoint proposal that could not land because the parent it built on never
- *                               landed on L1 (case 5b).
+ *                               landed on L1, or because an earlier slot landed its checkpoint number after it reached
+ *                               quorum (case 5b).
  * - `checkpoint-unpublished`  — valid checkpoint proposal with its parent on L1 and a quorum of attestations,
  *                               which the proposer still failed to land on L1 (case 5a).
  * - `checkpoint-mined`        — checkpoint published on L1 (case 6).
