@@ -240,11 +240,17 @@ export class TxPoolV2Impl {
     const ignored: TxHash[] = [];
     const rejected: TxHash[] = [];
     const errors = new Map<string, TxPoolRejectionError>();
+    // Per-rejected-tx failure reasons, so the gossip handler can tell state drift from a
+    // sender-attributable rejection and not blame the relayer.
+    const rejectionReasons = new Map<string, string[]>();
     const acceptedPending = new Set<string>();
 
     // Phase 1: Pre-compute all throwable I/O outside the transaction.
     // If any pre-computation throws, the entire call fails before mutations happen.
-    const precomputed = new Map<string, { meta: TxMetaData; minedBlockId: L2BlockId | undefined; isValid: boolean }>();
+    const precomputed = new Map<
+      string,
+      { meta: TxMetaData; minedBlockId: L2BlockId | undefined; isValid: boolean; reason?: string[] }
+    >();
 
     const validator = await this.#createTxValidator();
 
@@ -257,11 +263,14 @@ export class TxPoolV2Impl {
 
       // Validate non-mined txs (mined and pre-protected txs bypass validation inside the transaction)
       let isValid = true;
+      let reason: string[] | undefined;
       if (!minedBlockId) {
-        isValid = await this.#validateMeta(meta, validator);
+        const validation = await this.#validateMeta(meta, validator);
+        isValid = validation.valid;
+        reason = validation.reason;
       }
 
-      precomputed.set(txHashStr, { meta, minedBlockId, isValid });
+      precomputed.set(txHashStr, { meta, minedBlockId, isValid, reason });
     }
 
     // Phase 2: Apply mutations inside the transaction using only pre-computed results,
@@ -283,7 +292,7 @@ export class TxPoolV2Impl {
           continue;
         }
 
-        const { meta, minedBlockId, isValid } = precomputed.get(txHashStr)!;
+        const { meta, minedBlockId, isValid, reason } = precomputed.get(txHashStr)!;
         const preProtectedSlot = this.#indices.getProtectionSlot(txHashStr);
 
         if (minedBlockId) {
@@ -297,6 +306,9 @@ export class TxPoolV2Impl {
         } else if (!isValid) {
           // Failed pre-computed validation
           rejected.push(txHash);
+          if (reason && reason.length > 0) {
+            rejectionReasons.set(txHashStr, reason);
+          }
         } else {
           // Regular pending tx - run pre-add rules using pre-computed metadata
           const result = await this.#tryAddRegularPendingTx(
@@ -338,7 +350,13 @@ export class TxPoolV2Impl {
       this.#instrumentation.recordRejected(rejected.length);
     }
 
-    return { accepted, ignored, rejected, ...(errors.size > 0 ? { errors } : {}) };
+    return {
+      accepted,
+      ignored,
+      rejected,
+      ...(errors.size > 0 ? { errors } : {}),
+      ...(rejectionReasons.size > 0 ? { rejectionReasons } : {}),
+    };
   }
 
   /** Adds a validated pending tx, running pre-add rules and evicting conflicts. */
@@ -1119,15 +1137,19 @@ export class TxPoolV2Impl {
   // ============================================================================
 
   /** Validates transaction metadata, returning true if valid */
-  async #validateMeta(meta: TxMetaData, validator?: TxValidator<TxMetaData>, context?: string): Promise<boolean> {
+  async #validateMeta(
+    meta: TxMetaData,
+    validator?: TxValidator<TxMetaData>,
+    context?: string,
+  ): Promise<{ valid: boolean; reason?: string[] }> {
     const txValidator = validator ?? (await this.#createTxValidator());
     const result = await txValidator.validateTx(meta);
     if (result.result !== 'valid') {
       const contextStr = context ? ` ${context}` : '';
       this.#log.info(`Tx ${meta.txHash}${contextStr} failed validation: ${result.reason?.join(', ')}`);
-      return false;
+      return { valid: false, reason: result.reason };
     }
-    return true;
+    return { valid: true };
   }
 
   /** Validates metadata directly */
@@ -1139,7 +1161,7 @@ export class TxPoolV2Impl {
     const invalid: string[] = [];
     const validator = await this.#createTxValidator();
     for (const meta of metas) {
-      if (await this.#validateMeta(meta, validator, context)) {
+      if ((await this.#validateMeta(meta, validator, context)).valid) {
         valid.push(meta);
       } else {
         invalid.push(meta.txHash);

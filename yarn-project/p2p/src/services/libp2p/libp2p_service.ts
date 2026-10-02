@@ -33,7 +33,7 @@ import {
 } from '@aztec-labs/stdlib/p2p';
 import { ConsensusTimetable, getDefaultCheckpointProposalSyncGrace } from '@aztec-labs/stdlib/timetable';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
-import { Tx, type TxValidationResult } from '@aztec-labs/stdlib/tx';
+import { Tx, type TxValidationResult, isReceiverLocalStateDrift } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
 import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { compressComponentVersions } from '@aztec-labs/stdlib/versioning';
@@ -1200,9 +1200,24 @@ export class LibP2PService extends WithTracer implements P2PService {
       } else if (wasIgnored) {
         return { result: TopicValidatorResult.Ignore, obj: tx };
       } else {
+        // The final pool insert rebuilt a fresh validator and rejected a tx that passed the earlier
+        // checks and proof. If the rejection is receiver-local state drift, the relayer forwarded a tx
+        // valid from its own view - ignore without penalizing it; only a sender-attributable reject penalizes.
+        const rejectionReasons = addResult.rejectionReasons?.get(txHash.toString()) ?? [];
+        if (isReceiverLocalStateDrift(rejectionReasons)) {
+          this.logger.verbose(
+            `Ignoring gossiped tx ${txHash.toString()}: pool rejected on receiver-local state drift`,
+            {
+              source: source.toString(),
+              reasons: rejectionReasons,
+            },
+          );
+          return { result: TopicValidatorResult.Ignore, obj: tx };
+        }
         this.logger.warn(`Gossiped tx ${txHash.toString()} unexpectedly rejected by pool`, {
           source: source.toString(),
           txHash: txHash.toString(),
+          reasons: rejectionReasons,
         });
         return { result: TopicValidatorResult.Reject, severity: PeerErrorSeverity.HighToleranceError };
       }
