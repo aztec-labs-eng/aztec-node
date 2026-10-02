@@ -13,7 +13,7 @@ import { type InboxEndpointResolver, PROTOCOL_INBOX_CONSUMPTION_CAPS } from './i
 
 describe('CheckpointInboxConsumption', () => {
   const { perBlockCap, perCheckpointCap, maxMessagesPerBucket } = PROTOCOL_INBOX_CONSUMPTION_CAPS;
-  const ceiling = BigInt(perCheckpointCap - maxMessagesPerBucket);
+  const threshold = BigInt(perCheckpointCap - maxMessagesPerBucket);
 
   let messageSource: MockProxy<L1ToL2MessageSource>;
   let inbox: MockProxy<InboxEndpointResolver>;
@@ -113,10 +113,10 @@ describe('CheckpointInboxConsumption', () => {
     });
 
     it('queries the endpoint once a step would pass the threshold below the cap', async () => {
-      const endpoint = ceiling + 132n;
+      const endpoint = threshold + 132n;
       streamingInbox.set(leaves(perCheckpointCap - 24), [endpoint]);
       const consumption = await start();
-      await advanceTo(consumption, ceiling);
+      await advanceTo(consumption, threshold);
 
       const selection = await consumption.selectRange({ isFinalBlock: false, buildDeadline: farDeadline() });
 
@@ -127,11 +127,11 @@ describe('CheckpointInboxConsumption', () => {
     it('takes the safe local step when a non-final block cannot resolve an endpoint', async () => {
       streamingInbox.set(leaves(perCheckpointCap - 24), []);
       const consumption = await start();
-      await advanceTo(consumption, ceiling);
+      await advanceTo(consumption, threshold);
 
       const selection = await consumption.selectRange({ isFinalBlock: false, buildDeadline: farDeadline() });
 
-      expect(selection.kind === 'consume' && selection.range.end).toEqual(streamingInbox.positionAt(ceiling));
+      expect(selection.kind === 'consume' && selection.range.end).toEqual(streamingInbox.positionAt(threshold));
     });
 
     it('aborts when the local prefix no longer matches the cursor', async () => {
