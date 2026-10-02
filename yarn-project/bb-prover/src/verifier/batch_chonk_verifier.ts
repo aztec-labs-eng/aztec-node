@@ -1,5 +1,6 @@
 import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
+import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { isRetryableError } from '@aztec-labs/foundation/error';
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -35,6 +36,15 @@ interface FifoVerifyResult {
 
 /** Maps client protocol artifacts used for chonk verification to VK indices. */
 const CHONK_VK_ARTIFACTS = ['HidingKernelToRollup', 'HidingKernelToPublic'] as const;
+
+/**
+ * Whether a FAILED batch verifier result is bb reporting an exception of its own rather than a rejected proof. These are
+ * the messages bb's batch verifier formats from an exception it caught. Other internal failures it catches still
+ * surface as an ordinary failed check, until bb reports a distinct error status.
+ */
+export function isBatchVerifierInternalError(errorMessage: string | undefined): boolean {
+  return /\bthrew\b/.test(errorMessage ?? '');
+}
 
 interface PendingRequest {
   resolve: (result: IVCProofVerificationResult) => void;
@@ -148,9 +158,19 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     this.logger.info('BatchChonkVerifier started', { fifoPath: this.fifoPath });
   }
 
-  public verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
+  /**
+   * Verifies a tx's Chonk proof. Returns `valid: false` only for a malformed proof or one bb checked and rejected; rejects
+   * with {@link ProofVerifierUnavailableError} whenever the proof could not be checked.
+   */
+  public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const totalTimer = new Timer();
-    return (async () => {
+    const txHash = tx.getTxHash().toString();
+    // The one malformed proof that deserialization lets through is the empty placeholder.
+    if (tx.chonkProof.fields.length !== CHONK_PROOF_LENGTH) {
+      this.logger.warn(`Rejecting malformed Chonk proof`, { txHash, length: tx.chonkProof.fields.length });
+      return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
+    }
+    try {
       const circuit = tx.data.forPublic ? 'HidingKernelToPublic' : 'HidingKernelToRollup';
       const vkIndex = this.vkIndexMap.get(circuit);
       if (vkIndex === undefined) {
@@ -159,16 +179,15 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       const proofWithPubInputs = tx.chonkProof.attachPublicInputs(tx.data.publicInputs().toFields());
       const proofFields = proofWithPubInputs.fieldsWithPublicInputs.map(f => f.toBuffer());
       return await this.enqueueProof(vkIndex, proofFields);
-    })().catch(err => {
-      // A verifier that could not check the proof has not judged it. Saying otherwise makes a dead
-      // bb look like a bad transaction, and this result feeds gossip validation, so the peer that
-      // sent a perfectly good proof is the one penalised for it.
-      if (err instanceof ProofVerifierUnavailableError) {
-        throw err;
-      }
-      this.logger.warn(`Failed to verify Chonk proof for tx ${tx.getTxHash().toString()}: ${String(err)}`);
-      return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
-    });
+    } catch (err) {
+      // A verdict only ever arrives through handleResult. Every failure here is one where bb gave no answer on the
+      // proof: the verifier stopped or died, the proof could not be queued, or its result never came back.
+      this.metrics.recordUnavailable();
+      this.logger.warn(`Could not verify Chonk proof`, { txHash, err });
+      throw err instanceof ProofVerifierUnavailableError
+        ? err
+        : new ProofVerifierUnavailableError('BatchChonkVerifier could not verify the proof', { cause: err });
+    }
   }
 
   /** Enqueue raw proof fields for verification. Used directly by tests with custom VKs. */
@@ -337,6 +356,16 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     const valid = result.status === 0; // VerifyStatus::OK
     const durationMs = result.time_in_verify_ms;
     const totalDurationMs = pending.totalTimer.ms();
+
+    // bb reports only OK or FAILED, so a FAILED result is also what an exception inside bb looks like.
+    if (!valid && isBatchVerifierInternalError(result.error_message)) {
+      this.logger.warn(`bb failed internally while verifying request_id=${result.request_id}`, {
+        errorMessage: result.error_message,
+      });
+      pending.reject(new ProofVerifierUnavailableError(`bb failed while verifying the proof: ${result.error_message}`));
+      this.notifyPendingDrained();
+      return;
+    }
 
     const ivcResult: IVCProofVerificationResult = { valid, durationMs, totalDurationMs };
     this.metrics.recordIVCVerification(ivcResult);
