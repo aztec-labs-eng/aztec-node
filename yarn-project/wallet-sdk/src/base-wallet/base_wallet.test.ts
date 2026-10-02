@@ -1,4 +1,5 @@
-import { type Account, NO_FROM } from '@aztec-labs/aztec.js/account';
+import { type Account, NO_FROM, type NoFrom } from '@aztec-labs/aztec.js/account';
+import { type FeePaymentMethod, SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { Aliased } from '@aztec-labs/aztec.js/wallet';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
@@ -9,7 +10,7 @@ import { FunctionCall, FunctionSelector, FunctionType } from '@aztec-labs/stdlib
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import type { NodeInfo } from '@aztec-labs/stdlib/contract';
-import { Gas, GasFees, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
+import { Gas, GasFees, GasSettings, ManaUsageEstimate } from '@aztec-labs/stdlib/gas';
 import { PrivateKernelTailCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import {
   BlockHeader,
@@ -27,10 +28,13 @@ import {
 } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
-import { BaseWallet, type CompleteFeeOptionsConfig, type FeeOptions } from './base_wallet.js';
+import { BaseWallet, type CalculateGasSettingsConfig } from './base_wallet.js';
+import { getAppCallOffset } from './utils.js';
 
 class BasicWallet extends BaseWallet {
   mockAccount = mock<Account>();
+  defaultFeePaymentMethod: FeePaymentMethod | undefined;
+  defaultFeePaymentMethodRequests: { from: AztecAddress | NoFrom; gasSettings: GasSettings }[] = [];
 
   constructor(pxe: PXE, node: AztecNode) {
     super(pxe, node);
@@ -52,8 +56,24 @@ class BasicWallet extends BaseWallet {
     return super.getMaxTxGasLimits();
   }
 
-  public completeFeeOptionsForTest(config: CompleteFeeOptionsConfig): Promise<FeeOptions> {
-    return super.completeFeeOptions(config);
+  public calculateGasSettingsForTest(config: CalculateGasSettingsConfig): Promise<GasSettings> {
+    return super.calculateGasSettings(config);
+  }
+
+  protected override getDefaultFeePaymentMethod(
+    from: AztecAddress | NoFrom,
+    gasSettings: GasSettings,
+  ): Promise<FeePaymentMethod | undefined> {
+    this.defaultFeePaymentMethodRequests.push({ from, gasSettings });
+    return Promise.resolve(this.defaultFeePaymentMethod);
+  }
+
+  public addDefaultFeePaymentForTest(
+    executionPayload: ExecutionPayload,
+    from: AztecAddress | NoFrom,
+    gasSettings: GasSettings,
+  ): Promise<ExecutionPayload> {
+    return super.addDefaultFeePayment(executionPayload, from, gasSettings);
   }
 }
 
@@ -293,7 +313,7 @@ describe('BaseWallet', () => {
     });
   });
 
-  describe('completeFeeOptions gas limit validation', () => {
+  describe('calculateGasSettings gas limit validation', () => {
     let pxe: MockProxy<PXE>;
     let node: MockProxy<AztecNode>;
     let wallet: BasicWallet;
@@ -313,13 +333,12 @@ describe('BaseWallet', () => {
     });
 
     it('fills in the network admission limit when no gas limits are declared', async () => {
-      const { gasSettings } = await wallet.completeFeeOptionsForTest({ from: NO_FROM });
+      const gasSettings = await wallet.calculateGasSettingsForTest({});
       expect(gasSettings.gasLimits).toEqual(new Gas(1000, 2000));
     });
 
     it('accepts caller-provided gas limits at or below the network admission limit', async () => {
-      const { gasSettings } = await wallet.completeFeeOptionsForTest({
-        from: NO_FROM,
+      const gasSettings = await wallet.calculateGasSettingsForTest({
         gasSettings: { gasLimits: Gas.from({ daGas: 1000, l2Gas: 2000 }) },
       });
       expect(gasSettings.gasLimits).toEqual(new Gas(1000, 2000));
@@ -327,8 +346,7 @@ describe('BaseWallet', () => {
 
     it('rejects caller-provided da gas limit above the network admission limit', async () => {
       await expect(
-        wallet.completeFeeOptionsForTest({
-          from: NO_FROM,
+        wallet.calculateGasSettingsForTest({
           gasSettings: { gasLimits: Gas.from({ daGas: 1001, l2Gas: 2000 }) },
         }),
       ).rejects.toThrow('Declared DA gas limit (1001) exceeds the maximum this network allows per tx (1000)');
@@ -336,8 +354,7 @@ describe('BaseWallet', () => {
 
     it('rejects caller-provided l2 gas limit above the network admission limit', async () => {
       await expect(
-        wallet.completeFeeOptionsForTest({
-          from: NO_FROM,
+        wallet.calculateGasSettingsForTest({
           gasSettings: { gasLimits: Gas.from({ daGas: 1000, l2Gas: 2001 }) },
         }),
       ).rejects.toThrow('Declared L2 gas limit (2001) exceeds the maximum this network allows per tx (2000)');
@@ -345,12 +362,74 @@ describe('BaseWallet', () => {
 
     it('does not validate against the admission limit when estimating', async () => {
       await expect(
-        wallet.completeFeeOptionsForTest({
-          from: NO_FROM,
+        wallet.calculateGasSettingsForTest({
           forEstimation: true,
           gasSettings: { gasLimits: Gas.from({ daGas: 1_000_000, l2Gas: 1_000_000 }) },
         }),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe('addDefaultFeePayment', () => {
+    let wallet: BasicWallet;
+    let from: AztecAddress;
+    let sponsor: AztecAddress;
+    let payload: ExecutionPayload;
+    let gasSettings: GasSettings;
+
+    beforeEach(async () => {
+      wallet = new BasicWallet(mock<PXE>(), mock<AztecNode>());
+      from = await AztecAddress.random();
+      sponsor = await AztecAddress.random();
+      payload = new ExecutionPayload([await makeFunctionCall(FunctionType.PRIVATE, false, 'transfer')], [], []);
+      gasSettings = GasSettings.empty();
+    });
+
+    it('leaves the payload untouched when the wallet has no default fee payment method', async () => {
+      expect(await wallet.addDefaultFeePaymentForTest(payload, from, gasSettings)).toBe(payload);
+    });
+
+    it('prepends the default fee payment and makes its payer the fee payer', async () => {
+      wallet.defaultFeePaymentMethod = new SponsoredFeePaymentMethod(sponsor);
+
+      const txPayload = await wallet.addDefaultFeePaymentForTest(payload, from, gasSettings);
+
+      expect(txPayload.calls.map(call => call.to)).toEqual([sponsor, payload.calls[0].to]);
+      expect(txPayload.feePayer).toEqual(sponsor);
+    });
+
+    it("asks for the default fee payment method with the transaction's gas settings", async () => {
+      await wallet.addDefaultFeePaymentForTest(payload, from, gasSettings);
+
+      expect(wallet.defaultFeePaymentMethodRequests).toEqual([{ from, gasSettings }]);
+    });
+
+    it('keeps the fee payment of a payload that already has a fee payer', async () => {
+      wallet.defaultFeePaymentMethod = new SponsoredFeePaymentMethod(sponsor);
+      const paidPayload = new ExecutionPayload(payload.calls, [], [], [], await AztecAddress.random());
+
+      expect(await wallet.addDefaultFeePaymentForTest(paidPayload, from, gasSettings)).toBe(paidPayload);
+      expect(wallet.defaultFeePaymentMethodRequests).toEqual([]);
+    });
+  });
+
+  describe('getAppCallOffset', () => {
+    let appPayload: ExecutionPayload;
+
+    beforeEach(async () => {
+      appPayload = new ExecutionPayload([await makeFunctionCall(FunctionType.PRIVATE, false, 'transfer')], [], []);
+    });
+
+    it('counts the entrypoint and the fee payment calls added ahead of the app', async () => {
+      const feeCall = await makeFunctionCall(FunctionType.PRIVATE, false, 'sponsor_unconditionally');
+      const txPayload = new ExecutionPayload([feeCall, ...appPayload.calls], [], []);
+
+      expect(getAppCallOffset(await AztecAddress.random(), appPayload, txPayload)).toBe(2);
+      expect(getAppCallOffset(await AztecAddress.random(), appPayload, appPayload)).toBe(1);
+    });
+
+    it('starts at the root without a sender account', () => {
+      expect(getAppCallOffset(NO_FROM, appPayload, appPayload)).toBe(0);
     });
   });
 
@@ -385,7 +464,7 @@ describe('BaseWallet', () => {
     mockTx.getTxHash.mockReturnValue(TxHash.random());
     provenTx.toTx.mockResolvedValue(mockTx);
 
-    // Mock dependencies for completeFeeOptions and createTxExecutionRequestFromPayloadAndFee
+    // Mock dependencies for calculateGasSettings and createTxExecutionRequestFromPayload
     node.getPredictedMinFees.mockResolvedValue([new GasFees(2, 2)]);
     node.getCurrentMinFees.mockResolvedValue(new GasFees(2, 2));
     node.getNodeInfo.mockResolvedValue({

@@ -30,7 +30,7 @@ Key configuration:
 - `l1Contracts` - Required for the PXE to verify L1 state
 - `proverEnabled` - Enables client-side proof generation
 
-SponsoredFPC is registered lazily when the wallet's `completeFeeOptions()` is first called, rather than at PXE initialization time.
+SponsoredFPC is registered lazily when the wallet's `getDefaultFeePaymentMethod()` is first called, rather than at PXE initialization time.
 
 ## The Wallet Implementation
 
@@ -55,18 +55,20 @@ By extending `BaseWallet`, you inherit:
 You implement:
 - `getAccountFromAddress()` - Return the Account object for signing
 - `getAccounts()` - List available accounts
-- `completeFeeOptions()` - Configure fee payment (the SponsoredFPC override)
+- `getDefaultFeePaymentMethod()` - Pick how transactions pay fees (the SponsoredFPC override)
 - `sendTx()` - Override with automatic auth witness extraction
 
 ## SponsoredFPC Fee Payment
 
-The key override is `completeFeeOptions()`, which lazily registers the SponsoredFPC contract on first use:
+The key override is `getDefaultFeePaymentMethod()`, which lazily registers the SponsoredFPC contract on first use:
 
-#include_code complete-fee-options docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts typescript
+#include_code default-fee-payment-method docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts typescript
 
 This ensures that by default:
 1. If the payload already has a `feePayer` (e.g., during account deployment), the wallet respects it
 2. Otherwise, the wallet injects `SponsoredFeePaymentMethod` so users don't need fee tokens to transact
+
+`BaseWallet` merges the sponsor's fee payment calls in front of the app's calls, just as it would for a fee payment method passed by the app. The sender's account entrypoint then sees that the SponsoredFPC is the fee payer, so it leaves the fee to it instead of paying with its own fee juice.
 
 The `SponsoredFeePaymentMethod` creates an execution payload that:
 - Calls the SponsoredFPC contract's fee payment function
@@ -133,20 +135,24 @@ The `BaseWallet` base class does the heavy lifting for transactions:
 ```typescript
 // In BaseWallet (inherited)
 async sendTx(executionPayload, opts) {
-  // 1. Complete fee options (our override uses SponsoredFPC)
-  const feeOptions = await this.completeFeeOptions(...);
+  // 1. Fill in gas settings from the network's current fees and limits
+  const gasSettings = await this.calculateGasSettings(...);
 
-  // 2. Create execution request
-  const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(...);
+  // 2. If the payload doesn't pay its own fee, add the wallet's default fee payment
+  //    (our override uses SponsoredFPC)
+  const txPayload = await this.addDefaultFeePayment(executionPayload, opts.from, gasSettings);
 
-  // 3. Generate proof (WASM, can take time)
+  // 3. Create execution request
+  const txRequest = await this.createTxExecutionRequestFromPayload(txPayload, opts.from, gasSettings);
+
+  // 4. Generate proof (WASM, can take time)
   const provenTx = await this.pxe.proveTx(txRequest);
 
-  // 4. Submit to node
+  // 5. Submit to node
   const tx = await provenTx.toTx();
   await this.aztecNode.sendTx(tx);
 
-  // 5. Optionally wait for confirmation
+  // 6. Optionally wait for confirmation
   if (opts.wait !== NO_WAIT) {
     return await waitForTx(this.aztecNode, txHash, waitOpts);
   }
