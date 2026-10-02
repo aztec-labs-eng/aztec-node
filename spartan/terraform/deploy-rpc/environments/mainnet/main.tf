@@ -40,29 +40,7 @@ provider "google" {
 }
 
 locals {
-  l1_secret_names = {
-    l1_rpc_secret_name                            = "mainnet-rpc-urls"
-    l1_consensus_host_urls_secret_name            = "mainnet-consensus-host-urls"
-    l1_consensus_host_api_keys_secret_name        = "mainnet-consensus-host-api-keys"
-    l1_consensus_host_api_key_headers_secret_name = "mainnet-consensus-host-api-key-headers"
-  }
-
-  env = {
-    NETWORK           = "mainnet"
-    L1_CHAIN_ID       = "1"
-    RPC_MAX_BODY_SIZE = "10mb"
-  }
-
-  rpcs = {
-    canonical = merge(local.l1_secret_names, {
-      aztec_docker_image = var.CANONICAL_AZTEC_DOCKER_IMAGE
-      hosts              = ["v5.mainnet.rpc.aztec-labs.com", "canonical.mainnet.rpc.aztec-labs.com"]
-      storage_size       = "8Gi"
-      env = merge(local.env, {
-        ROLLUP_VERSION = ""
-      })
-    })
-  }
+  rpcs = {}
 
   consumer_secret_names = [
     "mainnet-rpc-consumer-client1",
