@@ -524,7 +524,7 @@ describe('HA Full Setup', () => {
 
       try {
         // Use our actual cleanupOldDuties method
-        const numCleaned = await spDb.cleanupOldDuties(60 * 60 * 1000); // 1 hour
+        const numCleaned = await spDb.cleanupOldDuties();
 
         // Should NOT delete the duty we just created (it uses DB's clock, not node's)
         expect(numCleaned).toBe(0);
@@ -575,7 +575,8 @@ describe('HA Full Setup', () => {
       const updateResult = await mainPool.query(
         `UPDATE validator_duties
          SET started_at = CURRENT_TIMESTAMP - INTERVAL '2 hours',
-             completed_at = CURRENT_TIMESTAMP - INTERVAL '2 hours'
+             completed_at = CURRENT_TIMESTAMP - INTERVAL '2 hours',
+             expires_at = CURRENT_TIMESTAMP - INTERVAL '1 hour'
          WHERE slot = $1 AND validator_address = $2`,
         ['300', validatorAddress.toString().toLowerCase()],
       );
@@ -596,7 +597,7 @@ describe('HA Full Setup', () => {
 
       try {
         // Use our actual cleanupOldDuties method - should delete based on DB time
-        const numCleaned = await spDb.cleanupOldDuties(60 * 60 * 1000); // 1 hour
+        const numCleaned = await spDb.cleanupOldDuties();
         expect(numCleaned).toBeGreaterThanOrEqual(1);
       } finally {
         // Reset dateProvider back to real time

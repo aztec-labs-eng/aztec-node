@@ -31,12 +31,8 @@ const LEGACY_CHECKPOINT_NUMBER = '0';
 type StoredDutyRecordV1 = Omit<StoredDutyRecord, 'checkpointNumber'> & { checkpointNumber?: undefined };
 type MigratableStoredDutyRecord = StoredDutyRecord | StoredDutyRecordV1;
 
-function needsCheckpointNumberMigration(record: MigratableStoredDutyRecord): record is StoredDutyRecordV1 {
-  return record.checkpointNumber === undefined;
-}
-
 /**
- * Migrates local slashing-protection duties from schema 1 to schema 2.
+ * Migrates local slashing-protection duties to the current schema, retaining legacy records for 30 days.
  */
 export async function migrateLmdbSlashingProtectionDatabase(
   dataDirectory: string,
@@ -44,7 +40,7 @@ export async function migrateLmdbSlashingProtectionDatabase(
   latestVersion: number,
   dbMapSizeKb?: number,
 ): Promise<void> {
-  if (currentVersion !== 1 || latestVersion !== LmdbSlashingProtectionDatabase.SCHEMA_VERSION) {
+  if (![1, 2].includes(currentVersion) || latestVersion !== LmdbSlashingProtectionDatabase.SCHEMA_VERSION) {
     throw new Error(`Unsupported LMDB slashing-protection migration ${currentVersion} -> ${latestVersion}`);
   }
 
@@ -53,10 +49,16 @@ export async function migrateLmdbSlashingProtectionDatabase(
     const duties = store.openMap<string, MigratableStoredDutyRecord>(DUTIES_MAP_NAME);
     const migratedRecords: { key: string; value: StoredDutyRecord }[] = [];
 
+    const expiresAtMs = Date.now() + 30 * 24 * 60 * 60 * 1000;
     for await (const [key, record] of duties.entriesAsync()) {
-      if (needsCheckpointNumberMigration(record)) {
-        migratedRecords.push({ key, value: { ...record, checkpointNumber: LEGACY_CHECKPOINT_NUMBER } });
-      }
+      migratedRecords.push({
+        key,
+        value: {
+          ...record,
+          checkpointNumber: record.checkpointNumber ?? LEGACY_CHECKPOINT_NUMBER,
+          expiresAtMs: record.expiresAtMs ?? expiresAtMs,
+        },
+      });
     }
 
     if (migratedRecords.length > 0) {
@@ -84,7 +86,7 @@ function dutyKey(
  * Does not provide cross-node coordination (that requires the PostgreSQL implementation).
  */
 export class LmdbSlashingProtectionDatabase implements SlashingProtectionDatabase {
-  public static readonly SCHEMA_VERSION = 2;
+  public static readonly SCHEMA_VERSION = 3;
 
   private readonly duties: AztecAsyncMap<string, StoredDutyRecord>;
   private readonly log: Logger;
@@ -134,6 +136,7 @@ export class LmdbSlashingProtectionDatabase implements SlashingProtectionDatabas
         nodeId: params.nodeId,
         lockToken,
         startedAtMs: now,
+        expiresAtMs: params.retentionMs === undefined ? undefined : now + params.retentionMs,
       };
       await this.duties.set(key, newRecord);
       return { isNew: true as const, record: newRecord };
@@ -264,30 +267,15 @@ export class LmdbSlashingProtectionDatabase implements SlashingProtectionDatabas
   }
 
   /**
-   * Cleanup duties with outdated rollup address.
-   *
-   * This is always a no-op for the LMDB implementation: the underlying store is created via
-   * DatabaseVersionManager (in factory.ts), which already resets the entire data directory at
-   * startup whenever the rollup address changes.
+   * Cleanup expired duties across all rollups using their persisted deadlines.
    */
-  public cleanupOutdatedRollupDuties(_currentRollupAddress: EthAddress): Promise<number> {
-    return Promise.resolve(0);
-  }
-
-  /**
-   * Cleanup old signed duties older than maxAgeMs.
-   */
-  public cleanupOldDuties(maxAgeMs: number): Promise<number> {
-    const cutoffMs = this.dateProvider.now() - maxAgeMs;
+  public cleanupOldDuties(): Promise<number> {
+    const now = this.dateProvider.now();
 
     return this.store.transactionAsync(async () => {
       const keysToDelete: string[] = [];
       for await (const [key, record] of this.duties.entriesAsync()) {
-        if (
-          record.status === DutyStatus.SIGNED &&
-          record.completedAtMs !== undefined &&
-          record.completedAtMs < cutoffMs
-        ) {
+        if (record.expiresAtMs !== undefined && record.expiresAtMs <= now) {
           keysToDelete.push(key);
         }
       }

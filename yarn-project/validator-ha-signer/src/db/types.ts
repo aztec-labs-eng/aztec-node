@@ -51,6 +51,8 @@ export interface StoredDutyRecord {
   startedAtMs: number;
   /** Unix timestamp in milliseconds when signing completed */
   completedAtMs?: number;
+  /** Unix timestamp in milliseconds after which the duty can be deleted; absent means no expiry. */
+  expiresAtMs?: number;
   errorMessage?: string;
 }
 
@@ -213,6 +215,8 @@ export function getBlockIndexFromDutyIdentifier(duty: DutyIdentifier): number {
  * Additional parameters for checking and recording a new duty
  */
 interface CheckAndRecordExtra {
+  /** Retention from insertion in milliseconds; omitted means no expiry. */
+  retentionMs?: number;
   /** Block number for this duty (0 for non-block-proposal duties) */
   blockNumber: BlockNumber;
   /** Checkpoint number for this duty (0 for attestation and vote duties) */

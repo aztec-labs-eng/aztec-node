@@ -360,6 +360,20 @@ export async function createAztecNodeService(
 
     if (!config.disableValidator) {
       // Create validator client if required
+      if (config.cleanupOldDutiesAfterHours === undefined) {
+        const slashingProposer = await rollupContract.getSlashingProposer();
+        if (slashingProposer) {
+          const [roundSize, offset, lifetime] = await Promise.all([
+            slashingProposer.getRoundSize(),
+            slashingProposer.getSlashOffsetInRounds(),
+            slashingProposer.getLifetimeInRounds(),
+          ]);
+          // Offenses in round R are voted on in R + offset and executable through R + offset + lifetime.
+          config.cleanupOldDutiesAfterHours = Math.ceil(
+            (Number((offset + lifetime + 1n) * roundSize) * Number(slotDuration)) / 3600,
+          );
+        }
+      }
       validatorClient = await createValidatorClient(config, {
         checkpointsBuilder: validatorCheckpointsBuilder,
         worldState: worldStateSynchronizer,

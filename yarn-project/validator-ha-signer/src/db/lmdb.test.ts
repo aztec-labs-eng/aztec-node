@@ -259,19 +259,9 @@ describe('LmdbSlashingProtectionDatabase', () => {
     });
   });
 
-  describe('cleanupOutdatedRollupDuties', () => {
-    it('is always a no-op: rollup address changes are handled at startup by DatabaseVersionManager', async () => {
-      await db.tryInsertOrGetExisting(defaultParams());
-
-      const differentRollup = EthAddress.random();
-      const count = await db.cleanupOutdatedRollupDuties(differentRollup);
-      expect(count).toBe(0);
-    });
-  });
-
   describe('cleanupOldDuties', () => {
     it('should remove old SIGNED duties', async () => {
-      const { record } = await db.tryInsertOrGetExisting(defaultParams());
+      const { record } = await db.tryInsertOrGetExisting({ ...defaultParams(), retentionMs: 60_000 });
       await db.updateDutySigned(
         ROLLUP_ADDRESS,
         VALIDATOR_ADDRESS,
@@ -283,20 +273,20 @@ describe('LmdbSlashingProtectionDatabase', () => {
       );
 
       dateProvider.advanceTime(120);
-      const count = await db.cleanupOldDuties(60_000);
+      const count = await db.cleanupOldDuties();
       expect(count).toBe(1);
     });
 
-    it('should not remove SIGNING duties', async () => {
+    it('should not remove duties without an expiry', async () => {
       await db.tryInsertOrGetExisting(defaultParams());
 
       dateProvider.advanceTime(120);
-      const count = await db.cleanupOldDuties(60_000);
+      const count = await db.cleanupOldDuties();
       expect(count).toBe(0);
     });
 
     it('should not remove fresh SIGNED duties within maxAgeMs', async () => {
-      const { record } = await db.tryInsertOrGetExisting(defaultParams());
+      const { record } = await db.tryInsertOrGetExisting({ ...defaultParams(), retentionMs: 60_000 });
       await db.updateDutySigned(
         ROLLUP_ADDRESS,
         VALIDATOR_ADDRESS,
@@ -308,7 +298,7 @@ describe('LmdbSlashingProtectionDatabase', () => {
       );
 
       dateProvider.advanceTime(30);
-      const count = await db.cleanupOldDuties(60_000);
+      const count = await db.cleanupOldDuties();
       expect(count).toBe(0);
     });
   });

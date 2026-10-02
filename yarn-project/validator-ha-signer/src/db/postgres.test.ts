@@ -65,6 +65,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       expect(result.rows.length).toBe(1);
@@ -91,6 +92,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       // Second insert attempt with different node
@@ -105,6 +107,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         'node-2', // Different node trying to acquire
         'different-token',
+        null,
       ]);
 
       expect(result.rows.length).toBe(1);
@@ -126,6 +129,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
       expect(insertResult.rows[0].is_new).toBe(true);
       expect(insertResult.rows[0].lock_token).toBe(LOCK_TOKEN);
@@ -142,6 +146,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         'competing-node',
         'competing-token',
+        null,
       ]);
       expect(conflictResult.rows[0].is_new).toBe(false);
       expect(conflictResult.rows[0].lock_token).toBe(''); // Empty string, not the original token
@@ -160,6 +165,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       // Insert ATTESTATION for same slot
@@ -174,6 +180,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         'token-2',
+        null,
       ]);
 
       expect(result1.rows[0].is_new).toBe(true);
@@ -192,6 +199,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         'token-1',
+        null,
       ]);
 
       const result2 = await db.query<InsertOrGetRow>(INSERT_OR_GET_DUTY, [
@@ -205,6 +213,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         'token-2',
+        null,
       ]);
 
       expect(result1.rows[0].is_new).toBe(true);
@@ -226,6 +235,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       // Update to signed with correct token
@@ -266,6 +276,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       // Try to update with wrong token
@@ -302,6 +313,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
       await db.query<DutyRow>(UPDATE_DUTY_SIGNED, [
         SIGNATURE,
@@ -348,6 +360,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       const deleteResult = await db.query(DELETE_DUTY, [
@@ -381,6 +394,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       const deleteResult = await db.query(DELETE_DUTY, [
@@ -414,6 +428,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
       await db.query(UPDATE_DUTY_SIGNED, [
         SIGNATURE,
@@ -459,6 +474,7 @@ describe('PostgreSQL Queries', () => {
         MESSAGE_HASH,
         NODE_ID,
         LOCK_TOKEN,
+        null,
       ]);
 
       // Direct insert should fail due to primary key constraint
@@ -1444,109 +1460,6 @@ describe('PostgresSlashingProtectionDatabase', () => {
     });
   });
 
-  describe('cleanupOutdatedRollupDuties', () => {
-    const CURRENT_ROLLUP_ADDRESS = EthAddress.random();
-    const OLD_ROLLUP_ADDRESS_1 = EthAddress.random();
-    const OLD_ROLLUP_ADDRESS_2 = EthAddress.random();
-    const VALIDATOR_ADDRESS = EthAddress.random();
-    const NODE_ID = 'node-1';
-
-    beforeEach(async () => {
-      for (const statement of SCHEMA_SETUP) {
-        await pglite.query(statement);
-      }
-      await pglite.query(INSERT_SCHEMA_VERSION, [SCHEMA_VERSION]);
-    });
-
-    it('should clean up duties with outdated rollup addresses', async () => {
-      const spDb = new PostgresSlashingProtectionDatabase(pool);
-
-      // Create duties for old rollup addresses
-      for (let i = 0; i < 3; i++) {
-        await spDb.tryInsertOrGetExisting({
-          rollupAddress: OLD_ROLLUP_ADDRESS_1,
-          validatorAddress: VALIDATOR_ADDRESS,
-          slot: SlotNumber(100 + i),
-          blockNumber: BlockNumber(50 + i),
-          checkpointNumber: CheckpointNumber(1),
-          blockIndexWithinCheckpoint: IndexWithinCheckpoint(0),
-          dutyType: DutyType.BLOCK_PROPOSAL,
-          messageHash: Buffer32.random().toString(),
-          nodeId: NODE_ID,
-        });
-      }
-
-      for (let i = 0; i < 2; i++) {
-        await spDb.tryInsertOrGetExisting({
-          rollupAddress: OLD_ROLLUP_ADDRESS_2,
-          validatorAddress: VALIDATOR_ADDRESS,
-          slot: SlotNumber(200 + i),
-          blockNumber: BlockNumber(150 + i),
-          checkpointNumber: CheckpointNumber(1),
-          blockIndexWithinCheckpoint: IndexWithinCheckpoint(0),
-          dutyType: DutyType.BLOCK_PROPOSAL,
-          messageHash: Buffer32.random().toString(),
-          nodeId: NODE_ID,
-        });
-      }
-
-      // Create duties for current rollup address
-      for (let i = 0; i < 2; i++) {
-        await spDb.tryInsertOrGetExisting({
-          rollupAddress: CURRENT_ROLLUP_ADDRESS,
-          validatorAddress: VALIDATOR_ADDRESS,
-          slot: SlotNumber(300 + i),
-          blockNumber: BlockNumber(250 + i),
-          checkpointNumber: CheckpointNumber(1),
-          blockIndexWithinCheckpoint: IndexWithinCheckpoint(0),
-          dutyType: DutyType.BLOCK_PROPOSAL,
-          messageHash: Buffer32.random().toString(),
-          nodeId: NODE_ID,
-        });
-      }
-
-      // Clean up outdated rollup duties
-      const numCleaned = await spDb.cleanupOutdatedRollupDuties(CURRENT_ROLLUP_ADDRESS);
-      expect(numCleaned).toBe(5); // 3 from OLD_ROLLUP_ADDRESS_1 + 2 from OLD_ROLLUP_ADDRESS_2
-
-      // Verify old rollup duties are gone
-      const oldDuties = await pglite.query(`SELECT * FROM validator_duties WHERE rollup_address != $1`, [
-        CURRENT_ROLLUP_ADDRESS.toString(),
-      ]);
-      expect(oldDuties.rows.length).toBe(0);
-
-      // Verify current rollup duties still exist
-      const currentDuties = await pglite.query(`SELECT * FROM validator_duties WHERE rollup_address = $1`, [
-        CURRENT_ROLLUP_ADDRESS.toString(),
-      ]);
-      expect(currentDuties.rows.length).toBe(2);
-    });
-
-    it('should return 0 when no outdated duties exist', async () => {
-      const spDb = new PostgresSlashingProtectionDatabase(pool);
-
-      // Create duties only for current rollup
-      await spDb.tryInsertOrGetExisting({
-        rollupAddress: CURRENT_ROLLUP_ADDRESS,
-        validatorAddress: VALIDATOR_ADDRESS,
-        slot: SlotNumber(100),
-        blockNumber: BlockNumber(50),
-        checkpointNumber: CheckpointNumber(1),
-        blockIndexWithinCheckpoint: IndexWithinCheckpoint(0),
-        dutyType: DutyType.BLOCK_PROPOSAL,
-        messageHash: Buffer32.random().toString(),
-        nodeId: NODE_ID,
-      });
-
-      const numCleaned = await spDb.cleanupOutdatedRollupDuties(CURRENT_ROLLUP_ADDRESS);
-      expect(numCleaned).toBe(0);
-
-      // Verify duty still exists
-      const duties = await pglite.query(`SELECT * FROM validator_duties`);
-      expect(duties.rows.length).toBe(1);
-    });
-  });
-
   describe('cleanupOldDuties', () => {
     const ROLLUP_ADDRESS = EthAddress.random();
     const VALIDATOR_ADDRESS = EthAddress.random();
@@ -1567,10 +1480,10 @@ describe('PostgresSlashingProtectionDatabase', () => {
         await pglite.query(
           `INSERT INTO validator_duties (
             rollup_address, validator_address, slot, block_number, block_index_within_checkpoint,
-            duty_type, status, message_hash, signature, node_id, lock_token, started_at, completed_at
+            duty_type, status, message_hash, signature, node_id, lock_token, started_at, completed_at, expires_at
           ) VALUES ($1, $2, $3, $4, $5, $6, 'signed', $7, '0xsignature', $8, 'token',
             CURRENT_TIMESTAMP - INTERVAL '2 hours',
-            CURRENT_TIMESTAMP - INTERVAL '2 hours')`,
+            CURRENT_TIMESTAMP - INTERVAL '2 hours', CURRENT_TIMESTAMP - INTERVAL '1 hour')`,
           [
             ROLLUP_ADDRESS.toString(),
             VALIDATOR_ADDRESS.toString(),
@@ -1628,8 +1541,7 @@ describe('PostgresSlashingProtectionDatabase', () => {
       );
 
       // Clean up duties older than 1 hour
-      const maxAgeMs = 60 * 60 * 1000; // 1 hour
-      const numCleaned = await spDb.cleanupOldDuties(maxAgeMs);
+      const numCleaned = await spDb.cleanupOldDuties();
       expect(numCleaned).toBe(2); // Only the 2 old signed duties
 
       // Verify old signed duties are gone
@@ -1648,7 +1560,7 @@ describe('PostgresSlashingProtectionDatabase', () => {
 
     it('should return 0 when no old signed duties exist', async () => {
       const spDb = new PostgresSlashingProtectionDatabase(pool);
-      const numCleaned = await spDb.cleanupOldDuties(60 * 60 * 1000);
+      const numCleaned = await spDb.cleanupOldDuties();
       expect(numCleaned).toBe(0);
     });
   });
@@ -1727,6 +1639,7 @@ describe('migrations', () => {
     expect(schemaAfterFirstUp.primaryKey.length).toBeGreaterThan(0);
 
     // Step 2: roll back all migrations one at a time.
+    await runner({ ...runnerOptions, direction: 'down', count: 1 });
     await runner({ ...runnerOptions, direction: 'down', count: 1 });
     await runner({ ...runnerOptions, direction: 'down', count: 1 });
 

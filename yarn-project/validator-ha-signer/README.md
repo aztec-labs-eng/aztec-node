@@ -176,15 +176,27 @@ All signing operations require a `SigningContext` that includes:
 
 Note: `AUTH_REQUEST` duties bypass HA protection since signing multiple times is safe for authentication requests.
 
-## Important Limitations
+## Rollup Upgrades
 
-### Database Isolation Per Rollup Version
+The shared PostgreSQL database isolates duties by rollup address. Replicas serving different rollups can share it during
+an upgrade: starting a replica preserves signing history for every rollup, including rollups still served by other replicas.
 
-**You cannot use the same database to provide slashing protection for validator nodes running on different rollup versions** (e.g., current rollup and old rollup simultaneously).
+The node defaults `cleanupOldDutiesAfterHours` to the full slashing window read from the rollup's slashing proposer:
+`(slashOffsetInRounds + lifetimeInRounds + 1) * roundSizeInSlots * slotDurationSeconds / 3600`, rounded up to hours.
+The extra round retains records through the end of the last round in which a slash can execute. An explicit
+`VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H` overrides this default. Without a slashing proposer, or when constructing a signer
+directly without a retention setting, signed duties are retained indefinitely.
 
-When the HA signer performs background cleanup via `cleanupOutdatedRollupDuties()`, it removes all duties where the rollup address doesn't match the current rollup address. If two validators running on different rollup versions share the same database, they will delete each other's duties during cleanup.
+Each newly inserted duty stores an expiry deadline based on its retention setting at insertion. An omitted setting
+stores no deadline. Later configuration changes do not shorten or extend existing deadlines. Any replica can remove
+expired records across all rollups, including retired rollups, without applying its own retention policy to them.
+Expiry cleanup runs at startup and approximately hourly; cleanup of the node's own stuck signing duties remains separate.
 
-**Solution**: Use separate databases for validators running on different rollup versions. Each rollup version requires its own isolated slashing protection database.
+Schema 3 adds these deadlines. The PostgreSQL migration marks every existing duty as expiring 30 days after migration,
+regardless of its age or rollup. Stop older replicas sharing the database, then run
+`aztec migrate-ha-db up --database-url <url>` with the updated release before starting the updated replicas. Older
+binaries cannot restart against schema 3. Local LMDB stores migrate automatically from schema 1 or 2 and give existing
+records the same 30-day grace period. The migration preserves signatures and duty identities.
 
 ## Development
 

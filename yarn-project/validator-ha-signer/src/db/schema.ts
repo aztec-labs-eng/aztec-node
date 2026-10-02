@@ -9,7 +9,7 @@
 /**
  * Current schema version
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /**
  * SQL to create the validator_duties table
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS validator_duties (
   lock_token VARCHAR(64) NOT NULL,
   started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   completed_at TIMESTAMP,
+  expires_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP + INTERVAL '30 days',
   error_message TEXT,
 
   PRIMARY KEY (rollup_address, validator_address, slot, duty_type, block_index_within_checkpoint),
@@ -72,14 +73,19 @@ VALUES ($1)
 ON CONFLICT (version) DO NOTHING;
 `;
 
-/**
- * Complete schema setup - all statements in order
- */
+/** Index for expiry-based cleanup across all rollups. */
+export const CREATE_EXPIRY_INDEX = `
+CREATE INDEX IF NOT EXISTS idx_validator_duties_expiry
+ON validator_duties(expires_at) WHERE expires_at IS NOT NULL;
+`;
+
+/** Complete schema setup, in execution order. */
 export const SCHEMA_SETUP = [
   CREATE_SCHEMA_VERSION_TABLE,
   CREATE_VALIDATOR_DUTIES_TABLE,
   CREATE_STATUS_INDEX,
   CREATE_NODE_INDEX,
+  CREATE_EXPIRY_INDEX,
 ] as const;
 
 /**
@@ -114,8 +120,10 @@ WITH inserted AS (
     message_hash,
     node_id,
     lock_token,
-    started_at
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'signing', $8, $9, $10, CURRENT_TIMESTAMP)
+    started_at,
+    expires_at
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'signing', $8, $9, $10, CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP + ($11::double precision * INTERVAL '1 millisecond'))
   ON CONFLICT (rollup_address, validator_address, slot, duty_type, block_index_within_checkpoint) DO NOTHING
   RETURNING
     rollup_address,
@@ -207,12 +215,11 @@ WHERE status = 'signed'
 
 /**
  * Query to clean up old duties (for maintenance)
- * Removes SIGNED duties older than a specified age (in milliseconds)
+ * Removes expired duties across all rollups using their persisted deadlines
  */
 export const CLEANUP_OLD_DUTIES = `
 DELETE FROM validator_duties
-WHERE status = 'signed'
-  AND started_at < CURRENT_TIMESTAMP - ($1 || ' milliseconds')::INTERVAL;
+WHERE expires_at <= CURRENT_TIMESTAMP;
 `;
 
 /**
@@ -225,16 +232,6 @@ DELETE FROM validator_duties
 WHERE node_id = $1
   AND status = 'signing'
   AND started_at < CURRENT_TIMESTAMP - ($2 || ' milliseconds')::INTERVAL;
-`;
-
-/**
- * Query to cleanup duties with outdated rollup address
- * Removes all duties where the rollup address doesn't match the current one
- * Used after a rollup upgrade to clean up duties for the old rollup
- */
-export const CLEANUP_OUTDATED_ROLLUP_DUTIES = `
-DELETE FROM validator_duties
-WHERE rollup_address != $1;
 `;
 
 /**
