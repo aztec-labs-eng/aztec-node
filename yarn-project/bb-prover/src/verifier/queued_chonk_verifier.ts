@@ -1,5 +1,6 @@
 import { createLogger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 import {
@@ -20,6 +21,7 @@ export class IVCVerifierMetrics {
   private ivcVerificationHistogram: Histogram;
   private ivcTotalVerificationHistogram: Histogram;
   private ivcFailureCount: UpDownCounter;
+  private ivcUnavailableCount: UpDownCounter;
   private localHistogramOk = createHistogram({
     min: 1,
     max: 5 * 60 * 1000, // 5 min
@@ -39,6 +41,7 @@ export class IVCVerifierMetrics {
     this.ivcTotalVerificationHistogram = meter.createHistogram(Metrics.IVC_VERIFIER_TOTAL_TIME);
 
     this.ivcFailureCount = createUpDownCounterWithDefault(meter, Metrics.IVC_VERIFIER_FAILURE_COUNT);
+    this.ivcUnavailableCount = createUpDownCounterWithDefault(meter, Metrics.IVC_VERIFIER_UNAVAILABLE_COUNT);
 
     this.aggDurationMetrics = {
       avg: meter.createObservableGauge(Metrics.IVC_VERIFIER_AGG_DURATION_AVG),
@@ -60,6 +63,11 @@ export class IVCVerifierMetrics {
     } else {
       this.localHistogramOk.record(Math.max(Math.ceil(result.durationMs), 1));
     }
+  }
+
+  /** Records a verification that could not run, so produced no verdict. */
+  recordUnavailable() {
+    this.ivcUnavailableCount.add(1);
   }
 
   private aggregate = (res: BatchObservableResult) => {
@@ -96,7 +104,15 @@ export class QueuedIVCVerifier implements ClientProtocolCircuitVerifier {
   }
 
   public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
-    const result = await this.queue.put(() => this.verifier.verifyProof(tx));
+    let result: IVCProofVerificationResult;
+    try {
+      result = await this.queue.put(() => this.verifier.verifyProof(tx));
+    } catch (err) {
+      if (err instanceof ProofVerifierUnavailableError) {
+        this.metrics.recordUnavailable();
+      }
+      throw err;
+    }
     this.metrics.recordIVCVerification(result);
     return result;
   }
