@@ -36,7 +36,7 @@ import { ConsensusTimetable, getDefaultCheckpointProposalSyncGrace } from '@azte
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { Tx, type TxValidationResult } from '@aztec-labs/stdlib/tx';
 import type { UInt64 } from '@aztec-labs/stdlib/types';
-import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
+import { InvalidBlockProposalTxsError, UnverifiableBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { compressComponentVersions } from '@aztec-labs/stdlib/versioning';
 import {
   Attributes,
@@ -150,7 +150,11 @@ interface ValidationResult {
   severity: PeerErrorSeverity;
 }
 
-type ValidationOutcome = { allPassed: true } | { allPassed: false; failure: ValidationResult };
+/** Outcome of one gossip validation stage. `unverifiable` means a check could not run, so there is no verdict. */
+type ValidationOutcome =
+  | { status: 'passed' }
+  | { status: 'failed'; failure: ValidationResult }
+  | { status: 'unverifiable'; validator: string };
 
 // REFACTOR: Unify with the type above
 type ReceivedMessageValidationResult<T, M = undefined> =
@@ -1141,7 +1145,10 @@ export class LibP2PService extends WithTracer implements P2PService {
 
       // Stage 1: fast validators (metadata, data, timestamps, double-spend, gas, phases, block header)
       const firstStageOutcome = await timed('fast_validation', () => this.runValidations(tx, firstStageValidators));
-      if (!firstStageOutcome.allPassed) {
+      if (firstStageOutcome.status === 'unverifiable') {
+        return this.ignoreUnverifiableTx(tx, source, { validator: firstStageOutcome.validator });
+      }
+      if (firstStageOutcome.status === 'failed') {
         const { name } = firstStageOutcome.failure;
         let { severity } = firstStageOutcome.failure;
 
@@ -1176,18 +1183,15 @@ export class LibP2PService extends WithTracer implements P2PService {
       try {
         secondStageOutcome = await timed('proof_verify', () => this.runValidations(tx, secondStageValidators));
       } catch (err) {
-        // A verifier that could not check the proof has not judged it, so this must not reach peer scoring: a dead
-        // local backend would otherwise have the node penalise every peer that sends it a transaction.
         if (err instanceof ProofVerifierUnavailableError) {
-          this.logger.warn(`Ignoring gossiped tx ${tx.getTxHash().toString()}: proof verifier unavailable`, {
-            source: source.toString(),
-            err,
-          });
-          return { result: TopicValidatorResult.Ignore, obj: tx };
+          return this.ignoreUnverifiableTx(tx, source, { err });
         }
         throw err;
       }
-      if (!secondStageOutcome.allPassed) {
+      if (secondStageOutcome.status === 'unverifiable') {
+        return this.ignoreUnverifiableTx(tx, source, { validator: secondStageOutcome.validator });
+      }
+      if (secondStageOutcome.status === 'failed') {
         const { severity, name } = secondStageOutcome.failure;
         this.logger.verbose(`Rejecting gossiped tx ${tx.getTxHash().toString()}: stage 2 validation failed`, {
           validator: name,
@@ -1934,9 +1938,15 @@ export class LibP2PService extends WithTracer implements P2PService {
     const invalidTxs = results.flatMap(({ txHash, result }) =>
       result.result === 'invalid' ? [{ txHash, reasons: result.reason }] : [],
     );
-
     if (invalidTxs.length > 0) {
       throw new InvalidBlockProposalTxsError(invalidTxs);
+    }
+
+    const unverifiableTxs = results.flatMap(({ txHash, result }) =>
+      result.result === 'unverifiable' ? [{ txHash, reasons: result.reason }] : [],
+    );
+    if (unverifiableTxs.length > 0) {
+      throw new UnverifiableBlockProposalTxsError(unverifiableTxs);
     }
   }
 
@@ -1990,30 +2000,50 @@ export class LibP2PService extends WithTracer implements P2PService {
   ): Promise<ValidationOutcome> {
     // Gossip validation stays exhaustive within each stage because peer scoring uses the harshest failure severity;
     // failing fast would make the penalty depend on validator order. The stage boundaries themselves fail fast.
+    // A deterministic failure in the stage wins over an unverifiable check, so a tx that is invalid on its own terms is
+    // still penalised when the proof verifier happens to be down.
     const validationPromises = Object.entries(messageValidators).map(async ([name, { validator, severity }]) => {
       const { result } = await validator.validateTx(tx);
-      return { name, isValid: result !== 'invalid', severity };
+      return { name, result, severity };
     });
 
     // A promise that resolves when all validations have been run
     const allValidations = await Promise.all(validationPromises);
-    const failures = allValidations.filter(x => !x.isValid);
+    const failures = allValidations.filter(x => x.result === 'invalid');
     if (failures.length > 0) {
       // Pick the most severe failure (lowest tolerance = harshest penalty)
       const failed = maxBy(failures, f => PeerErrorSeverityByHarshness.indexOf(f.severity))!;
       return {
-        allPassed: false,
+        status: 'failed',
         failure: {
           isValid: { result: 'invalid' as const, reason: ['Failed validation'] },
           name: failed.name,
           severity: failed.severity,
         },
       };
-    } else {
-      return {
-        allPassed: true,
-      };
     }
+    const unverifiable = allValidations.find(x => x.result === 'unverifiable');
+    if (unverifiable) {
+      return { status: 'unverifiable', validator: unverifiable.name };
+    }
+    return { status: 'passed' };
+  }
+
+  /**
+   * Ignores a gossiped tx that could not be checked, without penalising the peer that sent it: no check has judged it,
+   * and a node whose proof verifier is down would otherwise penalise every peer that sends it a transaction.
+   */
+  private ignoreUnverifiableTx(
+    tx: Tx,
+    source: PeerId,
+    details: { validator?: string; err?: unknown },
+  ): ReceivedMessageValidationResult<Tx> {
+    this.logger.warn(`Ignoring gossiped tx ${tx.getTxHash().toString()}: could not be verified`, {
+      txHash: tx.getTxHash().toString(),
+      source: source.toString(),
+      ...details,
+    });
+    return { result: TopicValidatorResult.Ignore, obj: tx };
   }
 
   /**

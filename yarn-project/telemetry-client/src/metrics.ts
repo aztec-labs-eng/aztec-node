@@ -1732,6 +1732,12 @@ export const IVC_VERIFIER_FAILURE_COUNT: MetricDefinition = {
   valueType: ValueType.INT,
 };
 
+export const IVC_VERIFIER_UNAVAILABLE_COUNT: MetricDefinition = {
+  name: 'aztec.ivc_verifier.unavailable_count',
+  description: 'Count of IVC proof verifications that could not run, so the proof was neither accepted nor rejected',
+  valueType: ValueType.INT,
+};
+
 export const IVC_VERIFIER_AGG_DURATION_MIN: MetricDefinition = {
   name: 'aztec.ivc_verifier.agg_duration_min',
   description: 'MIN ivc verification',

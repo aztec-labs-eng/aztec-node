@@ -87,6 +87,18 @@ describe('LruMap', () => {
     expect(map.has('c')).toBe(true);
   });
 
+  it('peek() returns the value without refreshing recency', () => {
+    const map = new LruMap<string, number>(2);
+    map.set('a', 1);
+    map.set('b', 2);
+
+    expect(map.peek('a')).toBe(1);
+    expect(map.peek('missing')).toBeUndefined();
+    map.set('c', 3);
+    expect(map.has('a')).toBe(false);
+    expect(map.peek('b')).toBe(2);
+  });
+
   it('deletes entries', () => {
     const map = new LruMap<string, number>(5);
     map.set('a', 1);

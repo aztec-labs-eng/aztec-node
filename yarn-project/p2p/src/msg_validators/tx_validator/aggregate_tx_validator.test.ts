@@ -32,6 +32,27 @@ describe('AggregateTxValidator', () => {
     await expect(agg.validateTx(tx)).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
   });
 
+  it('stops at an unverifiable check and reports it as unverifiable', async () => {
+    const tx = await mockTx(0);
+    const unverifiable: TxValidationResult = { result: 'unverifiable', reason: ['Proof could not be verified'] };
+    const agg = new AggregateTxValidator(
+      new TxDenyList([]),
+      { validateTx: () => Promise.resolve(unverifiable) },
+      new TxDenyList([tx.getTxHash()]),
+    );
+
+    await expect(agg.validateTx(tx)).resolves.toEqual(unverifiable);
+  });
+
+  it('reports an earlier invalid check rather than a later unverifiable one', async () => {
+    const tx = await mockTx(0);
+    const agg = new AggregateTxValidator(new TxDenyList([tx.getTxHash()]), {
+      validateTx: () => Promise.resolve<TxValidationResult>({ result: 'unverifiable', reason: ['down'] }),
+    });
+
+    await expect(agg.validateTx(tx)).resolves.toEqual({ result: 'invalid', reason: ['Denied'] });
+  });
+
   class TxDenyList implements TxValidator<AnyTx> {
     denyList: Set<string>;
 

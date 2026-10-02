@@ -55,8 +55,20 @@ import {
   mockTx,
 } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
-import { BlockHeader, GlobalVariables, TX_ERROR_INVALID_PROOF, type Tx, TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
-import { AttestationTimeoutError, InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
+import {
+  BlockHeader,
+  GlobalVariables,
+  TX_ERROR_INVALID_PROOF,
+  TX_ERROR_PROOF_UNVERIFIABLE,
+  type Tx,
+  TxEffect,
+  TxHash,
+} from '@aztec-labs/stdlib/tx';
+import {
+  AttestationTimeoutError,
+  InvalidBlockProposalTxsError,
+  UnverifiableBlockProposalTxsError,
+} from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type PrivateKeyAccount, generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -1794,6 +1806,22 @@ describe('ValidatorClient', () => {
         expect(emitSpy).not.toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, expect.anything());
         expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
       });
+    });
+
+    // A carried tx this node could not check is no evidence against the proposer, nor against anyone who attests.
+    it('neither slashes nor marks the slot invalid when txs carried in the proposal cannot be verified', async () => {
+      txProvider.getTxsForBlockProposal.mockRejectedValue(
+        new UnverifiableBlockProposalTxsError([
+          { txHash: proposal.txHashes[0], reasons: [TX_ERROR_PROOF_UNVERIFIABLE] },
+        ]),
+      );
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+
+      const isValid = await validatorClient.validateBlockProposal(proposal, sender);
+
+      expect(isValid).toBe(false);
+      expect(emitSpy).not.toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, expect.anything());
+      expect(validatorClient.hasInvalidProposals(proposal.slotNumber)).toBe(false);
     });
 
     // A proposal listing the same tx hash twice can never be built into a block, so it is proposer

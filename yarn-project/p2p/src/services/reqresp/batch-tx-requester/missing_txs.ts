@@ -2,7 +2,7 @@ import { type Tx, TxHash } from '@aztec-labs/stdlib/tx';
 import type { PeerId } from '@libp2p/interface';
 
 import type { IRequestTracker } from '../../tx_collection/request_tracker.js';
-import { DEFAULT_BATCH_TX_REQUESTER_TX_BATCH_SIZE } from './config.js';
+import { DEFAULT_BATCH_TX_REQUESTER_TX_BATCH_SIZE, MAX_UNVERIFIABLE_ATTEMPTS_PER_TX } from './config.js';
 import type { ITxMetadataCollection } from './interface.js';
 
 class MissingTxMetadata {
@@ -10,6 +10,7 @@ class MissingTxMetadata {
     public readonly txHash: string,
     public requestedCount = 0,
     public inFlightCount = 0,
+    public unverifiableCount = 0,
     public tx: Tx | undefined = undefined,
     public readonly peers = new Set<string>(),
   ) {}
@@ -38,6 +39,8 @@ class MissingTxMetadata {
  * */
 export class MissingTxMetadataCollection implements ITxMetadataCollection {
   private txMetadata = new Map<string, MissingTxMetadata>();
+  /** Txs still missing that this run stopped requesting, because they repeatedly could not be verified. */
+  private givenUp = new Set<string>();
 
   constructor(
     private requestTracker: IRequestTracker,
@@ -64,7 +67,8 @@ export class MissingTxMetadataCollection implements ITxMetadataCollection {
   }
 
   public getMissingTxHashes(): Set<string> {
-    return this.requestTracker.missingTxHashes;
+    const missing = this.requestTracker.missingTxHashes;
+    return this.givenUp.size === 0 ? missing : missing.difference(this.givenUp);
   }
 
   public getTxsPeerHas(peer: PeerId): Set<string> {
@@ -144,6 +148,20 @@ export class MissingTxMetadataCollection implements ITxMetadataCollection {
 
     txMeta.peers.add(peerId.toString());
     return this.requestTracker.markFetched(tx);
+  }
+
+  public markUnverifiable(txHash: TxHash): boolean {
+    const txHashStr = txHash.toString();
+    const txMeta = this.txMetadata.get(txHashStr);
+    if (!txMeta || this.givenUp.has(txHashStr)) {
+      return false;
+    }
+    txMeta.unverifiableCount++;
+    if (txMeta.unverifiableCount < MAX_UNVERIFIABLE_ATTEMPTS_PER_TX) {
+      return false;
+    }
+    this.givenUp.add(txHashStr);
+    return true;
   }
 
   public markPeerHas(peerId: PeerId, txHash: TxHash[]) {

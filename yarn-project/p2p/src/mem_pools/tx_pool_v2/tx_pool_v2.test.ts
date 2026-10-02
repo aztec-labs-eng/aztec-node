@@ -652,6 +652,18 @@ describe('TxPoolV2', () => {
       expect(await rejectingPool.getPendingTxCount()).toBe(0);
     });
 
+    it('addPendingTxs ignores, rather than rejects, a transaction that could not be validated', async () => {
+      const tx = await mockTx(1);
+      rejectingValidator.validateTx = () => Promise.resolve({ result: 'unverifiable', reason: ['verifier down'] });
+
+      const result = await rejectingPool.addPendingTxs([tx]);
+
+      expect(result.accepted).toHaveLength(0);
+      expect(result.rejected).toHaveLength(0);
+      expect(toStrings(result.ignored)).toEqual([hashOf(tx)]);
+      expect(await rejectingPool.getPendingTxCount()).toBe(0);
+    });
+
     it('addPendingTxs handles batch with mixed accepted and rejected', async () => {
       const tx1 = await mockTx(1);
       const tx2 = await mockTx(2);

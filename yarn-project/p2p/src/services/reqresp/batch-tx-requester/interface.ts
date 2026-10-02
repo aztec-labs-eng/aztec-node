@@ -21,6 +21,11 @@ export interface ITxMetadataCollection {
   markInFlightBySmartPeer(txHash: TxHash): void;
   markNotInFlightBySmartPeer(txHash: TxHash): void;
   alreadyFetched(txHash: TxHash): boolean;
+  /**
+   * Records that a received copy of the tx could not be verified. Once that has happened too often in this run, the tx
+   * is left out of the missing set so it is no longer requested. Returns true when this call made that happen.
+   */
+  markUnverifiable(txHash: TxHash): boolean;
   // Returns true if tx was marked as fetched, false if it was already marked as fetched
   markPeerHas(peerId: PeerId, txHashes: TxHash[]): void;
   /** Remove all tx metadata associations for a peer (e.g. on demotion from smart to dumb). */

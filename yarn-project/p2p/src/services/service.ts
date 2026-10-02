@@ -155,6 +155,7 @@ export interface P2PService {
   /**
    * Runs minimum integrity validation on txs carried in a block proposal.
    * @throws InvalidBlockProposalTxsError - If any tx fails validation.
+   * @throws UnverifiableBlockProposalTxsError - If no tx failed, but some could not be checked.
    */
   validateTxsReceivedInBlockProposal(txs: Tx[]): Promise<void>;
 

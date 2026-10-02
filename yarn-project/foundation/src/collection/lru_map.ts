@@ -36,6 +36,11 @@ export class LruMap<K, V> {
     return this.map.has(key);
   }
 
+  /** Returns the value for the key, or undefined if absent, without refreshing its recency. */
+  peek(key: K): V | undefined {
+    return this.map.get(key)?.value;
+  }
+
   /**
    * Returns the value for the key, or undefined if absent.
    * Refreshes the entry's recency so it becomes the most recently used.

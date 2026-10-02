@@ -47,6 +47,23 @@ export class InvalidBlockProposalTxsError extends ValidatorError {
   }
 }
 
+/**
+ * Thrown when a tx carried in a block proposal could not be checked, for example because the local proof verifier was
+ * unavailable. Nothing was learned about the tx, so unlike {@link InvalidBlockProposalTxsError} this is a local failure
+ * and never evidence against the proposer.
+ */
+export class UnverifiableBlockProposalTxsError extends ValidatorError {
+  constructor(public readonly unverifiableTxs: { txHash: TxHash; reasons: string[] }[]) {
+    super(
+      `Could not verify txs in block proposal: ${unverifiableTxs
+        .map(({ txHash, reasons }) => `${txHash} (${reasons.join(', ')})`)
+        .join('; ')}`,
+    );
+    // Set so `isErrorClass` can recognize this error across package instances, where `instanceof` fails.
+    this.name = 'UnverifiableBlockProposalTxsError';
+  }
+}
+
 export class FailedToReExecuteTransactionsError extends ValidatorError {
   constructor(txHashes: TxHash[]) {
     super(`Failed to re-execute transactions: ${txHashes.join(', ')}`);

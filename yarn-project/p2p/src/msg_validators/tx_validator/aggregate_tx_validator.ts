@@ -1,5 +1,9 @@
 import type { TxValidationResult, TxValidator } from '@aztec-labs/stdlib/tx';
 
+/**
+ * Runs validators in order and stops at the first one that does not pass, returning its result. Cheap validators go
+ * first, so a deterministic `invalid` from one of them wins over an `unverifiable` from a later proof check.
+ */
 export class AggregateTxValidator<T> implements TxValidator<T> {
   readonly validators: TxValidator<T>[];
   constructor(...validators: TxValidator<T>[]) {
@@ -11,14 +15,12 @@ export class AggregateTxValidator<T> implements TxValidator<T> {
   }
 
   async validateTx(tx: T): Promise<TxValidationResult> {
-    const reasons: string[] = [];
     for (const validator of this.validators) {
       const result = await validator.validateTx(tx);
-      if (result.result === 'invalid') {
-        reasons.push(...result.reason);
-        break;
+      if (result.result !== 'valid') {
+        return result;
       }
     }
-    return reasons.length > 0 ? { result: 'invalid', reason: reasons } : { result: 'valid' };
+    return { result: 'valid' };
   }
 }

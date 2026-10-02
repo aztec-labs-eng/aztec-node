@@ -15,6 +15,7 @@ export interface ITxProvider {
   /**
    * Collects the txs for a block proposal from the tx pool, the proposal body, and the network.
    * @throws InvalidBlockProposalTxsError - If a tx carried in the proposal fails minimum integrity validation.
+   * @throws UnverifiableBlockProposalTxsError - If a tx carried in the proposal could not be checked, and none failed.
    */
   getTxsForBlockProposal(
     blockProposal: BlockProposal,

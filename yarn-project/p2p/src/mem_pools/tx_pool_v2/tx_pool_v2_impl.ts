@@ -9,7 +9,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { L2Block, L2BlockId, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/server';
 import { DatabasePublicStateSource } from '@aztec-labs/stdlib/trees';
-import { BlockHeader, Tx, TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
+import { BlockHeader, Tx, TxHash, type TxValidationResult, type TxValidator } from '@aztec-labs/stdlib/tx';
 import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 
 import { TxArchive } from './archive/index.js';
@@ -244,7 +244,10 @@ export class TxPoolV2Impl {
 
     // Phase 1: Pre-compute all throwable I/O outside the transaction.
     // If any pre-computation throws, the entire call fails before mutations happen.
-    const precomputed = new Map<string, { meta: TxMetaData; minedBlockId: L2BlockId | undefined; isValid: boolean }>();
+    const precomputed = new Map<
+      string,
+      { meta: TxMetaData; minedBlockId: L2BlockId | undefined; validation: TxValidationResult['result'] }
+    >();
 
     const validator = await this.#createTxValidator();
 
@@ -256,12 +259,9 @@ export class TxPoolV2Impl {
       const minedBlockId = await this.#getMinedBlockId(txHash);
 
       // Validate non-mined txs (mined and pre-protected txs bypass validation inside the transaction)
-      let isValid = true;
-      if (!minedBlockId) {
-        isValid = await this.#validateMeta(meta, validator);
-      }
+      const validation = minedBlockId ? 'valid' : await this.#validateMeta(meta, validator);
 
-      precomputed.set(txHashStr, { meta, minedBlockId, isValid });
+      precomputed.set(txHashStr, { meta, minedBlockId, validation });
     }
 
     // Phase 2: Apply mutations inside the transaction using only pre-computed results,
@@ -283,7 +283,7 @@ export class TxPoolV2Impl {
           continue;
         }
 
-        const { meta, minedBlockId, isValid } = precomputed.get(txHashStr)!;
+        const { meta, minedBlockId, validation } = precomputed.get(txHashStr)!;
         const preProtectedSlot = this.#indices.getProtectionSlot(txHashStr);
 
         if (minedBlockId) {
@@ -294,9 +294,11 @@ export class TxPoolV2Impl {
           // Pre-protected and not mined - add as protected (bypass validation)
           await this.#addTx(tx, { protected: preProtectedSlot }, opts, meta);
           accepted.push(txHash);
-        } else if (!isValid) {
-          // Failed pre-computed validation
+        } else if (validation === 'invalid') {
           rejected.push(txHash);
+        } else if (validation === 'unverifiable') {
+          // Not judged, so not added and not counted as rejected either.
+          ignored.push(txHash);
         } else {
           // Regular pending tx - run pre-add rules using pre-computed metadata
           const result = await this.#tryAddRegularPendingTx(
@@ -1118,19 +1120,26 @@ export class TxPoolV2Impl {
   // PRIVATE HELPERS - Validation & Conflict Resolution
   // ============================================================================
 
-  /** Validates transaction metadata, returning true if valid */
-  async #validateMeta(meta: TxMetaData, validator?: TxValidator<TxMetaData>, context?: string): Promise<boolean> {
+  /** Validates transaction metadata, returning the validation outcome. */
+  async #validateMeta(
+    meta: TxMetaData,
+    validator?: TxValidator<TxMetaData>,
+    context?: string,
+  ): Promise<TxValidationResult['result']> {
     const txValidator = validator ?? (await this.#createTxValidator());
     const result = await txValidator.validateTx(meta);
     if (result.result !== 'valid') {
       const contextStr = context ? ` ${context}` : '';
-      this.#log.info(`Tx ${meta.txHash}${contextStr} failed validation: ${result.reason?.join(', ')}`);
-      return false;
+      const outcome = result.result === 'invalid' ? 'failed validation' : 'could not be validated';
+      this.#log.info(`Tx ${meta.txHash}${contextStr} ${outcome}: ${result.reason.join(', ')}`);
     }
-    return true;
+    return result.result;
   }
 
-  /** Validates metadata directly */
+  /**
+   * Validates metadata directly. A tx that could not be validated is in neither list: it is not restored to the pending
+   * pool, and since nothing judged it, it is not deleted either.
+   */
   async #revalidateMetadata(
     metas: TxMetaData[],
     context?: string,
@@ -1139,10 +1148,15 @@ export class TxPoolV2Impl {
     const invalid: string[] = [];
     const validator = await this.#createTxValidator();
     for (const meta of metas) {
-      if (await this.#validateMeta(meta, validator, context)) {
-        valid.push(meta);
-      } else {
-        invalid.push(meta.txHash);
+      switch (await this.#validateMeta(meta, validator, context)) {
+        case 'valid':
+          valid.push(meta);
+          break;
+        case 'invalid':
+          invalid.push(meta.txHash);
+          break;
+        case 'unverifiable':
+          break;
       }
     }
     return { valid, invalid };

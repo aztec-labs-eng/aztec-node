@@ -60,4 +60,21 @@ describe('NodeRpcTxSource', () => {
     expect(result.validTxs).toEqual([tx1]);
     expect(result.invalidTxHashes).toEqual([tx2.getTxHash().toString()]);
   });
+
+  it('reports txs that could not be verified apart from invalid ones', async () => {
+    const tx1 = await makeTx();
+    const tx2 = await makeTx();
+    mockClient.getTxsByHash.mockResolvedValue([tx1, tx2]);
+    mockValidator.validateTx
+      .mockResolvedValueOnce({ result: 'unverifiable', reason: ['verifier down'] })
+      .mockResolvedValueOnce({ result: 'invalid', reason: ['bad'] });
+
+    const result = await createSource().getTxsByHash([tx1.getTxHash(), tx2.getTxHash()]);
+
+    expect(result).toEqual({
+      validTxs: [],
+      invalidTxHashes: [tx2.getTxHash().toString()],
+      unverifiableTxHashes: [tx1.getTxHash().toString()],
+    });
+  });
 });
