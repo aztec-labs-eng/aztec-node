@@ -6,6 +6,7 @@ import {
 } from '@aztec-labs/foundation/config';
 
 import { type L1ContractAddresses, l1ContractAddressesMapping } from './l1_contract_addresses.js';
+import { DEFAULT_MAX_L1_LOGS_WINDOW_SIZE } from './logs_window.js';
 
 /** Configuration of the L1GlobalReader. */
 export type L1ReaderConfig = {
@@ -19,6 +20,8 @@ export type L1ReaderConfig = {
   viemPollingIntervalMS: number;
   /** Timeout for HTTP requests to the L1 RPC node in ms. */
   l1HttpTimeoutMS?: number;
+  /** Maximum number of L1 blocks a single `eth_getLogs` request may span. */
+  maxL1LogsWindowSize?: number;
 } & L1ContractAddresses;
 
 export const l1ReaderConfigMappings: ConfigMappingsType<L1ReaderConfig> = {
@@ -48,6 +51,12 @@ export const l1ReaderConfigMappings: ConfigMappingsType<L1ReaderConfig> = {
     env: 'ETHEREUM_HTTP_TIMEOUT_MS',
     description: 'Timeout for HTTP requests to the L1 RPC node in ms.',
     ...optionalNumberConfigHelper(),
+  },
+  maxL1LogsWindowSize: {
+    env: 'MAX_L1_LOGS_WINDOW_SIZE',
+    description:
+      'Maximum number of L1 blocks a single eth_getLogs request may span. Wider ranges are split into consecutive requests. Lower it when the L1 RPC provider caps log queries below this.',
+    ...numberConfigHelper(DEFAULT_MAX_L1_LOGS_WINDOW_SIZE),
   },
   ...l1ContractAddressesMapping,
 };

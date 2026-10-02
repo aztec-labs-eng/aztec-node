@@ -97,7 +97,10 @@ export async function createProverNode(
 
   const publicClient = createPublicClient({
     chain: chain.chainInfo,
-    transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
+    transport: makeL1HttpTransport(config.l1RpcUrls, {
+      timeout: config.l1HttpTimeoutMS,
+      maxLogsWindowSize: config.maxL1LogsWindowSize,
+    }),
     pollingInterval: config.viemPollingIntervalMS,
   });
 
