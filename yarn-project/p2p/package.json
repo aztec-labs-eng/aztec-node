@@ -93,7 +93,7 @@
     "@libp2p/prometheus-metrics": "^4.2.4",
     "@libp2p/tcp": "9.0.24",
     "@multiformats/multiaddr": "12.1.14",
-    "@nethermindeth/discv5": "patch:@nethermindeth/discv5@npm%3A9.0.0-backport-306-v4#~/.yarn/patches/@nethermindeth-discv5-npm-9.0.0-backport-306-v4-2f4901c773.patch",
+    "@nethermindeth/discv5": "9.0.0-backport-306-v4",
     "@nethermindeth/enr": "3.0.0-backport-306-v4",
     "interface-datastore": "^8.2.11",
     "interface-store": "^5.1.8",
