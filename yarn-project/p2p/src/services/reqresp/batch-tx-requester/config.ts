@@ -4,6 +4,11 @@ export const DEFAULT_BATCH_TX_REQUESTER_SMART_PARALLEL_WORKER_COUNT = 10;
 export const DEFAULT_BATCH_TX_REQUESTER_DUMB_PARALLEL_WORKER_COUNT = 10;
 export const DEFAULT_BATCH_TX_REQUESTER_TX_BATCH_SIZE = 8;
 export const DEFAULT_BATCH_TX_REQUESTER_BAD_PEER_THRESHOLD = 2;
+/**
+ * Times a requester run accepts a tx failing to verify before it stops requesting it. Bounds the work a tx whose proof
+ * deterministically breaks the verifier can cost, since an unverifiable tx is never held against the peer serving it.
+ */
+export const MAX_UNVERIFIABLE_ATTEMPTS_PER_TX = 3;
 
 export interface BatchTxRequesterConfig {
   /** Max concurrent requests to smart peers. */
