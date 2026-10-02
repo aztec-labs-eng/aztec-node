@@ -1,6 +1,7 @@
 import { type AvmStat, type BackendOptions, BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { FifoMemoryQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
@@ -76,12 +77,19 @@ export interface BBJsApi {
 export class BBJsInstance implements BBJsApi {
   private constructor(private api: Barretenberg) {}
 
-  /** Creates a new Barretenberg instance connected to a fresh bb process. */
-  static async create(bbPath: string, logger?: LogFn, threads?: number): Promise<BBJsInstance> {
+  /**
+   * Creates a new Barretenberg instance connected to a fresh bb process.
+   *
+   * `respawn` lets the instance replace its bb process when it dies, so a long-lived instance stays
+   * usable instead of failing every later call. Only safe where the instance holds no state between
+   * calls, since a replacement has no Chonk accumulation and no batch-verifier session.
+   */
+  static async create(bbPath: string, logger?: LogFn, threads?: number, respawn?: boolean): Promise<BBJsInstance> {
     const options: BackendOptions = {
       bbPath,
       backend: BackendType.NativeUnixSocket,
       logger,
+      respawn,
     };
     if (threads !== undefined) {
       options.threads = threads;
@@ -251,6 +259,12 @@ export interface BBJsFactoryOptions {
    * If omitted, every `getInstance()` call spawns a fresh bb that is destroyed on dispose.
    */
   poolSize?: number;
+  /**
+   * Let each instance replace its bb process when it dies. Only for callers whose calls stand alone:
+   * a replacement process remembers nothing, so state held across calls (a Chonk accumulation, a
+   * batch-verifier session) would be silently lost.
+   */
+  respawn?: boolean;
   logger?: Logger;
   threads?: number;
   debugDir?: string;
@@ -280,12 +294,16 @@ export class BBJsFactory {
   /** Lazily-resolved on first `getInstance()` call to prevent racing pool initialization. */
   private initPromise?: Promise<void>;
   private destroyed = false;
+  private readonly respawn: boolean;
+  /** Resolved by destroy(), so a borrow waiting on a pool that never starts does not wait forever. */
+  private readonly destroyedSignal = promiseWithResolvers<void>();
 
   constructor(
     private bbPath: string,
     options: BBJsFactoryOptions = {},
   ) {
     this.poolSize = options.poolSize;
+    this.respawn = options.respawn ?? false;
     this.logger = options.logger;
     this.threads = options.threads;
     this.debugDir = options.debugDir;
@@ -309,9 +327,20 @@ export class BBJsFactory {
       return this.makeOwned(instance);
     }
     if (!this.initPromise) {
-      this.initPromise = this.initPool();
+      // A pool that fails to start failed for environmental reasons — a loaded machine, a bb that
+      // could not spawn — so the failure is not cached: the next borrow tries again rather than the
+      // factory being wedged for the life of the process.
+      this.initPromise = this.initPool().catch(err => {
+        this.initPromise = undefined;
+        throw err;
+      });
     }
-    await this.initPromise;
+    // Racing destruction as well, so a borrow does not outlive the factory when the pool is still
+    // starting; a bb that never comes up would otherwise block shutdown indefinitely.
+    await Promise.race([this.initPromise, this.destroyedSignal.promise]);
+    if (this.destroyed) {
+      throw new Error('BBJsFactory has been destroyed');
+    }
     const pool = this.pool;
     if (!pool) {
       throw new Error('BBJsFactory has been destroyed');
@@ -329,6 +358,7 @@ export class BBJsFactory {
    * in-flight pooled borrow are destroyed by their dispose callback when released.
    */
   async destroy(): Promise<void> {
+    this.destroyedSignal.resolve();
     if (this.destroyed) {
       return;
     }
@@ -382,9 +412,9 @@ export class BBJsFactory {
     this.pool = pool;
   }
 
-  private async createInstance(): Promise<BBJsApi> {
+  protected async createInstance(): Promise<BBJsApi> {
     const logFn = this.logger ? (msg: string) => this.logger!.verbose(`bb.js - ${msg}`) : undefined;
-    const raw = await BBJsInstance.create(this.bbPath, logFn, this.threads);
+    const raw = await BBJsInstance.create(this.bbPath, logFn, this.threads, this.respawn);
     return this.maybeWrapDebug(raw);
   }
 
