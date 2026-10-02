@@ -492,19 +492,21 @@ function release_packages {
   done
 
   # Smoke test the deployed packages.
-  # NOTE: Disabled due to npmjs indexing taking too long.
-  # local dir=$(mktemp -d)
-  # cd "$dir"
-  # do_or_dryrun npm init -y
-  # # NOTE: originally this was on one line, but sometimes snagged downloading end-to-end (most recently published package).
-  # # --no-audit --no-fund: npm's implicit audit re-scans the whole cumulative tree on every install, dominating
-  # # release time. Dependency vulnerabilities are covered by the weekly socket-fix workflow instead.
-  # # npm publish is eventually consistent: a just-published version can take a few minutes to
-  # # become installable, so give each install a ~5 minute window instead of the default ~10s.
-  # for package in "${package_list[@]}"; do
-  #   RETRY_ATTEMPTS=10 RETRY_SLEEP=30 retry "do_or_dryrun npm install --no-audit --no-fund $package"
-  # done
-  # rm -rf "$dir"
+  local dir=$(mktemp -d)
+  cd "$dir"
+  do_or_dryrun npm init -y
+  # NOTE: originally this was on one line, but sometimes snagged downloading end-to-end (most recently published package).
+  # --no-audit --no-fund: npm's implicit audit re-scans the whole cumulative tree on every install, dominating
+  # release time. Dependency vulnerabilities are covered by the weekly socket-fix workflow instead.
+  # npm accepts a publish well before it serves the new version, sometimes more than 20 minutes later, so keep retrying
+  # for up to 30 minutes. --prefer-online makes each attempt re-check the registry instead of reusing npm's cached
+  # package metadata, which would otherwise hide the new version for up to 5 minutes.
+  local npm_serve_timeout_s=1800 npm_retry_sleep_s=30
+  for package in "${package_list[@]}"; do
+    RETRY_ATTEMPTS=$((npm_serve_timeout_s / npm_retry_sleep_s)) RETRY_SLEEP=$npm_retry_sleep_s \
+      retry "do_or_dryrun npm install --no-audit --no-fund --prefer-online $package"
+  done
+  rm -rf "$dir"
 }
 
 function release {
