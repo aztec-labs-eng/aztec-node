@@ -174,7 +174,7 @@ source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 export DENOISE=${DENOISE:-1}
 
 # Number of TXE servers to run when testing.
-export NUM_TXES=1
+export NUM_TXES=4
 
 # Number of jobs for make. Defaults to number of CPUs.
 # TODO: We should dial this back on consumer hardware, maybe to just 1.
