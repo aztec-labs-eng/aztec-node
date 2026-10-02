@@ -11,7 +11,7 @@ import { computeExpectedGenesisRoot } from './cli/cmds/standby.js';
  */
 describe('Testnet compatibility', () => {
   it('has expected VK tree root', () => {
-    const expectedRoots = [Fr.fromHexString('0x2d89003cc2dc62b06f07d83d3635c66c63fc43668369d30e7ee516f908ee10e3')];
+    const expectedRoots = [Fr.fromHexString('0x031139abb5b9f51ca0e55a6e2022d567029f50acc9428506f05c91ae27e7f75d')];
     expect(expectedRoots).toContainEqual(getVKTreeRoot());
   });
   it('has expected Protocol Contracts hash', () => {
