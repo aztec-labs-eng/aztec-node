@@ -25,6 +25,7 @@ export const TX_ERROR_INCORRECT_PROTOCOL_CONTRACTS_HASH = 'Incorrect protocol co
 
 // Proof
 export const TX_ERROR_INVALID_PROOF = 'Invalid proof';
+export const TX_ERROR_PROOF_UNVERIFIABLE = 'Proof could not be verified';
 
 //Data
 export const TX_ERROR_INCORRECT_CALLDATA = 'Incorrect calldata for public call';
