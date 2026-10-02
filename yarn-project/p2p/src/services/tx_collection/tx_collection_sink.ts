@@ -42,7 +42,7 @@ export class TxCollectionSink extends (EventEmitter as new () => TypedEventEmitt
     });
 
     // Execute collection function and measure the time taken, catching any errors.
-    const [duration, { validTxs, invalidTxHashes }] = await elapsed(async () => {
+    const [duration, { validTxs, invalidTxHashes, unverifiableTxHashes = [] }] = await elapsed(async () => {
       try {
         return await collectValidTxsFn();
       } catch (err) {
@@ -54,7 +54,7 @@ export class TxCollectionSink extends (EventEmitter as new () => TypedEventEmitt
       }
     });
 
-    if (validTxs.length === 0 && invalidTxHashes.length === 0) {
+    if (validTxs.length === 0 && invalidTxHashes.length === 0 && unverifiableTxHashes.length === 0) {
       this.log.trace(`No txs found via ${info.description}`, {
         ...info,
         requestedTxs: requested,
@@ -69,11 +69,19 @@ export class TxCollectionSink extends (EventEmitter as new () => TypedEventEmitt
       });
     }
 
+    if (unverifiableTxHashes.length > 0) {
+      this.log.warn(`Could not verify ${unverifiableTxHashes.length} txs from ${info.description}`, {
+        ...info,
+        unverifiableTxHashes,
+      });
+    }
+
     if (validTxs.length === 0) {
       this.log.trace(`No valid txs found via ${info.description} after validation`, {
         ...info,
         requestedTxs: requested,
         invalidTxHashes,
+        unverifiableTxHashes,
       });
       return { txs: [], requested, duration };
     }
@@ -86,6 +94,7 @@ export class TxCollectionSink extends (EventEmitter as new () => TypedEventEmitt
         txs: validTxs.map(t => t.getTxHash().toString()),
         requestedTxs: requested,
         rejectedCount: invalidTxHashes.length,
+        unverifiableCount: unverifiableTxHashes.length,
       },
     );
 
