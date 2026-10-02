@@ -43,8 +43,12 @@ import {
 } from '@aztec-labs/stdlib/testing';
 import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
-import { GlobalVariables, TX_ERROR_INVALID_PROOF, TxHash } from '@aztec-labs/stdlib/tx';
-import { InvalidBlockProposalTxsError, ReExStateMismatchError } from '@aztec-labs/stdlib/validators';
+import { GlobalVariables, TX_ERROR_INVALID_PROOF, TX_ERROR_PROOF_UNVERIFIABLE, TxHash } from '@aztec-labs/stdlib/tx';
+import {
+  InvalidBlockProposalTxsError,
+  ReExStateMismatchError,
+  UnverifiableBlockProposalTxsError,
+} from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -1618,6 +1622,23 @@ describe('ProposalHandler checkpoint validation', () => {
         blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM),
         reason: 'invalid_embedded_txs',
       });
+    });
+
+    it('classifies txs that could not be verified as a non-slashable failure', async () => {
+      const { proposal, blockHandler, txProvider } = await setupGenesisProposal(Fr.random());
+      txProvider.getTxsForBlockProposal.mockRejectedValue(
+        new UnverifiableBlockProposalTxsError([
+          { txHash: proposal.txHashes[0], reasons: [TX_ERROR_PROOF_UNVERIFIABLE] },
+        ]),
+      );
+
+      const result = await blockHandler.handleBlockProposal(proposal, {} as any, false);
+      expect(result).toEqual({
+        isValid: false,
+        blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM),
+        reason: 'txs_unverifiable',
+      });
+      expect(SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT['txs_unverifiable']).toBe(false);
     });
 
     // Only proposer misbehavior gets a typed (and slashable) failure reason; a local collection failure
