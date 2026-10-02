@@ -834,12 +834,7 @@ describe('ArchiverDataStoreUpdater', () => {
       });
 
       const publishedCheckpoint = makePublishedCheckpoint(makeCheckpoint([block]), 10);
-      const promotion = updaterWithCache.addCheckpoints([], undefined, {
-        l1: publishedCheckpoint.l1,
-        attestations: publishedCheckpoint.attestations,
-        verbatimAttestations: publishedCheckpoint.verbatimAttestations,
-        checkpoint: publishedCheckpoint,
-      });
+      const promotion = updaterWithCache.addCheckpoints([], undefined, publishedCheckpoint);
 
       await committed;
       const frontier = await l2FrontierCache.getL2Frontier();
