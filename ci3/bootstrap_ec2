@@ -201,9 +201,9 @@ container_script=$(
   ci_log_id=\$CI_LOG_ID
   log_ci_run \$ci_log_id
 
-  # A release forwards its docker credential but not its registry: the public URLs are defaults in
-  # ci3/source_release_target, which the build sources later. Source it here too, so this login
-  # knows where it is logging in; it is idempotent and only reached when there is a credential.
+  # Every command a release runs on this instance, its tests included, inherits the target's settings
+  # from here (a private release's cache switches among them), and the login needs its registry.
+  # Every release has a docker credential; the source is idempotent.
   if [ -n "\$DOCKER_PASSWORD" ]; then
     source \$ci3/source_release_target
     docker_login
@@ -375,6 +375,7 @@ start_build() {
     -e CI_DASHBOARD=${CI_DASHBOARD:-} \
     -e PARENT_LOG_ID=${PARENT_LOG_ID:-} \
     -e NO_CACHE=${NO_CACHE:-} \
+    -e NO_CACHE_UPLOAD=${NO_CACHE_UPLOAD:-} \
     -e NO_FAIL_FAST=${NO_FAIL_FAST:-} \
     -e CI_USE_BUILD_INSTANCE_KEY=${CI_USE_BUILD_INSTANCE_KEY:-1} \
     -e CI_REDIS='ci-redis-tiered.lzka0i.ng.0001.use2.cache.amazonaws.com' \
