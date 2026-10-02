@@ -573,7 +573,8 @@ export interface AztecNode {
   /**
    * Returns true if the transaction is valid for inclusion at the current state. Valid transactions can be
    * made invalid by *other* transactions if e.g. they emit the same nullifiers, or come become invalid
-   * due to e.g. the expiration_timestamp property.
+   * due to e.g. the expiration_timestamp property. Returns `unverifiable` when the node could not run a check, for
+   * example because its proof verifier is unavailable; that is no verdict on the transaction, and may be retried.
    * @param tx - The transaction to validate for correctness.
    * @param isSimulation - True if the transaction is a simulated one without generated proofs. (Optional)
    * @param skipFeeEnforcement - True if the validation of the fee should be skipped. Useful when the simulation is for estimating fee (Optional)
