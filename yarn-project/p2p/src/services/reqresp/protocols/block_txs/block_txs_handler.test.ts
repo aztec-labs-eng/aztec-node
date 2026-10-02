@@ -266,4 +266,90 @@ describe('reqRespBlockTxsHandler', () => {
       expect(archiver.getBlock).not.toHaveBeenCalled();
     });
   });
+
+  describe('per-request cap', () => {
+    const expectBadlyFormed = async (request: BlockTxsRequest) => {
+      let caught: unknown;
+      try {
+        await callHandler(request);
+      } catch (err) {
+        caught = err;
+      }
+      if (!(caught instanceof ReqRespStatusError)) {
+        throw new Error(`expected ReqRespStatusError, got ${String(caught)}`);
+      }
+      expect(caught.status).toBe(ReqRespStatus.BADLY_FORMED_REQUEST);
+    };
+
+    it('rejects a request selecting more distinct txs than the per-request cap', async () => {
+      // Selecting more than the cap positions for a retained proposal would otherwise drive an
+      // over-cap pool fetch and response; reject before the fetch and serialization.
+      const tooMany = MAX_BLOCK_TXS_PER_REQUEST + 1;
+      const txHashes = Array.from({ length: tooMany }, () => TxHash.random());
+      const proposal = await createBlockProposal(txHashes);
+      attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
+      txPool.hasTxs.mockResolvedValue(txHashes.map(() => true));
+
+      await expectBadlyFormed(
+        makeRequest(
+          proposal.archive,
+          BitVector.init(
+            tooMany,
+            Array.from({ length: tooMany }, (_, i) => i),
+          ),
+          txHashes,
+        ),
+      );
+      expect(txPool.getTxsByHash).not.toHaveBeenCalled();
+    });
+
+    it('serves a request selecting exactly the per-request cap', async () => {
+      const atCap = MAX_BLOCK_TXS_PER_REQUEST;
+      const txHashes = Array.from({ length: atCap }, () => TxHash.random());
+      const proposal = await createBlockProposal(txHashes);
+      attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
+      txPool.hasTxs.mockResolvedValue(txHashes.map(() => true));
+      txPool.getTxsByHash.mockResolvedValue(txHashes.map(h => makeTx(h)));
+
+      const response = await callHandler(
+        makeRequest(
+          proposal.archive,
+          BitVector.init(
+            atCap,
+            Array.from({ length: atCap }, (_, i) => i),
+          ),
+          txHashes,
+        ),
+      );
+
+      expect(response.peerHasBlock()).toBe(true);
+      expect(response.txs.length).toBe(atCap);
+    });
+
+    it('serves a dual-form request whose index and hash counts sum above the cap but dedupe within it', async () => {
+      // The dumb-peer requester sends each missing tx by index AND by explicit hash, so the two counts
+      // can sum past the cap while the distinct tx count stays within it. Such a batch must be served,
+      // not rejected: the cap is on the deduplicated served count.
+      const count = MAX_BLOCK_TXS_PER_REQUEST; // 128 distinct, sent twice => raw sum 256
+      const txHashes = Array.from({ length: count }, () => TxHash.random());
+      const proposal = await createBlockProposal(txHashes);
+      attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
+      txPool.hasTxs.mockResolvedValue(txHashes.map(() => true));
+      txPool.getTxsByHash.mockImplementation((hashes: TxHash[]) => Promise.resolve(hashes.map(h => makeTx(h))));
+
+      const response = await callHandler(
+        makeRequest(
+          proposal.archive,
+          BitVector.init(
+            count,
+            Array.from({ length: count }, (_, i) => i),
+          ),
+          txHashes,
+          txHashes,
+        ),
+      );
+
+      expect(response.txs.length).toBe(count);
+    });
+  });
 });
