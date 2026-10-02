@@ -220,4 +220,67 @@ describe('checkConsensusEnvOverrides', () => {
     expect(checkConsensusEnvOverrides(networkConfig, env)).toEqual({});
     expect(env.AZTEC_SLASHING_QUORUM).toBe('99');
   });
+
+  describe('validator tx limit', () => {
+    const limitsConfig = { VALIDATOR_MAX_TX_PER_CHECKPOINT: 144, SEQ_MAX_TX_PER_CHECKPOINT: 72 };
+
+    it('accepts a validator limit raised above the network value, in canonical form', () => {
+      const env: Record<string, string | undefined> = { VALIDATOR_MAX_TX_PER_CHECKPOINT: '2e2' };
+      expect(checkConsensusEnvOverrides(limitsConfig, env)).toEqual({ VALIDATOR_MAX_TX_PER_CHECKPOINT: '200' });
+    });
+
+    it('throws on a validator limit below the network value', () => {
+      const env: Record<string, string | undefined> = { VALIDATOR_MAX_TX_PER_CHECKPOINT: '100' };
+      expect(() => checkConsensusEnvOverrides(limitsConfig, env)).toThrow(
+        /VALIDATOR_MAX_TX_PER_CHECKPOINT=100 is below the network value 144/,
+      );
+    });
+
+    it('keeps a lowered validator limit and logs when ALLOW_OVERRIDING_NETWORK_CONFIG is set', () => {
+      const env: Record<string, string | undefined> = {
+        VALIDATOR_MAX_TX_PER_CHECKPOINT: '100',
+        ALLOW_OVERRIDING_NETWORK_CONFIG: 'true',
+      };
+      const logs: string[] = [];
+      expect(checkConsensusEnvOverrides(limitsConfig, env, msg => logs.push(msg))).toEqual({});
+      expect(logs.some(msg => msg.includes('VALIDATOR_MAX_TX_PER_CHECKPOINT=100'))).toBe(true);
+    });
+
+    it('accepts a proposer limit up to the network validator limit', () => {
+      const env: Record<string, string | undefined> = { SEQ_MAX_TX_PER_CHECKPOINT: '144' };
+      expect(checkConsensusEnvOverrides(limitsConfig, env)).toEqual({});
+    });
+
+    it('throws on a proposer limit above the network validator limit', () => {
+      const env: Record<string, string | undefined> = { SEQ_MAX_TX_PER_CHECKPOINT: '145' };
+      expect(() => checkConsensusEnvOverrides(limitsConfig, env)).toThrow(
+        /SEQ_MAX_TX_PER_CHECKPOINT=145 exceeds the network VALIDATOR_MAX_TX_PER_CHECKPOINT of 144/,
+      );
+    });
+
+    it('checks the proposer limit against the network value, not a locally raised validator limit', () => {
+      const env: Record<string, string | undefined> = {
+        VALIDATOR_MAX_TX_PER_CHECKPOINT: '500',
+        SEQ_MAX_TX_PER_CHECKPOINT: '300',
+      };
+      expect(() => checkConsensusEnvOverrides(limitsConfig, env)).toThrow(/SEQ_MAX_TX_PER_CHECKPOINT=300/);
+    });
+
+    it('throws when the network config itself sets the proposer limit above the validator limit', () => {
+      const env: Record<string, string | undefined> = {};
+      expect(() =>
+        checkConsensusEnvOverrides({ VALIDATOR_MAX_TX_PER_CHECKPOINT: 144, SEQ_MAX_TX_PER_CHECKPOINT: 200 }, env),
+      ).toThrow(/SEQ_MAX_TX_PER_CHECKPOINT=200/);
+    });
+
+    it('keeps a proposer limit above the validator limit and logs when ALLOW_OVERRIDING_NETWORK_CONFIG is set', () => {
+      const env: Record<string, string | undefined> = {
+        SEQ_MAX_TX_PER_CHECKPOINT: '200',
+        ALLOW_OVERRIDING_NETWORK_CONFIG: '1',
+      };
+      const logs: string[] = [];
+      expect(checkConsensusEnvOverrides(limitsConfig, env, msg => logs.push(msg))).toEqual({});
+      expect(logs.some(msg => msg.includes('SEQ_MAX_TX_PER_CHECKPOINT=200'))).toBe(true);
+    });
+  });
 });

@@ -14,7 +14,7 @@ import { ProposerTimetable } from '../timetable/proposer_timetable.js';
 import { sharedSequencerConfigMappings } from './sequencer-config.js';
 
 /**
- * Environment variables whose values must be identical across every node of a network. They fall into three
+ * Environment variables whose values must be identical across every node of a network. They fall into four
  * categories, all consensus-critical:
  *
  * - Timing/protocol consensus: slot and epoch durations, block sub-slot duration, max blocks per checkpoint, and
@@ -26,6 +26,8 @@ import { sharedSequencerConfigMappings } from './sequencer-config.js';
  *   it points at would compute the wrong epoch geometry, fees, or slashing rounds.
  * - Node-side slashing offense consensus: the offense detection/penalty parameters validators apply locally to
  *   decide which payloads to sign. Validators must agree on these to reach the on-chain slashing quorum.
+ * - Validator acceptance limits: the most txs a validator accepts in a peer's checkpoint. These are floors rather
+ *   than exact values (see {@link NETWORK_CONSENSUS_RAISABLE_ENV_VARS}), and proposers must build within them.
  *
  * Deliberately excluded: bootnodes, P2P/store/OTEL/sentinel settings, SEQ_MIN_TX_PER_BLOCK, SEQ_MAX_TX_PER_*,
  * AZTEC_SLASHER_ENABLED, PROVER_REAL_PROOFS, TRANSACTIONS_DISABLED, and AZTEC_ENTRY_QUEUE_* (mainnet-only genesis
@@ -84,10 +86,20 @@ export const NETWORK_CONSENSUS_ENV_VARS = [
   'SLASH_INVALID_BLOCK_PENALTY',
   'SLASH_INVALID_CHECKPOINT_PROPOSAL_PENALTY',
   'SLASH_GRACE_PERIOD_L2_SLOTS',
+
+  // Validator acceptance limits.
+  'VALIDATOR_MAX_TX_PER_CHECKPOINT',
 ] as const satisfies readonly EnvVar[];
 
 /** A consensus-critical environment variable name; see {@link NETWORK_CONSENSUS_ENV_VARS}. */
 export type ConsensusEnvVar = (typeof NETWORK_CONSENSUS_ENV_VARS)[number];
+
+/**
+ * Consensus-critical vars an operator may raise above the network value but never lower. A validator that accepts
+ * more than the network limit still accepts every checkpoint an honest proposer builds within it, whereas a stricter
+ * one would reject a protocol-valid checkpoint and decline to attest to it.
+ */
+export const NETWORK_CONSENSUS_RAISABLE_ENV_VARS: readonly ConsensusEnvVar[] = ['VALIDATOR_MAX_TX_PER_CHECKPOINT'];
 
 /**
  * The subset of consensus-critical timing config whose geometry can be validated in isolation. Composed by
@@ -231,13 +243,17 @@ export function validateNetworkConsensusConfig(config: NetworkConsensusConfig): 
  *
  * For each var in {@link NETWORK_CONSENSUS_ENV_VARS} present in `networkConfig`: if the operator set it in `env`
  * to a conflicting value, this throws unless `ALLOW_OVERRIDING_NETWORK_CONFIG` is truthy (in which case it logs
- * and keeps the operator value).
+ * and keeps the operator value). For a var in {@link NETWORK_CONSENSUS_RAISABLE_ENV_VARS}, only a value below the
+ * network one conflicts. The same applies to a `SEQ_MAX_TX_PER_CHECKPOINT` (from `env`, or else from
+ * `networkConfig`) above the network `VALIDATOR_MAX_TX_PER_CHECKPOINT`: validators running the network value would
+ * reject every checkpoint this node proposed over it.
  *
  * This function is pure: it never writes to `env`. Instead it returns the canonical env writes the caller
  * should apply — a map of env-var name to canonical string value for every numeric var whose env value matched
  * the network value numerically. Applying these closes a bypass where the config layer parses some vars with
  * `parseInt` (which reads '6e3' as 6); rewriting them to the network value's string form keeps the operator's
- * numerically-equal value but in canonical form. Vars kept under `ALLOW_OVERRIDING_NETWORK_CONFIG` (genuine
+ * numerically-equal value but in canonical form. A raisable var set above the network value is canonicalized to
+ * its own numeric value for the same reason. Vars kept under `ALLOW_OVERRIDING_NETWORK_CONFIG` (genuine
  * conflicts) are not included, so the operator value is preserved untouched.
  *
  * @returns Canonical env writes (env-var name -> canonical string value) for the caller to apply.
@@ -250,6 +266,18 @@ export function checkConsensusEnvOverrides(
   const allowOverride = allowsNetworkConfigOverride(env);
   const canonical: Record<string, string> = {};
   const conflicts: string[] = [];
+
+  const reportConflict = (conflict: string) => {
+    if (allowOverride) {
+      log?.(
+        `Environment variable ${conflict}. Consensus-critical values must match across the network, but ` +
+          `ALLOW_OVERRIDING_NETWORK_CONFIG is set so the operator value is kept (only do this if you know what ` +
+          `you are doing).`,
+      );
+    } else {
+      conflicts.push(conflict);
+    }
+  };
 
   for (const envVar of NETWORK_CONSENSUS_ENV_VARS) {
     const networkValue = networkConfig[envVar];
@@ -271,16 +299,21 @@ export function checkConsensusEnvOverrides(
       continue;
     }
 
-    const conflict = `${envVar}=${current} conflicts with the network value ${networkValue}`;
-    if (allowOverride) {
-      log?.(
-        `Environment variable ${conflict}. Consensus-critical values must match across the network, but ` +
-          `ALLOW_OVERRIDING_NETWORK_CONFIG is set so the operator value is kept (only do this if you know what ` +
-          `you are doing).`,
-      );
+    if (NETWORK_CONSENSUS_RAISABLE_ENV_VARS.includes(envVar) && networkIsNumeric) {
+      if (Number(current) > networkValue) {
+        canonical[envVar] = String(Number(current));
+        continue;
+      }
+      reportConflict(`${envVar}=${current} is below the network value ${networkValue} and may only be raised`);
       continue;
     }
-    conflicts.push(conflict);
+
+    reportConflict(`${envVar}=${current} conflicts with the network value ${networkValue}`);
+  }
+
+  const proposerConflict = getProposerTxLimitConflict(networkConfig, env);
+  if (proposerConflict !== undefined) {
+    reportConflict(proposerConflict);
   }
 
   // Accumulate every conflict so the operator sees all the env vars they need to reconcile at once, rather than
@@ -295,6 +328,32 @@ export function checkConsensusEnvOverrides(
   }
 
   return canonical;
+}
+
+/**
+ * Returns a conflict when this node would propose checkpoints with more txs than the network's validators accept:
+ * its `SEQ_MAX_TX_PER_CHECKPOINT` (from `env`, or else from `networkConfig`) exceeds the network
+ * `VALIDATOR_MAX_TX_PER_CHECKPOINT`. Compares against the network value, not this node's own raised one, since
+ * that is what the rest of the committee enforces.
+ */
+function getProposerTxLimitConflict(
+  networkConfig: Record<string, string | number | boolean>,
+  env: { [key: string]: string | undefined },
+): string | undefined {
+  const validatorMax = networkConfig.VALIDATOR_MAX_TX_PER_CHECKPOINT;
+  if (typeof validatorMax !== 'number') {
+    return undefined;
+  }
+  const fromEnv = env.SEQ_MAX_TX_PER_CHECKPOINT;
+  const proposerMax =
+    fromEnv !== undefined && fromEnv !== '' ? Number(fromEnv) : Number(networkConfig.SEQ_MAX_TX_PER_CHECKPOINT);
+  if (!Number.isFinite(proposerMax) || proposerMax <= validatorMax) {
+    return undefined;
+  }
+  return (
+    `SEQ_MAX_TX_PER_CHECKPOINT=${proposerMax} exceeds the network VALIDATOR_MAX_TX_PER_CHECKPOINT of ` +
+    `${validatorMax}, so validators would reject checkpoints this node proposes above it`
+  );
 }
 
 /** Whether the env opts into overriding network-wide consensus values (`ALLOW_OVERRIDING_NETWORK_CONFIG`). */
