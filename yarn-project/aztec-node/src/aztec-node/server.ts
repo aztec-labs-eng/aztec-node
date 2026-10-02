@@ -588,7 +588,13 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     }
 
     const valid = await this.isValidTx(tx);
-    if (valid.result !== 'valid') {
+    if (valid.result === 'unverifiable') {
+      const reason = valid.reason.join(', ');
+      this.metrics.receivedTx(timer.ms(), false);
+      this.log.warn(`Could not verify received tx ${txHash}: ${reason}`, { txHash });
+      throw new Error(`Cannot accept tx right now, as the node could not verify it (retry later): ${reason}`);
+    }
+    if (valid.result === 'invalid') {
       const reason = valid.reason.join(', ');
       this.metrics.receivedTx(timer.ms(), false);
       this.log.warn(`Received invalid tx ${txHash}: ${reason}`, { txHash });
