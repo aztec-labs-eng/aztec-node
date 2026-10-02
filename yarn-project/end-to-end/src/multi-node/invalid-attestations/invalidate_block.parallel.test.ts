@@ -17,7 +17,7 @@ import { retryUntil } from '@aztec-labs/foundation/retry';
 import { executeTimeout, timeoutPromise } from '@aztec-labs/foundation/timer';
 import type { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import { OffenseType } from '@aztec-labs/slasher';
-import { L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
+import { CommitteeAttestation, L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
 import { computeQuorum, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import { jest } from '@jest/globals';
 import type { Log } from 'viem';
@@ -136,12 +136,11 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const calldataRetriever = new CalldataRetriever(
       l1Client as unknown as ViemPublicClient,
       l1Client as unknown as ViemPublicDebugClient,
-      VALIDATOR_COUNT,
       undefined,
       createLogger('e2e:invalidate_block:calldata'),
       EthAddress.fromString(rollupContract.address),
     );
-    const { attestations } = await calldataRetriever.getCheckpointFromRollupTx(
+    const { verbatimAttestations } = await calldataRetriever.getCheckpointFromRollupTx(
       event!.l1TransactionHash,
       event!.args.versionedBlobHashes,
       checkpointNumber,
@@ -150,6 +149,7 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
         payloadDigest: event!.args.payloadDigest.toString(),
       },
     );
+    const attestations = CommitteeAttestation.fromPacked(verbatimAttestations, VALIDATOR_COUNT);
     const validCount = attestations.filter(a => !a.signature.isEmpty()).length;
     const quorum = computeQuorum(VALIDATOR_COUNT);
     logger.warn(`Checkpoint ${checkpointNumber} has ${validCount}/${VALIDATOR_COUNT} attestations (quorum=${quorum})`);
