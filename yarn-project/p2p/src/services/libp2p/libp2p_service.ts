@@ -9,7 +9,6 @@ import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { EthAddress, L2BlockSource } from '@aztec-labs/stdlib/block';
 import { DEFAULT_MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/stdlib/config';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
-import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import { type BlockMinFeesProvider, GasFees, getNetworkTxGasLimits } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
@@ -1179,15 +1178,7 @@ export class LibP2PService extends WithTracer implements P2PService {
 
       // Stage 2: expensive proof verification
       const secondStageValidators = this.createSecondStageMessageValidators();
-      let secondStageOutcome: ValidationOutcome;
-      try {
-        secondStageOutcome = await timed('proof_verify', () => this.runValidations(tx, secondStageValidators));
-      } catch (err) {
-        if (err instanceof ProofVerifierUnavailableError) {
-          return this.ignoreUnverifiableTx(tx, source, { err });
-        }
-        throw err;
-      }
+      const secondStageOutcome = await timed('proof_verify', () => this.runValidations(tx, secondStageValidators));
       if (secondStageOutcome.status === 'unverifiable') {
         return this.ignoreUnverifiableTx(tx, source, { validator: secondStageOutcome.validator });
       }
@@ -2036,7 +2027,7 @@ export class LibP2PService extends WithTracer implements P2PService {
   private ignoreUnverifiableTx(
     tx: Tx,
     source: PeerId,
-    details: { validator?: string; err?: unknown },
+    details: { validator: string },
   ): ReceivedMessageValidationResult<Tx> {
     this.logger.warn(`Ignoring gossiped tx ${tx.getTxHash().toString()}: could not be verified`, {
       txHash: tx.getTxHash().toString(),
