@@ -229,8 +229,32 @@ function install_foundry {
 function install_aztec_packages {
   set -euo pipefail
 
-  # Install npm packages to the version directory using --prefix
-  npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix "$version_path"
+  if [ "${AZTEC_UP_SKIP_PACKAGE_LOCK:-0}" = "1" ]; then
+    npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix "$version_path"
+    return
+  fi
+
+  local archive
+  archive=$(mktemp)
+  if ! curl -fsSL "$INSTALL_URI/$VERSION/packages.tar.gz" -o "$archive"; then
+    rm -f "$archive"
+    cat >&2 <<EOF
+Could not download the release package lock.
+To install using npm without the release lock, rerun with:
+  AZTEC_UP_SKIP_PACKAGE_LOCK=1 aztec-up install $VERSION
+Dependency versions may differ from the approved release.
+Before opting out, we recommend a seven-day minimum release age with an npm version that supports it.
+Add these settings to your user .npmrc to exempt Aztec packages while delaying third-party releases:
+  min-release-age=7
+  min-release-age-exclude[]=@aztec/*
+  min-release-age-exclude[]=@aztec-labs/*
+  min-release-age-exclude[]=@aztec-foundation/*
+EOF
+    return 1
+  fi
+  tar -xzf "$archive" -C "$version_path"
+  rm -f "$archive"
+  npm ci --prefix "$version_path" --no-audit --no-fund
 }
 
 # Expose every native tool in internal-bin under an aztec-<tool> symlink in bin.
