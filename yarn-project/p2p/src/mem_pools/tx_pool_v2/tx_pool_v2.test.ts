@@ -609,29 +609,43 @@ describe('TxPoolV2', () => {
       // eviction that commits between the two reads leaves the body present and the proof gone, and
       // we serve a proofless tx that an honest requester then penalises us for. The race has no
       // deterministic public seam (the two reads cannot be paused from outside), so assert the
-      // guarantee that prevents it: the proof read happens inside a store transaction.
+      // guarantee that prevents it: both reads happen inside the same store transaction.
       const spyStore = await openTmpStore('p2p-txn-read');
       const spyArchive = await openTmpStore('archive-txn-read');
 
-      let txnDepth = 0;
+      // Tag each transactionAsync call with a unique id. A read done inside a transaction sees that
+      // id; a read done outside any transaction sees 0. Restoring the previous id on exit keeps a
+      // nested transaction reporting its own id rather than the outer one.
+      let txnSeq = 0;
+      let activeTxn = 0;
       const realTxnAsync = spyStore.transactionAsync.bind(spyStore);
-      jest.spyOn(spyStore, 'transactionAsync').mockImplementation(cb => {
-        txnDepth++;
-        return realTxnAsync(cb).finally(() => {
-          txnDepth--;
-        });
+      jest.spyOn(spyStore, 'transactionAsync').mockImplementation(async cb => {
+        const id = ++txnSeq;
+        const prev = activeTxn;
+        activeTxn = id;
+        try {
+          return await realTxnAsync(cb);
+        } finally {
+          activeTxn = prev;
+        }
       });
 
-      let proofReadTxnDepth = -1;
+      // Record the transaction id active when the body (txs) and the proof (tx_proofs) are read.
+      let bodyReadTxn = -1;
+      let proofReadTxn = -1;
       const realOpenMap = spyStore.openMap.bind(spyStore);
       jest.spyOn(spyStore, 'openMap').mockImplementation((name: string) => {
         const map = realOpenMap(name);
-        if (name !== 'tx_proofs') {
+        if (name !== 'txs' && name !== 'tx_proofs') {
           return map;
         }
         const realGetAsync = map.getAsync.bind(map);
         jest.spyOn(map, 'getAsync').mockImplementation(key => {
-          proofReadTxnDepth = txnDepth;
+          if (name === 'txs') {
+            bodyReadTxn = activeTxn;
+          } else {
+            proofReadTxn = activeTxn;
+          }
           return realGetAsync(key);
         });
         return map;
@@ -644,15 +658,26 @@ describe('TxPoolV2', () => {
         checkAllowedSetupCalls: () => Promise.resolve(true),
         blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
       });
-      await txnPool.start();
+      try {
+        await txnPool.start();
 
-      const tx = await mockTx(1);
-      await txnPool.addPendingTxs([tx]);
+        const tx = await mockTx(1);
+        await txnPool.addPendingTxs([tx]);
 
-      proofReadTxnDepth = -1;
-      const retrieved = await txnPool.getTxByHash(tx.getTxHash());
-      expect(retrieved).toBeDefined();
-      expect(proofReadTxnDepth).toBeGreaterThan(0);
+        bodyReadTxn = -1;
+        proofReadTxn = -1;
+        const retrieved = await txnPool.getTxByHash(tx.getTxHash());
+        expect(retrieved).toBeDefined();
+        // Both reads must land inside a transaction (id > 0) and inside the SAME one, so no eviction
+        // can commit between them.
+        expect(bodyReadTxn).toBeGreaterThan(0);
+        expect(proofReadTxn).toBeGreaterThan(0);
+        expect(bodyReadTxn).toBe(proofReadTxn);
+      } finally {
+        await txnPool.stop();
+        await spyStore.delete();
+        await spyArchive.delete();
+      }
     });
   });
 
