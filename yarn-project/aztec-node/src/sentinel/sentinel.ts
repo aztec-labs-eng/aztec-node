@@ -51,14 +51,28 @@ export type SentinelRuntimeConfig = Pick<
   Pick<SentinelConfig, 'sentinelEpochEndBufferSlots'> &
   Pick<ChainConfig, 'l1ChainId' | 'rollupAddress'>;
 
-/** Why a valid checkpoint proposal that never reached L1 could not have landed, regardless of its proposer. */
-type OrphanedProposalReason = 'parent-not-on-l1' | 'parent-hash-mismatch';
+/**
+ * Why a valid checkpoint proposal that never reached L1 could not have landed, regardless of its proposer.
+ * `unexpected-parent-appeared` matches the reason the sequencer gives when it discards its own pipelined checkpoint
+ * for the same cause.
+ */
+type OrphanedProposalReason = 'parent-not-on-l1' | 'parent-hash-mismatch' | 'unexpected-parent-appeared';
+
+const ORPHANED_PROPOSAL_REASON_DESCRIPTIONS: Record<OrphanedProposalReason, string> = {
+  'parent-not-on-l1': 'the parent checkpoint it built on never landed on L1',
+  'parent-hash-mismatch': 'a different checkpoint landed on L1 in place of the parent it built on',
+  'unexpected-parent-appeared':
+    'a checkpoint from an earlier slot landed on L1 with its checkpoint number after it was built on the previous one',
+};
 
 /** Refined status of a valid checkpoint proposal for a slot whose checkpoint never reached L1. */
 type UnpublishedProposalClassification =
   | { status: 'checkpoint-unpublished' }
   | { status: 'checkpoint-orphaned'; reason: OrphanedProposalReason }
-  | { status: 'checkpoint-valid'; reason: 'equivocation' | 'no-parent-data' | 'below-quorum' };
+  | {
+      status: 'checkpoint-valid';
+      reason: 'equivocation' | 'no-parent-data' | 'below-quorum' | 'unexpected-parent-appeared';
+    };
 
 /** Maps a validator status to its category: proposer or attestation. */
 function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
@@ -107,7 +121,9 @@ function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
  *  - `checkpoint-unpublished`  — (5a) a valid checkpoint proposal built on a parent that is on L1
  *                                reached quorum, yet the proposer did not land it.
  *  - `checkpoint-orphaned`     — (5b) a valid checkpoint proposal could not land because the parent
- *                                it built on never reached L1 (the proposer pipelining cascade).
+ *                                it built on never reached L1 (the proposer pipelining cascade), or
+ *                                because an earlier slot's checkpoint landed with its number after it
+ *                                had built on the previous one.
  *  - `checkpoint-valid`        — the local node re-executed a checkpoint proposal for this slot
  *                                successfully (consulted via `CheckpointReexecutionTracker`), and it
  *                                could not be refined into 5a or 5b.
@@ -123,7 +139,8 @@ function statusToCategory(status: ValidatorStatusInSlot): ValidatorStatusType {
  * Missing-attestor faults are recorded only in `checkpoint-mined` and the three valid-proposal
  * statuses (`checkpoint-unpublished`, `checkpoint-orphaned`, `checkpoint-valid`), where the local
  * node has positive evidence the checkpoint was canonical or valid. In the other four cases the
- * proposer is at fault and no attestor penalty applies.
+ * proposer is at fault and no attestor penalty applies. A valid proposal whose checkpoint number an
+ * earlier slot took is also exempt: a validator holding that slot's blocks rightly refuses it.
  *
  * `checkpoint-unpublished` and `checkpoint-orphaned` are neutral for the proposer, like
  * `checkpoint-valid`: neither counts toward `missedProposals` or inactivity slashing.
@@ -510,7 +527,7 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    *  - case 5a `checkpoint-unpublished` — a valid proposal with its parent on L1 reached quorum but
    *                                       was not landed by the proposer.
    *  - case 5b `checkpoint-orphaned`    — a valid proposal could not land because its parent never
-   *                                       reached L1.
+   *                                       reached L1, or because an earlier slot took its checkpoint number.
    *  - case 5 `checkpoint-valid`        — the local node re-executed a checkpoint proposal for this
    *                                       slot successfully, and it could not be refined into 5a or 5b.
    *  - case 4 `checkpoint-invalid`      — the local node re-executed a checkpoint proposal for this
@@ -521,7 +538,8 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    *  - case 1 `blocks-missed`           — no block proposals seen for this slot.
    *
    * Missing-attestor penalties apply only in cases 5 (including 5a and 5b) and 6, where the local
-   * node has positive evidence the checkpoint was valid or has been canonicalised on L1.
+   * node has positive evidence the checkpoint was valid or has been canonicalised on L1, and never when
+   * an earlier slot took the proposal's checkpoint number.
    */
   protected async getSlotActivity(slot: SlotNumber, epoch: EpochNumber, proposer: EthAddress, committee: EthAddress[]) {
     this.logger.debug(`Computing stats for slot ${slot} at epoch ${epoch}`, { slot, epoch, proposer, committee });
@@ -550,10 +568,12 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
       | 'checkpoint-unvalidated'
       | 'checkpoint-missed'
       | 'blocks-missed';
+    let classification: UnpublishedProposalClassification | undefined;
     if (checkpoint) {
       status = 'checkpoint-mined';
     } else if (reexecutionOutcome === 'valid') {
-      ({ status } = await this.classifyUnpublishedProposal(slot, proposer, committee, p2pAttestors));
+      classification = await this.classifyUnpublishedProposal(slot, proposer, committee, p2pAttestors);
+      status = classification.status;
     } else if (reexecutionOutcome === 'invalid') {
       status = 'checkpoint-invalid';
     } else if (reexecutionOutcome === 'unvalidated') {
@@ -570,15 +590,22 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     // A local `invalid` verdict vetoes them even for a mined checkpoint (an honest validator refuses
     // to sign what it re-executed as invalid), and so does a proposal equivocation in the slot: with
     // two conflicting proposals an honest attestor may have seen an invalid one and correctly
-    // declined, so neither must count as a missed attestor (inactivity slashing).
+    // declined, so neither must count as a missed attestor (inactivity slashing). Nor does a proposal whose
+    // checkpoint number an earlier slot took: a validator that already held that slot's blocks rejects the
+    // proposal's blocks as conflicting, and is right to.
     const hasEquivocation = this.reexecutionTracker.hasEquivocation(slot);
+    const unexpectedParentAppeared =
+      classification !== undefined &&
+      'reason' in classification &&
+      classification.reason === 'unexpected-parent-appeared';
     const attestorsExpected =
       (status === 'checkpoint-mined' ||
         status === 'checkpoint-unpublished' ||
         status === 'checkpoint-orphaned' ||
         status === 'checkpoint-valid') &&
       reexecutionOutcome !== 'invalid' &&
-      !hasEquivocation;
+      !hasEquivocation &&
+      !unexpectedParentAppeared;
     const missedAttestors = new Set(
       attestorsExpected
         ? committee.filter(v => !attestors.has(v.toString()) && !proposer.equals(v)).map(v => v.toString())
@@ -616,12 +643,16 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
    * into whose fault it was that the proposal did not land:
    *
    *  - `checkpoint-orphaned` (5b) when other proposers prevented it: the parent it built on never landed on L1 (it is
-   *    missing, or a different checkpoint holds the parent's position).
+   *    missing, or a different checkpoint holds the parent's position), or, with a quorum of attestations, an earlier
+   *    slot's checkpoint landed with its number after it built on the previous one (`unexpected-parent-appeared`).
+   *    The latter happens when the earlier slot's proposal reached this proposer too late to build on.
    *  - `checkpoint-unpublished` (5a) when its parent is on L1 and a quorum of the committee attested, so the proposer
-   *    had everything it needed to publish. This holds even if an earlier slot already landed the same checkpoint
-   *    number: that proposer missed the earlier slot's gossiped proposal and built on a stale parent.
+   *    had everything it needed to publish. A later slot that lands the same checkpoint number does not exempt it:
+   *    that slot only got the number because this proposer failed to land it.
    *  - `checkpoint-valid` (5) otherwise: the slot had an equivocation, the tracker has no parent data to judge by, or
-   *    attestations fell short of quorum (a fault of the attestors, who are tagged `attestation-missed`).
+   *    attestations fell short of quorum. Short of quorum is a fault of the attestors, who are tagged
+   *    `attestation-missed`, except after an unexpected parent appeared (`unexpected-parent-appeared`), when
+   *    refusing to attest was correct.
    */
   protected async classifyUnpublishedProposal(
     slot: SlotNumber,
@@ -640,22 +671,25 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
     }
 
     const logData = { slot, proposer: proposer.toString(), checkpointNumber };
-    const orphaned = (reason: OrphanedProposalReason): UnpublishedProposalClassification => {
-      this.logger.verbose(`Valid checkpoint proposal for slot ${slot} was orphaned (${reason})`, {
-        ...logData,
-        reason,
-      });
+    const orphaned = (
+      reason: OrphanedProposalReason,
+      extra: Record<string, unknown> = {},
+    ): UnpublishedProposalClassification => {
+      this.logger.verbose(
+        `Valid checkpoint proposal for slot ${slot} was orphaned (${reason}): ${ORPHANED_PROPOSAL_REASON_DESCRIPTIONS[reason]}`,
+        { ...logData, ...extra, reason },
+      );
       return { status: 'checkpoint-orphaned', reason };
     };
 
     // The first checkpoint builds on genesis, which is always on L1.
     const parentNumber = checkpointNumber - 1;
     if (parentNumber >= INITIAL_CHECKPOINT_NUMBER) {
-      const parent = await this.archiver.getCheckpoint({ number: CheckpointNumber(parentNumber) });
+      const parent = await this.archiver.getCheckpointData({ number: CheckpointNumber(parentNumber) });
       if (!parent) {
         return orphaned('parent-not-on-l1');
       }
-      if (parent.checkpoint.archive.root.toString() !== lastArchiveRoot) {
+      if (parent.archive.root.toString() !== lastArchiveRoot) {
         return orphaned('parent-hash-mismatch');
       }
     }
@@ -666,6 +700,24 @@ export class Sentinel extends (EventEmitter as new () => WatcherEmitter) impleme
       p2pAttestors.map(attestor => attestor.toString()).filter(attestor => committeeMembers.has(attestor)),
     ).size;
     const quorum = computeQuorum(committee.length);
+
+    // A checkpoint landed for the slot itself would have made this case 6, so a holder of the same number comes from
+    // an earlier or a later slot. Only an earlier one can have stopped this proposal from landing.
+    const sameNumber = await this.archiver.getCheckpointData({ number: checkpointNumber });
+    const sameNumberSlot = sameNumber?.header.slotNumber;
+    if (sameNumberSlot !== undefined && sameNumberSlot < slot) {
+      const conflictData = { takenBySlot: sameNumberSlot, attestationCount, quorum };
+      if (attestationCount < quorum) {
+        this.logger.verbose(
+          `Valid checkpoint proposal for slot ${slot} fell short of quorum after checkpoint ${checkpointNumber} landed ` +
+            `from earlier slot ${sameNumberSlot} (unexpected-parent-appeared), so missing attestations are not counted`,
+          { ...logData, ...conflictData, reason: 'unexpected-parent-appeared' },
+        );
+        return { status: 'checkpoint-valid', reason: 'unexpected-parent-appeared' };
+      }
+      return orphaned('unexpected-parent-appeared', conflictData);
+    }
+
     if (attestationCount < quorum) {
       return { status: 'checkpoint-valid', reason: 'below-quorum' };
     }

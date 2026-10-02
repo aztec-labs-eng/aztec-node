@@ -18,6 +18,7 @@ import {
 } from '@aztec-labs/stdlib/block';
 import {
   Checkpoint,
+  type CheckpointData,
   CheckpointReexecutionTracker,
   L1PublishedData,
   PublishedCheckpoint,
@@ -408,34 +409,38 @@ describe('sentinel', () => {
 
     describe('valid proposal that never reached L1 (cases 5a and 5b)', () => {
       const checkpointNumber = CheckpointNumber(5);
-      let parent: PublishedCheckpoint;
-      let confirmedByNumber: Map<CheckpointNumber, PublishedCheckpoint>;
+      let parent: Checkpoint;
+      let confirmedByNumber: Map<CheckpointNumber, Checkpoint>;
 
-      const publish = (checkpoint: Checkpoint) =>
-        new PublishedCheckpoint(
-          checkpoint,
-          L1PublishedData.random(),
-          [],
-          CommitteeAttestationsAndSigners.packAttestations([]),
-        );
+      const toCheckpointData = (checkpoint: Checkpoint): CheckpointData => ({
+        checkpointNumber: checkpoint.number,
+        header: checkpoint.header,
+        startBlock: checkpoint.blocks[0].number,
+        blockCount: checkpoint.blocks.length,
+        archive: checkpoint.archive,
+        checkpointOutHash: checkpoint.getCheckpointOutHash(),
+        feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
+        attestations: [],
+        verbatimAttestations: CommitteeAttestationsAndSigners.packAttestations([]),
+        l1: L1PublishedData.random(),
+      });
 
       /** Records a valid outcome for the slot's proposal, built on the given parent archive root. */
       const recordValidProposal = (number: CheckpointNumber, lastArchiveRoot: Fr | undefined) =>
         reexecutionTracker.recordOutcome(slot, block.archive.root, 'valid', number, lastArchiveRoot);
 
       beforeEach(async () => {
-        parent = publish(
-          await Checkpoint.random(CheckpointNumber(checkpointNumber - 1), {
-            numBlocks: 1,
-            slotNumber: SlotNumber(slot - 2),
-          }),
-        );
-        confirmedByNumber = new Map([[parent.checkpoint.number, parent]]);
+        parent = await Checkpoint.random(CheckpointNumber(checkpointNumber - 1), {
+          numBlocks: 1,
+          slotNumber: SlotNumber(slot - 2),
+        });
+        confirmedByNumber = new Map([[parent.number, parent]]);
         // Nothing landed on L1 for the slot itself; only lookups by checkpoint number can hit.
-        archiver.getCheckpoint.mockImplementation(query =>
-          Promise.resolve('number' in query ? confirmedByNumber.get(query.number) : undefined),
-        );
-        recordValidProposal(checkpointNumber, parent.checkpoint.archive.root);
+        archiver.getCheckpointData.mockImplementation(query => {
+          const confirmed = 'number' in query ? confirmedByNumber.get(query.number) : undefined;
+          return Promise.resolve(confirmed && toCheckpointData(confirmed));
+        });
+        recordValidProposal(checkpointNumber, parent.archive.root);
       });
 
       it('flags checkpoint-unpublished when the parent landed and quorum was reached (case 5a)', async () => {
@@ -450,7 +455,7 @@ describe('sentinel', () => {
       });
 
       it('flags checkpoint-orphaned when the parent never landed on L1 (case 5b)', async () => {
-        confirmedByNumber.delete(parent.checkpoint.number);
+        confirmedByNumber.delete(parent.number);
         p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 3));
 
         const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
@@ -465,11 +470,38 @@ describe('sentinel', () => {
         expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
       });
 
-      // An earlier slot landing the same checkpoint number means this proposer missed that slot's gossiped proposal
-      // and built on a stale parent, which is its own fault.
-      it('flags checkpoint-unpublished when an earlier slot already landed its checkpoint number (case 5a)', async () => {
-        const sibling = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: SlotNumber(slot - 1) });
-        confirmedByNumber.set(checkpointNumber, publish(sibling));
+      // An earlier slot landing the same checkpoint number means the proposer built on the previous checkpoint before
+      // that slot's proposal reached it, and once it landed this one could not.
+      describe('when an earlier slot landed the proposal checkpoint number', () => {
+        beforeEach(async () => {
+          const sibling = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: SlotNumber(slot - 1) });
+          confirmedByNumber.set(checkpointNumber, sibling);
+        });
+
+        it('flags checkpoint-orphaned when quorum was reached (case 5b)', async () => {
+          p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 3));
+
+          const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+          expect(activity[proposer.toString()]).toEqual('checkpoint-orphaned');
+          // Validators holding the earlier slot's blocks rightly refused to attest a conflicting proposal.
+          expect(activity[committee[3].toString()]).toBeUndefined();
+        });
+
+        it('stays checkpoint-valid without tagging missed attestations when below quorum', async () => {
+          p2p.getCheckpointAttestationsForSlot.mockResolvedValue(attestations.slice(0, 2));
+
+          const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
+          expect(activity[proposer.toString()]).toEqual('checkpoint-valid');
+          expect(activity[committee[1].toString()]).toEqual('attestation-sent');
+          expect(activity[committee[2].toString()]).toBeUndefined();
+          expect(activity[committee[3].toString()]).toBeUndefined();
+        });
+      });
+
+      // A later slot can only take the number because this proposer failed to land its own checkpoint.
+      it('flags checkpoint-unpublished when a later slot landed its checkpoint number (case 5a)', async () => {
+        const successor = await Checkpoint.random(checkpointNumber, { numBlocks: 1, slotNumber: SlotNumber(slot + 1) });
+        confirmedByNumber.set(checkpointNumber, successor);
 
         const activity = await sentinel.getSlotActivity(slot, epoch, proposer, committee);
         expect(activity[proposer.toString()]).toEqual('checkpoint-unpublished');
