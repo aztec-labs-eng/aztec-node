@@ -6,7 +6,8 @@ import { EvictionEvent } from './interfaces.js';
 
 /**
  * Eviction rule that removes transactions whose maxFeesPerGas no longer meets the fee the next block will
- * charge, after a new block is mined. Only triggers on BLOCK_MINED events.
+ * charge. Only triggers on SLOT_PREPARED events: the next-block fee is stable within a slot, so sweeping once
+ * per slot preparation covers the same ground as rescanning after every mined block.
  *
  * Skips the sweep when that fee cannot be resolved, rather than evicting against a stand-in price that would
  * drop transactions which are in fact payable.
@@ -19,7 +20,7 @@ export class InsufficientFeePerGasEvictionRule implements EvictionRule {
   constructor(private nextBlockMinFeesProvider: NextBlockMinFeesProvider) {}
 
   async evict(context: EvictionContext, pool: PoolOperations): Promise<EvictionResult> {
-    if (context.event !== EvictionEvent.BLOCK_MINED) {
+    if (context.event !== EvictionEvent.SLOT_PREPARED) {
       return {
         reason: 'insufficient_fee_per_gas',
         success: true,
@@ -49,8 +50,9 @@ export class InsufficientFeePerGasEvictionRule implements EvictionRule {
       }
 
       if (txsToEvict.length > 0) {
-        this.log.info(`Evicted ${txsToEvict.length} txs with insufficient fee per gas after block mined`, {
+        this.log.info(`Evicted ${txsToEvict.length} txs with insufficient fee per gas preparing for a new slot`, {
           txsToEvict,
+          slotNumber: context.slotNumber,
         });
         await pool.deleteTxs(txsToEvict, this.name);
       }

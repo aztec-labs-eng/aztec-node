@@ -136,6 +136,6 @@ The gas-limit bounds `MaxGasLimitsValidator` enforces here — the per-tx protoc
 
 ## Fee-Per-Gas Rejection Strategy
 
-The `MaxFeePerGasValidator` and `InsufficientFeePerGasEvictionRule` reject and evict transactions whose `maxFeesPerGas` falls below the fee the next block will charge. Admission falls back to the L1-forward fee while the next block cannot be priced; eviction only acts on the exact next-block fee and skips its sweep otherwise. This is a simple strategy: if a tx can't pay the current fees, it gets rejected on entry and evicted after each new block.
+The `MaxFeePerGasValidator` and `InsufficientFeePerGasEvictionRule` reject and evict transactions whose `maxFeesPerGas` falls below the fee the next block will charge. Admission falls back to the L1-forward fee while the next block cannot be priced; eviction only acts on the exact next-block fee and skips its sweep otherwise. This is a simple strategy: if a tx can't pay the current fees, it gets rejected on entry and evicted when the node prepares for the next slot.
 
 **Caveat**: This may evict transactions that would become valid again if block fees drop. A more nuanced approach would be to define a threshold (e.g., 50%) and only reject/evict when the tx's max fee falls below that fraction of the current fees. The current approach is simpler and ensures the pool doesn't accumulate transactions with low max fees that are unlikely to be mined soon.

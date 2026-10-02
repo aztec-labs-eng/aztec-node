@@ -1,4 +1,4 @@
-import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import type { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { BlockHeader } from '@aztec-labs/stdlib/tx';
 
@@ -128,6 +128,18 @@ export class EvictionManager {
     const context: EvictionContext = {
       event: EvictionEvent.CHAIN_PRUNED,
       blockNumber,
+    };
+
+    await this.runPostEventRules(context);
+  }
+
+  /**
+   * Runs post-event eviction when the pool is prepared for a new slot.
+   */
+  async evictAfterSlotPrepared(slotNumber: SlotNumber): Promise<void> {
+    const context: EvictionContext = {
+      event: EvictionEvent.SLOT_PREPARED,
+      slotNumber,
     };
 
     await this.runPostEventRules(context);
