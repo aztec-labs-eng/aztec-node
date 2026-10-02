@@ -1,3 +1,4 @@
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { mockTx } from '@aztec-labs/stdlib/testing';
 import type { Tx, TxValidationResult } from '@aztec-labs/stdlib/tx';
@@ -148,41 +149,67 @@ describe('TxValidationCache', () => {
       expect(validateB).toHaveBeenCalledTimes(1);
     });
 
-    it('caches a rejected validation so a later call reuses the failure without retrying', async () => {
-      const error = new Error('temporary failure');
-      const success: TxValidationResult = { result: 'valid' };
+    it('keeps an invalid verdict', async () => {
+      const invalid: TxValidationResult = { result: 'invalid', reason: ['bad proof'] };
       const validate = jest
         .fn<() => Promise<TxValidationResult>>()
-        .mockRejectedValueOnce(error)
-        .mockResolvedValueOnce(success);
+        .mockResolvedValueOnce(invalid)
+        .mockResolvedValueOnce({ result: 'valid' });
 
-      await expect(cache.getOrValidate(validatorA, tx, validate)).rejects.toThrow(error.message);
-      await expect(cache.getOrValidate(validatorA, tx, validate)).rejects.toThrow(error.message);
-      expect(validate).toHaveBeenCalledTimes(1);
+      await expect(cache.getOrValidate(validatorA, tx, validate)).resolves.toEqual(invalid);
+      await expect(cache.getOrValidate(validatorA, tx, validate)).resolves.toEqual(invalid);
     });
 
-    it('caches a rejected in-flight validation so a later call reuses the failure', async () => {
-      const error = new Error('downstream unavailable');
-      const success: TxValidationResult = { result: 'invalid', reason: ['bad tx'] };
-
-      let rejectValidation!: (err: Error) => void;
-      const firstInFlight = new Promise<TxValidationResult>((_, reject) => {
-        rejectValidation = reject;
-      });
-
+    it('does not keep an unverifiable result, so the next call checks the tx again', async () => {
+      const unverifiable: TxValidationResult = { result: 'unverifiable', reason: ['verifier down'] };
       const validate = jest
         .fn<() => Promise<TxValidationResult>>()
-        .mockReturnValueOnce(firstInFlight)
-        .mockResolvedValueOnce(success);
+        .mockResolvedValueOnce(unverifiable)
+        .mockResolvedValueOnce({ result: 'valid' });
+
+      await expect(cache.getOrValidate(validatorA, tx, validate)).resolves.toEqual(unverifiable);
+      await expect(cache.getOrValidate(validatorA, tx, validate)).resolves.toEqual({ result: 'valid' });
+    });
+
+    it('does not keep a rejected validation, so the next call checks the tx again', async () => {
+      const validate = jest
+        .fn<() => Promise<TxValidationResult>>()
+        .mockRejectedValueOnce(new Error('temporary failure'))
+        .mockResolvedValueOnce({ result: 'valid' });
+
+      await expect(cache.getOrValidate(validatorA, tx, validate)).rejects.toThrow('temporary failure');
+      await expect(cache.getOrValidate(validatorA, tx, validate)).resolves.toEqual({ result: 'valid' });
+    });
+
+    it('gives every caller waiting on an unverifiable validation its result, then forgets it', async () => {
+      const unverifiable: TxValidationResult = { result: 'unverifiable', reason: ['verifier down'] };
+      const { promise: inFlight, resolve } = promiseWithResolvers<TxValidationResult>();
+      const validate = jest
+        .fn<() => Promise<TxValidationResult>>()
+        .mockReturnValueOnce(inFlight)
+        .mockResolvedValueOnce({ result: 'valid' });
 
       const first = cache.getOrValidate(validatorA, tx, validate);
       await waitUntilCached(validatorA, tx);
+      const second = cache.getOrValidate(validatorA, tx, validate);
 
-      rejectValidation(error);
-      await expect(first).rejects.toThrow(error.message);
+      resolve(unverifiable);
+      await expect(first).resolves.toEqual(unverifiable);
+      await expect(second).resolves.toEqual(unverifiable);
+      await expect(cache.getOrValidate(validatorA, tx, validate)).resolves.toEqual({ result: 'valid' });
+    });
 
-      await expect(cache.getOrValidate(validatorA, tx, validate)).rejects.toThrow(error.message);
-      expect(validate).toHaveBeenCalledTimes(1);
+    it('does not evict an entry that replaced an unverifiable validation before it settled', async () => {
+      const { promise: inFlight, reject } = promiseWithResolvers<TxValidationResult>();
+      const key = cache.key(validatorA, tx);
+
+      const first = cache.getOrValidate(validatorA, tx, () => inFlight);
+      const replacement = Promise.resolve<TxValidationResult>({ result: 'valid' });
+      cache.set(key, replacement);
+
+      reject(new Error('verifier down'));
+      await expect(first).rejects.toThrow('verifier down');
+      expect(cache.get(key)).toBe(replacement);
     });
   });
 });

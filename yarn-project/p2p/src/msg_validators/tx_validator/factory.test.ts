@@ -4,6 +4,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import { Gas, GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import type {
   ClientProtocolCircuitVerifier,
@@ -17,6 +18,9 @@ import {
   type GlobalVariables,
   TX_ERROR_GAS_LIMIT_TOO_HIGH,
   TX_ERROR_INSUFFICIENT_GAS_LIMIT,
+  TX_ERROR_INVALID_PROOF,
+  TX_ERROR_PROOF_UNVERIFIABLE,
+  type Tx,
 } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -43,6 +47,7 @@ import { SizeTxValidator } from './size_validator.js';
 import { TimestampTxValidator } from './timestamp_validator.js';
 import { TxPermittedValidator } from './tx_permitted_validator.js';
 import { TxProofValidator } from './tx_proof_validator.js';
+import { TxValidationCache } from './tx_validation_cache.js';
 
 /** Extract the constructor names from the validators inside an AggregateTxValidator. */
 function getValidatorNames(aggregate: AggregateTxValidator<unknown>): string[] {
@@ -298,6 +303,67 @@ describe('Validator factory functions', () => {
         ContractInstanceTxValidator.name,
         TxProofValidator.name,
       ]);
+    });
+
+    describe('with a validation cache', () => {
+      const config = { l1ChainId: 1, rollupVersion: 2 };
+      let cache: TxValidationCache;
+      let tx: Tx;
+
+      beforeEach(async () => {
+        cache = new TxValidationCache(100);
+        tx = await mockPrivateTxWithGasSettings(
+          GasSettings.fallback({
+            gasLimits: new Gas(MAX_TX_DA_GAS, MAX_PROCESSABLE_L2_GAS),
+            maxFeesPerGas: new GasFees(10, 10),
+          }),
+        );
+      });
+
+      it('checks a tx again once the verifier recovers from being unavailable', async () => {
+        proofVerifier.verifyProof
+          .mockRejectedValueOnce(new ProofVerifierUnavailableError('bb is down'))
+          .mockResolvedValueOnce({ valid: true, durationMs: 1, totalDurationMs: 1 });
+
+        // A fresh validator per call, as each block proposal gets, sharing only the cache.
+        const first = await createTxValidatorForBlockProposalReceivedTxs(
+          proofVerifier,
+          config,
+          undefined,
+          cache,
+        ).validateTx(tx);
+        const second = await createTxValidatorForBlockProposalReceivedTxs(
+          proofVerifier,
+          config,
+          undefined,
+          cache,
+        ).validateTx(tx);
+
+        expect(first).toEqual({ result: 'unverifiable', reason: [TX_ERROR_PROOF_UNVERIFIABLE] });
+        expect(second).toEqual({ result: 'valid' });
+      });
+
+      it('keeps an invalid proof verdict', async () => {
+        proofVerifier.verifyProof
+          .mockResolvedValueOnce({ valid: false, durationMs: 1, totalDurationMs: 1 })
+          .mockResolvedValueOnce({ valid: true, durationMs: 1, totalDurationMs: 1 });
+
+        const first = await createTxValidatorForBlockProposalReceivedTxs(
+          proofVerifier,
+          config,
+          undefined,
+          cache,
+        ).validateTx(tx);
+        const second = await createTxValidatorForBlockProposalReceivedTxs(
+          proofVerifier,
+          config,
+          undefined,
+          cache,
+        ).validateTx(tx);
+
+        expect(first).toEqual({ result: 'invalid', reason: [TX_ERROR_INVALID_PROOF] });
+        expect(second).toEqual(first);
+      });
     });
   });
 
