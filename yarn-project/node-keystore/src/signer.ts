@@ -3,6 +3,7 @@
  *
  * Common interface for different signing backends (local, remote, encrypted)
  */
+import { parseSignedTransaction } from '@aztec-labs/ethereum/blob-tx';
 import type { EthSigner } from '@aztec-labs/ethereum/eth-signer';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
@@ -16,7 +17,6 @@ import {
   type TypedDataDefinition,
   hashTypedData,
   keccak256,
-  parseTransaction,
   serializeTransaction,
 } from 'viem';
 
@@ -273,7 +273,7 @@ export class RemoteSigner implements EthSigner {
     }
 
     // we get back to whole signed tx. Deserialize it in order to read the signature
-    const parsedTxWithSignature = parseTransaction(rawTxHex);
+    const parsedTxWithSignature = parseSignedTransaction(rawTxHex);
     if (
       parsedTxWithSignature.r === undefined ||
       parsedTxWithSignature.s === undefined ||

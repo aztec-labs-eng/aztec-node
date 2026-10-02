@@ -69,7 +69,7 @@
     "@aztec-labs/stdlib": "workspace:^",
     "@ethersproject/wallet": "^5.7.0",
     "tslib": "^2.4.0",
-    "viem": "npm:@aztec/viem@2.38.3",
+    "viem": "2.56.5",
     "zod": "~4.4.3"
   },
   "devDependencies": {
