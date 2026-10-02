@@ -75,15 +75,19 @@ where
     )
 }
 
-/// Decodes the plaintext from a private note message (i.e. one of type [`PRIVATE_NOTE_MSG_TYPE_ID`]).
+/// Decodes the note fields from a private note message's plaintext.
 ///
-/// Returns `None` if `msg_content` is too short to contain the reserved fields. This plaintext is meant to have
-/// originated from [`encode_private_note_message`].
+/// Returns `(note_type_id, owner, storage_slot, randomness, packed_note)`, or `None` if `msg_content` is too short.
+/// Accepts the content produced by [`encode_private_note_message`] or [`encode_private_note_message_with_msg_type_id`].
+///
+/// Custom message handlers can inspect the decoded fields before passing accepted messages to
+/// [`process_private_note_msg`](crate::messages::discovery::private_notes::process_private_note_msg).
+/// Decoding does not validate note inclusion, compute a nullifier, or store the note in PXE.
 ///
 /// Note that while [`encode_private_note_message`] returns a fixed-size array, this function takes a [`BoundedVec`]
 /// instead. This is because when decoding we're typically processing runtime-sized plaintexts, more specifically,
 /// those that originate from [`crate::messages::encryption::message_encryption::MessageEncryption::decrypt`].
-pub(crate) unconstrained fn decode_private_note_message(
+pub unconstrained fn decode_private_note_message(
     msg_metadata: u64,
     msg_content: BoundedVec<Field, MAX_MESSAGE_CONTENT_LEN>,
 ) -> Option<(Field, AztecAddress, Field, Field, BoundedVec<Field, MAX_NOTE_PACKED_LEN>)> {
