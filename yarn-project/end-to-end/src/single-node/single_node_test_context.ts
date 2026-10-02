@@ -12,6 +12,7 @@ import { getTimestampRangeForEpoch } from '@aztec-labs/aztec.js/block';
 import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
+import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { MerkleTreeId } from '@aztec-labs/aztec.js/trees';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import type { CheatCodes } from '@aztec-labs/aztec/testing';
@@ -40,7 +41,7 @@ import {
   type SequencerEvents,
   SequencerState,
 } from '@aztec-labs/sequencer-client';
-import { type BlockParameter, EthAddress } from '@aztec-labs/stdlib/block';
+import { type BlockParameter, EthAddress, type L2BlockId } from '@aztec-labs/stdlib/block';
 import {
   type L1RollupConstants,
   getProofSubmissionDeadlineTimestamp,
@@ -90,6 +91,28 @@ export type SingleNodeTestOpts = Partial<SetupOptions> & {
    */
   useHardcodedAccount?: boolean;
 };
+
+/**
+ * Sequencer events that mean normal operation broke. `block-tx-count-check-failed` is deliberately
+ * absent: declining to build for want of txs is expected under a `minTxsPerBlock` floor.
+ */
+const SEQUENCER_FAILURE_EVENTS: (keyof SequencerEvents)[] = [
+  'block-build-failed',
+  'checkpoint-publish-failed',
+  'proposer-rollup-check-failed',
+  'checkpoint-error',
+  'header-validation-failed',
+  'pipelined-checkpoint-discarded',
+];
+
+/**
+ * A `block-build-failed` raised because the builder could not collect enough valid txs is the same
+ * benign "not enough txs" case as `block-tx-count-check-failed`, just detected after tx processing
+ * started rather than before.
+ */
+function isBenignSequencerFailure(eventName: keyof SequencerEvents, args: unknown): boolean {
+  return eventName === 'block-build-failed' && (args as { reason?: string }).reason === 'Insufficient valid txs';
+}
 
 export type TrackedSequencerEvent = {
   [K in keyof SequencerEvents]: Parameters<SequencerEvents[K]>[0] & {
@@ -889,6 +912,11 @@ export class SingleNodeTestContext {
     logger.warn(`Pipelining assertion passed for ${allBlocks.length} blocks`);
   }
 
+  /**
+   * Subscribes to every given sequencer's failure and state-change events, collecting them into the
+   * returned arrays. Call the returned `stop` once the interval of interest is over: the listeners stay
+   * attached (and keep appending) until then, so a watch left running bleeds into later phases.
+   */
   public watchSequencerEvents(
     sequencers: SequencerClient[],
     getMetadata: (i: number) => Record<string, any> = () => ({}),
@@ -896,19 +924,8 @@ export class SingleNodeTestContext {
   ) {
     const stateChanges: TrackedSequencerEvent[] = [];
     const failEvents: TrackedSequencerEvent[] = [];
-
-    // Note we do not include the 'block-tx-count-check-failed' event here, since it is fine if we dont build
-    // due to lack of txs available.
-    const failEventsKeys: (keyof SequencerEvents)[] = [
-      'block-build-failed',
-      'checkpoint-publish-failed',
-      'proposer-rollup-check-failed',
-      'checkpoint-error',
-      'checkpoint-publish-failed',
-      'header-validation-failed',
-      'pipelined-checkpoint-discarded',
-      ...additionalFailEventKeys,
-    ];
+    const failEventsKeys = [...new Set([...SEQUENCER_FAILURE_EVENTS, ...additionalFailEventKeys])];
+    const unsubscribes: (() => void)[] = [];
 
     const makeEvent = (
       i: number,
@@ -924,7 +941,8 @@ export class SingleNodeTestContext {
 
     sequencers.forEach((sequencer, i) => {
       const sequencerIndex = i + 2;
-      sequencer.getSequencer().on('state-changed', (args: Parameters<SequencerEvents['state-changed']>[0]) => {
+      const seq = sequencer.getSequencer();
+      const onStateChanged = (args: Parameters<SequencerEvents['state-changed']>[0]) => {
         const noisyStates = [SequencerState.IDLE, SequencerState.PROPOSER_CHECK, SequencerState.SYNCHRONIZING];
         if (!noisyStates.includes(args.newState)) {
           const evt = makeEvent(i, 'state-changed', args);
@@ -934,24 +952,25 @@ export class SingleNodeTestContext {
             evt,
           );
         }
-      });
+      };
+      seq.on('state-changed', onStateChanged);
+      unsubscribes.push(() => seq.off('state-changed', onStateChanged));
+
       failEventsKeys.forEach(eventName => {
-        sequencer.getSequencer().on(eventName, (args: Parameters<SequencerEvents[typeof eventName]>[0]) => {
-          // Skip benign block-build-failed events where the builder rejected the block because it
-          // could not collect enough valid txs. This is the same "not enough txs" case as
-          // block-tx-count-check-failed (which is already excluded above), just detected after we
-          // started processing txs rather than before.
-          if (eventName === 'block-build-failed' && (args as { reason?: string }).reason === 'Insufficient valid txs') {
+        const onFailEvent = (args: Parameters<SequencerEvents[typeof eventName]>[0]) => {
+          if (isBenignSequencerFailure(eventName, args)) {
             return;
           }
           const evt = makeEvent(i, eventName, args);
           failEvents.push(evt);
           this.logger.error(`Failed event ${eventName} from sequencer ${sequencerIndex}`, undefined, evt);
-        });
+        };
+        seq.on(eventName, onFailEvent);
+        unsubscribes.push(() => seq.off(eventName, onFailEvent as SequencerEvents[typeof eventName]));
       });
     });
 
-    return { failEvents, stateChanges };
+    return { failEvents, stateChanges, stop: () => unsubscribes.splice(0).forEach(off => off()) };
   }
 
   /**
@@ -1071,5 +1090,188 @@ export class SingleNodeTestContext {
         await Promise.all(sequencers.map(sequencer => sequencer.start()));
       }
     });
+  }
+
+  /**
+   * Advances the L1 clock to the start of the next epoch without orphaning healthy in-flight work.
+   *
+   * Warping a whole epoch under live sequencers moves an in-flight proposal's target slot into the past
+   * before its submission lands, so the archiver prunes it as an orphaned proposal and anything still
+   * holding it — a PXE operation that already picked it as its anchor, say — breaks. The sequencers are
+   * therefore paused first, which lets the current iteration and every pending L1 submission finish
+   * untouched, and only then is the clock moved.
+   *
+   * A returned `pause()` is not proof of publication: it awaits those submissions with
+   * `Promise.allSettled`, so it reports that they settled, not that they succeeded. Every block the
+   * sequencers proposed — the tip as of entry, plus everything proposed while draining — must therefore
+   * be shown to sit in the checkpointed chain under the same hash before the clock moves. Comparing the
+   * proposed and checkpointed tips would not do: a prune makes them equal by deleting the very blocks in
+   * question.
+   *
+   * Any non-benign sequencer failure recorded while draining also blocks the warp: warping on top of an
+   * unhealthy chain buries the cause under the prune that follows. That makes this helper suitable only
+   * where uninterrupted, successful production is the expectation — it is the wrong tool for a recovery
+   * scenario, where `proposer-rollup-check-failed` (transient archiver mismatch) and
+   * `pipelined-checkpoint-discarded` (an unexpected parent arriving) are part of the behavior under test.
+   *
+   * The tracked set is the proposed tip sampled either side of the drain plus every `block-proposed`
+   * seen in between. `block-proposed` fires before the proposal reaches the archiver, so a block built
+   * in the instant before this call subscribed is caught by the post-drain sample instead — unless it
+   * was already pruned by then, which stays uncovered.
+   *
+   * Pass only the sequencer-bearing nodes; a prover-only node has no sequencer to pause and must keep
+   * tracking L1 across the warp. `opts.timeout` (seconds, default 120) bounds the drain and the
+   * verification separately.
+   */
+  public async advanceToNextEpochWithSequencersPaused(
+    nodes: AztecNodeService[],
+    node: AztecNode,
+    cheatCodes: CheatCodes,
+    opts: { timeout?: number } = {},
+  ): Promise<void> {
+    const sequencers = this.getSequencers(nodes);
+    const timeout = opts.timeout ?? 120;
+    await testSpan('warp:next-epoch-sequencers-paused', async () => {
+      const proposals: L2BlockId[] = [];
+      const watch = this.watchSequencerEvents(sequencers);
+      const unsubscribeProposals = sequencers.map(sequencer => {
+        const seq = sequencer.getSequencer();
+        const listener = (args: Parameters<SequencerEvents['block-proposed']>[0]) =>
+          proposals.push({ number: args.blockNumber, hash: args.blockHash.toString() });
+        seq.on('block-proposed', listener);
+        return () => seq.off('block-proposed', listener);
+      });
+
+      const trackProposedTip = async () => {
+        const { proposed } = await node.getChainTips();
+        if (proposed.number > 0) {
+          proposals.push(proposed);
+        }
+      };
+
+      let paused = false;
+      let advanced = false;
+      let resumeError: Error | undefined;
+      try {
+        // Sampled before the pause: a block proposed before this call started listening is still in
+        // flight and must survive the warp just the same.
+        await trackProposedTip();
+
+        this.logger.warn(`Pausing ${sequencers.length} sequencers before advancing to the next epoch`);
+        await executeTimeout(
+          () => Promise.all(sequencers.map(sequencer => sequencer.pause())),
+          timeout * 1000,
+          'sequencers to drain before the epoch advance',
+        );
+        paused = true;
+
+        // Sampled again now the drain is over, since `block-proposed` fires before the proposal reaches
+        // the archiver: a block built just before this call subscribed shows up here rather than above.
+        await trackProposedTip();
+
+        this.assertNoDrainFailures(watch.failEvents);
+        await this.assertProposalsAreCheckpointed(node, proposals, watch.failEvents, timeout);
+        this.assertNoDrainFailures(watch.failEvents);
+
+        await cheatCodes.rollup.advanceToNextEpoch();
+        advanced = true;
+      } finally {
+        watch.stop();
+        unsubscribeProposals.forEach(off => off());
+        try {
+          if (paused) {
+            this.logger.warn(`Resuming ${sequencers.length} sequencers after the epoch advance`);
+            await Promise.all(sequencers.map(sequencer => sequencer.start()));
+          } else {
+            // Either the pause never started or it never finished draining, so submissions may still be
+            // in flight. Restarting the poll loop on top of them would race; leave this to teardown,
+            // whose `stop()` interrupts and awaits them.
+            this.logger.error(`Not resuming sequencers: the pause did not complete`);
+          }
+        } catch (err) {
+          resumeError = err instanceof Error ? err : new Error(`${err}`);
+          if (!advanced) {
+            this.logger.error(`Failed to resume sequencers after an unsafe epoch advance`, err);
+          }
+        }
+      }
+
+      // Reached only when the body succeeded: a failed advance propagates its own error out of the
+      // `finally` instead, so a resume failure can never replace the reason the warp was unsafe.
+      if (resumeError !== undefined) {
+        throw resumeError;
+      }
+    });
+  }
+
+  /**
+   * Throws if any non-benign sequencer failure was recorded. Warping on top of an already-unhealthy
+   * chain buries the cause under the prune that follows, and the fixture warps are not all wrapped in a
+   * test-level {@link assertNoFailuresFromSequencers}.
+   */
+  private assertNoDrainFailures(failEvents: TrackedSequencerEvent[]): void {
+    if (failEvents.length === 0) {
+      return;
+    }
+    this.logger.error(`Sequencer failures while draining for the epoch advance`, failEvents);
+    throw new Error(`Refusing to warp: the sequencers failed while draining: ${JSON.stringify(failEvents)}`);
+  }
+
+  /**
+   * Fails unless every given block sits in the checkpointed chain under the hash it was proposed with,
+   * waiting up to `timeout` seconds for the archiver to index the publications. `failEvents` is reported
+   * alongside the failure so a publication that errored explains the missing block.
+   */
+  private async assertProposalsAreCheckpointed(
+    node: AztecNode,
+    proposals: L2BlockId[],
+    failEvents: TrackedSequencerEvent[],
+    timeout: number,
+  ): Promise<void> {
+    const expected = [...new Map(proposals.map(block => [`${block.number}:${block.hash}`, block])).values()];
+    if (expected.length === 0) {
+      return;
+    }
+
+    let outstanding: string[] = [];
+    try {
+      await retryUntil(
+        async () => {
+          const checkpointed = await node.getCheckpointNumber('checkpointed');
+          const reasons = await Promise.all(
+            expected.map(async block => {
+              const data = await node.getBlockData(block.number);
+              if (!data) {
+                return `block ${block.number} is not indexed`;
+              }
+              if (data.blockHash.toString() !== block.hash) {
+                throw new Error(
+                  `block ${block.number} was replaced while draining: proposed ${block.hash}, indexed ${data.blockHash}`,
+                );
+              }
+              return data.checkpointNumber > checkpointed
+                ? `block ${block.number} is still in unpublished checkpoint ${data.checkpointNumber} (checkpointed is ${checkpointed})`
+                : undefined;
+            }),
+          );
+          outstanding = reasons.filter((reason): reason is string => reason !== undefined);
+          return outstanding.length === 0;
+        },
+        'proposed blocks to reach the checkpointed chain',
+        timeout,
+        0.5,
+      );
+    } catch (err) {
+      throw new Error(
+        [
+          `Refusing to warp: the sequencers drained without every proposed block reaching the checkpointed chain, so the warp would orphan them.`,
+          outstanding.length > 0 ? `Outstanding: ${outstanding.join('; ')}.` : undefined,
+          `Cause: ${err}.`,
+          `Sequencer failures while draining: ${failEvents.length === 0 ? 'none' : JSON.stringify(failEvents)}.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+    }
   }
 }

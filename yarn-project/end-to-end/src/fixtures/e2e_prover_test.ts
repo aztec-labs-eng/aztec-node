@@ -182,7 +182,7 @@ export class FullProverTest extends SingleNodeTestContext {
     }
 
     this.logger.verbose(`Move to a clean epoch`);
-    await this.context.cheatCodes.rollup.advanceToNextEpoch();
+    await this.advanceToNextEpochSafely();
 
     this.logger.verbose(`Marking current block as proven`);
     await this.context.cheatCodes.rollup.markAsProven();
@@ -279,6 +279,19 @@ export class FullProverTest extends SingleNodeTestContext {
     // was already stopped above).
     this.proverNodes = [this.proverAztecNode];
     this.logger.warn(`Proofs are now enabled`, { realProofs: this.realProofs });
+  }
+
+  /**
+   * Advances to the next epoch with the main sequencer paused and its in-flight work verified as
+   * published, so the warp cannot orphan a healthy proposal. The prover node is deliberately left
+   * running: it has no sequencer, and it has to keep tracking L1 across the warp.
+   */
+  public advanceToNextEpochSafely(): Promise<void> {
+    return this.advanceToNextEpochWithSequencersPaused(
+      this.nodes,
+      this.context.aztecNodeService,
+      this.context.cheatCodes,
+    );
   }
 
   private async mintFeeJuice(recipient: Hex) {
