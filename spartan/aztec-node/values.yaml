@@ -203,7 +203,13 @@ persistence:
 updateStrategy:
   type: RollingUpdate
 
-# -- Additional init containers
+# -- Additional containers, as a list or a templated YAML string.
+extraContainers: []
+
+# -- Additional pod volumes, as a list or a templated YAML string.
+extraVolumes: []
+
+# -- Additional init containers, as a list or a templated YAML string.
 initContainers: []
 # - name: my-init-container
 #   image: busybox:latest
