@@ -140,14 +140,14 @@ The offscreen document hosts your wallet implementation. Extend `BaseWallet` to 
 | `getAccounts()` | Return all accounts (with aliases) |
 
 :::tip Custom Fee Payment
-`completeFeeOptions` has a default implementation that uses the sender's fee juice balance. Override it to inject a custom fee payment strategy (e.g., `SponsoredFPC`). The tutorial wallet overrides this — see [`test-extension/src/offscreen/offscreen.ts`](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts) for the implementation.
+By default, transactions pay fees from the sender's fee juice balance. Override `getDefaultFeePaymentMethod` to return a different fee payment method (e.g., `SponsoredFPC`); `BaseWallet` adds it to every transaction whose payload doesn't already include one. The tutorial wallet overrides this — see [`test-extension/src/offscreen/offscreen.ts`](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts) for the implementation.
 :::
 
 ### What BaseWallet Provides
 
 | Method | What it does |
 |--------|-------------|
-| `sendTx(payload, opts)` | Completes fee options, creates execution request, generates proof, submits to node |
+| `sendTx(payload, opts)` | Fills in gas settings and fee payment, creates execution request, generates proof, submits to node |
 | `simulateTx(payload, opts)` | Simulates without proving |
 | `executeUtility(call, opts)` | Executes an unconstrained function call |
 | `batch(methods)` | Batches multiple wallet method calls |

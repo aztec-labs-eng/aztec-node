@@ -25,7 +25,6 @@
     "@aztec-labs/accounts": "#include_aztec_version",
     "@aztec-labs/aztec.js": "#include_aztec_version",
     "@aztec-labs/constants": "#include_aztec_version",
-    "@aztec-labs/entrypoints": "#include_aztec_version",
     "@aztec-labs/foundation": "#include_aztec_version",
     "@aztec-labs/kv-store": "#include_aztec_version",
     "@aztec-labs/noir-contracts.js": "#include_aztec_version",

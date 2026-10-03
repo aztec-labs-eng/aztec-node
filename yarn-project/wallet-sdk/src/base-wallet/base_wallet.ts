@@ -27,7 +27,7 @@ import {
   type Wallet,
   type WalletCapabilities,
 } from '@aztec-labs/aztec.js/wallet';
-import { AccountFeePaymentMethodOptions, type DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
+import type { DefaultAccountEntrypointOptions } from '@aztec-labs/entrypoints/account';
 import { DefaultEntrypoint } from '@aztec-labs/entrypoints/default';
 import type { ChainInfo } from '@aztec-labs/entrypoints/interfaces';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -63,38 +63,24 @@ import {
 import { inspect } from 'util';
 
 import { assertGasLimitsWithinNetworkLimits } from './get_gas_limits.js';
-import { buildMergedSimulationResult, extractOptimizablePublicStaticCalls, simulateViaNode } from './utils.js';
-
-/**
- * Options to configure fee payment for a transaction
- */
-export type FeeOptions = {
-  /**
-   * A wallet-provided fallback fee payment method that is used only if the transaction that is being constructed
-   * doesn't already include one
-   */
-  walletFeePaymentMethod?: FeePaymentMethod;
-  /** Configuration options for the account to properly handle the selected fee payment method */
-  accountFeePaymentMethodOptions?: AccountFeePaymentMethodOptions;
-  /** The gas settings to use for the transaction */
-  gasSettings: GasSettings;
-};
+import {
+  buildMergedSimulationResult,
+  extractOptimizablePublicStaticCalls,
+  getAppCallOffset,
+  simulateViaNode,
+} from './utils.js';
 
 /** Options for `simulateViaEntrypoint`. */
 export type SimulateViaEntrypointOptions = Pick<
   SimulateOptions,
   'from' | 'additionalScopes' | 'skipTxValidation' | 'skipFeeEnforcement' | 'sendMessagesAs' | 'overrides'
 > & {
-  /** Fee options for the entrypoint */
-  feeOptions: FeeOptions;
+  /** The gas settings to use for the transaction */
+  gasSettings: GasSettings;
 };
 
-/** Options for `completeFeeOptions`. */
-export type CompleteFeeOptionsConfig = {
-  /** The address where the transaction is being sent from. */
-  from: AztecAddress | NoFrom;
-  /** The address paying for fees (if any fee payment method is embedded in the execution payload). */
-  feePayer?: AztecAddress;
+/** Options for `calculateGasSettings`. */
+export type CalculateGasSettingsConfig = {
   /** User-provided partial gas settings. */
   gasSettings?: Partial<FieldsOf<GasSettings>>;
   /** If true, returns gas settings with high gas limits for estimation. If false, uses fallback limits. */
@@ -198,35 +184,30 @@ export abstract class BaseWallet implements Wallet {
     return new Gas(txsLimits.gas.daGas, txsLimits.gas.l2Gas);
   }
 
-  protected async createTxExecutionRequestFromPayloadAndFee(
+  /**
+   * Builds the tx execution request for a payload. The sender's account entrypoint works out how to handle the fee
+   * from the payload's fee payer.
+   * @param executionPayload - The payload to execute, including its fee payment if any.
+   * @param from - The sender address, or NO_FROM for the default entrypoint.
+   * @param gasSettings - The gas settings to declare in the transaction.
+   */
+  protected async createTxExecutionRequestFromPayload(
     executionPayload: ExecutionPayload,
     from: AztecAddress | NoFrom,
-    feeOptions: FeeOptions,
+    gasSettings: GasSettings,
   ): Promise<TxExecutionRequest> {
-    const feeExecutionPayload = await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
-    const finalExecutionPayload = feeExecutionPayload
-      ? mergeExecutionPayloads([feeExecutionPayload, executionPayload])
-      : executionPayload;
     const chainInfo = await this.getChainInfo();
 
     if (from === NO_FROM) {
       const entrypoint = new DefaultEntrypoint();
-      return entrypoint.createTxExecutionRequest(finalExecutionPayload, feeOptions.gasSettings, chainInfo);
-    } else {
-      const fromAccount = await this.getAccountFromAddress(from);
-      const executionOptions: DefaultAccountEntrypointOptions = {
-        txNonce: Fr.random(),
-        cancellable: this.cancellableTransactions,
-        // If from is an address, feeOptions include the way the account contract should handle the fee payment
-        feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
-      };
-      return fromAccount.createTxExecutionRequest(
-        finalExecutionPayload,
-        feeOptions.gasSettings,
-        chainInfo,
-        executionOptions,
-      );
+      return entrypoint.createTxExecutionRequest(executionPayload, gasSettings, chainInfo);
     }
+    const fromAccount = await this.getAccountFromAddress(from);
+    const executionOptions: DefaultAccountEntrypointOptions = {
+      txNonce: Fr.random(),
+      cancellable: this.cancellableTransactions,
+    };
+    return fromAccount.createTxExecutionRequest(executionPayload, gasSettings, chainInfo, executionOptions);
   }
 
   public async createAuthWit(
@@ -274,29 +255,56 @@ export abstract class BaseWallet implements Wallet {
   }
 
   /**
-   * Completes partial user-provided fee options with wallet defaults.
-   * @param config - Fee completion config.
+   * Returns the fee payment method the wallet adds to transactions whose payload doesn't include one. By default
+   * there is none, so the sender's account pays with its own fee juice. Override it to pay on the sender's behalf,
+   * e.g. through a sponsor contract.
+   *
+   * Only called for payloads without a fee payer, since a transaction can only have one. It is called again for every
+   * request built, with that request's gas settings: during simulation these are the high-limit estimation settings,
+   * so a method that sizes its payment from the gas limits must cope with them.
+   * @param _from - The sender address, or NO_FROM for the default entrypoint.
+   * @param _gasSettings - The gas settings the transaction declares, which the method may size its payment from.
    */
-  protected async completeFeeOptions(config: CompleteFeeOptionsConfig): Promise<FeeOptions> {
-    const { from, feePayer, gasSettings, forEstimation, congestionEstimate } = config;
+  protected getDefaultFeePaymentMethod(
+    _from: AztecAddress | NoFrom,
+    _gasSettings: GasSettings,
+  ): Promise<FeePaymentMethod | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  /**
+   * Adds the wallet's default fee payment, if it has one, ahead of the app's calls in a payload that doesn't include a
+   * fee payment of its own. Like a fee payment method passed by the app, it then pays the fee as the payload's fee
+   * payer.
+   * @param executionPayload - The app's execution payload.
+   * @param from - The sender address, or NO_FROM for the default entrypoint.
+   * @param gasSettings - The gas settings the transaction declares.
+   */
+  protected async addDefaultFeePayment(
+    executionPayload: ExecutionPayload,
+    from: AztecAddress | NoFrom,
+    gasSettings: GasSettings,
+  ): Promise<ExecutionPayload> {
+    if (executionPayload.feePayer) {
+      return executionPayload;
+    }
+    const feePaymentMethod = await this.getDefaultFeePaymentMethod(from, gasSettings);
+    if (!feePaymentMethod) {
+      return executionPayload;
+    }
+    return mergeExecutionPayloads([await feePaymentMethod.getExecutionPayload(), executionPayload]);
+  }
+
+  /**
+   * Completes partial user-provided gas settings with wallet defaults, using the network's current fees and
+   * per-tx gas limits.
+   * @param config - User-provided gas settings and how to fill in the missing values.
+   * @returns The full gas settings to declare in the transaction.
+   */
+  protected async calculateGasSettings(config: CalculateGasSettingsConfig): Promise<GasSettings> {
+    const { gasSettings, forEstimation, congestionEstimate } = config;
     const maxFeesPerGas =
       gasSettings?.maxFeesPerGas ?? (await this.getMinFees(congestionEstimate)).mul(1 + this.minFeePadding);
-    let accountFeePaymentMethodOptions;
-    // If from is an address, we need to determine the appropriate fee payment method options for the
-    // account contract entrypoint to use
-    if (from !== NO_FROM) {
-      if (!feePayer) {
-        // The transaction does not include a fee payment method, so we set the flag
-        // for the account to use its fee juice balance
-        accountFeePaymentMethodOptions = AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE;
-      } else {
-        // The transaction includes fee payment method, so we check if we are the fee payer for it
-        // (this can only happen if the embedded payment method is FeeJuiceWithClaim)
-        accountFeePaymentMethodOptions = from.equals(feePayer)
-          ? AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM
-          : AccountFeePaymentMethodOptions.EXTERNAL;
-      }
-    }
     const gasSettingsOverrides = {
       gasLimits: gasSettings?.gasLimits ? Gas.from(gasSettings.gasLimits) : undefined,
       teardownGasLimits: gasSettings?.teardownGasLimits ? Gas.from(gasSettings.teardownGasLimits) : undefined,
@@ -324,11 +332,7 @@ export abstract class BaseWallet implements Wallet {
       });
     }
     this.log.debug(`Using L2 gas settings`, fullGasSettings);
-    return {
-      gasSettings: fullGasSettings,
-      walletFeePaymentMethod: undefined,
-      accountFeePaymentMethodOptions,
-    };
+    return fullGasSettings;
   }
 
   /**
@@ -401,11 +405,8 @@ export abstract class BaseWallet implements Wallet {
    * @param opts - Simulation options.
    */
   protected async simulateViaEntrypoint(executionPayload: ExecutionPayload, opts: SimulateViaEntrypointOptions) {
-    const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(
-      executionPayload,
-      opts.from,
-      opts.feeOptions,
-    );
+    const txPayload = await this.addDefaultFeePayment(executionPayload, opts.from, opts.gasSettings);
+    const txRequest = await this.createTxExecutionRequestFromPayload(txPayload, opts.from, opts.gasSettings);
     const result = await this.pxe.simulateTx(txRequest, {
       simulatePublic: true,
       skipTxValidation: opts.skipTxValidation,
@@ -414,22 +415,10 @@ export abstract class BaseWallet implements Wallet {
       senderForTags: this.senderForTagsFrom(opts.from, opts.sendMessagesAs),
       overrides: opts.overrides,
     });
-    const appCallOffset = await this.computeAppCallOffset(opts.from, opts.feeOptions);
-    return TxSimulationResultWithAppOffset.fromResultAndOffset(result, appCallOffset);
-  }
-
-  /**
-   * Computes the index where the app's calls begin in the flattened array of calls (0 = entrypoint/root, 1..N = fee
-   * calls, N+1 = app).
-   * @param from - The sender address, or NO_FROM for the default entrypoint.
-   * @param feeOptions - Fee options containing the wallet fee payment method.
-   */
-  protected async computeAppCallOffset(from: AztecAddress | NoFrom, feeOptions: FeeOptions): Promise<number> {
-    if (from === NO_FROM) {
-      return 0;
-    }
-    const feeExecutionPayload = await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
-    return (feeExecutionPayload?.calls.length ?? 0) + 1; // +1 for entrypoint
+    return TxSimulationResultWithAppOffset.fromResultAndOffset(
+      result,
+      getAppCallOffset(opts.from, executionPayload, txPayload),
+    );
   }
 
   /**
@@ -444,9 +433,7 @@ export abstract class BaseWallet implements Wallet {
     executionPayload: ExecutionPayload,
     opts: SimulateOptions,
   ): Promise<TxSimulationResultWithAppOffset> {
-    const feeOptions = await this.completeFeeOptions({
-      from: opts.from,
-      feePayer: executionPayload.feePayer,
+    const gasSettings = await this.calculateGasSettings({
       gasSettings: opts.fee?.gasSettings,
       forEstimation: true,
       congestionEstimate: opts.fee?.congestionEstimate,
@@ -472,7 +459,7 @@ export abstract class BaseWallet implements Wallet {
             optimizableCalls,
             simulationOrigin,
             chainInfo,
-            feeOptions.gasSettings,
+            gasSettings,
             blockHeader,
             opts.skipFeeEnforcement ?? true,
             this.getContractName.bind(this),
@@ -482,7 +469,7 @@ export abstract class BaseWallet implements Wallet {
       remainingCalls.length > 0
         ? this.simulateViaEntrypoint(remainingPayload, {
             from: opts.from,
-            feeOptions,
+            gasSettings,
             additionalScopes: opts.additionalScopes,
             skipTxValidation: opts.skipTxValidation,
             skipFeeEnforcement: opts.skipFeeEnforcement ?? true,
@@ -496,13 +483,12 @@ export abstract class BaseWallet implements Wallet {
   }
 
   async profileTx(executionPayload: ExecutionPayload, opts: ProfileOptions): Promise<TxProfileResult> {
-    const feeOptions = await this.completeFeeOptions({
-      from: opts.from,
-      feePayer: executionPayload.feePayer,
+    const gasSettings = await this.calculateGasSettings({
       gasSettings: opts.fee?.gasSettings,
       congestionEstimate: opts.fee?.congestionEstimate,
     });
-    const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(executionPayload, opts.from, feeOptions);
+    const txPayload = await this.addDefaultFeePayment(executionPayload, opts.from, gasSettings);
+    const txRequest = await this.createTxExecutionRequestFromPayload(txPayload, opts.from, gasSettings);
     return this.pxe.profileTx(txRequest, {
       profileMode: opts.profileMode,
       skipProofGeneration: opts.skipProofGeneration ?? true,
@@ -515,13 +501,12 @@ export abstract class BaseWallet implements Wallet {
     executionPayload: ExecutionPayload,
     opts: SendOptions<W>,
   ): Promise<SendReturn<W>> {
-    const feeOptions = await this.completeFeeOptions({
-      from: opts.from,
-      feePayer: executionPayload.feePayer,
+    const gasSettings = await this.calculateGasSettings({
       gasSettings: opts.fee?.gasSettings,
       congestionEstimate: opts.fee?.congestionEstimate,
     });
-    const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(executionPayload, opts.from, feeOptions);
+    const txPayload = await this.addDefaultFeePayment(executionPayload, opts.from, gasSettings);
+    const txRequest = await this.createTxExecutionRequestFromPayload(txPayload, opts.from, gasSettings);
     const provenTx = await this.pxe.proveTx(txRequest, {
       scopes: this.scopesFrom(opts.from, opts.additionalScopes ?? [], opts.sendMessagesAs),
       senderForTags: this.senderForTagsFrom(opts.from, opts.sendMessagesAs),

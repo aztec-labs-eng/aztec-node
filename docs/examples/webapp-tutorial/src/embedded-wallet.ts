@@ -1,14 +1,11 @@
 // docs:start:embedded-wallet-imports
-import { type NoFrom, NO_FROM } from '@aztec-labs/aztec.js/account';
 import { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
 import { SponsoredFeePaymentMethod } from '@aztec-labs/aztec.js/fee';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { SPONSORED_FPC_SALT } from '@aztec-labs/constants';
-import { AccountFeePaymentMethodOptions } from '@aztec-labs/entrypoints/account';
 import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing/lazy';
 import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
-import { type CompleteFeeOptionsConfig, type FeeOptions } from '@aztec-labs/wallet-sdk/base-wallet';
 import { EmbeddedWallet as BaseEmbeddedWallet } from '@aztec-labs/wallets/embedded';
 // docs:end:embedded-wallet-imports
 
@@ -32,21 +29,9 @@ export class EmbeddedWallet extends BaseEmbeddedWallet {
    * Uses SponsoredFPC for fee payment by default, so users
    * don't need to hold fee tokens.
    */
-  override async completeFeeOptions(config: CompleteFeeOptionsConfig): Promise<FeeOptions> {
-    const base = await super.completeFeeOptions(config);
-
-    if (config.feePayer) {
-      return base;
-    }
-
+  protected override async getDefaultFeePaymentMethod() {
     const fpc = await EmbeddedWallet.#getSponsoredFPCContract();
-
-    return {
-      ...base,
-      walletFeePaymentMethod: new SponsoredFeePaymentMethod(fpc.instance.address),
-      accountFeePaymentMethodOptions:
-        config.from !== NO_FROM ? AccountFeePaymentMethodOptions.EXTERNAL : base.accountFeePaymentMethodOptions,
-    };
+    return new SponsoredFeePaymentMethod(fpc.instance.address);
   }
   // docs:end:fee-options
 

@@ -1,3 +1,4 @@
+import { NO_FROM, type NoFrom } from '@aztec-labs/aztec.js/account';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { TxSimulationResultWithAppOffset } from '@aztec-labs/aztec.js/wallet';
 import { MAX_ENQUEUED_CALLS_PER_CALL } from '@aztec-labs/constants';
@@ -245,4 +246,20 @@ export function buildMergedSimulationResult(
     normalResult?.stats,
   );
   return TxSimulationResultWithAppOffset.fromResultAndOffset(merged, normalResult?.appCallOffset ?? 0);
+}
+
+/**
+ * Returns the index where the app's calls begin in the flattened array of calls of a transaction (0 = entrypoint/root,
+ * 1..N = fee calls, N+1 = app). The wallet only ever adds fee payment calls ahead of the app's, so they are the calls
+ * the transaction's payload has on top of the app's.
+ * @param from - The sender address, or NO_FROM for the default entrypoint.
+ * @param appPayload - The execution payload the app asked to execute.
+ * @param txPayload - The execution payload of the transaction, with any fee payment the wallet added.
+ */
+export function getAppCallOffset(
+  from: AztecAddress | NoFrom,
+  appPayload: ExecutionPayload,
+  txPayload: ExecutionPayload,
+): number {
+  return from === NO_FROM ? 0 : txPayload.calls.length - appPayload.calls.length + 1; // +1 for entrypoint
 }

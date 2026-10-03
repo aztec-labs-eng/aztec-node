@@ -41,9 +41,13 @@ import {
   TxStatus,
   type UtilityExecutionResult,
   collectOffchainEffects,
-  mergeExecutionPayloads,
 } from '@aztec-labs/stdlib/tx';
-import { BaseWallet, type SimulateViaEntrypointOptions, getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
+import {
+  BaseWallet,
+  type SimulateViaEntrypointOptions,
+  getAppCallOffset,
+  getGasLimits,
+} from '@aztec-labs/wallet-sdk/base-wallet';
 
 import type { AccountContractsProvider } from './account-contract-providers/types.js';
 import { type AccountType, WalletDB } from './wallet_db.js';
@@ -161,9 +165,7 @@ export class EmbeddedWallet extends BaseWallet {
     // PXE has autoSync disabled by the embedded wallet entrypoints, so we sync once here to cover
     // both the inner simulateTx (via simulateViaEntrypoint) and the proveTx that super.sendTx
     await this.pxe.sync();
-    const feeOptions = await this.completeFeeOptions({
-      from: opts.from,
-      feePayer: executionPayload.feePayer,
+    const estimationGasSettings = await this.calculateGasSettings({
       gasSettings: opts.fee?.gasSettings,
       forEstimation: true,
     });
@@ -172,7 +174,7 @@ export class EmbeddedWallet extends BaseWallet {
     // private authwitnesses based on offchain effects.
     const simulationResult = await this.simulateViaEntrypoint(executionPayload, {
       from: opts.from,
-      feeOptions,
+      gasSettings: estimationGasSettings,
       additionalScopes: opts.additionalScopes,
       skipTxValidation: true,
       sendMessagesAs: opts.sendMessagesAs,
@@ -204,8 +206,8 @@ export class EmbeddedWallet extends BaseWallet {
     );
     const gasSettings = GasSettings.from({
       ...opts.fee?.gasSettings,
-      maxFeesPerGas: feeOptions.gasSettings.maxFeesPerGas,
-      maxPriorityFeesPerGas: feeOptions.gasSettings.maxPriorityFeesPerGas,
+      maxFeesPerGas: estimationGasSettings.maxFeesPerGas,
+      maxPriorityFeesPerGas: estimationGasSettings.maxPriorityFeesPerGas,
       gasLimits: opts.fee?.gasSettings?.gasLimits ?? estimated.gasLimits,
       teardownGasLimits: opts.fee?.gasSettings?.teardownGasLimits ?? estimated.teardownGasLimits,
     });
@@ -331,13 +333,10 @@ export class EmbeddedWallet extends BaseWallet {
     executionPayload: ExecutionPayload,
     opts: SimulateViaEntrypointOptions,
   ): Promise<TxSimulationResultWithAppOffset> {
-    const { from, feeOptions, additionalScopes, skipTxValidation, skipFeeEnforcement, sendMessagesAs } = opts;
+    const { from, gasSettings, additionalScopes, skipTxValidation, skipFeeEnforcement, sendMessagesAs } = opts;
     const scopes = this.scopesFrom(from, additionalScopes ?? [], sendMessagesAs);
 
-    const feeExecutionPayload = await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
-    const finalExecutionPayload = feeExecutionPayload
-      ? mergeExecutionPayloads([feeExecutionPayload, executionPayload])
-      : executionPayload;
+    const txPayload = await this.addDefaultFeePayment(executionPayload, from, gasSettings);
     const chainInfo = await this.getChainInfo();
 
     const accountOverrides = await this.buildAccountOverrides(scopes);
@@ -346,7 +345,7 @@ export class EmbeddedWallet extends BaseWallet {
     let txRequest: TxExecutionRequest;
     if (from === NO_FROM) {
       const entrypoint = new DefaultEntrypoint();
-      txRequest = await entrypoint.createTxExecutionRequest(finalExecutionPayload, feeOptions.gasSettings, chainInfo);
+      txRequest = await entrypoint.createTxExecutionRequest(txPayload, gasSettings, chainInfo);
     } else {
       const { type } = await this.walletDB.retrieveAccount(from);
       const originalAccount = await this.getAccountFromAddress(from);
@@ -355,15 +354,8 @@ export class EmbeddedWallet extends BaseWallet {
       const executionOptions: DefaultAccountEntrypointOptions = {
         txNonce: Fr.random(),
         cancellable: this.cancellableTransactions,
-        // If from is an address, feeOptions include the way the account contract should handle the fee payment
-        feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
       };
-      txRequest = await account.createTxExecutionRequest(
-        finalExecutionPayload,
-        feeOptions.gasSettings,
-        chainInfo,
-        executionOptions,
-      );
+      txRequest = await account.createTxExecutionRequest(txPayload, gasSettings, chainInfo, executionOptions);
     }
 
     const result = await this.pxe.simulateTx(txRequest, {
@@ -374,8 +366,10 @@ export class EmbeddedWallet extends BaseWallet {
       scopes,
       senderForTags: this.senderForTagsFrom(from, sendMessagesAs),
     });
-    const appCallOffset = await this.computeAppCallOffset(from, feeOptions);
-    return TxSimulationResultWithAppOffset.fromResultAndOffset(result, appCallOffset);
+    return TxSimulationResultWithAppOffset.fromResultAndOffset(
+      result,
+      getAppCallOffset(from, executionPayload, txPayload),
+    );
   }
 
   protected async createAccountInternal(
