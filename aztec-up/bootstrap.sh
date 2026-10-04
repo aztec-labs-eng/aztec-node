@@ -17,19 +17,9 @@ function versions {
   echo "node: $(node --version | cut -d 'v' -f 2)"
 }
 
-function build {
-  # Noop if user doesn't have docker.
-  if ! command -v docker &>/dev/null; then
-    echo "Docker not installed. Skipping..."
-    return
-  fi
-
-  # Create versions file so we know what to install.
-  versions > ./bin/0.0.1/versions
-  echo "Versions:"
-  cat ./bin/0.0.1/versions
-  echo
-
+# Starts a local verdaccio on :4873 seeded from the proxied-npmjs cache, and points npm at it for
+# the rest of this shell.
+function start_local_registry {
   # Create Verdaccio config.
   # publish.allow_offline lets verdaccio accept publishes when the npmjs
   # uplink is briefly unreachable, instead of returning 503. We never want
@@ -84,6 +74,82 @@ EOF
     export PATH="/tmp/verdaccio-pkg/bin:$PATH"
   fi
 
+  rm -rf verdaccio-storage
+  # Registry storage is only a download cache; the release lock determines dependency versions.
+  local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
+  cache_download aztec-up-verdaccio-cache-$deps_hash.zst || true
+  # Whatever already holds the port would answer the wait below and receive the publishes.
+  if nc -z localhost 4873 &>/dev/null; then
+    echo_stderr ":4873 is already in use; refusing to publish to an unknown registry."
+    exit 1
+  fi
+  verdaccio --config /tmp/verdaccio-config.yaml --listen 4873 &>/dev/null &
+  verdaccio_pid=$!
+  trap 'kill $verdaccio_pid &>/dev/null || true' EXIT
+  local deadline=$((SECONDS + 120))
+  while ! nc -z localhost 4873 &>/dev/null; do
+    if ! kill -0 $verdaccio_pid 2>/dev/null; then
+      echo_stderr "verdaccio exited before listening on :4873."
+      exit 1
+    fi
+    if ((SECONDS >= deadline)); then
+      echo_stderr "verdaccio did not listen on :4873 within 120s."
+      exit 1
+    fi
+    sleep 1
+  done
+
+  # Configure local npm registry.
+  export npm_config_registry="http://localhost:4873"
+  # Throwaway cache: on transient registry errors npm serves stale cached
+  # localhost:4873 packuments from a previous run, which makes deploy_npm's
+  # "already published" check skip packages that were never published.
+  export npm_config_cache=$(mktemp -d)
+  export npm_config_userconfig=$(mktemp)
+  # The scopes are pinned as well as the default registry: ci3/source_npm_auth writes
+  # "@aztec-labs:registry" into the global config when a release targets a private registry, and
+  # a scope registry outranks "registry", so without these publish_local's publishes would leave
+  # for that registry instead of verdaccio. Same key in the user config, which npm ranks higher.
+  cat > "$npm_config_userconfig" <<'EOF'
+max_body_size=1000mb
+registry=http://localhost:4873/
+@aztec-labs:registry=http://localhost:4873/
+@aztec-foundation:registry=http://localhost:4873/
+//localhost:4873/:username=testuser
+//localhost:4873/:_password=dGVzdHBhc3M=
+//localhost:4873/:email=test@example.com
+//localhost:4873/:always-auth=true
+EOF
+}
+
+# Fake-publishes every workspace package to the local registry at the given version.
+function publish_local {
+  local version=$1
+  # Scoped fake-publish: workspace-local @aztec-labs deps are co-published at $version, while
+  # foundation deps (bb.js, wsdb, noir packages, ...) keep the versions pinned in
+  # yarn-project's root resolutions and resolve through the npmjs uplink.
+  export NPM_RELEASE_RESOLUTIONS="$(jq -c '.resolutions // {}' $root/yarn-project/package.json)"
+  # TODO(AD): we have kludged a retry here. a local NPM install ought to be robust enough not to.
+  echo "Deploying packages to local npm registry (version: $version)..."
+  local t=$SECONDS
+  $root/yarn-project/bootstrap.sh get_projects |
+    DRY_RUN= parallel --tag --line-buffer --halt now,fail=1 "retry 'cd {} && dump_fail \"deploy_npm $version\" >/dev/null'"
+  echo "Package deploy took $((SECONDS - t))s."
+}
+
+function build {
+  # Noop if user doesn't have docker.
+  if ! command -v docker &>/dev/null; then
+    echo "Docker not installed. Skipping..."
+    return
+  fi
+
+  # Create versions file so we know what to install.
+  versions > ./bin/0.0.1/versions
+  echo "Versions:"
+  cat ./bin/0.0.1/versions
+  echo
+
   local base_hash=$(cache_content_hash ^aztec-up/Dockerfile.base)
   if ! cache_download aztec-up-test-base-image-$base_hash.zst; then
     docker build -t aztecprotocol/aztec-up-test-base -f Dockerfile.base .
@@ -94,54 +160,15 @@ EOF
   fi
 
   if ! cache_download_stream aztec-up-test-image-$hash.zst | docker load; then
-    rm -rf verdaccio-storage
-    # Registry storage is only a download cache; the release lock determines dependency versions.
-    local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
-    cache_download aztec-up-verdaccio-cache-$deps_hash.zst || true
-    verdaccio --config /tmp/verdaccio-config.yaml --listen 4873 &>/dev/null &
-    verdaccio_pid=$!
-    trap 'kill $verdaccio_pid &>/dev/null || true' EXIT
-    while ! nc -z localhost 4873 &>/dev/null; do sleep 1; done
+    start_local_registry
 
-    # Configure local npm registry.
-    export npm_config_registry="http://localhost:4873"
-    # Throwaway cache: on transient registry errors npm serves stale cached
-    # localhost:4873 packuments from a previous run, which makes deploy_npm's
-    # "already published" check skip packages that were never published.
-    export npm_config_cache=$(mktemp -d)
-    export npm_config_userconfig=$(mktemp)
-    # The scopes are pinned as well as the default registry: ci3/source_npm_auth writes
-    # "@aztec-labs:registry" into the global config when a release targets a private registry, and
-    # a scope registry outranks "registry", so without these the publishes below would leave for
-    # that registry instead of verdaccio. Same key in the user config, which npm ranks higher.
-    cat > "$npm_config_userconfig" <<'EOF'
-max_body_size=1000mb
-registry=http://localhost:4873/
-@aztec-labs:registry=http://localhost:4873/
-@aztec-foundation:registry=http://localhost:4873/
-//localhost:4873/:username=testuser
-//localhost:4873/:_password=dGVzdHBhc3M=
-//localhost:4873/:email=test@example.com
-//localhost:4873/:always-auth=true
-EOF
-
-    # Deploy all npm packages to local registry.
     version=0.0.1
-    # Scoped fake-publish: workspace-local @aztec-labs deps are co-published at $version, while
-    # foundation deps (bb.js, wsdb, noir packages, ...) keep the versions pinned in
-    # yarn-project's root resolutions and resolve through the npmjs uplink.
-    export NPM_RELEASE_RESOLUTIONS="$(jq -c '.resolutions // {}' $root/yarn-project/package.json)"
-    # TODO(AD): we have kludged a retry here. a local NPM install ought to be robust enough not to.
-    echo "Deploying packages to local npm registry (version: $version)..."
-    local t=$SECONDS
-    $root/yarn-project/bootstrap.sh get_projects |
-      DRY_RUN= parallel --tag --line-buffer --halt now,fail=1 "retry 'cd {} && dump_fail \"deploy_npm $version\" >/dev/null'"
-    echo "Package deploy took $((SECONDS - t))s."
+    publish_local $version
 
     echo "Generating and fetching the locked installer dependencies..."
     retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" bin/0.0.1"
 
-    t=$SECONDS
+    local t=$SECONDS
     docker build -t aztecprotocol/aztec-up-test .
     echo "Image build took $((SECONDS - t))s."
 
@@ -159,6 +186,7 @@ EOF
     $root/yarn-project/bootstrap.sh get_projects | while read -r project; do
       rm -rf "verdaccio-storage/$(jq -r .name "$project/package.json")"
     done
+    local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
     cache_upload aztec-up-verdaccio-cache-$deps_hash.zst verdaccio-storage
   else
     # The lock travels inside the image so a cache hit never pairs it with another run's registry.
@@ -177,6 +205,28 @@ function test {
   test_cmds | filter_test_cmds | parallelize
 }
 
+# Generates the release lock against a local registry holding the release version, so a tree the
+# generator rejects fails the release before anything is published. Runs under DRY_RUN too, since it
+# only publishes locally.
+function release_preflight {
+  echo_header "aztec-up release preflight"
+  local version=${REF_NAME#v}
+  start_local_registry
+  # This publishes the real release version, so a misrouted publish would be a real release.
+  local key
+  for key in registry @aztec-labs:registry; do
+    if [[ "$(npm config get "$key")" != http://localhost:4873* ]]; then
+      echo_stderr "Preflight would publish $key to $(npm config get "$key"), not the local registry."
+      exit 1
+    fi
+  done
+  publish_local "$version"
+  local out
+  out=$(mktemp -d)
+  retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" \"$out\""
+  rm -rf "$out"
+}
+
 function release {
   echo_header "aztec-up release"
   local version=${REF_NAME#v}
@@ -185,15 +235,15 @@ function release {
   # e.g. "4" from v4.1.0-nightly.20260319
   local major=$(semver major $REF_NAME)
 
-  if [ "${DRY_RUN:-0}" = "1" ]; then
-    echo "Would generate the package lock after publishing npm packages."
+  if [ "${DRY_RUN:-0}" != 0 ]; then
+    echo "Would generate the package lock from the published npm packages."
   else
     local packages_dir
     packages_dir=$(mktemp -d)
     # npm can accept a publish before its versions become visible to installs.
     RETRY_ATTEMPTS=20 RETRY_SLEEP=30 retry -p 'npm (ERR!|error) code (ETARGET|E404)' \
       "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" \"$packages_dir\""
-    aws s3 cp "$packages_dir/packages.tar.gz" "s3://install.aztec.network/$version/packages.tar.gz"
+    do_or_dryrun aws s3 cp "$packages_dir/packages.tar.gz" "s3://install.aztec.network/$version/packages.tar.gz"
     rm -rf "$packages_dir"
   fi
 
