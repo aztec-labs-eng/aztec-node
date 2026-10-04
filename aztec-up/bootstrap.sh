@@ -139,7 +139,7 @@ EOF
     echo "Package deploy took $((SECONDS - t))s."
 
     echo "Generating and fetching the locked installer dependencies..."
-    retry "node scripts/generate-package-lock.mjs \"$root/yarn-project\" \"$version\" bin/0.0.1"
+    retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" bin/0.0.1"
 
     t=$SECONDS
     docker build -t aztecprotocol/aztec-up-test .
@@ -192,7 +192,7 @@ function release {
     packages_dir=$(mktemp -d)
     # npm can accept a publish before its versions become visible to installs.
     RETRY_ATTEMPTS=20 RETRY_SLEEP=30 retry -p 'npm (ERR!|error) code (ETARGET|E404)' \
-      "node scripts/generate-package-lock.mjs \"$root/yarn-project\" \"$version\" \"$packages_dir\""
+      "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" \"$packages_dir\""
     aws s3 cp "$packages_dir/packages.tar.gz" "s3://install.aztec.network/$version/packages.tar.gz"
     rm -rf "$packages_dir"
   fi

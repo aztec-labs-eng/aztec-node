@@ -1,16 +1,16 @@
+import yaml from 'js-yaml';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import semver from 'semver';
 
-// The generator reuses dependencies (js-yaml and semver) without adding its own
-const require = createRequire(new URL('../../yarn-project/end-to-end/package.json', import.meta.url));
-const yaml = require('js-yaml');
-const semver = createRequire(new URL('../../yarn-project/cli/package.json', import.meta.url))('semver');
 const [source, version, output] = process.argv.slice(2);
-assert(source && version && output, 'Usage: generate-package-lock.mjs <yarn-project> <version> <output-directory>');
+assert(
+  source && version && output,
+  'Usage: generate-aztec-up-package-lock.mjs <yarn-project> <version> <output-directory>',
+);
 
 const manifest = JSON.parse(await readFile(join(source, 'package.json')));
 const yarnLock = yaml.load(await readFile(join(source, 'yarn.lock'), 'utf8'));

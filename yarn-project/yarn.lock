@@ -2035,6 +2035,8 @@ __metadata:
     "@types/node": "npm:^22.15.17"
     fs-extra: "npm:^11.1.1"
     jest: "npm:^30.0.0"
+    js-yaml: "npm:^4.1.0"
+    semver: "npm:^7.7.2"
     ts-node: "npm:^10.9.1"
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
