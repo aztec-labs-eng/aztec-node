@@ -326,18 +326,23 @@ export class BBJsFactory {
       const instance = await this.createInstance();
       return this.makeOwned(instance);
     }
-    if (!this.initPromise) {
-      // A pool that fails to start failed for environmental reasons — a loaded machine, a bb that
-      // could not spawn — so the failure is not cached: the next borrow tries again rather than the
-      // factory being wedged for the life of the process.
-      this.initPromise = this.initPool().catch(err => {
-        this.initPromise = undefined;
-        throw err;
-      });
+    if (!this.pool) {
+      if (!this.initPromise) {
+        // A pool that fails to start failed for environmental reasons — a loaded machine, a bb that
+        // could not spawn — so the failure is not cached: the next borrow tries again rather than the
+        // factory being wedged for the life of the process.
+        this.initPromise = this.initPool().catch(err => {
+          this.initPromise = undefined;
+          throw err;
+        });
+      }
+      // Racing destruction as well, so a borrow does not outlive the factory when the pool is still
+      // starting; a bb that never comes up would otherwise block shutdown indefinitely. Only while it
+      // is starting: each race leaves a handler on the pending destroyedSignal, so racing on every
+      // borrow would leak one per verification for the life of the node. Once the pool exists,
+      // destroy() releases waiting borrowers through pool.cancel() instead.
+      await Promise.race([this.initPromise, this.destroyedSignal.promise]);
     }
-    // Racing destruction as well, so a borrow does not outlive the factory when the pool is still
-    // starting; a bb that never comes up would otherwise block shutdown indefinitely.
-    await Promise.race([this.initPromise, this.destroyedSignal.promise]);
     if (this.destroyed) {
       throw new Error('BBJsFactory has been destroyed');
     }
