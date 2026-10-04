@@ -230,6 +230,8 @@ function install_aztec_packages {
   set -euo pipefail
 
   if [ "${AZTEC_UP_SKIP_PACKAGE_LOCK:-0}" = "1" ]; then
+    # A previous locked attempt leaves its manifest, lock and tree behind, and npm would reuse them.
+    rm -rf "$version_path/package.json" "$version_path/package-lock.json" "$version_path/node_modules"
     npm install @aztec-labs/aztec@$VERSION @aztec-labs/cli-wallet@$VERSION --prefix "$version_path"
     return
   fi
