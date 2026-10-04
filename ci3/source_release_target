@@ -30,7 +30,9 @@ case "$RELEASE_TARGET" in
   public)
     # The aztec-nr mirror goes first: a failure there aborts the whole release, since a CLI whose
     # scaffold pins an aztec-nr tag that does not exist is worse than no release at all.
-    export RELEASE_PROJECTS="noir-projects/aztec-nr yarn-project aztec-up playground release-image"
+    # aztec-up goes last: its lock is generated from the just-published npm packages, so a failure
+    # there should cost only the installer, not the playground and the image.
+    export RELEASE_PROJECTS="noir-projects/aztec-nr yarn-project playground release-image aztec-up"
 
     # Sanity check the registry. NPM_REGISTRY is both where the build reads our scopes from and
     # where it publishes them, so a public release pointed elsewhere would bake private packages
