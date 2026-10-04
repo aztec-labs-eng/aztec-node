@@ -93,7 +93,7 @@ EOF
     docker load < aztec-up-test-base-image
   fi
 
-  if ! cache_download aztec-up-package-lock-$hash.zst || ! cache_download_stream aztec-up-test-image-$hash.zst | docker load; then
+  if ! cache_download_stream aztec-up-test-image-$hash.zst | docker load; then
     rm -rf verdaccio-storage
     # Registry storage is only a download cache; the release lock determines dependency versions.
     local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
@@ -139,8 +139,7 @@ EOF
     echo "Package deploy took $((SECONDS - t))s."
 
     echo "Generating and fetching the locked installer dependencies..."
-    node scripts/generate-package-lock.mjs "$root/yarn-project" "$version" bin/0.0.1
-    cache_upload aztec-up-package-lock-$hash.zst bin/0.0.1/packages.tar.gz
+    retry "node scripts/generate-package-lock.mjs \"$root/yarn-project\" \"$version\" bin/0.0.1"
 
     t=$SECONDS
     docker build -t aztecprotocol/aztec-up-test .
@@ -161,6 +160,9 @@ EOF
       rm -rf "verdaccio-storage/$(jq -r .name "$project/package.json")"
     done
     cache_upload aztec-up-verdaccio-cache-$deps_hash.zst verdaccio-storage
+  else
+    # The lock travels inside the image so a cache hit never pairs it with another run's registry.
+    docker run --rm aztecprotocol/aztec-up-test cat /home/ubuntu/packages.tar.gz > bin/0.0.1/packages.tar.gz
   fi
 }
 
