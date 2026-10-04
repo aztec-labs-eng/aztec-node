@@ -17,6 +17,11 @@ function versions {
   echo "node: $(node --version | cut -d 'v' -f 2)"
 }
 
+# Cache key of the proxied-npmjs registry seed, which start_local_registry downloads and build uploads.
+function verdaccio_seed_key {
+  echo "aztec-up-verdaccio-cache-$(cache_content_hash ^yarn-project/yarn.lock).zst"
+}
+
 # Starts a local verdaccio on :4873 seeded from the proxied-npmjs cache, and points npm at it for
 # the rest of this shell.
 function start_local_registry {
@@ -76,8 +81,7 @@ EOF
 
   rm -rf verdaccio-storage
   # Registry storage is only a download cache; the release lock determines dependency versions.
-  local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
-  cache_download aztec-up-verdaccio-cache-$deps_hash.zst || true
+  cache_download "$(verdaccio_seed_key)" || true
   # Whatever already holds the port would answer the wait below and receive the publishes.
   if nc -z localhost 4873 &>/dev/null; then
     echo_stderr ":4873 is already in use; refusing to publish to an unknown registry."
@@ -186,8 +190,7 @@ function build {
     $root/yarn-project/bootstrap.sh get_projects | while read -r project; do
       rm -rf "verdaccio-storage/$(jq -r .name "$project/package.json")"
     done
-    local deps_hash=$(cache_content_hash ^yarn-project/yarn.lock)
-    cache_upload aztec-up-verdaccio-cache-$deps_hash.zst verdaccio-storage
+    cache_upload "$(verdaccio_seed_key)" verdaccio-storage
   else
     # The lock travels inside the image so a cache hit never pairs it with another run's registry.
     docker run --rm aztecprotocol/aztec-up-test cat /home/ubuntu/packages.tar.gz > bin/0.0.1/packages.tar.gz
