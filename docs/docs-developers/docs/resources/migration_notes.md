@@ -9,6 +9,17 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] `Writer::advance_offset` is removed
+
+Write the skipped fields instead, e.g. with their own `stream_serialize`:
+
+```diff
+- writer.advance_offset(<T as Serialize>::N);
++ value.stream_serialize(writer);
+```
+
+`Serialize for Option<T>` now fails on a `None` whose payload is non-zero. `Option::none()` has a zero payload, so its encoding is unchanged and no contract or client change is needed.
+
 ### [Aztec.nr] Batch nullifier status oracle
 
 The single-nullifier existence oracle is replaced by `aztec::oracle::nullifiers::get_nullifier_statuses`, which checks any number of nullifiers in one call and reports, for each settled one, the block it was included in. `check_nullifier_exists` is kept and now calls the new oracle.

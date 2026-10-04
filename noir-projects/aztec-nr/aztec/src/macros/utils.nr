@@ -182,6 +182,9 @@ pub(crate) comptime fn assert_return_type_serializable(f: FunctionDefinition) {
 }
 
 /// Asserts that all parameters of a contract function implement both `Serialize` and `Deserialize`.
+///
+/// A private function's parameters are bound to its caller only by `hash_args(param.serialize())`, so `Serialize` must
+/// write every field: a field left out of the encoding can be set freely by the callee's prover.
 pub(crate) comptime fn assert_params_serializable(f: FunctionDefinition) {
     let fn_name = f.name();
 
