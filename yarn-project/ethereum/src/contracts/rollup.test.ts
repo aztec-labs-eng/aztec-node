@@ -21,6 +21,7 @@ import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ViemClient } from '../types.js';
 import { buildSimulationOverridesStateOverride } from './chain_state_override.js';
+import { GSEContract } from './gse.js';
 import { InboxContract } from './inbox.js';
 import { type CheckpointPreflightArgs, type FeeHeader, RollupContract, TempCheckpointLogField } from './rollup.js';
 
@@ -578,6 +579,26 @@ describe('Rollup', () => {
       );
 
       await expect(rollup.getCurrentEpochCommittee()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('getAttesters', () => {
+    it('reads the attester count on the same timestamp basis as the addresses', async () => {
+      // At the past ts the set had 4 attesters; the current set has 3 (one exited). getAttesters(ts)
+      // must size the read from the ts count, or it drops a still-staked attester from the larger snapshot.
+      const addr = (d: string): `0x${string}` => `0x${'a'.repeat(39)}${d}`;
+      const snapshot = ['0', '1', '2', '3'].map(addr);
+      using _atTime = jest.spyOn(rollup, 'getAttesterCountAtTime').mockResolvedValue(snapshot.length);
+      using activeCount = jest.spyOn(rollup, 'getActiveAttesterCount').mockResolvedValue(3);
+      using _fromIndices = jest
+        .spyOn(GSEContract.prototype, 'getAttestersFromIndicesAtTime')
+        .mockImplementation((_instance, _ts, indices) => Promise.resolve(indices.map(i => snapshot[Number(i)])));
+
+      const got = (await rollup.getAttesters(100n)).map(a => a.toString().toLowerCase());
+
+      // All four ts attesters are returned, not a 3-prefix; and the current-count path is not used.
+      expect(got).toEqual(snapshot);
+      expect(activeCount).not.toHaveBeenCalled();
     });
   });
 
