@@ -37,13 +37,17 @@ versioned docs (see Step 5a).
 /release-network-docs https://testnet-v6.rpc2.aztec-labs.com
 ```
 
-Authenticated endpoints (testnet, mainnet) need a key in the environment first. It is read
-from there rather than passed as an argument so it never lands in shell history or a
-transcript:
+Some endpoints need an API key — `testnet-v6.rpc2.aztec-labs.com` does; the
+`*.rpc.aztec-labs.com` gateways are currently keyless. Export it **before starting the
+session**, since these commands inherit the environment as it was at launch:
 
 ```bash
 export AZTEC_NODE_API_KEY=<key>
 ```
+
+Reading it from the environment keeps it out of the skill's command line and the
+transcript; it does not keep it out of your shell history. See Step 1 for which header
+each gateway wants.
 
 ## Workflow
 
@@ -52,20 +56,37 @@ export AZTEC_NODE_API_KEY=<key>
 Fetch node info from the provided RPC URL:
 
 ```bash
-# Testnet and mainnet RPCs require an API key; local and devnet endpoints usually do not.
-# Pass it through the environment, never as a command argument, so it stays out of shell
-# history, transcripts and CI logs:
+# Some RPCs require an API key, and the two gateway families disagree on the header:
+# the `*.rpc.aztec-labs.com` Kong gateways read `x-aztec-api-key` (see
+# spartan/terraform/modules/rpc-gateway/variables.tf and the yarn-project
+# `aztec-node-rpc` skill), while `*.rpc2.aztec-labs.com` is AWS API Gateway and reads
+# `x-api-key`. Sending both is accepted by both — verified: rpc2 answers 403 to the
+# Kong header alone, and the Kong hosts ignore the extra one.
+#
+# Export the key BEFORE starting the session: these commands inherit the environment
+# as it was at launch, so exporting in another terminal afterwards will not reach them.
+# Sourcing a restricted file inside the snippet works too, which is what the
+# `aztec-node-rpc` skill does.
 #
 #   export AZTEC_NODE_API_KEY=<key>
 #
-# A bare `{"message":"Forbidden"}` with HTTP 403 means the key is missing or wrong for this
-# endpoint. Node URLs are per-version on testnet (e.g. testnet-v6.rpc2.aztec-labs.com), and a
-# key issued for one network does not necessarily work on another.
+# This keeps the key out of the skill's command line and the transcript. It does not
+# keep it out of your shell history — use a secrets file if that matters.
+#
+# `${AUTH[@]+...}` rather than a bare `"${AUTH[@]}"`: expanding an empty array under
+# `set -u` is an unbound-variable error on macOS's bash 3.2.
 AUTH=()
-[ -n "${AZTEC_NODE_API_KEY:-}" ] && AUTH=(-H "X-api-key: ${AZTEC_NODE_API_KEY}")
+[ -n "${AZTEC_NODE_API_KEY:-}" ] && AUTH=(
+  -H "x-api-key: ${AZTEC_NODE_API_KEY}"
+  -H "x-aztec-api-key: ${AZTEC_NODE_API_KEY}"
+)
 
-curl -s -X POST -H 'Content-Type: application/json' "${AUTH[@]}" \
-  -d '{"method":"aztec_getNodeInfo"}' <RPC_URL> | jq .result
+# No `| jq .result` here: on a rejected request that prints a bare `null` and hides the
+# status line and body you need to diagnose it. A 403 with {"message":"Forbidden"} means
+# a missing or wrong key for THIS gateway, not an endpoint that is down.
+curl -sS -w '\n[http %{http_code}]\n' -X POST -H 'Content-Type: application/json' \
+  ${AUTH[@]+"${AUTH[@]}"} \
+  -d '{"method":"aztec_getNodeInfo"}' <RPC_URL> | jq '.result // .'
 ```
 
 Parse the response to extract:
