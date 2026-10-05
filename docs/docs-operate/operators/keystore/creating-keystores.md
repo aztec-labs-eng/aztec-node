@@ -367,6 +367,33 @@ aztec validator-keys new \
 
 This regenerates the same validators if you've used this mnemonic before, or creates new ones at the next derivation indices.
 
+### BLS Keys and the Proof-of-Possession Gas Cap
+
+When a validator registers, L1 checks the proof of possession of its BLS key within a fixed gas cap. The cost of that
+check depends on the key, and for a small fraction of keys it could exceed the cap, so those keys could never register.
+`aztec validator-keys new`, `aztec validator-keys add` and `aztec generate-bls-keypair` check every BLS key they derive,
+locally and without RPC calls:
+
+- **No flag**: the command keeps the key at the usual derivation path. If its check could exceed the gas cap, the command
+  stops with an error before writing anything and suggests one of the flags below.
+- **`--bls-key-derivation=v6`**: a key whose check could exceed the gas cap is replaced by the next candidate, derived from
+  the same mnemonic at `<path>/1`, `<path>/2`, and so on, until one fits. Keys that already fit are unchanged, and the
+  ETH attester and publisher keys never change.
+- **`--bls-key-derivation=v5`** (or an earlier version): the command keeps the key at the usual path without checking it.
+  Use this to regenerate a key created by an earlier CLI version, for example one that is already registered.
+- **`--bls-key-derivation-max-iterations=<N>`**: like `v6`, with a custom bound on the hash-to-point iterations of a key.
+  You cannot combine it with `--bls-key-derivation`.
+
+When a key comes from a candidate other than 0, the summary shows its full derivation path, for example
+`bls derivation path: m/12381/3600/0/0/712/1 (candidate 1)`. With `--json`, the output lists these keys under
+`blsKeyCandidates`. Encrypted BLS keystore files record each key's derivation path in their `path` field.
+
+:::warning Regenerating keys
+To regenerate keys from your mnemonic, run the command with the same `--bls-key-derivation` or
+`--bls-key-derivation-max-iterations` flag you used to create them. Without the flag, the command stops with an error
+for a key that came from a later candidate; with `v5`, it returns the original candidate 0 key instead.
+:::
+
 ### Custom Output Location
 
 Specify custom directory and filename:
