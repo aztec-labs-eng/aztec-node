@@ -1,6 +1,6 @@
 import { AvmService } from '@aztec-foundation/bb-avm-sim';
 
-import { AbortError } from '@aztec-labs/foundation/error';
+import { AbortError, isRetryableError } from '@aztec-labs/foundation/error';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 
@@ -53,7 +53,7 @@ export interface AvmProcessHandle {
  * lifecycle is invisible to the pool's callers.
  */
 function isProcessFailure(err: unknown): boolean {
-  return err instanceof Error && (err as Error & { retry?: unknown }).retry === true;
+  return isRetryableError(err);
 }
 
 /** Sleep that wakes early (without throwing) when the signal aborts; callers re-check the signal. */
