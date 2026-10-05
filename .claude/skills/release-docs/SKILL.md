@@ -18,7 +18,15 @@ the user to confirm.
 
 ```
 /release-docs https://v4-devnet-3.aztec-labs.com
-/release-docs https://rpc.testnet.aztec-labs.com
+/release-docs https://testnet-v6.rpc2.aztec-labs.com
+```
+
+Authenticated endpoints (testnet, mainnet) need a key in the environment first. It is read
+from there rather than passed as an argument so it never lands in shell history or a
+transcript:
+
+```bash
+export AZTEC_NODE_API_KEY=<key>
 ```
 
 ## Workflow
@@ -28,7 +36,19 @@ the user to confirm.
 Fetch node info from the provided RPC URL:
 
 ```bash
-curl -s -X POST -H 'Content-Type: application/json' \
+# Testnet and mainnet RPCs require an API key; local and devnet endpoints usually do not.
+# Pass it through the environment, never as a command argument, so it stays out of shell
+# history, transcripts and CI logs:
+#
+#   export AZTEC_NODE_API_KEY=<key>
+#
+# A bare `{"message":"Forbidden"}` with HTTP 403 means the key is missing or wrong for this
+# endpoint. Node URLs are per-version on testnet (e.g. testnet-v6.rpc2.aztec-labs.com), and a
+# key issued for one network does not necessarily work on another.
+AUTH=()
+[ -n "${AZTEC_NODE_API_KEY:-}" ] && AUTH=(-H "X-api-key: ${AZTEC_NODE_API_KEY}")
+
+curl -s -X POST -H 'Content-Type: application/json' "${AUTH[@]}" \
   -d '{"method":"aztec_getNodeInfo"}' <RPC_URL> | jq .result
 ```
 
