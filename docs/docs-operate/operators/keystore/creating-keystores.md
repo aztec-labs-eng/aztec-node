@@ -371,27 +371,29 @@ This regenerates the same validators if you've used this mnemonic before, or cre
 
 When a validator registers, L1 checks the proof of possession of its BLS key within a fixed gas cap. The cost of that
 check depends on the key, and for a small fraction of keys it could exceed the cap, so those keys could never register.
-`aztec validator-keys new`, `aztec validator-keys add` and `aztec generate-bls-keypair` check every BLS key they derive,
-locally and without RPC calls:
+`aztec validator-keys new`, `aztec validator-keys add` and `aztec generate-bls-keypair` estimate that cost for every BLS
+key they derive, locally and without RPC calls. About 1 key in 3,000 estimates over the budget, which leaves a margin
+below the gas cap:
 
 - **No flag**: the command keeps the key at the usual derivation path. If its check could exceed the gas cap, the command
-  stops with an error before writing anything and suggests one of the flags below.
+  stops with an error before writing anything and suggests one of the flags below. If the command generated the
+  mnemonic itself, re-running without `--mnemonic` generates a new one; pass the mnemonic back with `--mnemonic` to keep it.
 - **`--bls-key-derivation=v6`**: a key whose check could exceed the gas cap is replaced by the next candidate, derived from
   the same mnemonic at `<path>/1`, `<path>/2`, and so on, until one fits. Keys that already fit are unchanged, and the
   ETH attester and publisher keys never change.
-- **`--bls-key-derivation=v5`** (or an earlier version): the command keeps the key at the usual path without checking it.
-  Use this to regenerate a key created by an earlier CLI version, for example one that is already registered.
-- **`--bls-key-derivation-max-iterations=<N>`**: like `v6`, with a custom bound on the hash-to-point iterations of a key.
-  You cannot combine it with `--bls-key-derivation`.
+- **`--skip-bls-key-gas-check`**: the command keeps the key at the usual path without checking it. Use this to
+  regenerate a key created by an earlier CLI version, for example one that is already registered. You cannot combine it
+  with `--bls-key-derivation`.
+- **`--bls-key-derivation=v5`** (or an earlier version) behaves like `--skip-bls-key-gas-check`.
 
 When a key comes from a candidate other than 0, the summary shows its full derivation path, for example
 `bls derivation path: m/12381/3600/0/0/712/1 (candidate 1)`. With `--json`, the output lists these keys under
 `blsKeyCandidates`. Encrypted BLS keystore files record each key's derivation path in their `path` field.
 
 :::warning Regenerating keys
-To regenerate keys from your mnemonic, run the command with the same `--bls-key-derivation` or
-`--bls-key-derivation-max-iterations` flag you used to create them. Without the flag, the command stops with an error
-for a key that came from a later candidate; with `v5`, it returns the original candidate 0 key instead.
+To regenerate keys from your mnemonic, run the command with the same `--bls-key-derivation` flag you used to create
+them. Without the flag, the command stops with an error for a key that came from a later candidate; with
+`--skip-bls-key-gas-check`, it returns the original candidate 0 key instead.
 :::
 
 ### Custom Output Location
