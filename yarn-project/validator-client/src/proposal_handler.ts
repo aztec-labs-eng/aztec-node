@@ -68,6 +68,7 @@ import {
   type InboxEndpointReader,
   checkInboxEndpoint,
 } from './checkpoint_endpoint_check.js';
+import { type InvalidBlockVerdict, checkpointCommitsToRejectedBlock } from './invalid_checkpoint_evidence.js';
 import type { ValidatorMetrics } from './metrics.js';
 import {
   type StreamingBlockCheckReason,
@@ -496,6 +497,13 @@ export class ProposalHandler {
    */
   private readonly invalidCheckpointProposalHashesBySlot = new Map<SlotNumber, Set<CheckpointProposalHash>>();
 
+  /**
+   * Per-proposal verdicts for block proposals this node rejected for a payload-committing reason, per slot. Used to
+   * bind a rejected block to a checkpoint that commits to it in its signed payload (see
+   * checkpointCommitsToRejectedBlock). Bounded like the other per-slot stores.
+   */
+  private readonly invalidBlockVerdictsBySlot = new Map<SlotNumber, InvalidBlockVerdict[]>();
+
   constructor(
     private checkpointsBuilder: FullNodeCheckpointsBuilder,
     private worldState: WorldStateSynchronizer,
@@ -593,6 +601,46 @@ export class ProposalHandler {
   /** Records a slot as having a slashable invalid proposal, for offense observers (sentinel/slasher watchers). */
   public markInvalidProposalSlot(slotNumber: SlotNumber): void {
     this.slotsWithInvalidProposals.add(slotNumber);
+  }
+
+  /**
+   * Records a per-proposal verdict for a block this node rejected for a payload-committing reason (a header or
+   * archive mismatch), so a checkpoint that commits to the block can later be bound to it. Bounded like the other
+   * per-slot stores (oldest slot evicted).
+   */
+  private recordInvalidBlockVerdict(slotNumber: SlotNumber, verdict: InvalidBlockVerdict): void {
+    let verdicts = this.invalidBlockVerdictsBySlot.get(slotNumber);
+    if (!verdicts) {
+      verdicts = [];
+      this.invalidBlockVerdictsBySlot.set(slotNumber, verdicts);
+      while (this.invalidBlockVerdictsBySlot.size > MAX_TRACKED_INVALID_PROPOSAL_SLOTS) {
+        const oldest = this.invalidBlockVerdictsBySlot.keys().next().value;
+        if (oldest === undefined) {
+          break;
+        }
+        this.invalidBlockVerdictsBySlot.delete(oldest);
+      }
+    }
+    verdicts.push(verdict);
+  }
+
+  /**
+   * When a checkpoint could not be validated because the block carrying its signed archive is not local
+   * (last_block_not_found), it may still commit to a block this node rejected. Records the invalid-checkpoint
+   * payload hash (so the watcher slashes its attesters) only when the rejection is provably bound to the signed
+   * payload; see checkpointCommitsToRejectedBlock. Missing evidence is never guilt, so an unbound or
+   * unreconstructable case records nothing.
+   */
+  private async recordInvalidCheckpointIfBoundToRejectedBlock(proposal: CheckpointProposalCore): Promise<void> {
+    const verdicts = this.invalidBlockVerdictsBySlot.get(proposal.slotNumber);
+    if (!verdicts || verdicts.length === 0 || !this.p2pClient) {
+      return;
+    }
+    const { blockProposals } = await this.p2pClient.getProposalsForSlot(proposal.slotNumber);
+    if (await checkpointCommitsToRejectedBlock(proposal, blockProposals, verdicts)) {
+      this.markInvalidProposalSlot(proposal.slotNumber);
+      this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
+    }
   }
 
   /** Records a slot as having a proposal equivocation, which suppresses attested-to-invalid-proposal slashing. */
@@ -1835,6 +1883,12 @@ export class ProposalHandler {
         expectedHeader: block.header.toInspect(),
         actualHeader: proposal.blockHeader.toInspect(),
       });
+      this.recordInvalidBlockVerdict(slot, {
+        blockHeader: proposal.blockHeader,
+        archiveRoot: proposal.archive,
+        headerMismatch: !headerMatches,
+        archiveMismatch: !archiveMatches,
+      });
       this.metrics?.recordFailedReexecution(proposal);
       throw new ReExStateMismatchError(proposal.archive, block.archive.root);
     }
@@ -2142,6 +2196,7 @@ export class ProposalHandler {
     } catch (err) {
       if (err instanceof TimeoutError) {
         this.log.warn(`Timed out waiting for block with archive matching checkpoint proposal`, proposalInfo);
+        await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal);
         return { isValid: false, reason: 'last_block_not_found' };
       }
       this.log.error(`Error fetching last block for checkpoint proposal`, err, proposalInfo);
@@ -2150,6 +2205,7 @@ export class ProposalHandler {
 
     if (!snapshot) {
       this.log.warn(`Last block not found for checkpoint proposal`, proposalInfo);
+      await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal);
       return { isValid: false, reason: 'last_block_not_found' };
     }
     const { blocks, lastBlockIndex } = snapshot;
