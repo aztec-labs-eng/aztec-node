@@ -22,7 +22,11 @@ export async function generateBlsKeypair(options: GenerateBlsKeypairOptions, log
     path,
     privateKey: priv,
     candidate,
-  } = selectBlsKey(blsKeyDerivation, mnemonic, ikm, withValidatorIndex(blsPath ?? defaultBlsPath, 0));
+  } = selectBlsKey(blsKeyDerivation, {
+    mnemonic,
+    ikm,
+    perValidatorPath: withValidatorIndex(blsPath ?? defaultBlsPath, 0),
+  });
   const pub = await computeBlsPublicKeyCompressed(priv);
   const result = {
     path,

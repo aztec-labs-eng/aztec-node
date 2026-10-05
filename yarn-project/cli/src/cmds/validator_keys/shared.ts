@@ -89,6 +89,8 @@ export type BuildValidatorsInput = {
   remoteSigner?: string;
   /** Defaults to the policy used when no BLS key derivation flag is given. */
   blsKeyDerivation?: BlsKeyDerivationPolicy;
+  /** Whether the CLI generated `mnemonic` in this run. */
+  mnemonicGenerated?: boolean;
 };
 
 export function withValidatorIndex(path: string, accountIndex: number = 0, addressIndex: number = 0) {
@@ -164,6 +166,7 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
     coinbase,
     remoteSigner,
     blsKeyDerivation = resolveBlsKeyDerivationPolicy({}),
+    mnemonicGenerated,
   } = input;
 
   const summaries: ValidatorSummary[] = [];
@@ -174,7 +177,10 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
       const basePath = blsPath ?? defaultBlsPath;
       const perValidatorPath = withValidatorIndex(basePath, accountIndex, addressIndex);
 
-      const blsKey = ikm || mnemonic ? selectBlsKey(blsKeyDerivation, mnemonic, ikm, perValidatorPath) : undefined;
+      const blsKey =
+        ikm || mnemonic
+          ? selectBlsKey(blsKeyDerivation, { mnemonic, ikm, perValidatorPath, mnemonicGenerated })
+          : undefined;
       const blsPrivKey = blsKey?.privateKey;
       const blsPubCompressed = blsPrivKey ? await computeBlsPublicKeyCompressed(blsPrivKey) : undefined;
 
@@ -279,7 +285,7 @@ export function logValidatorSummaries(log: LogFn, summaries: ValidatorSummary[])
   if (summaries.some(v => v.blsCandidate)) {
     lines.push(
       'Some BLS keys were derived from a retry candidate (see "bls derivation path" above).',
-      'To regenerate them from the mnemonic, re-run with the same --bls-key-derivation or --bls-key-derivation-max-iterations flag.',
+      'To regenerate them from the mnemonic, re-run with the same --bls-key-derivation flag.',
     );
   }
   if (lines.length > 0) {

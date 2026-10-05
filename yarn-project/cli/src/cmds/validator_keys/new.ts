@@ -222,6 +222,7 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
     coinbase,
     remoteSigner,
     blsKeyDerivation,
+    mnemonicGenerated: !_mnemonic,
   });
 
   let resolvedFundingAccount = fundingAccount ? resolveFundingAccount(fundingAccount, remoteSigner) : undefined;
