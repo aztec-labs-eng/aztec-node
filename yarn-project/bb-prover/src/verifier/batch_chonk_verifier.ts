@@ -174,7 +174,8 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   /** Enqueue raw proof fields for verification. Used directly by tests with custom VKs. */
   public enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
     if (this.stopped) {
-      return Promise.reject(new Error('BatchChonkVerifier stopped'));
+      // A stopped verifier has not checked the proof, so this is not a verdict on it either.
+      return Promise.reject(new ProofVerifierUnavailableError('BatchChonkVerifier stopped'));
     }
     if (this.fatalError) {
       return Promise.reject(this.fatalError);
