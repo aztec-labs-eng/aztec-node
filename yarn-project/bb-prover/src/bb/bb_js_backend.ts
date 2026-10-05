@@ -1,7 +1,6 @@
 import { type AvmStat, type BackendOptions, BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
-import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { FifoMemoryQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
@@ -270,11 +269,19 @@ export interface BBJsFactoryOptions {
   debugDir?: string;
 }
 
+/** A place in a {@link BBJsFactory} pool: empty until a borrower first starts a bb in it. */
+type PoolSlot = { instance?: BBJsApi };
+
 /**
  * Manages bb.js instance lifecycle. By default every `getInstance()` call spawns a fresh
  * bb process that is destroyed when the borrow is disposed. Pass `poolSize` to keep a fixed
  * set of long-lived bb processes that are reused across calls — useful when the per-call
  * bb startup cost dominates the workload (e.g. high-rate IVC verification).
+ *
+ * The pool is a queue of `poolSize` slots, each starting its bb on the first borrow that needs it.
+ * A borrower waits in exactly two places: for a slot, which destroy() releases by cancelling the
+ * queue, and for its slot's bb to start, which bb.js bounds with its own startup deadline. A bb that
+ * fails to start costs only that slot, which goes back empty for the next borrower to try again.
  *
  * Idiomatic usage:
  * ```
@@ -284,103 +291,86 @@ export interface BBJsFactoryOptions {
  * ```
  */
 export class BBJsFactory {
-  private readonly poolSize?: number;
   private readonly logger?: Logger;
   private readonly threads?: number;
   private readonly debugDir?: string;
-
-  /** Available pooled instances when poolSize is set; otherwise undefined. */
-  private pool?: FifoMemoryQueue<BBJsApi>;
-  /** Lazily-resolved on first `getInstance()` call to prevent racing pool initialization. */
-  private initPromise?: Promise<void>;
-  private destroyed = false;
   private readonly respawn: boolean;
-  /** Resolved by destroy(), so a borrow waiting on a pool that never starts does not wait forever. */
-  private readonly destroyedSignal = promiseWithResolvers<void>();
+
+  /** Slots not currently borrowed, when poolSize is set; otherwise undefined. */
+  private readonly slots?: FifoMemoryQueue<PoolSlot>;
+  private destroyed = false;
 
   constructor(
     private bbPath: string,
     options: BBJsFactoryOptions = {},
   ) {
-    this.poolSize = options.poolSize;
     this.respawn = options.respawn ?? false;
     this.logger = options.logger;
     this.threads = options.threads;
     this.debugDir = options.debugDir;
-    if (this.poolSize !== undefined && this.poolSize < 1) {
-      throw new Error(`BBJsFactory poolSize must be >= 1, got ${this.poolSize}`);
+    if (options.poolSize !== undefined) {
+      if (options.poolSize < 1) {
+        throw new Error(`BBJsFactory poolSize must be >= 1, got ${options.poolSize}`);
+      }
+      this.slots = new FifoMemoryQueue<PoolSlot>();
+      for (let i = 0; i < options.poolSize; i++) {
+        this.slots.put({});
+      }
     }
   }
 
   /**
    * Acquire a bb instance. The returned object implements `BBJsApi` and `AsyncDisposable`.
-   * With no pool: spawns a fresh bb that is destroyed on dispose. With a pool: borrows from
-   * the pool and returns to it on dispose.
+   * With no pool: spawns a fresh bb that is destroyed on dispose. With a pool: borrows a slot,
+   * starting its bb if it has none, and returns the slot to the pool on dispose.
    */
   async getInstance(): Promise<BBJsApi & AsyncDisposable> {
     if (this.destroyed) {
       throw new Error('BBJsFactory has been destroyed');
     }
-    if (this.poolSize === undefined) {
+    if (!this.slots) {
       // No pool: fresh-per-call, dispose destroys.
       const instance = await this.createInstance();
       return this.makeOwned(instance);
     }
-    if (!this.pool) {
-      if (!this.initPromise) {
-        // A pool that fails to start failed for environmental reasons — a loaded machine, a bb that
-        // could not spawn — so the failure is not cached: the next borrow tries again rather than the
-        // factory being wedged for the life of the process.
-        this.initPromise = this.initPool().catch(err => {
-          this.initPromise = undefined;
-          throw err;
-        });
-      }
-      // Racing destruction as well, so a borrow does not outlive the factory when the pool is still
-      // starting; a bb that never comes up would otherwise block shutdown indefinitely. Only while it
-      // is starting: each race leaves a handler on the pending destroyedSignal, so racing on every
-      // borrow would leak one per verification for the life of the node. Once the pool exists,
-      // destroy() releases waiting borrowers through pool.cancel() instead.
-      await Promise.race([this.initPromise, this.destroyedSignal.promise]);
-    }
-    if (this.destroyed) {
-      throw new Error('BBJsFactory has been destroyed');
-    }
-    const pool = this.pool;
-    if (!pool) {
-      throw new Error('BBJsFactory has been destroyed');
-    }
-    const instance = await pool.get();
-    if (!instance) {
+    const slot = await this.slots.get();
+    if (!slot) {
       throw new Error('BBJsFactory was destroyed while waiting for an instance');
     }
-    return this.makeBorrowed(instance);
+    let instance: BBJsApi;
+    try {
+      instance = slot.instance ??= await this.createInstance();
+    } catch (err) {
+      await this.release(slot);
+      throw err;
+    }
+    if (this.destroyed) {
+      await this.release(slot);
+      throw new Error('BBJsFactory has been destroyed');
+    }
+    return this.makeDisposable(instance, () => this.release(slot));
   }
 
   /**
    * Tear down all pooled instances. Idempotent. No-op when no pool is configured (fresh-per-call
-   * instances are destroyed by their own dispose callbacks). Instances currently held by an
-   * in-flight pooled borrow are destroyed by their dispose callback when released.
+   * instances are destroyed by their own dispose callbacks). Instances in borrowed slots are
+   * destroyed when their borrow is released.
    */
   async destroy(): Promise<void> {
-    this.destroyedSignal.resolve();
     if (this.destroyed) {
       return;
     }
     this.destroyed = true;
-    const pool = this.pool;
-    this.pool = undefined;
-    if (!pool) {
+    if (!this.slots) {
       return;
     }
     const idle: BBJsApi[] = [];
-    while (pool.length() > 0) {
-      const item = pool.getImmediate();
-      if (item) {
-        idle.push(item);
+    for (let slot = this.slots.getImmediate(); slot; slot = this.slots.getImmediate()) {
+      if (slot.instance) {
+        idle.push(slot.instance);
       }
     }
-    pool.cancel();
+    this.slots.cancel();
     // Aggregate teardown failures so a single bb child that fails to shut down doesn't mask others.
     const results = await Promise.allSettled(idle.map(item => item.destroy()));
     const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map(r => r.reason);
@@ -389,32 +379,13 @@ export class BBJsFactory {
     }
   }
 
-  private async initPool(): Promise<void> {
-    // Use allSettled so that if any createInstance() rejects we can destroy the rest instead of
-    // leaking bb child processes whose creation succeeded.
-    const results = await Promise.allSettled(Array.from({ length: this.poolSize! }, () => this.createInstance()));
-    const items: BBJsApi[] = [];
-    const errors: unknown[] = [];
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        items.push(result.value);
-      } else {
-        errors.push(result.reason);
-      }
+  /** Return a borrowed slot to the pool, or destroy its bb if the factory was destroyed meanwhile. */
+  private async release(slot: PoolSlot): Promise<void> {
+    if (!this.destroyed) {
+      this.slots!.put(slot);
+    } else {
+      await slot.instance?.destroy();
     }
-    if (errors.length > 0 || this.destroyed) {
-      // Either creation failed or destroy() raced ahead — clean up everything we successfully spawned.
-      await Promise.all(items.map(item => item.destroy()));
-      if (errors.length > 0) {
-        throw errors[0];
-      }
-      return;
-    }
-    const pool = new FifoMemoryQueue<BBJsApi>();
-    for (const item of items) {
-      pool.put(item);
-    }
-    this.pool = pool;
   }
 
   protected async createInstance(): Promise<BBJsApi> {
@@ -439,21 +410,6 @@ export class BBJsFactory {
    */
   private makeOwned(instance: BBJsApi): BBJsApi & AsyncDisposable {
     return this.makeDisposable(instance, () => instance.destroy());
-  }
-
-  /**
-   * Wrap a pooled instance with an `AsyncDisposable` that returns it to the pool (or destroys it
-   * if the factory was destroyed in the meantime). Destroy errors are propagated.
-   */
-  private makeBorrowed(instance: BBJsApi): BBJsApi & AsyncDisposable {
-    return this.makeDisposable(instance, async () => {
-      const pool = this.pool;
-      if (pool && !this.destroyed) {
-        pool.put(instance);
-      } else {
-        await instance.destroy();
-      }
-    });
   }
 
   private makeDisposable(instance: BBJsApi, onDispose: () => void | Promise<void>): BBJsApi & AsyncDisposable {

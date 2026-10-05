@@ -83,14 +83,29 @@ describe('BBCircuitVerifier', () => {
     await expect(perCallVerifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
   });
 
-  it('stops a queued verifier while a verification waits for a bb instance that never starts', async () => {
-    factory.planNextInstance([], new Promise<void>(() => {}));
-    const queued = new QueuedIVCVerifier(verifier, 1);
-    const verificationFails = expect(queued.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
-    // Let the verification start waiting for the pool before stopping.
+  it('starts no more bb processes than the pool holds, however many verifications arrive', async () => {
+    const results = await Promise.all([1, 2, 3].map(() => verifier.verifyProof(tx)));
+    expect(results.every(r => r.valid)).toBe(true);
+    expect(factory.created).toHaveLength(1);
+  });
+
+  it('stops a queued verifier while verifications wait on a bb instance that is still starting', async () => {
+    // bb.js bounds how long a start can take; this one finishes only when the test lets it.
+    let finishStart!: () => void;
+    factory.planNextInstance([], new Promise<void>(resolve => (finishStart = resolve)));
+    const queued = new QueuedIVCVerifier(verifier, 2);
+    const starting = expect(queued.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
+    const waiting = expect(queued.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
+    // Let one verification take the pool's only slot and the other queue for it.
     await new Promise(resolve => setImmediate(resolve));
 
-    await queued.stop();
-    await verificationFails;
+    const stopping = queued.stop();
+    // The verification waiting for a slot is released at once; the one starting bb, when the start ends.
+    await waiting;
+    finishStart();
+    await starting;
+    await stopping;
+    // The bb that finished starting after the stop was not left running.
+    expect(factory.created[0].destroyCount).toBe(1);
   });
 });
