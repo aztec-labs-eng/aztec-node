@@ -108,6 +108,10 @@ describe('attester exit authorizations', () => {
     ).rejects.toThrow('Invalid signature');
   });
 
+  it('reports an unreachable RPC rather than a missing rollup before simulating a batch', async () => {
+    await expect(rollup.simulateAttesterExitBatch([await sign()])).rejects.toThrow('L1 RPC request failed');
+  });
+
   it.each([0n, -1n, 1n << 256n])('rejects an invalid signing deadline %s', async deadline => {
     await expect(
       rollup.createAttesterExitAuthorization(attester, deadline, data => account.signTypedData(data)),

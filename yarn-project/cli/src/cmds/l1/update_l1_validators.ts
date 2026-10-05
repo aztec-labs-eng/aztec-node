@@ -348,10 +348,7 @@ export async function resolveAttesterExitTarget({
     }
     return { chainId: expectedChainId, rollupAddress };
   }
-  const rpcChainId = await createPublicClient({ transport: makeL1HttpTransport(rpcUrls) }).getChainId();
-  if (expectedChainId !== undefined && rpcChainId !== expectedChainId) {
-    throw new Error(`The L1 RPC reports chain ID ${rpcChainId}, but chain ID ${expectedChainId} was requested`);
-  }
+  const rpcChainId = await getL1RpcChainId(rpcUrls, expectedChainId);
   if (rollupAddress) {
     return { chainId: rpcChainId, rollupAddress };
   }
@@ -360,6 +357,15 @@ export async function resolveAttesterExitTarget({
   const canonicalRollup = await new RegistryContract(client, registryAddress).getCanonicalAddress();
   log(`Using canonical rollup ${canonicalRollup} from the ${network!.name} registry ${registryAddress}`);
   return { chainId: rpcChainId, rollupAddress: canonicalRollup };
+}
+
+/** Returns the chain ID the L1 RPC reports, failing if it differs from `expectedChainId`. */
+async function getL1RpcChainId(rpcUrls: string[], expectedChainId?: number): Promise<number> {
+  const rpcChainId = await createPublicClient({ transport: makeL1HttpTransport(rpcUrls) }).getChainId();
+  if (expectedChainId !== undefined && rpcChainId !== expectedChainId) {
+    throw new Error(`The L1 RPC reports chain ID ${rpcChainId}, but chain ID ${expectedChainId} was requested`);
+  }
+  return rpcChainId;
 }
 
 /** Signs an exit authorization locally and writes a JSON array accepted by the batch command. */
@@ -466,6 +472,23 @@ function parseAttesterExitAuthorization(value: unknown, index: number): Attester
   };
 }
 
+/**
+ * Confirms the RPC is on the requested chain, then checks each imported signature so a bad entry is named rather than
+ * reverting the whole batch. Duplicates and deadlines are left to the chain, which with --up-to-limit never looks past
+ * the processed prefix.
+ */
+async function checkAttesterExitBatch(
+  rollup: RollupContract,
+  authorizations: AttesterExitAuthorization[],
+  rpcUrls: string[],
+  chainId: number,
+) {
+  await getL1RpcChainId(rpcUrls, chainId);
+  for (const [index, authorization] of authorizations.entries()) {
+    await rollup.validateAttesterExitSignature(authorization, index);
+  }
+}
+
 /** Relays a batch of attester-signed exits. */
 export async function initiateWithdrawByAttesterBatch({
   rpcUrls,
@@ -495,6 +518,7 @@ export async function initiateWithdrawByAttesterBatch({
     }
     const client = getPublicClient({ l1RpcUrls: rpcUrls, l1ChainId: chainId });
     const rollup = new RollupContract(client, rollupAddress);
+    await checkAttesterExitBatch(rollup, authorizations, rpcUrls, chainId);
     const processedCount = await rollup.simulateAttesterExitBatch(authorizations, upToLimit);
     log(
       `Dry run: would process ${processedCount} of ${authorizations.length} attester exit authorizations at current chain state.`,
@@ -505,6 +529,7 @@ export async function initiateWithdrawByAttesterBatch({
   const account = getSignerAccount({ privateKey, mnemonic, accountIndex, addressIndex });
   const client = createExtendedL1Client(rpcUrls, account, createEthereumChain(rpcUrls, chainId).chainInfo);
   const rollup = new RollupContract(client, rollupAddress);
+  await checkAttesterExitBatch(rollup, authorizations, rpcUrls, chainId);
   const l1TxUtils = createL1TxUtils(client, { logger: debugLogger });
   const { receipt, processedCount, remainingCount } = await rollup.submitAttesterExitBatch(
     l1TxUtils,

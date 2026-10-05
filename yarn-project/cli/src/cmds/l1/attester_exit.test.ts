@@ -1,3 +1,4 @@
+import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
@@ -7,10 +8,11 @@ import { Command } from 'commander';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mnemonicToAccount } from 'viem/accounts';
+import { type HDAccount, mnemonicToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { injectCommands } from './index.js';
+import { serveL1Rpc } from './l1_rpc_test_utils.js';
 import {
   initiateWithdrawByAttester,
   initiateWithdrawByAttesterBatch,
@@ -57,14 +59,24 @@ describe('initiate-withdraw-by-attester command', () => {
 
 describe('initiate-withdraw-by-attester-batch command', () => {
   const relayerKey = `0x${Buffer.from(withdrawer.getHdKey().privateKey!).toString('hex')}`;
+  const rollupAddress = EthAddress.fromString('0x1234567890123456789012345678901234567890');
+  // January 1, 2100 (Unix seconds), so the test authorizations stay valid as time passes.
+  const deadline = 4102444800n;
+  const sign = (account: HDAccount, chainId: number = foundry.id) =>
+    new RollupContract(
+      getPublicClient({ l1RpcUrls: ['http://127.0.0.1:1'], l1ChainId: chainId }),
+      rollupAddress,
+    ).createAttesterExitAuthorization(EthAddress.fromString(account.address), deadline, data =>
+      account.signTypedData(data),
+    );
   const dryRunArgs = {
     rpcUrls: ['http://127.0.0.1:1'],
     chainId: foundry.id,
-    rollupAddress: EthAddress.ZERO,
+    rollupAddress,
     authorizations: [
       {
         attester: EthAddress.fromString(attester.address),
-        deadline: 4102444800n,
+        deadline,
         signature: Signature.random().toViemSignature(),
       },
     ],
@@ -74,7 +86,14 @@ describe('initiate-withdraw-by-attester-batch command', () => {
     debugLogger: logger,
   };
 
+  let rpc: Awaited<ReturnType<typeof serveL1Rpc>> | undefined;
+  afterEach(async () => {
+    await rpc?.close();
+    rpc = undefined;
+  });
+
   it.each([false, true])('dry-runs without a relayer key with up-to-limit=%s', async upToLimit => {
+    rpc = await serveL1Rpc(foundry.id);
     const directory = await mkdtemp(join(tmpdir(), 'attester-exit-dry-run-'));
     const path = join(directory, 'authorizations.json');
     const messages: string[] = [];
@@ -82,12 +101,17 @@ describe('initiate-withdraw-by-attester-batch command', () => {
       .spyOn(RollupContract.prototype, 'simulateAttesterExitBatch')
       .mockImplementation((authorizations, upToLimit) => Promise.resolve(upToLimit ? 2 : authorizations.length));
     try {
+      const authorizations = await Promise.all(
+        [attester, withdrawer, mnemonicToAccount(mnemonic, { addressIndex: 2 })].map(account => sign(account)),
+      );
       await writeFile(
         path,
         JSON.stringify(
-          [attester.address, withdrawer.address, mnemonicToAccount(mnemonic, { addressIndex: 2 }).address].map(
-            attester => ({ attester, deadline: '4102444800', signature: Signature.random().toString() }),
-          ),
+          authorizations.map(({ attester, deadline, signature }) => ({
+            attester: attester.toString(),
+            deadline: deadline.toString(),
+            signature: Signature.fromViemSignature(signature).toString(),
+          })),
         ),
       );
       const program = new Command().name('aztec').exitOverride();
@@ -100,11 +124,11 @@ describe('initiate-withdraw-by-attester-batch command', () => {
           '--authorizations',
           path,
           '--rollup',
-          attester.address,
+          rollupAddress.toString(),
           '--l1-chain-id',
           String(foundry.id),
           '--l1-rpc-urls',
-          'http://127.0.0.1:1',
+          rpc.url,
         ],
         { from: 'user' },
       );
@@ -117,6 +141,50 @@ describe('initiate-withdraw-by-attester-batch command', () => {
     } finally {
       simulation.mockRestore();
       await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([true, false])('rejects an RPC on another chain than --l1-chain-id with dry-run=%s', async dryRun => {
+    rpc = await serveL1Rpc(11155111);
+    const simulation = jest.spyOn(RollupContract.prototype, 'simulateAttesterExitBatch').mockResolvedValue(1);
+    try {
+      await expect(
+        initiateWithdrawByAttesterBatch({
+          ...dryRunArgs,
+          rpcUrls: [rpc.url],
+          authorizations: [await sign(attester)],
+          dryRun,
+          privateKey: relayerKey,
+        }),
+      ).rejects.toThrow(`The L1 RPC reports chain ID 11155111, but chain ID ${foundry.id} was requested`);
+    } finally {
+      simulation.mockRestore();
+    }
+  });
+
+  it.each([
+    [
+      'a yParity v',
+      async () => {
+        const entry = await sign(withdrawer);
+        return { ...entry, signature: { ...entry.signature, v: 0 } };
+      },
+      'Invalid v in authorization 1',
+    ],
+    ['a signature for another chain', () => sign(withdrawer, 1), 'Invalid signature in authorization 1'],
+  ])('rejects %s in an imported entry and names its index', async (_label, makeSecond, message) => {
+    rpc = await serveL1Rpc(foundry.id);
+    const simulation = jest.spyOn(RollupContract.prototype, 'simulateAttesterExitBatch').mockResolvedValue(2);
+    try {
+      await expect(
+        initiateWithdrawByAttesterBatch({
+          ...dryRunArgs,
+          rpcUrls: [rpc.url],
+          authorizations: [await sign(attester), await makeSecond()],
+        }),
+      ).rejects.toThrow(message);
+    } finally {
+      simulation.mockRestore();
     }
   });
 

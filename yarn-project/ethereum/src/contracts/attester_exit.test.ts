@@ -172,6 +172,13 @@ describe('attester exit client integration', () => {
       recipientBalance,
     } = context;
 
+    const notRollup = new RollupContract(attesterClient, EthAddress.fromString(deployer.address));
+    const nonce = await attesterClient.getTransactionCount({ address: attesters[0].address });
+    await expect(
+      notRollup.initiateWithdrawByAttester(createL1TxUtils(attesterClient, { logger }), target),
+    ).rejects.toThrow('No rollup');
+    expect(await attesterClient.getTransactionCount({ address: attesters[0].address })).toBe(nonce);
+
     const { receipt } = await rollup.initiateWithdrawByAttester(createL1TxUtils(attesterClient, { logger }), target);
     expect(receipt.status).toBe('success');
     const pending = await expectPendingExit(context, 1);
@@ -280,6 +287,16 @@ describe('attester exit client integration', () => {
     expect(await rollup.getAttesterExitLimitState()).toMatchObject({ used: 0n });
 
     const batch = authorizations.slice(0, 2);
+    const notRollup = new RollupContract(withdrawerClient, EthAddress.fromString(deployer.address));
+    const nonce = await withdrawerClient.getTransactionCount({ address: withdrawer.address });
+    for (const upToLimit of [false, true]) {
+      await expect(notRollup.simulateAttesterExitBatch(batch, upToLimit)).rejects.toThrow('No rollup');
+      await expect(
+        notRollup.submitAttesterExitBatch(createL1TxUtils(withdrawerClient, { logger }), batch, upToLimit),
+      ).rejects.toThrow('No rollup');
+    }
+    expect(await withdrawerClient.getTransactionCount({ address: withdrawer.address })).toBe(nonce);
+
     expect(await publicRollup.simulateAttesterExitBatch(batch)).toBe(2);
     expect(await rollup.getAttesterExitLimitState()).toMatchObject({ used: 0n });
     expect((await rollup.getAttesterView(target)).exit.exists).toBe(false);

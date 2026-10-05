@@ -16,7 +16,9 @@ import chunk from 'lodash.chunk';
 import {
   type AbiParameter,
   type Account,
+  BaseError,
   ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
   type GetContractReturnType,
   type Hex,
   type Log,
@@ -1500,27 +1502,58 @@ export class RollupContract {
       if (authorization.deadline <= now || authorization.deadline > maxUint256) {
         throw new Error(`Invalid or expired deadline for attester ${attester}`);
       }
-      if (authorization.signature.v !== 27 && authorization.signature.v !== 28) {
-        throw new Error(`Invalid v in authorization ${index} for attester ${attester}: expected 27 or 28`);
+      await this.validateAttesterExitSignature(authorization, index);
+    }
+  }
+
+  /**
+   * Checks one authorization's signature against this rollup and chain with the rollup's ECDSA rules (v of 27 or 28,
+   * low s), without checking its deadline or other entries. `index` names the entry in errors.
+   */
+  public async validateAttesterExitSignature(authorization: AttesterExitAuthorization, index: number): Promise<void> {
+    const attester = authorization.attester.toString().toLowerCase();
+    if (authorization.signature.v !== 27 && authorization.signature.v !== 28) {
+      throw new Error(`Invalid v in authorization ${index} for attester ${attester}: expected 27 or 28`);
+    }
+    if (BigInt(authorization.signature.s) > SECP256K1_HALF_ORDER) {
+      throw new Error(`High-s signature in authorization ${index} for attester ${attester}`);
+    }
+    const signer = await recoverTypedDataAddress({
+      ...this.buildAttesterExitTypedData(authorization.attester, authorization.deadline),
+      signature: { ...authorization.signature, v: BigInt(authorization.signature.v) },
+    });
+    if (signer.toLowerCase() !== attester) {
+      throw new Error(
+        `Invalid signature in authorization ${index} for attester ${attester} on the selected rollup and chain`,
+      );
+    }
+  }
+
+  /**
+   * The direct and batch exit endpoints return nothing, so calling them on an address without code succeeds silently.
+   * Reading a rollup view first makes a wrong address fail before a simulation or transaction. RPC failures propagate
+   * as is.
+   */
+  private async assertAttesterExitRollup(): Promise<void> {
+    try {
+      await this.getAttesterExitWindow();
+    } catch (err) {
+      if (
+        err instanceof BaseError &&
+        err.walk(e => e instanceof ContractFunctionZeroDataError || e instanceof ContractFunctionRevertedError)
+      ) {
+        throw new Error(`No rollup with attester exits at ${this.address}`, { cause: err });
       }
-      if (BigInt(authorization.signature.s) > SECP256K1_HALF_ORDER) {
-        throw new Error(`High-s signature in authorization ${index} for attester ${attester}`);
-      }
-      const signer = await recoverTypedDataAddress({
-        ...this.buildAttesterExitTypedData(authorization.attester, authorization.deadline),
-        signature: { ...authorization.signature, v: BigInt(authorization.signature.v) },
-      });
-      if (signer.toLowerCase() !== attester) {
-        throw new Error(`Invalid signature for attester ${attester} on the selected rollup and chain`);
-      }
+      throw err;
     }
   }
 
   /** Initiates an attester exit. The transaction signer must be the position's attester. */
-  public initiateWithdrawByAttester(
+  public async initiateWithdrawByAttester(
     l1TxUtils: L1TxUtils,
     attester: EthAddress,
   ): ReturnType<L1TxUtils['sendAndMonitorTransaction']> {
+    await this.assertAttesterExitRollup();
     return l1TxUtils.sendAndMonitorTransaction({
       to: this.address,
       abi: RollupAbi,
@@ -1553,6 +1586,7 @@ export class RollupContract {
     authorizations: AttesterExitAuthorization[],
     upToLimit = false,
   ): Promise<number> {
+    await this.assertAttesterExitRollup();
     const args = [authorizations.map(toViemAttesterExitAuthorization)] as const;
     if (upToLimit) {
       const { result } = await this.client.simulateContract({
@@ -1610,6 +1644,7 @@ export class RollupContract {
     authorizations: AttesterExitAuthorization[],
     upToLimit = false,
   ): Promise<AttesterExitBatchResult> {
+    await this.assertAttesterExitRollup();
     const { receipt } = upToLimit
       ? await this.initiateWithdrawByAttesterBatchUpToLimit(l1TxUtils, authorizations)
       : await this.initiateWithdrawByAttesterBatch(l1TxUtils, authorizations);

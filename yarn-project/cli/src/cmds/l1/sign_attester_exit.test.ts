@@ -6,13 +6,13 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 import { Command } from 'commander';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { encodeAbiParameters, toFunctionSelector } from 'viem';
+import { toFunctionSelector } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
 import { injectCommands } from './index.js';
+import { serveL1Rpc } from './l1_rpc_test_utils.js';
 import { readAttesterExitAuthorizations, signAttesterExit } from './update_l1_validators.js';
 
 const privateKey = `0x${'01'.repeat(32)}` as const;
@@ -224,42 +224,6 @@ describe('sign-attester-exit with real signatures', () => {
       ],
       { from: 'user' },
     );
-  };
-
-  const serveL1Rpc = async (chainId: number, canonicalRollup?: EthAddress) => {
-    const registryCalls: { to: string; data: string }[] = [];
-    const server = createServer((request, response) => {
-      let body = '';
-      request.on('data', chunk => (body += chunk));
-      request.on('end', () => {
-        const { id, method, params } = JSON.parse(body);
-        response.setHeader('content-type', 'application/json');
-        if (method === 'eth_chainId') {
-          response.end(JSON.stringify({ jsonrpc: '2.0', id, result: `0x${chainId.toString(16)}` }));
-        } else if (method === 'eth_call' && canonicalRollup) {
-          registryCalls.push({ to: params[0].to, data: params[0].data });
-          response.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              id,
-              result: encodeAbiParameters([{ type: 'address' }], [canonicalRollup.toString() as `0x${string}`]),
-            }),
-          );
-        } else {
-          response.end(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Unsupported method' } }));
-        }
-      });
-    });
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Expected a TCP server address');
-    }
-    return {
-      url: `http://127.0.0.1:${address.port}`,
-      registryCalls,
-      close: () => new Promise(resolve => server.close(resolve)),
-    };
   };
 
   const expectValidAuthorizationFor = async (
