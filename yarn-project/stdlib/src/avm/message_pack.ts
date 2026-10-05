@@ -5,6 +5,7 @@ import { strict as assert } from 'assert';
 import { Decoder, Encoder, addExtension } from 'msgpackr';
 
 import { AztecAddress } from '../aztec-address/index.js';
+import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
 
 export function serializeWithMessagePack(obj: any): Buffer {
   setUpMessagePackExtensions();
@@ -86,6 +87,15 @@ function setUpMessagePackExtensions() {
     Class: EthAddress,
     write: (addr: EthAddress) => addr.toField().toBuffer(),
     read: (data: Buffer) => EthAddress.fromField(Fr.fromBuffer(data)),
+  });
+  // The leaf index is a uint64_t in C++, but a number in TS, and msgpackr encodes any number above 0xffffffff as a
+  // float64, which the C++ decoder rejects for an unsigned field. Widen it here, as toBuffer does with writeUInt64.
+  addExtension({
+    Class: AppendOnlyTreeSnapshot,
+    write: (snapshot: AppendOnlyTreeSnapshot) => ({
+      root: snapshot.root,
+      nextAvailableLeafIndex: BigInt(snapshot.nextAvailableLeafIndex),
+    }),
   });
   messagePackWasSetUp = true;
 }
