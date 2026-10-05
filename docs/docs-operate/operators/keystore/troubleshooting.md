@@ -56,9 +56,9 @@ chmod 755 ~/.aztec/keystore
 - Check that publisher is an array: `["0x..."]` not `"0x..."`
 - Verify private keys are 64-character hex strings (with or without `0x` prefix)
 
-### BLS Key Needs Too Many Hash-to-Point Iterations
+### BLS Key Proof-of-Possession Check Over the Gas Budget
 
-**Error:** `The BLS key derived at m/12381/3600/0/0/<n> needs <k> hash-to-point iterations, above the <max> allowed by BLS key derivation v6, so its proof-of-possession check could exceed the L1 gas cap.`
+**Error:** `The proof-of-possession check of the BLS key derived at m/12381/3600/0/0/<n> is estimated at <gas> gas, above the 225000 budget of BLS key derivation v6, so it could exceed the L1 gas cap.`
 
 **Cause:** The proof-of-possession check of this BLS key could cost more gas than the L1 cap allows, so its registration
 could fail.
@@ -67,8 +67,10 @@ could fail.
 - For a new key, re-run with `--bls-key-derivation=v6`. The command derives a replacement BLS key from the same mnemonic
   for that validator and prints its derivation path. Keep using `--bls-key-derivation=v6` whenever you regenerate these
   keys.
-- To regenerate a key you already registered with an earlier CLI version, re-run with `--bls-key-derivation=v5`. It
+- To regenerate a key you already registered with an earlier CLI version, re-run with `--skip-bls-key-gas-check`. It
   keeps the original key without checking it.
+- If you did not pass `--mnemonic`, the command generated a new mnemonic, and re-running generates another one. To keep
+  it, pass it back with `--mnemonic`.
 
 See [BLS Keys and the Proof-of-Possession Gas Cap](./creating-keystores.md#bls-keys-and-the-proof-of-possession-gas-cap).
 
@@ -389,7 +391,7 @@ aztec validator-keys new [options]
 | `--l1-rpc-urls <urls>` | L1 RPC endpoints (required with --staker-output) | None |
 | `--legacy` | Use 2.1.4 BLS derivation path (only for regenerating old keys) | `false` |
 | `--bls-key-derivation <version>` | BLS key derivation version, `v1` to `v6`. From `v6`, replaces a BLS key whose proof-of-possession check could exceed the L1 gas cap | Keep the key, fail if over the cap |
-| `--bls-key-derivation-max-iterations <N>` | Like `v6`, with a custom bound on hash-to-point iterations | None |
+| `--skip-bls-key-gas-check` | Keep the first derived BLS key without checking its proof-of-possession gas | `false` |
 | `--password <str>` | Shared password for encrypted ETH and BLS keystore files | `AZTEC_KEYSTORE_PASSWORD` if set |
 | `--password-file <path>` | File containing the shared encrypted-keystore password | None |
 | `--eth-password <str>` | Password for encrypted ETH keystore files | `AZTEC_ETH_KEYSTORE_PASSWORD`, then shared password |
