@@ -38,7 +38,8 @@ export type L1SubmitEpochProofArgs = {
 
 /**
  * Result of a proof submission attempt. `'already-submitted'` means this prover had already registered a proof of
- * the same length for the epoch on L1, so nothing was sent; it is not a failure.
+ * the same length for the epoch on L1, so nothing was sent; it is not a failure. For a full proof, only a full-epoch
+ * registration counts.
  */
 export type SubmitEpochProofResult = 'published' | 'already-submitted' | 'failed';
 
@@ -102,10 +103,18 @@ export class ProverNodePublisher {
 
     // The rollup reverts on a second submission from the same prover for the same epoch and length, so don't
     // spend gas on one. Reachable when re-running an epoch we have already submitted a proof for, which is
-    // not a failure: our reward shares for it are already registered.
+    // not a failure: our reward shares for it are already registered. The one exception is a full-epoch proof
+    // replacing a non-full registration, which is the only way to get the activity-score increase for the epoch.
+    // A non-full registration comes from a proof that L1 did not count as covering the whole epoch when it was
+    // submitted, such as one sent while the epoch was still open: our own partial proof, or a third party proving
+    // under our prover id.
     const proverId = EthAddress.fromField(publicInputs.constants.proverId);
     const length = toCheckpoint - fromCheckpoint + 1;
-    if (await this.rollupContract.getHasSubmittedProof(epochNumber, length, proverId)) {
+    const alreadySubmitted =
+      args.kind === 'full'
+        ? await this.rollupContract.getHasSubmittedFullEpochProof(epochNumber, length, proverId)
+        : await this.rollupContract.getHasSubmittedProof(epochNumber, length, proverId);
+    if (alreadySubmitted) {
       this.log.warn(`Skipping epoch proof submission as prover already submitted a proof for this epoch`, {
         ...ctx,
         proverId,

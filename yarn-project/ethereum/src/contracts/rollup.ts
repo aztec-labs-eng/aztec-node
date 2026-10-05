@@ -1302,6 +1302,21 @@ export class RollupContract {
   }
 
   /**
+   * Calls getHasSubmittedFullEpoch directly. Returns whether the given prover's proof with the given length for the
+   * given epoch was registered as a full-epoch proof, which is the only kind that raises the prover's activity score.
+   */
+  public getHasSubmittedFullEpochProof(
+    epochNumber: EpochNumber,
+    numberOfCheckpointsInEpoch: number,
+    prover: Hex | EthAddress,
+  ) {
+    if (prover instanceof EthAddress) {
+      prover = prover.toString();
+    }
+    return this.rollup.read.getHasSubmittedFullEpoch([BigInt(epochNumber), BigInt(numberOfCheckpointsInEpoch), prover]);
+  }
+
+  /**
    * Returns the minimum mana fee at the given timestamp.
    * @param options - Optional state override to simulate against, and optional L1 block number to pin the call
    * to, so the fee describes a known L1 state rather than whatever the node considers latest.

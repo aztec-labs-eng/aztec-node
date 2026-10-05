@@ -51,7 +51,8 @@ export type PublishCandidate = {
 
 /**
  * Terminal outcome for a candidate. The promise from `submit()` resolves with one of these. `'already-submitted'`
- * means L1 already holds a proof of this length from this prover for the epoch, so nothing was sent.
+ * means L1 already holds a proof of this length from this prover for the epoch, so nothing was sent. For a full
+ * candidate, only a full-epoch registration counts.
  */
 export type PublishOutcome = 'published' | 'already-submitted' | 'superseded' | 'failed' | 'withdrawn' | 'expired';
 
