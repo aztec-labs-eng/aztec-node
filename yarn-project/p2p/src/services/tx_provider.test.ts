@@ -229,6 +229,23 @@ describe('TxProvider', () => {
     expect(txPools.size).toEqual(8);
   });
 
+  it('does not flag txs found by the final pool retry as missing', async () => {
+    const original = await generateTransactions(3);
+    const hashes = await Promise.all(original.map(tx => tx.getTxHash()));
+    setupTxPools(1, 0, original);
+
+    // The second tx lands in the pool while network collection runs, but the network returns nothing
+    txCollection.collectFastFor.mockImplementation(() => {
+      txPools.set(hashes[1].toString(), original[1]);
+      return Promise.resolve([]);
+    });
+
+    const proposal = await buildProposal([], hashes);
+    const results = await txProvider.getTxsForBlockProposal(proposal, blockNumber, opts);
+    const expected: TxResults = { txs: original.slice(0, 2), missingTxs: hashes.slice(2) };
+    await checkResults(results, expected);
+  });
+
   it("does not add txs from the proposal if their hash isn't in the payload", async () => {
     const original = await generateTransactions(10);
     const additional = await generateTransactions(2);
