@@ -189,7 +189,9 @@ export class TxProvider implements ITxProvider {
     const moreTxsFromPool = compactArray(await this.txPool.getTxsByHash([...missingTxHashes].map(TxHash.fromString)));
 
     if (moreTxsFromPool.length > 0) {
-      moreTxsFromPool.forEach(tx => missingTxHashes.delete(tx.getTxHash().toString()));
+      for (const tx of moreTxsFromPool) {
+        missingTxHashes.delete(tx.getTxHash().toString());
+      }
       this.instrumentation.incTxsFromMempool(moreTxsFromPool.length);
       this.log.debug(
         `Retrieved ${moreTxsFromPool.length} txs from pool retry for block proposal (${missingTxHashes.size} pending)`,
