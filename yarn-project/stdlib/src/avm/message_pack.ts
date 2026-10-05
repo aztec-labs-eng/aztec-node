@@ -93,7 +93,7 @@ function setUpMessagePackExtensions() {
   addExtension({
     Class: AppendOnlyTreeSnapshot,
     write: (snapshot: AppendOnlyTreeSnapshot) => ({
-      root: snapshot.root,
+      ...snapshot,
       nextAvailableLeafIndex: BigInt(snapshot.nextAvailableLeafIndex),
     }),
   });
