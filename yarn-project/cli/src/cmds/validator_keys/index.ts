@@ -1,8 +1,29 @@
 import type { LogFn } from '@aztec-labs/foundation/log';
-import { Command, Option } from 'commander';
+import { Command, InvalidArgumentError, Option } from 'commander';
 
 import { parseAztecAddress, parseEthereumAddress, parseHex, parseOptionalInteger } from '../../utils/commands.js';
+import { LATEST_BLS_KEY_DERIVATION_VERSION } from './bls_key_derivation.js';
 import { defaultBlsPath } from './utils.js';
+
+function blsKeyDerivationOption() {
+  return new Option(
+    '--bls-key-derivation <version>',
+    `BLS key derivation version (v1 to v${LATEST_BLS_KEY_DERIVATION_VERSION}). From v${LATEST_BLS_KEY_DERIVATION_VERSION}, a BLS key whose proof-of-possession check could exceed the L1 gas cap is replaced by a deterministic retry candidate. Earlier versions keep the first key unchecked. Regenerate keys with the same value.`,
+  );
+}
+
+function blsKeyDerivationMaxIterationsOption() {
+  return new Option(
+    '--bls-key-derivation-max-iterations <N>',
+    'Like the latest --bls-key-derivation, but retry any BLS key that needs more than N hash-to-point iterations. Regenerate keys with the same value.',
+  ).argParser(value => {
+    const parsed = parseOptionalInteger(value);
+    if (parsed === undefined || parsed < 1) {
+      throw new InvalidArgumentError('Must be an integer >= 1.');
+    }
+    return parsed;
+  });
+}
 
 export function injectCommands(program: Command, log: LogFn) {
   const group = program
@@ -39,6 +60,8 @@ export function injectCommands(program: Command, log: LogFn) {
     .option('--remote-signer <url>', 'Default remote signer URL for accounts in this file')
     .option('--ikm <hex>', 'Initial keying material for BLS (alternative to mnemonic)', value => parseHex(value, 32))
     .option('--bls-path <path>', `EIP-2334 path (default ${defaultBlsPath})`)
+    .addOption(blsKeyDerivationOption())
+    .addOption(blsKeyDerivationMaxIterationsOption())
     .addOption(
       new Option('--password <str>', 'Shared password for writing ETH JSON V3 and BLS EIP-2335 keystore files').env(
         'AZTEC_KEYSTORE_PASSWORD',
@@ -103,6 +126,8 @@ export function injectCommands(program: Command, log: LogFn) {
     .option('--remote-signer <url>', 'Default remote signer URL for accounts in this file')
     .option('--ikm <hex>', 'Initial keying material for BLS (alternative to mnemonic)', value => parseHex(value, 32))
     .option('--bls-path <path>', `EIP-2334 path (default ${defaultBlsPath})`)
+    .addOption(blsKeyDerivationOption())
+    .addOption(blsKeyDerivationMaxIterationsOption())
     .option('--empty', 'Generate an empty skeleton without keys')
     .option(
       '--password <str>',
@@ -168,6 +193,8 @@ export function injectCommands(program: Command, log: LogFn) {
     .option('--mnemonic <mnemonic>', 'Mnemonic for BLS derivation')
     .option('--ikm <hex>', 'Initial keying material for BLS (alternative to mnemonic)', value => parseHex(value, 32))
     .option('--bls-path <path>', `EIP-2334 path (default ${defaultBlsPath})`)
+    .addOption(blsKeyDerivationOption())
+    .addOption(blsKeyDerivationMaxIterationsOption())
     .option('--g2', 'Derive on G2 subgroup')
     .option('--compressed', 'Output compressed public key')
     .option('--json', 'Print JSON output to stdout')
