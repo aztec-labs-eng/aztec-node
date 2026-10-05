@@ -1,4 +1,5 @@
 import { createLogger } from '@aztec-labs/foundation/log';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { mockTx } from '@aztec-labs/stdlib/testing';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 
@@ -91,8 +92,8 @@ describe('BBCircuitVerifier', () => {
 
   it('stops a queued verifier while verifications wait on a bb instance that is still starting', async () => {
     // bb.js bounds how long a start can take; this one finishes only when the test lets it.
-    let finishStart!: () => void;
-    factory.planNextInstance([], new Promise<void>(resolve => (finishStart = resolve)));
+    const start = promiseWithResolvers<void>();
+    factory.planNextInstance([], start.promise);
     const queued = new QueuedIVCVerifier(verifier, 2);
     const starting = expect(queued.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
     const waiting = expect(queued.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
@@ -102,7 +103,7 @@ describe('BBCircuitVerifier', () => {
     const stopping = queued.stop();
     // The verification waiting for a slot is released at once; the one starting bb, when the start ends.
     await waiting;
-    finishStart();
+    start.resolve();
     await starting;
     await stopping;
     // The bb that finished starting after the stop was not left running.

@@ -1,3 +1,4 @@
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { ProvingError } from '@aztec-labs/stdlib/errors';
 
 import { FakeBBJsFactory } from '../test/fake_bb_js.js';
@@ -38,15 +39,15 @@ describe('BBJsFactory pool', () => {
 
   it('releases a borrower waiting for a slot at once on destroy, and one starting bb when its start ends', async () => {
     const factory = new FakeBBJsFactory(1);
-    let finishStart!: () => void;
-    factory.planNextInstance([], new Promise<void>(resolve => (finishStart = resolve)));
+    const start = promiseWithResolvers<void>();
+    factory.planNextInstance([], start.promise);
     const starting = factory.getInstance();
     const waiting = factory.getInstance();
     await tick();
 
     const destroying = factory.destroy();
     await expect(waiting).rejects.toThrow(/destroyed/);
-    finishStart();
+    start.resolve();
     await expect(starting).rejects.toThrow(/destroyed/);
     await destroying;
     expect(factory.created[0].destroyCount).toBe(1);
