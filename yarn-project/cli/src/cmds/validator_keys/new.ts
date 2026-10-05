@@ -10,9 +10,12 @@ import { basename, dirname, join } from 'path';
 import { createPublicClient, fallback, http } from 'viem';
 import { generateMnemonic, mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 
+import { type BlsKeyDerivationOptions, resolveBlsKeyDerivationPolicy } from './bls_key_derivation.js';
 import {
   buildValidatorEntries,
   encryptFundingAccountToFile,
+  getBlsDerivationPaths,
+  getBlsKeyCandidates,
   logValidatorSummaries,
   maybePrintJson,
   resolveFundingAccount,
@@ -59,7 +62,7 @@ export type NewValidatorKeystoreOptions = {
   gseAddress?: EthAddress;
   l1RpcUrls?: string[];
   l1ChainId?: number;
-};
+} & BlsKeyDerivationOptions;
 
 type PasswordSourceOptions = Pick<
   NewValidatorKeystoreOptions,
@@ -152,6 +155,7 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
   validateRemoteSignerOptions(options);
   // validate funding account option
   validateFundingAccountOptions(options);
+  const blsKeyDerivation = resolveBlsKeyDerivationPolicy(options);
 
   const {
     dataDir,
@@ -217,6 +221,7 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
     feeRecipient,
     coinbase,
     remoteSigner,
+    blsKeyDerivation,
   });
 
   let resolvedFundingAccount = fundingAccount ? resolveFundingAccount(fundingAccount, remoteSigner) : undefined;
@@ -226,7 +231,11 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
     const encryptedKeystoreOutDir =
       encryptedKeystoreDir && encryptedKeystoreDir.length > 0 ? encryptedKeystoreDir : keystoreOutDir;
     await writeEthJsonV3ToFile(validators, { outDir: encryptedKeystoreOutDir, password: ethPassword });
-    await writeBlsBn254ToFile(validators, { outDir: encryptedKeystoreOutDir, password: blsPassword });
+    await writeBlsBn254ToFile(validators, {
+      outDir: encryptedKeystoreOutDir,
+      password: blsPassword,
+      derivationPaths: getBlsDerivationPaths(summaries),
+    });
     if (resolvedFundingAccount) {
       resolvedFundingAccount = await encryptFundingAccountToFile(resolvedFundingAccount, {
         outDir: encryptedKeystoreOutDir,
@@ -274,7 +283,12 @@ export async function newValidatorKeystore(options: NewValidatorKeystoreOptions,
     }
   }
 
-  const outputData = !_mnemonic && !shouldEncryptKeystores ? { ...keystore, generatedMnemonic: mnemonic } : keystore;
+  const blsKeyCandidates = getBlsKeyCandidates(summaries);
+  const outputData = {
+    ...keystore,
+    ...(!_mnemonic && !shouldEncryptKeystores ? { generatedMnemonic: mnemonic } : {}),
+    ...(blsKeyCandidates.length > 0 ? { blsKeyCandidates } : {}),
+  };
 
   // Handle JSON output
   if (json) {
