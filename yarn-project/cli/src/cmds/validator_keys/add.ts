@@ -88,6 +88,7 @@ export async function addValidatorKeys(existing: string, options: AddValidatorKe
     coinbase,
     remoteSigner,
     blsKeyDerivation,
+    mnemonicGenerated: !mnemonic,
   });
 
   keystore.validators.push(...validators);
