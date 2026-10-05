@@ -1,6 +1,8 @@
 import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { GSEContract } from '@aztec-labs/ethereum/contracts';
+import { computeBn254RegistrationDigest } from '@aztec-labs/foundation/crypto/bn254';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { bn254 } from '@noble/curves/bn254';
 import { foundry } from 'viem/chains';
 
 import { DefaultL1ContractsConfig } from '../config.js';
@@ -61,6 +63,26 @@ describe('Governance', () => {
       // Use this to make random proofs of possession
       // console.log(bn254SecretKey);
       // console.log(registrationTuple);
+    });
+
+    it('computes registration digests locally that match the contract', async () => {
+      // Covers field rejections, failed square roots, both root choices, and the 95-attempt key 57193.
+      const secretKeys = [1n, 2n, 5n, 8n, 11n, 12n, 57193n, Fr.random().toBigInt(), Fr.random().toBigInt()];
+      const local = [];
+      for (const sk of secretKeys) {
+        const publicKey = bn254.G1.ProjectivePoint.BASE.multiply(sk);
+        const expected = (await gse.getRegistrationDigest(publicKey)).toAffine();
+        const actual = computeBn254RegistrationDigest(publicKey.toAffine());
+        expect(actual.point).toEqual({ x: expected.x, y: expected.y });
+        local.push(actual);
+      }
+
+      const p = bn254.fields.Fp.ORDER;
+      expect(local.some(r => r.attempts > r.sqrtCalls)).toBe(true);
+      expect(local.some(r => r.sqrtCalls > 1)).toBe(true);
+      expect(local.some(r => r.point.y < p - r.point.y)).toBe(true);
+      expect(local.some(r => r.point.y > p - r.point.y)).toBe(true);
+      expect(local.find(r => r.attempts === 95)).toMatchObject({ sqrtCalls: 18 });
     });
   });
 });
