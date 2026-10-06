@@ -30,7 +30,7 @@ import { computeUniqueNoteHash, siloNoteHash, siloNullifier } from '@aztec-labs/
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/server';
 import { PublicKeys, deriveKeys, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { AppTaggingSecret, AppTaggingSecretKind, SiloedTag } from '@aztec-labs/stdlib/logs';
-import { Note, NoteDao } from '@aztec-labs/stdlib/note';
+import { Note, NoteDao, NoteStatus } from '@aztec-labs/stdlib/note';
 import { makeL2Tips, randomContractInstanceWithAddress } from '@aztec-labs/stdlib/testing';
 import {
   BlockHeader,
@@ -761,6 +761,57 @@ describe('Utility Execution test suite', () => {
           expect.anything(),
         );
         expect(aztecNode.getNoteHashMembershipWitness).toHaveBeenNthCalledWith(2, olderHash, expect.anything());
+      });
+    });
+
+    describe('getSettledNoteOrigin', () => {
+      const noteHash = Fr.random();
+      const noteNonce = Fr.random();
+      const txHash = TxHash.random();
+      const blockHash = BlockHash.random();
+
+      beforeEach(async () => {
+        const sameHashOtherNonce = await NoteDao.random({ contractAddress, noteHash });
+        const note = await NoteDao.random({
+          contractAddress,
+          noteHash,
+          noteNonce,
+          txHash,
+          l2BlockNumber: BlockNumber(7),
+          l2BlockHash: blockHash.toString(),
+        });
+        noteStore.getNotes.mockResolvedValue([sameHashOtherNonce, note]);
+      });
+
+      it('returns the tx and block of the note with the given hash and nonce', async () => {
+        const origin = await utilityExecutionOracle.getSettledNoteOrigin(noteHash, contractAddress, noteNonce);
+
+        expect(origin).toEqual(
+          Option.some({ txHash: txHash.hash, block: { blockNumber: 7, blockHash: blockHash.toFr() } }),
+        );
+      });
+
+      it('looks up nullified notes too', async () => {
+        await utilityExecutionOracle.getSettledNoteOrigin(noteHash, contractAddress, noteNonce);
+
+        expect(noteStore.getNotes).toHaveBeenCalledWith(
+          { contractAddress, status: NoteStatus.ACTIVE_OR_NULLIFIED, scopes: [scope] },
+          expect.anything(),
+        );
+      });
+
+      it('returns none when no note matches', async () => {
+        const origin = await utilityExecutionOracle.getSettledNoteOrigin(noteHash, contractAddress, Fr.random());
+
+        expect(origin).toEqual(Option.none());
+      });
+
+      it('rejects lookups for other contracts', async () => {
+        const otherContract = await AztecAddress.random();
+
+        await expect(utilityExecutionOracle.getSettledNoteOrigin(noteHash, otherContract, noteNonce)).rejects.toThrow(
+          `Contract ${otherContract} is not allowed to access ${contractAddress}'s PXE DB`,
+        );
       });
     });
 

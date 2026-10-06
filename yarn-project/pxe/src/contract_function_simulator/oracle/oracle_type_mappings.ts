@@ -65,6 +65,7 @@ import type { FactCollection } from '../noir-structs/fact_collection.js';
 import { type LogRetrievalRequest, type LogSource, logSourceFromField } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
 import type { NoteData } from '../noir-structs/note_data.js';
+import type { NoteOrigin } from '../noir-structs/note_origin.js';
 import { NoteValidationRequest } from '../noir-structs/note_validation_request.js';
 import type { NullifierMembershipWitnessData } from '../noir-structs/nullifier_membership_witness_data.js';
 import type { NullifierStatus } from '../noir-structs/nullifier_status.js';
@@ -552,6 +553,11 @@ export const BLOCK_REFERENCE: TypeMapping<BlockReference> = STRUCT([
 export const NULLIFIER_STATUS: TypeMapping<NullifierStatus> = STRUCT([
   { name: 'exists', type: BOOL },
   { name: 'originBlock', type: OPTION(BLOCK_REFERENCE) },
+]);
+
+export const NOTE_ORIGIN: TypeMapping<NoteOrigin> = STRUCT([
+  { name: 'txHash', type: FIELD },
+  { name: 'block', type: BLOCK_REFERENCE },
 ]);
 
 const ORIGIN_BLOCK_STATE: TypeMapping<OriginBlockState> = SCALAR({
