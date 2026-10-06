@@ -548,6 +548,32 @@ Also:
 - Update any testnet RPC URLs or addresses in operator docs under `docs/docs-operate/`
 - Review the testnet section of `docs/docs/networks.md` for accuracy
 
+### Step 10b: Check the operator changelog covers this release
+
+**File:** `docs/docs-operate/operators/reference/changelog/v<major>.md`, plus the
+`## Version history` list in that directory's `index.md`.
+
+This is maintained per-PR by `/updating-changelog`, not by this skill — but it is cut
+into the network snapshot in Step 11, so a gap here publishes a page that announces
+itself as the new version and then lists an older one as the newest release. Operators
+read this page to decide whether to upgrade, so a stale one is worse than none.
+
+Check before cutting:
+
+```bash
+major=$(python3 -c "import json;print(json.load(open('.release-please-manifest.json'))['.'].split('.')[0])")
+ls docs/docs-operate/operators/reference/changelog/v${major}.md
+grep -n '^### ' docs/docs-operate/operators/reference/changelog/index.md | head -3
+```
+
+The version page must exist, and the first `###` entry in `index.md` must be this
+release. If either fails, stop and run `/updating-changelog`, or write the entry by
+hand from the commit range — do not cut around it.
+
+This has already shipped wrong once: no `v6.md` existed at all when v6.0.0-rc.1 was
+rehearsed, because `/updating-changelog` had been diffing against `next` since the
+migration and silently doing nothing.
+
 ### Step 11: Cut Versioned Docs
 
 **Prerequisite — preprocess before cutting.** `docs:version` snapshots from

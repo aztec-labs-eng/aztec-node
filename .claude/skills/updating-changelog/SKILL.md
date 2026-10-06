@@ -1,6 +1,6 @@
 ---
 name: updating-changelog
-description: Updates changelog documentation for contract developers and node operators by analyzing branch changes relative to 'next'. Use when preparing a PR, updating migration notes, documenting breaking changes, or when asked to update changelog/release notes.
+description: Updates changelog documentation for contract developers and node operators by analyzing branch changes relative to 'main'. Use when preparing a PR, updating migration notes, documenting breaking changes, or when asked to update changelog/release notes.
 ---
 
 # Updating Changelog
@@ -18,7 +18,9 @@ Read `.release-please-manifest.json` to get the version (e.g., `{"." : "4.0.0"}`
 
 ### 2. Analyze Branch Changes
 
-Run `git diff next...HEAD --stat` for overview, then `git diff next...HEAD` for details.
+Run `git diff origin/main...HEAD --stat` for overview, then `git diff origin/main...HEAD` for details.
+(`next` was the aztec-packages branch and does not exist here; the command silently
+failed after the migration, which is why no v6 operator changelog entry was ever written.)
 
 **Categorize changes:**
 
