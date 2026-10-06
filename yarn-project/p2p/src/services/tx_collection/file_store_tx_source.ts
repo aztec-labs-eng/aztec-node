@@ -100,7 +100,7 @@ export class FileStoreTxSource implements TxSource {
           invalidTxHashes.push(tx.getTxHash().toString());
           break;
         case 'unverifiable':
-          this.downloadsFailed.add(1);
+          // The download succeeded; it is this node that could not verify the tx, so it is not a download failure.
           unverifiableTxHashes.push(tx.getTxHash().toString());
           break;
       }

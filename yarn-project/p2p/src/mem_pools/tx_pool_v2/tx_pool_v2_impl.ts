@@ -1134,7 +1134,10 @@ export class TxPoolV2Impl {
     if (result.result !== 'valid') {
       const contextStr = context ? ` ${context}` : '';
       const outcome = result.result === 'invalid' ? 'failed validation' : 'could not be validated';
-      this.#log.info(`Tx ${meta.txHash}${contextStr} ${outcome}: ${result.reason.join(', ')}`);
+      this.#log.info(`Tx ${meta.txHash}${contextStr} ${outcome}: ${result.reason.join(', ')}`, {
+        txHash: meta.txHash,
+        result: result.result,
+      });
     }
     return result.result;
   }
