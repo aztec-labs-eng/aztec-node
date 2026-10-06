@@ -1325,7 +1325,7 @@ export class RollupContract {
     epochNumber: EpochNumber,
     numberOfCheckpointsInEpoch: number,
     prover: Hex | EthAddress,
-  ) {
+  ): Promise<boolean> {
     if (prover instanceof EthAddress) {
       prover = prover.toString();
     }

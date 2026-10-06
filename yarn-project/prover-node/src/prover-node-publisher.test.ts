@@ -7,7 +7,7 @@ import {
   computeAttestationsHash,
 } from '@aztec-labs/ethereum/contracts';
 import { randomL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
-import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { L1TxState, L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { SecretValue } from '@aztec-labs/foundation/config';
@@ -21,7 +21,7 @@ import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
-import { type Hex, decodeFunctionData, getAddress } from 'viem';
+import { type Hex, type TransactionReceipt, decodeFunctionData, getAddress } from 'viem';
 
 import { ProverNodePublisher } from './prover-node-publisher.js';
 
@@ -350,9 +350,23 @@ describe('prover-node-publisher', () => {
       // a full-epoch proof replace that registration.
       const args = setupPublishData(65, 32, 33, 64);
       registerProof(args, { fullEpoch: false });
+      l1Utils.sendAndMonitorTransaction.mockResolvedValue({
+        state: mock<L1TxState>(),
+        receipt: mock<TransactionReceipt>({
+          status: 'success',
+          effectiveGasPrice: 1n,
+          gasUsed: 1n,
+          transactionHash: `0x${randomBytes(32).toString('hex')}`,
+        }),
+      });
+      l1Utils.getTransactionStats.mockResolvedValue({
+        calldataGas: 1,
+        calldataSize: 1,
+        sender: EthAddress.random().toString(),
+        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      });
 
-      await expect(publisher.submitEpochProof(args)).resolves.not.toEqual('already-submitted');
-      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalled();
+      await expect(publisher.submitEpochProof(args)).resolves.toEqual('published');
     });
 
     it('does not send a partial proof', async () => {
