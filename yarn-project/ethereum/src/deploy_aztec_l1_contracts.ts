@@ -99,6 +99,9 @@ function runProcess<T>(
  */
 const GLAMSTERDAM_GAS_ESTIMATE_MULTIPLIER = 1000;
 
+/** Activates queued initial validators after a deploy. Only present in l1-contracts releases that need it. */
+const FLUSH_ENTRY_QUEUE_SCRIPT = 'script/deploy/FlushEntryQueue.s.sol';
+
 /** Arguments for broadcasting an l1-contracts forge script. */
 type ForgeScriptBroadcastArgs = {
   forgeBin: string;
@@ -119,7 +122,9 @@ type ForgeScriptBroadcastArgs = {
  * dry-run the script with an inflated gas multiplier, clamp every gas limit so it fits in a block, and broadcast the
  * edited sequence with `--resume`.
  */
-async function runForgeScriptBroadcast<T>(args: ForgeScriptBroadcastArgs): Promise<T | undefined> {
+async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
+  args: ForgeScriptBroadcastArgs,
+): Promise<T | undefined> {
   const { forgeBin, l1ContractsPath, script, privateKey, rpcUrl, l1Client, env } = args;
   const baseArgs = ['script', script, '--sig', 'run()', '--private-key', privateKey, '--rpc-url', rpcUrl];
   const verifyArgs = args.verify ? ['--verify'] : [];
@@ -166,7 +171,44 @@ async function runForgeScriptBroadcast<T>(args: ForgeScriptBroadcastArgs): Promi
   // --slow waits for each receipt before sending the next tx, so the sender only needs balance for one gas limit at a
   // time and a block-sized tx is not queued behind others from the same sender.
   await runProcess(forgeBin, [...baseArgs, '--resume', '--slow', ...verifyArgs], env, l1ContractsPath);
+
+  // l1-contracts releases that ship this script no longer activate initial validators inside the deploy, and rely on
+  // forge_broadcast.js flushing the entry queue afterwards; we bypassed it, so flush here. Older releases flush inline.
+  if (
+    result &&
+    hasInitialValidators(env.INITIAL_VALIDATORS) &&
+    existsSync(join(l1ContractsPath, FLUSH_ENTRY_QUEUE_SCRIPT))
+  ) {
+    logger.info(`Flushing the entry queue of rollup ${result.rollupAddress}`);
+    // flushEntryQueue needs a gas floor left before every deposit, which forge's simulated gas does not cover, so the
+    // limits come from eth_estimateGas instead. Each flush tx stays well under the RPC estimate cap.
+    await runProcess(
+      forgeBin,
+      [
+        'script',
+        `${FLUSH_ENTRY_QUEUE_SCRIPT}:FlushEntryQueue`,
+        '--sig',
+        'run(address)',
+        result.rollupAddress,
+        '--private-key',
+        privateKey,
+        '--rpc-url',
+        rpcUrl,
+        '--skip-simulation',
+        '--batch-size',
+        '1',
+        '--broadcast',
+      ],
+      env,
+      l1ContractsPath,
+    );
+  }
   return result;
+}
+
+function hasInitialValidators(initialValidatorsJson: string | undefined): boolean {
+  const parsed: unknown = JSON.parse(initialValidatorsJson ?? '[]');
+  return Array.isArray(parsed) && parsed.length > 0;
 }
 
 // Covers an edge where where we may have a cached BlobLib that is not meant for production.
