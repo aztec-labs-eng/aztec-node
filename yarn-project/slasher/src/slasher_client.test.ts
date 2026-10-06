@@ -1,6 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
-import { AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND } from '@aztec-labs/ethereum/l1-tx-utils';
+import { AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND, AmsterdamForkDetector } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -36,7 +36,7 @@ describe('SlasherClient', () => {
   let logger: Logger;
   let mockEpochCache: MockProxy<EpochCache>;
   let telemetryClient: BenchmarkTelemetryClient;
-  let amsterdamActive: boolean;
+  let amsterdamFork: Pick<AmsterdamForkDetector, 'isActive'>;
 
   let committee: EthAddress[];
 
@@ -121,7 +121,7 @@ describe('SlasherClient', () => {
   };
 
   beforeEach(() => {
-    amsterdamActive = false;
+    amsterdamFork = { isActive: () => Promise.resolve(false) };
     kvStore = openTmpStore(true);
     offensesStore = new SlasherOffensesStore(kvStore, {
       ...settings,
@@ -193,7 +193,7 @@ describe('SlasherClient', () => {
       ownValidators,
       logger,
       new SlasherMetrics(telemetryClient),
-      { isActive: () => Promise.resolve(amsterdamActive) },
+      amsterdamFork,
     );
 
   afterEach(async () => {
@@ -686,12 +686,23 @@ describe('SlasherClient', () => {
     });
 
     it('caps the validators voted for once Amsterdam is active', async () => {
-      amsterdamActive = true;
+      amsterdamFork = { isActive: () => Promise.resolve(true) };
+      slasherClient = createClient();
+      expect(await countVotedValidators()).toBe(AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND);
+    });
+
+    it('caps the validators voted for when the fork cannot be detected', async () => {
+      amsterdamFork = new AmsterdamForkDetector(
+        { getBlock: () => Promise.reject(new Error('rpc down')) },
+        { log: logger },
+      );
+      slasherClient = createClient();
       expect(await countVotedValidators()).toBe(AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND);
     });
 
     it('keeps a configured payload size below the Amsterdam cap', async () => {
-      amsterdamActive = true;
+      amsterdamFork = { isActive: () => Promise.resolve(true) };
+      slasherClient = createClient();
       slasherClient.updateConfig({ slashMaxPayloadSize: 10 });
       expect(await countVotedValidators()).toBe(10);
     });

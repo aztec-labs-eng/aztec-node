@@ -108,6 +108,7 @@ export class SlasherClient implements ProposerSlashActionProvider, SlasherClient
     private log = createLogger('slasher:consensus'),
     private readonly metrics = new SlasherMetrics(getTelemetryClient()),
     private readonly amsterdamFork: Pick<AmsterdamForkDetector, 'isActive'> = new AmsterdamForkDetector(rollup.client, {
+      dateProvider,
       log,
     }),
   ) {
@@ -434,11 +435,12 @@ export class SlasherClient implements ProposerSlashActionProvider, SlasherClient
 
   /**
    * Returns how many validators we vote to slash at most in a round: the configured payload size, further capped once
-   * Amsterdam is active so the round still fits in an L1 tx when executed.
+   * Amsterdam is active so the round still fits in an L1 tx when executed. If the fork cannot be detected, the cap
+   * applies, since a smaller vote is harmless while one too large for the round to execute is not.
    */
   private async getMaxSlashedValidators(): Promise<number> {
     const { slashMaxPayloadSize } = this.config;
-    if (!(await this.amsterdamFork.isActive())) {
+    if (!(await this.amsterdamFork.isActive({ assumeActiveOnError: true }))) {
       return slashMaxPayloadSize;
     }
     return Math.min(slashMaxPayloadSize, AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND);

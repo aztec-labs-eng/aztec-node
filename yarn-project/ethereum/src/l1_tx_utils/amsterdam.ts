@@ -43,8 +43,11 @@ export class AmsterdamForkDetector {
     this.lastObservedAtMs = this.now();
   }
 
-  /** Returns whether the Amsterdam fork is active, fetching the latest L1 block unless a recent one was observed. */
-  public async isActive(): Promise<boolean> {
+  /**
+   * Returns whether the Amsterdam fork is active, fetching the latest L1 block unless a recent one was observed.
+   * @param opts.assumeActiveOnError - What to answer when the fork is not known to be active and the block fetch fails.
+   */
+  public async isActive(opts: { assumeActiveOnError?: boolean } = {}): Promise<boolean> {
     if (this.active) {
       return true;
     }
@@ -55,10 +58,12 @@ export class AmsterdamForkDetector {
     try {
       this.observe(await this.blockSource.getBlock());
     } catch (err) {
+      const assumeActive = opts.assumeActiveOnError ?? false;
       (this.opts.log ?? createLogger('ethereum:amsterdam-fork-detector')).warn(
-        'Failed to fetch latest L1 block to detect the Amsterdam fork, assuming it is not active',
-        err,
+        'Failed to fetch latest L1 block to detect the Amsterdam fork',
+        { err, assumeActive },
       );
+      return assumeActive;
     }
     return this.active;
   }

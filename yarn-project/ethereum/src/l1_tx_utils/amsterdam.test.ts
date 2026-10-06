@@ -84,9 +84,10 @@ describe('Amsterdam fork detection', () => {
       expect(await detector.isActive()).toBe(true);
     });
 
-    it('reports inactive when the latest block cannot be fetched', async () => {
+    it('answers as requested when the latest block cannot be fetched', async () => {
       detector = new AmsterdamForkDetector({ getBlock: () => Promise.reject(new Error('rpc down')) }, { dateProvider });
       expect(await detector.isActive()).toBe(false);
+      expect(await detector.isActive({ assumeActiveOnError: true })).toBe(true);
     });
   });
 });
