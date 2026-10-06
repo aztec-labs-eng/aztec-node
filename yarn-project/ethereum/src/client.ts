@@ -19,7 +19,7 @@ import {
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
-import { createEthereumChain } from './chain.js';
+import { createEthereumChain, isAnvilTestChain } from './chain.js';
 import type { ExtendedViemWalletClient, ViemPublicClient } from './types.js';
 
 type Config = {
@@ -158,7 +158,7 @@ export function createExtendedL1Client(
     account: hdAccount,
     chain,
     transport: makeL1HttpTransport(rpcUrls, { timeout: opts?.httpTimeoutMS }),
-    pollingInterval: pollingIntervalMS,
+    pollingInterval: pollingIntervalMS ?? (isAnvilTestChain(chain.id) ? 100 : undefined),
   }).extend(publicActions);
 
   return extendedClient;

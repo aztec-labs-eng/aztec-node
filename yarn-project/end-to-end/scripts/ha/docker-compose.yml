@@ -30,7 +30,7 @@ services:
       - web3signer_keys:/keys
 
   end-to-end:
-    image: aztecprotocol/build:3.0
+    image: aztecprotocol/build:3.1
     cpus: 4
     cpuset: ${CPU_LIST:-}
     mem_limit: 8G

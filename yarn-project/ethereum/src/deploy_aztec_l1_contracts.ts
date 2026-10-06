@@ -5,6 +5,7 @@ import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { Fr } from '@aztec-labs/foundation/schemas';
+import { parse as parseToml } from '@iarna/toml';
 import { bn254 } from '@noble/curves/bn254';
 import type { Abi, Narrow } from 'abitype';
 import { spawn } from 'child_process';
@@ -32,16 +33,54 @@ const require = createRequire(import.meta.url);
 
 const JSON_DEPLOY_RESULT_PREFIX = 'JSON DEPLOY RESULT:';
 
+/** Returns the broadcast deadline, with an optional environment override in milliseconds. */
+export function getForgeBroadcastTimeout(
+  chainId: number,
+  value = process.env.FORGE_BROADCAST_TIMEOUT_MS,
+): number | undefined {
+  if (value === undefined || value === '') {
+    return isAnvilTestChain(chainId) ? 120_000 : undefined;
+  }
+  const timeout = Number(value);
+  if (!Number.isSafeInteger(timeout) || timeout < 0 || timeout > 2_147_483_647) {
+    throw new Error('FORGE_BROADCAST_TIMEOUT_MS must be an integer between 0 and 2147483647');
+  }
+  return timeout === 0 ? undefined : timeout;
+}
+
+/** Returns Forge broadcast flags for the target chain and artifact EVM version. */
+export function getForgeBroadcastArgs(l1ContractsPath: string, chainId: number): string[] {
+  const broadcastArgs = ['--broadcast', '--disable-external-identification'];
+  if (chainId !== sepolia.id) {
+    return broadcastArgs;
+  }
+
+  const foundryToml = readFileSync(join(l1ContractsPath, 'foundry.toml'), 'utf-8');
+  const profile = parseToml(foundryToml).profile;
+  const defaultProfile = typeof profile === 'object' && 'default' in profile ? profile.default : undefined;
+  const evmVersion =
+    defaultProfile && typeof defaultProfile === 'object' && 'evm_version' in defaultProfile
+      ? defaultProfile.evm_version
+      : undefined;
+  if (typeof evmVersion !== 'string' || !evmVersion) {
+    throw new Error('L1 deployment artifacts do not specify an EVM version');
+  }
+
+  // Plan with the artifact's EVM target; --skip-simulation makes Forge estimate each send through RPC.
+  return [...broadcastArgs, '--hardfork', evmVersion, '--skip-simulation'];
+}
+
 /**
  * Runs a process and parses JSON deploy results from stdout.
  * Lines starting with JSON_DEPLOY_RESULT_PREFIX are parsed and returned.
  * All other stdout goes to logger.info, stderr goes to logger.warn.
  */
-function runProcess<T>(
+export function runProcess<T>(
   command: string,
   args: string[],
   env: Record<string, string | undefined>,
   cwd: string,
+  timeoutMs?: number,
 ): Promise<T | undefined> {
   const { promise, resolve, reject } = promiseWithResolvers<T | undefined>();
   const proc = spawn(command, args, {
@@ -53,6 +92,27 @@ function runProcess<T>(
   let result: T | undefined;
   let parseError: Error | undefined;
   let settled = false;
+  let timedOut = false;
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutTimer = timeoutMs
+    ? setTimeout(() => {
+        timedOut = true;
+        proc.kill('SIGTERM');
+        killTimer = setTimeout(() => proc.kill('SIGKILL'), 1000);
+      }, timeoutMs)
+    : undefined;
+
+  const clearTimers = () => {
+    clearTimeout(timeoutTimer);
+    clearTimeout(killTimer);
+  };
+  const rejectProcess = (error: Error) => {
+    if (cwd === preparedDeployDir) {
+      preparedDeployDir = undefined;
+      error.message += `; deployment artifacts preserved at ${cwd}. Transactions may already have been broadcast.`;
+    }
+    reject(error);
+  };
 
   readline.createInterface({ input: proc.stdout }).on('line', line => {
     const trimmedLine = line.trim();
@@ -74,18 +134,24 @@ function runProcess<T>(
       return;
     }
     settled = true;
-    reject(new Error(`Failed to spawn ${command}: ${error.message}`));
+    clearTimers();
+    rejectProcess(new Error(`Failed to spawn ${command}: ${error.message}`));
   });
 
-  proc.on('close', code => {
+  proc.on('close', (code, signal) => {
     if (settled) {
       return;
     }
     settled = true;
-    if (code !== 0) {
-      reject(new Error(`${command} exited with code ${code}`));
+    clearTimers();
+    if (timedOut) {
+      rejectProcess(new Error(`${command} timed out after ${timeoutMs}ms (signal ${signal ?? 'none'})`));
+    } else if (signal) {
+      rejectProcess(new Error(`${command} terminated by signal ${signal}`));
+    } else if (code !== 0) {
+      rejectProcess(new Error(`${command} exited with code ${code}`));
     } else if (parseError) {
-      reject(parseError);
+      rejectProcess(parseError);
     } else {
       resolve(result);
     }
@@ -129,52 +195,65 @@ async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
   const { forgeBin, l1ContractsPath, script, privateKey, rpcUrl, l1Client, env } = args;
   const baseArgs = ['script', script, '--sig', 'run()', '--private-key', privateKey, '--rpc-url', rpcUrl];
   const verifyArgs = args.verify ? ['--verify'] : [];
+  const chainId = await l1Client.getChainId();
+  const broadcastArgs = getForgeBroadcastArgs(l1ContractsPath, chainId);
+  const timeout = getForgeBroadcastTimeout(chainId);
 
   const latestBlock = await l1Client.request({ method: 'eth_getBlockByNumber', params: ['latest', false] });
+  let result: T | undefined;
   if (!latestBlock || !isAmsterdamBlock(latestBlock)) {
-    const scriptPath = join(getL1ContractsPath(), 'scripts', 'forge_broadcast.js');
-    return runProcess<T>(
-      process.execPath,
-      [scriptPath, ...baseArgs.slice(1), ...verifyArgs],
-      // Resolved forge binary picked up by forge_broadcast.js, so it works without forge on PATH.
-      { ...env, FORGE_BIN: forgeBin },
+    result = await runProcess<T>(
+      forgeBin,
+      [...baseArgs, ...broadcastArgs, ...verifyArgs],
+      env,
       l1ContractsPath,
+      timeout,
+    );
+  } else {
+    logger.info(`Dry-running ${script} to plan Glamsterdam gas limits`);
+    result = await runProcess<T>(
+      forgeBin,
+      [
+        ...baseArgs,
+        ...broadcastArgs.filter(arg => arg !== '--broadcast' && arg !== '--skip-simulation'),
+        '--gas-estimate-multiplier',
+        String(GLAMSTERDAM_GAS_ESTIMATE_MULTIPLIER),
+      ],
+      env,
+      l1ContractsPath,
+    );
+
+    // Leave headroom for the block gas limit drifting down before the last tx lands.
+    const maxTxGas = (BigInt(latestBlock.gasLimit) * 99n) / 100n;
+    const sequencePath = join(
+      l1ContractsPath,
+      'broadcast',
+      basename(script),
+      String(chainId),
+      'dry-run',
+      'run-latest.json',
+    );
+    const sequence = JSON.parse(readFileSync(sequencePath, 'utf-8'));
+    for (const tx of sequence.transactions) {
+      const gas = BigInt(tx.transaction.gas);
+      tx.transaction.gas = `0x${(gas < maxTxGas ? gas : maxTxGas).toString(16)}`;
+    }
+    writeFileSync(sequencePath, JSON.stringify(sequence, null, 2));
+
+    logger.info(`Broadcasting ${sequence.transactions.length} transactions from ${script}`, { maxTxGas });
+    // --slow waits for each receipt before sending the next tx, so the sender only needs balance for one gas limit at a
+    // time and a block-sized tx is not queued behind others from the same sender.
+    await runProcess(
+      forgeBin,
+      [...baseArgs, ...broadcastArgs, '--resume', '--slow', ...verifyArgs],
+      env,
+      l1ContractsPath,
+      timeout,
     );
   }
 
-  logger.info(`Dry-running ${script} to plan Glamsterdam gas limits`);
-  const result = await runProcess<T>(
-    forgeBin,
-    [...baseArgs, '--gas-estimate-multiplier', String(GLAMSTERDAM_GAS_ESTIMATE_MULTIPLIER)],
-    env,
-    l1ContractsPath,
-  );
-
-  // Leave headroom for the block gas limit drifting down before the last tx lands.
-  const maxTxGas = (BigInt(latestBlock.gasLimit) * 99n) / 100n;
-  const chainId = await l1Client.getChainId();
-  const sequencePath = join(
-    l1ContractsPath,
-    'broadcast',
-    basename(script),
-    String(chainId),
-    'dry-run',
-    'run-latest.json',
-  );
-  const sequence = JSON.parse(readFileSync(sequencePath, 'utf-8'));
-  for (const tx of sequence.transactions) {
-    const gas = BigInt(tx.transaction.gas);
-    tx.transaction.gas = `0x${(gas < maxTxGas ? gas : maxTxGas).toString(16)}`;
-  }
-  writeFileSync(sequencePath, JSON.stringify(sequence, null, 2));
-
-  logger.info(`Broadcasting ${sequence.transactions.length} transactions from ${script}`, { maxTxGas });
-  // --slow waits for each receipt before sending the next tx, so the sender only needs balance for one gas limit at a
-  // time and a block-sized tx is not queued behind others from the same sender.
-  await runProcess(forgeBin, [...baseArgs, '--resume', '--slow', ...verifyArgs], env, l1ContractsPath);
-
   // l1-contracts releases that ship this script no longer activate initial validators inside the deploy, and rely on
-  // forge_broadcast.js flushing the entry queue afterwards; we bypassed it, so flush here. Older releases flush inline.
+  // the broadcast wrapper flushing the entry queue afterwards; we bypassed it, so flush here. Older releases flush inline.
   if (
     result &&
     hasInitialValidators(env.INITIAL_VALIDATORS) &&
@@ -195,13 +274,12 @@ async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
         privateKey,
         '--rpc-url',
         rpcUrl,
+        ...broadcastArgs.filter(arg => arg !== '--skip-simulation'),
         '--skip-simulation',
-        '--batch-size',
-        '1',
-        '--broadcast',
       ],
       env,
       l1ContractsPath,
+      timeout,
     );
   }
   return result;

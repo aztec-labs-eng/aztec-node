@@ -9,7 +9,7 @@
 #
 services:
   fork:
-    image: aztecprotocol/build:3.0
+    image: aztecprotocol/build:3.1
     cpus: 1
     cpuset: ${CPU_LIST:-}
     mem_limit: 2G

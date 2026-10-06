@@ -1,5 +1,5 @@
 # Create an image that installs yarn-projects production dependencies.
-FROM aztecprotocol/build:3.0 AS build
+FROM aztecprotocol/build:3.1 AS build
 # Copy files explicitly listed in Dockerfile.base.dockerignore into container.
 # Should just be package.json, yarn.lock, and .yarn* files.
 COPY . /usr/src

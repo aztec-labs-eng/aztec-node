@@ -1504,6 +1504,7 @@ __metadata:
     "@aztec-foundation/l1-artifacts": "npm:0.1.0-dummy"
     "@aztec-labs/blob-lib": "workspace:^"
     "@aztec-labs/foundation": "workspace:^"
+    "@iarna/toml": "npm:^2.2.5"
     "@jest/globals": "npm:^30.0.0"
     "@noble/curves": "npm:=1.7.0"
     "@types/jest": "npm:^30.0.0"

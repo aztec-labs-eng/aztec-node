@@ -103,7 +103,7 @@ for attempt in $(seq 1 $max_attempts); do
     -e TEST_TIMING_FILE \
     -e RUN_ID \
     "${arg_env_vars[@]}" \
-    aztecprotocol/build:3.0 \
+    aztecprotocol/build:3.1 \
     /bin/bash -c "$cmd" 2>"$run_err")
   run_code=$?
   set +x -e
