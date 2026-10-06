@@ -33,7 +33,7 @@ import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
 import { type UnsiloedMessageNullifier, getL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
-import type { NoteStatus } from '@aztec-labs/stdlib/note';
+import { NoteStatus } from '@aztec-labs/stdlib/note';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
   type BlockHeader,
@@ -74,6 +74,7 @@ import { type FactCollection, emptyFactCollection, toNoirFactCollection } from '
 import type { LogRetrievalRequest } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
 import type { NoteData } from '../noir-structs/note_data.js';
+import type { NoteOrigin } from '../noir-structs/note_origin.js';
 import type { NoteValidationRequest } from '../noir-structs/note_validation_request.js';
 import {
   type NullifierMembershipWitnessData,
@@ -504,6 +505,33 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       offset,
     });
     return BoundedVec.from({ data: picked, maxLength: maxNotes, elementSize: packedHintedNoteLength });
+  }
+
+  /**
+   * Returns the tx and block in which a settled note of the executing contract was created, or `None` if no such note
+   * is known. Nullified notes are also returned.
+   */
+  public async getSettledNoteOrigin(
+    noteHash: Fr,
+    contractAddress: AztecAddress,
+    noteNonce: Fr,
+  ): Promise<Option<NoteOrigin>> {
+    this.#assertOwnContract(contractAddress);
+
+    // The store is only indexed by contract, so this scans all of the contract's notes. The query is rare enough and
+    // stores are small enough that this is not a concern.
+    const notes = await this.noteStore.getNotes(
+      { contractAddress, status: NoteStatus.ACTIVE_OR_NULLIFIED, scopes: this.scopes },
+      this.changeSetId,
+    );
+    const note = notes.find(note => note.noteHash.equals(noteHash) && note.noteNonce.equals(noteNonce));
+
+    return note
+      ? Option.some({
+          txHash: note.txHash.hash,
+          block: { blockNumber: note.l2BlockNumber, blockHash: Fr.fromHexString(note.l2BlockHash) },
+        })
+      : Option.none();
   }
 
   /**
