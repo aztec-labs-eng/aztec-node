@@ -1,6 +1,7 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import {
+  AMSTERDAM_MAX_L1_TX_LIMIT,
   type L1TxUtils,
   MAX_L1_TX_LIMIT,
   ReadOnlyL1TxUtils,
@@ -22,6 +23,7 @@ describe('SequencerBundleSimulator gas limit', () => {
 
   let l1TxUtils: MockProxy<L1TxUtils>;
   let simulator: SequencerBundleSimulator;
+  let amsterdamActive: boolean;
 
   const makeRequest = (
     action: RequestWithExpiry['action'],
@@ -42,7 +44,18 @@ describe('SequencerBundleSimulator gas limit', () => {
       result: successes.map(success => ({ success, returnData: '0x' as Hex })),
     });
 
+  /** Simulates a bundle that reverts unless the simulation is given at least `gasNeeded` gas. */
+  const mockSimulateNeedingGas = (gasNeeded: bigint) =>
+    l1TxUtils.simulate.mockImplementation(request =>
+      Promise.resolve(
+        request.gas !== undefined && request.gas >= gasNeeded
+          ? { gasUsed: gasNeeded, maxUsedGas: gasNeeded, result: aggregate3Result([true]) }
+          : { gasUsed: request.gas ?? 0n, result: aggregate3Result([false]) },
+      ),
+    );
+
   beforeEach(() => {
+    amsterdamActive = false;
     l1TxUtils = mock<L1TxUtils>();
     l1TxUtils.config = { ...defaultL1TxUtilsConfig, gasLimitBufferPercentage: 20 };
     // Run the real bumping arithmetic against the mock's config, so these tests assert on the buffer the
@@ -61,6 +74,7 @@ describe('SequencerBundleSimulator gas limit', () => {
       getL1TxUtils: () => l1TxUtils,
       rollupContract,
       epochCache,
+      amsterdamFork: { isActive: () => Promise.resolve(amsterdamActive) },
       log: createLogger('sequencer:test:bundle-simulator'),
     });
   });
@@ -167,6 +181,33 @@ describe('SequencerBundleSimulator gas limit', () => {
     const result = await simulator.simulate([makeRequest('propose')], targetSlot);
 
     expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: MAX_L1_TX_LIMIT }));
+  });
+
+  it('drops a bundle that needs more than MAX_L1_TX_LIMIT gas before Amsterdam', async () => {
+    mockSimulateNeedingGas(30_000_000n);
+
+    const result = await simulator.simulate([makeRequest('execute-slash')], targetSlot);
+
+    expect(result).toEqual(expect.objectContaining({ kind: 'aborted', reason: 'all-reverted' }));
+  });
+
+  it('simulates and sizes a bundle above MAX_L1_TX_LIMIT once Amsterdam is active', async () => {
+    amsterdamActive = true;
+    mockSimulateNeedingGas(30_000_000n);
+
+    const result = await simulator.simulate([makeRequest('execute-slash')], targetSlot);
+
+    // ceil(30_000_000 * 64 / 63) = 30_476_191, bumped by 20%.
+    expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: 36_571_429n }));
+  });
+
+  it('caps the gas limit at AMSTERDAM_MAX_L1_TX_LIMIT once Amsterdam is active', async () => {
+    amsterdamActive = true;
+    mockSimulateNeedingGas(45_000_000n);
+
+    const result = await simulator.simulate([makeRequest('execute-slash')], targetSlot);
+
+    expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: AMSTERDAM_MAX_L1_TX_LIMIT }));
   });
 
   it('falls back when the node does not support eth_simulateV1', async () => {

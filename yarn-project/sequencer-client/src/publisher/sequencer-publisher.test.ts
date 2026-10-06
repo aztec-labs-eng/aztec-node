@@ -789,6 +789,55 @@ describe('SequencerPublisher', () => {
     });
   });
 
+  describe('bundle gas cap across the Amsterdam fork', () => {
+    const gasNeeded = 30_000_000n;
+
+    beforeEach(() => {
+      publisher.addRequest({
+        action: 'execute-slash',
+        request: { to: mockRollupAddress, data: '0xdeadbeef' },
+        lastValidL2Slot: SlotNumber(Number(publisher.getCurrentL2Slot()) + 2),
+        checkSuccess: () => true,
+      });
+      // The bundle reverts in simulation unless it is given enough gas.
+      l1TxUtils.simulate.mockImplementation(request =>
+        Promise.resolve({
+          gasUsed: gasNeeded,
+          result: encodeFunctionResult({
+            abi: multicall3Abi,
+            functionName: 'aggregate3',
+            result: [{ success: request.gas !== undefined && request.gas >= gasNeeded, returnData: '0x' }],
+          }),
+        }),
+      );
+      forwardSpy.mockResolvedValue({
+        receipt: proposeTxReceipt,
+        stats: undefined,
+        multicallData: '0x',
+        state: {} as any,
+      });
+    });
+
+    it('drops a bundle that needs more than MAX_L1_TX_LIMIT gas before Amsterdam', async () => {
+      l1TxUtils.getBlock.mockResolvedValue({ timestamp: 12n } as any);
+
+      const result = await publisher.sendRequests();
+
+      expect(result).toBeUndefined();
+      expect(forwardSpy).not.toHaveBeenCalled();
+    });
+
+    it('sends a bundle above MAX_L1_TX_LIMIT gas once the latest L1 block is post-Amsterdam', async () => {
+      l1TxUtils.getBlock.mockResolvedValue({ timestamp: 12n, blockAccessListHash: toHex(1, { size: 32 }) } as any);
+
+      const result = await publisher.sendRequests();
+
+      expect(result?.sentActions).toEqual(['execute-slash']);
+      // ceil(30_000_000 * 64 / 63) = 30_476_191, bumped by 20%.
+      expect(forwardSpy.mock.calls[0][2]?.gasLimit).toEqual(36_571_429n);
+    });
+  });
+
   describe('bundleSimulate second-pass re-decode', () => {
     const addTwoRequests = () => {
       const currentL2Slot = publisher.getCurrentL2Slot();
