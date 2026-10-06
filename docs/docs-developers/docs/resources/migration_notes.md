@@ -324,6 +324,16 @@ The other seven are now crate-internal (`pub(crate)`) and can no longer be impor
 
 **Impact**: Contracts that use aztec-nr's high-level APIs (notes, authwit, state variables, message delivery, ECDH) are unaffected, since these separators are applied internally. A contract that imported one of these constants directly must either switch to the new `aztec::note::partial_note` path (for the two public ones) or, for the now-internal ones, call the corresponding aztec-nr helper instead of recomputing the hash by hand. The generated TypeScript `DomainSeparator` enum in `@aztec-labs/constants` / `@aztec-labs/stdlib` likewise no longer contains the seven removed members (their values were unused in TypeScript).
 
+Account contracts that implement their own entrypoint and hashed `DOM_SEP__TX_NULLIFIER` to emit the cancellation nullifier should call `compute_tx_nullifier` instead:
+
+```diff
+- use aztec::protocol::{constants::DOM_SEP__TX_NULLIFIER, hash::poseidon2_hash_with_separator};
++ use aztec::authwit::account::compute_tx_nullifier;
+
+- context.push_nullifier_unsafe(poseidon2_hash_with_separator([tx_nonce], DOM_SEP__TX_NULLIFIER));
++ context.push_nullifier_unsafe(compute_tx_nullifier(tx_nonce));
+```
+
 ### [Aztec Node] `GasPrice` renamed to `FeesPerGas` in `@aztec-labs/ethereum`
 
 The `GasPrice` interface exported from `@aztec-labs/ethereum/l1-tx-utils` is now `FeesPerGas`, matching viem's name for the same thing, and the methods and fields carrying it are renamed to match. These values were never a price paid: they are the EIP-1559 caps a transaction is sent with (`maxFeePerGas`, `maxPriorityFeePerGas`, `maxFeePerBlobGas`), and what the transaction actually pays is decided at inclusion. The fields inside the type are unchanged.
