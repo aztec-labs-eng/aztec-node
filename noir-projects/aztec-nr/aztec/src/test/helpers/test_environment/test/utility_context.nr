@@ -155,6 +155,7 @@ unconstrained fn get_settled_note_origin_found() {
         let origin = get_settled_note_origin(note_hash, context.this_address(), note_nonce).unwrap();
         assert_eq(origin.block.block_number, settled_block_number);
         assert(origin.tx_hash != 0);
+        assert(origin.nullification_block.is_none());
     });
 }
 
@@ -189,6 +190,7 @@ unconstrained fn get_settled_note_origin_nullified_note() {
         let state_var: PrivateSet<MockNote, &mut PrivateContext> = PrivateSet::new(context, storage_slot, owner);
         assert_eq(state_var.pop_notes(NoteGetterOptions::new()).len(), 1);
     });
+    let nullification_block_number = env.last_block_number();
 
     env.utility_context(|context| {
         let state_var: PrivateSet<MockNote, UtilityContext> = PrivateSet::new(context, storage_slot, owner);
@@ -196,5 +198,6 @@ unconstrained fn get_settled_note_origin_nullified_note() {
 
         let origin = get_settled_note_origin(note_hash, context.this_address(), note_nonce).unwrap();
         assert_eq(origin.block.block_number, settled_block_number);
+        assert_eq(origin.nullification_block.unwrap().block_number, nullification_block_number);
     });
 }

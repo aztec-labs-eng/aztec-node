@@ -176,22 +176,28 @@ where
     notes_array
 }
 
-/// Where a settled note was created.
+/// Where a settled note was created and, if nullified, where.
 ///
 /// None of this can be cheaply constrained: doing so requires proving the transaction, its inclusion in the block, and
 /// the block's ancestry in the anchor block.
-// TODO(F-890): also expose the transaction and block in which the note was nullified, if it was.
+// TODO(F-890): also expose the transaction in which the note was nullified, if it was.
 #[derive(Deserialize, Eq)]
 pub struct NoteOrigin {
     /// Hash of the transaction that created the note.
     pub tx_hash: Field,
     /// The block that transaction was included in.
     pub block: BlockReference,
+    /// The block the note's nullifier was included in.
+    ///
+    /// `None` if the note has not been nullified, or if its nullifier is pending (emitted earlier in the current
+    /// transaction and not yet in any block).
+    pub nullification_block: Option<BlockReference>,
 }
 
 /// Returns where the settled note with the given hash and nonce was created, or `None` if the note is unknown.
 ///
-/// Nullified notes are also returned. Only notes of the executing contract can be looked up.
+/// Nullified notes are also returned, along with the block they were nullified in. Only notes of the executing
+/// contract can be looked up.
 pub unconstrained fn get_settled_note_origin(
     note_hash: Field,
     contract_address: AztecAddress,

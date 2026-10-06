@@ -1,5 +1,8 @@
+use crate::context::PrivateContext;
 use crate::ephemeral::EphemeralArray;
+use crate::note::{HintedNote, note_getter::view_note, note_getter_options::NoteGetterOptions, note_interface::NoteHash};
 use crate::oracle::block_header::get_block_header_at;
+use crate::oracle::notes::get_settled_note_origin;
 use crate::oracle::nullifiers::{check_nullifier_exists, get_nullifier_statuses};
 use crate::protocol::{
     abis::{function_selector::FunctionSelector, gas::Gas, gas_fees::GasFees, gas_settings::GasSettings},
@@ -7,7 +10,9 @@ use crate::protocol::{
     constants::{MAX_PROCESSABLE_DA_GAS_PER_CHECKPOINT, MAX_PROCESSABLE_L2_GAS},
     traits::{FromField, Hash},
 };
+use crate::state_vars::{OwnedStateVariable, PrivateSet};
 use crate::test::helpers::test_environment::{PrivateContextOptions, TestEnvironment};
+use crate::test::mocks::mock_note::MockNote;
 
 #[test]
 unconstrained fn at_sets_contract_address() {
@@ -288,5 +293,35 @@ unconstrained fn get_nullifier_statuses_mixed() {
         let nonexistent = statuses.get(2);
         assert(!nonexistent.exists);
         assert(nonexistent.origin_block.is_none());
+    });
+}
+
+#[test]
+unconstrained fn get_settled_note_origin_pending_nullifier() {
+    let mut env = TestEnvironment::new();
+    let owner = env.create_light_account();
+    let storage_slot = 17;
+
+    let note_message = env.private_context(|context| {
+        let state_var: PrivateSet<MockNote, &mut PrivateContext> = PrivateSet::new(context, storage_slot, owner);
+        state_var.insert(MockNote::new(23).build_note())
+    });
+    let settled_block_number = env.last_block_number();
+    env.discover_note(note_message);
+
+    let (note_hash, note_nonce) = env.utility_context(|_| {
+        let hinted_note: HintedNote<MockNote> = view_note(Option::some(owner), storage_slot);
+        let note_hash =
+            hinted_note.note.compute_note_hash(hinted_note.owner, hinted_note.storage_slot, hinted_note.randomness);
+        (note_hash, hinted_note.metadata.to_settled().note_nonce())
+    });
+
+    env.private_context(|context| {
+        let state_var: PrivateSet<MockNote, &mut PrivateContext> = PrivateSet::new(context, storage_slot, owner);
+        assert_eq(state_var.pop_notes(NoteGetterOptions::new()).len(), 1);
+
+        let origin = get_settled_note_origin(note_hash, context.this_address(), note_nonce).unwrap();
+        assert_eq(origin.block.block_number, settled_block_number);
+        assert(origin.nullification_block.is_none());
     });
 }

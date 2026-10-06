@@ -509,7 +509,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
 
   /**
    * Returns the tx and block in which a settled note of the executing contract was created, or `None` if no such note
-   * is known. Nullified notes are also returned.
+   * is known. Nullified notes are also returned, along with the block they were nullified in.
    */
   public async getSettledNoteOrigin(
     noteHash: Fr,
@@ -525,13 +525,17 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
       this.changeSetId,
     );
     const note = notes.find(note => note.noteHash.equals(noteHash) && note.noteNonce.equals(noteNonce));
+    if (!note) {
+      return Option.none();
+    }
 
-    return note
-      ? Option.some({
-          txHash: note.txHash.hash,
-          block: { blockNumber: note.l2BlockNumber, blockHash: Fr.fromHexString(note.l2BlockHash) },
-        })
-      : Option.none();
+    const [nullifierStatus] = await this.getSiloedNullifierStatuses([note.siloedNullifier]);
+
+    return Option.some({
+      txHash: note.txHash.hash,
+      block: { blockNumber: note.l2BlockNumber, blockHash: Fr.fromHexString(note.l2BlockHash) },
+      nullificationBlock: nullifierStatus.originBlock,
+    });
   }
 
   /**

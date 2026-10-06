@@ -19,7 +19,7 @@ export const ORACLE_VERSION_MINOR = 1;
 /// - increment only `ORACLE_VERSION_MINOR` if the change is additive (a new oracle was added).
 ///
 /// These constants must be kept in sync between this file and `noir-projects/aztec-nr/aztec/src/oracle/version.nr`.
-export const ORACLE_INTERFACE_HASH = 'f597d4c9e2b7d578e1b26ae757bfdc3bf698593cb82893dd80aad59442eecb7c';
+export const ORACLE_INTERFACE_HASH = '94e9af781eee83f28b22b5ff2c2951ae75119e6eb3727353142ed79237ee0f6d';
 
 /// The oracle interface served to the protocol contracts, which is versioned separately from the Aztec.nr one above.
 /// It is a single number that must match exactly: protocol contracts are only rebuilt when they are redeployed on a

@@ -558,6 +558,7 @@ export const NULLIFIER_STATUS: TypeMapping<NullifierStatus> = STRUCT([
 export const NOTE_ORIGIN: TypeMapping<NoteOrigin> = STRUCT([
   { name: 'txHash', type: FIELD },
   { name: 'block', type: BLOCK_REFERENCE },
+  { name: 'nullificationBlock', type: OPTION(BLOCK_REFERENCE) },
 ]);
 
 const ORIGIN_BLOCK_STATE: TypeMapping<OriginBlockState> = SCALAR({

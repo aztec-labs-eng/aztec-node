@@ -769,10 +769,11 @@ describe('Utility Execution test suite', () => {
       const noteNonce = Fr.random();
       const txHash = TxHash.random();
       const blockHash = BlockHash.random();
+      let note: NoteDao;
 
       beforeEach(async () => {
         const sameHashOtherNonce = await NoteDao.random({ contractAddress, noteHash });
-        const note = await NoteDao.random({
+        note = await NoteDao.random({
           contractAddress,
           noteHash,
           noteNonce,
@@ -781,13 +782,39 @@ describe('Utility Execution test suite', () => {
           l2BlockHash: blockHash.toString(),
         });
         noteStore.getNotes.mockResolvedValue([sameHashOtherNonce, note]);
+        aztecNode.findLeavesIndexes.mockImplementation((_referenceBlock, _treeId, leaves) =>
+          Promise.resolve(leaves.map(() => undefined)),
+        );
       });
 
       it('returns the tx and block of the note with the given hash and nonce', async () => {
         const origin = await utilityExecutionOracle.getSettledNoteOrigin(noteHash, contractAddress, noteNonce);
 
         expect(origin).toEqual(
-          Option.some({ txHash: txHash.hash, block: { blockNumber: 7, blockHash: blockHash.toFr() } }),
+          Option.some({
+            txHash: txHash.hash,
+            block: { blockNumber: 7, blockHash: blockHash.toFr() },
+            nullificationBlock: Option.none(),
+          }),
+        );
+      });
+
+      it('returns the block the note was nullified in', async () => {
+        const nullificationBlock = { l2BlockNumber: BlockNumber(9), l2BlockHash: BlockHash.random() };
+        aztecNode.findLeavesIndexes.mockImplementation((_referenceBlock, _treeId, leaves) =>
+          Promise.resolve(
+            leaves.map(leaf => (leaf.equals(note.siloedNullifier) ? { data: 0n, ...nullificationBlock } : undefined)),
+          ),
+        );
+
+        const origin = await utilityExecutionOracle.getSettledNoteOrigin(noteHash, contractAddress, noteNonce);
+
+        expect(origin).toEqual(
+          Option.some({
+            txHash: txHash.hash,
+            block: { blockNumber: 7, blockHash: blockHash.toFr() },
+            nullificationBlock: Option.some({ blockNumber: 9, blockHash: nullificationBlock.l2BlockHash.toFr() }),
+          }),
         );
       });
 
