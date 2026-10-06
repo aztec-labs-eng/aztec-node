@@ -42,6 +42,8 @@ sidebar_position: 1
   - [aztec get-l1-to-l2-message-witness](#aztec-get-l1-to-l2-message-witness)
   - [aztec get-logs](#aztec-get-logs)
   - [aztec get-node-info](#aztec-get-node-info)
+  - [aztec initiate-withdraw-by-attester](#aztec-initiate-withdraw-by-attester)
+  - [aztec initiate-withdraw-by-attester-batch](#aztec-initiate-withdraw-by-attester-batch)
   - [aztec migrate-ha-db](#aztec-migrate-ha-db)
     - [aztec migrate-ha-db down](#aztec-migrate-ha-db-down)
     - [aztec migrate-ha-db up](#aztec-migrate-ha-db-up)
@@ -57,6 +59,7 @@ sidebar_position: 1
   - [aztec remove-l1-validator](#aztec-remove-l1-validator)
   - [aztec sequencers](#aztec-sequencers)
   - [aztec setup-protocol-contracts](#aztec-setup-protocol-contracts)
+  - [aztec sign-attester-exit](#aztec-sign-attester-exit)
   - [aztec start](#aztec-start)
   - [aztec trigger-seed-snapshot](#aztec-trigger-seed-snapshot)
   - [aztec update](#aztec-update)
@@ -99,6 +102,8 @@ aztec [options] [command]
 - `get-logs [options]` - Gets public logs for a contract and tag, optionally restricted by block range or tx hash.
 - `get-node-info [options]` - Gets the information of an Aztec node from a PXE or directly from an Aztec node.
 - `help [command]` - display help for command
+- `initiate-withdraw-by-attester [options]` - Initiates a withdrawal signed by the position's attester.
+- `initiate-withdraw-by-attester-batch [options]` - Relays a JSON array of attester-signed withdrawal authorizations.
 - `migrate-ha-db` - Run validator-ha-signer database migrations
 - `preload-crs` - Preload the points data needed for proving and verifying
 - `profile` - Profile compiled Aztec artifacts.
@@ -108,6 +113,7 @@ aztec [options] [command]
 - `remove-l1-validator [options]` - Removes a validator to the L1 rollup contract.
 - `sequencers [options] <command> [who]` - Manages or queries registered sequencers on the L1 rollup contract.
 - `setup-protocol-contracts [options]` - Bootstrap the blockchain by initializing all the protocol contracts
+- `sign-attester-exit [options]` - Signs an exit authorization locally and writes a JSON array for batch submission.
 - `start [options]` - Starts Aztec modules. Options for each module can be set as key-value pairs (e.g. "option1=value1,option2=value2") or as environment variables.
 - `trigger-seed-snapshot [options]` - Triggers a seed snapshot for the next epoch.
 - `update [options] [projectPath]` - Updates Nodejs and Noir dependencies
@@ -543,6 +549,50 @@ aztec get-node-info [options]
 - `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `-h, --help` - display help for command
 
+### aztec initiate-withdraw-by-attester
+
+Initiates a withdrawal signed by the position's attester.
+
+**Usage:**
+```bash
+aztec initiate-withdraw-by-attester [options]
+```
+
+**Options:**
+
+- `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
+- `-m, --mnemonic <string>` - Mnemonic for the attester account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment (env: MNEMONIC)
+- `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
+- `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
+- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
+- `--attester <address>` - Attester address of the position to exit
+- `--rollup <address>` - Rollup holding the position
+- `-h, --help` - display help for command
+
+### aztec initiate-withdraw-by-attester-batch
+
+Relays a JSON array of attester-signed withdrawal authorizations.
+
+**Usage:**
+```bash
+aztec initiate-withdraw-by-attester-batch [options]
+```
+
+**Options:**
+
+- `-pk, --private-key <string>` - The relayer private key; supply this or --mnemonic (env: PRIVATE_KEY)
+- `-m, --mnemonic <string>` - Mnemonic for the relayer account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment (env: MNEMONIC)
+- `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
+- `--address-index <number>` - Mnemonic address index for the relayer paying for the transaction; attesters sign authorizations separately (default: 0; requires --mnemonic)
+- `--l1-rpc-urls <string>` - List of Ethereum host URLs. Chain identifiers localhost and testnet can be used (comma separated) (default: ["http://host.docker.internal:8545"], env: ETHEREUM_HOSTS)
+- `-c, --l1-chain-id <number>` - Chain ID of the ethereum host (default: 31337, env: L1_CHAIN_ID)
+- `--authorizations <path>` - JSON file containing attester, decimal deadline, and signature fields
+- `--rollup <address>` - Rollup holding the positions
+- `--up-to-limit` - Process the largest permitted prefix instead of reverting when the whole batch is too large
+- `--dry-run` - Simulate against current chain state without sending; no relayer key is required
+- `-h, --help` - display help for command
+
 ### aztec migrate-ha-db
 
 Run validator-ha-signer database migrations
@@ -797,6 +847,31 @@ aztec setup-protocol-contracts [options]
 - `-n, --node-url <string>` - URL of the Aztec node (default: "http://host.docker.internal:8080", env: AZTEC_NODE_URL)
 - `--testAccounts` - Deploy funded test accounts.
 - `--json` - Output the contract addresses in JSON format
+- `-h, --help` - display help for command
+
+### aztec sign-attester-exit
+
+Signs an exit authorization locally and writes a JSON array for batch submission.
+
+**Usage:**
+```bash
+aztec sign-attester-exit [options]
+```
+
+**Options:**
+
+- `-pk, --private-key <string>` - The attester private key; supply this or --mnemonic (env: PRIVATE_KEY)
+- `-m, --mnemonic <string>` - Mnemonic for the attester account; a flag overrides the other credential from the environment, and PRIVATE_KEY wins when both come from the environment (env: MNEMONIC)
+- `--account-index <number>` - Mnemonic account index, matching validator-keys generation (default: 0; requires --mnemonic)
+- `--address-index <number>` - Mnemonic address index: validator-keys base address index + zero-based validator position; third validator = base + 2 (default: 0; requires --mnemonic)
+- `--l1-rpc-urls <string>` - Ethereum host URLs (comma separated); when given, the chain ID they report must match, and they supply it or the rollup when those are not given (env: ETHEREUM_HOSTS)
+- `-c, --l1-chain-id <number>` - Chain ID to sign for; required unless --network or --l1-rpc-urls supplies it, and a value from L1_CHAIN_ID alone must be confirmed by one of them (env: L1_CHAIN_ID)
+- `--network <string>` - Network to execute against (env: NETWORK)
+- `--attester <address>` - Attester address of the position to exit
+- `--rollup <address>` - Rollup holding the position; defaults to the canonical rollup of --network
+- `--deadline <timestamp>` - Authorization expiry as Unix seconds
+- `--output <path>` - JSON output file (must be new unless --append is used)
+- `--append` - Append or create if missing, without validating existing authorizations; run initiate-withdraw-by-attester-batch --dry-run after the batch is complete
 - `-h, --help` - display help for command
 
 ### aztec start
