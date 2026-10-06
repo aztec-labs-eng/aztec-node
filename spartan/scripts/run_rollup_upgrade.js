@@ -1,51 +1,49 @@
 #!/usr/bin/env node
-// Runs a forge deploy script (e.g. DeployRollupForUpgrade) against the foundry bundle
-// shipped in the @aztec-foundation/l1-artifacts npm package, forwarding all arguments to
-// forge_broadcast.js. Requires yarn-project to be built.
+// Runs a forge deploy script against the foundry bundle shipped in
+// @aztec-foundation/l1-artifacts. Requires yarn-project to be built.
 //
-// prepareL1ContractsForDeployment copies the bundle to a temp directory (forge writes
-// broadcast/ and cache there) and removes it when the process that created it exits,
-// so the copy and the forge run must share this single process.
-import { spawn } from "node:child_process";
+// The artifact copy and Forge run share a process so cleanup happens only after
+// Forge exits. Failed broadcasts retain their artifacts for recovery.
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ethereumDest = join(repoRoot, "yarn-project", "ethereum", "dest");
-const { prepareL1ContractsForDeployment, getL1ContractsPath } = await import(
+const {
+  prepareL1ContractsForDeployment,
+  getForgeBroadcastArgs,
+  getForgeBroadcastTimeout,
+  runProcess,
+} = await import(
   pathToFileURL(join(ethereumDest, "deploy_aztec_l1_contracts.js"))
 );
 const { resolveFoundryBinary } = await import(
   pathToFileURL(join(ethereumDest, "foundry_binary.js"))
 );
+const { getPublicClient } = await import(
+  pathToFileURL(join(ethereumDest, "client.js"))
+);
 
+const args = process.argv.slice(2);
+const rpcUrlIndex = args.indexOf("--rpc-url");
+const rpcUrl = rpcUrlIndex >= 0 ? args[rpcUrlIndex + 1] : undefined;
+if (!rpcUrl || rpcUrl.startsWith("--")) {
+  throw new Error("--rpc-url is required");
+}
+// Only eth_chainId is queried; no chain-specific transaction formatting is used.
+const client = getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: 1 });
+const chainId = await client.getChainId();
+const timeout = getForgeBroadcastTimeout(chainId);
 const projectDir = prepareL1ContractsForDeployment();
-// The bundle's scripts/ directory is not part of the temp copy; forge_broadcast.js is
-// self-contained and only cares about the cwd it runs forge from.
-const broadcastScript = join(
-  getL1ContractsPath(),
-  "scripts",
-  "forge_broadcast.js",
-);
-
-const child = spawn(
-  process.execPath,
-  [broadcastScript, ...process.argv.slice(2)],
-  {
-    cwd: projectDir,
-    stdio: "inherit",
-    // Resolved forge binary picked up by forge_broadcast.js, so it works without forge on PATH.
-    env: { ...process.env, FORGE_BIN: resolveFoundryBinary("forge") },
-  },
-);
-child.on("error", (err) => {
-  console.error(`Failed to run ${broadcastScript}: ${err.message}`);
-  process.exit(1);
-});
-child.on("exit", (code, signal) => {
-  if (signal) {
-    console.error(`forge_broadcast.js terminated by signal ${signal}`);
-    process.exit(1);
-  }
-  process.exit(code ?? 1);
-});
+try {
+  await runProcess(
+    resolveFoundryBinary("forge"),
+    ["script", ...args, ...getForgeBroadcastArgs(projectDir, chainId)],
+    { FOUNDRY_PROFILE: chainId === 1 ? "production" : undefined },
+    projectDir,
+    timeout,
+  );
+} catch (err) {
+  console.error(err.message);
+  process.exitCode = 1;
+}
