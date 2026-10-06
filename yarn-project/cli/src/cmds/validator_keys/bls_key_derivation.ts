@@ -35,7 +35,7 @@ export type BlsKeyDerivationVersion = {
  * With per-attempt probabilities 0.189030554816 of reaching the square root and 0.094515277408 of succeeding, about
  * 3.2925e-4 of keys (1 in 3,037) estimate over the budget, so they move to a later candidate under v6.
  *
- * Frozen once a CLI release ships it: changing any value changes which BLS key `--bls-key-derivation=v6` selects for
+ * Frozen once a CLI release ships it: changing any value changes which BLS key `--bls-key-derivation-v6` selects for
  * the same mnemonic and indices, so operators could no longer regenerate their keys. Add a new version instead.
  */
 export const BLS_KEY_DERIVATION_V6: BlsKeyDerivationVersion = {
@@ -50,26 +50,28 @@ export const BLS_KEY_DERIVATION_V6: BlsKeyDerivationVersion = {
   budget: 225_000,
 };
 
-/** Newest BLS key derivation version this CLI knows. Versions above it are rejected. */
+/** Version checked when no derivation flag is given. A future version gets its own flag next to `--bls-key-derivation-v6`. */
 export const LATEST_BLS_KEY_DERIVATION = BLS_KEY_DERIVATION_V6;
 
 /** Number of candidates tried per validator before key selection gives up. */
 export const MAX_BLS_KEY_CANDIDATES = 256;
 
 /**
- * How a validator's BLS key is chosen among its candidates.
- * - `check`: candidate 0, failing if it estimates over the version's budget (no flags given).
- * - `retry`: the first candidate within the version's budget.
- * - `none`: candidate 0, unchecked (a version below v6, or the gas check skipped).
+ * How a validator's BLS key is chosen among its candidates. The budget is `maxGas` when set (a stricter, user-chosen
+ * value), or the version's budget otherwise.
+ * - `check`: candidate 0, failing if it estimates over the budget (no `--bls-key-derivation-v6`).
+ * - `retry`: the first candidate within the budget (`--bls-key-derivation-v6`).
+ * - `none`: candidate 0, unchecked (`--skip-bls-key-gas-check`).
  */
 export type BlsKeyDerivationPolicy =
-  | { mode: 'check'; version: BlsKeyDerivationVersion }
-  | { mode: 'retry'; version: BlsKeyDerivationVersion }
+  | { mode: 'check'; version: BlsKeyDerivationVersion; maxGas?: number }
+  | { mode: 'retry'; version: BlsKeyDerivationVersion; maxGas?: number }
   | { mode: 'none' };
 
 /** CLI options that choose the BLS key derivation policy. */
 export type BlsKeyDerivationOptions = {
-  blsKeyDerivation?: string;
+  blsKeyDerivationV6?: boolean;
+  blsKeyDerivationMaxGas?: number;
   skipBlsKeyGasCheck?: boolean;
 };
 
@@ -79,6 +81,8 @@ export type SelectedBlsKey = {
   /** Full derivation path, including the candidate component when the candidate is not 0. */
   path: string;
   candidate: number;
+  /** The `--bls-key-derivation-max-gas` value, when it took part in selecting a candidate other than 0. */
+  maxGas?: number;
 };
 
 /** Estimated minimum stipend for the proof-of-possession check of a key with the given `hashToPoint` work. */
@@ -99,19 +103,33 @@ export function estimateBlsKeyProofOfPossessionGas(model: ProofOfPossessionGasMo
   return estimateProofOfPossessionGas(model, attempts, sqrtCalls);
 }
 
-/** Thrown when candidate 0 estimates over the latest version's budget and no flag says what to do about it. */
+/** Lowest gas estimate any key can have: one attempt that reaches the square root and succeeds. */
+export function minimumProofOfPossessionGas(model: ProofOfPossessionGasModel) {
+  return estimateProofOfPossessionGas(model, 1, 1);
+}
+
+/** Thrown when candidate 0 estimates over the budget and no flag says what to do about it. */
 export class BlsKeyOverGasBudgetError extends Error {
   constructor(
     public readonly path: string,
     public readonly estimatedGas: number,
     public readonly version: BlsKeyDerivationVersion,
+    public readonly maxGas: number | undefined,
     mnemonicGenerated: boolean,
   ) {
+    const budget =
+      maxGas === undefined
+        ? `the ${version.budget} budget of BLS key derivation v${version.version}, so it could exceed the L1 gas cap`
+        : `the ${maxGas} budget set by --bls-key-derivation-max-gas`;
+    const remedies =
+      maxGas === undefined
+        ? `Re-run with --bls-key-derivation-v${version.version} to select a cheaper key for this validator, or with ` +
+          `--skip-bls-key-gas-check to keep this key regardless (for example, a key already registered).`
+        : `Re-run with --bls-key-derivation-v${version.version} to select a cheaper key for this validator, or with a ` +
+          `higher --bls-key-derivation-max-gas.`;
     super(
       `The proof-of-possession check of the BLS key derived at ${path} is estimated at ${estimatedGas} gas, above ` +
-        `the ${version.budget} budget of BLS key derivation v${version.version}, so it could exceed the L1 gas cap. ` +
-        `Re-run with --bls-key-derivation=v${version.version} to select a cheaper key for this validator, or with ` +
-        `--skip-bls-key-gas-check to keep this key regardless (for example, a key already registered).` +
+        `${budget}. ${remedies}` +
         (mnemonicGenerated
           ? ' This run generated its mnemonic, and re-running without --mnemonic generates a new one: to keep this ' +
             'mnemonic, pass it back with --mnemonic.'
@@ -123,31 +141,38 @@ export class BlsKeyOverGasBudgetError extends Error {
 
 /** Validates the BLS key derivation flags and turns them into a policy. */
 export function resolveBlsKeyDerivationPolicy(options: BlsKeyDerivationOptions): BlsKeyDerivationPolicy {
-  const { blsKeyDerivation, skipBlsKeyGasCheck } = options;
-  if (blsKeyDerivation !== undefined && skipBlsKeyGasCheck) {
-    throw new Error('--bls-key-derivation and --skip-bls-key-gas-check cannot be used together');
-  }
+  const { blsKeyDerivationV6, blsKeyDerivationMaxGas: maxGas, skipBlsKeyGasCheck } = options;
+  const version = LATEST_BLS_KEY_DERIVATION;
   if (skipBlsKeyGasCheck) {
+    if (blsKeyDerivationV6) {
+      throw new Error('--bls-key-derivation-v6 and --skip-bls-key-gas-check cannot be used together');
+    }
+    if (maxGas !== undefined) {
+      throw new Error('--bls-key-derivation-max-gas and --skip-bls-key-gas-check cannot be used together');
+    }
     return { mode: 'none' };
   }
-  if (blsKeyDerivation !== undefined) {
-    const version = parseBlsKeyDerivationVersion(blsKeyDerivation);
-    return version < BLS_KEY_DERIVATION_V6.version
-      ? { mode: 'none' }
-      : { mode: 'retry', version: BLS_KEY_DERIVATION_V6 };
-  }
-  return { mode: 'check', version: LATEST_BLS_KEY_DERIVATION };
-}
 
-function parseBlsKeyDerivationVersion(version: string): number {
-  const match = /^v([1-9][0-9]*)$/.exec(version);
-  const versionNumber = match ? Number(match[1]) : undefined;
-  if (versionNumber === undefined || versionNumber > LATEST_BLS_KEY_DERIVATION.version) {
-    throw new Error(
-      `Unknown BLS key derivation version '${version}'. Supported versions are v1 to v${LATEST_BLS_KEY_DERIVATION.version}.`,
-    );
+  if (maxGas !== undefined) {
+    if (!Number.isSafeInteger(maxGas)) {
+      throw new Error(`--bls-key-derivation-max-gas must be an integer, got ${maxGas}`);
+    }
+    if (maxGas > version.budget) {
+      throw new Error(
+        `--bls-key-derivation-max-gas can only lower the budget: ${maxGas} is above the ${version.budget} gas budget ` +
+          `of BLS key derivation v${version.version}.`,
+      );
+    }
+    const minimum = minimumProofOfPossessionGas(version.gasModel);
+    if (maxGas < minimum) {
+      throw new Error(
+        `--bls-key-derivation-max-gas ${maxGas} is below ${minimum}, the lowest proof-of-possession gas estimate any ` +
+          `key can have, so no key could fit.`,
+      );
+    }
   }
-  return versionNumber;
+
+  return { mode: blsKeyDerivationV6 ? 'retry' : 'check', version, ...(maxGas !== undefined ? { maxGas } : {}) };
 }
 
 /** Derivation path of a candidate: candidate 0 is the per-validator path itself, others append `/<candidate>`. */
@@ -176,11 +201,18 @@ export function selectBlsKey(policy: BlsKeyDerivationPolicy, input: SelectBlsKey
     return { ...candidate0, candidate: 0 };
   }
 
-  const { gasModel, budget } = policy.version;
+  const { gasModel } = policy.version;
+  const budget = policy.maxGas ?? policy.version.budget;
   if (policy.mode === 'check') {
     const estimatedGas = estimateBlsKeyProofOfPossessionGas(gasModel, candidate0.privateKey);
     if (estimatedGas > budget) {
-      throw new BlsKeyOverGasBudgetError(perValidatorPath, estimatedGas, policy.version, mnemonicGenerated);
+      throw new BlsKeyOverGasBudgetError(
+        perValidatorPath,
+        estimatedGas,
+        policy.version,
+        policy.maxGas,
+        mnemonicGenerated,
+      );
     }
     return { ...candidate0, candidate: 0 };
   }
@@ -189,11 +221,15 @@ export function selectBlsKey(policy: BlsKeyDerivationPolicy, input: SelectBlsKey
     const path = blsCandidatePath(perValidatorPath, candidate);
     const privateKey = candidate === 0 ? candidate0.privateKey : deriveBlsPrivateKey(mnemonic, ikm, path);
     if (estimateBlsKeyProofOfPossessionGas(gasModel, privateKey) <= budget) {
-      return { privateKey, path, candidate };
+      return {
+        privateKey,
+        path,
+        candidate,
+        ...(candidate > 0 && policy.maxGas !== undefined ? { maxGas: budget } : {}),
+      };
     }
   }
   throw new Error(
-    `No BLS key within the ${budget} gas budget of BLS key derivation v${policy.version.version} found for ` +
-      `${perValidatorPath} after ${maxCandidates} candidates.`,
+    `No BLS key within the ${budget} gas budget found for ` + `${perValidatorPath} after ${maxCandidates} candidates.`,
   );
 }
