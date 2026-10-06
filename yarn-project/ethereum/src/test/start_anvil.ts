@@ -1,7 +1,7 @@
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import type { TestDateProvider } from '@aztec-labs/foundation/timer';
-import { type ChildProcess, spawn } from 'child_process';
+import { type ChildProcess, spawn, spawnSync } from 'child_process';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
 
@@ -49,6 +49,12 @@ while kill -0 "$parent" 2>/dev/null && kill -0 "$anvil_pid" 2>/dev/null; do slee
 // How long to wait for anvil's "Listening on" banner before giving up on a spawn. Anvil normally
 // prints it in well under a second, so this only bounds a start that neither listens nor exits.
 const ANVIL_STARTUP_TIMEOUT_MS = 30_000;
+
+/** Version of the anvil binary that {@link startAnvil} runs (e.g. `1.8.4`), or undefined if it cannot be read. */
+export function getAnvilVersion(): string | undefined {
+  const result = spawnSync(resolveFoundryBinary('anvil'), ['--version'], { encoding: 'utf8' });
+  return /anvil Version: (\d+\.\d+\.\d+)/.exec(result.stdout ?? '')?.[1];
+}
 
 /**
  * Ensures there's a running Anvil instance and returns the RPC URL.
