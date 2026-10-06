@@ -10,6 +10,14 @@ use crate::authwit::entrypoint::app::AppPayload;
 /// Used to produce cancellable (replaceable) transactions.
 pub(crate) global DOM_SEP__TX_NULLIFIER: u32 = 1025801951;
 
+/// Computes the nullifier emitted by cancellable transactions.
+///
+/// [`AccountActions::entrypoint`] emits this nullifier when its `cancellable` flag is set. Account contracts that
+/// implement their own entrypoint can emit it to make their transactions cancellable in the same way.
+pub fn compute_tx_nullifier(tx_nonce: Field) -> Field {
+    poseidon2_hash_with_separator([tx_nonce], DOM_SEP__TX_NULLIFIER)
+}
+
 pub struct AccountActions<Context> {
     context: Context,
     is_valid_impl: fn(&mut PrivateContext, Field) -> bool,
@@ -78,7 +86,7 @@ impl AccountActions<&mut PrivateContext> {
         app_payload.execute_calls(self.context);
 
         if cancellable {
-            let tx_nullifier = poseidon2_hash_with_separator([app_payload.tx_nonce], DOM_SEP__TX_NULLIFIER);
+            let tx_nullifier = compute_tx_nullifier(app_payload.tx_nonce);
             self.context.push_nullifier_unsafe(tx_nullifier);
         }
     }
@@ -103,5 +111,55 @@ impl AccountActions<&mut PrivateContext> {
         let valid_fn = self.is_valid_impl;
         assert(valid_fn(self.context, message_hash), "Message not authorized by account");
         IS_VALID_SELECTOR
+    }
+}
+
+mod test {
+    use crate::authwit::entrypoint::app::AppPayload;
+    use crate::context::PrivateContext;
+    use crate::test::helpers::test_environment::TestEnvironment;
+    use super::{AccountActions, AccountFeePaymentMethodOptions, compute_tx_nullifier};
+
+    global TX_NONCE: Field = 1234;
+
+    fn authorize_any_message(_context: &mut PrivateContext, _message_hash: Field) -> bool {
+        true
+    }
+
+    fn app_payload_without_calls() -> AppPayload {
+        let mut app_payload: AppPayload = std::mem::zeroed();
+        app_payload.tx_nonce = TX_NONCE;
+        app_payload
+    }
+
+    #[test]
+    unconstrained fn cancellable_entrypoint_emits_tx_nullifier() {
+        let env = TestEnvironment::new();
+
+        env.private_context(|context| {
+            AccountActions::init(context, authorize_any_message).entrypoint(
+                app_payload_without_calls(),
+                AccountFeePaymentMethodOptions.EXTERNAL,
+                true,
+            );
+
+            assert_eq(context.nullifiers.len(), 1);
+            assert_eq(context.nullifiers.get(0).inner.value, compute_tx_nullifier(TX_NONCE));
+        });
+    }
+
+    #[test]
+    unconstrained fn non_cancellable_entrypoint_emits_no_nullifier() {
+        let env = TestEnvironment::new();
+
+        env.private_context(|context| {
+            AccountActions::init(context, authorize_any_message).entrypoint(
+                app_payload_without_calls(),
+                AccountFeePaymentMethodOptions.EXTERNAL,
+                false,
+            );
+
+            assert_eq(context.nullifiers.len(), 0);
+        });
     }
 }
