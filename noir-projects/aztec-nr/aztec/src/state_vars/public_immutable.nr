@@ -71,8 +71,8 @@ mod test;
 ///
 /// ## Requirements
 ///
-/// The type `T` stored in the `PublicImmutable` must implement the `Eq` and
-/// [`Packable`](crate::protocol::traits::Packable) traits.
+/// The type `T` stored in the `PublicImmutable` must implement the [`Packable`](crate::protocol::traits::Packable)
+/// trait.
 ///
 /// ## Implementation Details
 ///
@@ -148,7 +148,7 @@ impl<T> PublicImmutable<T, PublicContext> {
     /// `EMITNULLIFIER` AVM opcode is invoked once.
     pub fn initialize(self, value: T)
     where
-        T: Packable + Eq,
+        T: Packable,
     {
         // We emit an initialization nullifier to indicate that the struct is initialized. This also prevents the value
         // from being initialized again as each nullifier can be emitted only once.
@@ -178,7 +178,7 @@ impl<T> PublicImmutable<T, PublicContext> {
     /// opcode is invoked once.
     pub fn read(self) -> T
     where
-        T: Packable + Eq,
+        T: Packable,
     {
         assert(self.is_initialized(), "Trying to read from uninitialized PublicImmutable");
         WithHash::public_storage_read(self.context, self.storage_slot)
@@ -208,7 +208,7 @@ impl<T> PublicImmutable<T, PublicContext> {
     /// The `SLOAD` AVM opcode is invoked a number of times equal to `T`'s packed length.
     pub fn read_unsafe(self) -> T
     where
-        T: Packable + Eq,
+        T: Packable,
     {
         WithHash::public_storage_read(self.context, self.storage_slot)
     }
@@ -256,7 +256,7 @@ impl<T> PublicImmutable<T, UtilityContext> {
     /// ```
     pub unconstrained fn read(self) -> T
     where
-        T: Packable + Eq,
+        T: Packable,
     {
         assert(self.is_initialized(), "Trying to read from uninitialized PublicImmutable");
         WithHash::utility_public_storage_read(self.context, self.storage_slot)
@@ -316,7 +316,7 @@ impl<T> PublicImmutable<T, &mut PrivateContext> {
     /// ```
     pub fn read(self) -> T
     where
-        T: Packable + Eq,
+        T: Packable,
     {
         let nullifier = self.compute_initialization_inner_nullifier();
 
