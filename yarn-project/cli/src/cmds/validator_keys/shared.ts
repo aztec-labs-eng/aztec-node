@@ -74,6 +74,8 @@ export type ValidatorSummary = {
   blsPath?: string;
   /** Candidate selected by the BLS key derivation policy; 0 unless a retry picked another one. */
   blsCandidate?: number;
+  /** The `--bls-key-derivation-max-gas` budget, when it took part in selecting a candidate other than 0. */
+  blsMaxGas?: number;
   publisherEth?: string[];
 };
 
@@ -220,6 +222,7 @@ export async function buildValidatorEntries(input: BuildValidatorsInput) {
         attesterBls: blsPubCompressed,
         blsPath: blsKey?.path,
         blsCandidate: blsKey?.candidate,
+        blsMaxGas: blsKey?.maxGas,
         publisherEth: publisherAddresses.length > 0 ? publisherAddresses : undefined,
       });
 
@@ -275,7 +278,8 @@ export function logValidatorSummaries(log: LogFn, summaries: ValidatorSummary[])
       lines.push(`    bls: ${v.attesterBls}`);
     }
     if (v.blsCandidate) {
-      lines.push(`    bls derivation path: ${v.blsPath} (candidate ${v.blsCandidate})`);
+      const maxGas = v.blsMaxGas !== undefined ? `, max gas ${v.blsMaxGas}` : '';
+      lines.push(`    bls derivation path: ${v.blsPath} (candidate ${v.blsCandidate}${maxGas})`);
     }
     if (v.publisherEth && v.publisherEth.length > 0) {
       lines.push(`  publisher:`);
@@ -287,7 +291,7 @@ export function logValidatorSummaries(log: LogFn, summaries: ValidatorSummary[])
   if (summaries.some(v => v.blsCandidate)) {
     lines.push(
       'Some BLS keys were derived from a retry candidate (see "bls derivation path" above).',
-      'To regenerate them from the mnemonic, re-run with the same --bls-key-derivation flag.',
+      'To regenerate them from the mnemonic, re-run with --bls-key-derivation-v6 and the same --bls-key-derivation-max-gas, if any.',
     );
   }
   if (lines.length > 0) {
@@ -299,7 +303,13 @@ export function logValidatorSummaries(log: LogFn, summaries: ValidatorSummary[])
 export function getBlsKeyCandidates(summaries: ValidatorSummary[]) {
   return summaries
     .filter(v => v.blsCandidate)
-    .map(v => ({ attesterEth: v.attesterEth, bls: v.attesterBls, path: v.blsPath, candidate: v.blsCandidate }));
+    .map(v => ({
+      attesterEth: v.attesterEth,
+      bls: v.attesterBls,
+      path: v.blsPath,
+      candidate: v.blsCandidate,
+      ...(v.blsMaxGas !== undefined ? { maxGas: v.blsMaxGas } : {}),
+    }));
 }
 
 /** Derivation path of each BLS key in `summaries`, keyed by its compressed public key. */

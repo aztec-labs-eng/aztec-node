@@ -22,6 +22,7 @@ export async function generateBlsKeypair(options: GenerateBlsKeypairOptions, log
     path,
     privateKey: priv,
     candidate,
+    maxGas,
   } = selectBlsKey(blsKeyDerivation, {
     mnemonic,
     ikm,
@@ -31,6 +32,7 @@ export async function generateBlsKeypair(options: GenerateBlsKeypairOptions, log
   const result = {
     path,
     ...(candidate > 0 ? { candidate } : {}),
+    ...(maxGas !== undefined ? { maxGas } : {}),
     privateKey: priv,
     publicKey: pub,
     format: compressed ? 'compressed' : 'uncompressed',
@@ -40,7 +42,9 @@ export async function generateBlsKeypair(options: GenerateBlsKeypairOptions, log
     if (!json) {
       log(`Wrote BLS keypair to ${out}`);
       if (candidate > 0) {
-        log(`BLS key derived from candidate ${candidate} at ${path}`);
+        log(
+          `BLS key derived from candidate ${candidate} at ${path}${maxGas !== undefined ? ` (max gas ${maxGas})` : ''}`,
+        );
       }
     }
   }
