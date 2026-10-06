@@ -191,6 +191,16 @@ dependency in your `Nargo.toml` files as well:
 
 `aztec compile` warns when a dependency still points at the previous repository.
 
+### [Aztec.nr] `ecdsa_public_key_note` is published with aztec-nr
+
+`ecdsa_public_key_note` now ships in `aztec-labs-eng/aztec-nr`, alongside the other note crates. Depend
+on it from there, at the same tag as `aztec`:
+
+```diff
+-ecdsa_public_key_note = { git = "https://github.com/AztecProtocol/aztec-packages", tag = "v5.2.0", directory = "noir-projects/noir-contracts/contracts/libs/ecdsa_public_key_note" }
++ecdsa_public_key_note = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v<version>", directory = "ecdsa-public-key-note" }
+```
+
 ### [Aztec.nr] `DelayedPublicMutable` rejects delays below one hour
 
 `DelayedPublicMutable` now enforces a minimum delay of one hour (`aztec::state_vars::DELAYED_PUBLIC_MUTABLE_MINIMUM_DELAY`, 3600 seconds). Declaring a state variable with a shorter initial delay fails to compile, and `schedule_delay_change` reverts when passed a shorter delay:

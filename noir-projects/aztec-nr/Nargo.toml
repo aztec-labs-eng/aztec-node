@@ -4,6 +4,7 @@ members = [
   "aztec",
   "balance-set",
   "compressed-string",
+  "ecdsa-public-key-note",
   "field-note",
   "uint-note",
 ]

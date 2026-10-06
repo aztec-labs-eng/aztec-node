@@ -1,8 +1,6 @@
-use aztec::{
-    protocol::traits::Packable,
-    macros::notes::note
-};
+//! Note for an ECDSA public key.
 
+use aztec::{macros::notes::note, protocol::traits::Packable};
 
 // Stores an ECDSA public key composed of two 32-byte elements
 // TODO: Do we need to include a nonce, in case we want to read/nullify/recreate with the same pubkey value?
@@ -13,11 +11,10 @@ pub struct EcdsaPublicKeyNote {
     pub y: [u8; 32],
 }
 
-
 impl Packable for EcdsaPublicKeyNote {
     let N: u32 = 4;
 
-    // Cannot use the automatic packing since x and y don't fit. Pack the note as 5 fields where:
+    // Cannot use the automatic packing since x and y don't fit. Pack the note as 4 fields where:
     // [0] = x[0..31] (upper bound excluded)
     // [1] = x[31]
     // [2] = y[0..31]
@@ -46,13 +43,13 @@ impl Packable for EcdsaPublicKeyNote {
         let mut x: [u8; 32] = [0; 32];
         let mut y: [u8; 32] = [0; 32];
 
-        let part_x:[u8; 32] = packed_note[0].to_be_bytes();
+        let part_x: [u8; 32] = packed_note[0].to_be_bytes();
         for i in 0..31 {
             x[i] = part_x[i + 1];
         }
         x[31] = packed_note[1].to_be_bytes::<32>()[31];
 
-        let part_y:[u8; 32] = packed_note[2].to_be_bytes();
+        let part_y: [u8; 32] = packed_note[2].to_be_bytes();
         for i in 0..31 {
             y[i] = part_y[i + 1];
         }

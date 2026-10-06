@@ -3,7 +3,7 @@ title: Aztec.nr Dependencies
 description: Reference list of available Aztec.nr libraries and their Nargo.toml dependency paths.
 tags: [contracts]
 sidebar_position: 2
-references: ["noir-projects/aztec-nr/address-note/*", "noir-projects/aztec-nr/field-note/*", "noir-projects/aztec-nr/uint-note/*", "noir-projects/aztec-nr/balance-set/*", "noir-projects/aztec-nr/compressed-string/*"]
+references: ["noir-projects/aztec-nr/address-note/*", "noir-projects/aztec-nr/field-note/*", "noir-projects/aztec-nr/uint-note/*", "noir-projects/aztec-nr/ecdsa-public-key-note/*", "noir-projects/aztec-nr/balance-set/*", "noir-projects/aztec-nr/compressed-string/*"]
 ---
 
 This page lists the available Aztec.nr libraries. Add dependencies to the `[dependencies]` section of your `Nargo.toml`:
@@ -49,6 +49,14 @@ uint_note = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_a
 ```
 
 Provides `UintNote`, a note type for storing `u128` values. Also includes `PartialUintNote` for partial note workflows where the value is completed in public execution.
+
+### ECDSA public key note
+
+```toml
+ecdsa_public_key_note = { git="https://github.com/aztec-labs-eng/aztec-nr/", tag="#include_aztec_version", directory="ecdsa-public-key-note" }
+```
+
+Provides `EcdsaPublicKeyNote`, a note type for storing an ECDSA public key as its 32-byte `x` and `y` coordinates.
 
 ## State Variables
 
