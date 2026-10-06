@@ -1078,6 +1078,16 @@ export class ProposalHandler {
     } catch (error) {
       this.log.error(`Error reexecuting txs while processing block proposal`, error, proposalInfo);
       const reason = await this.classifyReexecutionFailure(error, proposal, streamingMetadata, proposalInfo);
+      // Only a mismatch that survives classification as slashable may become checkpoint-attester evidence; a
+      // local-view disagreement (inbox_prefix_*) must not, or an honest signer is slashed for this node's lag.
+      if (error instanceof ReExStateMismatchError && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason]) {
+        this.recordInvalidBlockVerdict(proposal.slotNumber, {
+          blockHeader: proposal.blockHeader,
+          archiveRoot: proposal.archive,
+          headerMismatch: error.headerMismatch,
+          archiveMismatch: error.archiveMismatch,
+        });
+      }
       return { isValid: false, blockNumber, reason, reexecutionResult };
     }
 
@@ -1883,14 +1893,10 @@ export class ProposalHandler {
         expectedHeader: block.header.toInspect(),
         actualHeader: proposal.blockHeader.toInspect(),
       });
-      this.recordInvalidBlockVerdict(slot, {
-        blockHeader: proposal.blockHeader,
-        archiveRoot: proposal.archive,
-        headerMismatch: !headerMatches,
-        archiveMismatch: !archiveMatches,
-      });
       this.metrics?.recordFailedReexecution(proposal);
-      throw new ReExStateMismatchError(proposal.archive, block.archive.root);
+      // Carry the mismatch shape on the error; the caller records the verdict only after final classification,
+      // so a local-view demotion (inbox_prefix_*) leaves no checkpoint-attester slashing evidence behind.
+      throw new ReExStateMismatchError(proposal.archive, block.archive.root, !headerMatches, !archiveMatches);
     }
 
     const reexecutionTimeMs = timer.ms();
