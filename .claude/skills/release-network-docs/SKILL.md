@@ -30,6 +30,21 @@ self-identify its release type, ask the user to confirm.
 **This skill DOES** regenerate the Node JSON-RPC API reference for the
 versioned docs (see Step 5a).
 
+## RPC endpoints: public vs operator
+
+Two different endpoints, and mixing them up publishes a broken guide.
+
+| | Public (goes in docs) | Operator (what you query) |
+| --- | --- | --- |
+| Mainnet | `https://aztec-mainnet.drpc.org` | `canonical.mainnet.rpc.aztec-labs.com` |
+| Testnet | `https://aztec-testnet.drpc.org` | `testnet-v<N>.rpc2.aztec-labs.com` |
+
+Run this skill against the operator endpoint — it is authoritative and needs
+`AZTEC_NODE_API_KEY`. But anything written into `networks.md` or a getting-started
+guide must be the public one: readers have no key, and an Aztec-run endpoint answers
+`403 Forbidden`. Verify the public endpoint reports the version you are cutting before
+writing it down.
+
 ## Usage
 
 ```

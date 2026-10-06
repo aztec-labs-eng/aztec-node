@@ -148,6 +148,21 @@ For example, for a devnet release of `4.1.0-devnet.1`, update `"devnet": "v4.1.0
 The preprocessor (`include_version.js`) reads defaults from this config file, so
 updating it is sufficient — you no longer need to edit hardcoded defaults in JS.
 
+**Do this AFTER the cut, not here, if you are cutting a version that does not yet
+exist.** `docusaurus.config.js` reads this file at load and validates every version
+named in it against the directories that exist. Naming the new version before
+Step 11 has created its directory makes every docusaurus command fail with:
+
+```
+[ERROR] Invalid docs option "versions": unknown versions (vX.Y.Z) found.
+        Available version names are: current, <previous>
+```
+
+including `docs:version` itself — so the config update blocks the cut that would
+satisfy it. Either leave this file alone until after Step 11, or revert it for the
+duration of the cut and restore it afterwards. This is the same constraint that
+already defers the network config below; it applies equally to the developer one.
+
 **Network/operator docs** are updated separately in Step 11 after the version
 snapshot is created (the config update requires the versioned docs directory to exist).
 
@@ -226,6 +241,19 @@ This updates the CLI reference files in `docs/docs-developers/docs/cli/`:
 
 These files are auto-generated — do not hand-edit them.
 
+**The scraped output contains your home directory.** `--help` prints defaults derived
+from `$HOME` (e.g. `aztec-wallet --data-dir` shows
+`(default: "/Users/<you>/.aztec/wallet")`), so whoever runs the generator has their
+username baked into the published reference. Generate in a container, or normalise the
+path afterwards, and check before committing:
+
+```bash
+grep -rn "$HOME" docs/docs-developers/docs/cli/
+```
+
+Do not rely on spellcheck to catch this: it only fires when the username happens not to
+be a dictionary word. `main` currently ships `/home/aztec-dev/...` for this reason.
+
 ### Step 7b: Generate Node API Reference Docs
 
 Regenerate the Node JSON-RPC API reference documentation. This script parses the
@@ -269,6 +297,19 @@ docs (Step 11), the generated content is included in the snapshot automatically.
    empty `## TBD` heading (and any empty `## Unreleased` headings) from
    `developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`
    so released docs never show an empty TBD section.
+
+   **Decide by ancestry, not by date.** Ported and cherry-picked commits keep their
+   original author dates, so an entry can describe work dated weeks before the tag
+   that is not in it. The only reliable test:
+
+   ```bash
+   git merge-base --is-ancestor <commit> v<new_version> && echo in-tag || echo NOT-in-tag
+   ```
+
+   An item whose commit is not an ancestor of the tag has not shipped in this release,
+   even if it is on `main` — leave it under `## TBD`. In one rehearsal 4 of 21 items
+   failed this test and 2 existed only on an unmerged branch. Writing them under the
+   new version tells developers to migrate to APIs their release does not have.
 
 4. Check for missing migration items by analyzing the diff between the previous
    release tag and the new one:
@@ -383,7 +424,28 @@ Update the column matching the release type (**Testnet** or **Alpha (Mainnet)**)
 in the tables. (The Devnet column was removed from `networks.md` — devnet
 releases no longer update this file.)
 
-- **Network Technical Information table**: version, RPC endpoint, rollup version
+- **Network Technical Information table**: version, rollup version, and the RPC
+  endpoint — which must be the **public** one, not the endpoint you ran this release
+  against. Aztec-run endpoints are for operators and tooling and require an API key;
+  `networks.md` and the getting-started guides are read by external developers who do
+  not have one. Publishing an authenticated host there makes the guide's first command
+  return `403 Forbidden` for every reader.
+
+  Use the third-party provider, as the mainnet column already does:
+
+  | Network | Public RPC (docs) | Operator RPC (not for docs) |
+  | --- | --- | --- |
+  | Mainnet | `https://aztec-mainnet.drpc.org` | `canonical.mainnet.rpc.aztec-labs.com` |
+  | Testnet | `https://aztec-testnet.drpc.org` | `testnet-v<N>.rpc2.aztec-labs.com` |
+
+  Verify before writing it down — it must answer without a key, and report the version
+  you are cutting:
+
+  ```bash
+  curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"aztec_getNodeInfo","params":[]}' \
+    https://aztec-testnet.drpc.org | jq -r '.result.nodeVersion'
+  ```
 - **L1 Contract Addresses table**: all addresses from the RPC response, on-chain
   queries, and any additional addresses provided by the user
   - Mainnet: use `https://etherscan.io/address/0xADDR` link format
@@ -457,10 +519,12 @@ transcribe one by hand. Concretely:
 **File:** `docs/docs-developers/getting_started_on_testnet.md` (snapshotted into the
 versioned docs at cut time in Step 11)
 
-- Update `NODE_URL` to the testnet RPC endpoint, and keep it **identical** to the
+- Update `NODE_URL` to the **public** testnet RPC, and keep it **identical** to the
   RPC endpoint in `docs/docs/networks.md` (Step 9). These two are maintained
-  separately, so a `networks.md` RPC change that isn't mirrored here leaves the
-  guide's first command pointing at a dead host.
+  separately, so a `networks.md` change that isn't mirrored here leaves the guide's
+  first command pointing at the wrong host. See Step 9 for why this must be the
+  third-party endpoint and not the Aztec-run one: readers have no API key, and the
+  guide never tells them to set one.
 - The source page names the FPC by its `contracts:SponsoredFPC` alias rather than hardcoding
   an address, so there is nothing to update here from Step 4. Older versioned snapshots still
   hardcode `SPONSORED_FPC_ADDRESS` and do need it (see below).
@@ -548,11 +612,24 @@ Also verify that macros were resolved in the network versioned snapshot — chec
 that `docs/network_versioned_docs/version-v<new_version>/` contains no raw
 `#release_version` or `#release_network` placeholders.
 
-**Strip the empty `## TBD` heading from the cut snapshot.** The source
-migration notes keep `## TBD` as the working bucket for future entries, but a
-final release snapshot must not render an empty TBD section. After the cut,
-remove the empty `## TBD` (and any empty `## Unreleased (...)`) headings from
-`developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`.
+**Strip the `## TBD` section from the cut snapshot — this is not cosmetic.** The
+source keeps `## TBD` as the working bucket, and Step 8 deliberately leaves items
+there that have NOT shipped in this release. The cut copies the file wholesale, so
+those items land in the snapshot and publish under the new version unless you remove
+them. In one rehearsal the section carried ~4,000 characters describing an unmerged
+oracle and APIs absent from the tag.
+
+So Step 8's triage and this strip are a pair: triage decides what has not shipped,
+and this is what stops it shipping anyway. Remove the whole `## TBD` section (and any
+`## Unreleased (...)`), empty or not, from
+`developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`,
+then confirm:
+
+```bash
+grep -n '^## ' developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md | head -3
+```
+
+The first heading must be the new version.
 
 #### Hardcoded version references
 
