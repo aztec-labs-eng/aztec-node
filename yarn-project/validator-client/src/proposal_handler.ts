@@ -49,6 +49,7 @@ import type {
   ValidatedBlockProposal,
   ValidatedCheckpointProposalCore,
 } from '@aztec-labs/stdlib/p2p';
+import { computeBlockHeadersHash } from '@aztec-labs/stdlib/rollup';
 import type { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { BlockHeader, CheckpointGlobalVariables, FailedTx, Tx, TxHash } from '@aztec-labs/stdlib/tx';
@@ -263,6 +264,14 @@ type BlockProposalSlotValidationResult =
   | { isValid: false; reason: 'block_proposal_beyond_checkpoint' | 'checkpoint_proposal_equivocation' };
 
 const MAX_TRACKED_INVALID_PROPOSAL_SLOTS = 1000;
+
+/**
+ * Per-block budget for re-executing a rejected checkpoint's blocks to gather invalid-checkpoint evidence. This
+ * rebuild runs after the slot's attestation window has closed, so it cannot reuse the attestation deadline; each
+ * block gets this fresh budget to let the public processor actually run its txs. Generous (AVM-heavy blocks on CI)
+ * but bounded, since the rebuild is off the attestation path.
+ */
+const CHECKPOINT_REBUILD_BLOCK_BUDGET_MS = 60_000;
 
 /**
  * How long the live Inbox endpoint gate keeps re-reading L1 before giving up, how short that window may be
@@ -631,16 +640,221 @@ export class ProposalHandler {
    * payload; see checkpointCommitsToRejectedBlock. Missing evidence is never guilt, so an unbound or
    * unreconstructable case records nothing.
    */
-  private async recordInvalidCheckpointIfBoundToRejectedBlock(proposal: CheckpointProposalCore): Promise<void> {
+  private async recordInvalidCheckpointIfBoundToRejectedBlock(
+    proposal: CheckpointProposalCore,
+    proposalInfo: LogData,
+  ): Promise<void> {
     const verdicts = this.invalidBlockVerdictsBySlot.get(proposal.slotNumber);
     if (!verdicts || verdicts.length === 0 || !this.p2pClient) {
       return;
     }
     const { blockProposals } = await this.p2pClient.getProposalsForSlot(proposal.slotNumber);
+    // Cheap first pass: a rejected block the checkpoint's signed payload names directly (its header is in the
+    // committed sequence, or its wrong archive is the signed archive). Covers the last-block case without re-executing.
     if (await checkpointCommitsToRejectedBlock(proposal, blockProposals, verdicts)) {
       this.markInvalidProposalSlot(proposal.slotNumber);
       this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
+      return;
     }
+    // A rejection the binding cannot reach - a middle-block corruption, or a header-level checkpoint corruption whose
+    // blocks are all absent because we rejected one - is only provable by rebuilding the checkpoint ourselves.
+    if (await this.checkpointProvablyInvalidByReexecution(proposal, blockProposals, proposalInfo)) {
+      this.markInvalidProposalSlot(proposal.slotNumber);
+      this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
+    }
+  }
+
+  /**
+   * Re-executes a checkpoint's blocks from the retained block proposals on a throwaway fork and compares the rebuilt
+   * checkpoint to the signed one. Returns true only when they differ for a slashable, deterministic reason, proving
+   * the attesters signed an invalid checkpoint.
+   *
+   * Reached only when this node rejected a block in the slot (so the local chain is truncated and the normal snapshot
+   * path bailed at last_block_not_found) and the cheap bound-to-rejected-block check did not already prove it. Every
+   * step that cannot deterministically attribute the mismatch to the proposer returns false - a committed sequence
+   * that does not reconstruct the signed blockHeadersHash, a missing parent or tx, an Inbox prefix this node cannot
+   * authenticate against the signed rolling hash, a fork off the signed chain, a build that throws - because missing
+   * or local-view evidence is never guilt. The Inbox prefix (the one nondeterminism the rebuild shares with the
+   * per-block path) is authenticated before use, so a trailing local view declines rather than false-slashing.
+   */
+  private async checkpointProvablyInvalidByReexecution(
+    proposal: CheckpointProposalCore,
+    retained: BlockProposal[],
+    proposalInfo: LogData,
+  ): Promise<boolean> {
+    const slot = proposal.slotNumber;
+
+    // Reconstruct the committed block sequence, trusted only when its headers hash to the signed blockHeadersHash.
+    const sequence = [...retained].sort((a, b) => Number(a.indexWithinCheckpoint) - Number(b.indexWithinCheckpoint));
+    if (sequence.length === 0) {
+      return false;
+    }
+    for (let i = 0; i < sequence.length; i++) {
+      if (Number(sequence[i].indexWithinCheckpoint) !== i) {
+        return false;
+      }
+    }
+    const reconstructed = await computeBlockHeadersHash(sequence.map(p => p.blockHeader));
+    if (!reconstructed.equals(proposal.checkpointHeader.blockHeadersHash)) {
+      return false;
+    }
+    const maxBlocksPerCheckpoint = Math.min(
+      this.config.maxBlocksPerCheckpoint ?? MAX_BLOCKS_PER_CHECKPOINT,
+      MAX_BLOCKS_PER_CHECKPOINT,
+    );
+    if (sequence.length > maxBlocksPerCheckpoint) {
+      return false;
+    }
+
+    const firstBlock = sequence[0];
+    const firstBlockNumber = BlockNumber(firstBlock.blockHeader.getBlockNumber());
+    const parentBlockNumber = BlockNumber(firstBlockNumber - 1);
+    const parentData =
+      parentBlockNumber < INITIAL_L2_BLOCK_NUM
+        ? undefined
+        : await this.blockSource.getBlockData({ number: parentBlockNumber });
+    if (parentBlockNumber >= INITIAL_L2_BLOCK_NUM && parentData === undefined) {
+      return false;
+    }
+    const checkpointNumber = parentData ? CheckpointNumber(parentData.checkpointNumber + 1) : CheckpointNumber.INITIAL;
+
+    // The checkpoint's consumed Inbox prefix, authenticated against the signed rolling hash. An unconfirmed or
+    // disagreeing prefix is a local view, never the proposer's fault.
+    const checkpointStartTotal = await this.getPreBlockConsumedTotal(firstBlockNumber);
+    if (checkpointStartTotal === undefined) {
+      return false;
+    }
+    const lastBlockTotal = this.headerLeafCount(sequence[sequence.length - 1].blockHeader);
+    const consumed = await this.awaitCheckpointConsumedMessages(
+      slot,
+      checkpointStartTotal,
+      lastBlockTotal,
+      proposal.checkpointHeader.inboxRollingHash,
+      proposalInfo,
+    );
+    if (!consumed.accepted) {
+      return false;
+    }
+
+    const epoch = getEpochAtSlot(slot, this.epochCache.getL1Constants());
+    const previousCheckpointOutHashes = await getPreviousCheckpointOutHashes({
+      blockSource: this.blockSource,
+      epoch,
+      checkpointNumber,
+      l1Constants: this.epochCache.getL1Constants(),
+      pipeliningEnabled: true,
+      log: this.log,
+    });
+    const previousInboxRollingHash = await getPreviousCheckpointInboxRollingHash({
+      blockSource: this.blockSource,
+      checkpointNumber,
+      log: this.log,
+    });
+
+    const expectedLastArchiveRoot = firstBlock.blockHeader.lastArchive.root;
+    let forkResult: MerkleTreeWriteOperations;
+    try {
+      forkResult = await this.checkpointsBuilder.getFork(parentBlockNumber, parentData?.blockHash);
+    } catch (err) {
+      this.log.warn(`Could not fork world state to rebuild a rejected checkpoint`, { ...proposalInfo, err });
+      return false;
+    }
+    await using fork = forkResult;
+    const forkArchiveRoot = new Fr((await fork.getTreeInfo(MerkleTreeId.ARCHIVE)).root);
+    if (!forkArchiveRoot.equals(expectedLastArchiveRoot)) {
+      // World state is on a different chain than the blocks being rebuilt; a local race, not a proposer offense.
+      return false;
+    }
+
+    const constants: CheckpointGlobalVariables = {
+      chainId: new Fr(this.checkpointsBuilder.getConfig().l1ChainId),
+      version: new Fr(this.checkpointsBuilder.getConfig().rollupVersion),
+      slotNumber: slot,
+      timestamp: firstBlock.blockHeader.globalVariables.timestamp,
+      coinbase: firstBlock.blockHeader.globalVariables.coinbase,
+      feeRecipient: firstBlock.blockHeader.globalVariables.feeRecipient,
+      gasFees: firstBlock.blockHeader.globalVariables.gasFees,
+    };
+    const checkpointBuilder = await this.checkpointsBuilder.openCheckpoint(
+      checkpointNumber,
+      constants,
+      proposal.feeAssetPriceModifier,
+      [],
+      previousCheckpointOutHashes,
+      previousInboxRollingHash,
+      fork,
+      [],
+      this.log.getBindings(),
+    );
+
+    const maxBlockGas =
+      this.config.validateMaxL2BlockGas !== undefined || this.config.validateMaxDABlockGas !== undefined
+        ? new Gas(this.config.validateMaxDABlockGas ?? Infinity, this.config.validateMaxL2BlockGas ?? Infinity)
+        : undefined;
+    let prevTotal = checkpointStartTotal;
+    for (const bp of sequence) {
+      const blockTotal = this.headerLeafCount(bp.blockHeader);
+      const blockMessages = consumed.messages.slice(
+        Number(prevTotal - checkpointStartTotal),
+        Number(blockTotal - checkpointStartTotal),
+      );
+      const blockNumber = BlockNumber(bp.blockHeader.getBlockNumber());
+      // This rebuild gathers slashing evidence after the fact, so it is not bound by the slot's attestation
+      // deadline (which has already passed by the time last_block_not_found drops us here - using it would make
+      // the public processor time out and process zero txs). Give each block a fresh, bounded budget instead.
+      const blockDeadline = new Date(this.dateProvider.now() + CHECKPOINT_REBUILD_BLOCK_BUDGET_MS);
+      let collected;
+      try {
+        collected = await this.txProvider.getTxsForBlockProposal(bp, blockNumber, {
+          pinnedPeer: undefined,
+          deadline: blockDeadline,
+        });
+      } catch (err) {
+        this.log.warn(`Could not collect txs to rebuild a rejected checkpoint`, { ...proposalInfo, err });
+        return false;
+      }
+      if (collected.missingTxs.length > 0) {
+        return false;
+      }
+      try {
+        await checkpointBuilder.buildBlock(collected.txs, blockNumber, bp.blockHeader.globalVariables.timestamp, {
+          isBuildingProposal: false,
+          minValidTxs: 0,
+          deadline: blockDeadline,
+          expectedEndState: bp.blockHeader.state,
+          maxTransactions: this.config.validateMaxTxsPerBlock,
+          maxBlockGas,
+          l1ToL2Messages: blockMessages,
+        });
+      } catch (err) {
+        // A build that fails here cannot be cleanly attributed (a genuine bad block vs a local issue); the rejected
+        // block already has its own per-block verdict. Record nothing from the rebuild.
+        this.log.warn(`Rebuild of a rejected checkpoint's block failed`, { ...proposalInfo, err });
+        return false;
+      }
+      prevTotal = blockTotal;
+    }
+
+    const computed = await checkpointBuilder.completeCheckpoint();
+    let reason: CheckpointProposalValidationFailureReason | undefined;
+    if (!computed.header.equals(proposal.checkpointHeader)) {
+      reason = 'checkpoint_header_mismatch';
+    } else if (!computed.archive.root.equals(proposal.archive)) {
+      reason = 'archive_mismatch';
+    } else {
+      const computedEpochOutHash = accumulateCheckpointOutHashes([
+        ...previousCheckpointOutHashes,
+        computed.getCheckpointOutHash(),
+      ]);
+      if (!computedEpochOutHash.equals(proposal.checkpointHeader.epochOutHash)) {
+        reason = 'out_hash_mismatch';
+      }
+    }
+    if (reason !== undefined && SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT[reason]) {
+      this.log.warn(`Rebuilt a rejected checkpoint and it is invalid`, { ...proposalInfo, reason });
+      return true;
+    }
+    return false;
   }
 
   /** Records a slot as having a proposal equivocation, which suppresses attested-to-invalid-proposal slashing. */
@@ -2202,7 +2416,7 @@ export class ProposalHandler {
     } catch (err) {
       if (err instanceof TimeoutError) {
         this.log.warn(`Timed out waiting for block with archive matching checkpoint proposal`, proposalInfo);
-        await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal);
+        await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal, proposalInfo);
         return { isValid: false, reason: 'last_block_not_found' };
       }
       this.log.error(`Error fetching last block for checkpoint proposal`, err, proposalInfo);
@@ -2211,7 +2425,7 @@ export class ProposalHandler {
 
     if (!snapshot) {
       this.log.warn(`Last block not found for checkpoint proposal`, proposalInfo);
-      await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal);
+      await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal, proposalInfo);
       return { isValid: false, reason: 'last_block_not_found' };
     }
     const { blocks, lastBlockIndex } = snapshot;
