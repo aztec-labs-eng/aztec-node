@@ -68,9 +68,10 @@ locals {
         requests = { cpu = "1", memory = "8Gi" }
         limits   = { cpu = "4", memory = "16Gi" }
       }
-      execution_hosts       = ["json-rpc.eth-sepolia.rpc.aztec-labs.com"]
-      beacon_hosts          = ["beacon.eth-sepolia.rpc.aztec-labs.com"]
-      reth_extra_args       = []
+      execution_hosts = ["json-rpc.eth-sepolia.rpc.aztec-labs.com"]
+      beacon_hosts    = ["beacon.eth-sepolia.rpc.aztec-labs.com"]
+      # Glamsterdam state-creation repricing pushes L1 contract deploy estimates past reth's 50M default.
+      reth_extra_args       = ["--rpc.gascap=150000000"]
       lighthouse_extra_args = []
     }
     mainnet = {
