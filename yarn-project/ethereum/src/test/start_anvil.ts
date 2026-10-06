@@ -237,16 +237,20 @@ export async function startAnvil(
   return { anvil: anvilObj, methodCalls, stop, rpcUrl: `http://127.0.0.1:${port}` };
 }
 
-/** Extracts block time from anvil stdout and syncs the dateProvider. */
-function syncDateProviderFromAnvilOutput(text: string, dateProvider: TestDateProvider): void {
+/** Advances the test clock from mined-block output without rewinding it when Anvil replays a reorg. */
+export function syncDateProviderFromAnvilOutput(text: string, dateProvider: TestDateProvider): void {
   // Anvil logs mined blocks as:
   //   Block Time: "Fri, 20 Mar 2026 02:10:46 +0000"
-  const match = text.match(/Block Time:\s*"([^"]+)"/);
-  if (match) {
+  const currentTimeMs = dateProvider.now();
+  let newestTimeMs = currentTimeMs;
+  for (const match of text.matchAll(/Block Time:\s*"([^"]+)"/g)) {
     const blockTimeMs = new Date(match[1]).getTime();
-    if (!isNaN(blockTimeMs)) {
-      dateProvider.setTime(blockTimeMs);
+    if (!Number.isNaN(blockTimeMs)) {
+      newestTimeMs = Math.max(newestTimeMs, blockTimeMs);
     }
+  }
+  if (newestTimeMs > currentTimeMs) {
+    dateProvider.setTime(newestTimeMs);
   }
 }
 
