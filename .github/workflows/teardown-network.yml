@@ -1,0 +1,44 @@
+# Tears down a long-lived network on demand: deletes its Chaos Mesh experiments and its Kubernetes namespace.
+#
+# mainnet and testnet are not listed.
+name: Tear Down Network
+run-name: Tear down ${{ inputs.network }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: "Network to tear down"
+        required: true
+        type: choice
+        options:
+          - next-net
+          - staging-public
+          - staging-internal
+
+permissions:
+  contents: read
+
+jobs:
+  teardown:
+    # Re-runs are skipped: a re-run replays this run's workflow file and inputs for up to 30 days, against whatever is
+    # deployed by then and past any check added to this file later. Dispatch again instead.
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
+    environment: deployment
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Each listed network's env file defaults NAMESPACE to the network's own name.
+      - name: Tear down network
+        uses: ./.github/actions/network-teardown
+        with:
+          env_file: ${{ inputs.network }}
+          namespace: ${{ inputs.network }}
+          gcp_helm_sa_key: ${{ secrets.GCP_HELM_SA_KEY }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
