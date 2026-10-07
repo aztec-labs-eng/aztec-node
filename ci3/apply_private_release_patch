@@ -3,7 +3,8 @@
 # clean tree. Prints the patch's location and sha256, never the patch or the paths it touches.
 #
 # Run from ci3/bootstrap_ec2 right after checkout, before ci3/source computes COMMIT_HASH. A
-# missing or empty patch leaves the tree as tagged; any other failure fails the release.
+# missing patch leaves the tree as tagged; any other failure, an empty patch included, fails the
+# release.
 set -euo pipefail
 
 bucket=aztec-node-ci-private
@@ -25,17 +26,16 @@ if ! err=$(aws s3api get-object --region eu-west-2 --bucket "$bucket" --key "$ke
     exit 0
   fi
   echo "$err" >&2
-  echo "Failed to download the private release patch." >&2
+  echo "Failed to download the private release patch s3://$bucket/$key." >&2
   exit 1
 fi
 
 sha=$(sha256sum "$patch" | cut -d' ' -f1)
 echo "Private release patch sha256: $sha"
 
-# git apply rejects an empty patch ("No valid patches in input"), so it never reaches it.
 if [ ! -s "$patch" ]; then
-  echo "The private release patch is empty; building the tagged tree."
-  exit 0
+  echo "The private release patch s3://$bucket/$key is empty." >&2
+  exit 1
 fi
 
 # git apply's warnings and errors quote paths and lines from the patch, so its output is dropped.
