@@ -11,6 +11,24 @@ This changelog documents all configuration changes, new features, and breaking c
 
 ## Version history
 
+### [v6.0.0](./v6.md)
+
+Major release. Protocol change requiring an archiver resync, and a configuration rename with no fallback.
+
+**Key changes:**
+- `ACVM_*` configuration renamed to `NOIR_EXECUTE_*`, with no fallback — a node still setting only the old names fails to start
+- Block headers commit to a per-block tx effects tree: archiver resyncs (schema 9 → 10), and v5 and v6 nodes do not interoperate
+- PXE databases re-initialize on next open (schema 14 → 15)
+- New `aztec initiate-withdraw-by-attester` and `...-batch` commands for attester-signed withdrawals
+- `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` re-pinned at new addresses
+- New RPC methods: `aztec_getTxEffectMembershipWitness`, `aztec_getValidatorStatsBatch`
+
+**Migration difficulty**: High
+
+[View full changelog →](./v6.md)
+
+---
+
 ### [v5.2.0](./v5.2.md)
 
 Node-operator hardening release: peerless nodes stop acting, slashing votes against your own validators are surfaced, and the RPC server gains timeout and CORS configuration.
