@@ -18,6 +18,8 @@ export HARDWARE_CONCURRENCY=${CPUS:-16}
 export RAYON_NUM_THREADS=1
 export TOKIO_WORKER_THREADS=1
 export LOG_LEVEL=${LOG_LEVEL:-verbose}
+# Receipt waits on the test anvil: see defaultViemPollingIntervalMs in ethereum/src/client.ts.
+export L1_VIEM_POLLING_INTERVAL_MS=${L1_VIEM_POLLING_INTERVAL_MS:-100}
 export NODE_NO_WARNINGS=1
 export FORCE_COLOR=1
 

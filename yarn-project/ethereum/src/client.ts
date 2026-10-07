@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { getErrorCause } from '@aztec-labs/foundation/types';
@@ -34,6 +35,19 @@ type Config = {
 };
 
 export type { Config as EthereumClientConfig };
+
+const DEFAULT_VIEM_POLLING_INTERVAL_MS = 1_000;
+
+/**
+ * Polling interval for viem clients created without an explicit one. `waitForTransactionReceipt` checks for the
+ * receipt once immediately and then once per interval, and anvil 1.8 returns a transaction's hash before it has
+ * mined it, so on a local chain every receipt wait costs one interval; `L1_VIEM_POLLING_INTERVAL_MS` lets test
+ * runners shorten it.
+ */
+export function defaultViemPollingIntervalMs(): number {
+  const fromEnv = Number(getEnv().L1_VIEM_POLLING_INTERVAL_MS);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_VIEM_POLLING_INTERVAL_MS;
+}
 
 /** Error exposed by L1 RPC transports without including provider URLs in its message. */
 export class L1RpcError extends Error {
@@ -108,7 +122,7 @@ export function getPublicClient(config: Config): ViemPublicClient {
   return createPublicClient({
     chain: chain.chainInfo,
     transport: makeL1HttpTransport(config.l1RpcUrls, { timeout: config.l1HttpTimeoutMS }),
-    pollingInterval: config.viemPollingIntervalMS,
+    pollingInterval: config.viemPollingIntervalMS ?? defaultViemPollingIntervalMs(),
   });
 }
 
@@ -161,7 +175,7 @@ export function createExtendedL1Client(
     account: hdAccount,
     chain,
     transport: makeL1HttpTransport(rpcUrls, { timeout: opts?.httpTimeoutMS }),
-    pollingInterval: pollingIntervalMS ?? (isAnvilTestChain(chain.id) ? 100 : undefined),
+    pollingInterval: pollingIntervalMS ?? (isAnvilTestChain(chain.id) ? 100 : defaultViemPollingIntervalMs()),
   }).extend(publicActions);
 
   return extendedClient;

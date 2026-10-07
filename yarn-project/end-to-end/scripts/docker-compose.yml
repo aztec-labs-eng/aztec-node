@@ -57,6 +57,7 @@ services:
       FORCE_COLOR: ${FORCE_COLOR:-1}
       AZTEC_NODE_URL: http://local-network:8080
       ANVIL_HARDFORK: ${ANVIL_HARDFORK:-}
+      L1_VIEM_POLLING_INTERVAL_MS: 100
       # Allow git usage despite different ownership. Relevant for script tests.
       GIT_CONFIG_GLOBAL: /root/aztec-node/build-images/src/home/.gitconfig
       # For debugging scripts that were passed as TEST.

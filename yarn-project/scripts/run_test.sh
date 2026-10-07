@@ -17,5 +17,7 @@ export TOKIO_WORKER_THREADS=1
 export UV_THREADPOOL_SIZE=${UV_THREADPOOL_SIZE:-8}
 export HARDWARE_CONCURRENCY=${CPUS:-16}
 export LOG_LEVEL=${LOG_LEVEL:-info}
+# Receipt waits on the test anvil: see defaultViemPollingIntervalMs in ethereum/src/client.ts.
+export L1_VIEM_POLLING_INTERVAL_MS=${L1_VIEM_POLLING_INTERVAL_MS:-100}
 exec node --no-warnings --experimental-vm-modules --loader @swc-node/register \
   ../node_modules/.bin/jest --runInBand $test "$@"
