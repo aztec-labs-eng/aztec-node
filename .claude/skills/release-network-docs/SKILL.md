@@ -33,7 +33,7 @@ versioned docs (see Step 5a).
 ## Usage
 
 ```
-/release-network-docs https://aztec-mainnet.drpc.org
+/release-network-docs https://canonical.mainnet.rpc.aztec-labs.com
 /release-network-docs https://testnet-v6.rpc2.aztec-labs.com
 ```
 
