@@ -481,6 +481,12 @@ export class CheckpointSubTreeOrchestrator extends ProvingScheduler {
 
     await this.verifyBuiltBlockAgainstSyncedState(provingState);
 
+    // Proofs may have resolved before verification, so rejecting the sub-tree result alone cannot signal failure.
+    const verificationError = provingState.getError();
+    if (verificationError) {
+      throw new Error(`Block proving failed: ${verificationError}`);
+    }
+
     return header;
   }
 
