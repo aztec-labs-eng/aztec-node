@@ -241,18 +241,23 @@ This updates the CLI reference files in `docs/docs-developers/docs/cli/`:
 
 These files are auto-generated — do not hand-edit them.
 
-**The scraped output contains your home directory.** `--help` prints defaults derived
-from `$HOME` (e.g. `aztec-wallet --data-dir` shows
+**The scraped output contains the generating machine's home directory.** `--help`
+prints defaults derived from `$HOME` (e.g. `aztec-wallet --data-dir` shows
 `(default: "/Users/<you>/.aztec/wallet")`), so whoever runs the generator has their
-username baked into the published reference. Generate in a container, or normalise the
-path afterwards, and check before committing:
+username baked into the published reference. Running in a container does not fix this,
+it only changes whose name leaks: `main` currently ships
+`(default: "/home/aztec-dev/.aztec/wallet")` because the generator ran as the CI build
+container's `aztec-dev` user. Normalise the paths to `~/.aztec/...` by hand, then check
+before committing — from `docs/`, since Step 7 starts with `cd docs`:
 
 ```bash
-grep -rn "$HOME" docs/docs-developers/docs/cli/
+grep -rnE '/home/|/Users/' docs-developers/docs/cli/
 ```
 
-Do not rely on spellcheck to catch this: it only fires when the username happens not to
-be a dictionary word. `main` currently ships `/home/aztec-dev/...` for this reason.
+Grep for the literal path prefixes, not `"$HOME"`: `$HOME` expands to *your* home, so it
+cannot match a path baked in on another machine — which is exactly the case that
+reaches `main`. Do not rely on spellcheck either: it only fires when the username
+happens not to be a dictionary word.
 
 ### Step 7b: Generate Node API Reference Docs
 
@@ -294,9 +299,11 @@ docs (Step 11), the generated content is included in the snapshot automatically.
    separating it from the next heading. The source keeps the (now usually
    empty) `## TBD` heading as the working bucket for future notes — but the
    **versioned snapshot must not ship it**: after the cut (Step 11), delete the
-   empty `## TBD` heading (and any empty `## Unreleased` headings) from
-   `developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`
-   so released docs never show an empty TBD section.
+   whole `## TBD` section — heading and any entries still under it — along with any
+   `## Unreleased` sections, from
+   `developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`.
+   The triage above deliberately leaves unshipped items there, and the cut copies them
+   verbatim, so this is what stops them publishing under the new version. See Step 11.
 
    **Decide by ancestry, not by date.** Ported and cherry-picked commits keep their
    original author dates, so an entry can describe work dated weeks before the tag
@@ -389,8 +396,10 @@ The revision you get is the one pinned in `docs/package.json` and resolved by
 `docs/yarn.lock`, because the install happens in `docs/`. That pin is not free to
 drift: per `docs/CLAUDE.md` it must equal `BB_VERSION` in
 `labs-aztec-toolchain/bootstrap.sh`, and CI fails `check_pin_drift` if it does not.
-So the pair to verify is the pin and `BB_VERSION`, not the pin and
-`yarn-project/package.json`:
+`labs-aztec-toolchain/pins.mjs` checks the `yarn-project/package.json` resolutions
+entry against `BB_VERSION` too, so all three should agree. Compare against
+`BB_VERSION` rather than against `yarn-project`: it is the value both pins are
+checked against, so it tells you which one drifted.
 
 ```bash
 grep '"@aztec-foundation/l1-artifacts"' docs/package.json
@@ -403,7 +412,7 @@ intact. Unequal should be impossible on a tag that passed CI; if you see it, sto
 rather than guess which is right.
 
 This package is also what the Solidity examples compile against:
-`examples/solidity/foundry.toml` remaps `@aztec/` and `@oz/` into it. So a Solidity
+`docs/examples/solidity/foundry.toml` remaps `@aztec/` and `@oz/` into it. So a Solidity
 `@aztec/core/...` import is a Foundry remapping, not an npm scope, and is NOT part
 of the `@aztec-labs` scope migration.
 
@@ -451,10 +460,13 @@ releases no longer update this file.)
   reader compares them.
 
   The RPC endpoint must be the **public** one, not the endpoint you ran this release
-  against. Aztec-run endpoints are for operators and tooling and require an API key;
-  `networks.md` and the getting-started guides are read by external developers who do
-  not have one. Publishing an authenticated host there makes the guide's first command
-  return `403 Forbidden` for every reader.
+  against. The `rpc2.aztec-labs.com` and `canonical.*.rpc.aztec-labs.com` hosts are for
+  operators and tooling and require an API key; `networks.md` and the getting-started
+  guides are read by external developers who do not have one. Publishing a gated host
+  there makes the guide's first command fail for every reader (`403` from rpc2, `401
+  No API key found in request` from the canonical gateways). Not every Aztec-run host
+  is gated — some older per-version ones still answer without a key — so test the
+  specific URL rather than assuming either way.
 
   Use the third-party provider, as the mainnet column already does:
 
@@ -469,7 +481,7 @@ releases no longer update this file.)
   ```bash
   curl -s -X POST -H 'Content-Type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"aztec_getNodeInfo","params":[]}' \
-    https://aztec-testnet.drpc.org | jq -r '.result.nodeVersion'
+    <public RPC for this release type> | jq -r '.result.nodeVersion'
   ```
 - **L1 Contract Addresses table**: all addresses from the RPC response, on-chain
   queries, and any additional addresses provided by the user
@@ -583,30 +595,49 @@ into the network snapshot in Step 11, so a gap here publishes a page that announ
 itself as the new version and then lists an older one as the newest release. Operators
 read this page to decide whether to upgrade, so a stale one is worse than none.
 
-Check before cutting:
+**Check `origin/main`, not the working tree.** Step 2 checks out the release tag, and
+the changelog page is written per-PR on `main` — for the first release of a major it
+usually lands after the tag is cut, so it is legitimately absent from the tag. Looking
+at the checkout would report a gap that is not one, and fixing it in a tag checkout
+writes the page somewhere it will never be merged.
 
 ```bash
 major=$(python3 -c "import json;print(json.load(open('.release-please-manifest.json'))['.'].split('.')[0])")
-ls docs/docs-operate/operators/reference/changelog/v${major}.md
-grep -n '^### ' docs/docs-operate/operators/reference/changelog/index.md | head -3
+git fetch origin main
+git show origin/main:docs/docs-operate/operators/reference/changelog/v${major}.md >/dev/null \
+  && echo "page present" || echo "MISSING: v${major}.md"
+git show origin/main:docs/docs-operate/operators/reference/changelog/index.md | grep -n '^### ' | head -3
+git show origin/main:docs/sidebars-operate.js | grep -n "changelog/v${major}"
 ```
 
-The version page must exist, and the first `###` entry in `index.md` must be this
-release. If either fails, stop and run `/updating-changelog`, or write the entry by
-hand from the commit range — do not cut around it.
+All three must hold on `origin/main`:
+
+1. `v<major>.md` exists.
+2. `index.md` carries a `### ` entry for this release's major (and minor, if the
+   series already has more than one — entries are per-minor: `v5.2.0`, `v4.3.x`).
+   Do not require the exact version string: an rc or patch is covered by its minor's
+   entry.
+3. `docs/sidebars-operate.js` lists `operators/reference/changelog/v<major>` — the
+   sidebar enumerates changelog pages explicitly, so a page that is not listed is
+   published but unreachable from the nav.
+
+If any fails, write it on `main` first (`/updating-changelog`, or by hand from the
+commit range) and merge it, then pick it up here through Step 12's reconcile along
+with the rest of the `main` changes. Do not cut around it, and do not write it into
+the tag checkout.
 
 This has already shipped wrong once: no `v6.md` existed at all when v6.0.0-rc.1 was
 rehearsed, because `/updating-changelog` had been diffing against `next` since the
-migration and silently doing nothing.
+migration and failing instead of running.
 
 ### Step 11: Cut Versioned Docs
 
 **Prerequisite — preprocess before cutting.** `docs:version` snapshots from
 `processed-docs/` (the resolved path the docs plugins serve, see
 `docusaurus.config.js`), *not* the raw `docs-*` source. So you must run
-`yarn preprocess` (or a full `yarn build`) with the same `RELEASE_TYPE`/`*_TAG`
-env vars used below *before* cutting, or the snapshot captures stale/empty
-content. This is why a freshly cut snapshot already has macros resolved (no raw
+`yarn preprocess` (or a full `yarn build`) with `RELEASE_TYPE`, the matching
+`*_TAG` and `COMMIT_TAG` (all three, see below) *before* cutting, or the snapshot
+captures stale/empty content. This is why a freshly cut snapshot already has macros resolved (no raw
 `#release_version`/`#include_code`). The "verify no raw placeholders remain"
 check later in this step confirms the preprocess took effect.
 
@@ -625,28 +656,39 @@ Set the environment variables matching the release type:
 - **Testnet**: `TESTNET_TAG=<new_version> RELEASE_TYPE=testnet`
 - **Mainnet**: `MAINNET_TAG=<new_version> RELEASE_TYPE=mainnet`
 
-**Set `COMMIT_TAG=v<new_version>` as well, on every release type.** It is easy to
-miss because it is not named per release type, and the failure is silent:
-`include_version.js` defaults it to `next`, and derives the npm version from it,
-falling back to `latest` when the tag does not start with `v`. Both are plausible
-values, so the cut looks correctly processed and the build passes — but neither is
-usable:
+**Set `COMMIT_TAG=v<new_version>` as well, on every release type — on the
+`yarn preprocess` run, not on `docs:version`.** `docs:version` only copies
+`processed-docs/`; the macros are already resolved by then, so a `COMMIT_TAG=` on
+that command line does nothing. It is easy to miss because it is not named per
+release type, and the failure is silent: `include_version.js` defaults it to `next`,
+and `#include_version_without_prefix` falls back to `latest` when the tag does not
+start with `v`. Both are plausible values, so the cut looks correctly processed and
+the build passes, but neither is usable:
 
-- `#include_aztec_version` resolves to `next`, which is not a ref in
-  `aztec-labs-eng/aztec-nr`, so every `Nargo.toml` in the snapshot fails
-  `aztec compile` with `fatal: Remote branch next not found in upstream origin`.
-- npm installs resolve to `@latest`, which is NOT the release. At the v6 rehearsal
-  `@aztec-labs/aztec.js@latest` was an August nightly, older than the rc being cut
-  and wire-incompatible with it (`-32702` reorg errors at runtime), while
-  `@aztec-foundation/l1-artifacts@latest` was `0.0.1-commit.b66364b`.
+- `#include_aztec_version` resolves to `next` — both in `Nargo.toml` git
+  dependencies, where it is not a ref in `aztec-labs-eng/aztec-nr` so `aztec compile`
+  fails with `fatal: Remote branch next not found in upstream origin`, and in npm
+  installs as `@aztec-labs/aztec.js@next`, which is not a dist-tag, so `yarn add`
+  fails outright.
+- `#include_version_without_prefix` resolves to `latest`, which is NOT the release.
+  At the v6 rehearsal `@aztec-labs/aztec.js@latest` was an August nightly, older than
+  the rc being cut and wire-incompatible with it (`-32702` reorg errors at runtime),
+  while `@aztec-foundation/l1-artifacts@latest` was `0.0.1-commit.b66364b`.
 
-Unset, this produced 28 unusable references across the tutorials in one cut. Only
-Step 15 catches it: the build validates links and spelling, not whether a dependency
-resolves. Verify before cutting:
+Unset, this leaves dozens of unusable references across the tutorials in one cut.
+Only Step 15 catches it, and only partly: the build validates links and spelling, not
+whether a dependency resolves. Verify after preprocess and before cutting, from
+`docs/` — every count must be `0`:
 
 ```bash
-grep -rc 'tag="next"\|@latest' processed-docs/docs-developers/docs/tutorials/
+cd docs
+COMMIT_TAG=v<new_version> <TAG_VAR>=<new_version> RELEASE_TYPE=<release_type> yarn preprocess
+grep -rcE 'tag *= *"next"|@next\b|@latest|VERSION=latest|aztec\.network/latest' \
+  processed-docs/docs-developers/docs/tutorials/ | grep -v ':0$'
 ```
+
+Both spacings of `tag = "next"` appear in the sources, so match the spaced form too;
+grepping only `tag="next"` misses most of the Nargo dependencies.
 
 **Important:** The version string passed to `docs:version` must always be prefixed
 with `v` (e.g. `v4.1.0-rc.2`, not `4.1.0-rc.2`).
@@ -656,11 +698,18 @@ cd docs
 <TAG_VAR>=<new_version> RELEASE_TYPE=<release_type> yarn docusaurus docs:version:developer v<new_version>
 ```
 
-Then update the versions files:
+Then write the version mapping — **this is the Step 5 developer config update,
+deferred to here.** The directory now exists, so naming the version no longer breaks
+docusaurus:
 
 ```bash
-scripts/update_docs_versions.sh developer
+scripts/update_docs_versions.sh developer <release_type> v<new_version>
 ```
+
+Both arguments are required. With only the instance name the script reconciles
+existing entries and prints `WARNING: Version ... not in the config file. Update ...
+manually` — it does not add the new one, `lastVersion` stays on the previous release,
+and the snapshot you just cut is served as an unlabelled extra version.
 
 For **mainnet** and **testnet** releases, also cut and configure the network/operator docs.
 

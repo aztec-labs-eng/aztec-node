@@ -16,11 +16,20 @@ Read `.release-please-manifest.json` to get the version (e.g., `{"." : "4.0.0"}`
 - Aztec contract developers: `docs/docs-developers/docs/resources/migration_notes.md`
 - Node operators and Ethereum contract developers: `docs/docs-operate/operators/reference/changelog/v{major}.md`
 
+When that file is new (the first entry of a major), two more files must be updated or
+the page ships unreachable:
+
+- `docs/docs-operate/operators/reference/changelog/index.md` — add a `### [vX.Y.Z](./vX.Y.md)`
+  entry at the top of `## Version history`. Entries are per-minor, not per-patch.
+- `docs/sidebars-operate.js` — add `"operators/reference/changelog/vX"` to the changelog
+  list. The sidebar enumerates these pages explicitly; an unlisted page is published but
+  has no nav entry.
+
 ### 2. Analyze Branch Changes
 
 Run `git diff origin/main...HEAD --stat` for overview, then `git diff origin/main...HEAD` for details.
-(`next` was the aztec-packages branch and does not exist here; the command silently
-failed after the migration, which is why no v6 operator changelog entry was ever written.)
+(`next` was the aztec-packages branch and does not exist here — after the migration the
+command aborted with `fatal: ambiguous argument 'next...HEAD'` instead of producing a diff.)
 
 **Categorize changes:**
 
