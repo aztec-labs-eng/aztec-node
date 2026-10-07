@@ -76,9 +76,8 @@ function build_image {
   docker build -f release-image/Dockerfile --build-arg VERSION=$version -t azteclabs/aztec:$(git rev-parse HEAD) .
   docker tag azteclabs/aztec:$(git rev-parse HEAD) azteclabs/aztec:latest
 
-  # In CI, dump all files under /usr/src. Not for a private release: the listing would name any
-  # file its private patch adds.
-  if [ "$CI" -eq 1 ] && [ "${RELEASE_TARGET:-}" != private ]; then
+  # In CI, dump all files under /usr/src.
+  if [ "$CI" -eq 1 ]; then
     docker run --rm --entrypoint /bin/bash azteclabs/aztec:latest -c 'cd /usr/src && find . -print | grep -v node_modules'
   fi
 

@@ -66,13 +66,6 @@ fi
 # instance) therefore leaves a version that the retry cannot detect and cannot publish over.
 staged_error='Cannot publish over previously staged version'
 
-# npm publish lists every file in the tarball at notice level, which in a private release would name
-# any file its private patch adds. --loglevel=warn still prints errors, staged_error among them.
-publish_loglevel=""
-if [ "${RELEASE_TARGET:-}" == private ]; then
-  publish_loglevel="--loglevel=warn"
-fi
-
 # Create temp directory for publishing
 tmpdir=$(mktemp -d)
 function cleanup {
@@ -95,7 +88,7 @@ release_prep_package_json $version
 
 # Publish from temp dir
 if [ "$dry_run" -eq 1 ]; then
-  denoise "npm publish --ignore-scripts --dry-run --tag $publish_tag --access public $publish_loglevel"
+  denoise "npm publish --ignore-scripts --dry-run --tag $publish_tag --access public"
 else
   # Check if version exists.
   if npm view "$package_name@$version" version >/dev/null 2>&1; then
@@ -109,7 +102,7 @@ else
   else
     # Publish new version. The output is kept so a staged-version conflict can be told apart from
     # other failures, including other 409s.
-    publish_cmd="npm publish --ignore-scripts --tag $publish_tag --access public $publish_loglevel"
+    publish_cmd="npm publish --ignore-scripts --tag $publish_tag --access public"
     publish_out="$tmpdir/publish.out"
     if ! DENOISE_DISPLAY_NAME="$publish_cmd" denoise "set -o pipefail; $publish_cmd 2>&1 | tee $publish_out"; then
       grep -q "$staged_error" "$publish_out" || exit 1
