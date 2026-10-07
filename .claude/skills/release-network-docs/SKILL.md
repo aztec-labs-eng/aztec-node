@@ -47,12 +47,9 @@ reports the version you are cutting before writing it down.
 
 ## Usage
 
-Pass the operator endpoint, not the public one — the public URL belongs in the docs,
-not on this command line:
-
 ```
-/release-network-docs https://canonical.mainnet.rpc.aztec-labs.com
-/release-network-docs https://testnet-v6.rpc2.aztec-labs.com
+/release-network-docs https://aztec-mainnet.drpc.org
+/release-network-docs https://rpc.testnet.aztec-labs.com
 ```
 
 ## Workflow

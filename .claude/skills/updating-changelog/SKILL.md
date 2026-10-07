@@ -19,11 +19,17 @@ Read `.release-please-manifest.json` to get the version (e.g., `{"." : "4.0.0"}`
 When that file is new (the first entry of a major), two more files must be updated or
 the page ships unreachable:
 
-- `docs/docs-operate/operators/reference/changelog/index.md` — add a `### [vX.Y.Z](./vX.Y.md)`
-  entry at the top of `## Version history`. Entries are per-minor, not per-patch.
-- `docs/sidebars-operate.js` — add `"operators/reference/changelog/vX"` to the changelog
-  list. The sidebar enumerates these pages explicitly; an unlisted page is published but
-  has no nav entry.
+- `docs/docs-operate/operators/reference/changelog/index.md` — add a
+  `### [<version>](./<page>.md)` entry at the top of `## Version history`. The heading
+  is the release (`v6.0.0`, `v5.2.0`, `v4.3.x`); the link target is the page's **actual
+  filename**, which is not derived from the heading. Page names vary by how many
+  releases a major has needed — `v6.md`, `v5.2.md`, `v4.3.md`, `v4.2.md`, `v4.md`,
+  `v2.0.2.md` all exist. Copy the filename you created; do not construct it from the
+  version. `docusaurus.config.js` sets `onBrokenMarkdownLinks: "throw"`, so a link to a
+  page that does not exist fails the build.
+- `docs/sidebars-operate.js` — add `"operators/reference/changelog/<page>"` (the same
+  filename, without `.md`) to the changelog list. The sidebar enumerates these pages
+  explicitly; an unlisted page is published but has no nav entry.
 
 ### 2. Analyze Branch Changes
 
