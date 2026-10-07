@@ -97,6 +97,7 @@ jobs:
       # Do NOT bump to checkout v6 (see the pinning rationale in ci3.yml).
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          submodules: true
           # Qualified, since a bare `v6` would also fetch every `v6.*` tag.
           ref: refs/heads/${{ inputs.branch }}
           token: ${{ steps.app.outputs.token }}
