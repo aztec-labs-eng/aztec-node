@@ -386,20 +386,26 @@ Read it from `docs/node_modules/` after `yarn install` in `docs/` rather than
 cloning aztec-packages.
 
 The revision you get is the one pinned in `docs/package.json` and resolved by
-`docs/yarn.lock` — that pair is authoritative for this install, because the
-install happens in `docs/`. `yarn-project/package.json` pins the same package
-separately; the two are expected to agree, and have at every tag checked, but
-it is the `docs/` pin that governs what lands in `docs/node_modules/`. Check it
-at the release tag:
+`docs/yarn.lock`, because the install happens in `docs/`. That pin is not free to
+drift: per `docs/CLAUDE.md` it must equal `BB_VERSION` in
+`labs-aztec-toolchain/bootstrap.sh`, and CI fails `check_pin_drift` if it does not.
+So the pair to verify is the pin and `BB_VERSION`, not the pin and
+`yarn-project/package.json`:
 
 ```bash
 grep '"@aztec-foundation/l1-artifacts"' docs/package.json
+grep '^BB_VERSION=' labs-aztec-toolchain/bootstrap.sh
 ```
 
-If that disagrees with `yarn-project/package.json`, stop and find out why before
-trusting either — one of them is not the revision the tag was built against.
-Otherwise, reading from `docs/node_modules/` keeps the "everything comes from
-the tag" rule intact.
+Equal means `docs/node_modules/` holds the l1-contracts revision this tag was built
+against, and reading from there keeps the "everything comes from the tag" rule
+intact. Unequal should be impossible on a tag that passed CI; if you see it, stop
+rather than guess which is right.
+
+This package is also what the Solidity examples compile against:
+`examples/solidity/foundry.toml` remaps `@aztec/` and `@oz/` into it. So a Solidity
+`@aztec/core/...` import is a Foundry remapping, not an npm scope, and is NOT part
+of the `@aztec-labs` scope migration.
 
 - **Staking Registry**
 
@@ -618,6 +624,29 @@ Set the environment variables matching the release type:
 - **Devnet**: `DEVNET_TAG=<new_version> RELEASE_TYPE=devnet`
 - **Testnet**: `TESTNET_TAG=<new_version> RELEASE_TYPE=testnet`
 - **Mainnet**: `MAINNET_TAG=<new_version> RELEASE_TYPE=mainnet`
+
+**Set `COMMIT_TAG=v<new_version>` as well, on every release type.** It is easy to
+miss because it is not named per release type, and the failure is silent:
+`include_version.js` defaults it to `next`, and derives the npm version from it,
+falling back to `latest` when the tag does not start with `v`. Both are plausible
+values, so the cut looks correctly processed and the build passes — but neither is
+usable:
+
+- `#include_aztec_version` resolves to `next`, which is not a ref in
+  `aztec-labs-eng/aztec-nr`, so every `Nargo.toml` in the snapshot fails
+  `aztec compile` with `fatal: Remote branch next not found in upstream origin`.
+- npm installs resolve to `@latest`, which is NOT the release. At the v6 rehearsal
+  `@aztec-labs/aztec.js@latest` was an August nightly, older than the rc being cut
+  and wire-incompatible with it (`-32702` reorg errors at runtime), while
+  `@aztec-foundation/l1-artifacts@latest` was `0.0.1-commit.b66364b`.
+
+Unset, this produced 28 unusable references across the tutorials in one cut. Only
+Step 15 catches it: the build validates links and spelling, not whether a dependency
+resolves. Verify before cutting:
+
+```bash
+grep -rc 'tag="next"\|@latest' processed-docs/docs-developers/docs/tutorials/
+```
 
 **Important:** The version string passed to `docs:version` must always be prefixed
 with `v` (e.g. `v4.1.0-rc.2`, not `4.1.0-rc.2`).
