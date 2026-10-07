@@ -32,6 +32,7 @@ import { type Libp2p, type Libp2pOptions, createLibp2p } from 'libp2p';
 import { BootstrapNode } from '../bootstrap/bootstrap.js';
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES, type P2PConfig } from '../config.js';
 import type { MemPools } from '../mem_pools/interface.js';
+import { getDiscv5RateLimiterDefaultConfig } from '../services/discv5/config.js';
 import { DiscV5Service } from '../services/discv5/discV5_service.js';
 import { APP_SPECIFIC_WEIGHT } from '../services/gossipsub/scoring.js';
 import { LibP2PService } from '../services/libp2p/libp2p_service.js';
@@ -283,6 +284,7 @@ export function createBootstrapNodeConfig(privateKey: string, port: number, chai
     listenAddress: '127.0.0.1',
     queryForIp: false,
     publicIpServices: DEFAULT_PUBLIC_IP_SERVICES,
+    ...getDiscv5RateLimiterDefaultConfig(),
   };
 }
 
