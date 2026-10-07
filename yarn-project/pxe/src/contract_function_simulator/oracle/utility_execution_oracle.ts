@@ -32,7 +32,11 @@ import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/clien
 import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
-import { type UnsiloedMessageNullifier, getL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
+import {
+  type UnsiloedMessageNullifier,
+  getL1ToL2MessageWitness,
+  lookUpL1ToL2MessageWitness,
+} from '@aztec-labs/stdlib/messaging';
 import { NoteStatus } from '@aztec-labs/stdlib/note';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
@@ -585,6 +589,27 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
     );
 
     return new MembershipWitness(L1_TO_L2_MSG_TREE_HEIGHT, messageIndex, siblingPath.toTuple());
+  }
+
+  /**
+   * Returns the membership witness of an L1 to L2 message, or none if there is no such message.
+   * @param messageHash - Hash of the message.
+   * @param nullifier - When present, the unsiloed nullifier of the message and the address to silo it with. The witness
+   * is only returned if the siloed nullifier is absent from the nullifier tree, i.e. the message has not been consumed.
+   * @returns The l1 to l2 membership witness (index of message in the tree and sibling path), or none.
+   */
+  public async tryGetL1ToL2MembershipWitness(
+    messageHash: Fr,
+    nullifier: Option<UnsiloedMessageNullifier>,
+  ): Promise<Option<MembershipWitness<typeof L1_TO_L2_MSG_TREE_HEIGHT>>> {
+    const anchor = await this.anchorBlockHeader.toBlockParameter();
+    const lookup = await lookUpL1ToL2MessageWitness(this.aztecNode, messageHash, nullifier.value, anchor);
+    if (lookup.type !== 'found') {
+      return Option.none();
+    }
+
+    const [messageIndex, siblingPath] = lookup.witness;
+    return Option.some(new MembershipWitness(L1_TO_L2_MSG_TREE_HEIGHT, messageIndex, siblingPath.toTuple()));
   }
 
   /**

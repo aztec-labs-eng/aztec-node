@@ -3,7 +3,6 @@ import { ARCHIVE_HEIGHT, L1_TO_L2_MSG_TREE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { FieldReader } from '@aztec-labs/foundation/serialize';
 import { toACVMField } from '@aztec-labs/simulator/client';
-import type { UnsiloedMessageNullifier } from '@aztec-labs/stdlib/messaging';
 
 import {
   ARRAY,
@@ -45,12 +44,12 @@ import {
   RESOLVED_TAGGING_STRATEGY,
   RESOLVED_TX,
   STR,
-  STRUCT,
   TX_EFFECT,
   TX_HASH,
   type TypeMapping,
   U8,
   U32,
+  UNSILOED_MESSAGE_NULLIFIER,
   UTILITY_CONTEXT,
   assertReadersConsumed,
   slotsOf,
@@ -194,17 +193,17 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getL1ToL2MembershipWitnessV2: makeEntry({
     params: [
       { name: 'messageHash', type: FIELD },
-      {
-        name: 'nullifier',
-        type: OPTION(
-          STRUCT<UnsiloedMessageNullifier>([
-            { name: 'contractAddress', type: AZTEC_ADDRESS },
-            { name: 'nullifier', type: FIELD },
-          ]),
-        ),
-      },
+      { name: 'nullifier', type: OPTION(UNSILOED_MESSAGE_NULLIFIER) },
     ],
     returnType: MEMBERSHIP_WITNESS(L1_TO_L2_MSG_TREE_HEIGHT),
+  }),
+
+  aztec_utl_tryGetL1ToL2MembershipWitness: makeEntry({
+    params: [
+      { name: 'messageHash', type: FIELD },
+      { name: 'nullifier', type: OPTION(UNSILOED_MESSAGE_NULLIFIER) },
+    ],
+    returnType: OPTION(MEMBERSHIP_WITNESS(L1_TO_L2_MSG_TREE_HEIGHT)),
   }),
 
   aztec_utl_getFromPublicStorage: makeEntry({

@@ -34,6 +34,7 @@ import {
   Tag,
   appTaggingSecretKindFromDeliveryMode,
 } from '@aztec-labs/stdlib/logs';
+import type { UnsiloedMessageNullifier } from '@aztec-labs/stdlib/messaging';
 import type {
   AppendOnlyTreeSnapshot,
   NullifierLeaf,
@@ -548,6 +549,11 @@ export const PENDING_TAGGED_LOG: TypeMapping<PendingTaggedLog> = STRUCT([
 export const BLOCK_REFERENCE: TypeMapping<BlockReference> = STRUCT([
   { name: 'blockNumber', type: U32 },
   { name: 'blockHash', type: FIELD },
+]);
+
+export const UNSILOED_MESSAGE_NULLIFIER: TypeMapping<UnsiloedMessageNullifier> = STRUCT([
+  { name: 'contractAddress', type: AZTEC_ADDRESS },
+  { name: 'nullifier', type: FIELD },
 ]);
 
 export const NULLIFIER_STATUS: TypeMapping<NullifierStatus> = STRUCT([

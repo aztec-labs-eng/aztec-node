@@ -95,6 +95,44 @@ export function computeFeeJuiceMessageNullifier(messageHash: Fr, secret: Fr): Pr
   return poseidon2HashWithSeparator([messageHash, secret], DomainSeparator.MESSAGE_NULLIFIER);
 }
 
+/** The outcome of {@link lookUpL1ToL2MessageWitness}. */
+export type L1ToL2MessageWitnessLookup =
+  /** The message is in the tree and, if a nullifier was given, has not been consumed. */
+  | { type: 'found'; witness: [bigint, SiblingPath<typeof L1_TO_L2_MSG_TREE_HEIGHT>] }
+  /** The message is not in the tree. */
+  | { type: 'missing' }
+  /** A nullifier was given and the message has been consumed. */
+  | { type: 'nullified' };
+
+/**
+ * Looks up the membership witness of an L1 to L2 message in the L1 to L2 message tree at `referenceBlock`.
+ */
+export async function lookUpL1ToL2MessageWitness(
+  node: AztecNode,
+  messageHash: Fr,
+  unsiloedNullifier: UnsiloedMessageNullifier | undefined,
+  referenceBlock: BlockParameter,
+): Promise<L1ToL2MessageWitnessLookup> {
+  // Both requests are dispatched before awaiting so they run concurrently.
+  const l1ToL2ResponsePromise = node.getL1ToL2MessageMembershipWitness(referenceBlock, messageHash);
+  const nullifierResponsePromise = unsiloedNullifier
+    ? siloNullifier(unsiloedNullifier.contractAddress, unsiloedNullifier.nullifier).then(siloed =>
+        node.findLeavesIndexes(referenceBlock, MerkleTreeId.NULLIFIER_TREE, [siloed]),
+      )
+    : undefined;
+
+  const [l1ToL2Response, nullifierResponse] = await Promise.all([l1ToL2ResponsePromise, nullifierResponsePromise]);
+  if (!l1ToL2Response) {
+    return { type: 'missing' };
+  }
+
+  if (nullifierResponse?.[0] !== undefined) {
+    return { type: 'nullified' };
+  }
+
+  return { type: 'found', witness: l1ToL2Response };
+}
+
 /**
  * Fetches the membership witness of an L1 to L2 message. When `unsiloedNullifier` is provided, the message is
  * additionally required to be un-nullified.
@@ -105,25 +143,15 @@ export async function getL1ToL2MessageWitness(
   unsiloedNullifier?: UnsiloedMessageNullifier,
   referenceBlock: BlockParameter = 'latest',
 ): Promise<[bigint, SiblingPath<typeof L1_TO_L2_MSG_TREE_HEIGHT>]> {
-  // Both requests are dispatched before awaiting so they run concurrently.
-  const l1ToL2ResponsePromise = node.getL1ToL2MessageMembershipWitness(referenceBlock, messageHash);
-  const nullifierResponsePromise = unsiloedNullifier
-    ? siloNullifier(unsiloedNullifier.contractAddress, unsiloedNullifier.nullifier).then(siloed =>
-        node.findLeavesIndexes(referenceBlock, MerkleTreeId.NULLIFIER_TREE, [siloed]),
-      )
-    : undefined;
-
-  const l1ToL2Response = await l1ToL2ResponsePromise;
-  if (!l1ToL2Response) {
-    throw new Error(`No L1 to L2 message found for message hash ${messageHash.toString()}`);
+  const lookup = await lookUpL1ToL2MessageWitness(node, messageHash, unsiloedNullifier, referenceBlock);
+  switch (lookup.type) {
+    case 'missing':
+      throw new Error(`No L1 to L2 message found for message hash ${messageHash.toString()}`);
+    case 'nullified':
+      throw new Error(`No non-nullified L1 to L2 message found for message hash ${messageHash.toString()}`);
+    case 'found':
+      return lookup.witness;
   }
-
-  const nullifierResponse = await nullifierResponsePromise;
-  if (nullifierResponse?.[0] !== undefined) {
-    throw new Error(`No non-nullified L1 to L2 message found for message hash ${messageHash.toString()}`);
-  }
-
-  return l1ToL2Response;
 }
 
 // This functionality is not on the node because we do not want to pass the node the secret, and give the node the ability to derive a valid nullifer for an L1 to L2 message.
