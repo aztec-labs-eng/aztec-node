@@ -21,6 +21,9 @@ permissions:
 
 jobs:
   teardown:
+    # Re-runs are skipped: a re-run replays this run's workflow file and inputs for up to 30 days, against whatever is
+    # deployed by then and past any check added to this file later. Dispatch again instead.
+    if: github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # GCP_HELM_SA_KEY lives in the deployment environment, whose policy admits only main.
