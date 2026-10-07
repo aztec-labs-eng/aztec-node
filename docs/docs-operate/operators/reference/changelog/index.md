@@ -17,7 +17,7 @@ Hard fork: a complete new deployment from genesis. Every artifact location moved
 
 **Key changes:**
 - New locations for everything: `azteclabs/aztec` on DockerHub, `@aztec-labs/*` and `@aztec-foundation/*` on npm, `aztec-labs-eng/aztec-node` for source
-- `ACVM_*` configuration renamed to `NOIR_EXECUTE_*`, with no fallback. A node still setting only the old names fails to start, or silently falls back to slow WASM simulation
+- `ACVM_*` configuration renamed to `NOIR_EXECUTE_*`, with no fallback. A real-proving node fails to start on the old names; one without real proofs starts anyway on slow WASM simulation, so a clean startup does not prove the config migrated
 - Attester-initiated sequencer exits: new `aztec initiate-withdraw-by-attester` and `...-batch` commands
 - New RPC methods: `aztec_getTxEffectMembershipWitness`, `aztec_getValidatorStatsBatch`
 - `v6.0.0-rc.1` is Testnet only; Mainnet's first v6 release will be `v6.0.0` stable
