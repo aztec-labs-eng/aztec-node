@@ -23,6 +23,7 @@ import { deployMulticall3 } from './contracts/multicall.js';
 import { RollupContract } from './contracts/rollup.js';
 import { resolveFoundryBinary } from './foundry_binary.js';
 import type { L1ContractAddresses } from './l1_contract_addresses.js';
+import { isAmsterdamBlock } from './l1_tx_utils/amsterdam.js';
 import type { ExtendedViemWalletClient } from './types.js';
 
 const logger = createLogger('ethereum:deploy_aztec_l1_contracts');
@@ -130,7 +131,7 @@ async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
   const verifyArgs = args.verify ? ['--verify'] : [];
 
   const latestBlock = await l1Client.request({ method: 'eth_getBlockByNumber', params: ['latest', false] });
-  if (!latestBlock || !('blockAccessListHash' in latestBlock)) {
+  if (!latestBlock || !isAmsterdamBlock(latestBlock)) {
     const scriptPath = join(getL1ContractsPath(), 'scripts', 'forge_broadcast.js');
     return runProcess<T>(
       process.execPath,
