@@ -15,7 +15,7 @@ Not sure which network or version to pin against? Jump to the [Network selection
 
 | Parameter           | Alpha (Mainnet)                                                                                          | Testnet                                                                                                  |
 | ------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **Version**         | `5.1.0`                                                                                                  | `5.1.0`                                                                                                  |
+| **Version**         | `5.2.0`                                                                                                  | `5.1.0`                                                                                                  |
 | **L1 Chain ID**     | `1` (Mainnet)                                                                                            | `11155111` (Sepolia)                                                                                     |
 | **Rollup Version**  | `4248422647`                                                                                             | `1821665230`                                                                                             |
 | **RPC Endpoint**    | `https://aztec-mainnet.drpc.org`                                                                         | `https://v5.testnet.rpc.aztec-labs.com`                                                                  |
