@@ -424,8 +424,27 @@ Update the column matching the release type (**Testnet** or **Alpha (Mainnet)**)
 in the tables. (The Devnet column was removed from `networks.md` — devnet
 releases no longer update this file.)
 
-- **Network Technical Information table**: version, rollup version, and the RPC
-  endpoint — which must be the **public** one, not the endpoint you ran this release
+- **Network Technical Information table**: the **Version** row, the rollup version,
+  and the RPC endpoint.
+
+  The `Version` row is the field most often missed. It was left at `5.1.0` for both
+  columns through the v5.2.0 release and again in a v6 rehearsal, while the rollup
+  version next to it was updated both times — leaving a v6 rollup version beside a
+  v5 build. The page tells readers it is authoritative ("the build a given network is
+  currently running"), so a stale value is what someone pins against. Read it from the
+  live network, not from the version config:
+
+  ```bash
+  curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"aztec_getNodeInfo","params":[]}' \
+    <public RPC> | jq -r '.result.nodeVersion'
+  ```
+
+  Check **both** columns while you are here, not only the one you are releasing — the
+  other may have been left stale by an earlier release, and this table is where a
+  reader compares them.
+
+  The RPC endpoint must be the **public** one, not the endpoint you ran this release
   against. Aztec-run endpoints are for operators and tooling and require an API key;
   `networks.md` and the getting-started guides are read by external developers who do
   not have one. Publishing an authenticated host there makes the guide's first command
