@@ -148,6 +148,21 @@ For example, for a devnet release of `4.1.0-devnet.1`, update `"devnet": "v4.1.0
 The preprocessor (`include_version.js`) reads defaults from this config file, so
 updating it is sufficient — you no longer need to edit hardcoded defaults in JS.
 
+**Do this AFTER the cut, not here, if you are cutting a version that does not yet
+exist.** `docusaurus.config.js` reads this file at load and validates every version
+named in it against the directories that exist. Naming the new version before
+Step 11 has created its directory makes every docusaurus command fail with:
+
+```
+[ERROR] Invalid docs option "versions": unknown versions (vX.Y.Z) found.
+        Available version names are: current, <previous>
+```
+
+including `docs:version` itself — so the config update blocks the cut that would
+satisfy it. Either leave this file alone until after Step 11, or revert it for the
+duration of the cut and restore it afterwards. This is the same constraint that
+already defers the network config below; it applies equally to the developer one.
+
 **Network/operator docs** are updated separately in Step 11 after the version
 snapshot is created (the config update requires the versioned docs directory to exist).
 
@@ -226,6 +241,24 @@ This updates the CLI reference files in `docs/docs-developers/docs/cli/`:
 
 These files are auto-generated — do not hand-edit them.
 
+**The scraped output contains the generating machine's home directory.** `--help`
+prints defaults derived from `$HOME` (e.g. `aztec-wallet --data-dir` shows
+`(default: "/Users/<you>/.aztec/wallet")`), so whoever runs the generator has their
+username baked into the published reference. Running in a container does not fix this,
+it only changes whose name leaks: `main` currently ships
+`(default: "/home/aztec-dev/.aztec/wallet")` because the generator ran as the CI build
+container's `aztec-dev` user. Normalise the paths to `~/.aztec/...` by hand, then check
+before committing — from `docs/`, since Step 7 starts with `cd docs`:
+
+```bash
+grep -rnE '/home/|/Users/' docs-developers/docs/cli/
+```
+
+Grep for the literal path prefixes, not `"$HOME"`: `$HOME` expands to *your* home, so it
+cannot match a path baked in on another machine — which is exactly the case that
+reaches `main`. Do not rely on spellcheck either: it only fires when the username
+happens not to be a dictionary word.
+
 ### Step 7b: Generate Node API Reference Docs
 
 Regenerate the Node JSON-RPC API reference documentation. This script parses the
@@ -266,9 +299,24 @@ docs (Step 11), the generated content is included in the snapshot automatically.
    separating it from the next heading. The source keeps the (now usually
    empty) `## TBD` heading as the working bucket for future notes — but the
    **versioned snapshot must not ship it**: after the cut (Step 11), delete the
-   empty `## TBD` heading (and any empty `## Unreleased` headings) from
-   `developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`
-   so released docs never show an empty TBD section.
+   whole `## TBD` section — heading and any entries still under it — along with any
+   `## Unreleased` sections, from
+   `developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`.
+   The triage above deliberately leaves unshipped items there, and the cut copies them
+   verbatim, so this is what stops them publishing under the new version. See Step 11.
+
+   **Decide by ancestry, not by date.** Ported and cherry-picked commits keep their
+   original author dates, so an entry can describe work dated weeks before the tag
+   that is not in it. The only reliable test:
+
+   ```bash
+   git merge-base --is-ancestor <commit> v<new_version> && echo in-tag || echo NOT-in-tag
+   ```
+
+   An item whose commit is not an ancestor of the tag has not shipped in this release,
+   even if it is on `main` — leave it under `## TBD`. In one rehearsal 4 of 21 items
+   failed this test and 2 existed only on an unmerged branch. Writing them under the
+   new version tells developers to migrate to APIs their release does not have.
 
 4. Check for missing migration items by analyzing the diff between the previous
    release tag and the new one:
@@ -345,20 +393,28 @@ Read it from `docs/node_modules/` after `yarn install` in `docs/` rather than
 cloning aztec-packages.
 
 The revision you get is the one pinned in `docs/package.json` and resolved by
-`docs/yarn.lock` — that pair is authoritative for this install, because the
-install happens in `docs/`. `yarn-project/package.json` pins the same package
-separately; the two are expected to agree, and have at every tag checked, but
-it is the `docs/` pin that governs what lands in `docs/node_modules/`. Check it
-at the release tag:
+`docs/yarn.lock`, because the install happens in `docs/`. That pin is not free to
+drift: per `docs/CLAUDE.md` it must equal `BB_VERSION` in
+`labs-aztec-toolchain/bootstrap.sh`, and CI fails `check_pin_drift` if it does not.
+`labs-aztec-toolchain/pins.mjs` checks the `yarn-project/package.json` resolutions
+entry against `BB_VERSION` too, so all three should agree. Compare against
+`BB_VERSION` rather than against `yarn-project`: it is the value both pins are
+checked against, so it tells you which one drifted.
 
 ```bash
 grep '"@aztec-foundation/l1-artifacts"' docs/package.json
+grep '^BB_VERSION=' labs-aztec-toolchain/bootstrap.sh
 ```
 
-If that disagrees with `yarn-project/package.json`, stop and find out why before
-trusting either — one of them is not the revision the tag was built against.
-Otherwise, reading from `docs/node_modules/` keeps the "everything comes from
-the tag" rule intact.
+Equal means `docs/node_modules/` holds the l1-contracts revision this tag was built
+against, and reading from there keeps the "everything comes from the tag" rule
+intact. Unequal should be impossible on a tag that passed CI; if you see it, stop
+rather than guess which is right.
+
+This package is also what the Solidity examples compile against:
+`docs/examples/solidity/foundry.toml` remaps `@aztec/` and `@oz/` into it. So a Solidity
+`@aztec/core/...` import is a Foundry remapping, not an npm scope, and is NOT part
+of the `@aztec-labs` scope migration.
 
 - **Staking Registry**
 
@@ -383,7 +439,50 @@ Update the column matching the release type (**Testnet** or **Alpha (Mainnet)**)
 in the tables. (The Devnet column was removed from `networks.md` — devnet
 releases no longer update this file.)
 
-- **Network Technical Information table**: version, RPC endpoint, rollup version
+- **Network Technical Information table**: the **Version** row, the rollup version,
+  and the RPC endpoint.
+
+  The `Version` row is the field most often missed. It was left at `5.1.0` for both
+  columns through the v5.2.0 release and again in a v6 rehearsal, while the rollup
+  version next to it was updated both times — leaving a v6 rollup version beside a
+  v5 build. The page tells readers it is authoritative ("the build a given network is
+  currently running"), so a stale value is what someone pins against. Read it from the
+  live network, not from the version config:
+
+  ```bash
+  curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"aztec_getNodeInfo","params":[]}' \
+    <public RPC> | jq -r '.result.nodeVersion'
+  ```
+
+  Check **both** columns while you are here, not only the one you are releasing — the
+  other may have been left stale by an earlier release, and this table is where a
+  reader compares them.
+
+  The RPC endpoint must be the **public** one, not the endpoint you ran this release
+  against. The `rpc2.aztec-labs.com` and `canonical.*.rpc.aztec-labs.com` hosts are for
+  operators and tooling and require an API key; `networks.md` and the getting-started
+  guides are read by external developers who do not have one. Publishing a gated host
+  there makes the guide's first command fail for every reader (`403` from rpc2, `401
+  No API key found in request` from the canonical gateways). Not every Aztec-run host
+  is gated — some older per-version ones still answer without a key — so test the
+  specific URL rather than assuming either way.
+
+  Use the third-party provider, as the mainnet column already does:
+
+  | Network | Public RPC (docs) | Operator RPC (not for docs) |
+  | --- | --- | --- |
+  | Mainnet | `https://aztec-mainnet.drpc.org` | `canonical.mainnet.rpc.aztec-labs.com` |
+  | Testnet | `https://aztec-testnet.drpc.org` | `testnet-v<N>.rpc2.aztec-labs.com` |
+
+  Verify before writing it down — it must answer without a key, and report the version
+  you are cutting:
+
+  ```bash
+  curl -s -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"aztec_getNodeInfo","params":[]}' \
+    <public RPC for this release type> | jq -r '.result.nodeVersion'
+  ```
 - **L1 Contract Addresses table**: all addresses from the RPC response, on-chain
   queries, and any additional addresses provided by the user
   - Mainnet: use `https://etherscan.io/address/0xADDR` link format
@@ -457,10 +556,12 @@ transcribe one by hand. Concretely:
 **File:** `docs/docs-developers/getting_started_on_testnet.md` (snapshotted into the
 versioned docs at cut time in Step 11)
 
-- Update `NODE_URL` to the testnet RPC endpoint, and keep it **identical** to the
+- Update `NODE_URL` to the **public** testnet RPC, and keep it **identical** to the
   RPC endpoint in `docs/docs/networks.md` (Step 9). These two are maintained
-  separately, so a `networks.md` RPC change that isn't mirrored here leaves the
-  guide's first command pointing at a dead host.
+  separately, so a `networks.md` change that isn't mirrored here leaves the guide's
+  first command pointing at the wrong host. See Step 9 for why this must be the
+  third-party endpoint and not the Aztec-run one: readers have no API key, and the
+  guide never tells them to set one.
 - The source page names the FPC by its `contracts:SponsoredFPC` alias rather than hardcoding
   an address, so there is nothing to update here from Step 4. Older versioned snapshots still
   hardcode `SPONSORED_FPC_ADDRESS` and do need it (see below).
@@ -484,14 +585,59 @@ Also:
 - Update any testnet RPC URLs or addresses in operator docs under `docs/docs-operate/`
 - Review the testnet section of `docs/docs/networks.md` for accuracy
 
+### Step 10b: Check the operator changelog covers this release
+
+**File:** `docs/docs-operate/operators/reference/changelog/v<major>.md`, plus the
+`## Version history` list in that directory's `index.md`.
+
+This is maintained per-PR by `/updating-changelog`, not by this skill — but it is cut
+into the network snapshot in Step 11, so a gap here publishes a page that announces
+itself as the new version and then lists an older one as the newest release. Operators
+read this page to decide whether to upgrade, so a stale one is worse than none.
+
+**Check `origin/main`, not the working tree.** Step 2 checks out the release tag, and
+the changelog page is written per-PR on `main` — for the first release of a major it
+usually lands after the tag is cut, so it is legitimately absent from the tag. Looking
+at the checkout would report a gap that is not one, and fixing it in a tag checkout
+writes the page somewhere it will never be merged.
+
+```bash
+major=$(python3 -c "import json;print(json.load(open('.release-please-manifest.json'))['.'].split('.')[0])")
+git fetch origin main
+git show origin/main:docs/docs-operate/operators/reference/changelog/v${major}.md >/dev/null \
+  && echo "page present" || echo "MISSING: v${major}.md"
+git show origin/main:docs/docs-operate/operators/reference/changelog/index.md | grep -n '^### ' | head -3
+git show origin/main:docs/sidebars-operate.js | grep -n "changelog/v${major}"
+```
+
+All three must hold on `origin/main`:
+
+1. `v<major>.md` exists.
+2. `index.md` carries a `### ` entry for this release's major (and minor, if the
+   series already has more than one — entries are per-minor: `v5.2.0`, `v4.3.x`).
+   Do not require the exact version string: an rc or patch is covered by its minor's
+   entry.
+3. `docs/sidebars-operate.js` lists `operators/reference/changelog/v<major>` — the
+   sidebar enumerates changelog pages explicitly, so a page that is not listed is
+   published but unreachable from the nav.
+
+If any fails, write it on `main` first (`/updating-changelog`, or by hand from the
+commit range) and merge it, then pick it up here through Step 12's reconcile along
+with the rest of the `main` changes. Do not cut around it, and do not write it into
+the tag checkout.
+
+This has already shipped wrong once: no `v6.md` existed at all when v6.0.0-rc.1 was
+rehearsed, because `/updating-changelog` had been diffing against `next` since the
+migration and failing instead of running.
+
 ### Step 11: Cut Versioned Docs
 
 **Prerequisite — preprocess before cutting.** `docs:version` snapshots from
 `processed-docs/` (the resolved path the docs plugins serve, see
 `docusaurus.config.js`), *not* the raw `docs-*` source. So you must run
-`yarn preprocess` (or a full `yarn build`) with the same `RELEASE_TYPE`/`*_TAG`
-env vars used below *before* cutting, or the snapshot captures stale/empty
-content. This is why a freshly cut snapshot already has macros resolved (no raw
+`yarn preprocess` (or a full `yarn build`) with `RELEASE_TYPE`, the matching
+`*_TAG` and `COMMIT_TAG` (all three, see below) *before* cutting, or the snapshot
+captures stale/empty content. This is why a freshly cut snapshot already has macros resolved (no raw
 `#release_version`/`#include_code`). The "verify no raw placeholders remain"
 check later in this step confirms the preprocess took effect.
 
@@ -510,6 +656,40 @@ Set the environment variables matching the release type:
 - **Testnet**: `TESTNET_TAG=<new_version> RELEASE_TYPE=testnet`
 - **Mainnet**: `MAINNET_TAG=<new_version> RELEASE_TYPE=mainnet`
 
+**Set `COMMIT_TAG=v<new_version>` as well, on every release type — on the
+`yarn preprocess` run, not on `docs:version`.** `docs:version` only copies
+`processed-docs/`; the macros are already resolved by then, so a `COMMIT_TAG=` on
+that command line does nothing. It is easy to miss because it is not named per
+release type, and the failure is silent: `include_version.js` defaults it to `next`,
+and `#include_version_without_prefix` falls back to `latest` when the tag does not
+start with `v`. Both are plausible values, so the cut looks correctly processed and
+the build passes, but neither is usable:
+
+- `#include_aztec_version` resolves to `next` — both in `Nargo.toml` git
+  dependencies, where it is not a ref in `aztec-labs-eng/aztec-nr` so `aztec compile`
+  fails with `fatal: Remote branch next not found in upstream origin`, and in npm
+  installs as `@aztec-labs/aztec.js@next`, which is not a dist-tag, so `yarn add`
+  fails outright.
+- `#include_version_without_prefix` resolves to `latest`, which is NOT the release.
+  At the v6 rehearsal `@aztec-labs/aztec.js@latest` was an August nightly, older than
+  the rc being cut and wire-incompatible with it (`-32702` reorg errors at runtime),
+  while `@aztec-foundation/l1-artifacts@latest` was `0.0.1-commit.b66364b`.
+
+Unset, this leaves dozens of unusable references across the tutorials in one cut.
+Only Step 15 catches it, and only partly: the build validates links and spelling, not
+whether a dependency resolves. Verify after preprocess and before cutting, from
+`docs/` — every count must be `0`:
+
+```bash
+cd docs
+COMMIT_TAG=v<new_version> <TAG_VAR>=<new_version> RELEASE_TYPE=<release_type> yarn preprocess
+grep -rcE 'tag *= *"next"|@next\b|@latest|VERSION=latest|aztec\.network/latest' \
+  processed-docs/docs-developers/docs/tutorials/ | grep -v ':0$'
+```
+
+Both spacings of `tag = "next"` appear in the sources, so match the spaced form too;
+grepping only `tag="next"` misses most of the Nargo dependencies.
+
 **Important:** The version string passed to `docs:version` must always be prefixed
 with `v` (e.g. `v4.1.0-rc.2`, not `4.1.0-rc.2`).
 
@@ -518,11 +698,18 @@ cd docs
 <TAG_VAR>=<new_version> RELEASE_TYPE=<release_type> yarn docusaurus docs:version:developer v<new_version>
 ```
 
-Then update the versions files:
+Then write the version mapping — **this is the Step 5 developer config update,
+deferred to here.** The directory now exists, so naming the version no longer breaks
+docusaurus:
 
 ```bash
-scripts/update_docs_versions.sh developer
+scripts/update_docs_versions.sh developer <release_type> v<new_version>
 ```
+
+Both arguments are required. With only the instance name the script reconciles
+existing entries and prints `WARNING: Version ... not in the config file. Update ...
+manually` — it does not add the new one, `lastVersion` stays on the previous release,
+and the snapshot you just cut is served as an unlabelled extra version.
 
 For **mainnet** and **testnet** releases, also cut and configure the network/operator docs.
 
@@ -548,11 +735,24 @@ Also verify that macros were resolved in the network versioned snapshot — chec
 that `docs/network_versioned_docs/version-v<new_version>/` contains no raw
 `#release_version` or `#release_network` placeholders.
 
-**Strip the empty `## TBD` heading from the cut snapshot.** The source
-migration notes keep `## TBD` as the working bucket for future entries, but a
-final release snapshot must not render an empty TBD section. After the cut,
-remove the empty `## TBD` (and any empty `## Unreleased (...)`) headings from
-`developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`.
+**Strip the `## TBD` section from the cut snapshot — this is not cosmetic.** The
+source keeps `## TBD` as the working bucket, and Step 8 deliberately leaves items
+there that have NOT shipped in this release. The cut copies the file wholesale, so
+those items land in the snapshot and publish under the new version unless you remove
+them. In one rehearsal the section carried ~4,000 characters describing an unmerged
+oracle and APIs absent from the tag.
+
+So Step 8's triage and this strip are a pair: triage decides what has not shipped,
+and this is what stops it shipping anyway. Remove the whole `## TBD` section (and any
+`## Unreleased (...)`), empty or not, from
+`developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md`,
+then confirm:
+
+```bash
+grep -n '^## ' developer_versioned_docs/version-v<new_version>/docs/resources/migration_notes.md | head -3
+```
+
+The first heading must be the new version.
 
 #### Hardcoded version references
 

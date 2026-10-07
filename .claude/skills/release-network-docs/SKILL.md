@@ -30,6 +30,21 @@ self-identify its release type, ask the user to confirm.
 **This skill DOES** regenerate the Node JSON-RPC API reference for the
 versioned docs (see Step 5a).
 
+## RPC endpoints: public vs operator
+
+Two different endpoints, and mixing them up publishes a broken guide.
+
+| | Public (goes in docs) | Operator (what you query) |
+| --- | --- | --- |
+| Mainnet | `https://aztec-mainnet.drpc.org` | `canonical.mainnet.rpc.aztec-labs.com` |
+| Testnet | `https://aztec-testnet.drpc.org` | `testnet-v<N>.rpc2.aztec-labs.com` |
+
+Run this skill against the operator endpoint — it is authoritative and needs
+`AZTEC_NODE_API_KEY`. But anything written into `networks.md` must be the public one:
+readers have no key, and the gated hosts reject them (`403` from rpc2, `401 No API key
+found in request` from the canonical Kong gateways). Verify the public endpoint
+reports the version you are cutting before writing it down.
+
 ## Usage
 
 ```
@@ -118,9 +133,10 @@ and reaches us only as the `@aztec-foundation/l1-artifacts` npm package, which
 ships the whole Solidity tree. Read it from `docs/node_modules/` after
 `yarn install` in `docs/`. The revision you get is pinned in
 `docs/package.json` and resolved by `docs/yarn.lock` — that pair governs this
-install, not `yarn-project/package.json`, which pins the same package
-separately. They are expected to agree; if they do not at the release tag, stop
-and find out why before trusting either.
+install. `yarn-project/package.json` pins the same package separately, and
+`labs-aztec-toolchain/pins.mjs` checks both against `BB_VERSION`, so all three are
+expected to agree; if they do not at the release tag, stop and find out why before
+trusting any of them.
 
 - **Reward Booster** (stored in Rollup's `RewardLib` storage, no getter)
 - **Tally Slashing Proposer** (deployed alongside Slasher, no getter)
@@ -147,9 +163,10 @@ Update the column matching the release type (**Alpha (Mainnet)** or **Testnet**)
 in each table:
 
 - **Network Technical Information table**: update the version, rollup version.
-  Update the RPC endpoint only if the user provides a new one (the argument
-  RPC URL may be temporary or internal). Keep bootnodes and block explorer
-  links unless the user requests changes.
+  Never write the argument RPC URL into the table — that is the operator endpoint.
+  The published endpoint is the public one from the table above; change it only if the
+  user provides a new public URL, and verify it answers without a key first. Keep
+  bootnodes and block explorer links unless the user requests changes.
 
 - **L1 Contract Addresses table**: update all addresses from the RPC response,
   on-chain queries, and any additional addresses provided by the user.
