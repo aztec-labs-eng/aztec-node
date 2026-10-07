@@ -67,7 +67,7 @@ Primitive types (`bool`, `u8` through `u128`, `Field`, `AztecAddress`) already i
 `#[storage]` requires every state variable's data type to implement `Packable`, but it does not add it for you. Put `#[derive(Packable)]` on the struct yourself.
 
 :::note
-`PublicImmutable<T>` and `DelayedPublicMutable<T>` also require `T: Eq`, because they verify stored values against a hash. Add `Eq` to the derive list (`#[derive(Eq, Packable)]`) for structs used in these state variables. `PublicMutable<T>` only needs `Packable`.
+`DelayedPublicMutable<T>` also requires `T: Eq`. Add `Eq` to the derive list (`#[derive(Eq, Packable)]`) for structs used in this state variable. `PublicMutable<T>` and `PublicImmutable<T>` only need `Packable`.
 :::
 
 When all members are already `Field`-sized (`Field`, `AztecAddress`, and types built from them), deriving is sufficient:

@@ -17,7 +17,7 @@ pub struct WithHash<T, let M: u32> {
 
 impl<T, let M: u32> WithHash<T, M>
 where
-    T: Packable<N = M> + Eq,
+    T: Packable<N = M>,
 {
     pub fn new(value: T) -> Self {
         let packed = value.pack();
@@ -71,7 +71,7 @@ where
         } else {
             // The hash slot can only hold a zero if it is uninitialized. Therefore, the hints must then be zero (i.e.
             // the default value for public storage) as well.
-            assert_eq(hint.get_value(), T::unpack(std::mem::zeroed()), "Non-zero hint for zero hash");
+            assert_eq(hint.packed, std::mem::zeroed(), "Non-zero hint for zero hash");
         };
 
         hint.get_value()
@@ -180,6 +180,45 @@ mod test {
 
             // This should fail because the hint value is non-zero and the hash is zero (default value of storage)
             let _ = WithHash::<MockStruct, _>::historical_public_storage_read(block_header, address, STORAGE_SLOT);
+        });
+    }
+
+    /// A value whose `Eq` ignores one of its packed fields.
+    #[derive(Packable)]
+    struct PartiallyComparedStruct {
+        compared: Field,
+        not_compared: Field,
+    }
+
+    impl Eq for PartiallyComparedStruct {
+        fn eq(self, other: Self) -> bool {
+            self.compared == other.compared
+        }
+    }
+
+    #[test(should_fail_with = "Non-zero hint for zero hash")]
+    unconstrained fn bad_hint_uninitialized_value_equal_to_zeroed__regression() {
+        let env = TestEnvironment::new();
+
+        env.private_context(|context| {
+            let block_header = context.anchor_block_header;
+            let address = context.this_address();
+
+            // The hint is not what public storage holds, even though it compares equal to a zeroed value.
+            let hint = PartiallyComparedStruct { compared: 0, not_compared: 1 };
+            assert_eq(hint, std::mem::zeroed());
+
+            let hint_packed = hint.pack();
+            let _ = OracleMock::mock("aztec_utl_getFromPublicStorage")
+                .with_params((block_header.hash(), address.to_field(), STORAGE_SLOT, hint_packed.len()))
+                .returns(hint_packed)
+                .times(1);
+
+            let _ = WithHash::<PartiallyComparedStruct, _>::historical_public_storage_read(
+                block_header,
+                address,
+                STORAGE_SLOT,
+            );
         });
     }
 
