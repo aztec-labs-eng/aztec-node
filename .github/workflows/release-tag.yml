@@ -72,11 +72,12 @@ on:
 jobs:
   tag:
     runs-on: ubuntu-latest
-    # Shared with release-tag-nightly.yml, so a dispatched tag and a scheduled
-    # nightly on the same line queue rather than race; it also keeps two rc or
-    # private dispatches on the same line from computing the same number.
+    # One group per line and kind, so a run waiting on its approval holds back
+    # only dispatches of its own kind, which would otherwise compute the same tag
+    # name. Kinds never share a tag name, so they tag in parallel.
+    # The scheduled nightly in release-tag-nightly.yml takes no group.
     concurrency:
-      group: release-tag-${{ inputs.branch }}
+      group: release-tag-${{ inputs.branch }}-${{ inputs.kind }}
     # A re-run replays the original inputs against the branch's current tip, so
     # an old stable dispatch re-run after a version bump would cut a release
     # nobody asked for. Dispatch again instead, which asks for approval afresh.
