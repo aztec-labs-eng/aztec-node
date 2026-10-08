@@ -325,7 +325,6 @@ const config = {
     ],
     // ["./src/plugins/plugin-embed-code", {}],
   ],
-  clientModules: ["./src/clientModules/docsgpt.js"],
   customFields: {},
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
@@ -444,6 +443,11 @@ const config = {
                 type: "html",
                 value: '<span class="dropdown-subtitle">Other Docs</span>',
                 className: "dropdown-subtitle",
+              },
+              {
+                to: "/developers/ai_tooling",
+                label: "AI Tooling",
+                className: "no-external-icon",
               },
               {
                 to: "/developers/docs/resources/video_lessons",

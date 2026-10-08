@@ -814,7 +814,7 @@ cd docs && grep -rn "<old_version>" src/ docs-developers/ docs-operate/ docs/ \
   network_versioned_docs/version-v<new_version>/
 ```
 
-Known hits: `src/clientModules/docsgpt.js` (`heroDescription`),
+Known hits:
 `developer_versioned_docs/version-v<new_version>/docs/aztec-js/wallet-sdk/{wallet,dapp}_integration.md`
 (`yarn add @aztec/*@<version>`).
 
