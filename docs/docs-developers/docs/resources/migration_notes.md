@@ -33,24 +33,11 @@ The `aztec::facts` functions now take the collection's scope as an `aztec::facts
 
 This is a breaking change to the PXE oracle interface (version 32 → 33): contracts must be recompiled against the updated `aztec-nr` to run against the new PXE.
 
-### [Aztec.nr] `MultiCallEntrypoint`, `HandshakeRegistry`, `AuthRegistry` and `PublicChecks` re-pinned at new addresses
-
-A further standard-contract re-pin, against the v6.0.0-rc.6 toolchain and oracle interface version 33, moves the canonical `MultiCallEntrypoint`, `HandshakeRegistry`, `AuthRegistry` and `PublicChecks` to new addresses and class ids. Handshakes established with the previous registry instance are not visible to the new one and must be re-established, and authorizations set on the previous `AuthRegistry` instance must be set again on the new one. This is separate from the re-pin that shipped in 6.0.0-rc.1, which moved only `MultiCallEntrypoint` and `HandshakeRegistry`.
-
 ### [Protocol] The contract address domain separator is bumped to V3; every contract address changes
 
 The domain separator that goes into contract address derivation (`preaddress = poseidon2(DOM_SEP__CONTRACT_ADDRESS_Vn, public_keys_hash, partial_address)`) is bumped: `DOM_SEP__CONTRACT_ADDRESS_V2` (`4099338721`) is replaced by `DOM_SEP__CONTRACT_ADDRESS_V3 = 993442748` (`hash_to_u32("az_dom_sep", "contract_address_v3")`). Every protocol version rotates this separator on purpose: an address can never exist on two rollup instances, so funds cannot be sent to an address that is live on one rollup and dead on another. As a result, every contract address, including account addresses, differs from the address the same class, salt, initialization and public keys produced under V2. The `V` number is the separator revision, not the protocol version.
 
-Nothing needs to change in contract code, but anything that hard-codes an address must be updated. The canonical addresses of the standard contracts, which are deterministic in their pinned artifacts and the separator, move to:
-
-| Contract            | V2 address                                                           | V3 address                                                           |
-| ------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| AuthRegistry        | `0x2e05e8fbfb2ce9a31e4b4ae5097c01b79d9b3529b1e861016c9c9a5d62fdf7c9` | `0x120bf1fe8c548704113679844f28f54b787aafad438bd90f20654f8ffef65e83` |
-| MultiCallEntrypoint | `0x09b93e8efd54a70cd718bc4d8ecf52c51db8150d300c8877c56796ee8c505137` | `0x2d464e835406c6057bf147843d1541e0b338a13f8fedd5cba697629172dd8105` |
-| PublicChecks        | `0x0468c918e7d7e077f4fa75e275891db9bee8faaeafab83e870eeb39dbfaddbbe` | `0x2097f8b30eed69e12abbb5107bcae325aa8b02ebf30a111d38f1ba89a15aa6a4` |
-| HandshakeRegistry   | `0x24d2effac2983dfcae3aea48019aa10b80a7d2cfddc52cdbd9b90745ed0b0fc7` | `0x20dfae8b5be70f13680b37dd346752517db43ebfc02bd5686fc11b3c5cba32b9` |
-
-`STANDARD_*_ADDRESS` in `@aztec-labs/standard-contracts` and `aztec::standard_addresses` carry the new values, so code that reads them needs only a recompile. HandshakeRegistry derives addresses itself, through `get_public_keys`, so the separator is compiled into its bytecode and the pinned standard-contract build is refreshed with it. That recompile also picks up the current aztec-nr, at oracle interface version 33, in all four contracts: their bytecode changes with it, so their artifact hashes and addresses move for that reason as well as for the separator.
+Nothing needs to change in contract code, but anything that hard-codes an address must be updated.
 
 The protocol contracts keep their magic addresses (`1`, `2`, ...). Their registration nullifiers are siloed by those magic addresses rather than by the derived ones, so the genesis constants move for a narrower reason: ContractInstanceRegistry calls `AztecAddress::compute` when it publishes an instance, so the separator is in its bytecode, its class id rotates, and exactly one of the six seeded registration nullifiers changes with it.
 
