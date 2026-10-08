@@ -37,10 +37,12 @@ jobs:
       fail-fast: false
       matrix:
         branch: [main]
-    # Shared with release-tag.yml, so a scheduled nightly and a dispatched tag on
-    # the same line queue rather than race for the same name.
-    concurrency:
-      group: release-tag-${{ matrix.branch }}
+    # No concurrency group: sharing one with release-tag.yml's nightly re-cuts
+    # would let a re-cut left awaiting approval hold back this unattended run,
+    # and each later night's run would cancel the one pending before it. When an
+    # unsuffixed re-cut races this run for the same name, whichever of the two
+    # pushes second fails, and neither moves the existing tag.
+    #
     # Skipped before the job enters `tagger`, so a re-run never mints a token.
     if: github.run_attempt == 1
     environment: tagger
