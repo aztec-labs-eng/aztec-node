@@ -14,7 +14,7 @@ This page covers how a dApp discovers wallet extensions, establishes an encrypte
 Your dApp needs two packages:
 
 ```bash
-npm install @aztec-labs/wallet-sdk @aztec-labs/aztec.js
+npm install @aztec-labs/wallet-sdk@6.0.0-rc.1 @aztec-labs/aztec.js@6.0.0-rc.1
 ```
 
 The key imports:

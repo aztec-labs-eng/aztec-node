@@ -58,7 +58,7 @@ The [`@aztec-foundation/l1-artifacts`](https://www.npmjs.com/package/@aztec-foun
 ```bash
 npm pack @aztec-foundation/l1-artifacts@#release_version
 mkdir l1-contracts
-tar xzf aztec-l1-artifacts-#release_version.tgz --strip-components=2 -C l1-contracts package/l1-contracts
+tar xzf aztec-foundation-l1-artifacts-#release_version.tgz --strip-components=2 -C l1-contracts package/l1-contracts
 cd l1-contracts
 ```
 

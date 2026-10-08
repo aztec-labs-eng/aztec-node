@@ -14,7 +14,7 @@ Add the contract you want to call to your `Nargo.toml` dependencies:
 
 ```toml
 [dependencies]
-token = { git="https://github.com/AztecProtocol/aztec-packages/", tag="#include_aztec_version", directory="noir-projects/noir-contracts/contracts/app/token_contract" }
+token = { git="https://github.com/aztec-labs-eng/aztec-node/", tag="#include_aztec_version", directory="noir-projects/noir-contracts/contracts/app/token_contract" }
 ```
 
 Then import the contract interface at the top of your contract file:

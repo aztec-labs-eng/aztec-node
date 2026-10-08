@@ -56,14 +56,14 @@ if (proofAsFields.length === 0) {
 const vkAsFields = recursiveArtifacts.vkAsFields;
 
 console.log(`VK size: ${vkAsFields.length}`); // Should be 115
-console.log(`Proof size: ${proofAsFields.length}`); // Should be ~500
+console.log(`Proof size: ${proofAsFields.length}`); // Should be 458
 console.log(`Public inputs: ${mainProofData.publicInputs.length}`); // Should be 1
 
 // Step 9: Save all data to JSON for contract interaction
 const data = {
   vkAsFields: vkAsFields, // 115 field elements - the verification key
   vkHash: recursiveArtifacts.vkHash, // Hash of VK - stored in contract
-  proofAsFields: proofAsFields, // ~500 field elements - the proof
+  proofAsFields: proofAsFields, // 458 field elements - the proof
   publicInputs: mainProofData.publicInputs.map((p: string) => p.toString()),
 };
 
