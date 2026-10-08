@@ -386,6 +386,25 @@ semantic equality; the build can pass with a stale sidebar while legacy pages st
 
 Use the old version recorded at the start of Step 7.
 
+**Delete nothing that another release type still points at.** The version you are
+replacing is often still the *current* version for another type, because types share a
+version string whenever they were last released together. Deleting it then removes that
+type's live docs — and if the type is mainnet, that is also the site default, so the
+bare URL serves nothing. This is the normal state when testnet forks onto a new major
+ahead of mainnet. Check both configs first:
+
+```bash
+python3 -c "
+import json
+for inst in ('developer','network'):
+    c=json.load(open(f'docs/{inst}_version_config.json'))
+    print(inst, c)
+"
+```
+
+If the old version still appears as any type's value in either config, skip the delete
+and say so.
+
 **If this is the first release for this release type** (no previous version
 existed in the config), skip this step.
 

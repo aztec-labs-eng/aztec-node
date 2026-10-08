@@ -2,7 +2,7 @@
 
 exports[`Data generation for noir tests Computes contract info for defaultContract 1`] = `
 {
-  "address": "AztecAddress { inner: 0x07680e2c2f956fafe2ee3a31150da694fd5792515b9349febc7fb738cfb24d7a }",
+  "address": "AztecAddress { inner: 0x2b3f0ef4f511c63fd3657adc4d9ced7d9fdc9d98072b7d8b43cc0791fc6e390a }",
   "artifact_hash": "0x0000000000000000000000000000000000000000000000000000000000003039",
   "contract_address_salt": "0x000000000000000000000000000000000000000000000000000000000000ddd5",
   "contract_class_id": "ContractClassId { inner: 0x2888d24c26f34b139f0f1d30278df8f9007d06da3b63cfe6eeb9a710d51f4f4a }",
@@ -17,7 +17,7 @@ exports[`Data generation for noir tests Computes contract info for defaultContra
 
 exports[`Data generation for noir tests Computes contract info for parentContract 1`] = `
 {
-  "address": "AztecAddress { inner: 0x0e8d8115be632405aa0b0540f28c2f6c7a8a1b99ee18ea975c31d14f52377cb1 }",
+  "address": "AztecAddress { inner: 0x02cf3f963c4dd25c241309655b4c319c0589a59f4f440e38d1481ae254c297a5 }",
   "artifact_hash": "0x00000000000000000000000000000000000000000000000000000000000004bc",
   "contract_address_salt": "0x0000000000000000000000000000000000000000000000000000000000001618",
   "contract_class_id": "ContractClassId { inner: 0x2998b9cf4a582f068a01b43c141dbcc5fd8f5cd17a797484b5a5db2386cf7574 }",
@@ -32,7 +32,7 @@ exports[`Data generation for noir tests Computes contract info for parentContrac
 
 exports[`Data generation for noir tests Computes contract info for updatedContract 1`] = `
 {
-  "address": "AztecAddress { inner: 0x1b1ac9bb4af44a4f2f4e6ecc488dc18b9b8b8b3bacfa99e6cec1b81fa9d10b1e }",
+  "address": "AztecAddress { inner: 0x2166216039b46642ec9cabc114322efa15d68e0e046b0cc54d6ef0db18e32f6f }",
   "artifact_hash": "0x0000000000000000000000000000000000000000000000000000000000054501",
   "contract_address_salt": "0x0000000000000000000000000000000000000000000000000000000000000315",
   "contract_class_id": "ContractClassId { inner: 0x07a63b1343bb8515d1115202c71cdc95f9bcda9c2237bdfc25435b89ffa06b46 }",

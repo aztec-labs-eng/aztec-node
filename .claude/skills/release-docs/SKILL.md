@@ -814,7 +814,7 @@ cd docs && grep -rn "<old_version>" src/ docs-developers/ docs-operate/ docs/ \
   network_versioned_docs/version-v<new_version>/
 ```
 
-Known hits: `src/clientModules/docsgpt.js` (`heroDescription`),
+Known hits:
 `developer_versioned_docs/version-v<new_version>/docs/aztec-js/wallet-sdk/{wallet,dapp}_integration.md`
 (`yarn add @aztec/*@<version>`).
 
@@ -826,7 +826,7 @@ documentation work that merged into `main` after the tag was created may therefo
 because the divergence is invisible if you only diff the working tree (which is
 checked out at the tag in Step 2) against the snapshot you just cut from it.
 
-Two distinct classes of change can be missed — **check both**:
+Three distinct classes of change can be missed — **check all three**:
 
 - **Source (current) docs and sidebars** — `docs/docs-developers/` (→
   `developer_versioned_docs/`), `docs/docs-operate/` (→ `network_versioned_docs/`),
@@ -841,6 +841,31 @@ Two distinct classes of change can be missed — **check both**:
   `docs/developer_versioned_docs/version-<prev_version>/...`). These were carried
   into the previous version on `main` but will not exist in a snapshot cut from the
   tag, because the tag predates them.
+- **Build tooling and config** — `docs/scripts/` (the validators and generators
+  `yarn build` runs) and `docs/docusaurus.config.js`. These are not published content and
+  are not snapshotted, so they are not part of the release; the tag simply carries
+  whatever version existed when it was cut. A tag older than a repair runs the *broken*
+  copy, and the damage surfaces as broken documentation rather than as broken tooling.
+  Take `origin/main`'s copies:
+
+  ```bash
+  git diff --name-only v<new_version>..origin/main -- docs/scripts/ docs/docusaurus.config.js
+  # for each repair (not for changes that support post-tag features):
+  git show origin/main:docs/<file> > docs/<file>
+  ```
+
+  Port repairs, not features: a generator change that adds support for an API introduced
+  after the tag has nothing to generate from this tag's source, so leave it.
+
+  `docusaurus.config.js` matters more than it looks because `editUrl` is baked into every
+  rendered page. Cutting v6.0.0-rc.1 emitted 124 pages whose "Edit this page" link pointed
+  at `AztecProtocol/aztec-packages/edit/next/...` — a repo and branch that no longer
+  exist — because the repair had landed on `main` after the tag. Grep the built output,
+  not just the sources:
+
+  ```bash
+  grep -rl 'github.com/AztecProtocol' build/ | head
+  ```
 
 Always compare against `origin/main`, **not** the working tree, so the divergence
 is actually visible:
@@ -914,6 +939,16 @@ is actually visible:
 existing versioned dirs, so a build before the snapshot exists fails — the
 config points to a version that hasn't been cut yet. Running it here, after
 Step 12's reconcile, also validates the backported content.
+
+**A wall of "invalid redirect targets" means the validator is broken, not the docs.**
+If `validate_redirect_targets.sh` rejects most or all targets, read one of the rejected
+values: when it still carries its `to = "` prefix, the script's `sed` never substituted
+and is handing the validator whole TOML lines instead of paths. The cause is a tag that
+predates the portability repairs — `sed -E 's/^\s*to\s*=.../'` matches nothing under
+BSD `sed` (macOS), which does not support `\s`, so every line passes through unchanged.
+Fix it by taking `origin/main`'s `docs/scripts/`, per Step 12's third class; do not chase
+the individual redirects. Confirm the flavour with `sed --version` — BSD answers
+`illegal option`. A 150-target site reported this as 185 broken links.
 
 **`rc` tags are still mainnet.** Always pass `RELEASE_TYPE=mainnet` explicitly
 for rc-suffixed mainnet builds. The API-doc generation scripts fall back to
@@ -1038,6 +1073,28 @@ infra down), say so and list what was skipped.
 
 Identify the previous developer docs version for this release type from
 `docs/developer_version_config.json` (look for the old entry being replaced).
+
+**Delete nothing that another release type still points at.** Release types share
+version strings whenever they were last released together, so the version you are
+replacing is often still the *current* version for another type — and deleting it
+removes that type's live docs. This is the normal state when testnet forks onto a new
+major ahead of mainnet: testnet moves to `v6.0.0-rc.1` while mainnet stays on `v5.2.0`,
+the value testnet just vacated. Deleting `version-v5.2.0` there would take out mainnet,
+which is also the site default (`lastVersion: mainnetDeveloperVersion || ...`), so the
+bare URL would serve nothing. Check every entry in **both** configs before deleting:
+
+```bash
+python3 -c "
+import json
+for inst in ('developer','network'):
+    c=json.load(open(f'docs/{inst}_version_config.json'))
+    print(inst, c)
+"
+```
+
+If the old version still appears as any type's value in either config, skip the delete
+and say so — there is nothing to clean up. The old snapshot stops being referenced only
+once every type has moved off it.
 
 **Note:** For testnet, there may not be an old developer docs version to clean up if
 this is the first testnet developer docs cut. In that case, skip this part.

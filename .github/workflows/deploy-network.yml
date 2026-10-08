@@ -1,6 +1,7 @@
 # Low-level workflow to deploy a single network
 # This is called by other deployment workflows
 name: Deploy Network
+run-name: Deploy Network (${{ inputs.image_tag }} to ${{ inputs.network }})
 
 on:
   workflow_call:

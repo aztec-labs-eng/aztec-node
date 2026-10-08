@@ -230,6 +230,42 @@ describe('public_processor', () => {
       expect(failed).toEqual([]);
     });
 
+    describe('block gas limit with unused teardown gas', () => {
+      const maxBlockGas = new Gas(150, 150);
+      let txs: Tx[];
+
+      beforeEach(async () => {
+        // Each tx bills its full teardown limit (100) but actually uses far less (10).
+        txs = await timesParallel(2, i =>
+          mockTx(i + 1, {
+            numberOfNonRevertiblePublicCallRequests: 1,
+            numberOfRevertiblePublicCallRequests: 1,
+            gasLimits: new Gas(100, 100),
+          }),
+        );
+        mockedEnqueuedCallsResult.gasUsed = {
+          totalGas: new Gas(10, 10),
+          publicGas: new Gas(10, 10),
+          teardownGas: new Gas(1, 1),
+          billedGas: new Gas(100, 100),
+        };
+      });
+
+      it('accumulates billed gas when building a proposal', async function () {
+        const [processed, failed] = await processor.process(txs, { maxBlockGas, isBuildingProposal: true });
+
+        expect(processed.map(p => p.hash)).toEqual([txs[0].getTxHash()]);
+        expect(failed).toEqual([]);
+      });
+
+      it('accumulates billed gas when re-executing', async function () {
+        const [processed, failed] = await processor.process(txs, { maxBlockGas, isBuildingProposal: false });
+
+        expect(processed.map(p => p.hash)).toEqual([txs[0].getTxHash()]);
+        expect(failed).toEqual([]);
+      });
+    });
+
     it('does not send a transaction to the prover if pre validation fails', async function () {
       const tx = await mockPrivateOnlyTx();
 

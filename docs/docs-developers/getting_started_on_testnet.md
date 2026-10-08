@@ -52,7 +52,7 @@ This installs:
 Set the required environment variables:
 
 ```bash
-export NODE_URL=https://v5.testnet.rpc.aztec-labs.com
+export NODE_URL=https://aztec-testnet.drpc.org
 ```
 
 ### Step 2: Register the Sponsored FPC

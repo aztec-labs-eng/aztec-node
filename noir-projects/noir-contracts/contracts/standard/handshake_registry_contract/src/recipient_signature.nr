@@ -168,7 +168,7 @@ mod test {
             ),
         };
         let recipient = AztecAddress::from_field(
-            0x1b94108a8172e103629879215c11f224522aa1bd0e4d50505c041c500f82d15b,
+            0x1866b3a27833a08ad11e6a93fc45227aca73ef01e8df719a11f078ab9bfef2c4,
         );
         let chain_id = 0x7a69;
         let version = 1;
