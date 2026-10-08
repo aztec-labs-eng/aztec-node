@@ -19,6 +19,7 @@ import {
   EPHEMERAL_ARRAY,
   EVENT_VALIDATION_REQUEST,
   FACT_COLLECTION,
+  FACT_SCOPE,
   FIELD,
   FIXED_ARRAY,
   FUNCTION_SELECTOR,
@@ -353,7 +354,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_recordFact: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
       { name: 'factCollectionId', type: FIELD },
       { name: 'factTypeId', type: FIELD },
@@ -365,7 +366,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_deleteFactCollection: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
       { name: 'factCollectionId', type: FIELD },
     ],
@@ -374,7 +375,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getFactCollection: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
       { name: 'factCollectionId', type: FIELD },
     ],
@@ -384,7 +385,7 @@ export const ORACLE_REGISTRY = {
   aztec_utl_getFactCollectionsByType: makeEntry({
     params: [
       { name: 'contractAddress', type: AZTEC_ADDRESS },
-      { name: 'scope', type: AZTEC_ADDRESS },
+      { name: 'scope', type: FACT_SCOPE },
       { name: 'factCollectionTypeId', type: FIELD },
     ],
     returnType: EPHEMERAL_ARRAY(FACT_COLLECTION),
