@@ -45,26 +45,36 @@ interface ExecutionPayload {
 }
 
 interface FunctionCall {
+  name: string;               // Function name
   to: AztecAddress;           // Target contract
-  functionSelector: FunctionSelector;
-  args: Fr[];                 // Function arguments
+  selector: FunctionSelector; // Function to call
+  type: FunctionType;         // Private, public or utility
+  hideMsgSender: boolean;     // Hide the caller from an enqueued public call?
   isStatic: boolean;          // View call?
+  args: Fr[];                 // Function arguments
 }
 ```
 
 Example from a Pod Racing dApp:
 
 ```typescript
-const payload = new ExecutionPayload([
-  {
-    to: gameContractAddress,
-    functionSelector: FunctionSelector.fromSignature('boost()'),
-    args: [],
-    isStatic: false,
-  },
-]);
+const payload = new ExecutionPayload(
+  [
+    FunctionCall.from({
+      name: 'boost',
+      to: gameContractAddress,
+      selector: await FunctionSelector.fromSignature('boost()'),
+      type: FunctionType.PRIVATE,
+      hideMsgSender: false,
+      isStatic: false,
+      args: [],
+    }),
+  ],
+  [], // authWitnesses
+  [], // capsules
+);
 
-const receipt = await wallet.sendTx(payload, {
+const { receipt } = await wallet.sendTx(payload, {
   from: playerAddress,
 });
 ```
@@ -124,7 +134,7 @@ function TransactionApproval({ transaction, onApprove, onReject }) {
         {/* Show function calls */}
         {transaction.args?.executionPayload?.calls?.map((call, i) => (
           <div key={i} className="tx-call">
-            <div>{call.functionSelector?.name || 'Unknown'}</div>
+            <div>{call.name || 'Unknown'}</div>
             <div>To: {truncateAddress(call.to)}</div>
           </div>
         ))}
@@ -183,14 +193,14 @@ case 'sendTx': {
   });
 
   // 3. Serialize the result
-  if (typeof result === 'object' && 'txHash' in result) {
+  if ('receipt' in result) {
     return {
-      txHash: result.txHash.toString(),
-      status: result.status,
-      blockNumber: result.blockNumber?.toString(),
+      txHash: result.receipt.txHash.toString(),
+      status: result.receipt.status,
+      blockNumber: result.receipt.blockNumber?.toString(),
     };
   }
-  return { txHash: result.toString() };
+  return { txHash: result.txHash.toString() };
 }
 ```
 
@@ -208,11 +218,11 @@ The inherited `sendTx` method does the heavy lifting:
 // In BaseWallet (inherited by OffscreenWallet)
 async sendTx(executionPayload, opts) {
   // 1. Get fee options (our override uses SponsoredFPC!)
-  const feeOptions = await this.completeFeeOptions(
-    opts.from,
-    executionPayload.feePayer,
-    opts.fee?.gasSettings
-  );
+  const feeOptions = await this.completeFeeOptions({
+    from: opts.from,
+    feePayer: executionPayload.feePayer,
+    gasSettings: opts.fee?.gasSettings,
+  });
 
   // 2. Create execution request
   const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(
@@ -233,37 +243,16 @@ async sendTx(executionPayload, opts) {
 
   // 6. Optionally wait for confirmation
   if (opts.wait !== NO_WAIT) {
-    return await waitForTx(this.aztecNode, txHash, opts.wait);
+    const receipt = await waitForTx(this.aztecNode, txHash, opts.wait);
+    return { receipt };
   }
-  return txHash;
+  return { txHash };
 }
 ```
 
 ## SponsoredFPC Integration
 
-Our `completeFeeOptions` override in `OffscreenWallet` ensures SponsoredFPC is used:
-
-```typescript
-protected async completeFeeOptions(from, feePayer, gasSettings) {
-  const base = await super.completeFeeOptions(from, feePayer, gasSettings);
-
-  // If the payload already includes a fee payer, don't inject another one
-  if (feePayer) {
-    return {
-      ...base,
-      accountFeePaymentMethodOptions: 0, // EXTERNAL
-    };
-  }
-
-  // Otherwise, lazily register and use SponsoredFPC
-  const address = await this.ensureSponsoredFPC();
-  return {
-    ...base,
-    walletFeePaymentMethod: new SponsoredFeePaymentMethod(address),
-    accountFeePaymentMethodOptions: 0, // EXTERNAL: sponsored FPC pays
-  };
-}
-```
+Our `completeFeeOptions` override in `OffscreenWallet` ensures SponsoredFPC is used, as shown in [PXE Integration](./03-pxe-integration.md#sponsoredfpc-fee-payment).
 
 The `SponsoredFeePaymentMethod`:
 1. Creates a fee payment execution payload
@@ -356,26 +345,32 @@ case 'createAuthWit': {
 
 The account signs the authorization, which can be used by other contracts to verify permission.
 
-## Transaction Status
+## Transaction status
 
-After submission, transactions go through states:
+After submission, a transaction's receipt reports one of these statuses:
 
-1. **Pending** - Submitted, waiting for sequencer
-2. **Included** - In a block, but not proven
-3. **Proven** - Epoch proof submitted
-4. **Finalized** - L1 finality achieved
+- `pending` - Still in the mempool
+- `proposed` - Included in a proposed block
+- `checkpointed` - The block's checkpoint has been published on L1
+- `proven` - The block's checkpoint has been proven on L1
+- `finalized` - The L1 transaction that proved the checkpoint has reached L1 finality
+- `dropped` - Dropped by the node
 
-The wallet can track status:
+See [Query transaction status](../../../aztec-js/how_to_send_transaction.md#query-transaction-status) for the receipt variants and their fields.
+
+The wallet can wait for a transaction to be included:
 
 ```typescript
 const receipt = await waitForTx(this.aztecNode, txHash, {
-  timeout: 60_000,  // 60 seconds
-  interval: 1_000,  // Check every second
+  timeout: 60, // Seconds
+  interval: 1, // Seconds between receipt polls
 });
 
-console.log(receipt.status); // 'success' | 'reverted'
+console.log(receipt.status); // 'checkpointed' or later
 console.log(receipt.blockNumber);
 ```
+
+By default, `waitForTx` resolves once the transaction is `checkpointed`, and throws if the transaction is dropped or its execution reverts.
 
 ## Next Steps
 

@@ -454,7 +454,7 @@ async function handleUnlockWallet(password: string) {
   return { success: true };
 }
 ```
-> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L605-L669" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L605-L669</a></sub></sup>
+> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L606-L670" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L606-L670</a></sub></sup>
 
 
 Each account:
@@ -493,7 +493,7 @@ async function handleDeployAccount(address: string) {
 
   // 4. Register SponsoredFPC contract with PXE (shared helper)
   reportProgress('Registering fee payment contract...');
-  const { AztecAddress, SponsoredFeePaymentMethod, SponsoredFPCContract } = await getAztecDeploy();
+  const { NO_FROM, SponsoredFeePaymentMethod, SponsoredFPCContract } = await getAztecDeploy();
   const sponsoredFPCInstance = await getSponsoredFPCInstance();
   const wallet = await getWallet();
   await wallet.registerContract(sponsoredFPCInstance, SponsoredFPCContract.artifact);
@@ -505,8 +505,8 @@ async function handleDeployAccount(address: string) {
 
   const paymentMethod = new SponsoredFeePaymentMethod(sponsoredFPCInstance.address);
   const deployMethod = await accountManager.getDeployMethod();
-  const receipt = await deployMethod.send({
-    from: AztecAddress.ZERO,
+  const { receipt } = await deployMethod.send({
+    from: NO_FROM,
     fee: { paymentMethod },
     wait: { timeout: 2400 },
   });
@@ -519,7 +519,7 @@ async function handleDeployAccount(address: string) {
   return { success: true, txHash: receipt.txHash?.toString() };
 }
 ```
-> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L552-L603" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L552-L603</a></sub></sup>
+> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L553-L604" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L553-L604</a></sub></sup>
 
 
 The deployment:
@@ -544,7 +544,7 @@ async function registerAccountInWallet(address, secret, salt) {
   const wallet = await getWallet();
   await wallet.registerContract(instance, artifact, secretFr);
 
-  const accountManager = await AccountManager.create(wallet, secretFr, accountContract, saltFr);
+  const accountManager = await AccountManager.create(wallet, secretFr, accountContract, { salt: saltFr });
   const account = await accountManager.getAccount();
   wallet.registerAccount(address, account);
 }
