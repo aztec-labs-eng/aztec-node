@@ -58,7 +58,7 @@
     "lodash.chunk": "^4.2.0",
     "lodash.pickby": "^4.5.0",
     "tslib": "^2.4.0",
-    "viem": "2.56.5",
+    "viem": "2.57.1",
     "zod": "~4.4.3"
   },
   "devDependencies": {
