@@ -217,6 +217,13 @@ variable "VALIDATOR_COINBASE" {
   default     = null
 }
 
+variable "VALIDATOR_L1_GAS_LIMIT_BUFFER_PERCENTAGE" {
+  description = "Override for validator L1 gas limit buffer percentage"
+  type        = string
+  nullable    = true
+  default     = null
+}
+
 variable "VALIDATOR_L1_PRIORITY_FEE_BUMP_PERCENTAGE" {
   description = "Override for validator L1 priority fee bump percentage"
   type        = string
