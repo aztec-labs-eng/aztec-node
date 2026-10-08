@@ -61,7 +61,7 @@ async function ensurePXE(nodeUrl: string = NODE_URL): Promise<{ pxe: PXE; node: 
 
 
 Key configuration:
-- `l1Contracts` - Required for the PXE to verify L1 state
+- `rollupAddress` - The L1 rollup contract address, read from the node, that identifies the rollup instance the PXE tracks
 - `proverEnabled` - Enables client-side proof generation
 
 SponsoredFPC is registered lazily when the wallet's `completeFeeOptions()` is first called, rather than at PXE initialization time.
@@ -106,7 +106,7 @@ async function getSponsoredFPCInstance() {
 async function getWallet() {
   if (walletInstance) return walletInstance;
 
-  const { BaseWallet, AztecAddress, SignerlessAccount } = await getAztecWallet();
+  const { BaseWallet, NO_FROM } = await getAztecWallet();
   const { pxe, node } = await ensurePXE();
 
   // AccountFeePaymentMethodOptions.EXTERNAL = 0 — fee is paid by an external FPC
@@ -126,9 +126,6 @@ async function getWallet() {
     }
 
     protected async getAccountFromAddress(address: any): Promise<Account> {
-      if (address.equals(AztecAddress.ZERO)) {
-        return new SignerlessAccount();
-      }
       const key = address.toString();
       const account = this.accounts.get(key);
       if (!account) {
@@ -191,7 +188,7 @@ async function getWallet() {
      * real transaction.
      */
     async sendTx(executionPayload: any, opts: any): Promise<any> {
-      if (executionPayload.authWitnesses.length === 0 && opts.from && !opts.from.equals(AztecAddress.ZERO)) {
+      if (executionPayload.authWitnesses.length === 0 && opts.from && opts.from !== NO_FROM) {
         try {
           await this.extractAndInjectAuthWitnesses(executionPayload, opts.from, opts.fee?.gasSettings);
         } catch (err: any) {
@@ -206,7 +203,7 @@ async function getWallet() {
      * parses CallAuthorizationRequest objects, and creates real auth witnesses.
      */
     private async extractAndInjectAuthWitnesses(executionPayload: any, from: any, feeGasSettings?: any) {
-      const { Fr, getContractInstanceFromInstantiationParams } = await getAztecCore();
+      const { Fr } = await getAztecCore();
 
       // Step 1: Create a stub account that passes all auth checks unconditionally
       log.info('[offscreen] Step 1: Loading stub account module...');
@@ -214,15 +211,24 @@ async function getWallet() {
       const originalAddress = realAccount.getCompleteAddress();
       log.info('[offscreen] Got complete address:', originalAddress.address.toString());
 
-      const { createStubAccount, getStubAccountContractArtifact } = await import('@aztec-labs/accounts/stub/lazy');
-      log.info('[offscreen] Loaded @aztec-labs/accounts/stub/lazy');
+      // The stub has to match the type of the account it stands in for. All accounts in this wallet are Schnorr.
+      const { createStubSchnorrAccount, getStubSchnorrAccountContractArtifact } = await import('@aztec-labs/accounts/schnorr/stub/lazy');
+      log.info('[offscreen] Loaded @aztec-labs/accounts/schnorr/stub/lazy');
 
-      const stubArtifact = await getStubAccountContractArtifact();
+      const stubArtifact = await getStubSchnorrAccountContractArtifact();
       log.info('[offscreen] Loaded stub artifact:', stubArtifact.name);
 
-      const stubAccount = createStubAccount(originalAddress);
-      const stubInstance = await getContractInstanceFromInstantiationParams(stubArtifact, { salt: Fr.random() });
-      log.info('[offscreen] Created stub account and instance');
+      const stubAccount = createStubSchnorrAccount(originalAddress);
+
+      // The override below swaps the account's class for the stub's, which the PXE looks up among registered classes.
+      await this.pxe.registerContractClass(stubArtifact);
+      const { getContractClassFromArtifact } = await import('@aztec-labs/stdlib/contract');
+      const { id: stubClassId } = await getContractClassFromArtifact(stubArtifact);
+      const accountInstance = await this.pxe.getContractInstance(from);
+      if (!accountInstance) {
+        throw new Error(`No contract instance registered in the PXE for account ${from.toString()}`);
+      }
+      log.info('[offscreen] Created stub account and registered stub class');
 
       // Step 2: Simulate with the stub account swapped in via PXE overrides
       log.info('[offscreen] Step 2: Simulating tx with stub account...');
@@ -244,8 +250,11 @@ async function getWallet() {
         simulatePublic: true,
         skipTxValidation: true,
         skipFeeEnforcement: true,
-        overrides: { contracts: { [from.toString()]: { instance: stubInstance, artifact: stubArtifact } } },
+        overrides: {
+          contracts: { [from.toString()]: { instance: { ...accountInstance, currentContractClassId: stubClassId } } },
+        },
         scopes: [from],
+        senderForTags: from,
       });
       log.info('[offscreen] Simulation succeeded');
 
@@ -291,7 +300,7 @@ async function getWallet() {
   return walletInstance;
 }
 ```
-> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L157-L373" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L157-L373</a></sub></sup>
+> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L157-L382" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L157-L382</a></sub></sup>
 
 
 By extending `BaseWallet`, you inherit:
@@ -340,7 +349,7 @@ protected async completeFeeOptions(config: any) {
   };
 }
 ```
-> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L235-L262" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L235-L262</a></sub></sup>
+> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L232-L259" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L232-L259</a></sub></sup>
 
 
 This ensures that by default:
@@ -435,7 +444,7 @@ async function handleMessage(message: any): Promise<any> {
   }
 }
 ```
-> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L375-L453" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L375-L453</a></sub></sup>
+> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L384-L462" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L384-L462</a></sub></sup>
 
 
 Each message type maps to a handler:
@@ -474,23 +483,15 @@ async function handleWalletMethod(method: string, args: any[]): Promise<any> {
     throw new Error(`Unknown wallet method: ${method}`);
   }
 
-  const { WalletSchema, jsonStringify, schemaHasMethod } = await getAztecWallet();
+  const { WalletSchema, jsonStringify, schemaHasMethod, getSchemaParameters, parseWithOptionals } = await getAztecWallet();
 
   // Parse args through WalletSchema to reconstruct proper Aztec types (Buffer, Fr, etc.)
-  // from their JSON representations. The schema's .parameters() returns a zod tuple that
-  // requires all positional elements even if some are optional. Pad with undefined so the
-  // tuple length matches and the parse succeeds.
+  // from their JSON representations. A zod tuple requires all positional elements even if
+  // some are optional, so a plain parse would reject calls that omit trailing optional args.
   let parsedArgs: any[] = args || [];
   if (schemaHasMethod(WalletSchema, method)) {
-    const schema = WalletSchema[method as keyof typeof WalletSchema];
-    const paramSchema = schema.parameters();
-    const expectedLength = (paramSchema as any)?._def?.items?.length ?? 0;
-    const paddedArgs = [...(args || [])];
-    while (paddedArgs.length < expectedLength) {
-      paddedArgs.push(undefined);
-    }
     try {
-      parsedArgs = await paramSchema.parseAsync(paddedArgs);
+      parsedArgs = await parseWithOptionals(args || [], getSchemaParameters(WalletSchema[method]));
     } catch (parseErr: any) {
       log.warn('[offscreen] Args parse warning for', method, ':', parseErr.message);
       parsedArgs = args || [];
@@ -512,7 +513,7 @@ async function handleWalletMethod(method: string, args: any[]): Promise<any> {
   return jsonSafe;
 }
 ```
-> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L464-L523" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L464-L523</a></sub></sup>
+> <sup><sub><a href="https://github.com/aztec-labs-eng/aztec-node/blob/v6.0.0-rc.1/docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L473-L524" target="_blank" rel="noopener noreferrer">Source code: docs/examples/webapp-tutorial/test-extension/src/offscreen/offscreen.ts#L473-L524</a></sub></sup>
 
 
 This generic dispatch means any method on the `BaseWallet` interface (e.g., `getAccounts`, `sendTx`, `simulateTx`, `createAuthWit`, `getChainInfo`) is automatically available to dApps through the wallet SDK protocol.
@@ -568,9 +569,10 @@ async sendTx(executionPayload, opts) {
 
   // 5. Optionally wait for confirmation
   if (opts.wait !== NO_WAIT) {
-    return await waitForTx(this.aztecNode, txHash, waitOpts);
+    const receipt = await waitForTx(this.aztecNode, txHash, waitOpts);
+    return { receipt };
   }
-  return txHash;
+  return { txHash };
 }
 ```
 
