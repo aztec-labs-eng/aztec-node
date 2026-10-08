@@ -296,17 +296,17 @@ export class PublicProcessor implements Traceable {
           continue;
         }
 
-        // During re-execution, check if the actual gas used by this tx would push the block over the gas limit.
+        // During re-execution, check if the billed gas of this tx would push the block over the gas limit.
         // Unlike the proposal-building check (which uses declared gas limits pessimistically before processing),
-        // this uses actual gas and stops processing when the limit is exceeded.
+        // this uses billed gas and stops processing when the limit is exceeded.
         if (
           !isBuildingProposal &&
           maxBlockGas !== undefined &&
-          totalBlockGas.add(processedTx.gasUsed.totalGas).gtAny(maxBlockGas)
+          totalBlockGas.add(processedTx.gasUsed.billedGas).gtAny(maxBlockGas)
         ) {
           this.log.warn(`Stopping re-execution since tx ${txHash} would push block gas over limit`, {
             txHash,
-            txGas: processedTx.gasUsed.totalGas,
+            txGas: processedTx.gasUsed.billedGas,
             totalBlockGas,
             maxBlockGas,
           });
@@ -326,7 +326,9 @@ export class PublicProcessor implements Traceable {
         this.debugLogStore.storeLogs(processedTx.hash.toString(), txDebugLogs);
 
         totalPublicGas = totalPublicGas.add(processedTx.gasUsed.publicGas);
-        totalBlockGas = totalBlockGas.add(processedTx.gasUsed.totalGas);
+        // Block mana limits are enforced on billed gas (the block header's totalManaUsed), which charges the full
+        // teardown gas limit. Accumulating actual gas would treat unused teardown limits as free headroom.
+        totalBlockGas = totalBlockGas.add(processedTx.gasUsed.billedGas);
         totalSizeInBytes += txSize;
         totalBlobFields += txBlobFields;
 
