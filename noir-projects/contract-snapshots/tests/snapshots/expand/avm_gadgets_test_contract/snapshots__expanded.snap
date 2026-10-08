@@ -143,6 +143,7 @@ contract AvmGadgetsTest {
     /// 
     /// This function is automatically injected by the `#[aztec]` macro.
     unconstrained fn offchain_receive(messages: BoundedVec<aztec::messages::processing::offchain::OffchainMessage, 16>) {
+        aztec::oracle::version::assert_compatible_oracle_version();
         let address: aztec::protocol::address::AztecAddress = aztec::context::UtilityContext::new().this_address();
         aztec::messages::processing::offchain::receive(address, messages);
     }
@@ -331,6 +332,7 @@ contract AvmGadgetsTest {
     }
 
     unconstrained fn sync_state(scope: aztec::protocol::address::AztecAddress) {
+        aztec::oracle::version::assert_compatible_oracle_version();
         let address: aztec::protocol::address::AztecAddress = aztec::context::UtilityContext::new().this_address();
         aztec::messages::discovery::do_sync_state(address, _compute_note_hash, _compute_note_nullifier, Option::<unconstrained fn(aztec::protocol::address::AztecAddress, u64, u64, BoundedVec<Field, 11>, aztec::oracle::tx_resolution::ResolvedTx, aztec::protocol::address::AztecAddress)>::none(), Option::<unconstrained fn(aztec::protocol::address::AztecAddress, aztec::protocol::address::AztecAddress) -> aztec::unconstrained_array::UnconstrainedArray<aztec::messages::processing::OffchainMessageWithTx, aztec::ephemeral::EphemeralOracles>>::some(aztec::messages::processing::offchain::sync_inbox), scope);
     }
