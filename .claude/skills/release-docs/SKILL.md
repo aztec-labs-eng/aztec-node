@@ -841,21 +841,31 @@ Three distinct classes of change can be missed — **check all three**:
   `docs/developer_versioned_docs/version-<prev_version>/...`). These were carried
   into the previous version on `main` but will not exist in a snapshot cut from the
   tag, because the tag predates them.
-- **Build tooling under `docs/scripts/`** — the validators and generators that
-  `yarn build` runs. These are not published content and are not snapshotted, so they
-  are not part of the release; the tag simply carries whatever version of them existed
-  when it was cut. A tag older than a tooling repair runs the *broken* tooling, and the
-  failure is reported as broken documentation rather than as a broken script. Take
-  `origin/main`'s copies:
+- **Build tooling and config** — `docs/scripts/` (the validators and generators
+  `yarn build` runs) and `docs/docusaurus.config.js`. These are not published content and
+  are not snapshotted, so they are not part of the release; the tag simply carries
+  whatever version existed when it was cut. A tag older than a repair runs the *broken*
+  copy, and the damage surfaces as broken documentation rather than as broken tooling.
+  Take `origin/main`'s copies:
 
   ```bash
-  git diff --name-only v<new_version>..origin/main -- docs/scripts/
-  # for each repair (not for generator changes that support post-tag features):
-  git show origin/main:docs/scripts/<file> > docs/scripts/<file>
+  git diff --name-only v<new_version>..origin/main -- docs/scripts/ docs/docusaurus.config.js
+  # for each repair (not for changes that support post-tag features):
+  git show origin/main:docs/<file> > docs/<file>
   ```
 
   Port repairs, not features: a generator change that adds support for an API introduced
   after the tag has nothing to generate from this tag's source, so leave it.
+
+  `docusaurus.config.js` matters more than it looks because `editUrl` is baked into every
+  rendered page. Cutting v6.0.0-rc.1 emitted 124 pages whose "Edit this page" link pointed
+  at `AztecProtocol/aztec-packages/edit/next/...` — a repo and branch that no longer
+  exist — because the repair had landed on `main` after the tag. Grep the built output,
+  not just the sources:
+
+  ```bash
+  grep -rl 'github.com/AztecProtocol' build/ | head
+  ```
 
 Always compare against `origin/main`, **not** the working tree, so the divergence
 is actually visible:
