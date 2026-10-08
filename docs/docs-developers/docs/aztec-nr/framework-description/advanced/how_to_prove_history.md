@@ -28,7 +28,7 @@ You can create proofs for these elements at any past block height:
 Common use cases:
 - Verify ownership of an asset from another contract without revealing which specific note
 - Prove eligibility based on historical state (e.g., "owned tokens at block X")
-- Claim rewards based on past contributions (see the [claim contract](https://github.com/AztecProtocol/aztec-packages/blob/#include_aztec_version/noir-projects/noir-contracts/contracts/app/claim_contract/src/main.nr) for a complete example)
+- Claim rewards based on past contributions (see the [claim contract](https://github.com/aztec-labs-eng/aztec-node/blob/#include_aztec_version/noir-projects/noir-contracts/contracts/app/claim_contract/src/main.nr) for a complete example)
 
 ## Choosing a block header
 

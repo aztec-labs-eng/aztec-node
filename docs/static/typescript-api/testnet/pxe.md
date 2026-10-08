@@ -1,6 +1,6 @@
 # @aztec/pxe
 
-Version: 5.2.0
+Version: 6.0.0-rc.1
 
 ## Quick Import Reference
 
@@ -69,16 +69,17 @@ new CapsuleService(capsuleStore: CapsuleStore, allowedScopes: AztecAddress[])
 ```
 
 **Methods**
-- `appendToCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], jobId: string, scope: AztecAddress) => Promise<void>`
-- `copyCapsule(contractAddress: AztecAddress, srcSlot: Fr, dstSlot: Fr, numEntries: number, jobId: string, scope: AztecAddress) => Promise<void>`
-- `deleteCapsule(contractAddress: AztecAddress, slot: Fr, jobId: string, scope: AztecAddress) => void`
-- `getCapsule(contractAddress: AztecAddress, slot: Fr, jobId: string, scope: AztecAddress, transientCapsules?: Capsule[]) => Promise<Fr[] | null>`
-- `readCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, jobId: string, scope: AztecAddress) => Promise<Fr[][]>`
-- `setCapsule(contractAddress: AztecAddress, slot: Fr, capsule: Fr[], jobId: string, scope: AztecAddress) => void`
-- `setCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], jobId: string, scope: AztecAddress) => Promise<void>`
+- `appendToCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], changeSetId: string, scope: AztecAddress) => Promise<void>`
+- `copyCapsule(contractAddress: AztecAddress, srcSlot: Fr, dstSlot: Fr, numEntries: number, changeSetId: string, scope: AztecAddress) => Promise<void>`
+- `deleteCapsule(contractAddress: AztecAddress, slot: Fr, changeSetId: string, scope: AztecAddress) => Promise<void>`
+- `getCapsule(contractAddress: AztecAddress, slot: Fr, changeSetId: string, scope: AztecAddress, transientCapsules?: Capsule[]) => Promise<Fr[] | null>`
+- `readCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, changeSetId: string, scope: AztecAddress) => Promise<Fr[][]>`
+- `setCapsule(contractAddress: AztecAddress, slot: Fr, capsule: Fr[], changeSetId: string, scope: AztecAddress) => Promise<void>`
+- `setCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], changeSetId: string, scope: AztecAddress) => Promise<void>`
 
 ### CapsuleStore
-Implements: `StagedStore`
+
+Extends: `BaseStagingStore<CapsuleStoreChangeSet, CapsuleStoreDb>`
 
 **Constructor**
 ```typescript
@@ -87,18 +88,24 @@ new CapsuleStore(store: AztecAsyncKVStore)
 
 **Properties**
 - `logger: Logger`
-- `readonly storeName: "capsule"` - Unique name identifying this store (used for tracking staged stores from JobCoordinator)
+- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator)
 
 **Methods**
-- `appendToCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], jobId: string, scope: AztecAddress) => Promise<void>` - Appends multiple capsules to a capsule array stored at the base slot. The array length is stored at the base slot, and elements are stored in consecutive slots after it. All operations are performed in a single transaction.
-- `commit(jobId: string) => Promise<void>` - Commits staged data to main storage. Called by JobCoordinator when a job completes successfully. Note: JobCoordinator wraps all commits in a single transaction, so we don't need our own transactionAsync here (and using one would deadlock on IndexedDB).
-- `copyCapsule(contractAddress: AztecAddress, srcSlot: Fr, dstSlot: Fr, numEntries: number, jobId: string, scope: AztecAddress) => Promise<void>` - Copies a number of contiguous entries in the per-contract non-volatile database. This allows for efficient data structures by avoiding repeated calls to `loadCapsule` and `storeCapsule`. Supports overlapping source and destination regions (which will result in the overlapped source values being overwritten). All copied slots must exist in the database (i.e. have been stored and not deleted)
-- `deleteCapsule(contractAddress: AztecAddress, slot: Fr, jobId: string, scope: AztecAddress) => void` - Deletes data in the per-contract non-volatile database. Does nothing if no data was present.
-- `discardStaged(jobId: string) => Promise<void>` - Discards staged data without committing.
-- `getCapsule(contractAddress: AztecAddress, slot: Fr, jobId: string, scope: AztecAddress) => Promise<Fr[] | null>` - Returns data previously stored via `storeCapsule` in the per-contract non-volatile database.
-- `readCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, jobId: string, scope: AztecAddress) => Promise<Fr[][]>`
-- `setCapsule(contractAddress: AztecAddress, slot: Fr, capsule: Fr[], jobId: string, scope: AztecAddress) => void` - Stores arbitrary information in a per-contract non-volatile database, which can later be retrieved with `loadCapsule`. * If data was already stored at this slot, it is overwritten.
-- `setCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], jobId: string, scope: AztecAddress) => Promise<void>`
+- `appendToCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], changeSetId: string, scope: AztecAddress) => Promise<void>` - Appends multiple capsules to a capsule array stored at the base slot. The array length is stored at the base slot, and elements are stored in consecutive slots after it.
+- `applyRollback() => Promise<void>` - No-op: capsules are not anchored to a block, so a prune cannot orphan any of them.
+- `beginChangeSet(changeSetId: string) => void` - Opens the change set, so its operations are accepted until commitChangeSet or discardChangeSet.
+- `commitChangeSet(changeSetId: string) => Promise<void>` - Commits the change set's staged data: flushes it via flushChangeSet, then closes the change set. Runs inside the transaction owned by the caller. Not meant to be overridden: subclasses implement flushChangeSet.
+- `copyCapsule(contractAddress: AztecAddress, srcSlot: Fr, dstSlot: Fr, numEntries: number, changeSetId: string, scope: AztecAddress) => Promise<void>` - Copies a number of contiguous entries in the per-contract non-volatile database. This allows for efficient data structures by avoiding repeated calls to `loadCapsule` and `storeCapsule`. Supports overlapping source and destination regions (which will result in the overlapped source values being overwritten). All copied slots must exist in the database (i.e. have been stored and not deleted)
+- `deleteCapsule(contractAddress: AztecAddress, slot: Fr, changeSetId: string, scope: AztecAddress) => Promise<void>` - Deletes data in the per-contract non-volatile database. Does nothing if no data was present.
+- `discardChangeSet(changeSetId: string) => void` - Closes the change set, discarding any staged data without committing. A no-op if it is not open.
+- `flushChangeSet(changeSet: CapsuleStoreChangeSet, db: CapsuleStoreDb) => Promise<void>` - Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not open a transaction of its own or call withChangeSetAndDb.
+- `getCapsule(contractAddress: AztecAddress, slot: Fr, changeSetId: string, scope: AztecAddress) => Promise<Fr[] | null>` - Returns data previously stored via `storeCapsule` in the per-contract non-volatile database.
+- `readCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, changeSetId: string, scope: AztecAddress) => Promise<Fr[][]>`
+- `rollbackToBlock(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock` via applyRollback. Must be called inside a transaction owned by the caller, since it opens none of its own. Not meant to be overridden: subclasses implement applyRollback.
+- `setCapsule(contractAddress: AztecAddress, slot: Fr, capsule: Fr[], changeSetId: string, scope: AztecAddress) => Promise<void>` - Stores arbitrary information in a per-contract non-volatile database, which can later be retrieved with `loadCapsule`. * If data was already stored at this slot, it is overwritten.
+- `setCapsuleArray(contractAddress: AztecAddress, baseSlot: Fr, content: Fr[][], changeSetId: string, scope: AztecAddress) => Promise<void>`
+- `withChangeSet<R>(changeSetId: string, fn: (changeSet: CapsuleStoreChangeSet) => R | Promise<R>) => Promise<R>` - Runs a change set operation over the staged data alone: takes the store's lock and calls `fn` with the change set's staged data, opening no db transaction. Use withChangeSetAndDb instead when `fn` reads the DB.
+- `withChangeSetAndDb<R>(changeSetId: string, fn: (changeSet: CapsuleStoreChangeSet, db: ReadonlyDb<TDb>) => Promise<R>) => Promise<R>` - Runs a change set operation that reads the DB. Takes the store's lock, opens a transaction, and calls `fn` with the change set's staged data and a read-only view of the DB (writes are staged in memory until flushChangeSet runs on commit). Prefer withChangeSet unless `fn` actually reads the DB. The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
 
 ### ContractClassService
 
@@ -140,22 +147,19 @@ new ContractStore(store: AztecAsyncKVStore)
 
 ### ContractSyncService
 
-Service for syncing the private state of contracts. It uses a cache to avoid redundant sync operations - the cache is wiped when the anchor block changes. The StagedStore naming is broken here. Figure out a better name.
-Implements: `StagedStore`
+Service for syncing the private state of contracts. It uses a cache to avoid redundant sync operations - the cache is wiped when the anchor block changes. Contributes to every synced operation (see OperationContributor): its syncs write into the operation's change set, so it settles them before the change set is decided and releases its per-change-set state on the outcome.
+Implements: `OperationContributor`
 
 **Constructor**
 ```typescript
-new ContractSyncService(aztecNode: AztecNode, contractStore: ContractStore, contractClassService: ContractClassService, noteStore: NoteStore, log: Logger)
+new ContractSyncService(aztecNode: AztecNode, contractStore: ContractStore, contractClassService: ContractClassService, noteStore: NoteStore, log: Logger, __namedParameters: ContractSyncConfig)
 ```
 
-**Properties**
-- `readonly storeName: "contract_sync"` - Unique name identifying this store (used for tracking staged stores from JobCoordinator)
-
 **Methods**
-- `commit(_jobId: string) => Promise<void>` - Commits staged data to main storage. Should be called within a transaction for atomicity.
-- `discardStaged(_jobId: string) => Promise<void>` - Discards staged data without committing. Called on abort.
-- `ensureContractSynced(contractAddress: AztecAddress, functionToInvokeAfterSync: FunctionSelector | null, utilityExecutor: (call: FunctionCall, scopes: AztecAddress[]) => Promise<any>, anchorBlockHeader: BlockHeader, jobId: string, scopes: AztecAddress[]) => Promise<void>` - Ensures a contract's private state is synchronized. Uses a cache to avoid redundant sync operations - the cache is wiped when the anchor block changes.
+- `ensureContractSynced(__namedParameters: ContractSyncRequest) => Promise<void>` - Ensures a contract's private state is synchronized. Uses a cache to avoid redundant sync operations - the cache is wiped when the anchor block changes.
 - `invalidateContractForScopes(contractAddress: AztecAddress, scopes: AztecAddress[]) => void` - Clears sync cache entries for the given scopes of a contract.
+- `onOperationEnd(changeSetId: string, outcome: "committed" | "discarded") => void` - Called once the operation's change set has been committed or discarded. A throw is logged and swallowed: the outcome is already decided by this point, so it cannot change it.
+- `settle(changeSetId: string) => Promise<void>` - Waits until every speculative sync the change set fired has finished, then rejects if any failed, so the change set discards instead of committing. This is needed because a sync that fails midway can leave partial staged writes, and a speculative failure might not be surfaced by any request.
 - `wipe() => void` - Clears sync cache. Called by BlockSynchronizer when anchor block changes.
 
 ### FactCollectionKey
@@ -207,15 +211,16 @@ new FactService(factStore: FactStore, allowedScopes: AztecAddress[])
 ```
 
 **Methods**
-- `deleteFactCollection(factCollectionKey: FactCollectionKey, jobId: string) => Promise<void>`
-- `getFactCollection(factCollectionKey: FactCollectionKey, tips: TipBlockNumbers, jobId: string) => Promise<FactCollectionWithOriginState | undefined>`
-- `getFactCollectionsByType(factCollectionTypeKey: FactCollectionTypeKey, tips: TipBlockNumbers, jobId: string) => Promise<FactCollectionWithOriginState[]>`
-- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: OriginBlock | undefined, jobId: string) => Promise<void>`
+- `deleteFactCollection(factCollectionKey: FactCollectionKey, changeSetId: string) => Promise<void>`
+- `getFactCollection(factCollectionKey: FactCollectionKey, tips: TipBlockNumbers, changeSetId: string) => Promise<FactCollectionWithOriginState | undefined>`
+- `getFactCollectionsByType(factCollectionTypeKey: FactCollectionTypeKey, tips: TipBlockNumbers, changeSetId: string) => Promise<FactCollectionWithOriginState[]>`
+- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: OriginBlock | undefined, changeSetId: string) => Promise<void>`
 
 ### FactStore
 
-Stores immutable facts grouped into collections, isolated by contract and scope. A fact collection is a contract-defined bag of facts identified by a FactCollectionKey (contract, scope, collection type, and id). A fact is a contract-defined immutable, typed datum in a collection. Collections are implicit: one comes into being when its first fact is recorded and ceases to exist once it has no facts left. What makes this store different to, for example, the `CapsuleStore`, is that it is designed to support use cases where resilience to reorgs is needed, via what we call _retractability_. Facts can be retractable or non-retractable. They are retractable if they are associated to an origin block. Retractable facts are removed from the store when their origin block is pruned (typically due to a reorg). Non-retractable facts survive reorgs: they must then be explicitly deleted, so as not to keep consuming resources (storage and compute) indefinitely. Fact collections are isolated by scope. This store is designed to enable Aztec.nr to implement complex workflows such as offchain reception or partial note processing by storing structured data that is guaranteed to exist conditionally to specific blocks being included in the chain, while leaving the complexity of ensuring said guarantees to PXE. A key design driver is that PXE knows nothing about the actual fact contents: it just manages enough metadata to provide the guarantees mentioned above. That way, concepts such as offchain delivery or partial notes are completely defined by Aztec.nr, opening the door to further extension without the need for ad-hoc PXE support. As with most other PXE stores, writes are staged per-job and flushed atomically on commit.
-Implements: `StagedStore`
+Stores immutable facts grouped into collections, isolated by contract and scope. A fact collection is a contract-defined bag of facts identified by a FactCollectionKey (contract, scope, collection type, and id). A fact is a contract-defined immutable, typed datum in a collection. Collections are implicit: one comes into being when its first fact is recorded and ceases to exist once it has no facts left. What makes this store different to, for example, the `CapsuleStore`, is that it is designed to support use cases where resilience to reorgs is needed, via what we call _retractability_. Facts can be retractable or non-retractable. They are retractable if they are associated to an origin block. Retractable facts are removed from the store when their origin block is pruned (typically due to a reorg). Non-retractable facts survive reorgs: they must then be explicitly deleted, so as not to keep consuming resources (storage and compute) indefinitely. Fact collections are isolated by scope. This store is designed to enable Aztec.nr to implement complex workflows such as offchain reception or partial note processing by storing structured data that is guaranteed to exist conditionally to specific blocks being included in the chain, while leaving the complexity of ensuring said guarantees to PXE. A key design driver is that PXE knows nothing about the actual fact contents: it just manages enough metadata to provide the guarantees mentioned above. That way, concepts such as offchain delivery or partial notes are completely defined by Aztec.nr, opening the door to further extension without the need for ad-hoc PXE support. As with most other PXE stores, writes are staged per change set ID and flushed atomically on commit.
+
+Extends: `BaseStagingStore<FactStoreChangeSet, FactStoreDb>`
 
 **Constructor**
 ```typescript
@@ -224,36 +229,21 @@ new FactStore(store: AztecAsyncKVStore)
 
 **Properties**
 - `logger: Logger`
-- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from JobCoordinator)
+- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator)
 
 **Methods**
-- `commit(jobId: string) => Promise<void>` - Commits all staged operations for the given job to persistent storage. Must be called inside a transaction owned by the caller (JobCoordinator wraps all commits in a single transactionAsync, and IndexedDB does not support nested transactions). DO NOT call `#withJobLock` here: awaiting the lock creates a microtask boundary that causes IndexedDB to auto-commit the outer transaction.
-- `deleteFactCollection(factCollectionKey: FactCollectionKey, jobId: string) => Promise<void>` - Deletes a fact collection: removes every fact under the (scope-qualified) collection key. Idempotent: deleting a collection that does not exist is a no-op.
-- `discardStaged(jobId: string) => Promise<void>` - Discards all staged operations for the given job without persisting them.
-- `getFactCollection(factCollectionKey: FactCollectionKey, jobId: string) => Promise<FactCollection | undefined>` - Returns the fact collection for the (scope-qualified) key, or undefined if it has no facts.
-- `getFactCollectionsByType(factCollectionTypeKey: FactCollectionTypeKey, jobId: string) => Promise<FactCollection[]>` - Returns every fact collection of the given type for the queried scope, each holding its facts.
-- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: OriginBlock | undefined, jobId: string) => Promise<void>` - Records a fact in a collection, visible under the given scope. The collection is created implicitly on the first fact recorded for its key: recording into an existing collection just adds to it. If `originBlock === undefined`, the fact is non-retractable: it survives reorgs. A defined origin block makes the fact retractable: on a prune below its block, it will be deleted. Idempotent: re-recording an identical fact (same collection, fact type, payload, and origin block) is a no-op. The same payload tied to a different origin block is a distinct fact.
-- `rollback(toBlock: number) => Promise<void>` - Removes every retractable fact originating from blocks over height `toBlock`, across all scopes. Non-retractable facts are untouched. Must run inside a caller-owned transaction (because it needs to share the transaction with other stores and IndexedDB has no nested transactions). Throws if any job is in flight (has accessed the store and not yet committed or discarded), since rolling back mid-job could re-introduce records originating from deleted blocks or change state underneath a job's view.
-
-### JobCoordinator
-
-JobCoordinator manages job lifecycle and provides crash resilience for PXE operations. It uses a staged writes pattern: 1. When a job begins, a unique job ID is created 2. During the job, all writes go to staging (keyed by job ID) 3. On commit, staging is promoted to main storage 4. On abort, staged data is discarded Note: PXE should only rely on a single JobCoordinator instance, so it can eventually orchestrate concurrent jobs. Right now it doesn't make a difference because we're using a job queue with concurrency=1.
-
-**Constructor**
-```typescript
-new JobCoordinator(kvStore: AztecAsyncKVStore, bindings?: LoggerBindings)
-```
-
-**Properties**
-- `kvStore: AztecAsyncKVStore` - The underlying KV store
-
-**Methods**
-- `abortJob(jobId: string) => Promise<void>` - Aborts a job by discarding all staged data.
-- `beginJob() => string` - Begins a new job and returns a job ID for staged writes.
-- `commitJob(jobId: string) => Promise<void>` - Commits a job by promoting all staged data to main storage.
-- `hasJobInProgress() => boolean` - Checks if there's a job currently in progress.
-- `registerStore(store: StagedStore) => void` - Registers a staged store. Must be called during initialization for all stores that need staging support.
-- `registerStores(stores: StagedStore[]) => void` - Registers multiple staged stores.
+- `applyRollback(toBlock: number, db: FactStoreDb) => Promise<void>` - Removes every retractable fact originating from blocks over height `toBlock`, across all scopes. Non-retractable facts are untouched.
+- `beginChangeSet(changeSetId: string) => void` - Opens the change set, so its operations are accepted until commitChangeSet or discardChangeSet.
+- `commitChangeSet(changeSetId: string) => Promise<void>` - Commits the change set's staged data: flushes it via flushChangeSet, then closes the change set. Runs inside the transaction owned by the caller. Not meant to be overridden: subclasses implement flushChangeSet.
+- `deleteFactCollection(factCollectionKey: FactCollectionKey, changeSetId: string) => Promise<void>` - Deletes a fact collection: removes every fact under the (scope-qualified) collection key. Idempotent: deleting a collection that does not exist is a no-op.
+- `discardChangeSet(changeSetId: string) => void` - Closes the change set, discarding any staged data without committing. A no-op if it is not open.
+- `flushChangeSet(changeSet: FactStoreChangeSet, db: FactStoreDb) => Promise<void>` - Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not open a transaction of its own or call withChangeSetAndDb.
+- `getFactCollection(factCollectionKey: FactCollectionKey, changeSetId: string) => Promise<FactCollection | undefined>` - Returns the fact collection for the (scope-qualified) key, or undefined if it has no facts.
+- `getFactCollectionsByType(factCollectionTypeKey: FactCollectionTypeKey, changeSetId: string) => Promise<FactCollection[]>` - Returns every fact collection of the given type for the queried scope, each holding its facts.
+- `recordFact(factCollectionKey: FactCollectionKey, factTypeId: Fr, payload: Fr[], originBlock: OriginBlock | undefined, changeSetId: string) => Promise<void>` - Records a fact in a collection. The collection is created implicitly on the first fact recorded for its key: recording into an existing collection just adds to it. If `originBlock === undefined`, the fact is non-retractable: it survives reorgs. A defined origin block makes the fact retractable: on a prune below its block, it will be deleted. Idempotent: re-recording an identical fact (same collection, fact type, payload, and origin block) is a no-op. The same payload tied to a different origin block is a distinct fact.
+- `rollbackToBlock(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock` via applyRollback. Must be called inside a transaction owned by the caller, since it opens none of its own. Not meant to be overridden: subclasses implement applyRollback.
+- `withChangeSet<R>(changeSetId: string, fn: (changeSet: FactStoreChangeSet) => R | Promise<R>) => Promise<R>` - Runs a change set operation over the staged data alone: takes the store's lock and calls `fn` with the change set's staged data, opening no db transaction. Use withChangeSetAndDb instead when `fn` reads the DB.
+- `withChangeSetAndDb<R>(changeSetId: string, fn: (changeSet: FactStoreChangeSet, db: ReadonlyDb<TDb>) => Promise<R>) => Promise<R>` - Runs a change set operation that reads the DB. Takes the store's lock, opens a transaction, and calls `fn` with the change set's staged data and a read-only view of the DB (writes are staged in memory until flushChangeSet runs on commit). Prefer withChangeSet unless `fn` actually reads the DB. The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
 
 ### NoteDao
 
@@ -292,7 +282,7 @@ new NoteDao(note: Note, contractAddress: AztecAddress, owner: AztecAddress, stor
 
 **Constructor**
 ```typescript
-new NoteService(noteStore: NoteStore, aztecNode: AztecNode, anchorBlockHeader: BlockHeader, jobId: string)
+new NoteService(noteStore: NoteStore, aztecNode: AztecNode, anchorBlockHeader: BlockHeader, changeSetId: string)
 ```
 
 **Methods**
@@ -303,7 +293,8 @@ new NoteService(noteStore: NoteStore, aztecNode: AztecNode, anchorBlockHeader: B
 ### NoteStore
 
 NoteStore manages the storage and retrieval of notes using an append-only model. Notes are written once (keyed by siloedNullifier) and never mutated. They might be deleted in case of reorg though. Nullifier emissions are recorded as separate append-only entries: a map from nullifier to the number of the block that emitted it. Reorgs are handled by delete-on-prune: the `chain-pruned` event triggers deletion of every note and nullifier originating on a reorg'd block.
-Implements: `StagedStore`
+
+Extends: `BaseStagingStore<NoteStoreChangeSet, NoteStoreDb>`
 
 **Constructor**
 ```typescript
@@ -311,17 +302,20 @@ new NoteStore(store: AztecAsyncKVStore)
 ```
 
 **Properties**
-- `logger: Logger`
-- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from JobCoordinator)
+- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator)
 
 **Methods**
-- `addNotes(notes: NoteDao[], scope: AztecAddress, jobId: string) => Promise<void[]>` - Adds multiple notes to the notes store under the specified scope. Notes are stored using their siloedNullifier as the key, which provides uniqueness. Each note is indexed by multiple criteria for efficient retrieval.
-- `applyNullifiers(siloedNullifiers: DataInBlock<Fr>[], jobId: string) => Promise<NoteDao[]>` - Records emission of the given siloed nullifiers, which causes notes to be considered nullified. Each nullifier gets an append-only entry recording the block number at which it was emitted. Every nullifier passed must correspond to a note already present in this store. Callers only apply nullifiers for notes of scopes they track, and a note is always discovered before the nullifier that spends it, so a nullifier with no matching note signals a bug (broken nonce/index discovery, a sync-ordering error, store corruption, etc). `applyNullifiers` is idempotent: a nullifier whose emission is already recorded (committed or staged in this job) is skipped, so re-applying it neither re-writes the emission, changes note visibility, nor appears in the result.
-- `commit(jobId: string) => Promise<void>` - Commits in-memory job data to persistent storage. Called by JobCoordinator when a job completes successfully. Note: JobCoordinator wraps all commits in a single transaction, so we don't need our own transactionAsync here (and using one would throw on IndexedDB as it does not support nested txs).
-- `discardStaged(jobId: string) => Promise<void>` - Discards staged data without committing. Called on abort.
-- `getNotes(filter: NotesFilter, jobId: string) => Promise<NoteDao[]>` - Retrieves notes based on the provided filter criteria. A note is considered nullified iff its corresponding nullifier emission has been recorded. All DB reads are kicked off before any await so IndexedDB does not auto-commit the transaction mid-read.
-- `nullifiersOfNotesAtBlock(blockNumber: number) => Promise<string[]>` - Returns the nullifiers (note ids) of all notes created at the given block number. Used by delete-on-prune.
-- `rollback(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock`: deletes every note and nullifier emission originating on a block strictly above it, as if nothing past that block height ever happened. Used to retract notes and nullifiers on a reorg. Must be called inside a transaction owned by the caller (it issues no `transactionAsync` of its own, because the reorg path wraps it together with other store operations, and IndexedDB has no nested transaction support). Throws if any job has uncommitted staged writes, since rolling back mid-job could later re-introduce notes or nullifier emissions anchored to deleted blocks.
+- `addNotes(notes: NoteDao[], scope: AztecAddress, changeSetId: string) => Promise<void[]>` - Adds multiple notes to the notes store under the specified scope. Notes are stored using their siloedNullifier as the key, which provides uniqueness. Each note is indexed by multiple criteria for efficient retrieval.
+- `applyNullifiers(siloedNullifiers: DataInBlock<Fr>[], changeSetId: string) => Promise<NoteDao[]>` - Records emission of the given siloed nullifiers, which causes notes to be considered nullified. Each nullifier gets an append-only entry recording the block number at which it was emitted. Every nullifier passed must correspond to a note already present in this store. Callers only apply nullifiers for notes of scopes they track, and a note is always discovered before the nullifier that spends it, so a nullifier with no matching note signals a bug (broken nonce/index discovery, a sync-ordering error, store corruption, etc). `applyNullifiers` is idempotent: a nullifier whose emission is already recorded (committed or currently staged) is skipped, so re-applying it neither re-writes the emission, changes note visibility, nor appears in the result.
+- `applyRollback(toBlock: number, db: NoteStoreDb) => Promise<void>` - Deletes every note and nullifier emission originating on a block strictly above `toBlock`, as if nothing past that block height ever happened, retracting notes and nullifiers on a reorg.
+- `beginChangeSet(changeSetId: string) => void` - Opens the change set, so its operations are accepted until commitChangeSet or discardChangeSet.
+- `commitChangeSet(changeSetId: string) => Promise<void>` - Commits the change set's staged data: flushes it via flushChangeSet, then closes the change set. Runs inside the transaction owned by the caller. Not meant to be overridden: subclasses implement flushChangeSet.
+- `discardChangeSet(changeSetId: string) => void` - Closes the change set, discarding any staged data without committing. A no-op if it is not open.
+- `flushChangeSet(changeSet: NoteStoreChangeSet, db: NoteStoreDb) => Promise<void>` - Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not open a transaction of its own or call withChangeSetAndDb.
+- `getNotes(filter: NotesFilter, changeSetId: string) => Promise<NoteDao[]>` - Retrieves notes based on the provided filter criteria. A note is considered nullified iff its corresponding nullifier emission has been recorded. All DB reads are kicked off before any await so IndexedDB does not auto-commit the transaction mid-read.
+- `rollbackToBlock(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock` via applyRollback. Must be called inside a transaction owned by the caller, since it opens none of its own. Not meant to be overridden: subclasses implement applyRollback.
+- `withChangeSet<R>(changeSetId: string, fn: (changeSet: NoteStoreChangeSet) => R | Promise<R>) => Promise<R>` - Runs a change set operation over the staged data alone: takes the store's lock and calls `fn` with the change set's staged data, opening no db transaction. Use withChangeSetAndDb instead when `fn` reads the DB.
+- `withChangeSetAndDb<R>(changeSetId: string, fn: (changeSet: NoteStoreChangeSet, db: ReadonlyDb<TDb>) => Promise<R>) => Promise<R>` - Runs a change set operation that reads the DB. Takes the store's lock, opens a transaction, and calls `fn` with the change set's staged data and a read-only view of the DB (writes are staged in memory until flushChangeSet runs on commit). Prefer withChangeSet unless `fn` actually reads the DB. The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
 
 ### PXE
 
@@ -349,13 +343,14 @@ Private eXecution Environment (PXE) is a library used by wallets to simulate pri
 - `registerTaggingSecretSource(source: TaggingSecretSource) => Promise<void>` - Registers a source from which this PXE derives the tagging secrets it scans for to discover incoming private logs. See TaggingSecretSource for the meaning of each variant. Does nothing if the source is already registered. After a new source is added we clear the cache tracking which contracts have finished syncing, so every contract re-syncs against the new source's logs (whose notes/events could belong to any contract). Already-discovered notes/events are not discarded.
 - `removeTaggingSecretSource(source: RegisteredTaggingSecretSource) => Promise<void>` - Removes a previously registered tagging secret source, identified by its registered form (see getTaggingSecretSources). Does nothing if it was not registered.
 - `simulateTx(txRequest: TxExecutionRequest, __namedParameters: SimulateTxOpts) => Promise<TxSimulationResult>` - Simulates a transaction based on the provided preauthenticated execution request. This will run a local simulation of private execution (and optionally of public as well), run the kernel circuits to ensure adherence to protocol rules (without generating a proof), and return the simulation results . Note that this is used with `ContractFunctionInteraction::simulateTx` to bypass certain checks. In that case, the transaction returned is only potentially ready to be sent to the network for execution.
-- `stop() => Promise<void>` - Stops the PXE's job queue and closes the backing store.
-- `sync() => Promise<void>` - Triggers a sync of PXE state with the node, regardless of the `autoSync` config flag. Use this to batch syncs across composite flows when `autoSync` is disabled (e.g. one sync per simulate+send instead of one per inner PXE call). Serialized through the job queue.
+- `stop() => Promise<void>` - Stops the PXE's operation queue and closes the backing store.
+- `sync() => Promise<void>` - Triggers a sync of PXE state with the node, regardless of the `autoSync` config flag. Use this to batch syncs across composite flows when `autoSync` is disabled (e.g. one sync per simulate+send instead of one per inner PXE call). Serialized through the queue.
 
 ### PrivateEventStore
 
 Stores decrypted private event logs. Append-only: events are never deleted during normal operation. Reorgs are handled by delete-on-prune, which removes every event originating on a reorg'd block.
-Implements: `StagedStore`
+
+Extends: `BaseStagingStore<PrivateEventStoreChangeSet, PrivateEventStoreDb>`
 
 **Constructor**
 ```typescript
@@ -364,20 +359,25 @@ new PrivateEventStore(store: AztecAsyncKVStore)
 
 **Properties**
 - `logger: Logger`
-- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from JobCoordinator)
+- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator)
 
 **Methods**
-- `commit(jobId: string) => Promise<void>` - Commits in memory job data to persistent storage. Called by JobCoordinator when a job completes successfully. Note: JobCoordinator wraps all commits in a single transaction, so we don't need our own transactionAsync here (and using one would throw on IndexedDB as it does not support nested txs).
-- `discardStaged(jobId: string) => Promise<void>` - Discards in memory job data without persisting it.
-- `eventIdsAtBlock(blockNumber: number) => Promise<string[]>` - Returns the ids (siloed event commitments) of all events emitted at the given block number. Used by delete-on-prune.
-- `getPrivateEvents(eventSelector: EventSelector, filter: PrivateEventStoreFilter) => Promise<PackedPrivateEvent[]>` - Returns the private events given search parameters.
-- `rollback(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock`: deletes every event anchored to a block strictly above it, as if nothing past that block height ever happened. Used by the reorg (`chain-pruned`) path to truncate the orphaned tail. Scanning from `toBlock + 1` upward covers everything above the rollback target without needing to know the chain tip. Must be called inside a transaction owned by the caller (it issues no `transactionAsync` of its own, the reorg path wraps it together with the anchor update, and IndexedDB has no nested transactions). Throws if any job has uncommitted staged writes, since rolling back mid-job could later re-introduce events anchored to deleted blocks.
-- `storePrivateEventLog(eventSelector: EventSelector, randomness: Fr, msgContent: Fr[], siloedEventCommitment: Fr, metadata: PrivateEventMetadata, jobId: string) => Promise<void>` - Store a private event log.
+- `applyRollback(toBlock: number, db: PrivateEventStoreDb) => Promise<void>` - Deletes every event originating on a block strictly above `toBlock`, as if nothing past that block height ever happened, truncating the orphaned tail on a reorg. Scanning from `toBlock + 1` upward covers everything above the rollback target without needing to know the chain tip.
+- `beginChangeSet(changeSetId: string) => void` - Opens the change set, so its operations are accepted until commitChangeSet or discardChangeSet.
+- `commitChangeSet(changeSetId: string) => Promise<void>` - Commits the change set's staged data: flushes it via flushChangeSet, then closes the change set. Runs inside the transaction owned by the caller. Not meant to be overridden: subclasses implement flushChangeSet.
+- `discardChangeSet(changeSetId: string) => void` - Closes the change set, discarding any staged data without committing. A no-op if it is not open.
+- `flushChangeSet(changeSet: PrivateEventStoreChangeSet, db: PrivateEventStoreDb) => Promise<void>` - Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not open a transaction of its own or call withChangeSetAndDb.
+- `getPrivateEvents(eventSelector: EventSelector, filter: PrivateEventStoreFilter, changeSetId: string) => Promise<PackedPrivateEvent[]>` - Returns the private events given search parameters.
+- `rollbackToBlock(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock` via applyRollback. Must be called inside a transaction owned by the caller, since it opens none of its own. Not meant to be overridden: subclasses implement applyRollback.
+- `storePrivateEventLog(eventSelector: EventSelector, randomness: Fr, msgContent: Fr[], siloedEventCommitment: Fr, metadata: PrivateEventMetadata, changeSetId: string) => Promise<void>` - Store a private event log.
+- `withChangeSet<R>(changeSetId: string, fn: (changeSet: PrivateEventStoreChangeSet) => R | Promise<R>) => Promise<R>` - Runs a change set operation over the staged data alone: takes the store's lock and calls `fn` with the change set's staged data, opening no db transaction. Use withChangeSetAndDb instead when `fn` reads the DB.
+- `withChangeSetAndDb<R>(changeSetId: string, fn: (changeSet: PrivateEventStoreChangeSet, db: ReadonlyDb<TDb>) => Promise<R>) => Promise<R>` - Runs a change set operation that reads the DB. Takes the store's lock, opens a transaction, and calls `fn` with the change set's staged data and a read-only view of the DB (writes are staged in memory until flushChangeSet runs on commit). Prefer withChangeSet unless `fn` actually reads the DB. The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
 
 ### RecipientTaggingStore
 
 Data provider of tagging data used when syncing the logs as a recipient. The sender counterpart of this class is called SenderTaggingStore. We have the providers separate for the sender and recipient because the algorithms are completely disjoint and there is not data reuse between the two.
-Implements: `StagedStore`
+
+Extends: `BaseStagingStore<RecipientTaggingChangeSet, RecipientTaggingDb>`
 
 **Constructor**
 ```typescript
@@ -385,20 +385,27 @@ new RecipientTaggingStore(store: AztecAsyncKVStore)
 ```
 
 **Properties**
-- `storeName: string` - Unique name identifying this store (used for tracking staged stores from JobCoordinator)
+- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator)
 
 **Methods**
-- `commit(jobId: string) => Promise<void>` - Writes all job-specific in-memory data to persistent storage.
-- `discardStaged(jobId: string) => Promise<void>` - Discards staged data without committing. Called on abort.
-- `getHighestAgedIndex(secret: AppTaggingSecret, jobId: string) => Promise<number | undefined>`
-- `getHighestFinalizedIndex(secret: AppTaggingSecret, jobId: string) => Promise<number | undefined>`
-- `updateHighestAgedIndex(secret: AppTaggingSecret, index: number, jobId: string) => Promise<void>`
-- `updateHighestFinalizedIndex(secret: AppTaggingSecret, index: number, jobId: string) => Promise<void>`
+- `applyRollback() => Promise<void>` - No-op: both indexes refer to finalized blocks, which a prune cannot remove.
+- `beginChangeSet(changeSetId: string) => void` - Opens the change set, so its operations are accepted until commitChangeSet or discardChangeSet.
+- `commitChangeSet(changeSetId: string) => Promise<void>` - Commits the change set's staged data: flushes it via flushChangeSet, then closes the change set. Runs inside the transaction owned by the caller. Not meant to be overridden: subclasses implement flushChangeSet.
+- `discardChangeSet(changeSetId: string) => void` - Closes the change set, discarding any staged data without committing. A no-op if it is not open.
+- `flushChangeSet(changeSet: RecipientTaggingChangeSet, db: RecipientTaggingDb) => Promise<void>` - Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not open a transaction of its own or call withChangeSetAndDb.
+- `getHighestAgedIndex(secret: AppTaggingSecret, changeSetId: string) => Promise<number | undefined>`
+- `getHighestFinalizedIndex(secret: AppTaggingSecret, changeSetId: string) => Promise<number | undefined>`
+- `rollbackToBlock(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock` via applyRollback. Must be called inside a transaction owned by the caller, since it opens none of its own. Not meant to be overridden: subclasses implement applyRollback.
+- `updateHighestAgedIndex(secret: AppTaggingSecret, index: number, changeSetId: string) => Promise<void>`
+- `updateHighestFinalizedIndex(secret: AppTaggingSecret, index: number, changeSetId: string) => Promise<void>`
+- `withChangeSet<R>(changeSetId: string, fn: (changeSet: RecipientTaggingChangeSet) => R | Promise<R>) => Promise<R>` - Runs a change set operation over the staged data alone: takes the store's lock and calls `fn` with the change set's staged data, opening no db transaction. Use withChangeSetAndDb instead when `fn` reads the DB.
+- `withChangeSetAndDb<R>(changeSetId: string, fn: (changeSet: RecipientTaggingChangeSet, db: ReadonlyDb<TDb>) => Promise<R>) => Promise<R>` - Runs a change set operation that reads the DB. Takes the store's lock, opens a transaction, and calls `fn` with the change set's staged data and a read-only view of the DB (writes are staged in memory until flushChangeSet runs on commit). Prefer withChangeSet unless `fn` actually reads the DB. The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
 
 ### SenderTaggingStore
 
 Data provider of tagging data used when syncing the sender tagging indexes. The recipient counterpart of this class is called RecipientTaggingStore. We have the data stores separate for sender and recipient because the algorithms are completely disjoint and there is not data reuse between the two.
-Implements: `StagedStore`
+
+Extends: `BaseStagingStore<SenderTaggingChangeSet, SenderTaggingDb>`
 
 **Constructor**
 ```typescript
@@ -406,20 +413,40 @@ new SenderTaggingStore(store: AztecAsyncKVStore)
 ```
 
 **Properties**
-- `readonly storeName: "sender_tagging"` - Unique name identifying this store (used for tracking staged stores from JobCoordinator)
+- `readonly storeName: string` - Unique name identifying this store (used for tracking staged stores from StagedWriteCoordinator)
 
 **Methods**
-- `commit(jobId: string) => Promise<void>` - Writes all job-specific in-memory data to persistent storage.
-- `discardStaged(jobId: string) => Promise<void>` - Discards staged data without committing. Called on abort.
-- `dropPendingIndexes(txHashes: TxHash[], jobId: string) => Promise<void>` - Drops all pending indexes corresponding to the given transaction hashes.
-- `finalizePendingIndexes(txHashes: TxHash[], jobId: string) => Promise<void>` - Updates pending indexes corresponding to the given transaction hashes to be finalized and prunes any lower pending indexes. Applies to every secret the txs used, so the caller must hold tx-level evidence that the whole tx finalized. Callers holding evidence about a single secret must use finalizePendingIndexesOfSecret instead.
-- `finalizePendingIndexesOfAPartiallyRevertedTx(txEffect: TxEffect, jobId: string) => Promise<void>` - Handles finalization of pending indexes for a transaction whose execution was partially reverted. Recomputes the siloed tags for each pending index of the given tx and checks which ones appear in the TxEffect's private logs (i.e., which ones made it onchain). Those that survived are finalized; those that didn't are dropped.
-- `finalizePendingIndexesOfSecret(secret: AppTaggingSecret, txHashes: TxHash[], jobId: string) => Promise<void>` - Same as finalizePendingIndexes, but restricted to the pending indexes of a single secret. Finalizing every secret off single-secret evidence would be unsound: a tx whose execution partially reverted can have all of one secret's tags onchain and none of another's, and the second secret's indexes must not be recorded as finalized when they never reached the chain.
-- `getLastFinalizedIndex(secret: AppTaggingSecret, jobId: string) => Promise<number | undefined>` - Returns the last (highest) finalized index for a given secret.
-- `getLastUsedIndex(secret: AppTaggingSecret, jobId: string) => Promise<number | undefined>` - Returns the last used index for a given directional app tagging secret, considering both finalized and pending indexes.
-- `getPendingTxs(secret: AppTaggingSecret, startIndex: number, endIndex: number, jobId: string) => Promise<PendingTx[]>` - Returns the pending txs whose highest index falls within [startIndex, endIndex) for a given directional app tagging secret. The highest index is what decides whether a tx belongs to the window, so it alone is matched against the bounds, and it is also the only index a caller needs: a tx whose highest index is onchain has every lower one onchain too. A secret holds at most one entry per tx hash, so no tx hash appears twice in the result.
-- `mergePendingIndexes(ranges: TaggingIndexRange[], txHash: TxHash, jobId: string) => Promise<void>` - Stores pending index ranges, widening an existing entry for the same (secret, txHash) pair to the union of the stored and incoming ranges instead of throwing on a mismatch. Discovery from onchain logs needs this: it may see only the surviving (non-revertible phase) sub-range of a partially reverted tx recorded at prove time (the finalized receipt step of the sync resolves that difference), or indexes beyond a partially discovered entry when a tx from another PXE straddles a sync window boundary. Callers that record indexes at prove time must use `storePendingIndexes` instead, so that a range disagreement surfaces as a bug rather than being absorbed.
-- `storePendingIndexes(ranges: TaggingIndexRange[], txHash: TxHash, jobId: string) => Promise<void>` - Stores pending index ranges, rejecting any range that disagrees with an already-stored one.
+- `applyRollback() => Promise<void>` - No-op: the last finalized index only ever advances from finalized blocks, and pending entries are keyed by tx hash rather than anchored to a block, so a prune removes neither.
+- `beginChangeSet(changeSetId: string) => void` - Opens the change set, so its operations are accepted until commitChangeSet or discardChangeSet.
+- `commitChangeSet(changeSetId: string) => Promise<void>` - Commits the change set's staged data: flushes it via flushChangeSet, then closes the change set. Runs inside the transaction owned by the caller. Not meant to be overridden: subclasses implement flushChangeSet.
+- `discardChangeSet(changeSetId: string) => void` - Closes the change set, discarding any staged data without committing. A no-op if it is not open.
+- `dropPendingIndexes(txHashes: TxHash[], changeSetId: string) => Promise<void>` - Drops all pending indexes corresponding to the given transaction hashes.
+- `finalizePendingIndexes(txHashes: TxHash[], changeSetId: string) => Promise<void>` - Updates pending indexes corresponding to the given transaction hashes to be finalized and prunes any lower pending indexes. Applies to every secret the txs used, so the caller must hold tx-level evidence that the whole tx finalized. Callers holding evidence about a single secret must use finalizePendingIndexesOfSecret instead.
+- `finalizePendingIndexesOfAPartiallyRevertedTx(txEffect: TxEffect, changeSetId: string) => Promise<void>` - Handles finalization of pending indexes for a transaction whose execution was partially reverted. Recomputes the siloed tags for each pending index of the given tx and checks which ones appear in the TxEffect's private logs (i.e., which ones made it onchain). Those that survived are finalized; those that didn't are dropped.
+- `finalizePendingIndexesOfSecret(secret: AppTaggingSecret, txHashes: TxHash[], changeSetId: string) => Promise<void>` - Same as finalizePendingIndexes, but restricted to the pending indexes of a single secret. Finalizing every secret off single-secret evidence would be unsound: a tx whose execution partially reverted can have all of one secret's tags onchain and none of another's, and the second secret's indexes must not be recorded as finalized when they never reached the chain.
+- `flushChangeSet(changeSet: SenderTaggingChangeSet, db: SenderTaggingDb) => Promise<void>` - Writes the change set's staged data to persistent storage. Runs inside the caller's transaction: it must not open a transaction of its own or call withChangeSetAndDb.
+- `getLastFinalizedIndex(secret: AppTaggingSecret, changeSetId: string) => Promise<number | undefined>` - Returns the last (highest) finalized index for a given secret.
+- `getLastUsedIndex(secret: AppTaggingSecret, changeSetId: string) => Promise<number | undefined>` - Returns the last used index for a given directional app tagging secret, considering both finalized and pending indexes.
+- `getPendingTxs(secret: AppTaggingSecret, startIndex: number, endIndex: number, changeSetId: string) => Promise<PendingTx[]>` - Returns the pending txs whose highest index falls within [startIndex, endIndex) for a given directional app tagging secret. The highest index is what decides whether a tx belongs to the window, so it alone is matched against the bounds, and it is also the only index a caller needs: a tx whose highest index is onchain has every lower one onchain too. A secret holds at most one entry per tx hash, so no tx hash appears twice in the result.
+- `mergePendingIndexes(ranges: TaggingIndexRange[], txHash: TxHash, changeSetId: string) => Promise<void>` - Stores pending index ranges, widening an existing entry for the same (secret, txHash) pair to the union of the stored and incoming ranges instead of throwing on a mismatch. Discovery from onchain logs needs this: it may see only the surviving (non-revertible phase) sub-range of a partially reverted tx recorded at prove time (the finalized receipt step of the sync resolves that difference), or indexes beyond a partially discovered entry when a tx from another PXE straddles a sync window boundary. Callers that record indexes at prove time must use `storePendingIndexes` instead, so that a range disagreement surfaces as a bug rather than being absorbed.
+- `rollbackToBlock(toBlock: number) => Promise<void>` - Rolls the store back to `toBlock` via applyRollback. Must be called inside a transaction owned by the caller, since it opens none of its own. Not meant to be overridden: subclasses implement applyRollback.
+- `storePendingIndexes(ranges: TaggingIndexRange[], txHash: TxHash, changeSetId: string) => Promise<void>` - Stores pending index ranges, rejecting any range that disagrees with an already-stored one.
+- `withChangeSet<R>(changeSetId: string, fn: (changeSet: SenderTaggingChangeSet) => R | Promise<R>) => Promise<R>` - Runs a change set operation over the staged data alone: takes the store's lock and calls `fn` with the change set's staged data, opening no db transaction. Use withChangeSetAndDb instead when `fn` reads the DB.
+- `withChangeSetAndDb<R>(changeSetId: string, fn: (changeSet: SenderTaggingChangeSet, db: ReadonlyDb<TDb>) => Promise<R>) => Promise<R>` - Runs a change set operation that reads the DB. Takes the store's lock, opens a transaction, and calls `fn` with the change set's staged data and a read-only view of the DB (writes are staged in memory until flushChangeSet runs on commit). Prefer withChangeSet unless `fn` actually reads the DB. The lock makes the store thread safe: two operations issued concurrently (e.g. under `Promise.all`) cannot interleave across awaits, so `fn` can read staged data and write it back without handling atomicity itself.
+
+### StagedWriteCoordinator
+
+StagedWriteCoordinator simulates a database transaction across the PXE stores, which some underlying KV stores (e.g. IndexedDB) cannot provide on their own for long-running async operations. It uses a staged writes pattern: 1. When a change set is opened, a unique ID is created 2. While a change set is open, all writes are staged under its ID, and reads observe the staged data 3. On commit, the staged data is promoted to persistent storage 4. On abort, staged data is discarded Only one change set can be open at a time: begin throws if one already is. Supporting overlapping change sets would mean merging them when one of them commits — a problem in its own right, and one no caller needs solved. Avoiding that throw is up to the caller, which must serialize whatever opens change sets, e.g. with a queue. Change sets nonetheless carry an ID, because aborting one does not cancel the async work it started. An oracle that was mid-write when the operation failed still attempts that write afterwards, naming the aborted ID. The stores reject it, since the change set it names is no longer open. Without the ID there would be nothing to reject it by, and the late write would be promoted by whichever change set commits next.
+
+**Constructor**
+```typescript
+new StagedWriteCoordinator(args: StagedWriteCoordinatorArgs)
+```
+
+**Methods**
+- `abort(changeSetId: string) => void` - Aborts by discarding all staged data. Every store gets to drop its staged data even if an earlier one failed, and the change set always ends, so a failed abort never blocks later change sets.
+- `begin() => string` - Opens a change set and returns its ID for staged writes. All or nothing: if a store fails to open the change set, the stores that already opened it discard it again and nothing is left active, so a later change set can still be opened on this PXE instance.
+- `commit(changeSetId: string) => Promise<void>` - Commits by promoting all staged data to persistent storage. Unlike begin and abort, a failed commit leaves the change set open, so the caller must still abort it before another can be opened.
 
 ### TaggingSecretSourcesStore
 
@@ -450,6 +477,13 @@ Configuration settings for the block synchronizer.
 - `l2BlockBatchSize: number` - Maximum amount of blocks to pull from the stream in one request when synchronizing
 - `syncChainTip?: "proposed" | "checkpointed" | "proven" | "finalized"` - Which chain tip to sync to (proposed, checkpointed, proven, finalized)
 
+### ContractSyncConfig
+
+Configuration settings for the contract sync service.
+
+**Properties**
+- `concurrentContractSyncEnabled: boolean` - Whether PXE speculatively syncs contracts it predicts will follow the one requested, running them concurrently with it instead of waiting for execution to reach them. When enabled, repeated flows sync faster, but a wrong prediction spends unnecessary node requests syncing contracts the operation never uses. Experimental, off by default.
+
 ### ExecutionHooks
 
 Hooks that PXE invokes during client-side simulation to gate or steer operations that the protocol does not restrict on its own. They give the wallet a chance to apply custom policies (e.g. prompting the user, consulting a dynamic allowlist, or inspecting call arguments) before the execution proceeds. All hooks are optional, and when a hook is absent PXE applies a safe default. For example, authorizeUtilityCall is called whenever a utility function makes a cross-contract call. A call made by a malicious contract could leak private information, so the hook lets the wallet decide, per-call, whether to allow it. A static allowlist would not work here because neither the app nor the wallet can predict ahead of time which contracts will be invoked during execution. Calls to standard contracts (such as the HandshakeRegistry) bypass this hook and are always authorized. When the hook is absent, cross-contract utility calls are denied. Note: hooks are unrelated to authentication witnesses (authwits). Authwits are an on-chain mechanism where a contract verifies that a caller was authorized by a specific account; hooks are a client-side PXE concern that gates execution before it proceeds.
@@ -465,6 +499,14 @@ Configuration settings for the prover factory
 
 **Properties**
 - `proverEnabled?: boolean` - Whether we are running with real proofs
+
+### OperationContributor
+
+Contributes work to every synced operation (e.g. writes into its change set). The operation waits for a contributor's work to settle before deciding its change set, and informs it of the outcome.
+
+**Methods**
+- `onOperationEnd(changeSetId: string, outcome: "committed" | "discarded") => void` - Called once the operation's change set has been committed or discarded. A throw is logged and swallowed: the outcome is already decided by this point, so it cannot change it.
+- `settle(changeSetId: string) => Promise<void>` - Waits for any work the contributor still has in flight. Awaited before the operation's change set is decided, so that no contributor is still writing when it is committed or discarded. A rejection causes the operation to discard instead of commit.
 
 ## Functions
 
@@ -516,7 +558,7 @@ Adds contract and function names to a simulation error, if they can be found in 
 
 ### getCliPXEOptions
 ```typescript
-function getCliPXEOptions() => CliPXEOptions & KernelProverConfig & { dataDirectory?: string; dataStoreMapSizeKb: number } & Partial<Pick<L1ContractAddresses, "rollupAddress">> & { l1ChainId: number; rollupVersion: number } & Pick<L1ContractAddresses, "rollupAddress"> & BlockSynchronizerConfig
+function getCliPXEOptions() => CliPXEOptions & KernelProverConfig & { dataDirectory?: string; dataStoreMapSizeKb: number } & Partial<Pick<L1ContractAddresses, "rollupAddress">> & { l1ChainId: number; rollupVersion: number } & Pick<L1ContractAddresses, "rollupAddress"> & BlockSynchronizerConfig & ContractSyncConfig
 ```
 Creates an instance of CliPxeOptions out of environment variables
 
@@ -555,6 +597,12 @@ function originBlockStateFromNumber(value: number) => OriginBlockState
 ```
 Parses a numeric origin-block-state discriminant, rejecting unknown values.
 
+### runOperation
+```typescript
+function runOperation<T>(args: RunOperationArgs, fn: () => Promise<T>) => Promise<T>
+```
+Runs `fn` as the operation's work and decides its change set. On success: 1. Waits for every contributor to settle. A rejection vetoes the commit and the failure path below runs instead. 2. Commits the change set. 3. Notifies contributors of the outcome. On failure: 1. Drains contributors, logging failures instead of propagating them so the discard runs to completion and the error that aborted the operation is not masked. 2. Aborts the change set. 3. Notifies contributors of the outcome. 4. Rethrows.
+
 ### stripAztecnrLogPrefix
 ```typescript
 function stripAztecnrLogPrefix(message: string) => { kind: CONTRACT_LOG_KIND; message: string }
@@ -590,6 +638,12 @@ Hook called when a utility function attempts a cross-contract call. Returns a re
 ```typescript
 type CONTRACT_LOG_KIND = "aztecnr" | "user"
 ```
+
+### ChangeSetId
+```typescript
+type ChangeSetId = string
+```
+Identifies a change set: the writes staged between a StagedWriteCoordinator.begin and its matching commit or abort, which are promoted to the database or dropped as a unit.
 
 ### CliPXEOptions
 ```typescript
@@ -658,12 +712,12 @@ A filter used to fetch notes.
 
 ### ORACLE_VERSION_MAJOR
 ```typescript
-type ORACLE_VERSION_MAJOR = 30
+type ORACLE_VERSION_MAJOR = 31
 ```
 
 ### ORACLE_VERSION_MINOR
 ```typescript
-type ORACLE_VERSION_MINOR = 8
+type ORACLE_VERSION_MINOR = 0
 ```
 
 ### OriginBlock
@@ -674,7 +728,7 @@ The block a retractable fact originates from.
 
 ### PXEConfig
 ```typescript
-type PXEConfig = KernelProverConfig & DataStoreConfig & ChainConfig & BlockSynchronizerConfig
+type PXEConfig = KernelProverConfig & DataStoreConfig & ChainConfig & BlockSynchronizerConfig & ContractSyncConfig
 ```
 
 ### PXECreateArgs
@@ -690,7 +744,7 @@ type PXECreationOptions = unknown
 
 ### PXE_DATA_SCHEMA_VERSION
 ```typescript
-type PXE_DATA_SCHEMA_VERSION = 13
+type PXE_DATA_SCHEMA_VERSION = 16
 ```
 
 ### PackedPrivateEvent
@@ -808,25 +862,3 @@ type pxeConfigMappings = ConfigMappingsType<PXEConfig>
 Chain state of a retractable fact's origin block, mirroring the L2 chain tips. - `Pending`: above the proven tip. - `Proven`: proof on L1 but not yet finalized. - `Finalized`: L1-finalized. The numeric discriminants must stay in sync with the Noir `OriginBlockState` in `noir-projects/aztec-nr/aztec/src/facts/origin_state.nr`: PXE serializes this value into the `Fact` oracle response and Noir deserializes it via `from_u8`, which rejects any value outside this set.
 
 Values: `3`, `1`, `2`
-
-## Cross-Package References
-
-This package references types from other Aztec packages:
-
-**@aztec/aztec.js**
-- `PrivateEventFilter`
-
-**@aztec/ethereum**
-- `L1ContractAddresses`
-
-**@aztec/foundation**
-- `BlockNumber`, `BufferReader`, `ConfigMappingsType`, `EthAddress`, `FieldsOf`, `Fr`, `Logger`, `LoggerBindings`, `MembershipWitness`, `Point`
-
-**@aztec/key-store**
-- `AccountPrivacyKeys`, `AccountPrivacySecretKeys`
-
-**@aztec/kv-store**
-- `AztecAsyncKVStore`, `AztecLMDBStoreV2`, `AztecSQLiteOPFSStore`
-
-**@aztec/stdlib**
-- `AppTaggingSecret`, `AztecAddress`, `AztecNode`, `BlockHeader`, `Capsule`, `ChainConfig`, `CompleteAddress`, `ContractArtifact`, `ContractClass`, `ContractClassCommitments`, `ContractClassIdPreimage`, `ContractInstancePreimage`, `ContractInstancePreimageWithAddress`, `ContractOverrides`, `DataInBlock`, `DataStoreConfig`, `DebugLog`, `EventSelector`, `FunctionArtifactWithContractName`, `FunctionCall`, `FunctionDebugMetadata`, `FunctionSelector`, `InTx`, `L2Tips`, `Note`, `NoteDao`, `NoteStatus`, `PublicKey`, `SimulationError`, `TaggingIndexRange`, `TxEffect`, `TxExecutionRequest`, `TxHash`, `TxProfileResult`, `TxProvingResult`, `TxSimulationResult`, `UtilityExecutionResult`

@@ -230,7 +230,7 @@ They also have some metadata, including a storage slot to avoid collisions with 
 
 The note content plus the metadata are all hashed together, and it is this hash that gets stored onchain in the note hash tree. This hash is called a commitment. The underlying note content (the note hash preimage) is not stored anywhere onchain, so third parties cannot access it and it remains private. The note hash tree is append-only - if it wasn't, when a note was spent, external observers would notice that the tree leaf inserted in some transaction was modified in a second transaction, linking them together and leaking privacy. For example, when a user made a payment to a third party, the recipient would be able to know when they spent the received funds. Nullifiers exist to solve this issue.
 
-Note: Aztec.nr comes with some prebuilt note types, including [`UintNote`](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/noir-projects/aztec-nr/uint-note) and [`AddressNote`](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/noir-projects/aztec-nr/address-note), but users are also free to create their own with the `#[note]` macro.
+Note: Aztec.nr comes with some prebuilt note types, including [`UintNote`](https://github.com/aztec-labs-eng/aztec-node/tree/#include_aztec_version/noir-projects/aztec-nr/uint-note) and [`AddressNote`](https://github.com/aztec-labs-eng/aztec-node/tree/#include_aztec_version/noir-projects/aztec-nr/address-note), but users are also free to create their own with the `#[note]` macro.
 
 ##### Note Lifecycle
 

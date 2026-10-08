@@ -9,6 +9,14 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] `AuthRegistry` re-pinned at a new address
+
+A further standard-contract re-pin, against oracle interface version 32, moves the
+canonical `AuthRegistry` to a new address and class id. Authorizations set on the
+previous `AuthRegistry` instance must be set again on the new one. This is separate
+from the re-pin that shipped in 6.0.0-rc.1, which moved only `MultiCallEntrypoint`
+and `HandshakeRegistry`.
+
 ### [Aztec.nr] `Writer::advance_offset` is removed
 
 Write the skipped fields instead, e.g. with their own `stream_serialize`:
@@ -57,9 +65,11 @@ To prove membership against a given archive root, including a block's own post-b
 
 Callers that anchor on a block header, such as PXE and its oracles, keep using `getBlockHashMembershipWitness`.
 
-### [Aztec.nr] `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` re-pinned at new addresses
+## 6.0.0-rc.1
 
-The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain and oracle interface version 32. The canonical `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` move to new addresses and class ids; `PublicChecks` keeps its own. Handshakes established with the previous registry instance are not visible to the new one and must be re-established, and authorizations set on the previous `AuthRegistry` instance must be set again on the new one.
+### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
+
+The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.
 
 ### [Protocol] The protocol nullifier is derived from the tx request's salt alone; `tx_request_salt` becomes `protocol_nullifier`
 
