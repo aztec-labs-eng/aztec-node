@@ -9,6 +9,30 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] Fact collections are scoped by `FactScope`
+
+The `aztec::facts` functions now take the collection's scope as an `aztec::facts::FactScope` instead of an `AztecAddress`, and `FactCollection::scope` is a `FactScope`. `FactScope::account(address)` is the scope of a single account, as before. The new `FactScope::public()` is shared by all accounts: any execution of the contract can access its collections, whichever accounts are in scope.
+
+**Migration:**
+
+```diff
+- use aztec::facts::record_retractable_fact;
++ use aztec::facts::{FactScope, record_retractable_fact};
+
+- record_retractable_fact(contract_address, recipient, type_id, collection_id, fact_type_id, payload, origin_block);
++ record_retractable_fact(
++     contract_address,
++     FactScope::account(recipient),
++     type_id,
++     collection_id,
++     fact_type_id,
++     payload,
++     origin_block,
++ );
+```
+
+This is a breaking change to the PXE oracle interface (version 32 → 33): contracts must be recompiled against the updated `aztec-nr` to run against the new PXE.
+
 ### [Aztec.nr] `Writer::advance_offset` is removed
 
 Write the skipped fields instead, e.g. with their own `stream_serialize`:

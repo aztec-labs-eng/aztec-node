@@ -62,7 +62,7 @@ import type { AddressStore } from '../../storage/address_store/address_store.js'
 import { assertAllowedScope } from '../../storage/allowed_scopes.js';
 import type { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import { FactCollectionKey, FactCollectionTypeKey, anchoredTipBlockNumbers } from '../../storage/fact_store/index.js';
-import type { BlockReference, FactService } from '../../storage/fact_store/index.js';
+import type { BlockReference, FactScope, FactService } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
@@ -74,7 +74,7 @@ import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import type { EmbeddedCurvePoint } from '../noir-structs/embedded_curve_point.js';
 import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import type { EventValidationRequest } from '../noir-structs/event_validation_request.js';
-import { type FactCollection, emptyFactCollection, toNoirFactCollection } from '../noir-structs/fact_collection.js';
+import { type FactCollection, toNoirFactCollection } from '../noir-structs/fact_collection.js';
 import type { LogRetrievalRequest } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
 import type { NoteData } from '../noir-structs/note_data.js';
@@ -857,7 +857,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public recordFact(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
     factTypeId: Fr,
@@ -879,7 +879,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public deleteFactCollection(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
   ): Promise<void> {
@@ -895,7 +895,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public async getFactCollection(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
   ): Promise<Option<FactCollection>> {
@@ -917,13 +917,13 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
             collection.facts,
           ),
         )
-      : Option.none(emptyFactCollection(this.ephemeralArrayService));
+      : Option.none();
   }
 
   /** Returns every fact collection of `factCollectionTypeId`. */
   public async getFactCollectionsByType(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
   ): Promise<EphemeralArray<FactCollection>> {
     this.#assertOwnContract(contractAddress);
