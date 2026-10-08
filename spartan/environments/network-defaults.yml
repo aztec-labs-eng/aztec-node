@@ -45,8 +45,9 @@ l1-contracts: &l1-contracts-defaults
   AZTEC_TARGET_COMMITTEE_SIZE: 48
   # How many epochs to lag for validator set selection.
   AZTEC_LAG_IN_EPOCHS_FOR_VALIDATOR_SET: 2
-  # How many epochs to lag for RANDAO selection.
-  AZTEC_LAG_IN_EPOCHS_FOR_RANDAO: 2
+  # How many epochs to lag for RANDAO selection. Keep it below the validator set lag: equal lags
+  # put the validator set snapshot and the RANDAO checkpoint in the same L1 block.
+  AZTEC_LAG_IN_EPOCHS_FOR_RANDAO: 1
   # Minimum stake to become a validator (in wei, 100 TST).
   AZTEC_ACTIVATION_THRESHOLD: 100e18
   # Minimum stake before forced ejection (in wei, 50 TST).
