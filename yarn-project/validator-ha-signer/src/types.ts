@@ -137,19 +137,11 @@ export interface SlashingProtectionDatabase {
   cleanupOwnStuckDuties(nodeId: string, maxAgeMs: number): Promise<number>;
 
   /**
-   * Cleanup duties with outdated rollup address.
-   * Removes all duties where the rollup address doesn't match the current one.
-   * Used after a rollup upgrade to clean up duties for the old rollup.
+   * Cleanup expired duties.
+   * Removes expired duties across all rollups using their persisted deadlines.
    * @returns the number of duties cleaned up
    */
-  cleanupOutdatedRollupDuties(currentRollupAddress: EthAddress): Promise<number>;
-
-  /**
-   * Cleanup old signed duties.
-   * Removes only signed duties older than the specified age.
-   * @returns the number of duties cleaned up
-   */
-  cleanupOldDuties(maxAgeMs: number): Promise<number>;
+  cleanupOldDuties(): Promise<number>;
 
   /**
    * Close the database connection.

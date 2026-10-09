@@ -431,7 +431,7 @@ export VALIDATOR_HA_SIGNING_TIMEOUT_MS=3000      # Default: 3000ms
 | `VALIDATOR_HA_MAX_STUCK_DUTIES_AGE_MS` | Max age before cleanup                           | `2 * slotDuration` |
 | `VALIDATOR_HA_POOL_MAX`                | Max database connections                         | `10`               |
 | `VALIDATOR_HA_POOL_MIN`                | Min database connections                         | `0`                |
-| `VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H`    | Clean up old signed duties after this many hours | N/A                |
+| `VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H`    | Retention for completed signing duties, in hours | Full slashing window, rounded up to hours |
 
 
 When `VALIDATOR_HA_SIGNING_ENABLED=true`, the validator client automatically:
@@ -548,6 +548,52 @@ If validator duties stop when you stop one node, check:
 - HA signing is enabled (`VALIDATOR_HA_SIGNING_ENABLED=true`)
 - Node ID is correctly configured
 - Database migrations were run successfully
+
+## Signing history and rollup upgrades
+
+Signing records are isolated by rollup address. With the signing-history retention fix, restarting a node preserves
+records for other rollups sharing its PostgreSQL database. This allows replicas serving different rollups to retain
+their own double-signing protection during an upgrade.
+
+:::warning Older replicas sharing the database
+Older node versions delete signing records for other rollups on startup. Every replica sharing the database must
+include the retention fix before you rely on this protection during a rollup transition. Updating only the replica
+serving the new rollup does not prevent an older replica from deleting its records on restart.
+:::
+
+By default, the node reads its rollup's slashing settings and retains completed signing records for the full period
+from an offense through the end of the last round in which the slash can execute:
+
+```text
+retention hours = ceil((voting offset + proposal lifetime + 1) × slots per round × seconds per slot / 3600)
+```
+
+The offset and lifetime are measured in rounds. Each new duty stores its expiry deadline when inserted. Background
+cleanup runs at startup and approximately hourly, removing expired records across all rollups in the shared database.
+A replica serving the new rollup can therefore clean expired records for a retired rollup without changing their
+retention deadlines. Cleanup of the node's own stuck, unfinished signing duties uses a separate timeout.
+
+Set `VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H` to override the default, using the same value on all replicas serving the same
+rollup. Overrides apply to newly inserted duties; existing deadlines do not change. A shorter override reduces how
+long signing history protects against conflicting signatures. If the rollup has no slashing proposer and no override
+is set, new duties have no expiry deadline.
+
+### Migrating existing signing history
+
+This change requires HA database schema 3. Every existing duty, including duties from retired rollups, receives a
+deadline 30 days after migration. Its original age does not shorten this grace period. Signatures and duty identities
+are preserved.
+
+Stop older replicas sharing the database, run the migration once with the updated release, then start the updated
+replicas:
+
+```bash
+aztec migrate-ha-db up --database-url "$VALIDATOR_HA_DATABASE_URL"
+```
+
+Older binaries cannot restart against schema 3. Local signing protection backed by LMDB migrates automatically on
+startup and gives existing records the same 30-day grace period. No migration is applied to your database by updating
+the source code alone.
 
 ## Operational Best Practices
 

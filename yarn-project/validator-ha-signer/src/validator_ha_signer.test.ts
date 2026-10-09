@@ -1147,14 +1147,13 @@ describe('ValidatorHASigner', () => {
           },
           { metrics: new HASignerMetrics(telemetryClient, config.nodeId), dateProvider },
         );
-        // Starting the new signer will clean up duties with outdated rollup addresses
         await newSigner.start();
 
         try {
           const signFn2 = jest.fn<(messageHash: Buffer32) => Promise<Signature>>();
           signFn2.mockResolvedValue(mockSignature);
 
-          // Sign same slot with new rollup - should succeed (no conflict, old duty was cleaned up)
+          // Rollup addresses isolate duties even when the slot and validator match.
           await newSigner.signWithProtection(
             VALIDATOR_ADDRESS,
             MESSAGE_HASH,
@@ -1170,7 +1169,6 @@ describe('ValidatorHASigner', () => {
 
           expect(signFn2).toHaveBeenCalledTimes(1);
 
-          // Verify old duty was cleaned up at startup
           const oldDuty = await db.tryInsertOrGetExisting({
             rollupAddress: oldRollupAddress,
             validatorAddress: VALIDATOR_ADDRESS,
@@ -1196,7 +1194,9 @@ describe('ValidatorHASigner', () => {
             nodeId: NODE_ID,
           });
 
-          expect(oldDuty.isNew).toBe(true); // Old duty was cleaned up
+          expect(oldDuty.isNew).toBe(false);
+          expect(oldDuty.record.rollupAddress).toEqual(oldRollupAddress);
+          expect(oldDuty.record.status).toBe(DutyStatus.SIGNED);
           expect(newDuty.isNew).toBe(false); // New duty exists
           expect(newDuty.record.rollupAddress).toEqual(newRollupAddress);
           expect(newDuty.record.status).toBe(DutyStatus.SIGNED);

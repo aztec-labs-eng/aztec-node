@@ -40,7 +40,7 @@ export type BaseSignerConfig = {
   signerCallTimeoutMs?: number;
   /** Maximum age of a stuck duty in ms (defaults to 2x hardcoded Aztec slot duration if not set) */
   maxStuckDutiesAgeMs?: number;
-  /** Optional: clean up old duties after this many hours (disabled if not set) */
+  /** Signed duty retention in hours (node default: full slashing window, rounded up to hours) */
   cleanupOldDutiesAfterHours?: number;
 } & Pick<L1ContractAddresses, 'rollupAddress'>;
 
@@ -72,7 +72,7 @@ export const baseSignerConfigMappings: ConfigMappingsType<BaseSignerConfig> = {
   },
   cleanupOldDutiesAfterHours: {
     env: 'VALIDATOR_HA_OLD_DUTIES_MAX_AGE_H',
-    description: 'Optional: clean up old duties after this many hours (disabled if not set)',
+    description: 'Signed duty retention in hours (node default: full slashing window, rounded up to hours)',
     ...optionalNumberConfigHelper(),
   },
   ...pickL1ContractAddressMappings('rollupAddress'),
