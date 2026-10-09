@@ -1,5 +1,6 @@
 export { SequencerPublisher } from './sequencer-publisher.js';
 export { SequencerPublisherFactory } from './sequencer-publisher-factory.js';
+export { PublisherManagerMetrics } from './publisher-manager-metrics.js';
 
 // Used for tests
 export { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';

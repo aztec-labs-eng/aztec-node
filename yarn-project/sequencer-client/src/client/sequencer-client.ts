@@ -19,6 +19,7 @@ import { FullNodeCheckpointsBuilder, NodeKeystoreAdapter, type ValidatorClient }
 
 import { type SequencerClientConfig, getPublisherConfigFromSequencerConfig } from '../config.js';
 import type { GlobalVariableBuilder } from '../global_variable_builder/index.js';
+import { PublisherManagerMetrics } from '../publisher/publisher-manager-metrics.js';
 import { SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
 import type { CheckpointProposalJobTestHooks } from '../sequencer/checkpoint_proposal_job_test_hooks.js';
 import { Sequencer, type SequencerConfig } from '../sequencer/index.js';
@@ -97,6 +98,7 @@ export class SequencerClient {
     const publisherManager = new PublisherManager(l1TxUtils, getPublisherConfigFromSequencerConfig(config), {
       bindings: log.getBindings(),
       funder: deps.funderL1TxUtils,
+      metrics: new PublisherManagerMetrics(telemetryClient, 'sequencer'),
     });
     const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
     const inboxContract = new InboxContract(publicClient, config.inboxAddress);
