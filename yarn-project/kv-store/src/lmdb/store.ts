@@ -146,6 +146,16 @@ export class AztecLmdbStore implements AztecKVStore, AztecAsyncKVStore {
   }
 
   /**
+   * Runs a callback against a consistent view of the store. This backend has no read-only snapshot that outlives a
+   * single operation, so the callback runs in a regular transaction.
+   * @param callback - Function to execute against the consistent view
+   * @returns A promise that resolves to the return value of the callback
+   */
+  readOnlyTransaction<T>(callback: () => Promise<T>): Promise<T> {
+    return this.transactionAsync(callback);
+  }
+
+  /**
    * Clears all entries in the store & sub DBs atomically within a single transaction.
    */
   async clear() {

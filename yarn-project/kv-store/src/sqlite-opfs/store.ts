@@ -190,6 +190,14 @@ export class AztecSQLiteOPFSStore implements AztecAsyncKVStore {
     });
   }
 
+  /**
+   * Runs a callback against a consistent view of the store. SQLite here is single-connection, so there is no separate
+   * snapshot to open and the callback runs in a regular transaction, serialized against writers.
+   */
+  readOnlyTransaction<T>(callback: () => Promise<T>): Promise<T> {
+    return this.transactionAsync(callback);
+  }
+
   async clear(): Promise<void> {
     await this.runAsync('DELETE FROM data');
   }
