@@ -28,7 +28,7 @@ import {
 import type { ViemClient } from '../types.js';
 import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
-import { MAX_L1_TX_LIMIT } from './constants.js';
+import { INSUFFICIENT_FUNDS_BACKOFF_MS, MAX_L1_TX_LIMIT } from './constants.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
 import { type L1SimulationResult, ReadOnlyL1TxUtils, isInsufficientFundsRpcError } from './readonly_l1_tx_utils.js';
 import { Delayer, createDelayer, wrapClientWithDelayer } from './tx_delayer.js';
@@ -63,8 +63,11 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   public delayer?: Delayer;
   /** KZG instance for blob operations. */
   protected kzg?: BlobKzgInstance;
-  /** Sender balance when a send was last rejected for insufficient funds, cleared once the balance rises above it. */
-  private insufficientFundsAtBalance: bigint | undefined;
+  /**
+   * Sender balance and time when a send was last rejected for insufficient funds. Cleared once the balance rises above
+   * the recorded one or the backoff expires.
+   */
+  private insufficientFunds: { balance: bigint; atMs: number } | undefined;
 
   constructor(
     public override client: ViemClient,
@@ -162,24 +165,30 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
   /** Returns the sender balance recorded when a send was last rejected for insufficient funds, if any. */
   public getInsufficientFundsAtBalance(): bigint | undefined {
-    return this.insufficientFundsAtBalance;
+    return this.insufficientFunds?.balance;
   }
 
   /**
    * Returns whether this sender should be skipped because a previous send was rejected for insufficient funds and its
-   * balance has not increased since. Clears the mark once the given current balance is above the recorded one.
+   * balance has not increased since. Clears the mark once the given current balance is above the recorded one, or once
+   * INSUFFICIENT_FUNDS_BACKOFF_MS have elapsed since the rejection: a rejection can come from a send whose gas limit was
+   * far above what later sends need, so a balance that did not move is not proof the publisher cannot afford them.
    */
   public isBackedOffForInsufficientFunds(currentBalance: bigint): boolean {
-    if (this.insufficientFundsAtBalance === undefined) {
+    if (this.insufficientFunds === undefined) {
       return false;
     }
-    if (currentBalance > this.insufficientFundsAtBalance) {
-      this.logger.info(`Publisher balance increased after an insufficient funds rejection, clearing backoff`, {
+    const { balance, atMs } = this.insufficientFunds;
+    const balanceIncreased = currentBalance > balance;
+    const expired = this.dateProvider.now() - atMs >= INSUFFICIENT_FUNDS_BACKOFF_MS;
+    if (balanceIncreased || expired) {
+      this.logger.info(`Clearing insufficient funds backoff for publisher`, {
         account: this.getSenderAddress().toString(),
         balance: currentBalance,
-        insufficientFundsAtBalance: this.insufficientFundsAtBalance,
+        insufficientFundsAtBalance: balance,
+        reason: balanceIncreased ? 'balance-increased' : 'expired',
       });
-      this.insufficientFundsAtBalance = undefined;
+      this.insufficientFunds = undefined;
       return false;
     }
     return true;
@@ -380,13 +389,15 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     }
   }
 
-  /** Records the current sender balance as one that cannot afford a send, so selection skips it until topped up. */
+  /** Records the current sender balance as one that cannot afford a send, so selection skips it for a while. */
   private async recordInsufficientFunds(): Promise<void> {
     try {
-      this.insufficientFundsAtBalance = await this.getSenderBalance();
+      const balance = await this.getSenderBalance();
+      this.insufficientFunds = { balance, atMs: this.dateProvider.now() };
       this.logger.warn(`L1 send rejected for insufficient funds, backing off publisher until its balance increases`, {
         account: this.getSenderAddress().toString(),
-        balance: this.insufficientFundsAtBalance,
+        balance,
+        backoffMs: INSUFFICIENT_FUNDS_BACKOFF_MS,
       });
     } catch (err) {
       this.logger.warn(`Failed to read balance after an insufficient funds rejection`, { err });

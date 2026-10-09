@@ -197,7 +197,7 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
    * Finds and prioritises an available publisher. Candidates must pass the filter and not be busy (unless
    * `publisherAllowInvalidStates` is set and no idle publisher remains), and are ranked by state (see `stateRank`), then
    * highest balance, then least recently used. Publishers backed off after an insufficient funds rejection are skipped
-   * until their balance increases.
+   * until their balance increases or the backoff expires.
    *
    * With a `requirement`, only publishers whose balance covers the worst-case cost of that send are eligible, and a
    * {@link NoAffordablePublisherError} is thrown if there are none. Without one, selection is lenient: it prefers funded

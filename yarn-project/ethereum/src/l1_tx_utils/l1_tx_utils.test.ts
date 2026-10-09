@@ -37,6 +37,7 @@ import { formatViemError } from '../utils.js';
 import {
   type IL1TxMetrics,
   type IL1TxStore,
+  INSUFFICIENT_FUNDS_BACKOFF_MS,
   type L1TxRequest,
   type L1TxState,
   type L1TxUtilsConfig,
@@ -185,6 +186,22 @@ describe('L1TxUtils', () => {
       expect(gasUtils.getInsufficientFundsAtBalance()).toBeUndefined();
 
       await expect(gasUtils.sendTransaction(request, { gasLimit: 100_000n })).resolves.toBeDefined();
+    }, 30_000);
+
+    it('lifts the insufficient funds backoff after it expires even if the balance did not increase', async () => {
+      const sender = EthAddress.fromString(l1Client.account.address);
+      const dust = 1000n;
+      await cheatCodes.setBalance(sender, dust);
+
+      await expect(gasUtils.sendTransaction(request, { gasLimit: 100_000n })).rejects.toThrow();
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
+
+      dateProvider.setTime(dateProvider.now() + INSUFFICIENT_FUNDS_BACKOFF_MS - 1000);
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
+
+      dateProvider.setTime(dateProvider.now() + 1000);
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBeUndefined();
     }, 30_000);
 
     it('bumps nonce when getTransactionCount returns a stale value after a successful send', async () => {

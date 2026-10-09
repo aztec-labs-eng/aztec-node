@@ -18,6 +18,10 @@ export const MAX_L1_TX_LIMIT = 16_777_216n;
 export const AMSTERDAM_MAX_L1_TX_LIMIT = 50_000_000n;
 export const AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND = 35;
 
+// How long a publisher whose send was rejected for insufficient funds is skipped by publisher selection if its balance
+// does not increase in the meantime.
+export const INSUFFICIENT_FUNDS_BACKOFF_MS = 5 * 60 * 1000;
+
 // setting a minimum bump percentage to 10% due to geth's implementation
 // https://github.com/ethereum/go-ethereum/blob/e3d61e6db028c412f74bc4d4c7e117a9e29d0de0/core/txpool/legacypool/list.go#L298
 export const MIN_REPLACEMENT_BUMP_PERCENTAGE = 10;
