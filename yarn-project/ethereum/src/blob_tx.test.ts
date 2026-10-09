@@ -2,6 +2,8 @@ import { Blob, getKzg } from '@aztec-labs/blob-lib';
 import {
   type Hex,
   type TransactionSerializableEIP4844,
+  blobsToCommitments,
+  commitmentsToVersionedHashes,
   fromRlp,
   hexToBytes,
   keccak256,
@@ -16,6 +18,7 @@ import {
   recoverSignedTransactionAddress,
   serializeSignedTransaction,
 } from './blob_tx.js';
+import sepoliaBlobTx from './test/fixtures/sepolia_blob_tx.json' with { type: 'json' };
 
 describe('blob tx serialization', () => {
   const kzg = Blob.getViemKzgInstance();
@@ -112,5 +115,43 @@ describe('blob tx serialization', () => {
     });
     const serialized = serializeSignedTransaction(tx, txSignature);
     expect(await recoverSignedTransactionAddress(serialized)).toEqual(privateKeyToAccount(privateKey).address);
+  });
+
+  describe('with a blob tx mined on sepolia', () => {
+    const {
+      hash,
+      rawTransaction,
+      blobs: fixtureBlobs,
+      blobVersionedHashes,
+    } = sepoliaBlobTx as {
+      hash: Hex;
+      rawTransaction: Hex;
+      blobs: Hex[];
+      blobVersionedHashes: Hex[];
+    };
+    const { r, s, yParity, ...unsigned } = parseTransaction(rawTransaction) as TransactionSerializableEIP4844;
+    const minedSignature = { r: r!, s: s!, yParity: yParity! };
+    const minedTx = { ...unsigned, blobs: fixtureBlobs, kzg };
+
+    it('matches the blob in the fixture to the mined tx', () => {
+      const commitments = blobsToCommitments({ blobs: fixtureBlobs, kzg });
+      expect(commitmentsToVersionedHashes({ commitments })).toEqual(blobVersionedHashes);
+    });
+
+    it('hashes the mined tx without a network wrapper', () => {
+      expect(computeSignedTransactionHash(rawTransaction)).toEqual(hash);
+    });
+
+    it('hashes the mined tx in the EIP-7594 network wrapper', () => {
+      const serialized = serializeSignedTransaction(minedTx, minedSignature);
+      expect(fromRlp(`0x${serialized.slice(4)}`, 'hex')).toHaveLength(5);
+      expect(computeSignedTransactionHash(serialized)).toEqual(hash);
+    });
+
+    it('hashes the mined tx in the EIP-4844 network wrapper', () => {
+      const serialized = serializeTransaction(minedTx, minedSignature);
+      expect(fromRlp(`0x${serialized.slice(4)}`, 'hex')).toHaveLength(4);
+      expect(computeSignedTransactionHash(serialized)).toEqual(hash);
+    });
   });
 });
