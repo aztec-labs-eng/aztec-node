@@ -1,7 +1,6 @@
-import { sleep } from '@aztec-labs/foundation/sleep';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
-import { GENESIS_BLOCK_HEADER_HASH } from '@aztec-labs/stdlib/block';
+import { GENESIS_BLOCK_HEADER_HASH, type L2Block } from '@aztec-labs/stdlib/block';
 import type { PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import { SiloedTag } from '@aztec-labs/stdlib/logs';
 import type { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
@@ -11,15 +10,10 @@ import { makeCheckpointWithLogs } from '../test/mock_structs.js';
 import { BlockStore } from './block_store.js';
 import { LogStore } from './log_store.js';
 
-const BLOCKS_TO_SEED = 5;
-const TXS_PER_BLOCK = 4;
+const BLOCKS_TO_SEED = 20;
+const TXS_PER_BLOCK = 1;
 const LOGS_PER_TX = 5;
 const TAGS_PER_QUERY = 100;
-
-/** Number of artificial write transactions queued in front of the contended read. */
-const QUEUED_WRITES = 5;
-/** Duration of each artificial write transaction. */
-const WRITE_DURATION_MS = 50;
 
 describe('LogStore write contention', () => {
   jest.setTimeout(60_000);
@@ -27,6 +21,7 @@ describe('LogStore write contention', () => {
   let db: AztecAsyncKVStore;
   let blockStore: BlockStore;
   let logStore: LogStore;
+  let blocks: L2Block[];
   let tags: SiloedTag[];
 
   beforeEach(async () => {
@@ -46,7 +41,7 @@ describe('LogStore write contention', () => {
       checkpoints.push(checkpoint);
     }
 
-    const blocks = checkpoints.map(c => c.checkpoint.blocks[0]);
+    blocks = checkpoints.map(c => c.checkpoint.blocks[0]);
     await blockStore.addCheckpoints(checkpoints);
     await logStore.addLogs(blocks);
 
@@ -60,18 +55,29 @@ describe('LogStore write contention', () => {
     await db.delete();
   });
 
-  it('returns the same results for a tag query racing queued write transactions', async () => {
+  it('returns a coherent state for a tag query racing queued write transactions', async () => {
     const baseline = await logStore.getPrivateLogsByTags({ tags, includeEffects: true });
 
-    // Fill the store's serial writer queue without awaiting it, so the query below races these writes.
-    const writes = Array.from({ length: QUEUED_WRITES }, () => db.transactionAsync(() => sleep(WRITE_DURATION_MS)));
+    // Queue one write per block (but the first) that drops that block's logs, without awaiting them. The writes commit
+    // one at a time in queue order, so the only coherent states are "the first k blocks' deletions applied". The
+    // writes are kept short so that, were the query not isolated from them, some would likely commit between its
+    // per-tag scans and the test would see a torn result.
+    const deletedBlocks = blocks.slice(1);
+    const writes = deletedBlocks.map(block => logStore.deleteLogs([block]));
 
     const contended = await logStore.getPrivateLogsByTags({ tags, includeEffects: true });
-
-    expect(contended).toHaveLength(TAGS_PER_QUERY);
-    expect(contended.every(logs => logs.length > 0)).toBe(true);
-    expect(contended).toEqual(baseline);
-
     await Promise.all(writes);
+
+    const coherentStates = Array.from({ length: deletedBlocks.length + 1 }, (_, applied) => {
+      const deleted = new Set(deletedBlocks.slice(0, applied).map(block => block.number));
+      return baseline.map(logs => logs.filter(log => !deleted.has(log.blockNumber)));
+    });
+    expect(contended).toHaveLength(TAGS_PER_QUERY);
+    expect(coherentStates).toContainEqual(contended);
+
+    // once every write has landed, only the first block's logs are left
+    await expect(logStore.getPrivateLogsByTags({ tags, includeEffects: true })).resolves.toEqual(
+      coherentStates[deletedBlocks.length],
+    );
   });
 });
