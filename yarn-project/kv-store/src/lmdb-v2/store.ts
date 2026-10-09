@@ -44,6 +44,11 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
     private cleanup?: () => Promise<void>,
     ephemeral: boolean = false,
   ) {
+    // One reader is always kept back for point reads and the rest are handed out to cursors, so fewer than two would
+    // leave no cursor slot and every iteration would wait forever.
+    if (!Number.isInteger(maxReaders) || maxReaders < 2) {
+      throw new Error(`maxReaders must be an integer of at least 2, got ${maxReaders}`);
+    }
     this.log.info(`Starting data store with maxReaders ${maxReaders}`);
     this.channel = new MsgpackChannel(new NativeLMDBStore(dataDir, mapSize, maxReaders, ephemeral));
     // leave one reader to always be available for regular, atomic, reads

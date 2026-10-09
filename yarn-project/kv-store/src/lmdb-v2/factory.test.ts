@@ -33,4 +33,10 @@ describe('createStore', () => {
     await expect(blocked).resolves.toHaveLength(50);
     readTx.close();
   });
+
+  it.each([0, 1, 2.5])('rejects dataStoreMaxReaders=%s', async dataStoreMaxReaders => {
+    await expect(
+      createStore('max-readers-invalid-test', 1, { dataStoreMapSizeKb: 10 * 1024, dataStoreMaxReaders }),
+    ).rejects.toThrow('maxReaders must be an integer of at least 2');
+  });
 });

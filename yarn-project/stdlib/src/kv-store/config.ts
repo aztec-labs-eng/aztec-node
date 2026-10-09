@@ -3,7 +3,7 @@ import { type ConfigMappingsType, getConfigFromMappings, numberConfigHelper } fr
 
 /**
  * Default number of slots in the LMDB reader table. Every concurrent cursor holds one, so this bounds how many reads a
- * store can have in flight at once.
+ * store can have in flight at once. One slot is always kept back for point reads, so the minimum is 2.
  */
 export const DEFAULT_DATA_STORE_MAX_READERS = 16;
 
@@ -25,7 +25,7 @@ export const dataConfigMappings: ConfigMappingsType<DataStoreConfig> = {
   },
   dataStoreMaxReaders: {
     env: 'DATA_STORE_MAX_READERS',
-    description: 'Maximum number of concurrent readers (cursors) on a data store DB.',
+    description: 'Maximum number of concurrent readers (cursors) on a data store DB. Must be at least 2.',
     ...numberConfigHelper(DEFAULT_DATA_STORE_MAX_READERS),
   },
   ...pickL1ContractAddressMappings('rollupAddress'),
