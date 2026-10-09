@@ -270,16 +270,16 @@ export class NodePublicCallsSimulator {
 
       const caps = PROTOCOL_INBOX_CONSUMPTION_CAPS;
       const localSyncedCount = (await this.l1ToL2MessageSource.getSyncedMessagePosition()).totalMessageCount;
-      const greedyEnd = selectSafeLocalEnd({ cursorCount, localSyncedCount, checkpointStartCount, caps });
-      if (greedyEnd <= cursorCount) {
+      const safeLocalEnd = selectSafeLocalEnd({ cursorCount, localSyncedCount, checkpointStartCount, caps });
+      if (safeLocalEnd <= cursorCount) {
         return;
       }
 
-      const { messages } = await this.l1ToL2MessageSource.getL1ToL2MessageRange(cursorCount, greedyEnd);
+      const { messages } = await this.l1ToL2MessageSource.getL1ToL2MessageRange(cursorCount, safeLocalEnd);
       await appendL1ToL2MessagesToTree(fork, messages);
       this.log.debug(`Appended ${messages.length} predicted L1-to-L2 messages to the simulation fork`, {
         cursorCount,
-        greedyEnd,
+        safeLocalEnd,
       });
     } catch (err) {
       this.log.verbose(`Could not predict the next block's L1-to-L2 messages, simulating against the tip: ${err}`);
