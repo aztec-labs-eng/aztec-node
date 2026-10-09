@@ -148,8 +148,9 @@ The `@aztec` scope keeps the packages published for earlier versions, so an exis
 pinned to an older release continues to install unchanged. There is no `@aztec-labs` release of
 those older versions.
 
-The vendored viem fork is unchanged: it is still consumed as
-`"viem": "npm:@aztec/viem@<version>"`.
+The packages now depend on upstream `viem` instead of the `@aztec/viem` fork. If your project
+aliased `viem` to the fork (`"viem": "npm:@aztec/viem@<version>"`), depend on upstream `viem` at
+the version `@aztec-labs/aztec.js` uses instead.
 
 ### [npm] Foundation packages moved to the `@aztec-foundation` scope
 

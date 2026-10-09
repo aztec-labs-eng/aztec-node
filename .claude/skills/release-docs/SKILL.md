@@ -932,15 +932,16 @@ GitHub URLs which require the `v` prefix), while `#include_version_without_prefi
 the `v` to produce the bare version (used for install commands and npm packages). If you
 omit the `v`, all GitHub links and git tag references in the versioned docs will be broken.
 
-**`@aztec/viem` is versioned off the release line.** It mirrors upstream `viem` (e.g.
-`@aztec/viem@2.38.2`) and has no `5.0.0-rc.1`-style version on npm, so never rewrite it to
-the release version. CI won't catch a wrong pin: the import type-checks against the
-auto-linked workspace copy. Tutorials whose example code imports it (token/aave/uniswap
-bridges) must list `@aztec/viem` at its own version in their install command (readers may
-substitute plain `viem` at the same version). Find the pin:
+**viem is versioned off the release line.** The packages depend on upstream `viem` (e.g.
+`viem@2.57.1`), which has no `5.0.0-rc.1`-style version on npm, so never rewrite it to the
+release version. Tutorials and examples that have not been migrated yet still import the old
+`@aztec/viem@2.38.2` fork; never rewrite that pin to the release version either. CI won't
+catch a wrong pin: the import type-checks against the auto-linked workspace copy. Tutorials
+whose example code imports viem (token/aave/uniswap bridges) must list it at its own version
+in their install command. Find the pin:
 
 ```bash
-grep -rh '"viem": "npm:@aztec/viem@' yarn-project/*/package.json | head -1
+grep -rh '"viem": "' yarn-project/*/package.json | head -1
 ```
 
 ```bash
@@ -1024,7 +1025,7 @@ Aztec.js examples, which are source-only; see task 4). Tasks:
    execute the runner-supported set via `aztecjs_runner/run.sh`, and list skipped examples
    with reasons. To test against the published release (not the workspace copies auto-linked
    in `lib.sh`), temporarily rewrite each example's `@aztec-labs/*` config dep to
-   `npm:@aztec-labs/*@<new_version>`, keeping special pins like `@aztec/viem`.
+   `npm:@aztec-labs/*@<new_version>`, keeping special pins like viem.
 
 Report pass/fail per guide/tutorial/example with the exact doc line for each failure. Fix
 guide/tutorial drift in both the snapshot **and** the source docs; for the Aztec.js
