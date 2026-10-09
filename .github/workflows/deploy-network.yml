@@ -154,7 +154,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
         with:
-          terraform_version: "1.7.5"
+          terraform_version: "1.16.5"
           terraform_wrapper: false # Disable the wrapper that adds debug output, this messes with reading terraform output
 
       - name: Deploy network
