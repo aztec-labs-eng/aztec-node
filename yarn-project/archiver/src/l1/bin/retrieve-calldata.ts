@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 
+import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
-import { type Hex, createPublicClient, decodeEventLog, getAbiItem, http, toEventSelector } from 'viem';
+import { type Hex, createPublicClient, decodeEventLog, getAbiItem, toEventSelector } from 'viem';
 import { mainnet } from 'viem/chains';
 
 import { CalldataRetriever } from '../calldata_retriever.js';
@@ -78,7 +79,7 @@ async function main() {
     // Create viem public client
     const publicClient = createPublicClient({
       chain: mainnet,
-      transport: http(rpcUrl, { batch: false }),
+      transport: makeL1HttpTransport([rpcUrl]),
     });
 
     logger.info('Fetching transaction...');
