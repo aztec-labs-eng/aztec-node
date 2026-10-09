@@ -48,7 +48,7 @@ Each phase lands in this slot:
 
 This flow introduces two failure modes that block building has to handle:
 
-- **Pipeline depth** is bounded to 2 (`checkpointNumber ≤ confirmedCheckpoint + 2`). Building further ahead would require trusting more in-flight parent proposals than the design allows.
+- **Pipeline depth** is bounded to 2 (`checkpointNumber ≤ confirmedCheckpoint + 2`). Building further ahead would require trusting more in-flight parent proposals than the design allows. This is a producer-side build bound only, and it is measured against the sequencer's own confirmed tip. The archiver's accept path does not cap how far ahead a *received* checkpoint may be: a node whose L1 RPC lags has a stale confirmed tip, and must still ingest validly-attested checkpoints beyond it to catch up to the real L1 head. An over-produced checkpoint that never lands on L1 is pruned once its epoch deadline passes (`isPruneDueAtSlot`), so the "2 in flight" limit holds in steady state but relaxes under L1 RPC delay.
 - **Pipelined parent invalidation**: if the parent checkpoint we built on top of fails to land cleanly on L1, the next proposer's work is discarded (`pipelined-checkpoint-discarded` event) and an `invalidate` request is enqueued for the parent.
 
 ## Architecture
