@@ -15,6 +15,7 @@ import { BootstrapNode } from '../../bootstrap/bootstrap.js';
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES, type P2PConfig, getP2PDefaultConfig } from '../../config.js';
 import { AZTEC_ENR_CLIENT_VERSION_KEY, AZTEC_ENR_KEY, PeerEvent } from '../../types/index.js';
 import { PeerDiscoveryState } from '../service.js';
+import { getDiscv5RateLimiterDefaultConfig } from './config.js';
 import { DiscV5Service } from './discV5_service.js';
 import { PersistedEnrStore } from './persisted_enr_store.js';
 
@@ -57,6 +58,7 @@ describe('Discv5Service', () => {
     bootstrapNodes: [],
     queryForIp: false,
     publicIpServices: DEFAULT_PUBLIC_IP_SERVICES,
+    ...getDiscv5RateLimiterDefaultConfig(),
     ...emptyChainConfig,
   };
 
@@ -487,6 +489,31 @@ describe('Discv5Service', () => {
       }
     }
     expect(afterExchange).toBeLessThan(5000);
+  });
+
+  it('applies the configured per-IP and global rate limits to the discovery transport', async () => {
+    // Replenish far slower than the test runs so no token comes back mid-test and the counts are exact.
+    const node = await createNode({
+      discv5RateLimitPerIpMaxTokens: 7,
+      discv5RateLimitPerIpReplenishMs: 3_600_000,
+      discv5RateLimitGlobalMaxTokens: 20,
+      discv5RateLimitGlobalReplenishMs: 3_600_000,
+    });
+    const limiter = (node as any).discv5.sessionService.transport.rateLimiter;
+
+    const attackerIp = '203.0.113.1';
+    const attackerAllowed = Array.from({ length: 50 }, () => limiter.allowEncodedPacket(attackerIp));
+    expect(attackerAllowed.filter(Boolean).length).toBe(7);
+
+    // The attacker spent 7 of the 20 aggregate tokens, so fresh sources share the remaining 13.
+    const freshIps = Array.from({ length: 20 }, (_, i) => `198.51.100.${i + 1}`);
+    expect(freshIps.filter(ip => limiter.allowEncodedPacket(ip)).length).toBe(13);
+  });
+
+  it('refuses to start with a non-positive rate limit', async () => {
+    await expect(createNode({ discv5RateLimitPerIpMaxTokens: 0 })).rejects.toThrow(
+      'P2P_DISCV5_RATE_LIMIT_PER_IP_MAX_TOKENS',
+    );
   });
 
   const createNode = async (overrides: Partial<P2PConfig & IDiscv5CreateOptions> = {}, useBootnode = true) => {

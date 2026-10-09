@@ -5,6 +5,7 @@ import { jest } from '@jest/globals';
 import { Discv5 } from '@nethermindeth/discv5';
 
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES } from '../config.js';
+import { getDiscv5RateLimiterDefaultConfig } from '../services/discv5/config.js';
 import { BootstrapNode } from './bootstrap.js';
 
 describe('BootstrapNode', () => {
@@ -27,6 +28,7 @@ describe('BootstrapNode', () => {
       bootstrapNodes: [],
       queryForIp: false,
       publicIpServices: DEFAULT_PUBLIC_IP_SERVICES,
+      ...getDiscv5RateLimiterDefaultConfig(),
       ...emptyChainConfig,
     };
 
@@ -42,6 +44,36 @@ describe('BootstrapNode', () => {
       expect(bootNode.getENR()?.udp).toBe(p2pBroadcastPort);
     } finally {
       createSpy.mockRestore();
+      await bootNode.stop();
+      await store.close();
+    }
+  });
+
+  it('applies the configured per-IP rate limit to the discovery transport', async () => {
+    const store = await openTmpStore('bootstrap-rate-limit-test');
+    const bootNode = new BootstrapNode(store, getTelemetryClient());
+    const config: BootnodeConfig = {
+      p2pIp: '127.0.0.1',
+      p2pPort: 41401,
+      listenAddress: '127.0.0.1',
+      dataDirectory: undefined,
+      dataStoreMapSizeKb: 0,
+      bootstrapNodes: [],
+      queryForIp: false,
+      publicIpServices: DEFAULT_PUBLIC_IP_SERVICES,
+      ...getDiscv5RateLimiterDefaultConfig(),
+      // Replenish far slower than the test runs so no token comes back mid-test and the count is exact.
+      discv5RateLimitPerIpMaxTokens: 7,
+      discv5RateLimitPerIpReplenishMs: 3_600_000,
+      ...emptyChainConfig,
+    };
+
+    try {
+      await bootNode.start(config);
+      const limiter = (bootNode as any).node.sessionService.transport.rateLimiter;
+      const allowed = Array.from({ length: 50 }, () => limiter.allowEncodedPacket('203.0.113.1'));
+      expect(allowed.filter(Boolean).length).toBe(7);
+    } finally {
       await bootNode.stop();
       await store.close();
     }
