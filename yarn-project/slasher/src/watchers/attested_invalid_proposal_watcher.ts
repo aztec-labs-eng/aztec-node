@@ -118,6 +118,13 @@ export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => W
       return;
     }
 
+    // The guard at the top ran before the awaited attestation read above; a duplicate proposal for
+    // this slot can be detected during that await and mark it equivocated. Re-check so an equivocated
+    // slot's honest attesters are never slashed.
+    if (this.invalidProposalSlotSource.hasProposalEquivocation(slot)) {
+      return;
+    }
+
     // Slash only attesters whose signed payload matches an invalid checkpoint proposal
     // (see invalidCheckpointProposalHashesBySlot for why block-invalid slots are excluded).
     const invalidHashes = new Set(this.invalidProposalSlotSource.getInvalidCheckpointProposalHashes(slot));

@@ -32,6 +32,12 @@ export type SlashOffensesCollectorSettings = Prettify<
 export class SlashOffensesCollector {
   private readonly unwatchCallbacks: (() => void)[] = [];
   private readonly storeMutationQueue = new SerialQueue();
+  // Keyed by `${offenseType}:${epochOrSlot}`: the validators forgiven in the current round. A
+  // WANT_TO_CLEAR_SLASH can be processed before the matching WANT_TO_SLASH it forgives (the slash is
+  // emitted after an awaited attestation read, so a duplicate-proposal clear can enqueue first), and
+  // deleting present rows alone then misses it. This forgiveness record also blocks a later add for the
+  // key, so an equivocated slot's honest attesters stay forgiven regardless of order. Reset each round.
+  private readonly forgivenOffenses = new Map<string, { all: boolean; validators: Set<string> }>();
 
   constructor(
     private config: SlashOffensesCollectorConfig,
@@ -101,6 +107,11 @@ export class SlashOffensesCollector {
         continue;
       }
 
+      if (this.isForgiven(offense)) {
+        this.log.verbose('Skipping offense forgiven this round', this.getOffenseLogData(offense));
+        continue;
+      }
+
       const added = await this.offensesStore.addOffense(offense);
       if (added) {
         if (this.settings.slashingAmounts) {
@@ -122,6 +133,7 @@ export class SlashOffensesCollector {
 
   public async handleWantToClearSlash(args: WantToClearSlashArgs[]) {
     for (const arg of args) {
+      this.recordForgiveness(arg);
       const cleared = await this.offensesStore.clearOffenses(arg);
       if (cleared > 0) {
         this.log.info(`Cleared ${cleared} pending offenses`, {
@@ -138,6 +150,8 @@ export class SlashOffensesCollector {
    * Clears expired offenses from stores.
    */
   public async handleNewRound(round: bigint) {
+    // A new round opens a fresh forgiveness window; the previous round's forgiven keys no longer apply.
+    this.forgivenOffenses.clear();
     const cleared = await this.offensesStore.clearExpiredOffenses(round);
     if (cleared && cleared > 0) {
       this.log.debug(`Cleared ${cleared} expired offenses for round ${round}`);
@@ -148,6 +162,31 @@ export class SlashOffensesCollector {
   private shouldSkipOffense(offense: Offense): boolean {
     const offenseSlot = getSlotForOffense(offense, this.settings);
     return offenseSlot < this.settings.rollupRegisteredAtL2Slot + this.config.slashGracePeriodL2Slots;
+  }
+
+  /**
+   * Records a WANT_TO_CLEAR_SLASH as a forgiveness for the round so a later WANT_TO_SLASH for the same
+   * key is suppressed, mirroring clearOffenses scoping: the named validators when given, else all.
+   */
+  private recordForgiveness(arg: WantToClearSlashArgs) {
+    const key = `${arg.offenseType}:${arg.epochOrSlot}`;
+    let entry = this.forgivenOffenses.get(key);
+    if (!entry) {
+      entry = { all: false, validators: new Set<string>() };
+      this.forgivenOffenses.set(key, entry);
+    }
+    if (arg.validators && arg.validators.length > 0) {
+      for (const validator of arg.validators) {
+        entry.validators.add(validator.toString());
+      }
+    } else {
+      entry.all = true;
+    }
+  }
+
+  private isForgiven(offense: Offense): boolean {
+    const entry = this.forgivenOffenses.get(`${offense.offenseType}:${offense.epochOrSlot}`);
+    return entry !== undefined && (entry.all || entry.validators.has(offense.validator.toString()));
   }
 
   private getOffenseLogData(offense: Offense) {
