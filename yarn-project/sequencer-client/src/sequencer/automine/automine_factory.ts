@@ -23,6 +23,7 @@ import {
 
 import { type SequencerClientConfig, getPublisherConfigFromSequencerConfig } from '../../config.js';
 import type { GlobalVariableBuilder } from '../../global_variable_builder/global_builder.js';
+import { PublisherManagerMetrics } from '../../publisher/publisher-manager-metrics.js';
 import { SequencerPublisherFactory } from '../../publisher/sequencer-publisher-factory.js';
 import { AutomineSequencer } from './automine_sequencer.js';
 
@@ -93,6 +94,7 @@ export async function createAutomineSequencer({
   const publisherManager = new PublisherManager(l1TxUtils, getPublisherConfigFromSequencerConfig(config), {
     bindings: log.getBindings(),
     funder: funderL1TxUtils,
+    metrics: new PublisherManagerMetrics(telemetry, 'sequencer'),
   });
   const governanceProposerContract = new GovernanceProposerContract(
     publicClient,

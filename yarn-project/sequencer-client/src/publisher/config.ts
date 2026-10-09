@@ -5,6 +5,7 @@ import {
   type ConfigMappingsType,
   SecretValue,
   booleanConfigHelper,
+  floatConfigHelper,
   numberConfigHelper,
 } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -60,9 +61,11 @@ export type PublisherConfig = L1TxUtilsConfig &
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
+    /** Warn when a publisher balance is below this multiple of the ETH required for its next L1 send. */
+    publisherLowBalanceWarningMultiplier?: number;
   };
 
-/** Shared config mappings for publisher funding, used by both sequencer and prover publisher configs. */
+/** Shared config mappings for publisher funding and balance warnings, used by both sequencer and prover configs. */
 const publisherFundingConfigMappings = {
   publisherFundingThreshold: {
     env: 'PUBLISHER_FUNDING_THRESHOLD' as const,
@@ -76,6 +79,17 @@ const publisherFundingConfigMappings = {
       'Amount of ETH to send when funding a publisher. Specified in ether (e.g. 0.5). Unset = funding disabled.',
     parseEnv: (val: string) => parseEther(val),
   },
+  publisherLowBalanceWarningMultiplier: {
+    env: 'PUBLISHER_LOW_BALANCE_WARNING_MULTIPLIER' as const,
+    description:
+      'Warn when a publisher balance is below this multiple of the ETH required for its next L1 send (gas limit times ' +
+      'max fee per gas, plus blob fees). Publishers that cannot afford the send itself are never used for it.',
+    ...floatConfigHelper(4, val => {
+      if (val <= 0) {
+        throw new Error(`PUBLISHER_LOW_BALANCE_WARNING_MULTIPLIER must be positive, got ${val}`);
+      }
+    }),
+  },
 };
 
 export type ProverPublisherConfig = L1TxUtilsConfig &
@@ -87,6 +101,8 @@ export type ProverPublisherConfig = L1TxUtilsConfig &
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
+    /** Warn when a publisher balance is below this multiple of the ETH required for its next L1 send. */
+    publisherLowBalanceWarningMultiplier?: number;
   };
 
 export type SequencerPublisherConfig = L1TxUtilsConfig &
@@ -104,6 +120,8 @@ export type SequencerPublisherConfig = L1TxUtilsConfig &
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
+    /** Warn when a publisher balance is below this multiple of the ETH required for its next L1 send. */
+    publisherLowBalanceWarningMultiplier?: number;
   };
 
 export function getPublisherConfigFromProverConfig(config: ProverPublisherConfig): PublisherConfig {

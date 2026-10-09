@@ -1,7 +1,7 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import type { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
-import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { L1TxUtils, SendCostRequirement } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { PublisherFilter, PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -58,10 +58,15 @@ export class SequencerPublisherFactory {
 
   /**
    * Creates a new SequencerPublisher instance.
-   * @param _validatorAddress - The address of the validator that will be using the publisher.
+   * @param validatorAddress - The address of the validator that will be using the publisher.
+   * @param opts.requirement - Gas and blobs of the send the publisher is for. When set, only a publisher that can afford
+   *   it is selected, and NoAffordablePublisherError is thrown if none can.
    * @returns A new SequencerPublisher instance.
    */
-  public async create(validatorAddress?: EthAddress): Promise<AttestorPublisherPair> {
+  public async create(
+    validatorAddress?: EthAddress,
+    opts?: { requirement?: SendCostRequirement },
+  ): Promise<AttestorPublisherPair> {
     // If we have been given an attestor address we must only allow publishers permitted for that attestor
 
     const allowedPublishers = !validatorAddress ? [] : this.nodeKeyStore.getPublisherAddresses(validatorAddress);
@@ -72,14 +77,19 @@ export class SequencerPublisherFactory {
           return allowedPublishers.some(allowedPublisher => allowedPublisher.equals(publisherAddress));
         };
 
-    const l1Publisher = await this.deps.publisherManager.getAvailablePublisher(filter);
+    const l1Publisher = await this.deps.publisherManager.getAvailablePublisher(filter, {
+      requirement: opts?.requirement,
+    });
     const attestorAddress =
       validatorAddress ?? this.nodeKeyStore.getAttestorForPublisher(l1Publisher.getSenderAddress());
 
     const rollup = this.deps.rollupContract;
     const slashingProposerContract = await rollup.getSlashingProposer();
 
-    const getNextPublisher = async (excludeAddresses: EthAddress[]): Promise<L1TxUtils | undefined> => {
+    const getNextPublisher = async (
+      excludeAddresses: EthAddress[],
+      requirement?: SendCostRequirement,
+    ): Promise<L1TxUtils | undefined> => {
       const exclusionFilter: PublisherFilter<L1TxUtils> = (utils: L1TxUtils) => {
         if (excludeAddresses.some(addr => addr.equals(utils.getSenderAddress()))) {
           return false;
@@ -87,8 +97,9 @@ export class SequencerPublisherFactory {
         return filter(utils);
       };
       try {
-        return await this.deps.publisherManager.getAvailablePublisher(exclusionFilter);
-      } catch {
+        return await this.deps.publisherManager.getAvailablePublisher(exclusionFilter, { requirement });
+      } catch (err) {
+        this.logger.debug(`No replacement publisher available`, { err, requirement });
         return undefined;
       }
     };

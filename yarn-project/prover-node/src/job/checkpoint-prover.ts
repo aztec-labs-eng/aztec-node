@@ -85,7 +85,7 @@ export type CheckpointProverArgs = {
  * produce the same archive — so a reorg branch, or a replacement built on the same
  * predecessor but with different content, keys to a distinct prover.
  *
- * The prover eagerly starts its own tx gather and sub-tree work in the constructor, so
+ * Once `start()` is called, the prover eagerly runs its own tx gather and sub-tree work, so
  * callers only need to call `whenSubTreeProofsReady()` to obtain the resulting block-rollup
  * and InboxParity proofs.
  *
@@ -126,8 +126,8 @@ export class CheckpointProver {
   private subTree?: CheckpointSubTreeOrchestrator;
   private readonly abortController = new AbortController();
 
-  /** Tracks the eager gather+execute task so `cancel()` and `whenDone()` can await its unwind. */
-  private readonly runPromise: Promise<void>;
+  /** Tracks the gather+execute task, set by `start()`, so `cancel()` and `whenDone()` can await its unwind. */
+  private runPromise?: Promise<void>;
   /** Tracks the cancel-driven teardown so `whenDone()` can await it. */
   private cancelPromise?: Promise<void>;
   /** Tracks the success-driven sub-tree teardown (once block proofs are captured) so `whenDone()` can await it. */
@@ -157,8 +157,21 @@ export class CheckpointProver {
       l1ToL2MessageCount: this.l1ToL2Messages.length,
       archiveRoot: this.checkpoint.archive.root.toString(),
     });
-    // Kick off the eager gather + sub-tree pipeline.
+  }
+
+  /**
+   * Kicks off the eager gather + sub-tree pipeline. Idempotent, and a no-op once cancelled. Until started, the prover
+   * holds the checkpoint without doing any work, and its block proofs never resolve.
+   */
+  public start(): void {
+    if (this.runPromise || this.cancelled) {
+      return;
+    }
     this.runPromise = this.gatherAndExecute();
+  }
+
+  public isStarted(): boolean {
+    return this.runPromise !== undefined;
   }
 
   /**
@@ -196,7 +209,7 @@ export class CheckpointProver {
 
   /** Resolves when all in-flight work for this prover has fully unwound. */
   public async whenDone(): Promise<void> {
-    await this.runPromise.catch(() => {});
+    await this.runPromise?.catch(() => {});
     // `runPromise` resolves once block-level proving is *enqueued*, but the sub-tree's proofs (and the
     // success-driven teardown they trigger) land later, on the `getSubTreeResult()` callback. Awaiting
     // `subTreeProofs` here bridges that gap: on success the callback resolves `subTreeProofs` and then
@@ -538,7 +551,7 @@ export class CheckpointProver {
         this.deps.log.error('Error cancelling sub-tree', err);
       }
     }
-    await this.runPromise.catch(() => {});
+    await this.runPromise?.catch(() => {});
     if (this.subTree) {
       await this.teardownSubTree();
     }

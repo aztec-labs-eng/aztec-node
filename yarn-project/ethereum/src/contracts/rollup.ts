@@ -383,6 +383,7 @@ export class RollupContract {
   private readonly logger = createLogger('ethereum:rollup');
 
   private static cachedStfStorageSlot: Hex | undefined;
+  private static cachedValidatorSelectionStorageSlot: Hex | undefined;
   private cachedEscapeHatch?: {
     address: EthAddress;
     contract: GetContractReturnType<typeof EscapeHatchAbi, ViemClient>;
@@ -398,6 +399,13 @@ export class RollupContract {
 
   static get stfStorageSlot(): Hex {
     return (RollupContract.cachedStfStorageSlot ??= keccak256(Buffer.from('aztec.stf.storage', 'utf-8')));
+  }
+
+  /** Base slot of the rollup's validator selection storage struct, whose first field maps epochs to committee commitments. */
+  static get validatorSelectionStorageSlot(): Hex {
+    return (RollupContract.cachedValidatorSelectionStorageSlot ??= keccak256(
+      Buffer.from('aztec.validator_selection.storage', 'utf-8'),
+    ));
   }
 
   static getFromL1ContractsValues(deployL1ContractsValues: DeployAztecL1ContractsReturnType) {
@@ -773,6 +781,21 @@ export class RollupContract {
 
   async getCurrentEpoch(): Promise<EpochNumber> {
     return EpochNumber.fromBigInt(await this.rollup.read.getCurrentEpoch());
+  }
+
+  /**
+   * Whether `setupEpoch` has already run for the epoch at the latest L1 block, i.e. its committee commitment is stored.
+   * Read straight from storage because `getEpochCommitteeCommitment` computes the commitment when it is not stored.
+   */
+  async isEpochSetUp(epoch: EpochNumber): Promise<boolean> {
+    const slot = keccak256(
+      encodeAbiParameters(
+        [{ type: 'uint256' }, { type: 'uint256' }],
+        [BigInt(epoch), BigInt(RollupContract.validatorSelectionStorageSlot)],
+      ),
+    );
+    const value = await this.client.getStorageAt({ address: this.address, slot, blockTag: 'latest' });
+    return value !== undefined && hexToBigInt(value) !== 0n;
   }
 
   async getCurrentEpochCommittee(): Promise<EthAddress[] | undefined> {

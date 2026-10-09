@@ -827,6 +827,22 @@ export const L1_PUBLISHER_BALANCE: MetricDefinition = {
   unit: 'eth',
   valueType: ValueType.DOUBLE,
 };
+export const L1_PUBLISHER_REQUIRED_BALANCE: MetricDefinition = {
+  name: 'aztec.l1_publisher.required_balance',
+  description: 'ETH a publisher must hold to afford its next L1 send at current fees',
+  unit: 'eth',
+  valueType: ValueType.DOUBLE,
+};
+export const L1_PUBLISHER_LOW_BALANCE_COUNT: MetricDefinition = {
+  name: 'aztec.l1_publisher.low_balance_count',
+  description: 'Number of times a publisher balance was found below the low-balance warning level',
+  valueType: ValueType.INT,
+};
+export const PROVER_NODE_PROVING_NOT_STARTED_UNAFFORDABLE_COUNT: MetricDefinition = {
+  name: 'aztec.prover_node.proving_not_started_unaffordable_count',
+  description: 'Number of times epoch proving was not started because no publisher could afford the proof submission',
+  valueType: ValueType.INT,
+};
 export const L1_PUBLISHER_TX_TOTAL_FEE: MetricDefinition = {
   name: 'aztec.l1_publisher.tx_total_fee',
   description: 'How much L1 tx costs',

@@ -374,7 +374,9 @@ describe('ProverNode', () => {
 
     await proverNode.handleBlockStreamEvent(mineCheckpoint(makeCheckpoint(3, 3, 3)));
     const prover = proverNode.getCheckpointStore().listAll()[0];
-    // Wait for the eager pipeline to settle (it fails at gather), then the onFailed hook has fired.
+    // Start it as the (mocked) session manager would, wait for the pipeline to settle (it fails at gather), then the
+    // onFailed hook has fired.
+    prover.start();
     await prover.whenDone();
 
     expect(prover.isFailed()).toBe(true);

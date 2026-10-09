@@ -1,3 +1,4 @@
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -36,8 +37,11 @@ describe('SessionManager', () => {
   let onConstruct: ((stub: StubSession) => void) | undefined;
 
   let manager: TestSessionManager;
+  /** Whether a publisher can afford submitting a proof, as reported to the manager. */
+  let submissionAffordable: boolean;
 
   beforeEach(() => {
+    submissionAffordable = true;
     store = mock<CheckpointStore>();
     l2BlockSource =
       mock<
@@ -46,7 +50,12 @@ describe('SessionManager', () => {
     publishingService = mock<ProofPublishingService>();
     metrics = new ProverNodeJobMetrics(
       // Minimal Meter stub: every meter.create* returns an object with a no-op record.
-      { createHistogram: noopMetric, createGauge: noopMetric, createCounter: noopMetric } as any,
+      {
+        createHistogram: noopMetric,
+        createGauge: noopMetric,
+        createCounter: noopMetric,
+        createUpDownCounter: noopMetric,
+      } as any,
       { startActiveSpan: (_n: string, fn: any) => fn({ end: () => {} }) } as any,
     );
     l2BlockSource.getL1Constants.mockResolvedValue(l1Constants);
@@ -54,6 +63,7 @@ describe('SessionManager', () => {
     l2BlockSource.getCheckpoints.mockResolvedValue([]);
     store.listInSlotRange.mockReturnValue([]);
     store.listForEpoch.mockResolvedValue([]);
+    store.listAll.mockReturnValue([]);
 
     stubs = [];
     sessionFailures = [];
@@ -73,6 +83,8 @@ describe('SessionManager', () => {
           sessionFailures.push(session);
           return Promise.resolve();
         },
+        checkSubmissionAffordable: () =>
+          submissionAffordable ? Promise.resolve() : Promise.reject(makeNoAffordablePublisherError()),
       },
       (spec, provers) => {
         const stub = makeStubSession(spec, provers);
@@ -198,6 +210,116 @@ describe('SessionManager', () => {
     await manager.onCheckpointAdded(EpochNumber(4));
     expect(stubs.length).toBe(1);
     expect(manager.getFullSession(EpochNumber(4))).toBeUndefined();
+  });
+
+  // ---------------- submission affordability ----------------
+
+  it('does not start proving while no publisher can afford the submission, and retries on a later tick', async () => {
+    mockNextUnprovenSlot(2, 6);
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6)]);
+    store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 6)]);
+    submissionAffordable = false;
+
+    await manager.onTick();
+    await manager.onCheckpointAdded(EpochNumber(3));
+    expect(stubs).toHaveLength(0);
+    expect(manager.getFullSession(EpochNumber(3))).toBeUndefined();
+
+    submissionAffordable = true;
+    await manager.onTick();
+    expect(stubs).toHaveLength(1);
+    expect(manager.getFullSession(EpochNumber(3))).toBeDefined();
+  });
+
+  it('startProof throws without scheduling a session when no publisher can afford the submission', async () => {
+    store.listForEpoch.mockResolvedValue([proverForCheckpoint(1, 14)]);
+    store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 14)]);
+    submissionAffordable = false;
+
+    await expect(manager.startProof(EpochNumber(7))).rejects.toThrow(NoAffordablePublisherError);
+    expect(stubs).toHaveLength(0);
+  });
+
+  it('holds back checkpoint proving while no publisher can afford the submission, and starts it once one can', async () => {
+    mockNextUnprovenSlot(0, undefined);
+    const provers = [proverForCheckpoint(1, 6), proverForCheckpoint(2, 7)];
+    store.listAll.mockReturnValue(provers);
+    submissionAffordable = false;
+
+    await manager.onCheckpointAdded(EpochNumber(3));
+    await manager.onTick();
+    expect(provers.map(p => p.isStarted())).toEqual([false, false]);
+
+    submissionAffordable = true;
+    await manager.onTick();
+    expect(provers.map(p => p.isStarted())).toEqual([true, true]);
+  });
+
+  it('does not start held back checkpoint provers whose blocks are already proven', async () => {
+    // Block numbers equal checkpoint numbers in these stubs, so proven block 1 covers checkpoint 1 only.
+    mockNextUnprovenSlot(1, undefined);
+    const provers = [proverForCheckpoint(1, 6), proverForCheckpoint(2, 7)];
+    store.listAll.mockReturnValue(provers);
+
+    await manager.onTick();
+
+    expect(provers.map(p => p.isStarted())).toEqual([false, true]);
+  });
+
+  it('starts the held back checkpoint provers a session is built over', async () => {
+    const provers = [proverForCheckpoint(1, 6)];
+    await openCanonicalFullSession(EpochNumber(3), provers);
+
+    expect(stubs).toHaveLength(1);
+    expect(provers[0].isStarted()).toBe(true);
+  });
+
+  it('keeps a partial request whose recreation is unaffordable and reopens it once affordable', async () => {
+    const epoch = EpochNumber(7);
+    const initial = [proverForCheckpoint(1, 14)];
+    store.listForEpoch.mockResolvedValue(initial);
+    store.listInSlotRange.mockReturnValue(initial);
+    const original = await manager.startProof(epoch).then(() => stubs[0]);
+
+    const swapped = [proverForCheckpoint(2, 14)];
+    store.listInSlotRange.mockReturnValue(swapped);
+    submissionAffordable = false;
+    await manager.onTick();
+
+    expect(original.cancelled).toBe(true);
+    expect(manager.getPartialSession(original.spec)).toBeUndefined();
+    expect(stubs).toHaveLength(1);
+
+    submissionAffordable = true;
+    await manager.onTick();
+
+    const recreated = manager.getPartialSession(original.spec);
+    expect(stubs).toHaveLength(2);
+    expect(recreated).toBe(stubs[1] as unknown as EpochSession);
+    expect(stubs[1].spec).toEqual(original.spec);
+    expect(stubs[1].provers).toEqual(swapped);
+  });
+
+  it('drops a held back partial request once its checkpoints are gone', async () => {
+    const epoch = EpochNumber(7);
+    const initial = [proverForCheckpoint(1, 14)];
+    store.listForEpoch.mockResolvedValue(initial);
+    store.listInSlotRange.mockReturnValue(initial);
+    const original = await manager.startProof(epoch).then(() => stubs[0]);
+
+    store.listInSlotRange.mockReturnValue([proverForCheckpoint(2, 14)]);
+    submissionAffordable = false;
+    await manager.onTick();
+
+    store.listInSlotRange.mockReturnValue([]);
+    await manager.onTick();
+    submissionAffordable = true;
+    store.listInSlotRange.mockReturnValue([proverForCheckpoint(3, 14)]);
+    await manager.onTick();
+
+    expect(manager.getPartialSession(original.spec)).toBeUndefined();
+    expect(stubs).toHaveLength(1);
   });
 
   // ---------------- onTick ----------------
@@ -1080,12 +1202,18 @@ function makeCheckpointContent(number: number, slot: number) {
 
 function proverForCheckpoint(number: number, slot: number, failed = false): CheckpointProver {
   const checkpoint = makeCheckpointContent(number, slot);
+  let started = false;
   return {
     id: CheckpointProver.idFor(checkpoint),
     checkpoint,
+    epochNumber: EpochNumber(Math.floor(slot / 2)),
     slotNumber: SlotNumber(slot),
     isCancelled: () => false,
     isFailed: () => failed,
+    isStarted: () => started,
+    start: () => {
+      started = true;
+    },
   } as unknown as CheckpointProver;
 }
 
@@ -1104,6 +1232,15 @@ function proverWithSlot(slot: number): CheckpointProver {
 }
 
 /** Minimal Histogram/Gauge/Counter stub: only the methods ProverNodeJobMetrics records into. */
+function makeNoAffordablePublisherError() {
+  return new NoAffordablePublisherError(
+    1000n,
+    { gasLimit: 1n, blobCount: 0 },
+    { maxFeePerGas: 1000n, maxPriorityFeePerGas: 1n },
+    [{ address: EthAddress.ZERO.toString(), balance: 1n, state: 'IDLE' }],
+  );
+}
+
 function noopMetric() {
   return { record: () => {}, add: () => {} };
 }

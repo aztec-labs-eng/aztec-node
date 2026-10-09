@@ -6,6 +6,7 @@ import type { LoggerBindings } from '@aztec-labs/foundation/log';
 import type { ProverPublisherConfig, ProverTxSenderConfig } from '@aztec-labs/sequencer-client';
 import type { TelemetryClient } from '@aztec-labs/telemetry-client';
 
+import { SUBMIT_EPOCH_PROOF_REQUIREMENT } from './gas_constants.js';
 import { ProverNodePublisher } from './prover-node-publisher.js';
 
 export class ProverPublisherFactory {
@@ -29,11 +30,23 @@ export class ProverPublisherFactory {
   }
 
   /**
+   * Checks that some publisher can afford submitting an epoch proof, regardless of whether it is busy right now.
+   * @throws NoAffordablePublisherError if none can.
+   */
+  public checkSubmissionAffordable(): Promise<void> {
+    return this.deps.publisherManager.checkAffordablePublisher(SUBMIT_EPOCH_PROOF_REQUIREMENT);
+  }
+
+  /**
    * Creates a new Prover Publisher instance.
+   * @param opts.requireAffordableSubmission - Only select a publisher that can afford submitting an epoch proof, and
+   *   throw NoAffordablePublisherError if none can.
    * @returns A new ProverNodePublisher instance.
    */
-  public async create(): Promise<ProverNodePublisher> {
-    const l1Publisher = await this.deps.publisherManager.getAvailablePublisher();
+  public async create(opts?: { requireAffordableSubmission?: boolean }): Promise<ProverNodePublisher> {
+    const l1Publisher = await this.deps.publisherManager.getAvailablePublisher(undefined, {
+      requirement: opts?.requireAffordableSubmission ? SUBMIT_EPOCH_PROOF_REQUIREMENT : undefined,
+    });
     return new ProverNodePublisher(
       this.config,
       {
