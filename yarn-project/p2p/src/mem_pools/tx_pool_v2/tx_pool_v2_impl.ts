@@ -1143,8 +1143,8 @@ export class TxPoolV2Impl {
   }
 
   /**
-   * Validates metadata directly. A tx that could not be validated is in neither list: it is not restored to the pending
-   * pool, and since nothing judged it, it is not deleted either.
+   * Validates metadata directly. A tx that could not be validated counts as valid: it passed validation when it entered
+   * the pool, and a check that judged nothing does not overturn that. Block building validates it again.
    */
   async #revalidateMetadata(
     metas: TxMetaData[],
@@ -1156,12 +1156,11 @@ export class TxPoolV2Impl {
     for (const meta of metas) {
       switch (await this.#validateMeta(meta, validator, context)) {
         case 'valid':
+        case 'unverifiable':
           valid.push(meta);
           break;
         case 'invalid':
           invalid.push(meta.txHash);
-          break;
-        case 'unverifiable':
           break;
       }
     }
