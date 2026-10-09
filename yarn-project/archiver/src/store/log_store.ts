@@ -54,11 +54,11 @@ const TAG_SCAN_CONCURRENCY = 4;
  *
  * Contract-class logs are no longer stored or served by the log store.
  *
- * Tag queries run inside `db.transactionAsync` so the `referenceBlock` reorg check and every per-tag scan see the same
- * state of the store and cannot return a torn result. On lmdb-v2 that routes the query through the store's single
- * serial writer queue, so it waits for any queued write (notably block ingestion) to commit first; that cost is
- * accepted in exchange for the consistency. The per-tag scans within one query run concurrently, up to
- * {@link TAG_SCAN_CONCURRENCY} at a time.
+ * Every read path runs inside `db.readOnlyTransaction`, so the `referenceBlock` reorg check and all the per-tag scans of
+ * one query observe the same committed state and cannot return a torn result. On lmdb-v2 that call is still backed by
+ * the store's single serial writer queue, so a query waits for queued writes (notably block ingestion) to commit
+ * first; once it is backed by a native read-only snapshot, queries stop queueing behind writes with no change here.
+ * The per-tag scans within one query run concurrently, up to {@link TAG_SCAN_CONCURRENCY} at a time.
  */
 export class LogStore {
   /** Primary map: composite private key (tag + tail = 96 hex chars + separators) -> serialized {@link StoredLogValue}. */
@@ -205,13 +205,13 @@ export class LogStore {
   /** Returns one inner array per element of `query.tags`, in input order. */
   getPrivateLogsByTags(query: ResolvedLogsQuery<PrivateLogsQuery>): Promise<LogResult[][]> {
     LogStore.#validateQuery(query);
-    return this.db.transactionAsync(() => this.#runQuery(query, /* contractHex */ undefined));
+    return this.db.readOnlyTransaction(() => this.#runQuery(query, /* contractHex */ undefined));
   }
 
   /** Returns one inner array per element of `query.tags`, in input order. */
   getPublicLogsByTags(query: ResolvedLogsQuery<PublicLogsQuery>): Promise<LogResult[][]> {
     LogStore.#validateQuery(query);
-    return this.db.transactionAsync(() => this.#runQuery(query, fieldHex(query.contractAddress)));
+    return this.db.readOnlyTransaction(() => this.#runQuery(query, fieldHex(query.contractAddress)));
   }
 
   static #validateQuery(query: { txHash?: TxHash; fromBlock?: unknown; toBlock?: unknown }): void {
@@ -228,7 +228,7 @@ export class LogStore {
     const tags = (query.tags as ReadonlyArray<TagQuery<Tag | SiloedTag>>) ?? [];
     const primaryMap = isPublic ? this.#publicLogs : this.#privateLogs;
 
-    // referenceBlock reorg check, in-transaction, against the same db the log primary maps live on. The
+    // referenceBlock reorg check, on the query's consistent view, against the same db the log primary maps live on. The
     // genesis block is a valid anchor during early sync but is synthetic and never indexed in the block
     // store, so resolve it directly to the genesis block number rather than mistaking it for a reorg.
     let referenceBlockNumber: number | undefined;
@@ -345,14 +345,16 @@ export class LogStore {
    * counts without depending on the removed `getPublicLogs(LogFilter)` API.
    */
   getPrivateLogsForBlock(blockNumber: number): Promise<LogResult[]> {
-    return this.db.transactionAsync(() =>
+    return this.db.readOnlyTransaction(() =>
       this.#readBlockLogs(this.#privateKeysByBlock, this.#privateLogs, blockNumber),
     );
   }
 
   /** {@inheritDoc LogStore.getPrivateLogsForBlock} */
   getPublicLogsForBlock(blockNumber: number): Promise<LogResult[]> {
-    return this.db.transactionAsync(() => this.#readBlockLogs(this.#publicKeysByBlock, this.#publicLogs, blockNumber));
+    return this.db.readOnlyTransaction(() =>
+      this.#readBlockLogs(this.#publicKeysByBlock, this.#publicLogs, blockNumber),
+    );
   }
 
   async #readBlockLogs(
