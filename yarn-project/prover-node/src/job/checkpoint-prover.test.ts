@@ -1,4 +1,4 @@
-import { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { ARCHIVE_HEIGHT, MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { CheckpointNumber, EpochNumber, TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -598,6 +598,25 @@ describe('CheckpointProver', () => {
 
     // Verifier jobs go into a shared cache that outlives this checkpoint's sub-tree, so one started before the span
     // is validated survives the cancellation that follows and keeps proving for a checkpoint nothing will accept.
+    it('fails the prover when a block consumes more than the per-block message cap', async () => {
+      checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2, txsPerBlock: 0 });
+      // First block consumes one over the per-block cap; the Ethereum-ingest path must reject it here.
+      pinConsumedMessageCounts(checkpoint, [MAX_L1_TO_L2_MSGS_PER_BLOCK + 1, MAX_L1_TO_L2_MSGS_PER_BLOCK + 2]);
+      const { startNewBlock } = stubExecution();
+
+      const prover = makeProver({
+        previousBlockHeader: makePreviousBlockHeader(0),
+        l1ToL2Messages: Array.from({ length: MAX_L1_TO_L2_MSGS_PER_BLOCK + 2 }, () => Fr.random()),
+      });
+
+      await expect(prover.whenSubTreeProofsReady()).rejects.toThrow();
+      // Rejected before any block is enqueued; the span matches, so the per-block cap is the only failure path.
+      expect(startNewBlock).not.toHaveBeenCalled();
+      expect(prover.isFailed()).toBe(true);
+
+      await cleanup(prover);
+    });
+
     it('starts no verifier circuits for a checkpoint whose message span is invalid', async () => {
       checkpoint = await Checkpoint.random(CheckpointNumber(1), { numBlocks: 2, txsPerBlock: 1 });
       pinConsumedMessageCounts(checkpoint, [12, 13]);

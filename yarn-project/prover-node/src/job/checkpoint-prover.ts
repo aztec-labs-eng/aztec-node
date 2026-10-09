@@ -1,4 +1,5 @@
 import type { ARCHIVE_HEIGHT } from '@aztec-labs/constants';
+import { MAX_L1_TO_L2_MSGS_PER_BLOCK } from '@aztec-labs/constants';
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type EpochNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -479,6 +480,13 @@ export class CheckpointProver {
       if (blockEndLeafCount < previousBlockLeafCount) {
         throw new Error(
           `Block ${block.number} L1 to L2 leaf count ${blockEndLeafCount} is below its parent's ${previousBlockLeafCount}`,
+        );
+      }
+      // The live p2p path enforces this cap; the Ethereum-ingest path must too, or an over-cap block
+      // is accepted here and only fails later in bundle construction.
+      if (blockEndLeafCount - previousBlockLeafCount > MAX_L1_TO_L2_MSGS_PER_BLOCK) {
+        throw new Error(
+          `Block ${block.number} consumes ${blockEndLeafCount - previousBlockLeafCount} L1 to L2 messages, above the per-block cap of ${MAX_L1_TO_L2_MSGS_PER_BLOCK}`,
         );
       }
       const blockMessages = this.l1ToL2Messages.slice(
