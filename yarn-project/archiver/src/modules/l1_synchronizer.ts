@@ -13,12 +13,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { count } from '@aztec-labs/foundation/string';
 import { DateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { isDefined } from '@aztec-labs/foundation/types';
-import {
-  type ArchiverEmitter,
-  type L2Block,
-  L2BlockSourceEvents,
-  type ValidateCheckpointResult,
-} from '@aztec-labs/stdlib/block';
+import { type ArchiverEmitter, type L2Block, L2BlockSourceEvents } from '@aztec-labs/stdlib/block';
 import type { CheckpointData } from '@aztec-labs/stdlib/checkpoint';
 import { type L1RollupConstants, getEpochAtSlot, getSlotAtNextL1Block } from '@aztec-labs/stdlib/epoch-helpers';
 import { type Traceable, type Tracer, execInSpan, trackSpan } from '@aztec-labs/telemetry-client';
@@ -632,14 +627,8 @@ export class ArchiverL1Synchronizer implements Traceable {
   private async reconcileCheckpointedChain(
     blocksSynchedTo: bigint,
     currentL1BlockNumber: bigint,
-  ): Promise<{
-    rollupStatus: RollupStatus;
-    fetchCheckpoints: boolean;
-    initialValidationStatus: ValidateCheckpointResult | undefined;
-  }> {
+  ): Promise<{ rollupStatus: RollupStatus; fetchCheckpoints: boolean }> {
     const localPendingCheckpointNumber = await this.stores.blocks.getLatestCheckpointNumber();
-    const initialValidationStatus: ValidateCheckpointResult | undefined =
-      await this.stores.blocks.getPendingChainValidationStatus();
     const {
       provenCheckpointNumber,
       provenArchive,
@@ -671,7 +660,7 @@ export class ArchiverL1Synchronizer implements Traceable {
       this.log.debug(
         `No checkpoints to retrieve from ${blocksSynchedTo + 1n} to ${currentL1BlockNumber}, no checkpoints on chain`,
       );
-      return { rollupStatus, fetchCheckpoints: false, initialValidationStatus };
+      return { rollupStatus, fetchCheckpoints: false };
     }
 
     await this.updateProvenCheckpoint(provenCheckpointNumber, provenArchive);
@@ -701,7 +690,7 @@ export class ArchiverL1Synchronizer implements Traceable {
         // waits for L1 to produce a block that moves the root again. A "checkpoint refetch still pending" flag
         // carried out of reconciliation past this optimization would let the next pass fetch at the same head.
         this.log.debug(`No checkpoints to retrieve from ${blocksSynchedTo + 1n} to ${currentL1BlockNumber}`);
-        return { rollupStatus, fetchCheckpoints: false, initialValidationStatus };
+        return { rollupStatus, fetchCheckpoints: false };
       }
 
       const localPendingCheckpointInChain = archiveForLocalPendingCheckpointNumber.equals(
@@ -732,7 +721,7 @@ export class ArchiverL1Synchronizer implements Traceable {
       }
     }
 
-    return { rollupStatus, fetchCheckpoints: true, initialValidationStatus };
+    return { rollupStatus, fetchCheckpoints: true };
   }
 
   /**
@@ -830,13 +819,15 @@ export class ArchiverL1Synchronizer implements Traceable {
     currentL1BlockNumber: bigint,
     initialSyncComplete: boolean,
   ): Promise<CheckpointSyncOutcome> {
-    const { rollupStatus, fetchCheckpoints, initialValidationStatus } = await this.reconcileCheckpointedChain(
+    const { rollupStatus, fetchCheckpoints } = await this.reconcileCheckpointedChain(
       blocksSynchedTo,
       currentL1BlockNumber,
     );
     if (!fetchCheckpoints) {
       return { rollupStatus, blocksAdded: [], lastSeenCheckpoint: undefined };
     }
+    // Read after reconciliation, since an unwind resets the stored status to valid.
+    const initialValidationStatus = await this.stores.blocks.getPendingChainValidationStatus();
     const { blocksAdded, lastSeenCheckpoint } = await this.checkpointIngestor.ingest(
       blocksSynchedTo,
       currentL1BlockNumber,

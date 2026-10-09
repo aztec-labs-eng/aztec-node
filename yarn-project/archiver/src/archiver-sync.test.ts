@@ -1130,6 +1130,51 @@ describe('Archiver Sync', () => {
       assert(!statusAfter.valid);
       expect(statusAfter.checkpoint.archive).toEqual(replacementCp3.archive.root);
     }, 15_000);
+
+    it('records an invalid replacement at a lower number after an unwind that drops the recorded invalid checkpoint', async () => {
+      fake.setTargetCommitteeSize(3);
+      const signers = times(3, Secp256k1Signer.random);
+      const committee = signers.map(signer => signer.address);
+      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee } as EpochCommitteeInfo);
+
+      const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
+        l1BlockNumber: 70n,
+        numL1ToL2Messages: 0,
+        signers,
+      });
+      await fake.addCheckpoint(CheckpointNumber(2), { l1BlockNumber: 75n, numL1ToL2Messages: 0, signers });
+      await fake.addCheckpoint(CheckpointNumber(3), {
+        l1BlockNumber: 80n,
+        numL1ToL2Messages: 0,
+        signers: times(3, Secp256k1Signer.random),
+      });
+
+      fake.setL1BlockNumber(82n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(2));
+      const statusBefore = await archiver.getPendingChainValidationStatus();
+      assert(!statusBefore.valid);
+      expect(statusBefore.checkpoint.checkpointNumber).toEqual(3);
+
+      // L1 prunes checkpoints 2 and 3 and publishes an invalid replacement for 2. The unwind resets the stored status
+      // to valid, so the replacement has to be recorded as the new invalidation target.
+      fake.markCheckpointAsPruned(CheckpointNumber(2));
+      fake.markCheckpointAsPruned(CheckpointNumber(3));
+      const { checkpoint: replacementCp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
+        l1BlockNumber: 90n,
+        numL1ToL2Messages: 0,
+        previousArchive: cp1.blocks.at(-1)!.archive,
+        signers: times(3, Secp256k1Signer.random),
+      });
+
+      fake.setL1BlockNumber(92n);
+      await archiver.syncImmediate();
+      expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
+      const statusAfter = await archiver.getPendingChainValidationStatus();
+      assert(!statusAfter.valid);
+      expect(statusAfter.checkpoint.checkpointNumber).toEqual(2);
+      expect(statusAfter.checkpoint.archive).toEqual(replacementCp2.archive.root);
+    }, 15_000);
   });
 
   describe('escape hatch checkpoints', () => {
