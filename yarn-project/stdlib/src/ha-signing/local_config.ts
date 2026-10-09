@@ -51,6 +51,7 @@ export const LocalSignerConfigSchema = zodFor<LocalSignerConfig>()(
   BaseSignerConfigSchema.extend({
     dataDirectory: z.string().optional(),
     dataStoreMapSizeKb: z.number(),
+    dataStoreMaxReaders: z.number().int().min(2).optional(),
     signingProtectionMapSizeKb: z.number().optional(),
     allowEphemeralSigningProtection: z.boolean().optional(),
   }),

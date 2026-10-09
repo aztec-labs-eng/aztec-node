@@ -1,9 +1,16 @@
 import { type L1ContractAddresses, pickL1ContractAddressMappings } from '@aztec-labs/ethereum/l1-contract-addresses';
 import { type ConfigMappingsType, getConfigFromMappings, numberConfigHelper } from '@aztec-labs/foundation/config';
 
+/**
+ * Default number of slots in the LMDB reader table. Every concurrent cursor holds one, so this bounds how many reads a
+ * store can have in flight at once. One slot is always kept back for point reads, so the minimum is 2.
+ */
+export const DEFAULT_DATA_STORE_MAX_READERS = 16;
+
 export type DataStoreConfig = {
   dataDirectory?: string;
   dataStoreMapSizeKb: number;
+  dataStoreMaxReaders?: number;
 } & Partial<Pick<L1ContractAddresses, 'rollupAddress'>>;
 
 export const dataConfigMappings: ConfigMappingsType<DataStoreConfig> = {
@@ -15,6 +22,11 @@ export const dataConfigMappings: ConfigMappingsType<DataStoreConfig> = {
     env: 'DATA_STORE_MAP_SIZE_KB',
     description: 'The maximum possible size of a data store DB in KB. Can be overridden by component-specific options.',
     ...numberConfigHelper(128 * 1_024 * 1_024), // Defaulted to 128 GB
+  },
+  dataStoreMaxReaders: {
+    env: 'DATA_STORE_MAX_READERS',
+    description: 'Maximum number of concurrent readers (cursors) on a data store DB. Must be at least 2.',
+    ...numberConfigHelper(DEFAULT_DATA_STORE_MAX_READERS),
   },
   ...pickL1ContractAddressMappings('rollupAddress'),
 };

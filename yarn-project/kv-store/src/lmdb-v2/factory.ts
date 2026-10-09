@@ -5,14 +5,12 @@ import {
   type SchemaVersionMismatchPolicy,
   type VersionFileReadFailurePolicy,
 } from '@aztec-labs/stdlib/database-version/manager';
-import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
+import { DEFAULT_DATA_STORE_MAX_READERS, type DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { copyFile, mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { AztecLMDBStoreV2 } from './store.js';
-
-const MAX_READERS = 16;
 
 /** Optional versioning hooks for persistent LMDB stores. */
 export type CreateStoreOptions = {
@@ -30,6 +28,7 @@ export async function createStore(
 ): Promise<AztecLMDBStoreV2> {
   const log = createLogger('kv-store:lmdb-v2:' + name, bindings);
   const { dataDirectory, rollupAddress: rollupFromConfig } = config;
+  const maxReaders = config.dataStoreMaxReaders ?? DEFAULT_DATA_STORE_MAX_READERS;
 
   let store: AztecLMDBStoreV2;
   if (typeof dataDirectory !== 'undefined') {
@@ -45,7 +44,7 @@ export async function createStore(
       rollupAddress,
       dataDirectory: subDir,
       onOpen: dbDirectory =>
-        AztecLMDBStoreV2.new(dbDirectory, config.dataStoreMapSizeKb, MAX_READERS, () => Promise.resolve(), bindings),
+        AztecLMDBStoreV2.new(dbDirectory, config.dataStoreMapSizeKb, maxReaders, () => Promise.resolve(), bindings),
       onUpgrade: options.onUpgrade,
       schemaVersionMismatchPolicy: options.schemaVersionMismatchPolicy,
       versionFileReadFailurePolicy: options.versionFileReadFailurePolicy,
@@ -56,7 +55,7 @@ export async function createStore(
     );
     [store] = await versionManager.open();
   } else {
-    store = await openTmpStore(name, true, config.dataStoreMapSizeKb, MAX_READERS, bindings);
+    store = await openTmpStore(name, true, config.dataStoreMapSizeKb, maxReaders, bindings);
   }
 
   return store;
@@ -71,7 +70,7 @@ export async function openTmpStore(
   name: string,
   cleanupTmpDir: boolean = true,
   dbMapSizeKb = 10 * 1_024 * 1_024, // 10GB
-  maxReaders = MAX_READERS,
+  maxReaders = DEFAULT_DATA_STORE_MAX_READERS,
   bindings?: LoggerBindings,
 ): Promise<AztecLMDBStoreV2> {
   const log = createLogger('kv-store:lmdb-v2:' + name, bindings);
@@ -104,7 +103,7 @@ export async function openTmpStore(
 export async function openEphemeralStore(
   name: string,
   dbMapSizeKb = 10 * 1_024 * 1_024, // 10GB
-  maxReaders = MAX_READERS,
+  maxReaders = DEFAULT_DATA_STORE_MAX_READERS,
   bindings?: LoggerBindings,
 ): Promise<AztecLMDBStoreV2> {
   const log = createLogger('kv-store:lmdb-v2:' + name, bindings);
@@ -126,7 +125,7 @@ export async function openEphemeralStore(
 export async function openStoreAt(
   dataDir: string,
   dbMapSizeKb = 10 * 1_024 * 1_024, // 10GB
-  maxReaders = MAX_READERS,
+  maxReaders = DEFAULT_DATA_STORE_MAX_READERS,
   bindings?: LoggerBindings,
 ): Promise<AztecLMDBStoreV2> {
   const log = createLogger('kv-store:lmdb-v2', bindings);
@@ -144,7 +143,7 @@ export async function cloneEphemeralStoreFrom(
   srcDataMdbPath: string,
   name: string,
   dbMapSizeKb = 10 * 1_024 * 1_024, // 10GB
-  maxReaders = MAX_READERS,
+  maxReaders = DEFAULT_DATA_STORE_MAX_READERS,
   bindings?: LoggerBindings,
 ): Promise<AztecLMDBStoreV2> {
   const log = createLogger('kv-store:lmdb-v2:' + name, bindings);
@@ -169,7 +168,7 @@ export async function openVersionedStoreAt(
   schemaVersion: number,
   rollupAddress: EthAddress,
   dbMapSizeKb = 10 * 1_024 * 1_024, // 10GB
-  maxReaders = MAX_READERS,
+  maxReaders = DEFAULT_DATA_STORE_MAX_READERS,
   bindings?: LoggerBindings,
 ): Promise<AztecLMDBStoreV2> {
   const log = createLogger('kv-store:lmdb-v2', bindings);
