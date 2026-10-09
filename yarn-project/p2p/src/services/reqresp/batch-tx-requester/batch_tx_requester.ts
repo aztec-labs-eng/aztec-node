@@ -60,6 +60,8 @@ export class BatchTxRequester {
   private readonly smartParallelWorkerCount: number;
   private readonly dumbParallelWorkerCount: number;
   private readonly txBatchSize: number;
+  /** Hashes of txs whose validation is in progress, so a copy of one in another response is not validated again. */
+  private readonly txsBeingValidated = new Set<string>();
 
   constructor(
     requestTracker: IRequestTracker,
@@ -503,40 +505,29 @@ export class BatchTxRequester {
    * to be yielded by main running loop
    */
   private async handleReceivedTxs(peerId: PeerId, txs: TxArray) {
-    const newTxs = txs.filter(tx => !this.txsMetadata.alreadyFetched(tx.txHash));
+    const stillMissing = this.txsMetadata.getMissingTxHashes();
+    // A tx another response is already validating is skipped here, and that validation decides it. Validating it again
+    // would usually share the same verification through the validation cache, but count it as one more unverifiable
+    // attempt per response, so concurrent responses could use up the tx's attempts on a single failed verification.
+    const newTxs: Tx[] = [];
+    for (const tx of txs) {
+      const txHash = tx.txHash.toString();
+      if (stillMissing.has(txHash) && !this.txsBeingValidated.has(txHash)) {
+        this.txsBeingValidated.add(txHash);
+        newTxs.push(tx);
+      }
+    }
 
     if (newTxs.length === 0) {
       return;
     }
 
-    // TODO: this validation can be slow, maybe spawn worker just for validation
-    // We could use the async queue for communication.
-    const validationResults = await Promise.allSettled(
-      newTxs.map(async tx => ({
-        tx,
-        isValid: (await this.txValidator.validateTx(tx)).result === 'valid',
-      })),
-    );
-
-    let hasInvalidTx = false;
-    validationResults.forEach(result => {
-      if (result.status === 'fulfilled' && result.value.isValid) {
-        if (this.txsMetadata.markFetched(peerId, result.value.tx)) {
-          this.txQueue.put(result.value.tx);
-        }
-      } else {
-        hasInvalidTx = true;
+    try {
+      await this.validateReceivedTxs(peerId, newTxs);
+    } finally {
+      for (const tx of newTxs) {
+        this.txsBeingValidated.delete(tx.txHash.toString());
       }
-    });
-
-    if (hasInvalidTx) {
-      this.logger.warn(`Penalizing peer ${peerId.toString()} for sending invalid transactions in batch response`, {
-        peerId,
-      });
-      this.peers.penalisePeer(peerId, PeerErrorSeverity.LowToleranceError);
-    } else {
-      // If we have received successful response from the peer, they have "redeemed" themselves and not considered bad anymore
-      this.peers.unMarkPeerAsBad(peerId);
     }
 
     const missingTxHashes = this.txsMetadata.getMissingTxHashes();
@@ -549,6 +540,52 @@ export class BatchTxRequester {
           .map(tx => tx.toString())
           .join(', ')}`,
       );
+    }
+  }
+
+  /** Validates txs received from a peer, queues the valid ones, and penalises or redeems the peer by the outcome. */
+  private async validateReceivedTxs(peerId: PeerId, newTxs: Tx[]) {
+    // TODO: this validation can be slow, maybe spawn worker just for validation
+    // We could use the async queue for communication.
+    const validationResults = await Promise.allSettled(
+      newTxs.map(async tx => (await this.txValidator.validateTx(tx)).result),
+    );
+
+    let hasInvalidTx = false;
+    let hasUnverifiableTx = false;
+    for (const [i, settled] of validationResults.entries()) {
+      const tx = newTxs[i];
+      // A validation that threw judged nothing, so it counts as unverifiable rather than against the peer.
+      const result = settled.status === 'fulfilled' ? settled.value : 'unverifiable';
+      switch (result) {
+        case 'valid':
+          if (this.txsMetadata.markFetched(peerId, tx)) {
+            this.txQueue.put(tx);
+          }
+          break;
+        case 'invalid':
+          hasInvalidTx = true;
+          break;
+        case 'unverifiable':
+          // Left missing so it is requested again, until it has failed to verify too many times this run.
+          hasUnverifiableTx = true;
+          if (this.txsMetadata.markUnverifiable(tx.txHash)) {
+            this.logger.warn(`Giving up on tx ${tx.txHash.toString()} after it repeatedly could not be verified`, {
+              txHash: tx.txHash.toString(),
+            });
+          }
+          break;
+      }
+    }
+
+    if (hasInvalidTx) {
+      this.logger.warn(`Penalizing peer ${peerId.toString()} for sending invalid transactions in batch response`, {
+        peerId,
+      });
+      this.peers.penalisePeer(peerId, PeerErrorSeverity.LowToleranceError);
+    } else if (!hasUnverifiableTx) {
+      // If we have received successful response from the peer, they have "redeemed" themselves and not considered bad anymore
+      this.peers.unMarkPeerAsBad(peerId);
     }
   }
 

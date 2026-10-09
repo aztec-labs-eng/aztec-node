@@ -6,7 +6,11 @@ import type { Tx, TxHash, TxValidator } from '@aztec-labs/stdlib/tx';
 import { type ComponentsVersions, getComponentsVersionsFromConfig } from '@aztec-labs/stdlib/versioning';
 import { makeTracedFetch } from '@aztec-labs/telemetry-client';
 
-export type TxSourceCollectionResult = { validTxs: Tx[]; invalidTxHashes: string[] };
+/**
+ * Txs a source returned, split by validation outcome. Unverifiable txs could not be checked (for example, the proof
+ * verifier was down); they are not accepted, but neither are they held against the source.
+ */
+export type TxSourceCollectionResult = { validTxs: Tx[]; invalidTxHashes: string[]; unverifiableTxHashes?: string[] };
 
 export interface TxSource {
   getInfo(): string;
@@ -41,17 +45,24 @@ export class NodeRpcTxSource implements TxSource {
     // Validate tx hashes for all collected txs from external sources
     const validTxs: Tx[] = [];
     const invalidTxHashes: string[] = [];
+    const unverifiableTxHashes: string[] = [];
     await Promise.all(
       txs.map(async tx => {
         const validation = await this.txValidator.validateTx(tx);
-        if (validation.result === 'valid') {
-          validTxs.push(tx);
-        } else {
-          invalidTxHashes.push(tx.getTxHash().toString());
+        switch (validation.result) {
+          case 'valid':
+            validTxs.push(tx);
+            break;
+          case 'invalid':
+            invalidTxHashes.push(tx.getTxHash().toString());
+            break;
+          case 'unverifiable':
+            unverifiableTxHashes.push(tx.getTxHash().toString());
+            break;
         }
       }),
     );
-    return { validTxs: validTxs, invalidTxHashes: invalidTxHashes };
+    return { validTxs, invalidTxHashes, unverifiableTxHashes };
   }
 }
 

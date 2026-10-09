@@ -65,6 +65,7 @@ export class ValidatorMetrics {
           'global_variables_mismatch',
           'block_number_already_exists',
           'txs_not_available',
+          'txs_unverifiable',
           'timeout',
           'unknown_error',
         ],

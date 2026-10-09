@@ -278,6 +278,18 @@ describe('public_processor', () => {
       expect(failed.length).toBe(1);
     });
 
+    it('skips, without failing, a transaction pre validation could not check', async function () {
+      const tx = await mockPrivateOnlyTx();
+
+      const txValidator: MockProxy<TxValidator<Tx>> = mock();
+      txValidator.validateTx.mockResolvedValue({ result: 'unverifiable', reason: ['Verifier down'] });
+
+      const [processed, failed] = await processor.process([tx], {}, { preprocessValidator: txValidator });
+
+      expect(processed).toEqual([]);
+      expect(failed).toEqual([]);
+    });
+
     it('aborts in-flight tx processing and cancels the simulator', async function () {
       const tx = await mockTxWithPublicCalls();
       const controller = new AbortController();

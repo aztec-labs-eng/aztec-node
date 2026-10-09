@@ -59,6 +59,7 @@ import {
   ReExStateMismatchError,
   ReExTimeoutError,
   TransactionsNotAvailableError,
+  UnverifiableBlockProposalTxsError,
 } from '@aztec-labs/stdlib/validators';
 import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
 
@@ -91,6 +92,8 @@ export type BlockProposalValidationFailureReason =
   | 'global_variables_mismatch'
   | 'block_number_already_exists'
   | 'txs_not_available'
+  // A tx the proposal carries could not be checked, typically because this node's proof verifier is unavailable.
+  | 'txs_unverifiable'
   | 'duplicate_txs'
   | 'invalid_embedded_txs'
   | 'state_mismatch'
@@ -380,6 +383,7 @@ export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: Record<BlockProposalVal
   ['inbox_prefix_mismatch']: false,
   ['block_number_already_exists']: false,
   ['txs_not_available']: false,
+  ['txs_unverifiable']: false,
   ['initial_state_mismatch']: false,
   ['timeout']: false,
   ['block_proposal_beyond_checkpoint']: false,
@@ -952,7 +956,7 @@ export class ProposalHandler {
     txsPromise.catch(() => {});
     bundlePromise.catch(() => {});
     const [collected, bundle] = await Promise.all([txsPromise, bundlePromise]);
-    if (collected === 'invalid_embedded_txs') {
+    if (collected === 'invalid_embedded_txs' || collected === 'txs_unverifiable') {
       return { isValid: false, blockNumber, reason: collected };
     }
     // The bundle and the prefix hash it ends at come from one snapshot, so a message replacement that landed between
@@ -1063,29 +1067,37 @@ export class ProposalHandler {
    * Collects the txs for a proposal, returning `invalid_embedded_txs` if the proposal carries a tx that fails
    * minimum integrity validation. That is proposer misbehavior — the proposal signs both the tx hashes and the
    * tx objects — so the caller turns it into an invalid-proposal result that reaches slashing and invalid-slot
-   * accounting, rather than letting it escape as an exception. Any other collection error is a local failure
-   * and keeps propagating.
+   * accounting, rather than letting it escape as an exception. A carried tx that could not be checked at all returns
+   * the non-slashable `txs_unverifiable`: it says nothing about the proposer. Any other collection error is a local
+   * failure and keeps propagating.
    */
   private async collectProposalTxs(
     proposal: BlockProposal,
     blockNumber: BlockNumber,
     proposalSender: PeerId,
     proposalInfo: LogData,
-  ): Promise<{ txs: Tx[]; missingTxs: TxHash[] } | 'invalid_embedded_txs'> {
+  ): Promise<{ txs: Tx[]; missingTxs: TxHash[] } | 'invalid_embedded_txs' | 'txs_unverifiable'> {
     try {
       return await this.txProvider.getTxsForBlockProposal(proposal, blockNumber, {
         pinnedPeer: proposalSender,
         deadline: this.getReexecutionDeadline(proposal.slotNumber),
       });
     } catch (error) {
-      if (!isErrorClass(error, InvalidBlockProposalTxsError)) {
-        throw error;
+      if (isErrorClass(error, InvalidBlockProposalTxsError)) {
+        this.log.warn(`Block proposal carries ${error.invalidTxs.length} invalid txs`, {
+          ...proposalInfo,
+          invalidTxs: error.invalidTxs.map(({ txHash, reasons }) => ({ txHash: txHash.toString(), reasons })),
+        });
+        return 'invalid_embedded_txs';
       }
-      this.log.warn(`Block proposal carries ${error.invalidTxs.length} invalid txs`, {
-        ...proposalInfo,
-        invalidTxs: error.invalidTxs.map(({ txHash, reasons }) => ({ txHash: txHash.toString(), reasons })),
-      });
-      return 'invalid_embedded_txs';
+      if (isErrorClass(error, UnverifiableBlockProposalTxsError)) {
+        this.log.warn(`Could not verify ${error.unverifiableTxs.length} txs carried in block proposal`, {
+          ...proposalInfo,
+          unverifiableTxs: error.unverifiableTxs.map(({ txHash, reasons }) => ({ txHash: txHash.toString(), reasons })),
+        });
+        return 'txs_unverifiable';
+      }
+      throw error;
     }
   }
 

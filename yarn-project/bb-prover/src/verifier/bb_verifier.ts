@@ -1,3 +1,4 @@
+import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { isRetryableError } from '@aztec-labs/foundation/error';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -101,52 +102,58 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
   }
 
   /**
-   * Verify a Chonk (IVC) proof from a transaction via bb.js API. Throws {@link ProofVerifierUnavailableError} when no
-   * live bb process could check the proof; any other failure returns `valid: false`.
+   * Verify a Chonk (IVC) proof from a transaction via bb.js API. Returns `valid: false` only when the proof is malformed
+   * or a verification ran to completion and rejected it. Throws {@link ProofVerifierUnavailableError} on any other
+   * failure, since bb never judged the proof.
    */
   public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const proofType = 'Chonk';
     const txHash = tx.getTxHash().toString();
-    try {
-      const totalTimer = new Timer();
+    const totalTimer = new Timer();
 
-      const circuit: ClientProtocolArtifact = tx.data.forPublic ? 'HidingKernelToPublic' : 'HidingKernelToRollup';
+    // The one malformed proof that deserialization lets through is the empty placeholder. Rejected here, so that bb
+    // failing on a proof it cannot parse is never needed to tell a bad proof apart.
+    if (tx.chonkProof.fields.length !== CHONK_PROOF_LENGTH) {
+      this.logger.warn(`Rejecting malformed ${proofType} proof`, { txHash, length: tx.chonkProof.fields.length });
+      return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
+    }
+
+    const circuit: ClientProtocolArtifact = tx.data.forPublic ? 'HidingKernelToPublic' : 'HidingKernelToRollup';
+    let result: { verified: boolean; durationMs: number };
+    try {
       const verificationKey = this.getVerificationKeyData(circuit);
 
       // Reconstruct the full proof with public inputs prepended, then convert Fr[] to Uint8Array[]
       const proofWithPubInputs = tx.chonkProof.attachPublicInputs(tx.data.publicInputs().toFields());
       const fieldsAsBuffers = proofWithPubInputs.fieldsWithPublicInputs.map(f => new Uint8Array(f.toBuffer()));
 
-      const { verified, durationMs } = await this.verifyChonkProofOnLiveInstance(
-        fieldsAsBuffers,
-        verificationKey.keyAsBytes,
-        txHash,
-      );
-
-      if (!verified) {
-        throw new Error(`Failed to verify ${proofType} proof for ${circuit}!`);
-      }
-
-      this.logger.debug(`${proofType} verification successful`, {
-        circuitName: mapProtocolArtifactNameToCircuitName(circuit),
-        duration: durationMs,
-        eventName: 'circuit-verification',
-        proofType: 'chonk',
-      } satisfies CircuitVerificationStats);
-
-      return { valid: true, durationMs, totalDurationMs: totalTimer.ms() };
+      result = await this.verifyChonkProofOnLiveInstance(fieldsAsBuffers, verificationKey.keyAsBytes, txHash);
     } catch (err) {
       if (err instanceof ProofVerifierUnavailableError) {
         throw err;
       }
-      this.logger.warn(`Failed to verify ${proofType} proof`, { txHash, err });
-      return { valid: false, durationMs: 0, totalDurationMs: 0 };
+      throw new ProofVerifierUnavailableError(`Could not verify ${proofType} proof`, { cause: err });
     }
+
+    const { verified, durationMs } = result;
+    if (!verified) {
+      this.logger.warn(`Failed to verify ${proofType} proof`, { txHash, circuit });
+      return { valid: false, durationMs, totalDurationMs: totalTimer.ms() };
+    }
+
+    this.logger.debug(`${proofType} verification successful`, {
+      circuitName: mapProtocolArtifactNameToCircuitName(circuit),
+      duration: durationMs,
+      eventName: 'circuit-verification',
+      proofType: 'chonk',
+    } satisfies CircuitVerificationStats);
+
+    return { valid: true, durationMs, totalDurationMs: totalTimer.ms() };
   }
 
   /**
    * Runs a Chonk verification on a pooled bb instance. A call that failed for environmental reasons — its bb process
-   * died, or could not be started — is retried; any other failure is the verification's own verdict and is rethrown.
+   * died, or could not be started — is retried; any other failure is rethrown without a retry.
    *
    * The error says so itself, through the `retry` property bb.js sets. Asking the instance whether it is still alive
    * would be a guess: the process can die between the answer and the next call.
@@ -175,8 +182,7 @@ export class BBCircuitVerifier implements ClientProtocolCircuitVerifier {
       try {
         return await instance.verifyChonkProof(fieldsWithPublicInputs, verificationKey);
       } catch (err) {
-        // Only an environmental failure is worth retrying; anything else is the verification's own
-        // verdict and belongs to the caller.
+        // Only an environmental failure is worth retrying.
         if (!isRetryableError(err)) {
           throw err;
         }

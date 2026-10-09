@@ -1,4 +1,3 @@
-import { partitionAsync } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { type ReadOnlyFileStore, createReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
@@ -84,26 +83,30 @@ export class FileStoreTxSource implements TxSource {
     );
 
     const txs = results.filter(tx => tx !== undefined);
-    const [validTxs, invalidTxs] = await partitionAsync(
-      txs,
-      async ({ tx, downloadDuration, downloadSize }): Promise<boolean> => {
-        const valid = await this.txValidator.validateTx(tx);
-        if (valid.result === 'valid') {
+    const validTxs: Tx[] = [];
+    const invalidTxHashes: string[] = [];
+    const unverifiableTxHashes: string[] = [];
+    for (const { tx, downloadDuration, downloadSize } of txs) {
+      const validation = await this.txValidator.validateTx(tx);
+      switch (validation.result) {
+        case 'valid':
           this.downloadsSuccess.add(1);
           this.downloadDuration.record(Math.ceil(downloadDuration));
           this.downloadSize.record(downloadSize);
-          return true;
-        } else {
+          validTxs.push(tx);
+          break;
+        case 'invalid':
           this.downloadsFailed.add(1);
-          return false;
-        }
-      },
-    );
+          invalidTxHashes.push(tx.getTxHash().toString());
+          break;
+        case 'unverifiable':
+          // The download succeeded; it is this node that could not verify the tx, so it is not a download failure.
+          unverifiableTxHashes.push(tx.getTxHash().toString());
+          break;
+      }
+    }
 
-    return {
-      validTxs: validTxs.map(({ tx }) => tx),
-      invalidTxHashes: invalidTxs.map(({ tx }) => tx.getTxHash().toString()),
-    };
+    return { validTxs, invalidTxHashes, unverifiableTxHashes };
   }
 }
 

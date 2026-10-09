@@ -652,6 +652,18 @@ describe('TxPoolV2', () => {
       expect(await rejectingPool.getPendingTxCount()).toBe(0);
     });
 
+    it('addPendingTxs ignores, rather than rejects, a transaction that could not be validated', async () => {
+      const tx = await mockTx(1);
+      rejectingValidator.validateTx = () => Promise.resolve({ result: 'unverifiable', reason: ['verifier down'] });
+
+      const result = await rejectingPool.addPendingTxs([tx]);
+
+      expect(result.accepted).toHaveLength(0);
+      expect(result.rejected).toHaveLength(0);
+      expect(toStrings(result.ignored)).toEqual([hashOf(tx)]);
+      expect(await rejectingPool.getPendingTxCount()).toBe(0);
+    });
+
     it('addPendingTxs handles batch with mixed accepted and rejected', async () => {
       const tx1 = await mockTx(1);
       const tx2 = await mockTx(2);
@@ -2430,6 +2442,30 @@ describe('TxPoolV2', () => {
 
       // Validator returns valid (default)
       await poolWithValidator.prepareForSlot(SlotNumber(2));
+
+      expect(await poolWithValidator.getTxStatus(tx.getTxHash())).toBe('pending');
+      expect(await poolWithValidator.getPendingTxCount()).toBe(1);
+    });
+
+    it('prepareForSlot restores a tx that could not be validated when unprotecting', async () => {
+      const tx = await mockTx(1);
+      await poolWithValidator.addProtectedTxs([tx], slot1Header);
+      mockValidator.validateTx.mockResolvedValue({ result: 'unverifiable', reason: ['verifier down'] });
+
+      await poolWithValidator.prepareForSlot(SlotNumber(2));
+
+      expect(await poolWithValidator.getTxStatus(tx.getTxHash())).toBe('pending');
+      expect(await poolWithValidator.getPendingTxCount()).toBe(1);
+    });
+
+    it('handlePrunedBlocks restores a tx that could not be validated when un-mining', async () => {
+      db.findLeafIndices.mockResolvedValue([1n]);
+      const tx = await mockTx(1);
+      await poolWithValidator.addPendingTxs([tx]);
+      await poolWithValidator.handleMinedBlock(makeBlock([tx], slot1Header));
+      mockValidator.validateTx.mockResolvedValue({ result: 'unverifiable', reason: ['verifier down'] });
+
+      await poolWithValidator.handlePrunedBlocks(block0Id);
 
       expect(await poolWithValidator.getTxStatus(tx.getTxHash())).toBe('pending');
       expect(await poolWithValidator.getPendingTxCount()).toBe(1);

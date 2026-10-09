@@ -1,5 +1,6 @@
 import { createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
 import { mockTx } from '@aztec-labs/stdlib/testing';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 
@@ -50,10 +51,17 @@ describe('BBCircuitVerifier', () => {
     await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: false });
   });
 
-  it('rejects a proof bb errors on while alive', async () => {
+  it('reports the verifier unavailable, without a retry, when bb errors while alive', async () => {
     factory.planNextInstance(['bb-error']);
-    await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: false });
+    await expect(verifier.verifyProof(tx)).rejects.toBeInstanceOf(ProofVerifierUnavailableError);
     expect(factory.created).toHaveLength(1);
+    expect(factory.created[0].chonkVerifyCalls).toBe(1);
+  });
+
+  it('rejects an empty proof without asking bb', async () => {
+    const emptyProofTx = await mockTx(1, { chonkProof: ChonkProof.empty() });
+    await expect(verifier.verifyProof(emptyProofTx)).resolves.toMatchObject({ valid: false });
+    expect(factory.created).toHaveLength(0);
   });
 
   it('retries after bb dies during verification, on the replacement process', async () => {

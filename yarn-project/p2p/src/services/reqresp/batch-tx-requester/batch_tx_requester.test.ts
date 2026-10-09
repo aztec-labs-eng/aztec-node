@@ -22,7 +22,11 @@ import type { ReqRespInterface } from '../interface.js';
 import { BitVector, BlockTxsRequest, BlockTxsResponse } from '../protocols/index.js';
 import { ReqRespStatus } from '../status.js';
 import { BatchTxRequester } from './batch_tx_requester.js';
-import { DEFAULT_BATCH_TX_REQUESTER_BAD_PEER_THRESHOLD, DEFAULT_BATCH_TX_REQUESTER_TX_BATCH_SIZE } from './config.js';
+import {
+  DEFAULT_BATCH_TX_REQUESTER_BAD_PEER_THRESHOLD,
+  DEFAULT_BATCH_TX_REQUESTER_TX_BATCH_SIZE,
+  MAX_UNVERIFIABLE_ATTEMPTS_PER_TX,
+} from './config.js';
 import type { BatchTxRequesterLibP2PService, IPeerPenalizer } from './interface.js';
 import { type IPeerCollection, PeerCollection, RATE_LIMIT_EXCEEDED_PEER_CACHE_TTL } from './peer_collection.js';
 
@@ -1367,6 +1371,142 @@ describe('BatchTxRequester', () => {
       // Verify that valid transactions ARE in result
       [0, 2, 4, 6, 7].forEach(validIndex => {
         expect(resultTxHashes.has(missing[validIndex].toString())).toBe(true);
+      });
+    });
+
+    describe('unverifiable txs', () => {
+      const txCount = 4;
+      let missing: TxHash[];
+      let peer: PeerId;
+      let peerCollection: TestPeerCollection;
+
+      beforeEach(async () => {
+        missing = Array.from({ length: txCount }, () => TxHash.random());
+        blockProposal = await makeBlockProposal({
+          signer: Secp256k1Signer.random(),
+          blockHeader: makeBlockHeader(1, { blockNumber: BlockNumber(1) }),
+          archiveRoot: Fr.random(),
+          txHashes: missing,
+        });
+        peer = await createSecp256k1PeerId();
+        connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue([peer]);
+        peerCollection = new TestPeerCollection(new PeerCollection(connectionSampler, undefined, new DateProvider()));
+        const peerTransactions = new Map([[peer.toString(), Array.from({ length: txCount }, (_, i) => i)]]);
+        const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
+        reqResp.sendRequestToPeer.mockImplementation(mockImplementation);
+      });
+
+      /** A validator that cannot verify the tx at `index` on its first `failures` attempts. */
+      const unverifiableAt = (index: number, failures: number) => {
+        const attempts = { count: 0 };
+        const validator: TxValidator = {
+          validateTx: (tx: Tx) => {
+            if (!tx.txHash.equals(missing[index])) {
+              return Promise.resolve({ result: 'valid' });
+            }
+            attempts.count++;
+            return Promise.resolve(
+              attempts.count <= failures ? { result: 'unverifiable', reason: ['verifier down'] } : { result: 'valid' },
+            );
+          },
+        };
+        return { validator, attempts };
+      };
+
+      const runRequester = (txValidator: TxValidator, deadlineMs: number) =>
+        BatchTxRequester.collectAllTxs(
+          new BatchTxRequester(
+            RequestTracker.create(missing, new Date(Date.now() + deadlineMs)),
+            blockProposal,
+            undefined,
+            mockP2PService,
+            logger,
+            new DateProvider(),
+            {
+              smartParallelWorkerCount: 0,
+              dumbParallelWorkerCount: 1,
+              txBatchSize: txCount,
+              peerCollection,
+              txValidator,
+            },
+          ).run(),
+        );
+
+      it('does not penalise the peer, and collects the tx once it can be verified', async () => {
+        const { validator } = unverifiableAt(2, 1);
+
+        const result = await runRequester(validator, 5_000);
+
+        expect(new Set(result.map(tx => tx.txHash.toString()))).toEqual(new Set(missing.map(h => h.toString())));
+        expect(peerCollection.peersPenalised).toEqual([]);
+      });
+
+      it('stops requesting a tx that repeatedly cannot be verified, without penalising the peer', async () => {
+        const { validator, attempts } = unverifiableAt(2, Infinity);
+        const deadlineMs = 5_000;
+        const startedAt = Date.now();
+
+        const result = await runRequester(validator, deadlineMs);
+
+        expect(result.map(tx => tx.txHash.toString()).sort()).toEqual([0, 1, 3].map(i => missing[i].toString()).sort());
+        expect(attempts.count).toBe(MAX_UNVERIFIABLE_ATTEMPTS_PER_TX);
+        expect(peerCollection.peersPenalised).toEqual([]);
+        // Nothing is left to request, so the run ends without waiting out its deadline.
+        expect(Date.now() - startedAt).toBeLessThan(deadlineMs);
+      });
+
+      it('counts one verification shared by concurrent responses as a single attempt', async () => {
+        const peers = await Promise.all(
+          Array.from({ length: MAX_UNVERIFIABLE_ATTEMPTS_PER_TX }, createSecp256k1PeerId),
+        );
+        connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue(peers);
+        const peerTransactions = new Map(peers.map(p => [p.toString(), Array.from({ length: txCount }, (_, i) => i)]));
+        const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
+        reqResp.sendRequestToPeer.mockImplementation(mockImplementation);
+
+        // Like the validation cache, callers that arrive while the tx is being verified share that verification. The
+        // first one cannot reach the verifier; any later one can.
+        let verifications = 0;
+        let inFlight: Promise<TxValidationResult> | undefined;
+        const validator: TxValidator = {
+          validateTx: (tx: Tx) => {
+            if (!tx.txHash.equals(missing[2])) {
+              return Promise.resolve({ result: 'valid' });
+            }
+            if (!inFlight) {
+              verifications++;
+              const result: TxValidationResult =
+                verifications === 1 ? { result: 'unverifiable', reason: ['verifier down'] } : { result: 'valid' };
+              inFlight = (async () => {
+                await sleep(200);
+                inFlight = undefined;
+                return result;
+              })();
+            }
+            return inFlight;
+          },
+        };
+
+        const result = await BatchTxRequester.collectAllTxs(
+          new BatchTxRequester(
+            RequestTracker.create(missing, new Date(Date.now() + 5_000)),
+            blockProposal,
+            undefined,
+            mockP2PService,
+            logger,
+            new DateProvider(),
+            {
+              smartParallelWorkerCount: 0,
+              dumbParallelWorkerCount: peers.length,
+              txBatchSize: txCount,
+              peerCollection,
+              txValidator: validator,
+            },
+          ).run(),
+        );
+
+        expect(new Set(result.map(tx => tx.txHash.toString()))).toEqual(new Set(missing.map(h => h.toString())));
+        expect(peerCollection.peersPenalised).toEqual([]);
       });
     });
   });

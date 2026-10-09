@@ -6,6 +6,8 @@ import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer'
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb';
+import { getVKTreeRoot } from '@aztec-labs/noir-protocol-circuits-types/vk-tree';
+import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import type { L2Block, L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { ContractDataSource } from '@aztec-labs/stdlib/contract';
 import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
@@ -25,8 +27,14 @@ import {
   makeCheckpointProposal,
   mockTx,
 } from '@aztec-labs/stdlib/testing';
-import { TX_ERROR_INCORRECT_VK_TREE_ROOT, TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
-import { InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
+import {
+  TX_ERROR_INCORRECT_VK_TREE_ROOT,
+  TX_ERROR_PROOF_UNVERIFIABLE,
+  TxArray,
+  TxHash,
+  TxHashArray,
+} from '@aztec-labs/stdlib/tx';
+import { InvalidBlockProposalTxsError, UnverifiableBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { ServerWorldStateSynchronizer } from '@aztec-labs/world-state';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
@@ -301,16 +309,32 @@ describe('LibP2PService', () => {
       expect(txPool.addPendingTxs).not.toHaveBeenCalled();
     });
 
-    it('should Ignore without penalty when the proof verifier is unavailable', async () => {
-      const tx = await mockTx();
+    describe('with the real proof validator', () => {
+      beforeEach(() => {
+        txService.useRealSecondStage = true;
+      });
 
-      txService.secondStageError = new ProofVerifierUnavailableError('bb is down');
+      it('should Ignore without penalty when the proof could not be verified', async () => {
+        const tx = await mockTx();
+        txService.proofVerifierMock.verifyProof.mockRejectedValue(new ProofVerifierUnavailableError('bb is down'));
 
-      await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
 
-      expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
-      expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
-      expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Ignore);
+        expect(txPeerManager.penalizePeer).not.toHaveBeenCalled();
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
+
+      it('should Reject and penalize peer when the verifier rejects the proof', async () => {
+        const tx = await mockTx();
+        txService.proofVerifierMock.verifyProof.mockResolvedValue({ valid: false, durationMs: 1, totalDurationMs: 1 });
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.LowToleranceError);
+        expect(txPool.addPendingTxs).not.toHaveBeenCalled();
+      });
     });
 
     it('should penalize peer with the severity from the failing first-stage validator', async () => {
@@ -515,6 +539,43 @@ describe('LibP2PService', () => {
       expect(error.invalidTxs[0].reasons).toEqual(
         expect.arrayContaining([expect.stringContaining(TX_ERROR_INCORRECT_VK_TREE_ROOT)]),
       );
+    });
+
+    /** A tx that passes every integrity check short of its proof. */
+    const mockWellFormedTx = async (seed: number) => {
+      const tx = await mockTx(seed, {
+        numberOfNonRevertiblePublicCallRequests: 0,
+        numberOfRevertiblePublicCallRequests: 0,
+        chainId: new Fr(TEST_COORDINATION_SIGNATURE_CONTEXT.chainId),
+        version: new Fr(1),
+        vkTreeRoot: getVKTreeRoot(),
+        protocolContractsHash,
+      });
+      await tx.recomputeHash();
+      return tx;
+    };
+
+    it('throws a non-slashable error when a tx proof could not be verified', async () => {
+      const tx = await mockWellFormedTx(1);
+      service.proofVerifierMock.verifyProof.mockRejectedValue(new ProofVerifierUnavailableError('bb is down'));
+
+      const error = await service.validateTxsReceivedInBlockProposal([tx]).catch(err => err);
+
+      expect(error).toBeInstanceOf(UnverifiableBlockProposalTxsError);
+      expect(error.unverifiableTxs).toEqual([{ txHash: tx.getTxHash(), reasons: [TX_ERROR_PROOF_UNVERIFIABLE] }]);
+    });
+
+    it('reports an invalid tx over an unverifiable one in the same proposal', async () => {
+      const unverifiableTx = await mockWellFormedTx(1);
+      const invalidTx = await mockTx(2);
+      service.proofVerifierMock.verifyProof.mockRejectedValue(new ProofVerifierUnavailableError('bb is down'));
+
+      const error = await service.validateTxsReceivedInBlockProposal([unverifiableTx, invalidTx]).catch(err => err);
+
+      expect(error).toBeInstanceOf(InvalidBlockProposalTxsError);
+      expect(error.invalidTxs.map((invalid: { txHash: TxHash }) => invalid.txHash.toString())).toEqual([
+        invalidTx.getTxHash().toString(),
+      ]);
     });
   });
 
@@ -2161,8 +2222,11 @@ class TestLibP2PService extends LibP2PService {
   /** Controls whether second-stage gossip validation passes. Set to false to simulate proof verification failure. */
   public secondStageValidationPasses = true;
 
-  /** When set, the second-stage (proof) validator throws this instead of returning a verdict. */
-  public secondStageError: Error | undefined;
+  /** Runs the production second stage, a proof validator over {@link proofVerifierMock}, instead of the test flags. */
+  public useRealSecondStage = false;
+
+  /** The proof verifier the service was built with. Accepts every proof unless re-mocked. */
+  public readonly proofVerifierMock: MockProxy<ClientProtocolCircuitVerifier>;
 
   /** Controls the name of the failing first-stage validator (e.g., 'doubleSpendValidator' to trigger special handling). */
   public firstStageFailingValidatorName = 'failingValidator';
@@ -2209,9 +2273,8 @@ class TestLibP2PService extends LibP2PService {
     const resolvedPeerDiscoveryService = peerDiscoveryService ?? mock<PeerDiscoveryService>();
     const mockReqResp = mock<ReqRespInterface>();
     const mockWorldStateSynchronizer = mock<ServerWorldStateSynchronizer>();
-    const mockProofVerifier = mock<ClientProtocolCircuitVerifier>({
-      verifyProof: () => Promise.resolve({ valid: true, durationMs: 1000, totalDurationMs: 1000 }),
-    });
+    const mockProofVerifier = mock<ClientProtocolCircuitVerifier>();
+    mockProofVerifier.verifyProof.mockResolvedValue({ valid: true, durationMs: 1000, totalDurationMs: 1000 });
 
     super(
       mockConfig,
@@ -2230,6 +2293,7 @@ class TestLibP2PService extends LibP2PService {
     );
 
     this.mockPeerDiscoveryService = resolvedPeerDiscoveryService;
+    this.proofVerifierMock = mockProofVerifier;
 
     this.testEpochCache = epochCache;
   }
@@ -2269,14 +2333,8 @@ class TestLibP2PService extends LibP2PService {
 
   /** Override to use test flag for second-stage validators. Returns a failing validator when secondStageValidationPasses is false. */
   protected override createSecondStageMessageValidators(): Record<string, TransactionValidator> {
-    const error = this.secondStageError;
-    if (error) {
-      return {
-        proofValidator: {
-          validator: { validateTx: () => Promise.reject(error) },
-          severity: PeerErrorSeverity.LowToleranceError,
-        },
-      };
+    if (this.useRealSecondStage) {
+      return super.createSecondStageMessageValidators();
     }
     if (this.secondStageValidationPasses) {
       return {};

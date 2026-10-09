@@ -77,6 +77,10 @@ export class TxValidationCache implements ITxValidationCache {
   /**
    * Returns the cached promise if present, otherwise calls `validate`, stores its promise
    * immediately (before awaiting), and returns it.
+   *
+   * Only verdicts are kept. A validation that ends `unverifiable` or rejects is evicted once it settles, so the next
+   * caller checks the tx again instead of inheriting a transient local failure. Callers already waiting on it still see
+   * its outcome.
    */
   public getOrValidate(
     validatorSymbol: symbol,
@@ -93,8 +97,25 @@ export class TxValidationCache implements ITxValidationCache {
       });
       return cached;
     }
-    const promise = validate();
+    const promise: Promise<TxValidationResult> = validate().then(
+      result => {
+        if (result.result === 'unverifiable') {
+          this.evictIfCurrent(key, promise);
+        }
+        return result;
+      },
+      err => {
+        this.evictIfCurrent(key, promise);
+        throw err;
+      },
+    );
     this.set(key, promise);
     return promise;
+  }
+
+  private evictIfCurrent(key: string, promise: Promise<TxValidationResult>): void {
+    if (this.entries.peek(key) === promise) {
+      this.entries.delete(key);
+    }
   }
 }

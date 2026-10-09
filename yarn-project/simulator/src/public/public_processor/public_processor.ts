@@ -246,6 +246,12 @@ export class PublicProcessor implements Traceable {
           failed.push({ tx, error: new Error(`Tx failed preprocess validation: ${reason}`) });
           returns.push(new NestedProcessReturnValues([]));
           continue;
+        } else if (result.result === 'unverifiable') {
+          // Skipped rather than failed: a failed tx is dropped from the pool, and nothing has judged this one.
+          this.log.warn(`Skipping tx ${txHash.toString()} that could not be validated: ${result.reason.join(', ')}`, {
+            txHash: txHash.toString(),
+          });
+          continue;
         } else {
           this.log.trace(`Tx ${txHash.toString()} is valid before processing.`);
         }

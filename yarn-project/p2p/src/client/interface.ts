@@ -243,6 +243,7 @@ export type P2P = P2PClient & {
   /**
    * Validates a set of txs received in a block proposal.
    * @throws InvalidBlockProposalTxsError - If any tx fails minimum integrity validation.
+   * @throws UnverifiableBlockProposalTxsError - If no tx failed, but some could not be checked.
    */
   validateTxsReceivedInBlockProposal(txs: Tx[]): Promise<void>;
 

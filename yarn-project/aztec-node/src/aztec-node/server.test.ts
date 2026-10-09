@@ -73,6 +73,8 @@ import {
   TX_ERROR_INCORRECT_ROLLUP_VERSION,
   TX_ERROR_INSUFFICIENT_FEE_PER_GAS,
   TX_ERROR_INVALID_EXPIRATION_TIMESTAMP,
+  TX_ERROR_INVALID_PROOF,
+  TX_ERROR_PROOF_UNVERIFIABLE,
   TX_ERROR_SIZE_ABOVE_LIMIT,
   Tx,
   TxEffect,
@@ -149,7 +151,10 @@ describe('aztec node', () => {
   let lastBlockNumber: BlockNumber;
   let node: TestAztecNodeService;
   /** Builds a node on the shared mocks, optionally overriding config entries. */
-  let createNode: (configOverrides?: Partial<AztecNodeConfig>) => TestAztecNodeService;
+  let createNode: (
+    configOverrides?: Partial<AztecNodeConfig>,
+    rpcProofVerifier?: TestCircuitVerifier,
+  ) => TestAztecNodeService;
   let feePayer: AztecAddress;
   let epochCache: EpochCache;
   let nextBlockPredictor: NextBlockPredictor;
@@ -304,7 +309,7 @@ describe('aztec node', () => {
       dateProvider: new MockDateProvider(),
     });
 
-    createNode = (configOverrides: Partial<AztecNodeConfig> = {}) =>
+    createNode = (configOverrides: Partial<AztecNodeConfig> = {}, rpcProofVerifier = new TestCircuitVerifier()) =>
       new TestAztecNodeService({
         config: { ...nodeConfig, ...configOverrides },
         p2pClient: p2p,
@@ -327,7 +332,7 @@ describe('aztec node', () => {
         epochCache,
         packageVersion: getPackageVersion(),
         peerProofVerifier: new TestCircuitVerifier(),
-        rpcProofVerifier: new TestCircuitVerifier(),
+        rpcProofVerifier,
       });
 
     node = createNode();
@@ -468,6 +473,42 @@ describe('aztec node', () => {
 
       await node.sendTx(tx);
       expect(p2p.sendTx).toHaveBeenCalledWith(tx);
+    });
+
+    describe('when the proof cannot be checked', () => {
+      beforeEach(() => {
+        const rpcProofVerifier = new TestCircuitVerifier();
+        rpcProofVerifier.outcome = 'unavailable';
+        node = createNode({}, rpcProofVerifier);
+        p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 1 });
+      });
+
+      it('reports the tx unverifiable rather than invalid', async () => {
+        const tx = await mockTxForRollup(0x10000);
+
+        await expect(node.isValidTx(tx)).resolves.toEqual({
+          result: 'unverifiable',
+          reason: [TX_ERROR_PROOF_UNVERIFIABLE],
+        });
+      });
+
+      it('refuses the tx as one to retry, not as an invalid one', async () => {
+        const tx = await mockTxForRollup(0x10000);
+
+        await expect(node.sendTx(tx)).rejects.toThrow('could not verify it (retry later)');
+        expect(p2p.sendTx).not.toHaveBeenCalled();
+      });
+    });
+
+    it('rejects the tx as invalid when its proof is rejected', async () => {
+      const rpcProofVerifier = new TestCircuitVerifier();
+      rpcProofVerifier.outcome = 'invalid';
+      node = createNode({}, rpcProofVerifier);
+      p2p.getP2PConnectivity.mockResolvedValue({ enabled: true, connectedPeers: 1 });
+      const tx = await mockTxForRollup(0x10000);
+
+      await expect(node.sendTx(tx)).rejects.toThrow(`Invalid tx: ${TX_ERROR_INVALID_PROOF}`);
+      expect(p2p.sendTx).not.toHaveBeenCalled();
     });
   });
 
