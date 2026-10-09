@@ -60,7 +60,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 
 import type { PublisherConfig, SequencerPublisherConfig, TxSenderConfig } from './config.js';
-import { PROPOSE_GAS } from './gas_constants.js';
+import { PROPOSE_WITH_SETUP_EPOCH_GAS } from './gas_constants.js';
 import { type FailedL1Tx, FailedL1TxSchema } from './l1_tx_failed_store/index.js';
 import type { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
 import { type Action, Actions, SequencerPublisher, compareActions } from './sequencer-publisher.js';
@@ -598,9 +598,9 @@ describe('SequencerPublisher', () => {
         expect.anything(),
         expect.anything(),
       );
-      // Without a simulated gas limit, the proposal is costed with the selection gas constant
+      // Without a simulated gas limit, the proposal is costed at the gas ceiling it is sent with
       expect(getNextPublisher).toHaveBeenCalledWith([l1TxUtils.getSenderAddress()], {
-        gasLimit: PROPOSE_GAS,
+        gasLimit: MAX_L1_TX_LIMIT,
         blobCount: expect.any(Number),
       });
       // Result is defined (rotation succeeded and tx was sent)
@@ -610,14 +610,16 @@ describe('SequencerPublisher', () => {
       expect(rotatingPublisher.l1TxUtils).toBe(secondL1TxUtils);
     });
 
-    it('rotates to a publisher that can afford the proposal when the current one cannot', async () => {
+    it('rotates away from a publisher that cannot afford the gas ceiling a fallback bundle is sent with', async () => {
       forwardSpy.mockResolvedValue({
         receipt: proposeTxReceipt,
         stats: undefined,
         multicallData: '0x',
         state: {} as any,
       });
-      l1TxUtils.getSenderBalance.mockResolvedValue(1n);
+      // Enough for the proposal gas constant at 1 gwei, but not for the MAX_L1_TX_LIMIT the fallback send uses
+      const balance = ((PROPOSE_WITH_SETUP_EPOCH_GAS + MAX_L1_TX_LIMIT) / 2n) * 1_000_000_000n;
+      l1TxUtils.getSenderBalance.mockResolvedValue(balance);
       getNextPublisher.mockResolvedValueOnce(secondL1TxUtils);
 
       await rotatingPublisher.enqueueProposeCheckpoint(
@@ -630,8 +632,9 @@ describe('SequencerPublisher', () => {
 
       expect(forwardSpy).toHaveBeenCalledTimes(1);
       expect(forwardSpy.mock.calls[0][1]).toBe(secondL1TxUtils);
+      expect(forwardSpy.mock.calls[0][2]?.gasLimit).toEqual(MAX_L1_TX_LIMIT);
       expect(getNextPublisher).toHaveBeenCalledWith([l1TxUtils.getSenderAddress()], {
-        gasLimit: PROPOSE_GAS,
+        gasLimit: MAX_L1_TX_LIMIT,
         blobCount: expect.any(Number),
       });
       expect(result?.sentActions).toEqual(['propose']);

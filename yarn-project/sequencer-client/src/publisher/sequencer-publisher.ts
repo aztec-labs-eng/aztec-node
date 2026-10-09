@@ -76,7 +76,6 @@ import {
 } from 'viem';
 
 import type { SequencerPublisherConfig } from './config.js';
-import { INVALIDATE_GAS, PROPOSE_GAS } from './gas_constants.js';
 import { type FailedL1Tx, type L1TxFailedStore, createL1TxFailedStore } from './l1_tx_failed_store/index.js';
 import { type DroppedRequest, SequencerBundleSimulator } from './sequencer-bundle-simulator.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
@@ -160,6 +159,27 @@ const OPTIONAL_ACTIONS: readonly Action[] = ['governance-signal', 'vote-offenses
 
 /** ETH cost of a bundle with required actions, checked against the publisher balance before sending it. */
 type BundleCost = { requirement: SendCostRequirement; required: bigint };
+
+/** Thrown before sending a bundle the current publisher cannot afford, so the send is never attempted. */
+class BundleUnaffordableError extends Error {
+  public readonly required: bigint;
+  public readonly requirement: SendCostRequirement;
+
+  constructor(
+    public readonly publisher: EthAddress,
+    public readonly balance: bigint,
+    cost: BundleCost,
+  ) {
+    super(
+      `Publisher ${publisher} cannot afford the bundle: balance ${formatEther(balance)} ETH, ` +
+        `required ${formatEther(cost.required)} ETH (gas limit ${cost.requirement.gasLimit}, ` +
+        `${cost.requirement.blobCount} blobs)`,
+    );
+    this.name = 'BundleUnaffordableError';
+    this.required = cost.required;
+    this.requirement = cost.requirement;
+  }
+}
 
 /** Requests surviving bundle simulation, with the gas limit to send them with (undefined if simulation was skipped). */
 type SimulatedBundle = { requests: RequestWithExpiry[]; droppedRequests: DroppedRequest[]; gasLimit?: bigint };
@@ -721,7 +741,7 @@ export class SequencerPublisher implements Disposable {
       return { ...bundle, feeDroppedActions: [] };
     }
 
-    // Without a simulated gas limit the cost only covers the required actions, so dropping votes would not change it.
+    // Without a simulated gas limit the bundle is sent at the gas ceiling, so dropping votes would not change its cost.
     const cost = this.computeBundleCost(bundle.requests, fees, bundle.gasLimit);
     const optional = bundle.requests.filter(r => OPTIONAL_ACTIONS.includes(r.action));
     if (
@@ -780,18 +800,13 @@ export class SequencerPublisher implements Disposable {
   }
 
   /**
-   * Computes the worst-case ETH cost of a bundle. When the bundle gas limit is unknown (eth_simulateV1 unavailable, so
-   * the send uses the MAX_L1_TX_LIMIT ceiling) the required actions are costed with the selection gas constants instead,
-   * since costing the ceiling would overstate the cost many times over.
+   * Computes the worst-case ETH cost of a bundle: its gas limit times the max fee per gas, plus blob fees. When the
+   * bundle gas limit is unknown (eth_simulateV1 unavailable) the send uses the MAX_L1_TX_LIMIT ceiling, and L1 checks the
+   * sender balance against that limit before executing anything, so the bundle is costed at the ceiling too.
    */
   private computeBundleCost(requests: RequestWithExpiry[], fees: FeesPerGas, gasLimit: bigint | undefined): BundleCost {
     const blobCount = requests.find(r => r.blobConfig)?.blobConfig?.blobs.length ?? 0;
-    const hasPropose = requests.some(r => r.action === 'propose');
-    const hasInvalidate = requests.some(r => r.action.startsWith('invalidate-'));
-    const requirement: SendCostRequirement = {
-      gasLimit: gasLimit ?? (hasPropose ? PROPOSE_GAS : 0n) + (hasInvalidate ? INVALIDATE_GAS : 0n),
-      blobCount,
-    };
+    const requirement: SendCostRequirement = { gasLimit: gasLimit ?? MAX_L1_TX_LIMIT, blobCount };
     return { requirement, required: computeSendCost(fees, requirement) };
   }
 
@@ -906,6 +921,22 @@ export class SequencerPublisher implements Disposable {
           this.backupRevertFailure(validRequests, err, currentPublisher, targetSlot);
           return undefined;
         }
+        if (err instanceof BundleUnaffordableError) {
+          const nextPublisher = await this.getNextPublisher?.([...triedAddresses], err.requirement);
+          if (!nextPublisher) {
+            this.log.error(`No publisher can afford the bundle, not sending it`, err, {
+              actions: validRequests.map(r => r.action),
+              triedAddresses: triedAddresses.map(a => a.toString()),
+              required: err.required,
+              gasLimit: err.requirement.gasLimit,
+              blobCount: err.requirement.blobCount,
+              slot: targetSlot,
+            });
+            return undefined;
+          }
+          currentPublisher = nextPublisher;
+          continue;
+        }
         const viemError = formatViemError(err);
         if (!this.getNextPublisher) {
           this.log.error('Failed to publish bundled transactions', viemError);
@@ -942,11 +973,7 @@ export class SequencerPublisher implements Disposable {
         gasLimit: cost.requirement.gasLimit,
         blobCount: cost.requirement.blobCount,
       });
-      throw new Error(
-        `Publisher ${publisher.getSenderAddress()} cannot afford the bundle: balance ${formatEther(balance)} ETH, ` +
-          `required ${formatEther(cost.required)} ETH (gas limit ${cost.requirement.gasLimit}, ` +
-          `${cost.requirement.blobCount} blobs)`,
-      );
+      throw new BundleUnaffordableError(publisher.getSenderAddress(), balance, cost);
     }
   }
 
