@@ -5,6 +5,9 @@ export enum Database {
 
 export const CURSOR_PAGE_SIZE = 10;
 
+/** Most keys sent in one GET message; larger batched reads are split, which bounds the size of each message. */
+export const GET_CHUNK_SIZE = 1024;
+
 export enum LMDBMessageType {
   OPEN_DATABASE = 100,
   GET,

@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import {
   CURSOR_PAGE_SIZE,
   Database,
+  GET_CHUNK_SIZE,
   type LMDBMessageChannel,
   LMDBMessageType,
   type LMDBResponseBody,
@@ -52,6 +53,22 @@ describe('ReadTransaction', () => {
   it('does not send a database request for an empty bulk read', async () => {
     await expect(tx.getMany([])).resolves.toEqual([]);
     expect(channel.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('splits a large bulk read into bounded GET messages and keeps input order', async () => {
+    const keys = Array.from({ length: 2 * GET_CHUNK_SIZE + 3 }, (_, i) => Buffer.from(`key${i}`));
+    // Echo each requested key back as its value, leaving every odd-numbered key missing.
+    channel.sendMessage.mockImplementation((_type, { keys: requested }: { keys: Buffer[] }) =>
+      Promise.resolve({
+        values: requested.map(key => (Number(key.toString().slice(3)) % 2 === 0 ? [key] : null)),
+      }),
+    );
+
+    const values = await tx.getMany(keys);
+
+    expect(values).toEqual(keys.map((key, i) => (i % 2 === 0 ? key : undefined)));
+    const sentKeyCounts = channel.sendMessage.mock.calls.map(([, body]) => body.keys.length);
+    expect(sentKeyCounts).toEqual([GET_CHUNK_SIZE, GET_CHUNK_SIZE, 3]);
   });
 
   it('rejects bulk reads after the transaction closes', async () => {

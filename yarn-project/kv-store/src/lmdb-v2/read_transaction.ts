@@ -1,4 +1,6 @@
-import { CURSOR_PAGE_SIZE, Database, type LMDBMessageChannel, LMDBMessageType } from './message.js';
+import { chunk } from '@aztec-labs/foundation/collection';
+
+import { CURSOR_PAGE_SIZE, Database, GET_CHUNK_SIZE, type LMDBMessageChannel, LMDBMessageType } from './message.js';
 
 export class ReadTransaction {
   protected open = true;
@@ -22,14 +24,20 @@ export class ReadTransaction {
     return (await this.getMany([key]))[0];
   }
 
-  /** Reads multiple data keys with one database request, returning values in input order. */
+  /**
+   * Reads multiple data keys, returning values in input order. Sends one database request per {@link GET_CHUNK_SIZE}
+   * keys.
+   */
   public async getMany(keys: Uint8Array[]): Promise<(Uint8Array | undefined)[]> {
     this.assertIsOpen();
-    if (keys.length === 0) {
-      return [];
+    const results: (Uint8Array | undefined)[] = [];
+    for (const keysChunk of chunk(keys, GET_CHUNK_SIZE)) {
+      const response = await this.channel.sendMessage(LMDBMessageType.GET, { keys: keysChunk, db: Database.DATA });
+      for (let i = 0; i < keysChunk.length; i++) {
+        results.push(response.values[i]?.[0] ?? undefined);
+      }
     }
-    const response = await this.channel.sendMessage(LMDBMessageType.GET, { keys, db: Database.DATA });
-    return keys.map((_, index) => response.values[index]?.[0] ?? undefined);
+    return results;
   }
 
   public async getIndex(key: Uint8Array): Promise<Uint8Array[]> {
