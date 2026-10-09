@@ -757,8 +757,9 @@ describe('ProposalHandler checkpoint validation', () => {
       firstBlockNumber: number;
       parentLeafCount: number | undefined;
       lastLeafCount: number;
+      lastArchiveRoot?: Fr;
     }) {
-      const { firstBlockNumber, parentLeafCount, lastLeafCount } = opts;
+      const { firstBlockNumber, parentLeafCount, lastLeafCount, lastArchiveRoot = Fr.ZERO } = opts;
       const block = {
         archive: new AppendOnlyTreeSnapshot(archiveRoot, TreeLeafIndex(1)),
         number: firstBlockNumber,
@@ -767,7 +768,7 @@ describe('ProposalHandler checkpoint validation', () => {
         header: {
           globalVariables: GlobalVariables.empty({ slotNumber: SlotNumber(1) }),
           state: { l1ToL2MessageTree: { nextAvailableLeafIndex: lastLeafCount } },
-          lastArchive: new AppendOnlyTreeSnapshot(Fr.ZERO, TreeLeafIndex(firstBlockNumber - 1)),
+          lastArchive: new AppendOnlyTreeSnapshot(lastArchiveRoot, TreeLeafIndex(firstBlockNumber - 1)),
         },
       } as unknown as L2Block;
       blockSource.getBlocksForSlot.mockResolvedValue([block]);
@@ -950,9 +951,18 @@ describe('ProposalHandler checkpoint validation', () => {
       it('attests once a sync after the first consumed read brings the prefix into agreement', async () => {
         const inboxRollingHash = Fr.random();
         const header = setupMatchingRebuild({ inboxRollingHash });
-        setupCheckpointWithConsumption({ firstBlockNumber: 5, parentLeafCount: 3, lastLeafCount: 7 });
-        // The last block, as the archiver serves it by archive, ends at total 0, and so does the live bucket.
-        inbox.setBuckets([{ seq: 0n, total: 0n, rollingHash: inboxRollingHash }]);
+        const block = setupCheckpointWithConsumption({
+          firstBlockNumber: 5,
+          parentLeafCount: 3,
+          lastLeafCount: 7,
+          lastArchiveRoot: header.lastArchiveRoot,
+        });
+        // Serve the slot's last block by archive too, so the endpoint gate checks where the checkpoint really ends.
+        const getBlockDataByNumber = blockSource.getBlockData.getMockImplementation()!;
+        blockSource.getBlockData.mockImplementation(query =>
+          'archive' in query ? Promise.resolve(block as unknown as BlockData) : getBlockDataByNumber(query),
+        );
+        inbox.setBuckets([{ seq: 4n, total: 7n, rollingHash: inboxRollingHash }]);
         const consumedMessages = [new Fr(1000), new Fr(1001), new Fr(1002), new Fr(1003)];
         l1ToL2MessageSource.getL1ToL2MessageRange.mockRejectedValue(new Error('Inbox message range is not synced'));
         let syncs = 0;
