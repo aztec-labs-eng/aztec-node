@@ -20,14 +20,17 @@ import {
 import { type L1FeeAnalysisResult, L1FeeAnalyzer, captureWindowBlockFees } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
   AmsterdamForkDetector,
+  type FeesPerGas,
   type L1BlobInputs,
   type L1TxConfig,
   type L1TxRequest,
   L1TxTimeoutError,
   type L1TxUtils,
   MAX_L1_TX_LIMIT,
+  type SendCostRequirement,
   type TransactionStats,
   WEI_CONST,
+  computeSendCost,
   summarizeTransactionReceipt,
 } from '@aztec-labs/ethereum/l1-tx-utils';
 import {
@@ -66,12 +69,14 @@ import {
   type TransactionReceipt,
   type TypedDataDefinition,
   encodeFunctionData,
+  formatEther,
   keccak256,
   size,
   toHex,
 } from 'viem';
 
 import type { SequencerPublisherConfig } from './config.js';
+import { INVALIDATE_GAS, PROPOSE_GAS } from './gas_constants.js';
 import { type FailedL1Tx, type L1TxFailedStore, createL1TxFailedStore } from './l1_tx_failed_store/index.js';
 import { type DroppedRequest, SequencerBundleSimulator } from './sequencer-bundle-simulator.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
@@ -140,6 +145,25 @@ type GovernanceSignalAction = Extract<Action, 'governance-signal'>;
 // Sorting for actions such that invalidations go before proposals, and proposals go before votes
 export const compareActions = (a: Action, b: Action) => Actions.indexOf(a) - Actions.indexOf(b);
 
+/**
+ * Actions whose bundle must be affordable before it is sent. They are never dropped individually: an invalidation must
+ * land in the same tx as the proposal that builds on it, or the proposal reverts.
+ */
+const REQUIRED_ACTIONS: readonly Action[] = [
+  'invalidate-by-invalid-attestation',
+  'invalidate-by-insufficient-attestations',
+  'propose',
+];
+
+/** Actions dropped from a bundle with required actions when the publisher cannot afford the whole bundle. */
+const OPTIONAL_ACTIONS: readonly Action[] = ['governance-signal', 'vote-offenses', 'execute-slash'];
+
+/** ETH cost of a bundle with required actions, checked against the publisher balance before sending it. */
+type BundleCost = { requirement: SendCostRequirement; required: bigint };
+
+/** Requests surviving bundle simulation, with the gas limit to send them with (undefined if simulation was skipped). */
+type SimulatedBundle = { requests: RequestWithExpiry[]; droppedRequests: DroppedRequest[]; gasLimit?: bigint };
+
 export type InvalidateCheckpointRequest = {
   request: L1TxRequest;
   reason: 'invalid-attestation' | 'insufficient-attestations';
@@ -198,8 +222,14 @@ export class SequencerPublisher implements Disposable {
 
   private blobClient: BlobClientInterface;
 
-  /** Optional callback to obtain a replacement publisher when the current one fails to send. */
-  private getNextPublisher?: (excludeAddresses: EthAddress[]) => Promise<L1TxUtils | undefined>;
+  /**
+   * Optional callback to obtain a replacement publisher when the current one fails to send. With a requirement, only a
+   * publisher that can afford a send of that size is returned.
+   */
+  private getNextPublisher?: (
+    excludeAddresses: EthAddress[],
+    requirement?: SendCostRequirement,
+  ) => Promise<L1TxUtils | undefined>;
 
   /** L1 fee analyzer for fisherman mode */
   private l1FeeAnalyzer?: L1FeeAnalyzer;
@@ -241,7 +271,10 @@ export class SequencerPublisher implements Disposable {
       metrics: SequencerPublisherMetrics;
       lastActions: Partial<Record<Action, SlotNumber>>;
       log?: Logger;
-      getNextPublisher?: (excludeAddresses: EthAddress[]) => Promise<L1TxUtils | undefined>;
+      getNextPublisher?: (
+        excludeAddresses: EthAddress[],
+        requirement?: SendCostRequirement,
+      ) => Promise<L1TxUtils | undefined>;
     },
   ) {
     this.log = deps.log ?? createLogger('sequencer:publisher');
@@ -582,16 +615,19 @@ export class SequencerPublisher implements Disposable {
         return undefined;
       }
 
-      const { requests, droppedRequests, gasLimit } =
-        bundleResult.kind === 'fallback'
-          ? {
-              requests: bundleResult.requests,
-              droppedRequests: bundleResult.droppedRequests,
-              gasLimit: MAX_L1_TX_LIMIT,
-            }
-          : bundleResult;
+      const simulated: SimulatedBundle = {
+        requests: bundleResult.requests,
+        droppedRequests: bundleResult.droppedRequests,
+        gasLimit: bundleResult.kind === 'fallback' ? undefined : bundleResult.gasLimit,
+      };
+      this.logDroppedInSim(simulated.droppedRequests);
 
-      this.logDroppedInSim(droppedRequests);
+      const affordable = await this.dropOptionalActionsIfUnaffordable(simulated, currentL2Slot);
+      if (affordable === undefined) {
+        return undefined;
+      }
+      const { requests, droppedRequests, cost, feeDroppedActions } = affordable;
+      const gasLimit = affordable.gasLimit ?? MAX_L1_TX_LIMIT;
 
       // Compute blobConfig from survivors (not original validRequests) so that if the propose
       // entry was dropped by bundleSimulate we don't attach a blob-typed config to a non-blob tx.
@@ -602,12 +638,12 @@ export class SequencerPublisher implements Disposable {
         requests: requests.map(request => request.action),
         txConfig,
       });
-      const result = await this.forwardWithPublisherRotation(requests, txConfig, blobConfig, currentL2Slot);
+      const result = await this.forwardWithPublisherRotation(requests, txConfig, blobConfig, currentL2Slot, cost);
       if (result === undefined) {
         return undefined;
       }
       const { successfulActions = [], failedActions = [] } = this.callbackBundledTransactions(requests, result);
-      const allFailedActions = [...failedActions, ...droppedRequests.map(d => d.request.action)];
+      const allFailedActions = [...failedActions, ...droppedRequests.map(d => d.request.action), ...feeDroppedActions];
       return {
         result,
         expiredActions,
@@ -669,6 +705,106 @@ export class SequencerPublisher implements Disposable {
     }
   }
 
+  /**
+   * Bundles with a proposal or invalidation must be affordable before sending: if the publisher cannot pay for the whole
+   * bundle, drops the optional votes and re-simulates the rest, rather than losing the proposal to fees. Returns the
+   * bundle to send along with its cost (only set for bundles with required actions), or undefined if nothing survived.
+   */
+  private async dropOptionalActionsIfUnaffordable(
+    bundle: SimulatedBundle,
+    targetSlot: SlotNumber,
+  ): Promise<(SimulatedBundle & { cost?: BundleCost; feeDroppedActions: Action[] }) | undefined> {
+    const fees = bundle.requests.some(r => REQUIRED_ACTIONS.includes(r.action))
+      ? await this.tryGetFeesForCostCheck(bundle.requests)
+      : undefined;
+    if (!fees) {
+      return { ...bundle, feeDroppedActions: [] };
+    }
+
+    // Without a simulated gas limit the cost only covers the required actions, so dropping votes would not change it.
+    const cost = this.computeBundleCost(bundle.requests, fees, bundle.gasLimit);
+    const optional = bundle.requests.filter(r => OPTIONAL_ACTIONS.includes(r.action));
+    if (
+      optional.length === 0 ||
+      bundle.gasLimit === undefined ||
+      (await this.checkAffordable(this.l1TxUtils, cost)).affordable
+    ) {
+      return { ...bundle, cost, feeDroppedActions: [] };
+    }
+
+    const feeDroppedActions = optional.map(r => r.action);
+    const remaining = bundle.requests.filter(r => !OPTIONAL_ACTIONS.includes(r.action));
+    this.log.warn(`Dropping optional actions since publisher cannot afford the full bundle`, {
+      droppedActions: feeDroppedActions,
+      remainingActions: remaining.map(r => r.action),
+      publisher: this.getSenderAddress().toString(),
+      required: cost.required,
+      gasLimit: cost.requirement.gasLimit,
+      blobCount: cost.requirement.blobCount,
+      slot: targetSlot,
+    });
+
+    const reduced = await this.bundleSimulator.simulate(remaining, targetSlot);
+    this.logDroppedInSim(reduced.droppedRequests);
+    if (reduced.kind === 'aborted') {
+      void this.backupDroppedInSim(reduced.droppedRequests, targetSlot).catch(err =>
+        this.log.error(`Failed to backup requests dropped in simulation`, err),
+      );
+      return undefined;
+    }
+
+    const gasLimit = reduced.kind === 'fallback' ? undefined : reduced.gasLimit;
+    return {
+      requests: reduced.requests,
+      droppedRequests: [...bundle.droppedRequests, ...reduced.droppedRequests],
+      gasLimit,
+      cost: reduced.requests.some(r => REQUIRED_ACTIONS.includes(r.action))
+        ? this.computeBundleCost(reduced.requests, fees, gasLimit)
+        : undefined,
+      feeDroppedActions,
+    };
+  }
+
+  /**
+   * Fetches the fees used to cost a bundle against the publisher balance. Returns undefined if they cannot be read, in
+   * which case the bundle is sent unchecked: the publisher already passed the affordability check at selection.
+   */
+  private async tryGetFeesForCostCheck(requests: RequestWithExpiry[]): Promise<FeesPerGas | undefined> {
+    const isBlobTx = requests.some(r => r.blobConfig);
+    try {
+      return await this.l1TxUtils.getFeesPerGas(undefined, isBlobTx, 0);
+    } catch (err) {
+      this.log.warn(`Failed to fetch L1 fees to check bundle affordability, sending unchecked`, { err });
+      return undefined;
+    }
+  }
+
+  /**
+   * Computes the worst-case ETH cost of a bundle. When the bundle gas limit is unknown (eth_simulateV1 unavailable, so
+   * the send uses the MAX_L1_TX_LIMIT ceiling) the required actions are costed with the selection gas constants instead,
+   * since costing the ceiling would overstate the cost many times over.
+   */
+  private computeBundleCost(requests: RequestWithExpiry[], fees: FeesPerGas, gasLimit: bigint | undefined): BundleCost {
+    const blobCount = requests.find(r => r.blobConfig)?.blobConfig?.blobs.length ?? 0;
+    const hasPropose = requests.some(r => r.action === 'propose');
+    const hasInvalidate = requests.some(r => r.action.startsWith('invalidate-'));
+    const requirement: SendCostRequirement = {
+      gasLimit: gasLimit ?? (hasPropose ? PROPOSE_GAS : 0n) + (hasInvalidate ? INVALIDATE_GAS : 0n),
+      blobCount,
+    };
+    return { requirement, required: computeSendCost(fees, requirement) };
+  }
+
+  /** Checks whether the publisher holds the ETH the bundle needs and is not backed off for insufficient funds. */
+  private async checkAffordable(
+    publisher: L1TxUtils,
+    cost: BundleCost,
+  ): Promise<{ affordable: boolean; balance: bigint }> {
+    const balance = await publisher.getSenderBalance();
+    const affordable = balance >= cost.required && !publisher.isBackedOffForInsufficientFunds(balance);
+    return { affordable, balance };
+  }
+
   /** Logs entries dropped by bundle simulation as warnings on the publisher's logger. */
   private logDroppedInSim(dropped: DroppedRequest[]): void {
     for (const drop of dropped) {
@@ -727,6 +863,7 @@ export class SequencerPublisher implements Disposable {
     txConfig: RequestWithExpiry['gasConfig'],
     blobConfig: L1BlobInputs | undefined,
     targetSlot?: SlotNumber,
+    cost?: BundleCost,
   ) {
     if (!txConfig?.gasLimit) {
       throw new Error('gasLimit is required for bundled transactions');
@@ -746,6 +883,9 @@ export class SequencerPublisher implements Disposable {
       triedAddresses.push(currentPublisher.getSenderAddress());
 
       try {
+        if (cost) {
+          await this.assertCanAfford(currentPublisher, cost);
+        }
         const result = await Multicall3.forward(
           validRequests.map(r => r.request),
           currentPublisher,
@@ -776,7 +916,7 @@ export class SequencerPublisher implements Disposable {
           `Publisher ${currentPublisher.getSenderAddress()} failed to send, rotating to next publisher`,
           viemError,
         );
-        const nextPublisher = await this.getNextPublisher([...triedAddresses]);
+        const nextPublisher = await this.getNextPublisher([...triedAddresses], cost?.requirement);
         if (!nextPublisher) {
           this.log.error(
             `All available publishers exhausted (tried ${triedAddresses.length}), failed to publish bundled transactions`,
@@ -788,6 +928,25 @@ export class SequencerPublisher implements Disposable {
         }
         currentPublisher = nextPublisher;
       }
+    }
+  }
+
+  /** Throws if the publisher cannot afford the bundle, so the rotation loop moves on to another publisher. */
+  private async assertCanAfford(publisher: L1TxUtils, cost: BundleCost): Promise<void> {
+    const { affordable, balance } = await this.checkAffordable(publisher, cost);
+    if (!affordable) {
+      this.log.warn(`Publisher cannot afford the bundle`, {
+        publisher: publisher.getSenderAddress().toString(),
+        balance,
+        required: cost.required,
+        gasLimit: cost.requirement.gasLimit,
+        blobCount: cost.requirement.blobCount,
+      });
+      throw new Error(
+        `Publisher ${publisher.getSenderAddress()} cannot afford the bundle: balance ${formatEther(balance)} ETH, ` +
+          `required ${formatEther(cost.required)} ETH (gas limit ${cost.requirement.gasLimit}, ` +
+          `${cost.requirement.blobCount} blobs)`,
+      );
     }
   }
 

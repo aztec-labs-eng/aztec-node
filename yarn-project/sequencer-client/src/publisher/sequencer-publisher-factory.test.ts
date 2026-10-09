@@ -1,15 +1,17 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import type { GovernanceProposerContract, RollupContract } from '@aztec-labs/ethereum/contracts';
-import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
-import type { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { type L1TxUtils, TxUtilsState } from '@aztec-labs/ethereum/l1-tx-utils';
+import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
 import { NodeKeystoreAdapter } from '@aztec-labs/validator-client';
 import { type MockProxy, mock } from 'jest-mock-extended';
+import { parseEther } from 'viem';
 
 import type { SequencerClientConfig } from '../config.js';
+import { getProposeRequirement } from './gas_constants.js';
 import { SequencerPublisherFactory } from './sequencer-publisher-factory.js';
 
 describe('SequencerPublisherFactory', () => {
@@ -65,7 +67,9 @@ describe('SequencerPublisherFactory', () => {
 
       const result = await factory.create();
 
-      expect(mockPublisherManager.getAvailablePublisher).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockPublisherManager.getAvailablePublisher).toHaveBeenCalledWith(expect.any(Function), {
+        requirement: undefined,
+      });
 
       const filterFn = mockPublisherManager.getAvailablePublisher.mock.calls[0][0]!;
       expect(filterFn(mockL1TxUtils)).toBe(true);
@@ -84,7 +88,9 @@ describe('SequencerPublisherFactory', () => {
       const result = await factory.create(validatorAddress);
 
       expect(mockNodeKeyStore.getPublisherAddresses).toHaveBeenCalledWith(validatorAddress);
-      expect(mockPublisherManager.getAvailablePublisher).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockPublisherManager.getAvailablePublisher).toHaveBeenCalledWith(expect.any(Function), {
+        requirement: undefined,
+      });
 
       const filterFn = mockPublisherManager.getAvailablePublisher.mock.calls[0][0]!;
       expect(filterFn(mockL1TxUtils)).toBe(true);
@@ -203,5 +209,42 @@ describe('SequencerPublisherFactory', () => {
       expect(mockRollupContract.getSlashingProposer).toHaveBeenCalled();
       expect(result.publisher.slashingProposerContract!.address.equals(mockSlashingProposer.address)).toBe(true);
     });
+  });
+
+  describe('affordability', () => {
+    const gwei = 1_000_000_000n;
+
+    beforeEach(() => {
+      // Fees as getFeesPerGas derives them at a 1 gwei base fee with the default config: the base fee bumped 12.5% for
+      // one stalled block plus a 1 gwei priority fee bumped 20%. The blob fee is taken equally high to be conservative.
+      mockL1TxUtils.getFeesPerGas.mockResolvedValue({
+        maxFeePerGas: (1125n * gwei) / 1000n + (12n * gwei) / 10n,
+        maxPriorityFeePerGas: (12n * gwei) / 10n,
+        maxFeePerBlobGas: (1125n * gwei) / 1000n,
+      });
+      mockL1TxUtils.getSenderBalance.mockResolvedValue(parseEther('0.02'));
+      Object.defineProperty(mockL1TxUtils, 'state', { get: () => TxUtilsState.IDLE });
+      mockNodeKeyStore.getAttestorForPublisher.mockReturnValue(attestorAddress);
+
+      factory = new SequencerPublisherFactory(mockConfig, {
+        telemetry: getTelemetryClient(),
+        publisherManager: new PublisherManager([mockL1TxUtils], {}),
+        blobClient: mockBlobClient,
+        dateProvider: mockDateProvider,
+        epochCache: mockEpochCache,
+        governanceProposerContract: mockGovernanceProposerContract,
+        rollupContract: mockRollupContract,
+        nodeKeyStore: mockNodeKeyStore,
+      });
+    });
+
+    it.each([false, true])(
+      'selects a 0.02 ETH publisher for a proposal at 1 gwei (invalidating: %s)',
+      async withInvalidate => {
+        const result = await factory.create(undefined, { requirement: getProposeRequirement({ withInvalidate }) });
+
+        expect(result.publisher.getSenderAddress()).toEqual(publisherAddress);
+      },
+    );
   });
 });

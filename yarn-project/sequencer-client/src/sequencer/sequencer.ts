@@ -1,6 +1,7 @@
 import { getKzg } from '@aztec-labs/blob-lib';
 import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
 import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { merge, omit, pick } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -53,7 +54,8 @@ import EventEmitter from 'node:events';
 
 import { DefaultSequencerConfig } from '../config.js';
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
-import type { SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
+import { INVALIDATE_REQUIREMENT, getProposeRequirement } from '../publisher/gas_constants.js';
+import type { AttestorPublisherPair, SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { CheckpointProposalJob } from './checkpoint_proposal_job.js';
 import { CheckpointProposalJobMetrics } from './checkpoint_proposal_job_metrics.js';
@@ -662,7 +664,31 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     // Otherwise it will be a valid attestor for the returned publisher.
     // In fisherman mode, pass undefined to use the fisherman's own keystore instead of the actual proposer's
     const proposerForPublisher = this.config.fishermanMode ? undefined : proposer;
-    const { attestorAddress, publisher } = await this.publisherFactory.create(proposerForPublisher);
+    // Only a publisher that can afford the proposal (plus the invalidation bundled with it, see below) is eligible, so
+    // we skip the slot here rather than build and gossip a checkpoint that can never land. Fisherman nodes never send.
+    const needsInvalidation = !syncedTo.hasProposedCheckpoint && !syncedTo.pendingChainValidationStatus.valid;
+    const requirement = this.config.fishermanMode
+      ? undefined
+      : getProposeRequirement({ withInvalidate: needsInvalidation });
+    let created: AttestorPublisherPair;
+    try {
+      created = await this.publisherFactory.create(proposerForPublisher, { requirement });
+    } catch (err) {
+      if (!(err instanceof NoAffordablePublisherError)) {
+        throw err;
+      }
+      this.log.error(`Skipping checkpoint proposal for slot ${targetSlot} since no publisher can afford it`, err, {
+        ...logCtx,
+        proposer,
+        ...err.toLogContext(),
+      });
+      this.metrics.recordCheckpointPrecheckFailed('insufficient_publisher_balance');
+      // Mark the slot as attempted so we do not re-check on every tick. Votes are cheaper and optional, so still try.
+      await this.tryVoteAndPruneWhenCannotBuild({ slot, targetSlot });
+      this.lastSlotForCheckpointProposalJob = targetSlot;
+      return undefined;
+    }
+    const { attestorAddress, publisher } = created;
     using cleanup = new DisposableStack();
     cleanup.use(publisher);
     this.log.verbose(`Created publisher at address ${publisher.getSenderAddress()} for attestor ${attestorAddress}`);
@@ -1362,7 +1388,22 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       validatorToUse = ourValidatorAddresses[0];
     }
 
-    const { publisher: createdPublisher } = await this.publisherFactory.create(validatorToUse);
+    let createdPublisher: SequencerPublisher;
+    try {
+      ({ publisher: createdPublisher } = await this.publisherFactory.create(validatorToUse, {
+        requirement: this.config.fishermanMode ? undefined : INVALIDATE_REQUIREMENT,
+      }));
+    } catch (err) {
+      if (!(err instanceof NoAffordablePublisherError)) {
+        throw err;
+      }
+      this.log.error(`Not invalidating checkpoint ${invalidCheckpointNumber} since no publisher can afford it`, err, {
+        ...logData,
+        ...err.toLogContext(),
+      });
+      this.lastInvalidationAttempt = { slot: currentSlot, checkpointNumber: invalidCheckpointNumber };
+      return;
+    }
     using publisher = createdPublisher;
 
     const invalidateCheckpoint = await publisher.simulateInvalidateCheckpoint(pendingChainValidationStatus);

@@ -1,6 +1,7 @@
 import { MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { type EpochCache, type EpochCommitteeInfo, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
 import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -54,10 +55,12 @@ import { expect, jest } from '@jest/globals';
 import { type MockProxy, mock, mockDeep, mockFn } from 'jest-mock-extended';
 
 import type { GlobalVariableBuilder } from '../global_variable_builder/global_builder.js';
+import { INVALIDATE_REQUIREMENT, getProposeRequirement } from '../publisher/gas_constants.js';
 import type { AttestorPublisherPair, SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
 import type { InvalidateCheckpointRequest, SequencerPublisher } from '../publisher/sequencer-publisher.js';
 import { MockCheckpointBuilder, MockCheckpointsBuilder } from '../test/utils.js';
 import * as TestUtils from '../test/utils.js';
+import { SequencerMetrics } from './metrics.js';
 import { Sequencer } from './sequencer.js';
 import { SequencerState } from './utils.js';
 
@@ -813,6 +816,32 @@ describe('sequencer', () => {
       expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber));
     });
 
+    it('skips the slot without building or broadcasting when no publisher can afford the proposal', async () => {
+      await setupSingleTxBlock();
+      const recordPrecheckFailed = jest.spyOn(SequencerMetrics.prototype, 'recordCheckpointPrecheckFailed');
+      const requirement = getProposeRequirement({ withInvalidate: false });
+      const unaffordable = new NoAffordablePublisherError(
+        1000n,
+        requirement,
+        { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n },
+        [{ address: publisher.getSenderAddress().toString(), balance: 1n, state: 'IDLE' }],
+      );
+      publisherFactory.create.mockImplementation((_validator, opts) =>
+        opts?.requirement
+          ? Promise.reject(unaffordable)
+          : Promise.resolve({ attestorAddress: publisher.getSenderAddress(), publisher }),
+      );
+
+      await sequencer.work();
+
+      expect(publisherFactory.create).toHaveBeenCalledWith(undefined, { requirement });
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(0);
+      expect(validatorClient.broadcastBlockProposal).not.toHaveBeenCalled();
+      expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+      expect(recordPrecheckFailed).toHaveBeenCalledWith('insufficient_publisher_balance');
+      expect(sequencer.getLastSlotForCheckpointProposalJob()).toEqual(SlotNumber(newSlotNumber));
+    });
+
     it('builds a block with zero peers when p2p is disabled', async () => {
       await setupSingleTxBlock();
       p2p.getP2PConnectivity.mockResolvedValue({ enabled: false, connectedPeers: 0 });
@@ -1425,7 +1454,7 @@ describe('sequencer', () => {
       await sequencer.work();
 
       // Should create publisher with the committee member validator
-      expect(publisherFactory.create).toHaveBeenCalledWith(validator2);
+      expect(publisherFactory.create).toHaveBeenCalledWith(validator2, { requirement: INVALIDATE_REQUIREMENT });
       expect(publisher.enqueueInvalidateCheckpoint).toHaveBeenCalled();
       expect(publisher.sendRequests).toHaveBeenCalled();
     });
@@ -1451,7 +1480,7 @@ describe('sequencer', () => {
       await sequencer.work();
 
       // Should create publisher with the first validator
-      expect(publisherFactory.create).toHaveBeenCalledWith(validator1);
+      expect(publisherFactory.create).toHaveBeenCalledWith(validator1, { requirement: INVALIDATE_REQUIREMENT });
       expect(publisher.enqueueInvalidateCheckpoint).toHaveBeenCalled();
       expect(publisher.sendRequests).toHaveBeenCalled();
     });
