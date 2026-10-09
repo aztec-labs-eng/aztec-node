@@ -170,6 +170,23 @@ describe('L1TxUtils', () => {
       expect((await l1Client.getTransaction({ hash: txHash })).nonce).toBe(expectedNonce);
     }, 30_000);
 
+    it('backs off a sender rejected for insufficient funds until its balance increases', async () => {
+      const sender = EthAddress.fromString(l1Client.account.address);
+      const dust = 1000n;
+      await cheatCodes.setBalance(sender, dust);
+
+      await expect(gasUtils.sendTransaction(request, { gasLimit: 100_000n })).rejects.toThrow();
+
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBe(dust);
+      expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
+
+      await cheatCodes.setBalance(sender, 10n ** 18n);
+      expect(gasUtils.isBackedOffForInsufficientFunds(10n ** 18n)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBeUndefined();
+
+      await expect(gasUtils.sendTransaction(request, { gasLimit: 100_000n })).resolves.toBeDefined();
+    }, 30_000);
+
     it('bumps nonce when getTransactionCount returns a stale value after a successful send', async () => {
       // Send a successful tx first to advance the chain nonce
       await gasUtils.sendAndMonitorTransaction(request);

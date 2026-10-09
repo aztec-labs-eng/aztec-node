@@ -4,8 +4,8 @@ import { jest } from '@jest/globals';
 import { type Hex, encodeFunctionData } from 'viem';
 
 import { MULTI_CALL_3_ADDRESS, aggregate3ValueAbi } from './contracts/multicall.js';
-import { L1TxUtils, TxUtilsState } from './l1_tx_utils/index.js';
-import { PublisherManager } from './publisher_manager.js';
+import { type FeesPerGas, GAS_PER_BLOB, L1TxUtils, TxUtilsState } from './l1_tx_utils/index.js';
+import { NoAffordablePublisherError, PublisherManager } from './publisher_manager.js';
 
 /** Encode the expected aggregate3Value calldata for the given addresses and funding amount. */
 function expectedFundingData(addresses: EthAddress[], fundingAmount: bigint): Hex {
@@ -79,7 +79,7 @@ describe('PublisherManager', () => {
       );
     });
 
-    it('should return publisher with best state', async () => {
+    it('should rank IDLE and MINED equally and pick the highest balance among them', async () => {
       mockPublishers[0].state = TxUtilsState.MINED;
       mockPublishers[1].state = TxUtilsState.IDLE;
       mockPublishers[2].state = TxUtilsState.MINED;
@@ -90,7 +90,22 @@ describe('PublisherManager', () => {
 
       const result = await publisherManager.getAvailablePublisher();
 
-      expect(result).toBe(mockPublishers[1]); // IDLE state has priority
+      expect(result).toBe(mockPublishers[2]);
+    });
+
+    it('should prefer a lower balance publisher in a better state', async () => {
+      mockPublishers[0].state = TxUtilsState.CANCELLED;
+      mockPublishers[1].state = TxUtilsState.SENT;
+      mockPublishers[2].state = TxUtilsState.MINED;
+
+      mockPublishers[0].balance = 3000n;
+      mockPublishers[1].balance = 2000n;
+      mockPublishers[2].balance = 1000n;
+
+      publisherManager = new PublisherManager(mockPublishers, { publisherAllowInvalidStates: true });
+      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[2]);
+      mockPublishers[2].state = TxUtilsState.NOT_MINED;
+      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[1]);
     });
 
     it('should sort by balance when states are equal', async () => {
@@ -139,6 +154,20 @@ describe('PublisherManager', () => {
       const result = await publisherManager.getAvailablePublisher();
 
       expect(result).not.toBe(mockPublishers[1]);
+    });
+
+    it('prefers a funded MINED publisher over a dust IDLE one', async () => {
+      // A dust publisher never leaves IDLE since its sends fail, so state alone must not let it win.
+      mockPublishers = createMockPublishers(2, addresses);
+      publisherManager = new PublisherManager(mockPublishers, {});
+      mockPublishers[0].state = TxUtilsState.MINED;
+      mockPublishers[0].balance = 10n ** 17n;
+      mockPublishers[1].state = TxUtilsState.IDLE;
+      mockPublishers[1].balance = 1000n;
+
+      const result = await publisherManager.getAvailablePublisher();
+
+      expect(result).toBe(mockPublishers[0]);
     });
 
     it('falls back to zero-balance publishers when none are funded', async () => {
@@ -203,17 +232,139 @@ describe('PublisherManager', () => {
 
       const result = await publisherManager.getAvailablePublisher(filter);
 
-      // IDLE state has priority, and among IDLE publishers, least recently used wins
+      // IDLE and MINED rank equally, so the highest balance among them wins
       expect(result).toBeDefined();
-      expect(result!.getSenderAddress()).toEqual(mockPublishers[4].getSenderAddress());
+      expect(result!.getSenderAddress()).toEqual(mockPublishers[3].getSenderAddress());
 
-      // Set this publisher to have the same balance as publisher index 1
-      mockPublishers[4].balance = 300n;
+      // Set this publisher to have the same balance as publisher index 4
+      mockPublishers[3].balance = 600n;
 
-      // Priority should now go to the one that is least recently used, index 1
+      // Priority should now go to the one that is least recently used, index 4
       const result2 = await publisherManager.getAvailablePublisher(filter);
       expect(result2).toBeDefined();
-      expect(result2!.getSenderAddress()).toEqual(mockPublishers[1].getSenderAddress());
+      expect(result2!.getSenderAddress()).toEqual(mockPublishers[4].getSenderAddress());
+    });
+  });
+
+  describe('affordability', () => {
+    const gwei = 10n ** 9n;
+    const requirement = { gasLimit: 1_000_000n, blobCount: 2 };
+    // 1M gas at 2 gwei plus 2 blobs at 1 gwei per blob gas
+    const required = 1_000_000n * 2n * gwei + 2n * GAS_PER_BLOB * gwei;
+    let metrics: { recordRequiredBalance: jest.Mock; recordLowBalance: jest.Mock };
+
+    beforeEach(() => {
+      metrics = { recordRequiredBalance: jest.fn(), recordLowBalance: jest.fn() };
+      mockPublishers = createMockPublishers(3);
+      mockPublishers.forEach(
+        p => (p.fees = { maxFeePerGas: 2n * gwei, maxPriorityFeePerGas: gwei, maxFeePerBlobGas: gwei }),
+      );
+      publisherManager = new PublisherManager(mockPublishers, {}, { metrics });
+    });
+
+    it('selects a funded MINED publisher over a dust IDLE one', async () => {
+      mockPublishers[0].state = TxUtilsState.MINED;
+      mockPublishers[0].balance = required;
+      mockPublishers[1].state = TxUtilsState.IDLE;
+      mockPublishers[1].balance = required - 1n;
+      mockPublishers[2].state = TxUtilsState.IDLE;
+      mockPublishers[2].balance = 0n;
+
+      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[0]);
+    });
+
+    it('throws a NoAffordablePublisherError with balances when no publisher can afford the send', async () => {
+      mockPublishers.forEach((p, i) => (p.balance = BigInt(i)));
+      mockPublishers[1].state = TxUtilsState.MINED;
+
+      const err = await publisherManager.getAvailablePublisher(undefined, { requirement }).catch(e => e);
+
+      expect(err).toBeInstanceOf(NoAffordablePublisherError);
+      expect(err).toMatchObject({
+        required,
+        requirement,
+        publishers: mockPublishers.map((p, i) => ({
+          address: p.getSenderAddress().toString(),
+          balance: BigInt(i),
+          state: TxUtilsState[p.state],
+        })),
+      });
+    });
+
+    it('only considers publishers that pass the filter', async () => {
+      mockPublishers[0].balance = 10n * required;
+      mockPublishers[1].balance = 0n;
+      mockPublishers[2].balance = 0n;
+      const notFirst = (p: L1TxUtils) => !p.getSenderAddress().equals(mockPublishers[0].getSenderAddress());
+
+      await expect(publisherManager.getAvailablePublisher(notFirst, { requirement })).rejects.toThrow(
+        NoAffordablePublisherError,
+      );
+    });
+
+    it('considers a busy affordable publisher over an idle unaffordable one when invalid states are allowed', async () => {
+      publisherManager = new PublisherManager(mockPublishers, { publisherAllowInvalidStates: true }, { metrics });
+      mockPublishers[0].state = TxUtilsState.IDLE;
+      mockPublishers[0].balance = 1n;
+      mockPublishers[1].state = TxUtilsState.SENT;
+      mockPublishers[1].balance = required;
+      mockPublishers[2].state = TxUtilsState.IDLE;
+      mockPublishers[2].balance = 0n;
+
+      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[1]);
+    });
+
+    it('skips a publisher backed off for insufficient funds until its balance increases', async () => {
+      mockPublishers[0].balance = 10n * required;
+      mockPublishers[0].backoffBalance = 10n * required;
+      mockPublishers[1].balance = 2n * required;
+      mockPublishers[2].balance = 0n;
+
+      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[1]);
+      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[1]);
+
+      mockPublishers[0].balance = 10n * required + 1n;
+
+      await expect(publisherManager.getAvailablePublisher(undefined, { requirement })).resolves.toBe(mockPublishers[0]);
+    });
+
+    it('still returns a backed off publisher in lenient mode when it is the only candidate', async () => {
+      mockPublishers = createMockPublishers(1);
+      publisherManager = new PublisherManager(mockPublishers, {});
+      mockPublishers[0].backoffBalance = mockPublishers[0].balance;
+
+      await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[0]);
+    });
+
+    it('checkAffordablePublisher ignores busy state and rejects when nobody can afford the send', async () => {
+      mockPublishers.forEach(p => (p.state = TxUtilsState.SENT));
+      mockPublishers[2].balance = required;
+
+      await expect(publisherManager.checkAffordablePublisher(requirement)).resolves.toBeUndefined();
+
+      mockPublishers[2].balance = required - 1n;
+      await expect(publisherManager.checkAffordablePublisher(requirement)).rejects.toThrow(NoAffordablePublisherError);
+    });
+
+    it('records the required balance and low balance publishers using the configured multiplier', async () => {
+      publisherManager = new PublisherManager(mockPublishers, { publisherLowBalanceWarningMultiplier: 2 }, { metrics });
+      mockPublishers[0].balance = 2n * required;
+      mockPublishers[1].balance = 2n * required - 1n;
+      mockPublishers[2].balance = required;
+
+      await publisherManager.getAvailablePublisher(undefined, { requirement });
+      await publisherManager.getAvailablePublisher(undefined, { requirement });
+
+      expect(metrics.recordRequiredBalance.mock.calls).toEqual([[required], [required]]);
+      const lowAddresses = [mockPublishers[1], mockPublishers[2]].map(p => p.getSenderAddress().toString());
+      expect(metrics.recordLowBalance.mock.calls).toEqual([...lowAddresses, ...lowAddresses].map(a => [a]));
+    });
+
+    it('does not evaluate affordability without a requirement', async () => {
+      mockPublishers.forEach(p => (p.balance = 1n));
+
+      await expect(publisherManager.getAvailablePublisher()).resolves.toBeDefined();
+      expect(metrics.recordRequiredBalance).not.toHaveBeenCalled();
     });
   });
 
@@ -529,6 +680,9 @@ class TestL1TxUtils {
   public state: TxUtilsState = TxUtilsState.IDLE;
   public lastMinedAtBlockNumber: bigint | undefined = undefined;
   public balance: bigint = 1000n;
+  public fees: FeesPerGas = { maxFeePerGas: 1n, maxPriorityFeePerGas: 1n };
+  /** Mirrors L1TxUtils' insufficient funds backoff mark. */
+  public backoffBalance: bigint | undefined = undefined;
   /** Mirrors the real ReadOnlyL1TxUtils.interrupted flag so tests can assert publishing is re-enabled. */
   public interrupted = false;
   public loadCount = 0;
@@ -546,6 +700,25 @@ class TestL1TxUtils {
 
   public getSenderAddress() {
     return this.senderAddress;
+  }
+
+  public getFeesPerGas() {
+    return Promise.resolve(this.fees);
+  }
+
+  public getInsufficientFundsAtBalance() {
+    return this.backoffBalance;
+  }
+
+  public isBackedOffForInsufficientFunds(currentBalance: bigint) {
+    if (this.backoffBalance === undefined) {
+      return false;
+    }
+    if (currentBalance > this.backoffBalance) {
+      this.backoffBalance = undefined;
+      return false;
+    }
+    return true;
   }
 
   public loadStateAndResumeMonitoring() {

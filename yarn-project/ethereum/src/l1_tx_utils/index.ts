@@ -7,6 +7,7 @@ export * from './interfaces.js';
 export * from './l1_fee_analyzer.js';
 export * from './l1_tx_utils.js';
 export * from './readonly_l1_tx_utils.js';
+export * from './send_cost.js';
 export * from './signer.js';
 export * from './types.js';
 export * from './tx_delayer.js';

@@ -10,11 +10,13 @@ import { Semaphore } from '@aztec-labs/foundation/queue';
 import { makeBackoff, retry, retryUntil } from '@aztec-labs/foundation/retry';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider } from '@aztec-labs/foundation/timer';
+import { getErrorCause } from '@aztec-labs/foundation/types';
 import pickBy from 'lodash.pickby';
 import {
   type Abi,
   type BlockOverrides,
   type Hex,
+  InsufficientFundsError,
   type PrepareTransactionRequestRequest,
   type StateOverride,
   type TransactionReceipt,
@@ -28,7 +30,7 @@ import { formatViemError } from '../utils.js';
 import { type L1TxUtilsConfig, l1TxUtilsConfigMappings } from './config.js';
 import { MAX_L1_TX_LIMIT } from './constants.js';
 import type { IL1TxMetrics, IL1TxStore } from './interfaces.js';
-import { type L1SimulationResult, ReadOnlyL1TxUtils } from './readonly_l1_tx_utils.js';
+import { type L1SimulationResult, ReadOnlyL1TxUtils, isInsufficientFundsRpcError } from './readonly_l1_tx_utils.js';
 import { Delayer, createDelayer, wrapClientWithDelayer } from './tx_delayer.js';
 import {
   DroppedTransactionError,
@@ -61,6 +63,8 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
   public delayer?: Delayer;
   /** KZG instance for blob operations. */
   protected kzg?: BlobKzgInstance;
+  /** Sender balance when a send was last rejected for insufficient funds, cleared once the balance rises above it. */
+  private insufficientFundsAtBalance: bigint | undefined;
 
   constructor(
     public override client: ViemClient,
@@ -154,6 +158,31 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     return this.client.getBalance({
       address: this.getSenderAddress().toString(),
     });
+  }
+
+  /** Returns the sender balance recorded when a send was last rejected for insufficient funds, if any. */
+  public getInsufficientFundsAtBalance(): bigint | undefined {
+    return this.insufficientFundsAtBalance;
+  }
+
+  /**
+   * Returns whether this sender should be skipped because a previous send was rejected for insufficient funds and its
+   * balance has not increased since. Clears the mark once the given current balance is above the recorded one.
+   */
+  public isBackedOffForInsufficientFunds(currentBalance: bigint): boolean {
+    if (this.insufficientFundsAtBalance === undefined) {
+      return false;
+    }
+    if (currentBalance > this.insufficientFundsAtBalance) {
+      this.logger.info(`Publisher balance increased after an insufficient funds rejection, clearing backoff`, {
+        account: this.getSenderAddress().toString(),
+        balance: currentBalance,
+        insufficientFundsAtBalance: this.insufficientFundsAtBalance,
+      });
+      this.insufficientFundsAtBalance = undefined;
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -340,11 +369,27 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
 
       return { txHash, state: l1TxState };
     } catch (err: any) {
+      if (isInsufficientFundsRpcError(err) || getErrorCause(err, InsufficientFundsError)) {
+        await this.recordInsufficientFunds();
+      }
       const viemError = formatViemError(err, request.abi);
       this.logger.error(`Failed to send L1 transaction: ${viemError.message}`, viemError, {
         request: pick(request, 'to', 'value'),
       });
       throw viemError;
+    }
+  }
+
+  /** Records the current sender balance as one that cannot afford a send, so selection skips it until topped up. */
+  private async recordInsufficientFunds(): Promise<void> {
+    try {
+      this.insufficientFundsAtBalance = await this.getSenderBalance();
+      this.logger.warn(`L1 send rejected for insufficient funds, backing off publisher until its balance increases`, {
+        account: this.getSenderAddress().toString(),
+        balance: this.insufficientFundsAtBalance,
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to read balance after an insufficient funds rejection`, { err });
     }
   }
 

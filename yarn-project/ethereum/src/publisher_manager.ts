@@ -1,23 +1,30 @@
 import { pick } from '@aztec-labs/foundation/collection';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
+import { formatEther } from 'viem';
 
 import { Multicall3 } from './contracts/multicall.js';
-import { L1TxUtils, TxUtilsState } from './l1_tx_utils/index.js';
+import {
+  type FeesPerGas,
+  L1TxUtils,
+  type SendCostRequirement,
+  TxUtilsState,
+  computeSendCost,
+} from './l1_tx_utils/index.js';
 
-// Defines the order in which we prioritise publishers based on their state (first is better)
-const sortOrder = [
-  // Always prefer sending from idle publishers
-  TxUtilsState.IDLE,
-  // Then from publishers that have sent a tx and it got mined
-  TxUtilsState.MINED,
-  // Then from publishers that have sent a tx but it's in-flight
-  TxUtilsState.SPEED_UP,
-  TxUtilsState.SENT,
-  // We leave cancelled and not-mined states for last, since these represent failures to mines and could be problematic
-  TxUtilsState.CANCELLED,
-  TxUtilsState.NOT_MINED,
-];
+/**
+ * Selection rank per publisher state (lower is better). IDLE and MINED rank equally: a publisher whose sends keep
+ * failing (e.g. for lack of funds) never leaves IDLE, so ranking IDLE above MINED would let it beat a working one.
+ * In-flight states come next, and cancelled or not-mined states last since they represent failures to mine.
+ */
+const stateRank: Record<TxUtilsState, number> = {
+  [TxUtilsState.IDLE]: 0,
+  [TxUtilsState.MINED]: 0,
+  [TxUtilsState.SPEED_UP]: 1,
+  [TxUtilsState.SENT]: 1,
+  [TxUtilsState.CANCELLED]: 2,
+  [TxUtilsState.NOT_MINED]: 2,
+};
 
 // Which states represent a busy publisher that we should avoid if possible
 const busyStates: TxUtilsState[] = [
@@ -27,6 +34,9 @@ const busyStates: TxUtilsState[] = [
   TxUtilsState.NOT_MINED,
 ];
 
+const LOW_BALANCE_WARNING_INTERVAL_MS = 10 * 60 * 1000;
+const DEFAULT_LOW_BALANCE_WARNING_MULTIPLIER = 4;
+
 export type PublisherFilter<UtilsType extends L1TxUtils> = (utils: UtilsType) => boolean;
 
 /** Config accepted by PublisherManager. */
@@ -34,26 +44,85 @@ type PublisherManagerConfig = {
   publisherAllowInvalidStates?: boolean;
   publisherFundingThreshold?: bigint;
   publisherFundingAmount?: bigint;
+  /** Warn when a publisher balance is below this multiple of the ETH required for a send. */
+  publisherLowBalanceWarningMultiplier?: number;
 };
 
+/** Metrics emitted by the PublisherManager when evaluating whether publishers can afford a send. */
+export interface IPublisherManagerMetrics {
+  /** Records the latest ETH amount (in wei) a publisher must hold to afford a send. */
+  recordRequiredBalance(required: bigint): void;
+  /** Records that a publisher balance is below the low-balance warning level. */
+  recordLowBalance(address: string): void;
+}
+
+/** Balance snapshot of a publisher considered for an L1 send. */
+export type PublisherBalanceInfo = {
+  address: string;
+  balance: bigint;
+  state: string;
+  /** Balance at which a previous send was rejected for insufficient funds, if the publisher is backed off. */
+  insufficientFundsAtBalance?: bigint;
+};
+
+/** Thrown when publishers are available but none holds enough ETH to afford the requested L1 send. */
+export class NoAffordablePublisherError extends Error {
+  constructor(
+    public readonly required: bigint,
+    public readonly requirement: SendCostRequirement,
+    public readonly fees: FeesPerGas,
+    public readonly publishers: PublisherBalanceInfo[],
+  ) {
+    super(
+      `No publisher can afford the L1 send: requires ${formatEther(required)} ETH ` +
+        `(balances: ${publishers.map(p => `${p.address}=${formatEther(p.balance)}`).join(', ') || 'none'})`,
+    );
+    this.name = 'NoAffordablePublisherError';
+  }
+
+  /** Structured context for logging. */
+  public toLogContext() {
+    return {
+      required: this.required,
+      gasLimit: this.requirement.gasLimit,
+      blobCount: this.requirement.blobCount,
+      maxFeePerGas: this.fees.maxFeePerGas,
+      maxFeePerBlobGas: this.fees.maxFeePerBlobGas,
+      publishers: this.publishers,
+    };
+  }
+}
+
+type PublisherWithBalance<UtilsType> = { publisher: UtilsType; balance: bigint };
+
 export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
+  private static readonly FUNDING_CHECK_INTERVAL_MS = 2 * 60 * 1000;
   private log: Logger;
   private config: PublisherManagerConfig;
-  private static readonly FUNDING_CHECK_INTERVAL_MS = 2 * 60 * 1000;
   protected funder?: UtilsType;
   protected readonly fundingPromise?: RunningPromise;
   private started = false;
+  private readonly metrics?: IPublisherManagerMetrics;
+  /** Last time a low-balance warning was logged, per publisher address (and for the funding threshold check). */
+  private readonly lastLowBalanceWarningAt = new Map<string, number>();
 
   constructor(
     protected publishers: UtilsType[],
     config: PublisherManagerConfig,
-    opts?: { bindings?: LoggerBindings; funder?: UtilsType },
+    opts?: { bindings?: LoggerBindings; funder?: UtilsType; metrics?: IPublisherManagerMetrics },
   ) {
     this.funder = opts?.funder;
+    this.metrics = opts?.metrics;
     this.log = createLogger('publisher:manager', opts?.bindings);
     this.log.info(`PublisherManager initialized with ${publishers.length} publishers.`);
     this.publishers = publishers;
-    this.config = pick(config, 'publisherAllowInvalidStates', 'publisherFundingThreshold', 'publisherFundingAmount');
+    this.config = pick(
+      config,
+      'publisherAllowInvalidStates',
+      'publisherFundingThreshold',
+      'publisherFundingAmount',
+      'publisherLowBalanceWarningMultiplier',
+    );
 
     const hasThreshold = this.config.publisherFundingThreshold !== undefined;
     const hasAmount = this.config.publisherFundingAmount !== undefined;
@@ -124,60 +193,62 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     ]);
   }
 
-  // Finds and prioritises available publishers based on
-  // 1. Validity as per the provided filter function
-  // 2. Validity based on the state the publisher is in
-  // 3. Priority based on state as defined by sortOrder
-  // 4. Then priority based on highest balance
-  // 5. Then priority based on least recently used
-  public async getAvailablePublisher(filter: PublisherFilter<UtilsType> = () => true): Promise<UtilsType> {
+  /**
+   * Finds and prioritises an available publisher. Candidates must pass the filter and not be busy (unless
+   * `publisherAllowInvalidStates` is set and no idle publisher remains), and are ranked by state (see `stateRank`), then
+   * highest balance, then least recently used. Publishers backed off after an insufficient funds rejection are skipped
+   * until their balance increases.
+   *
+   * With a `requirement`, only publishers whose balance covers the worst-case cost of that send are eligible, and a
+   * {@link NoAffordablePublisherError} is thrown if there are none. Without one, selection is lenient: it prefers funded
+   * publishers but falls back to unfunded ones rather than failing, for sends that are fine to attempt and lose.
+   */
+  public async getAvailablePublisher(
+    filter: PublisherFilter<UtilsType> = () => true,
+    opts?: { requirement?: SendCostRequirement },
+  ): Promise<UtilsType> {
     this.log.debug(`Getting available publisher`, {
       publishers: this.publishers.map(p => ({
         address: p.getSenderAddress(),
         state: p.state,
         lastMined: p.lastMinedAtBlockNumber,
       })),
+      requirement: opts?.requirement,
     });
 
-    // Extract the valid publishers
-    let validPublishers = this.publishers.filter((pub: UtilsType) => !busyStates.includes(pub.state) && filter(pub));
+    const filtered = this.publishers.filter(pub => filter(pub));
+    let validPublishers = filtered.filter(pub => !busyStates.includes(pub.state));
 
-    // If none found but we allow invalid (busy) states, try again including them
-    if (validPublishers.length === 0 && this.config.publisherAllowInvalidStates) {
-      this.log.warn(`No valid publishers found. Trying again including invalid states.`);
-      validPublishers = this.publishers.filter(pub => filter(pub));
+    // If none found but we allow invalid (busy) states, try again including them. When the send has a requirement we
+    // also consider busy ones, so that an idle but unaffordable publisher does not hide a busy affordable one. Busy
+    // publishers still rank below idle ones.
+    if (this.config.publisherAllowInvalidStates && (validPublishers.length === 0 || opts?.requirement)) {
+      if (validPublishers.length === 0) {
+        this.log.warn(`No valid publishers found. Trying again including invalid states.`);
+      }
+      validPublishers = filtered;
     }
 
-    // Error if none found
     if (validPublishers.length === 0) {
       throw new Error(`Failed to find an available publisher.`);
     }
 
-    // Get the balances
-    const publishersWithBalance = await Promise.all(
-      validPublishers.map(async pub => {
-        return { balance: await pub.getSenderBalance(), publisher: pub };
-      }),
-    );
+    const withBalance = await this.getBalances(validPublishers);
 
-    // Discount unfunded publishers: a publisher with no ETH cannot send a tx, so it must never win
-    // selection regardless of how favourable its state or last-used time is. Fall back to the full
-    // set only if every candidate is unfunded, so behaviour is no worse than before.
-    let fundedPublishers = publishersWithBalance.filter(p => p.balance > 0n);
-    if (fundedPublishers.length === 0) {
-      this.log.warn(`All candidate publishers have zero balance; selecting from unfunded publishers.`);
-      fundedPublishers = publishersWithBalance;
+    let candidates: PublisherWithBalance<UtilsType>[];
+    if (opts?.requirement) {
+      candidates = await this.getAffordable(withBalance, opts.requirement);
+    } else {
+      candidates = this.getLenientCandidates(withBalance);
     }
 
-    // Sort based on state, then balance, then time since last use
-    const sortedPublishers = fundedPublishers.sort((a, b) => {
-      const stateComparison = sortOrder.indexOf(a.publisher.state) - sortOrder.indexOf(b.publisher.state);
+    const sortedPublishers = candidates.sort((a, b) => {
+      const stateComparison = stateRank[a.publisher.state] - stateRank[b.publisher.state];
       if (stateComparison !== 0) {
         return stateComparison;
       }
-      const balanceComparison = Number(b.balance - a.balance);
-      if (balanceComparison !== 0) {
-        return balanceComparison;
+      if (a.balance !== b.balance) {
+        return b.balance > a.balance ? 1 : -1;
       }
       const lastUsedComparison = Number(
         (a.publisher.lastMinedAtBlockNumber ?? 0n) - (b.publisher.lastMinedAtBlockNumber ?? 0n),
@@ -186,6 +257,121 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     });
 
     return sortedPublishers[0].publisher;
+  }
+
+  /**
+   * Checks that at least one publisher passing the filter can afford a send with the given requirement, regardless of
+   * whether it is busy right now. Meant for gating long-running work whose result is published much later.
+   * @throws NoAffordablePublisherError if no publisher can afford it.
+   */
+  public async checkAffordablePublisher(
+    requirement: SendCostRequirement,
+    filter: PublisherFilter<UtilsType> = () => true,
+  ): Promise<void> {
+    const publishers = this.publishers.filter(pub => filter(pub));
+    await this.getAffordable(await this.getBalances(publishers), requirement);
+  }
+
+  private getBalances(publishers: UtilsType[]): Promise<PublisherWithBalance<UtilsType>[]> {
+    return Promise.all(publishers.map(async publisher => ({ publisher, balance: await publisher.getSenderBalance() })));
+  }
+
+  /** Returns the publishers that can afford the requirement, or throws NoAffordablePublisherError if none. */
+  private async getAffordable(
+    publishers: PublisherWithBalance<UtilsType>[],
+    requirement: SendCostRequirement,
+  ): Promise<PublisherWithBalance<UtilsType>[]> {
+    if (publishers.length === 0) {
+      throw new Error(`Failed to find an available publisher.`);
+    }
+    // All publishers share the L1 network, so fees are fetched once rather than per publisher.
+    const fees = await publishers[0].publisher.getFeesPerGas(undefined, requirement.blobCount > 0, 0);
+    const required = computeSendCost(fees, requirement);
+    this.metrics?.recordRequiredBalance(required);
+    this.warnOnLowBalances(publishers, required);
+
+    const affordable = publishers.filter(
+      p => p.balance >= required && !p.publisher.isBackedOffForInsufficientFunds(p.balance),
+    );
+    if (affordable.length === 0) {
+      throw new NoAffordablePublisherError(
+        required,
+        requirement,
+        fees,
+        publishers.map(({ publisher, balance }) => ({
+          address: publisher.getSenderAddress().toString(),
+          balance,
+          state: TxUtilsState[publisher.state],
+          insufficientFundsAtBalance: publisher.getInsufficientFundsAtBalance(),
+        })),
+      );
+    }
+    return affordable;
+  }
+
+  /**
+   * Prefers publishers that are funded and not backed off after an insufficient funds rejection, but never returns an
+   * empty list: if every candidate is excluded, falls back to the full set so lenient sends still have something to try.
+   */
+  private getLenientCandidates(publishers: PublisherWithBalance<UtilsType>[]): PublisherWithBalance<UtilsType>[] {
+    const usable = publishers.filter(p => p.balance > 0n && !p.publisher.isBackedOffForInsufficientFunds(p.balance));
+    if (usable.length > 0) {
+      return usable;
+    }
+    const funded = publishers.filter(p => p.balance > 0n);
+    if (funded.length > 0) {
+      return funded;
+    }
+    this.log.warn(`All candidate publishers have zero balance; selecting from unfunded publishers.`);
+    return publishers;
+  }
+
+  /** Records a metric for every publisher below the low-balance level, and warns at most once per interval each. */
+  private warnOnLowBalances(publishers: PublisherWithBalance<UtilsType>[], required: bigint): void {
+    const multiplier = this.config.publisherLowBalanceWarningMultiplier ?? DEFAULT_LOW_BALANCE_WARNING_MULTIPLIER;
+    const warningLevel = (required * BigInt(Math.round(multiplier * 1000))) / 1000n;
+
+    for (const { publisher, balance } of publishers) {
+      if (balance >= warningLevel) {
+        continue;
+      }
+      const address = publisher.getSenderAddress().toString();
+      this.metrics?.recordLowBalance(address);
+      if (this.shouldWarn(address)) {
+        this.log.warn(`Publisher balance is low relative to the ETH required for an L1 send`, {
+          address,
+          balance,
+          required,
+          multiplier,
+          warningLevel,
+        });
+      }
+    }
+
+    const { publisherFundingThreshold } = this.config;
+    if (
+      this.funder &&
+      publisherFundingThreshold !== undefined &&
+      publisherFundingThreshold < warningLevel &&
+      this.shouldWarn('funding-threshold')
+    ) {
+      this.log.warn(`Publisher funding threshold is below the low-balance warning level`, {
+        publisherFundingThreshold,
+        warningLevel,
+        required,
+        multiplier,
+      });
+    }
+  }
+
+  private shouldWarn(key: string): boolean {
+    const now = Date.now();
+    const last = this.lastLowBalanceWarningAt.get(key);
+    if (last !== undefined && now - last < LOW_BALANCE_WARNING_INTERVAL_MS) {
+      return false;
+    }
+    this.lastLowBalanceWarningAt.set(key, now);
+    return true;
   }
 
   /** Check all publisher balances and fund those below threshold. */
