@@ -76,6 +76,7 @@ import {
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
+  getEpochAtSlot,
   getNextL1SlotTimestamp,
   getSlotStartBuildTimestamp,
 } from '@aztec-labs/stdlib/epoch-helpers';
@@ -110,7 +111,7 @@ import {
   getEndpointUpperBound,
   resolveEndpoint,
 } from '../sequencer/inbox_message_selection.js';
-import { INVALIDATE_GAS, PROPOSE_GAS } from './gas_constants.js';
+import { INVALIDATE_GAS, PROPOSE_GAS, PROPOSE_WITH_SETUP_EPOCH_GAS } from './gas_constants.js';
 import { sendL1ToL2Message } from './l1_to_l2_messaging.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
 import { type SendRequestsResult, SequencerPublisher } from './sequencer-publisher.js';
@@ -838,15 +839,18 @@ describe('L1Publisher integration', () => {
       const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());
       const attestationsAndSignersSignature = signAttestationsAndSigners(attestationsAndSigners, proposerSigner!);
 
+      // The epoch is already set up, so this is an ordinary proposal that does not also run setupEpoch.
+      expect(await rollup.isEpochSetUp(getEpochAtSlot(block.header.getSlot(), l1Constants))).toBe(true);
       const result = await expectPublishCheckpoint(checkpoint, attestations, attestationsAndSignersSignature);
       await expectWithinGas(result, PROPOSE_GAS);
     });
 
-    it('publishes the first checkpoint of an epoch, which also sets up the epoch, within the propose gas', async () => {
+    it('publishes the first checkpoint of an epoch, which also sets up the epoch, within the setup gas', async () => {
       // Move to an epoch whose committee has not been set up yet, so the proposal itself runs setupEpoch.
       const nextEpoch = EpochNumber((await rollup.getCurrentEpoch()) + 1);
       await rollupCheatCodes.advanceToEpoch(nextEpoch);
       await ethCheatCodes.syncDateProvider();
+      expect(await rollup.isEpochSetUp(nextEpoch)).toBe(false);
       ({ committee } = await epochCache.getCommittee(await getPipelinedProposalSlot()));
 
       const { checkpoint } = await buildSingleCheckpointForPipelinedProposer();
@@ -859,7 +863,8 @@ describe('L1Publisher integration', () => {
       );
 
       const result = await expectPublishCheckpoint(checkpoint, attestations, signature);
-      await expectWithinGas(result, PROPOSE_GAS);
+      expect(await rollup.isEpochSetUp(nextEpoch)).toBe(true);
+      await expectWithinGas(result, PROPOSE_WITH_SETUP_EPOCH_GAS);
     });
 
     it('fails to publish a block without the proposer attestation', async () => {

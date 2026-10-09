@@ -266,6 +266,7 @@ describe('sequencer', () => {
 
     rollupContract = mockDeep<RollupContract>();
     rollupContract.isEscapeHatchOpen.mockResolvedValue(false);
+    rollupContract.isEpochSetUp.mockResolvedValue(true);
     // Default rollup reads used by pipelined fee-header derivation.
     rollupContract.getCheckpoint.mockResolvedValue({
       feeHeader: { manaUsed: 0n, excessMana: 0n, ethPerFeeAsset: 1n, protocolFee: 0n, proverCost: 0n },
@@ -819,7 +820,7 @@ describe('sequencer', () => {
     it('skips the slot without building or broadcasting when no publisher can afford the proposal', async () => {
       await setupSingleTxBlock();
       const recordPrecheckFailed = jest.spyOn(SequencerMetrics.prototype, 'recordCheckpointPrecheckFailed');
-      const requirement = getProposeRequirement({ withInvalidate: false });
+      const requirement = getProposeRequirement({ withInvalidate: false, withSetupEpoch: false });
       const unaffordable = new NoAffordablePublisherError(
         1000n,
         requirement,
@@ -840,6 +841,20 @@ describe('sequencer', () => {
       expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
       expect(recordPrecheckFailed).toHaveBeenCalledWith('insufficient_publisher_balance');
       expect(sequencer.getLastSlotForCheckpointProposalJob()).toEqual(SlotNumber(newSlotNumber));
+    });
+
+    it.each([
+      ['is not set up yet', () => rollupContract.isEpochSetUp.mockResolvedValue(false)],
+      ['cannot be read', () => rollupContract.isEpochSetUp.mockRejectedValue(new Error('rpc down'))],
+    ])('requires a publisher to afford setting up the epoch when the target epoch %s', async (_, setup) => {
+      await setupSingleTxBlock();
+      setup();
+
+      await sequencer.work();
+
+      expect(publisherFactory.create).toHaveBeenCalledWith(undefined, {
+        requirement: getProposeRequirement({ withInvalidate: false, withSetupEpoch: true }),
+      });
     });
 
     it('builds a block with zero peers when p2p is disabled', async () => {

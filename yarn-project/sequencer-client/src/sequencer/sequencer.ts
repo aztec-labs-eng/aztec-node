@@ -497,6 +497,19 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
   }
 
   /**
+   * Whether the epoch's committee is already stored on L1, so a proposal in it does not also run setupEpoch. Reads the
+   * latest mined L1 state; returns false if the read fails, so the proposal is costed for the more expensive case.
+   */
+  private async isEpochSetUpOnL1(epoch: EpochNumber): Promise<boolean> {
+    try {
+      return await this.rollupContract.isEpochSetUp(epoch);
+    } catch (err) {
+      this.log.warn(`Failed to read whether epoch ${epoch} is set up on L1, assuming it is not`, { epoch, err });
+      return false;
+    }
+  }
+
+  /**
    * Prepares the checkpoint proposal by performing all necessary checks and setup.
    * This is the initial step in the main loop.
    * @returns CheckpointProposalJob if successful, undefined if we are not yet synced or are not the proposer.
@@ -669,7 +682,10 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
     const needsInvalidation = !syncedTo.hasProposedCheckpoint && !syncedTo.pendingChainValidationStatus.valid;
     const requirement = this.config.fishermanMode
       ? undefined
-      : getProposeRequirement({ withInvalidate: needsInvalidation });
+      : getProposeRequirement({
+          withInvalidate: needsInvalidation,
+          withSetupEpoch: !(await this.isEpochSetUpOnL1(targetEpoch)),
+        });
     let created: AttestorPublisherPair;
     try {
       created = await this.publisherFactory.create(proposerForPublisher, { requirement });

@@ -238,10 +238,17 @@ describe('SequencerPublisherFactory', () => {
       });
     });
 
-    it.each([false, true])(
-      'selects a 0.02 ETH publisher for a proposal at 1 gwei (invalidating: %s)',
-      async withInvalidate => {
-        const result = await factory.create(undefined, { requirement: getProposeRequirement({ withInvalidate }) });
+    it.each([
+      [false, false],
+      [true, false],
+      [false, true],
+      [true, true],
+    ])(
+      'selects a 0.02 ETH publisher for a proposal at 1 gwei (invalidating: %s, setting up the epoch: %s)',
+      async (withInvalidate, withSetupEpoch) => {
+        const result = await factory.create(undefined, {
+          requirement: getProposeRequirement({ withInvalidate, withSetupEpoch }),
+        });
 
         expect(result.publisher.getSenderAddress()).toEqual(publisherAddress);
       },
