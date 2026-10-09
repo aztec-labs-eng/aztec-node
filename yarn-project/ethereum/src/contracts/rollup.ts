@@ -1391,7 +1391,8 @@ export class RollupContract {
     const block = await this.client.getBlock();
     const blockNumber = block.number ?? undefined;
     const ts = timestamp ?? block.timestamp;
-    const attesterSize = await this.getActiveAttesterCount({ blockNumber });
+    // Count at ts, matching the addresses below; the current count would truncate a shrunk set.
+    const attesterSize = await this.getAttesterCountAtTime(ts, { blockNumber });
     const gse = new GSEContract(this.client, await this.getGSE());
     const indices = Array.from({ length: attesterSize }, (_, i) => BigInt(i));
     const chunks = chunk(indices, 1000);
