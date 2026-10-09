@@ -186,9 +186,15 @@ function fromHexString<T extends BaseField>(buf: string, f: DerivedField<T>) {
     throw new Error(`Invalid hex-encoded string: "${buf}"`);
   }
 
-  const buffer = Buffer.from(checked.length % 2 === 1 ? '0' + checked : checked, 'hex');
+  // Going straight to a bigint rather than through a Buffer is measurably faster, which matters when deserializing
+  // thousands of field elements from JSON-RPC responses. The length check keeps rejecting over-long values the way
+  // the Buffer-based constructor does.
+  const byteLength = Math.ceil(checked.length / 2);
+  if (byteLength > BaseField.SIZE_IN_BYTES) {
+    throw new Error(`Value length ${byteLength} exceeds ${BaseField.SIZE_IN_BYTES}`);
+  }
 
-  return new f(toBigIntBE(buffer));
+  return new f(BigInt(`0x${checked}`));
 }
 
 /**
