@@ -38,7 +38,9 @@ export type L1SubmitEpochProofArgs = {
 
 /**
  * Result of a proof submission attempt. `'already-submitted'` means this prover had already registered a proof of
- * the same length for the epoch on L1, so nothing was sent; it is not a failure.
+ * the same length for the epoch on L1, so nothing was sent; it is not a failure. For a full proof, only a full-epoch
+ * registration counts: a proof registered while the epoch was still open is non-full, so a full proof is resent to
+ * replace it.
  */
 export type SubmitEpochProofResult = 'published' | 'already-submitted' | 'failed';
 
@@ -102,16 +104,35 @@ export class ProverNodePublisher {
 
     // The rollup reverts on a second submission from the same prover for the same epoch and length, so don't
     // spend gas on one. Reachable when re-running an epoch we have already submitted a proof for, which is
-    // not a failure: our reward shares for it are already registered.
+    // not a failure: our reward shares for it are already registered. The one exception is a full-epoch proof
+    // replacing a non-full registration, which is the only way to get the activity-score increase for the epoch.
     const proverId = EthAddress.fromField(publicInputs.constants.proverId);
     const length = toCheckpoint - fromCheckpoint + 1;
-    if (await this.rollupContract.getHasSubmittedProof(epochNumber, length, proverId)) {
+    const [registered, registeredFullEpoch] = await Promise.all([
+      this.rollupContract.getHasSubmittedProof(epochNumber, length, proverId),
+      this.rollupContract.getHasSubmittedFullEpochProof(epochNumber, length, proverId),
+    ]);
+    if (registeredFullEpoch || (registered && args.kind === 'partial')) {
       this.log.warn(`Skipping epoch proof submission as prover already submitted a proof for this epoch`, {
         ...ctx,
         proverId,
         length,
       });
       return 'already-submitted';
+    }
+    if (registered) {
+      // L1 did not count the earlier proof as covering the whole epoch when it was submitted, e.g. it was sent
+      // while the epoch was still open: our own partial proof, or a third party proving under our prover id.
+      // If L1 does not count this proof as full either, the rollup rejects it and this returns 'failed' rather than
+      // 'already-submitted'. That is unlikely: a full session only starts once the epoch is complete, and proving a
+      // whole epoch takes long enough that the proof lands after the epoch has closed on L1. The remaining case is
+      // an under-attested checkpoint of the epoch still pending after our range when we resend. Gas estimation
+      // catches the revert before anything is sent.
+      this.log.warn(`Resubmitting full epoch proof to replace a non-full registration of the same length`, {
+        ...ctx,
+        proverId,
+        length,
+      });
     }
 
     // Validate epoch proof range and hashes are correct before submitting
