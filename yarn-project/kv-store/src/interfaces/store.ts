@@ -125,6 +125,17 @@ export interface AztecAsyncKVStore {
    */
   transactionAsync<T extends Exclude<any, Promise<any>>>(callback: () => Promise<T>): Promise<T>;
 
+  /**
+   * Runs the callback against a consistent view of the store: all reads inside it observe the same committed state,
+   * so no write can land between two of them. The callback must only read. Nested calls reuse the enclosing
+   * transaction, as with {@link transactionAsync}; inside a write transaction the callback sees its uncommitted writes.
+   *
+   * Every backend currently implements this with {@link transactionAsync}. On lmdb-v2 that means the callback still
+   * goes through the single writer queue, so it waits for queued writes and blocks writes issued while it runs.
+   * @param callback - The callback to execute against the consistent view
+   */
+  readOnlyTransaction<T extends Exclude<any, Promise<any>>>(callback: () => Promise<T>): Promise<T>;
+
   /** Clears all entries in the store */
   clear(): Promise<void>;
 

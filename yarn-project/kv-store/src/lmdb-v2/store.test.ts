@@ -1,3 +1,4 @@
+import { toArray } from '@aztec-labs/foundation/iterable';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { mkdtemp } from 'fs/promises';
@@ -142,6 +143,94 @@ describe('AztecLMDBStoreV2', () => {
     expect(first).toBe('v1');
     expect(second).toBe('v1');
     expect(await map.getAsync('k')).toBe('v2');
+  });
+
+  describe('readOnlyTransaction', () => {
+    it('keeps every read on the same committed state while a concurrent write is issued', async () => {
+      const map = store.openMap<string, string>('ro-snapshot');
+      await map.set('k', 'v1');
+
+      const opened = promiseWithResolvers<void>();
+      const writeIssued = promiseWithResolvers<void>();
+
+      const snapshotReads = store.readOnlyTransaction(async () => {
+        const first = await map.getAsync('k');
+        opened.resolve();
+        await writeIssued.promise;
+        // Give the write a chance to commit; whether it can do so while this callback runs is up to the backend.
+        await sleep(20);
+        return [first, await map.getAsync('k'), await map.hasAsync('k')];
+      });
+
+      await opened.promise;
+      const write = map.set('k', 'v2');
+      writeIssued.resolve();
+
+      await expect(snapshotReads).resolves.toEqual(['v1', 'v1', true]);
+      await write;
+      await expect(map.getAsync('k')).resolves.toBe('v2');
+    });
+
+    it('does not observe rows written concurrently while iterating', async () => {
+      const map = store.openMap<string, string>('ro-iteration');
+      await store.transactionAsync(async () => {
+        await map.set('a', '1');
+        await map.set('b', '2');
+      });
+
+      const opened = promiseWithResolvers<void>();
+      const writeIssued = promiseWithResolvers<void>();
+
+      const snapshotEntries = store.readOnlyTransaction(async () => {
+        await map.getAsync('a');
+        opened.resolve();
+        await writeIssued.promise;
+        await sleep(20);
+        return { entries: await toArray(map.entriesAsync()), size: await map.sizeAsync() };
+      });
+
+      await opened.promise;
+      const write = map.set('c', '3');
+      writeIssued.resolve();
+
+      await expect(snapshotEntries).resolves.toEqual({
+        entries: [
+          ['a', '1'],
+          ['b', '2'],
+        ],
+        size: 2,
+      });
+      await write;
+      await expect(map.sizeAsync()).resolves.toBe(3);
+    });
+
+    it('reuses the enclosing read-only transaction when nested', async () => {
+      const map = store.openMap<string, string>('ro-nested');
+      await map.set('k', 'v');
+
+      const result = await store.readOnlyTransaction(outerTx =>
+        store.readOnlyTransaction(async innerTx => ({ sameTx: innerTx === outerTx, value: await map.getAsync('k') })),
+      );
+
+      expect(result).toEqual({ sameTx: true, value: 'v' });
+    });
+
+    it('sees uncommitted writes when nested inside a write transaction', async () => {
+      const map = store.openMap<string, string>('ro-nested-write');
+      await map.set('k', 'v1');
+
+      const result = await store.transactionAsync(async writeTx => {
+        await map.set('k', 'v2');
+        return store.readOnlyTransaction(async tx => ({ sameTx: tx === writeTx, value: await map.getAsync('k') }));
+      });
+
+      expect(result).toEqual({ sameTx: true, value: 'v2' });
+    });
+
+    it('rejects once the store is closed', async () => {
+      await store.close();
+      await expect(store.readOnlyTransaction(() => Promise.resolve(1))).rejects.toThrow('Store is closed');
+    });
   });
 
   it('should serialize writes correctly', async () => {

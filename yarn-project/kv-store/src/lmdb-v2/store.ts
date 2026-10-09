@@ -158,6 +158,18 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
     });
   }
 
+  /**
+   * Runs the callback against a consistent view of the store: every read inside it, whether through the supplied
+   * transaction or through a container such as a map, observes the same committed state. The callback must only read.
+   *
+   * This currently delegates to {@link transactionAsync}, so the callback still goes through the single writer queue:
+   * it waits for queued writes to commit, and writes issued while it runs wait for it to finish. Nested calls behave
+   * like nested {@link transactionAsync} calls and reuse the enclosing transaction, including its uncommitted writes.
+   */
+  readOnlyTransaction<T extends Exclude<any, Promise<any>>>(callback: (tx: ReadTransaction) => Promise<T>): Promise<T> {
+    return this.transactionAsync(callback);
+  }
+
   clear(): Promise<void> {
     return Promise.resolve();
   }
