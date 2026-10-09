@@ -269,7 +269,7 @@ export class CheckpointIngestor {
       validationUpdate: validation.update,
       // The last checkpoint seen on L1 this batch (valid or rejected), tracked from calldata since
       // rejected checkpoints are no longer built into PublishedCheckpoints.
-      lastSeenCheckpoint: lastCalldataCheckpoint,
+      lastSeenCheckpoint: pick(lastCalldataCheckpoint, 'checkpointNumber', 'l1'),
     };
   }
 
