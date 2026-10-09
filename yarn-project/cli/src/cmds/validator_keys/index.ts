@@ -2,7 +2,29 @@ import type { LogFn } from '@aztec-labs/foundation/log';
 import { Command, Option } from 'commander';
 
 import { parseAztecAddress, parseEthereumAddress, parseHex, parseOptionalInteger } from '../../utils/commands.js';
+import { BLS_KEY_DERIVATION_V6, minimumProofOfPossessionGas } from './bls_key_derivation.js';
 import { defaultBlsPath } from './utils.js';
+
+function blsKeyDerivationV6Option() {
+  return new Option(
+    '--bls-key-derivation-v6',
+    `Replace any BLS key whose estimated proof-of-possession gas exceeds the budget with the next deterministic candidate from the same mnemonic (BLS key derivation v6, budget ${BLS_KEY_DERIVATION_V6.budget} gas). ETH keys never change. Pass it again to regenerate the same keys.`,
+  );
+}
+
+function blsKeyDerivationMaxGasOption() {
+  return new Option(
+    '--bls-key-derivation-max-gas <gas>',
+    `Stricter budget for the estimated proof-of-possession verification gas of each BLS key. The L1 limit (GSE proofOfPossessionGasLimit) is 250,000 gas today and governance may raise it; the default budget is ${BLS_KEY_DERIVATION_V6.budget}, that cap minus a 10% margin. Must be between ${minimumProofOfPossessionGas(BLS_KEY_DERIVATION_V6.gasModel)} and ${BLS_KEY_DERIVATION_V6.budget}. Without --bls-key-derivation-v6, an over-budget key is an error. Pass the same value again to regenerate the same keys.`,
+  ).argParser(value => parseOptionalInteger(value));
+}
+
+function skipBlsKeyGasCheckOption() {
+  return new Option(
+    '--skip-bls-key-gas-check',
+    'Keep the first derived BLS key even if its proof-of-possession check could exceed the L1 gas cap (for example, a key already registered).',
+  );
+}
 
 export function injectCommands(program: Command, log: LogFn) {
   const group = program
@@ -39,6 +61,9 @@ export function injectCommands(program: Command, log: LogFn) {
     .option('--remote-signer <url>', 'Default remote signer URL for accounts in this file')
     .option('--ikm <hex>', 'Initial keying material for BLS (alternative to mnemonic)', value => parseHex(value, 32))
     .option('--bls-path <path>', `EIP-2334 path (default ${defaultBlsPath})`)
+    .addOption(blsKeyDerivationV6Option())
+    .addOption(blsKeyDerivationMaxGasOption())
+    .addOption(skipBlsKeyGasCheckOption())
     .addOption(
       new Option('--password <str>', 'Shared password for writing ETH JSON V3 and BLS EIP-2335 keystore files').env(
         'AZTEC_KEYSTORE_PASSWORD',
@@ -103,6 +128,9 @@ export function injectCommands(program: Command, log: LogFn) {
     .option('--remote-signer <url>', 'Default remote signer URL for accounts in this file')
     .option('--ikm <hex>', 'Initial keying material for BLS (alternative to mnemonic)', value => parseHex(value, 32))
     .option('--bls-path <path>', `EIP-2334 path (default ${defaultBlsPath})`)
+    .addOption(blsKeyDerivationV6Option())
+    .addOption(blsKeyDerivationMaxGasOption())
+    .addOption(skipBlsKeyGasCheckOption())
     .option('--empty', 'Generate an empty skeleton without keys')
     .option(
       '--password <str>',
@@ -168,6 +196,9 @@ export function injectCommands(program: Command, log: LogFn) {
     .option('--mnemonic <mnemonic>', 'Mnemonic for BLS derivation')
     .option('--ikm <hex>', 'Initial keying material for BLS (alternative to mnemonic)', value => parseHex(value, 32))
     .option('--bls-path <path>', `EIP-2334 path (default ${defaultBlsPath})`)
+    .addOption(blsKeyDerivationV6Option())
+    .addOption(blsKeyDerivationMaxGasOption())
+    .addOption(skipBlsKeyGasCheckOption())
     .option('--g2', 'Derive on G2 subgroup')
     .option('--compressed', 'Output compressed public key')
     .option('--json', 'Print JSON output to stdout')

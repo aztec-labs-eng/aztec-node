@@ -132,6 +132,7 @@
     "dest",
     "src",
     "!*.test.*",
+    "!src/cmds/validator_keys/fixtures",
     "public_include_metric_prefixes.json"
   ],
   "types": "./dest/index.d.ts",

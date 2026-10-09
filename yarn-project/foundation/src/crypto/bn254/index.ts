@@ -1,6 +1,8 @@
 import { Fr } from '../../curves/bn254/field.js';
 import { Bn254G1Point, Bn254G2Point } from '../../curves/bn254/point.js';
 
+export * from './hash_to_point.js';
+
 /**
  * BN254 utility functions for point operations.
  * Provides compression, decompression, and public key generation for the BN254 curve.

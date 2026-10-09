@@ -6,9 +6,12 @@ import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { dirname, isAbsolute, join } from 'path';
 import { generateMnemonic } from 'viem/accounts';
 
+import { resolveBlsKeyDerivationPolicy } from './bls_key_derivation.js';
 import type { NewValidatorKeystoreOptions } from './new.js';
 import {
   buildValidatorEntries,
+  getBlsDerivationPaths,
+  getBlsKeyCandidates,
   logValidatorSummaries,
   maybePrintJson,
   writeBlsBn254ToFile,
@@ -26,6 +29,7 @@ export async function addValidatorKeys(existing: string, options: AddValidatorKe
   validatePublisherOptions(options);
   // validate remote signer options
   validateRemoteSignerOptions(options);
+  const blsKeyDerivation = resolveBlsKeyDerivationPolicy(options);
 
   const {
     dataDir,
@@ -83,6 +87,8 @@ export async function addValidatorKeys(existing: string, options: AddValidatorKe
     feeRecipient,
     coinbase,
     remoteSigner,
+    blsKeyDerivation,
+    mnemonicGenerated: !mnemonic,
   });
 
   keystore.validators.push(...validators);
@@ -98,7 +104,12 @@ export async function addValidatorKeys(existing: string, options: AddValidatorKe
       targetDir = dirname(existing);
     }
     await writeEthJsonV3ToFile(keystore.validators, { outDir: targetDir, password });
-    await writeBlsBn254ToFile(keystore.validators, { outDir: targetDir, password, blsPath });
+    await writeBlsBn254ToFile(keystore.validators, {
+      outDir: targetDir,
+      password,
+      blsPath,
+      derivationPaths: getBlsDerivationPaths(summaries),
+    });
   }
 
   let outputPath = existing;
@@ -118,5 +129,7 @@ export async function addValidatorKeys(existing: string, options: AddValidatorKe
     log(`Updated keystore ${outputPath} with ${validators.length} new validator(s)`);
     logValidatorSummaries(log, summaries);
   }
-  maybePrintJson(log, !!json, keystore as unknown as Record<string, any>);
+  const blsKeyCandidates = getBlsKeyCandidates(summaries);
+  const outputData = blsKeyCandidates.length > 0 ? { ...keystore, blsKeyCandidates } : keystore;
+  maybePrintJson(log, !!json, outputData as unknown as Record<string, any>);
 }
