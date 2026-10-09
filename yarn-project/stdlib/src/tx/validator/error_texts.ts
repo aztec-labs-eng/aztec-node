@@ -53,3 +53,21 @@ export const TX_ERROR_MALFORMED_CONTRACT_CLASS_LOG = 'Failed to parse contract c
 
 // General
 export const TX_ERROR_DURING_VALIDATION = 'Unexpected error during validation';
+
+// Reasons a tx can fail only because the receiver's own state moved on (later timestamp, raised fee
+// floor, dropped fee-payer balance, committed nullifier, advanced archive root) - not the relayer's fault.
+const RECEIVER_LOCAL_STATE_DRIFT_TX_ERRORS = [
+  TX_ERROR_INVALID_EXPIRATION_TIMESTAMP,
+  TX_ERROR_EXISTING_NULLIFIER,
+  TX_ERROR_BLOCK_HEADER,
+  TX_ERROR_INSUFFICIENT_FEE_PER_GAS,
+  TX_ERROR_INSUFFICIENT_FEE_PAYER_BALANCE,
+];
+
+// True when every reason is receiver-local drift. Prefix match: some reasons append detail (e.g. fees).
+export function isReceiverLocalStateDrift(reasons: string[]): boolean {
+  return (
+    reasons.length > 0 &&
+    reasons.every(reason => RECEIVER_LOCAL_STATE_DRIFT_TX_ERRORS.some(drift => reason.startsWith(drift)))
+  );
+}
