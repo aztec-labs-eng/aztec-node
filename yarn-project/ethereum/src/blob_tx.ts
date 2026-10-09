@@ -1,14 +1,19 @@
 import {
+  type Address,
   type ByteArray,
   type Hex,
   type TransactionSerializable,
   type TransactionSerializableEIP4844,
+  type TransactionSerialized,
   blobsToCommitments,
   bytesToHex,
   concatHex,
   fromRlp,
+  getTransactionType,
   hexToBytes,
+  keccak256,
   parseTransaction,
+  recoverTransactionAddress,
   serializeTransaction,
   toRlp,
 } from 'viem';
@@ -44,7 +49,7 @@ export function usesEip7594BlobWrapper(chainId: number | undefined): boolean {
  * `0x03 || rlp([tx_payload_body, wrapper_version, blobs, commitments, cell_proofs])`.
  */
 export function serializeSignedTransaction(tx: TransactionSerializable, signature: TransactionSignature): Hex {
-  if (tx.type !== 'eip4844' || !tx.blobs || !usesEip7594BlobWrapper(tx.chainId)) {
+  if (getTransactionType(tx) !== 'eip4844' || !tx.blobs || !usesEip7594BlobWrapper(tx.chainId)) {
     return serializeTransaction(tx, signature);
   }
 
@@ -53,7 +58,10 @@ export function serializeSignedTransaction(tx: TransactionSerializable, signatur
     throw new Error('Serializing an EIP-7594 blob tx requires a kzg instance with computeCellsAndKzgProofs');
   }
 
-  const envelope = serializeTransaction({ ...tx, sidecars: false } as TransactionSerializableEIP4844, signature);
+  const envelope = serializeTransaction(
+    { ...tx, type: 'eip4844', sidecars: false } as TransactionSerializableEIP4844,
+    signature,
+  );
   const payloadBody = fromRlp(`0x${envelope.slice(4)}`, 'hex');
 
   const blobs = tx.blobs.map(blob => (typeof blob === 'string' ? blob : bytesToHex(blob)));
@@ -75,6 +83,26 @@ export function serializeSignedTransaction(tx: TransactionSerializable, signatur
  */
 export function parseSignedTransaction(serializedTransaction: Hex) {
   return parseTransaction(stripEip7594BlobWrapper(serializedTransaction));
+}
+
+/**
+ * Computes the hash of a signed serialized tx. For blob txs, this is the hash of the tx payload without the network
+ * wrapper, i.e. without blobs, commitments, and proofs.
+ */
+export function computeSignedTransactionHash(serializedTransaction: Hex): Hex {
+  if (!serializedTransaction.startsWith('0x03')) {
+    return keccak256(serializedTransaction);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { blobs, sidecars, ...rest } = parseSignedTransaction(serializedTransaction);
+  return keccak256(serializeTransaction({ ...rest, type: 'eip4844' } as TransactionSerializableEIP4844));
+}
+
+/** Recovers the sender of a signed serialized tx, also accepting blob txs in the EIP-7594 network wrapper. */
+export function recoverSignedTransactionAddress(serializedTransaction: Hex): Promise<Address> {
+  return recoverTransactionAddress({
+    serializedTransaction: stripEip7594BlobWrapper(serializedTransaction) as TransactionSerialized,
+  });
 }
 
 function stripEip7594BlobWrapper(serializedTransaction: Hex): Hex {

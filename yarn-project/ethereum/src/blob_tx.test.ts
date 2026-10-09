@@ -8,8 +8,14 @@ import {
   parseTransaction,
   serializeTransaction,
 } from 'viem';
+import { generatePrivateKey, privateKeyToAccount, sign } from 'viem/accounts';
 
-import { parseSignedTransaction, serializeSignedTransaction } from './blob_tx.js';
+import {
+  computeSignedTransactionHash,
+  parseSignedTransaction,
+  recoverSignedTransactionAddress,
+  serializeSignedTransaction,
+} from './blob_tx.js';
 
 describe('blob tx serialization', () => {
   const kzg = Blob.getViemKzgInstance();
@@ -82,5 +88,29 @@ describe('blob tx serialization', () => {
       kzg: { blobToKzgCommitment: kzg.blobToKzgCommitment, computeBlobKzgProof: kzg.computeBlobKzgProof },
     };
     expect(() => serializeSignedTransaction(tx, signature)).toThrow(/computeCellsAndKzgProofs/);
+  });
+
+  it('wraps blob txs without an explicit type in the EIP-7594 network wrapper on sepolia', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { type, ...untyped } = makeTx(11_155_111);
+    const serialized = serializeSignedTransaction(untyped, signature);
+    expect(serialized).toEqual(serializeSignedTransaction(makeTx(11_155_111), signature));
+  });
+
+  it.each([31337, 11_155_111])('hashes signed blob txs without their network wrapper on chain %i', chainId => {
+    const tx = makeTx(chainId);
+    const envelope = serializeTransaction({ ...tx, sidecars: false }, signature);
+    expect(computeSignedTransactionHash(serializeSignedTransaction(tx, signature))).toEqual(keccak256(envelope));
+  });
+
+  it.each([31337, 11_155_111])('recovers the sender of signed blob txs on chain %i', async chainId => {
+    const privateKey = generatePrivateKey();
+    const tx = makeTx(chainId);
+    const txSignature = await sign({
+      hash: keccak256(serializeTransaction({ ...tx, sidecars: false })),
+      privateKey,
+    });
+    const serialized = serializeSignedTransaction(tx, txSignature);
+    expect(await recoverSignedTransactionAddress(serialized)).toEqual(privateKeyToAccount(privateKey).address);
   });
 });
