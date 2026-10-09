@@ -46,8 +46,8 @@ Without privacy, your opponent could see your point allocations as you play and 
 The tutorial walks through a complete working example. Clone it first, then follow along:
 
 ```bash
-git clone https://github.com/AztecProtocol/aztec-packages.git
-cd aztec-packages
+git clone https://github.com/aztec-labs-eng/aztec-node.git
+cd aztec-node
 git checkout #include_aztec_version
 cd docs/examples/webapp-tutorial
 ./setup.sh
@@ -86,7 +86,7 @@ cd docs/examples/webapp-tutorial
 
 ## Completed example
 
-The full working example including the contract source is available at [`docs/examples/webapp-tutorial/`](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/docs/examples/webapp-tutorial).
+The full working example including the contract source is available at [`docs/examples/webapp-tutorial/`](https://github.com/aztec-labs-eng/aztec-node/tree/#include_aztec_version/docs/examples/webapp-tutorial).
 
 The example also includes a **functional wallet extension** (`test-extension/`) that can deploy accounts and send real transactions using SponsoredFPC for fee payment. See the [Network & Wallet](./03-network-and-wallet.md#testing-with-the-tutorial-wallet-extension) section for setup instructions.
 

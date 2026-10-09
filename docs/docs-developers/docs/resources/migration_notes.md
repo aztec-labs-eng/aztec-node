@@ -25,6 +25,38 @@ Depend on them from `aztec-labs-eng/aztec-nr`, at the same tag as `aztec`:
 +fee_juice = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v<version>", directory = "fee-juice-interface" }
 ```
 
+### [Aztec.nr] Fact collections are scoped by `FactScope`
+
+The `aztec::facts` functions now take the collection's scope as an `aztec::facts::FactScope` instead of an `AztecAddress`, and `FactCollection::scope` is a `FactScope`. `FactScope::account(address)` is the scope of a single account, as before. The new `FactScope::public()` is shared by all accounts: any execution of the contract can access its collections, whichever accounts are in scope.
+
+**Migration:**
+
+```diff
+- use aztec::facts::record_retractable_fact;
++ use aztec::facts::{FactScope, record_retractable_fact};
+
+- record_retractable_fact(contract_address, recipient, type_id, collection_id, fact_type_id, payload, origin_block);
++ record_retractable_fact(
++     contract_address,
++     FactScope::account(recipient),
++     type_id,
++     collection_id,
++     fact_type_id,
++     payload,
++     origin_block,
++ );
+```
+
+This is a breaking change to the PXE oracle interface (version 32 → 33): contracts must be recompiled against the updated `aztec-nr` to run against the new PXE.
+
+### [Protocol] The contract address domain separator is bumped to V3; every contract address changes
+
+The domain separator that goes into contract address derivation (`preaddress = poseidon2(DOM_SEP__CONTRACT_ADDRESS_Vn, public_keys_hash, partial_address)`) is bumped: `DOM_SEP__CONTRACT_ADDRESS_V2` (`4099338721`) is replaced by `DOM_SEP__CONTRACT_ADDRESS_V3 = 993442748` (`hash_to_u32("az_dom_sep", "contract_address_v3")`). Every protocol version rotates this separator on purpose: an address can never exist on two rollup instances, so funds cannot be sent to an address that is live on one rollup and dead on another. As a result, every contract address, including account addresses, differs from the address the same class, salt, initialization and public keys produced under V2. The `V` number is the separator revision, not the protocol version.
+
+Nothing needs to change in contract code, but anything that hard-codes an address must be updated.
+
+The protocol contracts keep their magic addresses (`1`, `2`, ...). Their registration nullifiers are siloed by those magic addresses rather than by the derived ones, so the genesis constants move for a narrower reason: ContractInstanceRegistry calls `AztecAddress::compute` when it publishes an instance, so the separator is in its bytecode, its class id rotates, and exactly one of the six seeded registration nullifiers changes with it.
+
 ### [Aztec.nr] `Writer::advance_offset` is removed
 
 Write the skipped fields instead, e.g. with their own `stream_serialize`:
@@ -73,9 +105,11 @@ To prove membership against a given archive root, including a block's own post-b
 
 Callers that anchor on a block header, such as PXE and its oracles, keep using `getBlockHashMembershipWitness`.
 
-### [Aztec.nr] `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` re-pinned at new addresses
+## 6.0.0-rc.1
 
-The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain and oracle interface version 32. The canonical `MultiCallEntrypoint`, `HandshakeRegistry` and `AuthRegistry` move to new addresses and class ids; `PublicChecks` keeps its own. Handshakes established with the previous registry instance are not visible to the new one and must be re-established, and authorizations set on the previous `AuthRegistry` instance must be set again on the new one.
+### [Aztec.nr] `MultiCallEntrypoint` and `HandshakeRegistry` re-pinned at new addresses
+
+The standard contracts have been re-pinned against the v6.0.0-rc.1 toolchain. The canonical `MultiCallEntrypoint` and `HandshakeRegistry` move to new addresses and class ids; `AuthRegistry` and `PublicChecks` keep theirs. Handshakes established with the previous registry instance are not visible to the new one and must be re-established.
 
 ### [Protocol] The protocol nullifier is derived from the tx request's salt alone; `tx_request_salt` becomes `protocol_nullifier`
 
@@ -164,8 +198,9 @@ The `@aztec` scope keeps the packages published for earlier versions, so an exis
 pinned to an older release continues to install unchanged. There is no `@aztec-labs` release of
 those older versions.
 
-The vendored viem fork is unchanged: it is still consumed as
-`"viem": "npm:@aztec/viem@<version>"`.
+The packages now depend on upstream `viem` instead of the `@aztec/viem` fork. If your project
+aliased `viem` to the fork (`"viem": "npm:@aztec/viem@<version>"`), depend on upstream `viem` at
+the version `@aztec-labs/aztec.js` uses instead.
 
 ### [npm] Foundation packages moved to the `@aztec-foundation` scope
 
@@ -339,6 +374,16 @@ Two remain public, at a new path:
 The other seven are now crate-internal (`pub(crate)`) and can no longer be imported from outside the `aztec` crate: `DOM_SEP__AUTHWIT_NULLIFIER`, `DOM_SEP__TX_NULLIFIER`, `DOM_SEP__SINGLE_USE_CLAIM_NULLIFIER`, `DOM_SEP__CONSTRAINED_MSG_NULLIFIER`, `DOM_SEP__ECDH_SUBKEY`, `DOM_SEP__ECDH_FIELD_MASK`, and `DOM_SEP__INITIALIZATION_NULLIFIER`.
 
 **Impact**: Contracts that use aztec-nr's high-level APIs (notes, authwit, state variables, message delivery, ECDH) are unaffected, since these separators are applied internally. A contract that imported one of these constants directly must either switch to the new `aztec::note::partial_note` path (for the two public ones) or, for the now-internal ones, call the corresponding aztec-nr helper instead of recomputing the hash by hand. The generated TypeScript `DomainSeparator` enum in `@aztec-labs/constants` / `@aztec-labs/stdlib` likewise no longer contains the seven removed members (their values were unused in TypeScript).
+
+Account contracts that implement their own entrypoint and hashed `DOM_SEP__TX_NULLIFIER` to emit the cancellation nullifier should call `compute_tx_nullifier` instead:
+
+```diff
+- use aztec::protocol::{constants::DOM_SEP__TX_NULLIFIER, hash::poseidon2_hash_with_separator};
++ use aztec::authwit::account::compute_tx_nullifier;
+
+- context.push_nullifier_unsafe(poseidon2_hash_with_separator([tx_nonce], DOM_SEP__TX_NULLIFIER));
++ context.push_nullifier_unsafe(compute_tx_nullifier(tx_nonce));
+```
 
 ### [Aztec Node] `GasPrice` renamed to `FeesPerGas` in `@aztec-labs/ethereum`
 

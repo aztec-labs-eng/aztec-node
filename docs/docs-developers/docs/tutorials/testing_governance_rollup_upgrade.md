@@ -58,7 +58,7 @@ The [`@aztec-foundation/l1-artifacts`](https://www.npmjs.com/package/@aztec-foun
 ```bash
 npm pack @aztec-foundation/l1-artifacts@#release_version
 mkdir l1-contracts
-tar xzf aztec-l1-artifacts-#release_version.tgz --strip-components=2 -C l1-contracts package/l1-contracts
+tar xzf aztec-foundation-l1-artifacts-#release_version.tgz --strip-components=2 -C l1-contracts package/l1-contracts
 cd l1-contracts
 ```
 
@@ -89,7 +89,7 @@ export AZTEC_SLOT_DURATION=36
 export AZTEC_EPOCH_DURATION=16
 export AZTEC_TARGET_COMMITTEE_SIZE=48
 export AZTEC_LAG_IN_EPOCHS_FOR_VALIDATOR_SET=2
-export AZTEC_LAG_IN_EPOCHS_FOR_RANDAO=2
+export AZTEC_LAG_IN_EPOCHS_FOR_RANDAO=1
 export AZTEC_PROOF_SUBMISSION_EPOCHS=2
 export AZTEC_LOCAL_EJECTION_THRESHOLD=0
 export AZTEC_SLASHING_ROUND_SIZE_IN_EPOCHS=1

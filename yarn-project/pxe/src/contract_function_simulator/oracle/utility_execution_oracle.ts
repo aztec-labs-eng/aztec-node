@@ -32,7 +32,11 @@ import { type AztecNode, MAX_RPC_LEN } from '@aztec-labs/stdlib/interfaces/clien
 import type { KeyValidationRequest } from '@aztec-labs/stdlib/kernel';
 import { PublicKeys, computeAddressSecret, hashPublicKey } from '@aztec-labs/stdlib/keys';
 import { AppTaggingSecret, FlatPublicLogs, appSiloEcdhSharedSecret } from '@aztec-labs/stdlib/logs';
-import { type UnsiloedMessageNullifier, getL1ToL2MessageWitness } from '@aztec-labs/stdlib/messaging';
+import {
+  type UnsiloedMessageNullifier,
+  getL1ToL2MessageWitness,
+  lookUpL1ToL2MessageWitness,
+} from '@aztec-labs/stdlib/messaging';
 import { NoteStatus } from '@aztec-labs/stdlib/note';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import {
@@ -58,7 +62,7 @@ import type { AddressStore } from '../../storage/address_store/address_store.js'
 import { assertAllowedScope } from '../../storage/allowed_scopes.js';
 import type { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import { FactCollectionKey, FactCollectionTypeKey, anchoredTipBlockNumbers } from '../../storage/fact_store/index.js';
-import type { BlockReference, FactService } from '../../storage/fact_store/index.js';
+import type { BlockReference, FactScope, FactService } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
 import type { ChangeSetId } from '../../storage/staged_write_coordinator.js';
@@ -70,7 +74,7 @@ import { BoundedVec } from '../noir-structs/bounded_vec.js';
 import type { EmbeddedCurvePoint } from '../noir-structs/embedded_curve_point.js';
 import { EphemeralArray } from '../noir-structs/ephemeral_array.js';
 import type { EventValidationRequest } from '../noir-structs/event_validation_request.js';
-import { type FactCollection, emptyFactCollection, toNoirFactCollection } from '../noir-structs/fact_collection.js';
+import { type FactCollection, toNoirFactCollection } from '../noir-structs/fact_collection.js';
 import type { LogRetrievalRequest } from '../noir-structs/log_retrieval_request.js';
 import type { LogRetrievalResponse } from '../noir-structs/log_retrieval_response.js';
 import type { NoteData } from '../noir-structs/note_data.js';
@@ -588,6 +592,27 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
   }
 
   /**
+   * Returns the membership witness of an L1 to L2 message, or none if there is no such message.
+   * @param messageHash - Hash of the message.
+   * @param nullifier - When present, the unsiloed nullifier of the message and the address to silo it with. The witness
+   * is only returned if the siloed nullifier is absent from the nullifier tree, i.e. the message has not been consumed.
+   * @returns The l1 to l2 membership witness (index of message in the tree and sibling path), or none.
+   */
+  public async tryGetL1ToL2MembershipWitness(
+    messageHash: Fr,
+    nullifier: Option<UnsiloedMessageNullifier>,
+  ): Promise<Option<MembershipWitness<typeof L1_TO_L2_MSG_TREE_HEIGHT>>> {
+    const anchor = await this.anchorBlockHeader.toBlockParameter();
+    const lookup = await lookUpL1ToL2MessageWitness(this.aztecNode, messageHash, nullifier.value, anchor);
+    if (lookup.type !== 'found') {
+      return Option.none();
+    }
+
+    const [messageIndex, siblingPath] = lookup.witness;
+    return Option.some(new MembershipWitness(L1_TO_L2_MSG_TREE_HEIGHT, messageIndex, siblingPath.toTuple()));
+  }
+
+  /**
    * Read the public storage data.
    * @param blockHash - The block hash to read storage at.
    * @param contractAddress - The address to read storage from.
@@ -832,7 +857,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public recordFact(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
     factTypeId: Fr,
@@ -854,7 +879,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public deleteFactCollection(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
   ): Promise<void> {
@@ -870,7 +895,7 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
    */
   public async getFactCollection(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
     factCollectionId: Fr,
   ): Promise<Option<FactCollection>> {
@@ -892,13 +917,13 @@ export class UtilityExecutionOracle implements IMiscOracle, IUtilityExecutionOra
             collection.facts,
           ),
         )
-      : Option.none(emptyFactCollection(this.ephemeralArrayService));
+      : Option.none();
   }
 
   /** Returns every fact collection of `factCollectionTypeId`. */
   public async getFactCollectionsByType(
     contractAddress: AztecAddress,
-    scope: AztecAddress,
+    scope: FactScope,
     factCollectionTypeId: Fr,
   ): Promise<EphemeralArray<FactCollection>> {
     this.#assertOwnContract(contractAddress);

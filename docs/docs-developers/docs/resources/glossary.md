@@ -34,11 +34,11 @@ Full reference [here](../cli/aztec_wallet_cli_reference).
 
 A [Node package](https://www.npmjs.com/package/@aztec-labs/aztec.js) to help make Aztec dApps.
 
-Read more and review the source code [here](https://github.com/AztecProtocol/aztec-packages/blob/#include_aztec_version/yarn-project/aztec.js).
+Read more and review the source code [here](https://github.com/aztec-labs-eng/aztec-node/blob/#include_aztec_version/yarn-project/aztec.js).
 
 ### Aztec.nr
 
-[Aztec.nr](https://github.com/AztecProtocol/aztec-packages/tree/#include_aztec_version/noir-projects/aztec-nr) is a Noir framework for writing Aztec smart contracts that abstracts away state management, handling note generation, state trees, and more.
+[Aztec.nr](https://github.com/aztec-labs-eng/aztec-node/tree/#include_aztec_version/noir-projects/aztec-nr) is a Noir framework for writing Aztec smart contracts that abstracts away state management, handling note generation, state trees, and more.
 
 Read more and review the source code [here](https://aztec.nr).
 

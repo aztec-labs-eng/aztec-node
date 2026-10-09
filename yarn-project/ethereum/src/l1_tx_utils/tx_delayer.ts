@@ -3,20 +3,9 @@ import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foun
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
 import { inspect } from 'util';
-import {
-  type Client,
-  type Hex,
-  type PublicClient,
-  type TransactionSerializableEIP4844,
-  type TransactionSerialized,
-  keccak256,
-  parseTransaction,
-  publicActions,
-  recoverTransactionAddress,
-  serializeTransaction,
-  walletActions,
-} from 'viem';
+import { type Client, type Hex, type PublicClient, publicActions, walletActions } from 'viem';
 
+import { computeSignedTransactionHash, parseSignedTransaction, recoverSignedTransactionAddress } from '../blob_tx.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';
 
 const MAX_WAIT_TIME_SECONDS = 180;
@@ -152,9 +141,7 @@ export function createDelayer(
 /** Tries to recover the sender address from a serialized signed transaction. */
 async function tryRecoverSender(serializedTransaction: Hex): Promise<string | undefined> {
   try {
-    return await recoverTransactionAddress({
-      serializedTransaction: serializedTransaction as TransactionSerialized,
-    });
+    return await recoverSignedTransactionAddress(serializedTransaction);
   } catch {
     return undefined;
   }
@@ -189,7 +176,7 @@ export function wrapClientWithDelayer<T extends ViemClient>(client: T, delayer: 
           delayer.nextWait = undefined;
 
           // Compute the tx hash manually so we emulate sendRawTransaction response
-          txHash = computeTxHash(serializedTransaction);
+          txHash = computeSignedTransactionHash(serializedTransaction);
 
           // Cancel tx outright if instructed
           if ('indefinitely' in waitUntil && waitUntil.indefinitely) {
@@ -214,7 +201,7 @@ export function wrapClientWithDelayer<T extends ViemClient>(client: T, delayer: 
           logger.info(`Delaying tx ${txHash} until ${inspect(waitUntil)}`, {
             sender,
             argsLen: args.length,
-            ...omit(parseTransaction(serializedTransaction), 'data', 'sidecars'),
+            ...omit(parseSignedTransaction(serializedTransaction), 'data', 'sidecars'),
           });
         } else if (delayer.maxInclusionTimeIntoSlot !== undefined) {
           // Check if we need to delay txs sent too close to the end of the slot.
@@ -222,10 +209,10 @@ export function wrapClientWithDelayer<T extends ViemClient>(client: T, delayer: 
           const { timestamp: lastBlockTimestamp, number } = currentBlock;
           const now = delayer.dateProvider.now();
 
-          txHash = computeTxHash(serializedTransaction);
+          txHash = computeSignedTransactionHash(serializedTransaction);
           const logData = {
             sender,
-            ...omit(parseTransaction(serializedTransaction), 'data', 'sidecars'),
+            ...omit(parseSignedTransaction(serializedTransaction), 'data', 'sidecars'),
             lastBlockTimestamp,
             now,
             maxInclusionTimeIntoSlot: delayer.maxInclusionTimeIntoSlot,
@@ -283,20 +270,4 @@ export function wrapClientWithDelayer<T extends ViemClient>(client: T, delayer: 
     : withRawTx;
 
   return extended as T;
-}
-
-/**
- * Compute the tx hash given the serialized tx. Note that if this is a blob tx, we need to
- * exclude the blobs, commitments, and proofs from the hash.
- */
-function computeTxHash(serializedTransaction: Hex) {
-  if (serializedTransaction.startsWith('0x03')) {
-    const parsed = parseTransaction(serializedTransaction);
-    if (parsed.blobs || parsed.sidecars) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { blobs, sidecars, ...rest } = parsed;
-      return keccak256(serializeTransaction({ type: 'eip4844', ...rest } as TransactionSerializableEIP4844));
-    }
-  }
-  return keccak256(serializedTransaction);
 }

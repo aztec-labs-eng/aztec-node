@@ -518,6 +518,16 @@ export class RPCTranslator {
   }
 
   // eslint-disable-next-line camelcase
+  aztec_utl_tryGetL1ToL2MembershipWitness(...inputs: ForeignCallArgs) {
+    return callTxeHandler({
+      oracle: 'aztec_utl_tryGetL1ToL2MembershipWitness',
+      inputs,
+      handler: ([messageHash, nullifier]) =>
+        this.handlerAsUtility().tryGetL1ToL2MembershipWitness(messageHash, nullifier),
+    });
+  }
+
+  // eslint-disable-next-line camelcase
   aztec_utl_getAuthWitness(...inputs: ForeignCallArgs) {
     return callTxeHandler({
       oracle: 'aztec_utl_getAuthWitness',

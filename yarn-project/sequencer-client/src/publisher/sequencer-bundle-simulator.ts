@@ -1,6 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { Multicall3, type RollupContract, buildSimulationOverridesStateOverride } from '@aztec-labs/ethereum/contracts';
-import { type L1TxUtils, MAX_L1_TX_LIMIT } from '@aztec-labs/ethereum/l1-tx-utils';
+import { type AmsterdamForkDetector, type L1TxUtils, getMaxL1TxGasLimit } from '@aztec-labs/ethereum/l1-tx-utils';
 import { formatViemError } from '@aztec-labs/ethereum/utils';
 import type { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
@@ -23,7 +23,7 @@ export type DroppedRequest = {
  *   the bumped gas limit derived from the simulated transaction gas (plus blob evaluation gas).
  *   `droppedRequests` lists the entries that were observed to revert in simulation.
  * - `fallback`: the node does not support eth_simulateV1 (or the simulate call threw). The
- *   caller should send `requests` as-is with a safe gas limit (e.g. {@link MAX_L1_TX_LIMIT}).
+ *   caller should send `requests` as-is with a safe gas limit (e.g. `MAX_L1_TX_LIMIT`).
  *   `droppedRequests` carries any entries that the first pass already proved reverted, so the
  *   caller does not re-include them when the second pass falls back.
  * - `aborted`: the bundle cannot be sent. `droppedRequests` contains only entries that were
@@ -62,6 +62,8 @@ export class SequencerBundleSimulator {
       getL1TxUtils: () => L1TxUtils;
       rollupContract: RollupContract;
       epochCache: EpochCache;
+      /** Decides the gas cap for simulating and sending the bundle, which is higher once Amsterdam is active. */
+      amsterdamFork: Pick<AmsterdamForkDetector, 'isActive'>;
       log?: Logger;
     },
   ) {
@@ -98,12 +100,19 @@ export class SequencerBundleSimulator {
     // Pin the publisher we'll use across the whole simulate call so that the publisher's rotation
     // can't change l1TxUtils mid-flight.
     const l1TxUtils = this.deps.getL1TxUtils();
+    const maxGasLimit = getMaxL1TxGasLimit(await this.deps.amsterdamFork.isActive());
 
     const proposeRequest = validRequests.find(r => r.action === 'propose');
     const simulateTimestamp = getLastL1SlotTimestampForL2Slot(targetSlot, this.deps.epochCache.getL1Constants());
     const firstPassOverrides = await this.buildStateOverrides(!!proposeRequest);
 
-    const firstPass = await this.simulateAndDecode(l1TxUtils, validRequests, simulateTimestamp, firstPassOverrides);
+    const firstPass = await this.simulateAndDecode(
+      l1TxUtils,
+      validRequests,
+      simulateTimestamp,
+      firstPassOverrides,
+      maxGasLimit,
+    );
 
     if (firstPass.kind === 'fallback') {
       this.log.warn('Bundle simulate fallback (eth_simulateV1 unavailable); caller will send bundle as-is', {
@@ -120,7 +129,7 @@ export class SequencerBundleSimulator {
     }
 
     if (firstPass.droppedRequests.length === 0) {
-      return this.buildSuccessResult(l1TxUtils, firstPass.survivors, [], firstPass, proposeRequest);
+      return this.buildSuccessResult(l1TxUtils, firstPass.survivors, [], firstPass, proposeRequest, maxGasLimit);
     }
 
     this.log.warn('Some bundle entries reverted; re-simulating reduced bundle', {
@@ -136,6 +145,7 @@ export class SequencerBundleSimulator {
       firstPass.survivors,
       simulateTimestamp,
       secondPassOverrides,
+      maxGasLimit,
     );
 
     if (secondPass.kind === 'fallback') {
@@ -168,6 +178,7 @@ export class SequencerBundleSimulator {
       firstPass.droppedRequests,
       secondPass,
       proposeRequest,
+      maxGasLimit,
     );
   }
 
@@ -177,10 +188,11 @@ export class SequencerBundleSimulator {
     droppedRequests: DroppedRequest[],
     bundleGas: { gasUsed: bigint; maxUsedGas?: bigint },
     proposeRequest: RequestWithExpiry | undefined,
+    maxGasLimit: bigint,
   ): BundleSimulateResult {
     const proposeSurvived = proposeRequest !== undefined && survivors.includes(proposeRequest);
     const blobEvaluationGas = proposeSurvived ? (proposeRequest?.blobEvaluationGas ?? 0n) : 0n;
-    const gasLimit = this.computeGasLimit(l1TxUtils, bundleGas, blobEvaluationGas);
+    const gasLimit = this.computeGasLimit(l1TxUtils, bundleGas, blobEvaluationGas, maxGasLimit);
     this.log.debug('Bundle simulate complete', {
       survivingRequests: survivors.length,
       bundleGasUsed: bundleGas.gasUsed,
@@ -194,7 +206,7 @@ export class SequencerBundleSimulator {
 
   /**
    * `gasLimit = bumpGasLimit(ceil(basis * 64 / 63))`, plus blob evaluation gas if a propose survived,
-   * capped at {@link MAX_L1_TX_LIMIT}.
+   * capped at `maxGasLimit` (see {@link getMaxL1TxGasLimit}).
    *
    * The basis is the simulation's `maxUsedGas` when the node reports it, since that is measured before
    * refunds, and its `gasUsed` otherwise. Either way the headroom on top is the buffer configured for the
@@ -204,11 +216,12 @@ export class SequencerBundleSimulator {
     l1TxUtils: L1TxUtils,
     bundleGas: { gasUsed: bigint; maxUsedGas?: bigint },
     blobEvaluationGas: bigint,
+    maxGasLimit: bigint,
   ): bigint {
     const basis = bundleGas.maxUsedGas ?? bundleGas.gasUsed;
     const gasUsedWithEip150 = (basis * 64n + 62n) / 63n;
     const gasLimit = l1TxUtils.bumpGasLimit(gasUsedWithEip150) + blobEvaluationGas;
-    return gasLimit > MAX_L1_TX_LIMIT ? MAX_L1_TX_LIMIT : gasLimit;
+    return gasLimit > maxGasLimit ? maxGasLimit : gasLimit;
   }
 
   /**
@@ -227,6 +240,7 @@ export class SequencerBundleSimulator {
     requests: RequestWithExpiry[],
     simulateTimestamp: bigint,
     stateOverrides: StateOverride,
+    maxGasLimit: bigint,
   ): Promise<SimulatePassResult> {
     let simResult: Awaited<ReturnType<typeof Multicall3.simulateAggregate3>>;
     try {
@@ -234,10 +248,10 @@ export class SequencerBundleSimulator {
         requests.map(r => ({ to: r.request.to! as Hex, data: r.request.data! as Hex, abi: r.request.abi })),
         l1TxUtils,
         {
-          blockOverrides: { time: simulateTimestamp, gasLimit: MAX_L1_TX_LIMIT * 2n },
+          blockOverrides: { time: simulateTimestamp, gasLimit: maxGasLimit * 2n },
           stateOverrides,
-          gas: MAX_L1_TX_LIMIT,
-          fallbackGasEstimate: MAX_L1_TX_LIMIT,
+          gas: maxGasLimit,
+          fallbackGasEstimate: maxGasLimit,
         },
       );
     } catch (err) {

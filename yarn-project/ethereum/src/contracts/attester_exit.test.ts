@@ -56,6 +56,12 @@ describe('attester exit client integration', () => {
         bn254SecretKey: new SecretValue(BigInt(index + 1)),
       })),
     });
+    // Exits are sized by eth_estimateGas against the latest block. When that block is the entry-queue flush that
+    // deposited these attesters, an exit's timestamp-keyed checkpoint writes overwrite the entries the deposit made
+    // instead of appending new ones, so the estimate falls short of what the exit needs one block later by more than the
+    // gas buffer covers. Mine a block so no estimate runs against the flush block.
+    const cheatCodes = new EthCheatCodes([rpcUrl], new DateProvider());
+    await cheatCodes.mine();
     const attesterClient = createExtendedL1Client([rpcUrl], attesters[0], foundry);
     const withdrawerClient = createExtendedL1Client([rpcUrl], withdrawer, foundry);
     const rollup = new RollupContract(attesterClient, l1ContractAddresses.rollupAddress);
@@ -89,7 +95,7 @@ describe('attester exit client integration', () => {
     expect(await rollup.getAttesterExitWindow()).toBe(before.window);
 
     return {
-      rpcUrl,
+      cheatCodes,
       validatorCount,
       initialAllowance,
       attesterClient,
@@ -161,7 +167,7 @@ describe('attester exit client integration', () => {
   it('lets the attester start a direct exit and the withdrawer select a recipient after both delays', async () => {
     const context = await setupExit(21, 1);
     const {
-      rpcUrl,
+      cheatCodes,
       attesterClient,
       withdrawerClient,
       rollup,
@@ -203,7 +209,6 @@ describe('attester exit client integration', () => {
     expect(await governance.read.getWithdrawal([pending.exit.withdrawalId])).toEqual(withdrawal);
 
     const unlock = pending.exit.exitableAt > withdrawal.unlocksAt ? pending.exit.exitableAt : withdrawal.unlocksAt;
-    const cheatCodes = new EthCheatCodes([rpcUrl], new DateProvider());
     await cheatCodes.warp(unlock - 1n);
     await expect(
       attesterClient.simulateContract({

@@ -19,6 +19,7 @@ import {
 } from '@aztec-labs/ethereum/contracts';
 import { type L1FeeAnalysisResult, L1FeeAnalyzer, captureWindowBlockFees } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
+  AmsterdamForkDetector,
   type L1BlobInputs,
   type L1TxConfig,
   type L1TxRequest,
@@ -173,6 +174,7 @@ export class SequencerPublisher implements Disposable {
   private interrupted = false;
   private metrics: SequencerPublisherMetrics;
   private bundleSimulator: SequencerBundleSimulator;
+  private readonly amsterdamFork: AmsterdamForkDetector;
   public epochCache: EpochCache;
   private failedTxStore?: Promise<L1TxFailedStore | undefined>;
 
@@ -291,10 +293,20 @@ export class SequencerPublisher implements Disposable {
     // Initialize failed L1 tx store (optional, for test networks)
     this.failedTxStore = createL1TxFailedStore(config.l1TxFailedStore, this.log);
 
+    this.amsterdamFork = new AmsterdamForkDetector(
+      { getBlock: () => this.l1TxUtils.getBlock() },
+      {
+        maxBlockAgeMs: config.ethereumSlotDuration * 1000,
+        dateProvider: this.dateProvider,
+        log: this.log.createChild('amsterdam-fork'),
+      },
+    );
+
     this.bundleSimulator = new SequencerBundleSimulator({
       getL1TxUtils: () => this.l1TxUtils,
       rollupContract: this.rollupContract,
       epochCache: this.epochCache,
+      amsterdamFork: this.amsterdamFork,
       log: this.log.createChild('bundle-simulator'),
     });
   }
@@ -916,7 +928,9 @@ export class SequencerPublisher implements Disposable {
           return;
         }
 
-        const latestBlockTs = await this.l1TxUtils.getBlock().then(b => b.timestamp);
+        const latestBlock = await this.l1TxUtils.getBlock();
+        this.amsterdamFork.observe(latestBlock);
+        const latestBlockTs = latestBlock.timestamp;
         if (latestBlockTs >= previousL1BlockTs) {
           this.log.debug(`Previous L1 block mined, proceeding to send requests`, { ...logCtx, latestBlockTs });
           return;

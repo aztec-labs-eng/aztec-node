@@ -30,12 +30,43 @@ self-identify its release type, ask the user to confirm.
 **This skill DOES** regenerate the Node JSON-RPC API reference for the
 versioned docs (see Step 5a).
 
+## RPC endpoints: public vs operator
+
+Two different endpoints, and mixing them up publishes a broken guide.
+
+| | Public (goes in docs) | Operator (what you query) |
+| --- | --- | --- |
+| Mainnet | `https://aztec-mainnet.drpc.org` | `canonical.mainnet.rpc.aztec-labs.com` |
+| Testnet | `https://aztec-testnet.drpc.org` | `testnet-v<N>.rpc2.aztec-labs.com` |
+
+Run this skill against the operator endpoint — it is authoritative and needs
+`AZTEC_NODE_API_KEY`. But anything written into `networks.md` must be the public one:
+readers have no key, and the gated hosts reject them (`403` from rpc2, `401 No API key
+found in request` from the canonical Kong gateways). Verify the public endpoint
+reports the version you are cutting before writing it down.
+
 ## Usage
 
 ```
-/release-network-docs https://aztec-mainnet.drpc.org
-/release-network-docs https://rpc.testnet.aztec-labs.com
+/release-network-docs https://canonical.mainnet.rpc.aztec-labs.com
+/release-network-docs https://testnet-v6.rpc2.aztec-labs.com
 ```
+
+Some endpoints need an API key. `testnet-v6.rpc2.aztec-labs.com` does, and so do the
+mainnet Kong gateways — `canonical.mainnet.rpc.aztec-labs.com` answers `401 No API key
+found in request` without one. Only the *testnet* `*.rpc.aztec-labs.com` hosts are
+currently keyless. A key issued for one gateway does not necessarily work on another.
+
+Export it **before starting the session**, since these commands inherit the environment
+as it was at launch:
+
+```bash
+export AZTEC_NODE_API_KEY=<key>
+```
+
+Reading it from the environment keeps it out of the skill's command line and the
+transcript; it does not keep it out of your shell history. See Step 1 for which header
+each gateway wants.
 
 ## Workflow
 
@@ -44,8 +75,40 @@ versioned docs (see Step 5a).
 Fetch node info from the provided RPC URL:
 
 ```bash
-curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"method":"aztec_getNodeInfo"}' <RPC_URL> | jq .result
+# Some RPCs require an API key, and the two gateway families disagree on the header:
+# the `*.rpc.aztec-labs.com` Kong gateways read `x-aztec-api-key` (see
+# spartan/terraform/modules/rpc-gateway/variables.tf and the yarn-project
+# `aztec-node-rpc` skill), while `*.rpc2.aztec-labs.com` is AWS API Gateway and reads
+# `x-api-key`. Sending both is accepted by both — verified: rpc2 answers 403 to the
+# Kong header alone, and the Kong hosts ignore the extra one.
+#
+# Export the key BEFORE starting the session: these commands inherit the environment
+# as it was at launch, so exporting in another terminal afterwards will not reach them.
+# Sourcing a restricted file inside the snippet works too, which is what the
+# `aztec-node-rpc` skill does.
+#
+#   export AZTEC_NODE_API_KEY=<key>
+#
+# This keeps the key out of the skill's command line and the transcript. It does not
+# keep it out of your shell history — use a secrets file if that matters.
+#
+# `${AUTH[@]+...}` rather than a bare `"${AUTH[@]}"`: expanding an empty array under
+# `set -u` is an unbound-variable error on macOS's bash 3.2.
+AUTH=()
+[ -n "${AZTEC_NODE_API_KEY:-}" ] && AUTH=(
+  -H "x-api-key: ${AZTEC_NODE_API_KEY}"
+  -H "x-aztec-api-key: ${AZTEC_NODE_API_KEY}"
+)
+
+# No `| jq .result` here: on a rejected request that prints a bare `null` and hides the
+# status line and body you need to diagnose it. `%{stderr}` keeps the status off stdout,
+# which jq is reading; without it jq chokes on the trailer even when the call succeeds.
+# Rejection looks different per gateway: rpc2 (AWS) answers 403 {"message":"Forbidden"},
+# Kong answers 401 {"message":"No API key found in request"}. Either way that is a missing
+# or wrong key for THAT endpoint, not an endpoint that is down.
+curl -sS -w '%{stderr}[http %{http_code}]\n' -X POST -H 'Content-Type: application/json' \
+  ${AUTH[@]+"${AUTH[@]}"} \
+  -d '{"method":"aztec_getNodeInfo"}' <RPC_URL> | jq '.result // .'
 ```
 
 Parse the response to extract:
@@ -118,9 +181,10 @@ and reaches us only as the `@aztec-foundation/l1-artifacts` npm package, which
 ships the whole Solidity tree. Read it from `docs/node_modules/` after
 `yarn install` in `docs/`. The revision you get is pinned in
 `docs/package.json` and resolved by `docs/yarn.lock` — that pair governs this
-install, not `yarn-project/package.json`, which pins the same package
-separately. They are expected to agree; if they do not at the release tag, stop
-and find out why before trusting either.
+install. `yarn-project/package.json` pins the same package separately, and
+`labs-aztec-toolchain/pins.mjs` checks both against `BB_VERSION`, so all three are
+expected to agree; if they do not at the release tag, stop and find out why before
+trusting any of them.
 
 - **Reward Booster** (stored in Rollup's `RewardLib` storage, no getter)
 - **Tally Slashing Proposer** (deployed alongside Slasher, no getter)
@@ -147,9 +211,10 @@ Update the column matching the release type (**Alpha (Mainnet)** or **Testnet**)
 in each table:
 
 - **Network Technical Information table**: update the version, rollup version.
-  Update the RPC endpoint only if the user provides a new one (the argument
-  RPC URL may be temporary or internal). Keep bootnodes and block explorer
-  links unless the user requests changes.
+  Never write the argument RPC URL into the table — that is the operator endpoint.
+  The published endpoint is the public one from the table above; change it only if the
+  user provides a new public URL, and verify it answers without a key first. Keep
+  bootnodes and block explorer links unless the user requests changes.
 
 - **L1 Contract Addresses table**: update all addresses from the RPC response,
   on-chain queries, and any additional addresses provided by the user.
@@ -320,6 +385,25 @@ semantic equality; the build can pass with a stale sidebar while legacy pages st
 ### Step 8: Clean Up Old Network Version
 
 Use the old version recorded at the start of Step 7.
+
+**Delete nothing that another release type still points at.** The version you are
+replacing is often still the *current* version for another type, because types share a
+version string whenever they were last released together. Deleting it then removes that
+type's live docs — and if the type is mainnet, that is also the site default, so the
+bare URL serves nothing. This is the normal state when testnet forks onto a new major
+ahead of mainnet. Check both configs first:
+
+```bash
+python3 -c "
+import json
+for inst in ('developer','network'):
+    c=json.load(open(f'docs/{inst}_version_config.json'))
+    print(inst, c)
+"
+```
+
+If the old version still appears as any type's value in either config, skip the delete
+and say so.
 
 **If this is the first release for this release type** (no previous version
 existed in the config), skip this step.

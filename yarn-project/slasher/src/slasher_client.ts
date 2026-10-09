@@ -1,5 +1,6 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND, AmsterdamForkDetector } from '@aztec-labs/ethereum/l1-tx-utils';
 import { maxBigint } from '@aztec-labs/foundation/bigint';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, partition, times } from '@aztec-labs/foundation/collection';
@@ -106,6 +107,10 @@ export class SlasherClient implements ProposerSlashActionProvider, SlasherClient
     private readonly ownValidators: EthAddress[] = [],
     private log = createLogger('slasher:consensus'),
     private readonly metrics = new SlasherMetrics(getTelemetryClient()),
+    private readonly amsterdamFork: Pick<AmsterdamForkDetector, 'isActive'> = new AmsterdamForkDetector(rollup.client, {
+      dateProvider,
+      log,
+    }),
   ) {
     this.roundMonitor = new SlashRoundMonitor(settings, dateProvider);
     this.offensesCollector = new SlashOffensesCollector(config, settings, watchers, offensesStore);
@@ -385,12 +390,12 @@ export class SlasherClient implements ProposerSlashActionProvider, SlasherClient
 
     const committees = await this.collectCommitteesActiveDuringRound(slashedRound);
     const epochsForCommittees = getEpochsForRound(slashedRound, this.settings);
-    const { slashMaxPayloadSize } = this.config;
+    const maxSlashedValidators = await this.getMaxSlashedValidators();
     const votes = getSlashConsensusVotesFromOffenses(
       offensesToSlash,
       committees,
       epochsForCommittees.map(e => BigInt(e)),
-      { ...this.settings, maxSlashedValidators: slashMaxPayloadSize },
+      { ...this.settings, maxSlashedValidators },
       this.log,
     );
     if (votes.every(v => v === 0)) {
@@ -426,6 +431,19 @@ export class SlasherClient implements ProposerSlashActionProvider, SlasherClient
       votes,
       committees,
     };
+  }
+
+  /**
+   * Returns how many validators we vote to slash at most in a round: the configured payload size, further capped once
+   * Amsterdam is active so the round still fits in an L1 tx when executed. If the fork cannot be detected, the cap
+   * applies, since a smaller vote is harmless while one too large for the round to execute is not.
+   */
+  private async getMaxSlashedValidators(): Promise<number> {
+    const { slashMaxPayloadSize } = this.config;
+    if (!(await this.amsterdamFork.isActive({ assumeActiveOnError: true }))) {
+      return slashMaxPayloadSize;
+    }
+    return Math.min(slashMaxPayloadSize, AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND);
   }
 
   /** Returns the committees that were active during the timespan of a given round */

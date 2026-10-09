@@ -52,7 +52,7 @@ if [ -n "${NPM_TOKEN:-}" ] || [ -n "${NPM_PASSWORD:-}" ]; then
   (
     umask 077
     if ! is_npmjs "$NPM_REGISTRY"; then
-      # Route only the scopes we build. Everything else — the @aztec/viem fork included — resolves
+      # Route only the scopes we build. Everything else resolves
       # from the default registry, so nothing has to be mirrored into the private one.
       echo "@aztec-foundation:registry=$npm_auth_registry"
       echo "@aztec-labs:registry=$npm_auth_registry"

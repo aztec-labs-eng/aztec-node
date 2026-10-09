@@ -1,5 +1,6 @@
 import { ARCHIVE_HEIGHT, NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { times } from '@aztec-labs/foundation/collection';
 import { Grumpkin } from '@aztec-labs/foundation/crypto/grumpkin';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
@@ -7,7 +8,7 @@ import { MembershipWitness } from '@aztec-labs/foundation/trees';
 import type { KeyStore } from '@aztec-labs/key-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { StatefulTestContractArtifact } from '@aztec-labs/noir-test-contracts.js/StatefulTest';
-import { type CircuitSimulator, WASMSimulator } from '@aztec-labs/simulator/client';
+import { type CircuitSimulator, WASMSimulator, toACVMField } from '@aztec-labs/simulator/client';
 import { HandshakeRegistryArtifact } from '@aztec-labs/standard-contracts/handshake-registry';
 import { STANDARD_HANDSHAKE_REGISTRY_ADDRESS } from '@aztec-labs/standard-contracts/handshake-registry/constants';
 import {
@@ -55,7 +56,7 @@ import { CapsuleService } from '../../storage/capsule_store/capsule_service.js';
 import type { CapsuleStore } from '../../storage/capsule_store/capsule_store.js';
 import type { ContractStore } from '../../storage/contract_store/contract_store.js';
 import { FactService, FactStore } from '../../storage/fact_store/index.js';
-import { type BlockReference, OriginBlockState } from '../../storage/fact_store/index.js';
+import { type BlockReference, type FactScope, OriginBlockState } from '../../storage/fact_store/index.js';
 import type { NoteStore } from '../../storage/note_store/note_store.js';
 import type { PrivateEventStore } from '../../storage/private_event_store/private_event_store.js';
 import type { RecipientTaggingStore } from '../../storage/tagging_store/recipient_tagging_store.js';
@@ -72,6 +73,8 @@ import { NoteValidationRequest } from '../noir-structs/note_validation_request.j
 import { Option } from '../noir-structs/option.js';
 import type { ProvidedSecret } from '../noir-structs/provided_secret.js';
 import { TransientArrayService } from '../transient_array_service.js';
+import { ORACLE_REGISTRY } from './oracle_registry.js';
+import { FACT } from './oracle_type_mappings.js';
 import { UtilityExecutionOracle, type UtilityExecutionOracleArgs } from './utility_execution_oracle.js';
 
 describe('Utility Execution test suite', () => {
@@ -1029,16 +1032,25 @@ describe('Utility Execution test suite', () => {
       const factTypeId = new Fr(30);
       const noBlock = Option.none<BlockReference>();
       const payloadOf = (value: number) => EphemeralArray.fromValues(service, [new Fr(value)]);
+      const accountScope = (): FactScope => ({ type: 'account', account: scope });
 
       it('records a fact and reads it back via getFactCollection', async () => {
         const oracle = makeOracle({ scopes: [scope] });
-        await oracle.recordFact(contractAddress, scope, typeId, collectionId, factTypeId, payloadOf(7), noBlock);
+        await oracle.recordFact(
+          contractAddress,
+          accountScope(),
+          typeId,
+          collectionId,
+          factTypeId,
+          payloadOf(7),
+          noBlock,
+        );
 
-        const result = await oracle.getFactCollection(contractAddress, scope, typeId, collectionId);
+        const result = await oracle.getFactCollection(contractAddress, accountScope(), typeId, collectionId);
         expect(result.isSome()).toBe(true);
         const collection = result.value!;
         expect(collection.contractAddress).toEqual(contractAddress);
-        expect(collection.scope).toEqual(scope);
+        expect(collection.scope).toEqual(accountScope());
         expect(collection.factCollectionTypeId).toEqual(typeId);
         expect(collection.factCollectionId).toEqual(collectionId);
         const facts = collection.facts.readAll(service);
@@ -1046,12 +1058,18 @@ describe('Utility Execution test suite', () => {
         expect(facts[0].factTypeId).toEqual(factTypeId);
         expect(facts[0].payload.readAll(service)).toEqual([new Fr(7)]);
         expect(facts[0].originBlock.isNone()).toBe(true);
+        // The None origin still occupies its discriminant and the origin's three fields on the wire, zero-filled.
+        expect(FACT.serialization!.fn(facts[0]).slice(-4)).toEqual(times(4, () => Fr.ZERO));
       });
 
       it('returns None for an unrecorded collection', async () => {
         const oracle = makeOracle({ scopes: [scope] });
-        const result = await oracle.getFactCollection(contractAddress, scope, typeId, collectionId);
+        const result = await oracle.getFactCollection(contractAddress, accountScope(), typeId, collectionId);
         expect(result.isNone()).toBe(true);
+        // The None still occupies its discriminant and the collection's six fields on the wire, zero-filled.
+        expect(ORACLE_REGISTRY.aztec_utl_getFactCollection.serializeReturn(result)).toEqual(
+          times(7, () => toACVMField(Fr.ZERO)),
+        );
       });
 
       it('returns only the surviving collections of a type after some are removed', async () => {
@@ -1061,14 +1079,24 @@ describe('Utility Execution test suite', () => {
         // ones come back.
         const ids = [1, 2, 3, 4, 5];
         for (const id of ids) {
-          await oracle.recordFact(contractAddress, scope, typeId, new Fr(id), factTypeId, payloadOf(100 + id), noBlock);
+          await oracle.recordFact(
+            contractAddress,
+            accountScope(),
+            typeId,
+            new Fr(id),
+            factTypeId,
+            payloadOf(100 + id),
+            noBlock,
+          );
         }
 
         // Remove two of them; the rest must remain.
-        await oracle.deleteFactCollection(contractAddress, scope, typeId, new Fr(2));
-        await oracle.deleteFactCollection(contractAddress, scope, typeId, new Fr(4));
+        await oracle.deleteFactCollection(contractAddress, accountScope(), typeId, new Fr(2));
+        await oracle.deleteFactCollection(contractAddress, accountScope(), typeId, new Fr(4));
 
-        const collections = (await oracle.getFactCollectionsByType(contractAddress, scope, typeId)).readAll(service);
+        const collections = (await oracle.getFactCollectionsByType(contractAddress, accountScope(), typeId)).readAll(
+          service,
+        );
 
         // Exactly the survivors come back (order is not guaranteed, so compare as a set).
         const survivingIds = collections
@@ -1085,9 +1113,17 @@ describe('Utility Execution test suite', () => {
         l2TipsStore.getL2Tips.mockResolvedValue(makeL2Tips(100));
         const oracle = makeOracle({ scopes: [scope] });
         const originBlock = Option.some<BlockReference>({ blockNumber: 5, blockHash: new Fr(0xabc) });
-        await oracle.recordFact(contractAddress, scope, typeId, collectionId, factTypeId, payloadOf(42), originBlock);
+        await oracle.recordFact(
+          contractAddress,
+          accountScope(),
+          typeId,
+          collectionId,
+          factTypeId,
+          payloadOf(42),
+          originBlock,
+        );
 
-        const result = await oracle.getFactCollection(contractAddress, scope, typeId, collectionId);
+        const result = await oracle.getFactCollection(contractAddress, accountScope(), typeId, collectionId);
         expect(result.isSome()).toBe(true);
         const facts = result.value!.facts.readAll(service);
         expect(facts).toHaveLength(1);
@@ -1099,11 +1135,26 @@ describe('Utility Execution test suite', () => {
         });
       });
 
+      it('records and reads a public fact with no allowed accounts', async () => {
+        const oracle = makeOracle({ scopes: [] });
+        const publicScope: FactScope = { type: 'public' };
+        await oracle.recordFact(contractAddress, publicScope, typeId, collectionId, factTypeId, payloadOf(7), noBlock);
+
+        const collection = (await oracle.getFactCollection(contractAddress, publicScope, typeId, collectionId)).value!;
+        expect(collection.scope).toEqual(publicScope);
+        expect(collection.facts.readAll(service).map(fact => fact.payload.readAll(service))).toEqual([[new Fr(7)]]);
+
+        const collections = (await oracle.getFactCollectionsByType(contractAddress, publicScope, typeId)).readAll(
+          service,
+        );
+        expect(collections.map(c => c.scope)).toEqual([publicScope]);
+      });
+
       it('rejects access to another contract', async () => {
         const oracle = makeOracle({ scopes: [scope] });
         const otherContract = await AztecAddress.random();
         expect(() =>
-          oracle.recordFact(otherContract, scope, typeId, collectionId, factTypeId, payloadOf(1), noBlock),
+          oracle.recordFact(otherContract, accountScope(), typeId, collectionId, factTypeId, payloadOf(1), noBlock),
         ).toThrow(/not allowed to access/);
       });
 
@@ -1111,7 +1162,15 @@ describe('Utility Execution test suite', () => {
         const oracle = makeOracle({ scopes: [scope] });
         const otherScope = await AztecAddress.random();
         expect(() =>
-          oracle.recordFact(contractAddress, otherScope, typeId, collectionId, factTypeId, payloadOf(1), noBlock),
+          oracle.recordFact(
+            contractAddress,
+            { type: 'account', account: otherScope },
+            typeId,
+            collectionId,
+            factTypeId,
+            payloadOf(1),
+            noBlock,
+          ),
         ).toThrow(/not in the allowed scopes/);
       });
     });

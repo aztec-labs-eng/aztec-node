@@ -118,8 +118,8 @@ test-extension/
 If you want to try the completed wallet before reading the tutorial:
 
 ```bash
-git clone https://github.com/AztecProtocol/aztec-packages.git
-cd aztec-packages
+git clone https://github.com/aztec-labs-eng/aztec-node.git
+cd aztec-node
 git checkout #include_aztec_version
 cd docs/examples/webapp-tutorial
 ./setup.sh
@@ -152,5 +152,5 @@ Start with [Architecture](./01-architecture.md) to understand why this multi-com
 
 :::tip Related Resources
 - [Webapp Tutorial](../webapp/index.md) - Build a dApp that connects to this wallet
-- [BaseWallet Source](https://github.com/AztecProtocol/aztec-packages/blob/#include_aztec_version/yarn-project/wallet-sdk/src/base-wallet/base_wallet.ts) - The class you extend
+- [BaseWallet Source](https://github.com/aztec-labs-eng/aztec-node/blob/#include_aztec_version/yarn-project/wallet-sdk/src/base-wallet/base_wallet.ts) - The class you extend
 :::

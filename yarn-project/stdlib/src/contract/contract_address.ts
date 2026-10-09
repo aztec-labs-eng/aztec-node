@@ -16,7 +16,7 @@ import type { PartialAddress } from './partial_address.js';
  * ```
  * salted_initialization_hash = poseidon2(DOM_SEP__SALTED_INITIALIZATION_HASH, [salt, initialization_hash, deployer, immutables_hash])
  * partial_address = poseidon2(DOM_SEP__PARTIAL_ADDRESS, [contract_class_id, salted_initialization_hash])
- * address = ((poseidon2(DOM_SEP__CONTRACT_ADDRESS_V2, [public_keys_hash, partial_address]) * G) + ivpk_m).x <- the x-coordinate of the address point
+ * address = ((poseidon2(DOM_SEP__CONTRACT_ADDRESS_V3, [public_keys_hash, partial_address]) * G) + ivpk_m).x <- the x-coordinate of the address point
  * ```
  * @param instance - A contract instance for which to calculate the deployment address.
  */

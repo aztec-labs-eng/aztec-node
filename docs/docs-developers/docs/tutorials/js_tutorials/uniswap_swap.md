@@ -38,7 +38,7 @@ The example code lives in the Aztec packages repository:
 
 ```bash
 git clone --depth 1 --branch #include_aztec_version https://github.com/AztecProtocol/aztec-packages.git
-cd aztec-packages/docs/examples
+cd aztec-node/docs/examples
 ```
 
 ### Project Structure

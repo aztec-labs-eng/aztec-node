@@ -118,6 +118,38 @@ describe('TxProvider', () => {
     expect(txProvider).toBeDefined();
   });
 
+  it('deletes a tx recovered by the final pool re-check from the missing list', async () => {
+    const original = await generateTransactions(3);
+    const hashes = await Promise.all(original.map(tx => tx.getTxHash()));
+    // First two are already in the pool; the third is not, and the collector will not report it.
+    txPools.set(hashes[0].toString(), original[0]);
+    txPools.set(hashes[1].toString(), original[1]);
+
+    // Model a gossip arrival landing in the pool after the collector de-registered its request:
+    // the pool gains the third tx while collectFastFor returns nothing, so only the final re-check finds it.
+    txCollection.collectFastFor.mockImplementation((_request, _txHashes) => {
+      txPools.set(hashes[2].toString(), original[2]);
+      return Promise.resolve([]);
+    });
+
+    const proposal = await buildProposal([], hashes);
+    const results = await txProvider.getTxsForBlockProposal(proposal, blockNumber, opts);
+    await checkResults(results, { txs: original, missingTxs: [] });
+  });
+
+  it('still reports a tx as missing when the final pool re-check does not find it', async () => {
+    const original = await generateTransactions(3);
+    const hashes = await Promise.all(original.map(tx => tx.getTxHash()));
+    txPools.set(hashes[0].toString(), original[0]);
+    txPools.set(hashes[1].toString(), original[1]);
+
+    txCollection.collectFastFor.mockImplementation((_request, _txHashes) => Promise.resolve([]));
+
+    const proposal = await buildProposal([], hashes);
+    const results = await txProvider.getTxsForBlockProposal(proposal, blockNumber, opts);
+    await checkResults(results, { txs: original.slice(0, 2), missingTxs: [hashes[2]] });
+  });
+
   it('can gather transactions from the network', async () => {
     const original = await generateTransactions(10);
     setupTxPools(0, 10, original);

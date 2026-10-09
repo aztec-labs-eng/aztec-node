@@ -14,7 +14,7 @@ This page covers how a dApp discovers wallet extensions, establishes an encrypte
 Your dApp needs two packages:
 
 ```bash
-npm install @aztec-labs/wallet-sdk @aztec-labs/aztec.js
+npm install @aztec-labs/wallet-sdk@6.0.0-rc.1 @aztec-labs/aztec.js@6.0.0-rc.1
 ```
 
 The key imports:
@@ -157,7 +157,7 @@ const accounts = await wallet.getAccounts();
 await wallet.registerContract(contractInstance, contractArtifact);
 
 // Send a transaction
-const receipt = await wallet.sendTx(executionPayload, { from: account.item });
+const { receipt } = await wallet.sendTx(executionPayload, { from: account.item });
 
 // Simulate without sending
 const simulation = await wallet.simulateTx(executionPayload, { from: account.item });

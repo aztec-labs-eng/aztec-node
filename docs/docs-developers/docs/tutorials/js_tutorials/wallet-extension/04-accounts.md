@@ -173,7 +173,7 @@ async function registerAccountInWallet(address, secret, salt) {
   const wallet = await getWallet();
   await wallet.registerContract(instance, artifact, secretFr);
 
-  const accountManager = await AccountManager.create(wallet, secretFr, accountContract, saltFr);
+  const accountManager = await AccountManager.create(wallet, secretFr, accountContract, { salt: saltFr });
   const account = await accountManager.getAccount();
   wallet.registerAccount(address, account);
 }

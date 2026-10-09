@@ -4,8 +4,19 @@
 export const WEI_CONST = 1_000_000_000n;
 
 // Our conservative ceiling on the total gas limit of any L1 tx we send (2^24), matching the EIP-7825 cap.
-// EIP-8037 keeps 2^24 as the execution cap but would allow a higher total; we stay at the tighter value.
+// EIP-8037 keeps 2^24 as the execution cap but would allow a higher total; see AMSTERDAM_MAX_L1_TX_LIMIT.
 export const MAX_L1_TX_LIMIT = 16_777_216n;
+
+// Once Amsterdam (EIP-8037) is active, 2^24 bounds only execution gas, and state gas is drawn from whatever the tx gas
+// limit exceeds 2^24 by, so a tx sent with exactly 2^24 must fit execution and state gas together in 16.7M. Executing a
+// slashing round is dominated by state gas: the worst case per slashed validator is an ejection that leaves a remainder,
+// costing ~930k state gas and ~210k execution gas, on top of ~1.8M fixed plus ~10.7k per vote. With the maximum of 128
+// votes, a round slashing 39 validators uses ~47.4M gas and fits a 50M limit, while 40 do not (the 63/64 call-forwarding
+// rule needs headroom above the gas used); we cap at 35 to leave margin below that. 50M is also the default gas cap RPC
+// nodes apply to eth_estimateGas, eth_call and eth_simulateV1, so we cannot simulate anything larger; both values can be
+// raised once RPCs allow more than 50M.
+export const AMSTERDAM_MAX_L1_TX_LIMIT = 50_000_000n;
+export const AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND = 35;
 
 // setting a minimum bump percentage to 10% due to geth's implementation
 // https://github.com/ethereum/go-ethereum/blob/e3d61e6db028c412f74bc4d4c7e117a9e29d0de0/core/txpool/legacypool/list.go#L298

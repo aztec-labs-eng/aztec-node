@@ -11,7 +11,7 @@ import { spawn } from 'child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'os';
-import { dirname, join, resolve } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import readline from 'readline';
 import type { Hex } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
@@ -23,6 +23,7 @@ import { deployMulticall3 } from './contracts/multicall.js';
 import { RollupContract } from './contracts/rollup.js';
 import { resolveFoundryBinary } from './foundry_binary.js';
 import type { L1ContractAddresses } from './l1_contract_addresses.js';
+import { isAmsterdamBlock } from './l1_tx_utils/amsterdam.js';
 import type { ExtendedViemWalletClient } from './types.js';
 
 const logger = createLogger('ethereum:deploy_aztec_l1_contracts');
@@ -91,6 +92,124 @@ function runProcess<T>(
   });
 
   return promise;
+}
+
+/**
+ * Multiplier (in percent) applied to forge's simulated gas when dry-running against a Glamsterdam chain. Forge simulates
+ * with a pre-Glamsterdam gas schedule, which undercounts contract creation by up to ~8x once state growth is repriced.
+ */
+const GLAMSTERDAM_GAS_ESTIMATE_MULTIPLIER = 1000;
+
+/** Activates queued initial validators after a deploy. Only present in l1-contracts releases that need it. */
+const FLUSH_ENTRY_QUEUE_SCRIPT = 'script/deploy/FlushEntryQueue.s.sol';
+
+/** Arguments for broadcasting an l1-contracts forge script. */
+type ForgeScriptBroadcastArgs = {
+  forgeBin: string;
+  l1ContractsPath: string;
+  script: string;
+  privateKey: Hex;
+  rpcUrl: string;
+  l1Client: ExtendedViemWalletClient;
+  env: Record<string, string | undefined>;
+  verify?: boolean;
+};
+
+/**
+ * Broadcasts a forge script and returns its parsed deploy result.
+ *
+ * On chains that run Glamsterdam, forge's own gas limits make contract creations run out of gas, and RPC gas estimation
+ * is no fallback since the largest deployments need more gas than RPC nodes allow for eth_estimateGas. Instead we
+ * dry-run the script with an inflated gas multiplier, clamp every gas limit so it fits in a block, and broadcast the
+ * edited sequence with `--resume`.
+ */
+async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
+  args: ForgeScriptBroadcastArgs,
+): Promise<T | undefined> {
+  const { forgeBin, l1ContractsPath, script, privateKey, rpcUrl, l1Client, env } = args;
+  const baseArgs = ['script', script, '--sig', 'run()', '--private-key', privateKey, '--rpc-url', rpcUrl];
+  const verifyArgs = args.verify ? ['--verify'] : [];
+
+  const latestBlock = await l1Client.request({ method: 'eth_getBlockByNumber', params: ['latest', false] });
+  if (!latestBlock || !isAmsterdamBlock(latestBlock)) {
+    const scriptPath = join(getL1ContractsPath(), 'scripts', 'forge_broadcast.js');
+    return runProcess<T>(
+      process.execPath,
+      [scriptPath, ...baseArgs.slice(1), ...verifyArgs],
+      // Resolved forge binary picked up by forge_broadcast.js, so it works without forge on PATH.
+      { ...env, FORGE_BIN: forgeBin },
+      l1ContractsPath,
+    );
+  }
+
+  logger.info(`Dry-running ${script} to plan Glamsterdam gas limits`);
+  const result = await runProcess<T>(
+    forgeBin,
+    [...baseArgs, '--gas-estimate-multiplier', String(GLAMSTERDAM_GAS_ESTIMATE_MULTIPLIER)],
+    env,
+    l1ContractsPath,
+  );
+
+  // Leave headroom for the block gas limit drifting down before the last tx lands.
+  const maxTxGas = (BigInt(latestBlock.gasLimit) * 99n) / 100n;
+  const chainId = await l1Client.getChainId();
+  const sequencePath = join(
+    l1ContractsPath,
+    'broadcast',
+    basename(script),
+    String(chainId),
+    'dry-run',
+    'run-latest.json',
+  );
+  const sequence = JSON.parse(readFileSync(sequencePath, 'utf-8'));
+  for (const tx of sequence.transactions) {
+    const gas = BigInt(tx.transaction.gas);
+    tx.transaction.gas = `0x${(gas < maxTxGas ? gas : maxTxGas).toString(16)}`;
+  }
+  writeFileSync(sequencePath, JSON.stringify(sequence, null, 2));
+
+  logger.info(`Broadcasting ${sequence.transactions.length} transactions from ${script}`, { maxTxGas });
+  // --slow waits for each receipt before sending the next tx, so the sender only needs balance for one gas limit at a
+  // time and a block-sized tx is not queued behind others from the same sender.
+  await runProcess(forgeBin, [...baseArgs, '--resume', '--slow', ...verifyArgs], env, l1ContractsPath);
+
+  // l1-contracts releases that ship this script no longer activate initial validators inside the deploy, and rely on
+  // forge_broadcast.js flushing the entry queue afterwards; we bypassed it, so flush here. Older releases flush inline.
+  if (
+    result &&
+    hasInitialValidators(env.INITIAL_VALIDATORS) &&
+    existsSync(join(l1ContractsPath, FLUSH_ENTRY_QUEUE_SCRIPT))
+  ) {
+    logger.info(`Flushing the entry queue of rollup ${result.rollupAddress}`);
+    // flushEntryQueue needs a gas floor left before every deposit, which forge's simulated gas does not cover, so the
+    // limits come from eth_estimateGas instead. Each flush tx stays well under the RPC estimate cap.
+    await runProcess(
+      forgeBin,
+      [
+        'script',
+        `${FLUSH_ENTRY_QUEUE_SCRIPT}:FlushEntryQueue`,
+        '--sig',
+        'run(address)',
+        result.rollupAddress,
+        '--private-key',
+        privateKey,
+        '--rpc-url',
+        rpcUrl,
+        '--skip-simulation',
+        '--batch-size',
+        '1',
+        '--broadcast',
+      ],
+      env,
+      l1ContractsPath,
+    );
+  }
+  return result;
+}
+
+function hasInitialValidators(initialValidatorsJson: string | undefined): boolean {
+  const parsed: unknown = JSON.parse(initialValidatorsJson ?? '[]');
+  return Array.isArray(parsed) && parsed.length > 0;
 }
 
 // Covers an edge where where we may have a cached BlobLib that is not meant for production.
@@ -340,31 +459,21 @@ export async function deployAztecL1Contracts(
     );
   }
 
-  const scriptPath = join(getL1ContractsPath(), 'scripts', 'forge_broadcast.js');
-  const forgeArgs = [
-    FORGE_SCRIPT,
-    '--sig',
-    'run()',
-    '--private-key',
-    privateKey,
-    '--rpc-url',
-    rpcUrl,
-    ...(shouldVerify ? ['--verify'] : []),
-  ];
-  const forgeEnv = {
-    // Resolved forge binary picked up by forge_broadcast.js, so it works without forge on PATH.
-    FORGE_BIN: forgeBin,
-    // Env vars required by l1-contracts/script/deploy/DeploymentConfiguration.sol.
-    NETWORK: getActiveNetworkName(),
-    FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
-    ...getDeployAztecL1ContractsEnvVars(args),
-  };
-  const result = await runProcess<ForgeL1ContractsDeployResult>(
-    process.execPath,
-    [scriptPath, ...forgeArgs],
-    forgeEnv,
+  const result = await runForgeScriptBroadcast<ForgeL1ContractsDeployResult>({
+    forgeBin,
     l1ContractsPath,
-  );
+    script: FORGE_SCRIPT,
+    privateKey,
+    rpcUrl,
+    l1Client,
+    verify: shouldVerify,
+    env: {
+      // Env vars required by l1-contracts/script/deploy/DeploymentConfiguration.sol.
+      NETWORK: getActiveNetworkName(),
+      FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
+      ...getDeployAztecL1ContractsEnvVars(args),
+    },
+  });
   if (!result) {
     throw new Error('Forge script did not output deployment result');
   }
@@ -630,29 +739,25 @@ export const deployRollupForUpgrade = async (
   const FORGE_SCRIPT = 'script/deploy/DeployRollupForUpgrade.s.sol';
   await maybeForgeForceProductionBuild(forgeBin, l1ContractsPath, FORGE_SCRIPT, chainId);
 
-  const scriptPath = join(getL1ContractsPath(), 'scripts', 'forge_broadcast.js');
-  const forgeArgs = [FORGE_SCRIPT, '--sig', 'run()', '--private-key', privateKey, '--rpc-url', rpcUrl];
-  const forgeEnv = {
-    // Resolved forge binary picked up by forge_broadcast.js, so it works without forge on PATH.
-    FORGE_BIN: forgeBin,
-    FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
-    // Env vars required by l1-contracts/script/deploy/RollupConfiguration.sol.
-    REGISTRY_ADDRESS: registryAddress.toString(),
-    NETWORK: getActiveNetworkName(),
-    ...getDeployRollupForUpgradeEnvVars(args),
-  };
-
-  const result = await runProcess<ForgeRollupUpgradeResult>(
-    process.execPath,
-    [scriptPath, ...forgeArgs],
-    forgeEnv,
+  const extendedClient = createExtendedL1Client([rpcUrl], privateKey);
+  const result = await runForgeScriptBroadcast<ForgeRollupUpgradeResult>({
+    forgeBin,
     l1ContractsPath,
-  );
+    script: FORGE_SCRIPT,
+    privateKey,
+    rpcUrl,
+    l1Client: extendedClient,
+    env: {
+      FOUNDRY_PROFILE: chainId === mainnet.id ? 'production' : undefined,
+      // Env vars required by l1-contracts/script/deploy/RollupConfiguration.sol.
+      REGISTRY_ADDRESS: registryAddress.toString(),
+      NETWORK: getActiveNetworkName(),
+      ...getDeployRollupForUpgradeEnvVars(args),
+    },
+  });
   if (!result) {
     throw new Error('Forge script did not output deployment result');
   }
-
-  const extendedClient = createExtendedL1Client([rpcUrl], privateKey);
 
   // Create RollupContract wrapper for the deployed rollup
   const rollup = new RollupContract(extendedClient, result.rollupAddress);
