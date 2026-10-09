@@ -304,6 +304,7 @@ locals {
     "validator.node.env.SEQ_BUILD_CHECKPOINT_IF_EMPTY"                            = var.SEQ_BUILD_CHECKPOINT_IF_EMPTY
     "validator.node.env.AZTEC_EPOCHS_LAG"                                         = var.AZTEC_EPOCHS_LAG
     "validator.node.env.P2P_TX_POOL_DELETE_TXS_AFTER_REORG"                       = var.P2P_TX_POOL_DELETE_TXS_AFTER_REORG
+    "validator.node.env.L1_GAS_LIMIT_BUFFER_PERCENTAGE"                         = var.VALIDATOR_L1_GAS_LIMIT_BUFFER_PERCENTAGE
     "validator.node.env.L1_PRIORITY_FEE_BUMP_PERCENTAGE"                          = var.VALIDATOR_L1_PRIORITY_FEE_BUMP_PERCENTAGE
     "validator.node.env.L1_PRIORITY_FEE_RETRY_BUMP_PERCENTAGE"                    = var.VALIDATOR_L1_PRIORITY_FEE_RETRY_BUMP_PERCENTAGE
     "validator.node.env.BLOB_ALLOW_EMPTY_SOURCES"                                 = var.BLOB_ALLOW_EMPTY_SOURCES
