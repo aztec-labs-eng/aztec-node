@@ -66,6 +66,8 @@ export class ReExStateMismatchError extends ValidatorError {
   constructor(
     public readonly expectedArchiveRoot: Fr,
     public readonly actualArchiveRoot: Fr,
+    public readonly headerMismatch: boolean,
+    public readonly archiveMismatch: boolean,
   ) {
     super('Re-execution state mismatch');
   }

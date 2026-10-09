@@ -85,7 +85,6 @@ import {
 // Just cap the set to avoid unbounded growth.
 const MAX_PROPOSERS_OF_INVALID_BLOCKS = 1000;
 const MAX_TRACKED_INVALID_CHECKPOINT_PROPOSALS = 1000;
-const MAX_TRACKED_BAD_ATTESTATIONS = 10_000;
 
 /**
  * Validator Client
@@ -112,7 +111,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
   private proposersOfInvalidBlocks = FifoSet.withLimit<string>(MAX_PROPOSERS_OF_INVALID_BLOCKS);
   private invalidCheckpointProposalOffenseKeys = FifoSet.withLimit<string>(MAX_TRACKED_INVALID_CHECKPOINT_PROPOSALS);
   private oversizedProposalOffenseKeys = FifoSet.withLimit<string>(MAX_TRACKED_INVALID_CHECKPOINT_PROPOSALS);
-  private badAttestationOffenseKeys = FifoSet.withLimit<string>(MAX_TRACKED_BAD_ATTESTATIONS);
 
   /** Tracks the last checkpoint proposal we attested to, to prevent equivocation. */
   private lastAttestedProposal?: CheckpointProposalCore;
@@ -416,10 +414,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       // Duplicate attestation handler - triggers slashing for attestation equivocation
       this.p2pClient.registerDuplicateAttestationCallback((info: DuplicateAttestationInfo) => {
         this.handleDuplicateAttestation(info);
-      });
-
-      this.p2pClient.registerCheckpointAttestationCallback((attestation: CheckpointAttestation) => {
-        this.handleCheckpointAttestation(attestation);
       });
 
       const myAddresses = this.getValidatorAddresses();
@@ -830,50 +824,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
 
   private markInvalidProposalSlot(slotNumber: SlotNumber): void {
     this.proposalHandler.markInvalidProposalSlot(slotNumber);
-  }
-
-  private handleCheckpointAttestation(attestation: CheckpointAttestation): void {
-    const slotNumber = attestation.slotNumber;
-    if (
-      !this.proposalHandler.hasInvalidProposals(slotNumber) ||
-      this.proposalHandler.hasProposalEquivocation(slotNumber)
-    ) {
-      return;
-    }
-
-    const attester = attestation.getSender();
-    if (!attester) {
-      this.log.warn(`Cannot slash checkpoint attestation with invalid signature`, {
-        slotNumber,
-        archive: attestation.archive.toString(),
-      });
-      return;
-    }
-
-    this.slashAttestedToInvalidCheckpointProposal(slotNumber, attester);
-  }
-
-  private slashAttestedToInvalidCheckpointProposal(slotNumber: SlotNumber, attester: EthAddress): void {
-    const offenseKey = `${attester.toString()}:${OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL}:${slotNumber}`;
-    if (!this.badAttestationOffenseKeys.addIfAbsent(offenseKey)) {
-      return;
-    }
-
-    this.log.info(`Detected attestation to invalid checkpoint proposal offense`, {
-      attester: attester.toString(),
-      slotNumber,
-      amount: this.config.slashAttestInvalidCheckpointProposalPenalty,
-      offenseType: getOffenseTypeName(OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL),
-    });
-
-    this.emit(WANT_TO_SLASH_EVENT, [
-      {
-        validator: attester,
-        amount: this.config.slashAttestInvalidCheckpointProposalPenalty,
-        offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
-        epochOrSlot: BigInt(slotNumber),
-      },
-    ]);
   }
 
   /**

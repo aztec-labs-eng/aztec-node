@@ -400,10 +400,13 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
     });
   });
 
-  // Runs createInvalidProposalSlashingScenario with broadcastEquivocatedProposals=true so the bad
-  // proposer equivocates. Asserts lazy attester is initially slashed; then broadcasts a delayed
-  // equivocated proposal and verifies the attestation offense is cleared and a DUPLICATE_PROPOSAL
-  // offense replaces it on the honest node.
+  // Runs createInvalidProposalSlashingScenario with broadcastInvalidCheckpointProposalOnly=true so the
+  // CHECKPOINT the lazy attester signs is itself invalid, and no block is corrupted: the attester is slashed
+  // only for the payload it signed, so the invalid thing must be the checkpoint (a bad block in the slot alone
+  // does not slash the attester). broadcastEquivocatedProposals=true makes the bad proposer equivocate.
+  // Asserts the lazy attester is initially slashed; then broadcasts a delayed equivocated proposal and verifies
+  // the attestation offense is cleared and a DUPLICATE_PROPOSAL offense replaces it, while the proposer keeps a
+  // BROADCASTED_INVALID_CHECKPOINT_PROPOSAL offense for the invalid checkpoint it signed.
   it('slashes a lazy attester for an invalid checkpoint and clears it on delayed equivocation', async () => {
     const {
       rollup,
@@ -414,8 +417,11 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
       targetSlot,
       badCheckpointBlockHashes,
     } = await createInvalidProposalSlashingScenario({
+      corruptBlockProposal: false,
+      expectBadProposerOffense: false,
       badProposerConfig: {
         broadcastEquivocatedProposals: true,
+        broadcastInvalidCheckpointProposalOnly: true,
       },
     });
 
@@ -532,7 +538,12 @@ describe('multi-node/slashing/attested_invalid_proposal', () => {
       ),
     ).toBeUndefined();
     expect(
-      findSlashOffense(offensesAfterClear, badProposer, OffenseType.BROADCASTED_INVALID_BLOCK_PROPOSAL, targetSlot),
+      findSlashOffense(
+        offensesAfterClear,
+        badProposer,
+        OffenseType.BROADCASTED_INVALID_CHECKPOINT_PROPOSAL,
+        targetSlot,
+      ),
     ).toBeDefined();
     expect(findSlashOffense(offensesAfterClear, badProposer, OffenseType.DUPLICATE_PROPOSAL, targetSlot)).toBeDefined();
   });
