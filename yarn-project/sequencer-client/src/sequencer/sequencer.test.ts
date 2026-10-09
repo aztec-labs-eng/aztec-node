@@ -390,6 +390,7 @@ describe('sequencer', () => {
     TestUtils.mockStreamingInbox(l1ToL2MessageSource, inboxContract);
 
     validatorClient = mock<ValidatorClient>();
+    validatorClient.getValidatorAddresses.mockReturnValue([]);
     validatorClient.collectAttestations.mockImplementation(() => Promise.resolve(getCheckpointAttestations()));
     validatorClient.createBlockProposal.mockImplementation(() => Promise.resolve(createBlockProposal()));
     validatorClient.createCheckpointProposal.mockImplementation(() => Promise.resolve(createCheckpointProposal()));

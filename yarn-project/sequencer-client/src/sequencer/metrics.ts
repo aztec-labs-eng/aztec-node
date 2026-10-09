@@ -274,23 +274,19 @@ export class SequencerMetrics {
     });
   }
 
-  incOpenSlot(slot: SlotNumber, proposer: string) {
+  incOpenSlot(slot: SlotNumber) {
     // sequencer went through the loop a second time. Noop
     if (slot === this.lastSeenSlot) {
       return;
     }
 
-    this.slots.add(1, {
-      [Attributes.BLOCK_PROPOSER]: proposer,
-    });
+    this.slots.add(1);
 
     this.lastSeenSlot = slot;
   }
 
-  async incFilledSlot(proposer: string, coinbase: Hex | EthAddress | undefined): Promise<void> {
-    this.filledSlots.add(1, {
-      [Attributes.BLOCK_PROPOSER]: proposer,
-    });
+  async incFilledSlot(coinbase: Hex | EthAddress | undefined): Promise<void> {
+    this.filledSlots.add(1);
     this.lastSeenSlot = undefined;
 
     if (coinbase) {
