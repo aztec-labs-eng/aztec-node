@@ -1,4 +1,5 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
+import { asyncPoolToCompletion } from '@aztec-labs/foundation/async-pool';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
@@ -31,6 +32,14 @@ import {
 } from './log_store_codec.js';
 
 /**
+ * How many per-tag range scans a single tag query runs concurrently. Each scan reads through its own native cursor,
+ * so overlapping them hides the per-scan round trip. On a 100-tag query, going from 1 to 2 cuts latency by about a
+ * third and anything above 2 is flat. The bound stays well under the store's cursor budget (`maxReaders - 1`) so other
+ * components can still read while a query is in flight.
+ */
+const TAG_SCAN_CONCURRENCY = 4;
+
+/**
  * Indexes every emitted private and public log under a composite hex-string key
  * `[contractAddress (public only)]-tag-blockNumber-txIndexWithinBlock-logIndexWithinTx`,
  * where each numeric segment is zero-padded to 8 lowercase hex digits (4 bytes BE) and
@@ -44,6 +53,12 @@ import {
  * scan by block (block isn't the leading key segment).
  *
  * Contract-class logs are no longer stored or served by the log store.
+ *
+ * Tag queries run inside `db.transactionAsync` so the `referenceBlock` reorg check and every per-tag scan see the same
+ * state of the store and cannot return a torn result. On lmdb-v2 that routes the query through the store's single
+ * serial writer queue, so it waits for any queued write (notably block ingestion) to commit first; that cost is
+ * accepted in exchange for the consistency. The per-tag scans within one query run concurrently, up to
+ * {@link TAG_SCAN_CONCURRENCY} at a time.
  */
 export class LogStore {
   /** Primary map: composite private key (tag + tail = 96 hex chars + separators) -> serialized {@link StoredLogValue}. */
@@ -258,8 +273,10 @@ export class LogStore {
     const fromBlock = query.fromBlock ?? INITIAL_L2_BLOCK_NUM;
     const includeEffects = query.includeEffects === true;
 
-    const perTagResults: LogResult[][] = [];
-    for (const tagEntry of tags) {
+    const limit = query.limitPerTag ?? MAX_LOGS_PER_TAG;
+
+    // Every started scan settles before this returns, even on failure, so none outlives the enclosing transaction.
+    const perTagResults = await asyncPoolToCompletion(TAG_SCAN_CONCURRENCY, tags, async tagEntry => {
       const { tagHex, afterLog } = normalizeTagEntry(tagEntry);
       const prefix = contractHex !== undefined ? encodePublicPrefix(contractHex, tagHex) : tagHex;
 
@@ -279,7 +296,6 @@ export class LogStore {
         start = encodeKey(prefix, fromBlock, 0, 0);
       }
 
-      const limit = query.limitPerTag ?? MAX_LOGS_PER_TAG;
       const out: LogResult[] = [];
       for await (const [rawKey, rawVal] of primaryMap.entriesAsync({ start, end, limit })) {
         const tail = decodeKeyTail(rawKey);
@@ -294,8 +310,8 @@ export class LogStore {
           logIndexWithinTx: tail.logIndexWithinTx,
         });
       }
-      perTagResults.push(out);
-    }
+      return out;
+    });
 
     if (includeEffects) {
       // Dedupe by txHash across the entire page so a tx with many tagged logs costs one fetch.
@@ -348,12 +364,14 @@ export class LogStore {
     if (!keys || keys.length === 0) {
       return [];
     }
+    const raws = await primaryMap.getManyAsync(keys);
     const results: LogResult[] = [];
-    for (const key of keys) {
-      const raw = await primaryMap.getAsync(key);
+    for (let i = 0; i < keys.length; i++) {
+      const raw = raws[i];
       if (!raw) {
         continue;
       }
+      const key = keys[i];
       const tail = decodeKeyTail(key);
       const value = decodeValue(raw);
       results.push({

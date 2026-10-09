@@ -8,6 +8,13 @@ export const CURSOR_PAGE_SIZE = 10;
 /** Most keys sent in one GET message; larger batched reads are split, which bounds the size of each message. */
 export const GET_CHUNK_SIZE = 1024;
 
+/**
+ * Largest `limit` that an iteration asks the native side to return in a single page. Bounded scans up to this size
+ * are answered by one START_CURSOR round trip with no cursor left open, so they neither pay for
+ * ADVANCE_CURSOR/CLOSE_CURSOR nor hold one of the store's limited cursor slots.
+ */
+export const SINGLE_PAGE_LIMIT = 128;
+
 export enum LMDBMessageType {
   OPEN_DATABASE = 100,
   GET,

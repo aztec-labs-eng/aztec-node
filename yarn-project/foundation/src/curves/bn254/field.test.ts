@@ -7,6 +7,39 @@ describe('Fr Serialization', () => {
     const obtained = Fr.schema.parse(string);
     expect(obtained).toEqual(original);
   });
+
+  it('rejects non-hex strings through the hex schema', () => {
+    expect(Fr.schema.safeParse('not-hex').success).toBe(false);
+    expect(Fr.schema.safeParse('0x12g4').success).toBe(false);
+  });
+});
+
+describe('Fr hex parsing', () => {
+  it('parses short, odd-length, unprefixed and uppercase hex strings', () => {
+    expect(Fr.fromHexString('0x1').toBigInt()).toBe(1n);
+    expect(Fr.fromHexString('abc').toBigInt()).toBe(0xabcn);
+    expect(Fr.fromHexString('0XABC').toBigInt()).toBe(0xabcn);
+    expect(Fr.fromHexString('0x' + '0'.repeat(63) + 'f').toBigInt()).toBe(15n);
+  });
+
+  it('round trips through toString', () => {
+    const original = Fr.random();
+    expect(Fr.fromHexString(original.toString())).toEqual(original);
+  });
+
+  it('accepts leading zeros beyond 32 bytes', () => {
+    expect(Fr.fromHexString('0x' + '0'.repeat(65) + '1').toBigInt()).toBe(1n);
+    expect(Fr.fromHexString('0x' + '0'.repeat(66)).toBigInt()).toBe(0n);
+  });
+
+  it('rejects values that do not fit in the field', () => {
+    expect(() => Fr.fromHexString('0x1' + '0'.repeat(64))).toThrow('greater or equal to field modulus');
+  });
+
+  it('rejects strings that are not hex', () => {
+    expect(() => Fr.fromHexString('0x')).toThrow('Invalid hex-encoded string');
+    expect(() => Fr.fromHexString('0x12g4')).toThrow('Invalid hex-encoded string');
+  });
 });
 
 describe('Fr Modulus Validation', () => {

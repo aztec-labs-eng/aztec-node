@@ -299,6 +299,115 @@ describe('AztecLMDBStoreV2', () => {
     readTx.close();
   });
 
+  describe('bounded scans', () => {
+    const ENTRIES = 300;
+    const key = (i: number) => Buffer.from(String(i).padStart(3, '0'));
+    const keysOf = (entries: [Uint8Array, unknown][]) => entries.map(([k]) => Buffer.from(k));
+    const keyRange = (from: number, count: number, step = 1) =>
+      Array.from({ length: count }, (_, i) => key(from + i * step));
+
+    beforeEach(async () => {
+      await store.transactionAsync(async tx => {
+        for (let i = 0; i < ENTRIES; i++) {
+          await tx.set(key(i), Buffer.from(String(i)));
+        }
+      });
+    });
+
+    /**
+     * Starts as many bounded scans as the store has cursor slots and leaves each paused after its first entry. A scan
+     * that kept its native cursor open would hold a slot while paused, and any further scan would then never start.
+     */
+    async function startPausedScans(scan: () => AsyncIterable<[Uint8Array, Uint8Array]>) {
+      const paused = Array.from({ length: testMaxReaders - 1 }, () => scan()[Symbol.asyncIterator]());
+      await Promise.all(paused.map(it => it.next()));
+      return paused;
+    }
+
+    async function drain(iterator: AsyncIterator<[Uint8Array, Uint8Array]>) {
+      let count = 0;
+      while (!(await iterator.next()).done) {
+        count++;
+      }
+      return count;
+    }
+
+    it('does not hold a cursor slot while a single-page scan is paused', async () => {
+      const readTx = store.getReadTx();
+      const paused = await startPausedScans(() => readTx.iterate(key(10), undefined, false, 20));
+
+      // Would wait for a free cursor slot, and so time out, if the paused scans each held one.
+      const entries = await toArray(readTx.iterate(key(10), key(90), false, 20));
+      expect(keysOf(entries)).toEqual(keyRange(10, 20));
+
+      // the paused scans still deliver the rest of their entries
+      await expect(Promise.all(paused.map(drain))).resolves.toEqual(paused.map(() => 19));
+      readTx.close();
+    });
+
+    it('does not hold a cursor slot while a bounded scan in a write transaction with no pending writes is paused', async () => {
+      const entries = await store.transactionAsync(async tx => {
+        const paused = await startPausedScans(() => tx.iterate(key(10), undefined, false, 20));
+        const scanned = await toArray(tx.iterate(key(10), undefined, false, 20));
+        await Promise.all(paused.map(drain));
+        return scanned;
+      });
+      expect(keysOf(entries)).toEqual(keyRange(10, 20));
+    });
+
+    it.each([
+      ['single page', 128],
+      ['paged', 129],
+    ])('returns exactly the limit on a %s scan', async (_, limit) => {
+      const readTx = store.getReadTx();
+      expect(keysOf(await toArray(readTx.iterate(key(0), undefined, false, limit)))).toEqual(keyRange(0, limit));
+      expect(keysOf(await toArray(readTx.iterate(key(ENTRIES - 1), undefined, true, limit)))).toEqual(
+        keyRange(ENTRIES - 1, limit, -1),
+      );
+      readTx.close();
+    });
+
+    it.each([
+      ['single page', 128],
+      ['paged', 129],
+    ])('stops at the end key on a %s scan', async (_, limit) => {
+      const readTx = store.getReadTx();
+      expect(keysOf(await toArray(readTx.iterate(key(10), key(60), false, limit)))).toEqual(keyRange(10, 50));
+      expect(keysOf(await toArray(readTx.iterate(key(200), key(150), true, limit)))).toEqual(keyRange(200, 50, -1));
+      readTx.close();
+    });
+
+    it.each([
+      ['single page', 128],
+      ['paged', 129],
+    ])('stops at the end of the data on a %s scan', async (_, limit) => {
+      const entries = await toArray(store.getReadTx().iterate(key(ENTRIES - 5), undefined, false, limit));
+      expect(keysOf(entries)).toEqual(keyRange(ENTRIES - 5, 5));
+    });
+
+    it('merges pending writes into a bounded scan inside a write transaction', async () => {
+      const entries = await store.transactionAsync(async tx => {
+        await tx.remove(key(11));
+        await tx.set(Buffer.from('0105'), Buffer.from('new'));
+        return toArray(tx.iterate(key(10), undefined, false, 4));
+      });
+      expect(entries.map(([k, v]) => [Buffer.from(k).toString(), Buffer.from(v).toString()])).toEqual([
+        ['010', '10'],
+        ['0105', 'new'],
+        ['012', '12'],
+        ['013', '13'],
+      ]);
+    });
+
+    it('merges pending writes into a paged scan inside a write transaction', async () => {
+      const entries = await store.transactionAsync(async tx => {
+        await tx.remove(key(50));
+        return toArray(tx.iterate(key(0), undefined, false, 129));
+      });
+      expect(keysOf(entries)).toEqual([...keyRange(0, 50), ...keyRange(51, 79)]);
+    });
+  });
+
   it('copies and restores data', async () => {
     const key = Buffer.from('foo');
     const value = Buffer.from('bar');
