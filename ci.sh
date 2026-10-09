@@ -386,12 +386,22 @@ case "$cmd" in
   # RELEASES #
   ############
   release)
-    # Spin up ec2 instances (amd64 + arm64) and run the full release flow: build and publish.
+    # Spin up ec2 instances (amd64 + arm64) and run the full release flow: build both arches and
+    # run the full test suite on amd64, then build and publish.
     # Set DRY_RUN=1 to exercise the whole flow without publishing.
     export CI_DASHBOARD="tags"
-    # Roomier instance lifetime than a standard run: the amd64 job builds and then publishes,
-    # which together exceed the default 75 min shutdown.
+    # Roomier instance lifetime than a standard run: a private release runs the whole test suite
+    # without the test cache.
     export AWS_SHUTDOWN_TIME=${AWS_SHUTDOWN_TIME:-180}
+    # A misconfigured release environment fails here, before any instance is requested.
+    source $ci3/source_release_target
+    # Nothing is published until both arches build and the amd64 tests pass, so a build or test
+    # failure here publishes nothing. On a version REF_NAME, ci-fast runs ci-full's test set
+    # (CI_FULL=1, from ci3/source_refname) without its benches. TARGET_BRANCH is cleared because
+    # the tag would give every test that runs a per-tag history list in redis that never expires.
+    TARGET_BRANCH= multi_job_run \
+      'x-release-test amd64 ci-fast' \
+      'a-release-build arm64 build'
     multi_job_run \
       'x-release amd64 ci-release' \
       'a-release arm64 ci-release'
