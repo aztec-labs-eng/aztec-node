@@ -51,11 +51,20 @@ export async function checkpointCommitsToRejectedBlock(
         // The retained proposals do not reconstruct the signed sequence, so the evidence is not bound.
         return false;
       }
+      // The signed archive is the resulting archive of the last block in the committed sequence, so a wrong archive
+      // claim only invalidates the checkpoint when the rejected block is that last block. Binding on any slot block
+      // whose claimed archive happens to equal the signed one would slash honest signers off a stale verdict for a
+      // block that is not in, or is no longer the end of, this sequence.
+      const lastBlock = sequence[sequence.length - 1];
       for (const v of verdicts) {
         if (v.headerMismatch && sequence.some(p => p.blockHeader.equals(v.blockHeader))) {
           return true;
         }
-        if (v.archiveMismatch && v.archiveRoot.equals(checkpoint.archive)) {
+        if (
+          v.archiveMismatch &&
+          v.archiveRoot.equals(checkpoint.archive) &&
+          lastBlock.blockHeader.equals(v.blockHeader)
+        ) {
           return true;
         }
       }

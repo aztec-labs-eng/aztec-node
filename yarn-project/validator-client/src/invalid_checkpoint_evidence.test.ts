@@ -74,6 +74,37 @@ describe('checkpointCommitsToRejectedBlock', () => {
     expect(await checkpointCommitsToRejectedBlock(checkpoint, proposals, [verdict])).toBe(false);
   });
 
+  it('binds an archive-mismatch block that is the committed sequence last and claims the signed archive', async () => {
+    const { checkpoint, proposals } = await makeCommittedCheckpoint(3);
+    const last = proposals[2];
+    expect(last.archiveRoot.equals(checkpoint.archive)).toBe(true);
+    const verdict: InvalidBlockVerdict = {
+      blockHeader: last.blockHeader,
+      archiveRoot: last.archiveRoot,
+      headerMismatch: false,
+      archiveMismatch: true,
+    };
+    expect(await checkpointCommitsToRejectedBlock(checkpoint, proposals, [verdict])).toBe(true);
+  });
+
+  it('does not bind an extra n+1 block whose archive claim equals the signed archive', async () => {
+    const { checkpoint, proposals } = await makeCommittedCheckpoint(3);
+    // An extra block past the committed sequence that claims the checkpoint's signed archive is not the sequence's
+    // last block, so a stale verdict for it must not slash the valid checkpoint's signers.
+    const extra = await makeBlockProposal({
+      blockHeader: makeBlockHeader(99),
+      indexWithinCheckpoint: IndexWithinCheckpoint(3),
+      archiveRoot: checkpoint.archive,
+    });
+    const verdict: InvalidBlockVerdict = {
+      blockHeader: extra.blockHeader,
+      archiveRoot: checkpoint.archive,
+      headerMismatch: false,
+      archiveMismatch: true,
+    };
+    expect(await checkpointCommitsToRejectedBlock(checkpoint, [...proposals, extra], [verdict])).toBe(false);
+  });
+
   it('does not bind when a committed proposal is missing so the sequence cannot be reconstructed', async () => {
     const { checkpoint, proposals } = await makeCommittedCheckpoint(3);
     const retained = proposals.filter((_, i) => i !== 0);

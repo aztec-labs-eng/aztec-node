@@ -28,7 +28,6 @@ import {
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import type {
   ITxProvider,
-  MerkleTreeWriteOperations,
   ValidatorClientFullConfig,
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
@@ -46,7 +45,11 @@ import {
 import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { GlobalVariables, TX_ERROR_INVALID_PROOF, TxHash } from '@aztec-labs/stdlib/tx';
-import { InvalidBlockProposalTxsError, ReExStateMismatchError } from '@aztec-labs/stdlib/validators';
+import {
+  InvalidBlockProposalTxsError,
+  ReExFailedTxsError,
+  ReExStateMismatchError,
+} from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -1731,7 +1734,7 @@ describe('ProposalHandler checkpoint validation', () => {
     const prefixHash = new Fr(0xabc);
     const signedRef = new InboxMessagePrefixRef(prefixHash);
 
-    async function rejectBlockThenValidateCommittingCheckpoint(moveLocalPrefix: boolean) {
+    async function rejectBlockThenValidateCommittingCheckpoint(moveLocalPrefix: boolean, thrownError?: Error) {
       const blockHeader = makeBlockHeader(1, { slotNumber: SlotNumber(1) });
       blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(2);
       const blockArchive = Fr.random();
@@ -1799,7 +1802,7 @@ describe('ProposalHandler checkpoint validation', () => {
         if (moveLocalPrefix) {
           mockLocalView(new Fr(0xdead));
         }
-        throw new ReExStateMismatchError(blockArchive, Fr.random(), true, false);
+        throw thrownError ?? new ReExStateMismatchError(blockArchive, Fr.random(), true, false);
       });
       const blockResult = await handler.handleBlockProposal(blockProposal, mock<PeerId>(), true);
 
@@ -1821,120 +1824,17 @@ describe('ProposalHandler checkpoint validation', () => {
       expect(blockResult).toMatchObject({ isValid: false, reason: 'state_mismatch' });
       expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([checkpoint.getPayloadHash()]);
     });
-  });
 
-  // A checkpoint the binding cannot reach - this node rejected one of its blocks for a wrong archive that is not the
-  // one the checkpoint signs - is still proven invalid by re-executing the slot's blocks and rebuilding the checkpoint.
-  describe('invalid checkpoint proven by re-executing a rejected slot', () => {
-    // Rejects block 1 for an archive mismatch whose archive is not the checkpoint's signed archive (so the cheap
-    // bound-to-rejected-block check cannot use it), then validates the committing checkpoint, which falls into the
-    // rebuild path. `reconstructable` controls whether the retained header sequence hashes to the signed
-    // blockHeadersHash; `computedArchive` is the archive the rebuild produces.
-    async function rejectBlockThenRebuildCheckpoint(opts: { reconstructable: boolean; computedArchive: Fr }) {
-      const slot = SlotNumber(1);
-      const blockHeader = makeBlockHeader(1, { blockNumber: BlockNumber(INITIAL_L2_BLOCK_NUM), slotNumber: slot });
-      blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(0);
-      const blockArchive = Fr.random();
-      const blockProposal = ValidatedBlockProposal(
-        await makeBlockProposal({
-          blockHeader,
-          archiveRoot: blockArchive,
-          txHashes: [],
-          inboxPrefixRef: new InboxMessagePrefixRef(Fr.ZERO),
-        }),
-      );
-      blockSource.getGenesisValues.mockResolvedValue({
-        genesisArchiveRoot: blockProposal.blockHeader.lastArchive.root,
-      });
-      dateProvider.setTime(1_000_000);
-
-      // The block and the checkpoint both consume nothing and read the same empty Inbox prefix ending at zero, which
-      // is what both the block bundle check and the checkpoint rebuild authenticate against.
-      l1ToL2MessageSource.getMessagePosition.mockImplementation(count =>
-        Promise.resolve(count === 0n ? position(0n, Fr.ZERO) : undefined),
-      );
-      l1ToL2MessageSource.getL1ToL2MessageRange.mockImplementation((start, end) =>
-        start === 0n && end === 0n
-          ? Promise.resolve({ messages: [], start: position(0n, Fr.ZERO), end: position(0n, Fr.ZERO) })
-          : Promise.reject(new Error(`unexpected range [${start}, ${end})`)),
+    it('slashes the committing checkpoint attesters when the block was rejected for failed txs', async () => {
+      // failed_txs is a defect in the block the signed header commits to, so it binds a committing checkpoint by header
+      // membership the same way a header mismatch does.
+      const { blockResult, checkpoint, handler } = await rejectBlockThenValidateCommittingCheckpoint(
+        false,
+        new ReExFailedTxsError(1),
       );
 
-      const checkpointHeader = makeCheckpointHeader(0, { slotNumber: slot });
-      checkpointHeader.inboxRollingHash = Fr.ZERO;
-      checkpointHeader.blockHeadersHash = opts.reconstructable
-        ? await computeBlockHeadersHash([blockHeader])
-        : Fr.random();
-      const signedArchive = Fr.random();
-      const checkpoint = await makeProposal({ checkpointHeader, archiveRoot: signedArchive });
-      // last_block_not_found: the signed archive is not among local blocks.
-      blockSource.getBlocksForSlot.mockResolvedValue([]);
-
-      // Rebuild dependencies: fork at genesis (block 1's parent), a built checkpoint to compare against the signed one.
-      const dispose = jest.fn();
-      checkpointsBuilder.getFork.mockResolvedValue({
-        [Symbol.asyncDispose]: dispose,
-        getTreeInfo: () => Promise.resolve({ root: blockHeader.lastArchive.root.toBuffer() }),
-      } as unknown as MerkleTreeWriteOperations);
-      const builder = mock<CheckpointBuilder>();
-      builder.completeCheckpoint.mockResolvedValue({
-        header: CheckpointHeader.empty({ slotNumber: slot }),
-        archive: new AppendOnlyTreeSnapshot(opts.computedArchive, TreeLeafIndex(0)),
-        getCheckpointOutHash: () => Fr.ZERO,
-      } as unknown as Checkpoint);
-      checkpointsBuilder.openCheckpoint.mockResolvedValue(builder);
-
-      const txProvider = mock<ITxProvider>();
-      txProvider.getTxsForBlockProposal.mockResolvedValue({ txs: [], missingTxs: [] });
-
-      const handler = new ProposalHandler(
-        checkpointsBuilder,
-        mock<WorldStateSynchronizer>(),
-        blockSource,
-        l1ToL2MessageSource,
-        inbox,
-        txProvider,
-        epochCache,
-        consensusTimetable,
-        config,
-        mock<BlobClientInterface>(),
-        new CheckpointReexecutionTracker(),
-        metrics,
-        dateProvider,
-      );
-      const p2p = mock<P2P>();
-      let checkpointHandler:
-        | ((proposal: ValidatedCheckpointProposalCore, sender: PeerId) => Promise<unknown>)
-        | undefined;
-      p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
-        checkpointHandler = h;
-      });
-      p2p.getProposalsForSlot.mockResolvedValue({ blockProposals: [blockProposal], checkpointProposals: [] });
-      handler.register(p2p, true);
-
-      jest.spyOn(handler, 'reexecuteTransactions').mockImplementation(() => {
-        throw new ReExStateMismatchError(blockArchive, Fr.random(), false, true);
-      });
-      const blockResult = await handler.handleBlockProposal(blockProposal, mock<PeerId>(), true);
-      await checkpointHandler!(checkpoint, mock<PeerId>());
-      return { blockResult, checkpoint, handler };
-    }
-
-    it('slashes the attesters when the rebuilt checkpoint differs from the signed one', async () => {
-      const { blockResult, checkpoint, handler } = await rejectBlockThenRebuildCheckpoint({
-        reconstructable: true,
-        computedArchive: Fr.random(), // != the signed archive -> archive_mismatch on rebuild
-      });
-      expect(blockResult).toMatchObject({ isValid: false, reason: 'state_mismatch' });
+      expect(blockResult).toMatchObject({ isValid: false, reason: 'failed_txs' });
       expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([checkpoint.getPayloadHash()]);
-    });
-
-    it('records nothing when the retained blocks do not reconstruct the signed header sequence', async () => {
-      const { blockResult, handler } = await rejectBlockThenRebuildCheckpoint({
-        reconstructable: false,
-        computedArchive: Fr.random(),
-      });
-      expect(blockResult).toMatchObject({ isValid: false, reason: 'state_mismatch' });
-      expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
     });
   });
 
