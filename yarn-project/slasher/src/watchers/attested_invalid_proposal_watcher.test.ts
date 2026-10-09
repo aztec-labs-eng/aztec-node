@@ -92,6 +92,24 @@ describe('AttestedInvalidProposalWatcher', () => {
     ]);
   });
 
+  it('does not slash when the slot is marked equivocated during the awaited attestation read', async () => {
+    const slot = SlotNumber(10);
+    const attesterSigner = Secp256k1Signer.random();
+    invalidProposalSlots.add(slot);
+    const attestation = await makeAttestation(slot, attesterSigner);
+    invalidCheckpointHashes.set(slot, [attestation.getPayloadHash()]);
+    // A duplicate proposal for this slot is detected while the attestation read is in flight, marking
+    // the slot equivocated after the top-of-scan guard already passed.
+    p2pClient.getCheckpointAttestationsForSlot.mockImplementation(() => {
+      proposalEquivocationSlots.add(slot);
+      return Promise.resolve([attestation]);
+    });
+
+    await watcher.scanSlot(slot);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('does not slash checkpoint attesters when only a BLOCK proposal was invalid in the slot', async () => {
     const slot = SlotNumber(10);
     invalidProposalSlots.add(slot); // block-invalid marks the slot, but no invalid CHECKPOINT hash is recorded

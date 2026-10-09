@@ -287,4 +287,89 @@ describe('SlashOffensesCollector', () => {
       epochOrSlot: 150n,
     });
   });
+
+  it('forgives an attested-to-invalid offense when the clear is processed before the matching slash', async () => {
+    const watcher = new EventEmitter() as unknown as Watcher;
+    watcher.updateConfig = jest.fn();
+    offensesCollector = new SlashOffensesCollector(config, settings, [watcher], offensesStore, logger);
+    await offensesCollector.start();
+
+    const honestAttester = EthAddress.random();
+
+    // Equivocation forgiveness arrives before the slash it is meant to forgive.
+    watcher.emit(WANT_TO_CLEAR_SLASH_EVENT, [
+      { offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL, epochOrSlot: 150n },
+    ] satisfies WantToClearSlashArgs[]);
+    watcher.emit(WANT_TO_SLASH_EVENT, [
+      {
+        validator: honestAttester,
+        amount: 1000000000000000000n,
+        offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
+        epochOrSlot: 150n,
+      },
+    ] satisfies WantToSlashArgs[]);
+
+    await offensesCollector.stop();
+
+    expect(await offensesStore.getOffenses()).toHaveLength(0);
+  });
+
+  it('scopes a validator-specific clear-before-slash to the named validators', async () => {
+    const watcher = new EventEmitter() as unknown as Watcher;
+    watcher.updateConfig = jest.fn();
+    offensesCollector = new SlashOffensesCollector(config, settings, [watcher], offensesStore, logger);
+    await offensesCollector.start();
+
+    const forgiven = EthAddress.random();
+    const other = EthAddress.random();
+
+    watcher.emit(WANT_TO_CLEAR_SLASH_EVENT, [
+      {
+        offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
+        epochOrSlot: 150n,
+        validators: [forgiven],
+      },
+    ] satisfies WantToClearSlashArgs[]);
+    watcher.emit(WANT_TO_SLASH_EVENT, [
+      {
+        validator: forgiven,
+        amount: 1000000000000000000n,
+        offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
+        epochOrSlot: 150n,
+      },
+      {
+        validator: other,
+        amount: 1000000000000000000n,
+        offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
+        epochOrSlot: 150n,
+      },
+    ] satisfies WantToSlashArgs[]);
+
+    await offensesCollector.stop();
+
+    const pending = await offensesStore.getOffenses();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ validator: other, epochOrSlot: 150n });
+  });
+
+  it('stops forgiving once a new round opens, so a later genuine offense is recorded', async () => {
+    offensesCollector = new SlashOffensesCollector(config, settings, [], offensesStore, logger);
+
+    const attester = EthAddress.random();
+
+    await offensesCollector.handleWantToClearSlash([
+      { offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL, epochOrSlot: 150n },
+    ]);
+    await offensesCollector.handleNewRound(99n);
+    await offensesCollector.handleWantToSlash([
+      {
+        validator: attester,
+        amount: 1000000000000000000n,
+        offenseType: OffenseType.ATTESTED_TO_INVALID_CHECKPOINT_PROPOSAL,
+        epochOrSlot: 150n,
+      },
+    ]);
+
+    expect(await offensesStore.getOffenses()).toHaveLength(1);
+  });
 });
