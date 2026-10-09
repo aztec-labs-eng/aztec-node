@@ -59,7 +59,12 @@ describe('CheckpointProver', () => {
       dateProvider: new DateProvider(),
       proverId: EthAddress.ZERO,
       metrics: new ProverNodeJobMetrics(
-        { createHistogram: noopMetric, createGauge: noopMetric, createCounter: noopMetric } as any,
+        {
+          createHistogram: noopMetric,
+          createGauge: noopMetric,
+          createCounter: noopMetric,
+          createUpDownCounter: noopMetric,
+        } as any,
         { startActiveSpan: (_n: string, fn: any) => fn({ end: () => {} }) } as any,
       ),
       txGatheringTimeoutMs: 30_000,

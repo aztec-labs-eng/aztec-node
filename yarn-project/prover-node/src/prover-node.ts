@@ -615,6 +615,9 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       onSessionFailed: async session => {
         await this.tryUploadEpochFailure(session.getId(), session.getCheckpoints());
       },
+      checkSubmissionAffordable: this.config.proverNodeDisableProofPublish
+        ? undefined
+        : () => this.publisherFactory.checkSubmissionAffordable(),
       bindings: this.log.getBindings(),
     });
   }

@@ -1,5 +1,6 @@
 import type { BatchedBlob } from '@aztec-labs/blob-lib';
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, type CheckpointNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -89,6 +90,9 @@ type EpochBucket = {
  */
 const PUBLISHER_ACQUIRE_RETRY_DELAY_MS = 1_000;
 
+/** Backoff when no publisher can afford the submission: a balance only changes with a new L1 block or a top-up. */
+const PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS = 12_000;
+
 /**
  * Central owner of L1 proof submission. Sessions offer their proofs here as
  * `PublishCandidate`s; the service serialises one publish at a time, picks the
@@ -125,6 +129,8 @@ export class ProofPublishingService {
   /** Tracks the candidate currently being published. Set while drain is awaiting the L1 publish. */
   private inFlight: { id: string } | undefined;
   private stopped = false;
+  /** Candidates for which the lack of an affordable publisher has already been logged. */
+  private readonly unaffordableCandidates = new Set<string>();
 
   constructor(private readonly deps: ProofPublishingServiceDeps) {
     this.log = createLogger('prover-node:proof-publishing-service', deps.bindings);
@@ -295,8 +301,24 @@ export class ProofPublishingService {
   private async publishWinner(epoch: EpochNumber, winner: PublishCandidate, bucket: EpochBucket): Promise<void> {
     let publisher: PublisherLike;
     try {
-      publisher = await this.deps.publisherFactory.create();
+      publisher = await this.deps.publisherFactory.create({
+        requireAffordableSubmission: !this.deps.config.skipSubmitProof,
+      });
     } catch (err) {
+      if (err instanceof NoAffordablePublisherError) {
+        // Logged once per candidate: retrying every few seconds until a top-up or the deadline would spam errors.
+        if (!this.unaffordableCandidates.has(winner.id)) {
+          this.unaffordableCandidates.add(winner.id);
+          this.log.error(`No publisher can afford submitting the proof for candidate ${winner.id}; retrying`, err, {
+            candidateId: winner.id,
+            epoch: winner.epoch,
+            retryDelayMs: PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS,
+            ...err.toLogContext(),
+          });
+        }
+        setTimeout(() => this.scheduleDrain(), PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS);
+        return;
+      }
       // Treat this as transient: the publisher pool may be temporarily exhausted
       // (every signer busy, funding tx in flight, etc.). Leave the candidate queued and
       // schedule another drain after a short backoff. If the failure persists past the
@@ -381,6 +403,7 @@ export class ProofPublishingService {
     }
     bucket.candidates.delete(id);
     bucket.resolvers.delete(id);
+    this.unaffordableCandidates.delete(id);
     if (resolve) {
       this.log.info(`Candidate ${id} resolved as ${outcome}`, { candidateId: id, outcome });
       resolve(outcome);

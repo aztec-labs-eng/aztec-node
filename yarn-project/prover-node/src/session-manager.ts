@@ -1,3 +1,4 @@
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -65,8 +66,16 @@ export type SessionManagerDeps = {
    * `stopped` session (a prover under it failed — possibly a prune), which is recovered on re-add instead.
    */
   onSessionFailed?: (session: EpochSession) => Promise<void>;
+  /**
+   * Checks that a publisher can afford submitting an epoch proof, throwing NoAffordablePublisherError if none can.
+   * Sessions are not started while it throws, since their proof could never land. Unset when proofs are not submitted.
+   */
+  checkSubmissionAffordable?: () => Promise<void>;
   bindings?: LoggerBindings;
 };
+
+/** Minimum interval between error logs for proving held back by a lack of an affordable publisher. */
+const UNAFFORDABLE_LOG_INTERVAL_MS = 60_000;
 
 /**
  * Owns the lifecycle of every `EpochSession`. Each L2BlockStream event and periodic tick
@@ -93,6 +102,8 @@ export class SessionManager {
   private sessionHooks: EpochSessionHooks | undefined;
   /** Periodic tick that nudges reconcile to pick up newly-complete epochs. Started by `start()`. */
   private epochTicker: RunningPromise | undefined;
+  /** Last time proving held back by a lack of an affordable publisher was logged at error level. */
+  private lastUnaffordableLogAt: number | undefined;
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.log = createLogger('prover-node:session-manager', deps.bindings);
@@ -206,6 +217,11 @@ export class SessionManager {
       return existingPartial.getId();
     }
 
+    const unaffordable = await this.checkSubmissionAffordable(epoch);
+    if (unaffordable) {
+      throw unaffordable;
+    }
+
     await this.scheduleReconcile({ kind: 'start-proof', spec });
     const created = this.getPartialSession(spec);
     if (!created) {
@@ -233,7 +249,7 @@ export class SessionManager {
   private async reconcile(trigger: ReconcileTrigger): Promise<void> {
     this.log.debug(`Reconciling`, { trigger });
 
-    this.recreateInvalidSessions();
+    await this.recreateInvalidSessions();
 
     const implicatedEpochs = await this.epochsForTrigger(trigger);
     for (const epoch of implicatedEpochs) {
@@ -245,7 +261,7 @@ export class SessionManager {
     }
   }
 
-  private recreateInvalidSessions(): void {
+  private async recreateInvalidSessions(): Promise<void> {
     for (const [key, session] of Array.from(this.fullSessions.entries())) {
       const canonical = this.checkpointsForSpec(session.getSpec());
       const contentChanged = !this.checkpointsMatch(session.getCheckpoints(), canonical);
@@ -258,7 +274,7 @@ export class SessionManager {
           continue;
         }
         this.fullSessions.delete(key);
-        if (contentChanged && this.canBuildOver(canonical)) {
+        if (contentChanged && (await this.canStartSession(session.getSpec(), canonical))) {
           const newSession = this.constructSession(session.getSpec(), canonical);
           this.fullSessions.set(key, newSession);
           void this.runSession(newSession);
@@ -269,7 +285,7 @@ export class SessionManager {
       if (contentChanged) {
         this.fireAndForgetCancel(session, 'canonical content changed');
         this.fullSessions.delete(key);
-        if (this.canBuildOver(canonical)) {
+        if (await this.canStartSession(session.getSpec(), canonical)) {
           const newSession = this.constructSession(session.getSpec(), canonical);
           this.fullSessions.set(key, newSession);
           void this.runSession(newSession);
@@ -285,7 +301,7 @@ export class SessionManager {
       if (!this.checkpointsMatch(session.getCheckpoints(), canonical)) {
         this.fireAndForgetCancel(session, 'canonical content changed');
         this.partialSessions.delete(key);
-        if (this.canBuildOver(canonical)) {
+        if (await this.canStartSession(session.getSpec(), canonical)) {
           const newSession = this.constructSession(session.getSpec(), canonical);
           this.partialSessions.set(key, newSession);
           void this.runSession(newSession);
@@ -297,6 +313,48 @@ export class SessionManager {
   /** A session may be built over a checkpoint set only when it is non-empty and contains no failed prover. */
   private canBuildOver(canonical: readonly CheckpointProver[]): boolean {
     return canonical.length > 0 && !this.hasFailedProver(canonical);
+  }
+
+  /** Whether a recreated session can be built over the checkpoint set and its proof could be submitted. */
+  private async canStartSession(spec: SessionSpec, canonical: readonly CheckpointProver[]): Promise<boolean> {
+    return this.canBuildOver(canonical) && !(await this.checkSubmissionAffordable(spec.epochNumber));
+  }
+
+  /**
+   * Returns the error if no publisher can afford submitting an epoch proof, recording the metric and logging it at most
+   * once per interval, since the periodic tick re-checks every poll. If the check itself fails, does not hold proving
+   * back: the publisher selection at submission time still applies.
+   */
+  private async checkSubmissionAffordable(epoch: EpochNumber): Promise<NoAffordablePublisherError | undefined> {
+    if (!this.deps.checkSubmissionAffordable) {
+      return undefined;
+    }
+    try {
+      await this.deps.checkSubmissionAffordable();
+      return undefined;
+    } catch (err) {
+      if (!(err instanceof NoAffordablePublisherError)) {
+        this.log.warn(`Failed to check whether the epoch proof submission is affordable`, { epoch, err });
+        return undefined;
+      }
+      this.deps.metrics.recordProvingNotStartedUnaffordable();
+      const now = this.deps.dateProvider.now();
+      const logCtx = { epoch, ...err.toLogContext() };
+      if (
+        this.lastUnaffordableLogAt === undefined ||
+        now - this.lastUnaffordableLogAt >= UNAFFORDABLE_LOG_INTERVAL_MS
+      ) {
+        this.lastUnaffordableLogAt = now;
+        this.log.error(
+          `Not starting proving for epoch ${epoch} since no publisher can afford the submission`,
+          err,
+          logCtx,
+        );
+      } else {
+        this.log.debug(`Not starting proving for epoch ${epoch} since no publisher can afford the submission`, logCtx);
+      }
+      return err;
+    }
   }
 
   private async openFullSessionIfReady(epoch: EpochNumber): Promise<void> {
@@ -332,6 +390,10 @@ export class SessionManager {
       // session over it would fail immediately. Don't re-create it every tick — it recovers when a
       // prune/re-add replaces the failed prover with a fresh one, or fails for good at expiry.
       this.log.debug(`Skipping full-session open for epoch ${epoch}: a checkpoint prover has failed`, { epoch });
+      return;
+    }
+    // Not opened while no publisher can afford the submission; the periodic tick retries once one can.
+    if (await this.checkSubmissionAffordable(epoch)) {
       return;
     }
     const spec: SessionSpec = { kind: 'full', epochNumber: epoch, fromSlot, toSlot };

@@ -32,6 +32,7 @@ export class ProverNodeJobMetrics {
   private checkpointProvingDuration: Histogram;
   private checkpointBlocks: Histogram;
   private checkpointTransactions: Histogram;
+  private provingNotStartedUnaffordable: UpDownCounter;
 
   /** Observable gauges for live state. Registered via `observeState(...)` once the
    *  CheckpointStore and SessionManager are available. */
@@ -56,6 +57,10 @@ export class ProverNodeJobMetrics {
     this.checkpointProvingDuration = this.meter.createHistogram(Metrics.PROVER_NODE_CHECKPOINT_PROVING_DURATION);
     this.checkpointBlocks = this.meter.createHistogram(Metrics.PROVER_NODE_CHECKPOINT_BLOCKS);
     this.checkpointTransactions = this.meter.createHistogram(Metrics.PROVER_NODE_CHECKPOINT_TRANSACTIONS);
+    this.provingNotStartedUnaffordable = createUpDownCounterWithDefault(
+      this.meter,
+      Metrics.PROVER_NODE_PROVING_NOT_STARTED_UNAFFORDABLE_COUNT,
+    );
   }
 
   public recordProvingJob(totalTimeMs: number, numCheckpoints: number, numBlocks: number, numTxs: number) {
@@ -81,6 +86,11 @@ export class ProverNodeJobMetrics {
 
   public recordCheckpointProving(durationMs: number) {
     this.checkpointProvingDuration.record(Math.ceil(durationMs));
+  }
+
+  /** Records that epoch proving was not started because no publisher could afford submitting the proof. */
+  public recordProvingNotStartedUnaffordable() {
+    this.provingNotStartedUnaffordable.add(1);
   }
 
   /**

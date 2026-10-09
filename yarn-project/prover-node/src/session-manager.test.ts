@@ -1,3 +1,4 @@
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -36,8 +37,11 @@ describe('SessionManager', () => {
   let onConstruct: ((stub: StubSession) => void) | undefined;
 
   let manager: TestSessionManager;
+  /** Whether a publisher can afford submitting a proof, as reported to the manager. */
+  let submissionAffordable: boolean;
 
   beforeEach(() => {
+    submissionAffordable = true;
     store = mock<CheckpointStore>();
     l2BlockSource =
       mock<
@@ -46,7 +50,12 @@ describe('SessionManager', () => {
     publishingService = mock<ProofPublishingService>();
     metrics = new ProverNodeJobMetrics(
       // Minimal Meter stub: every meter.create* returns an object with a no-op record.
-      { createHistogram: noopMetric, createGauge: noopMetric, createCounter: noopMetric } as any,
+      {
+        createHistogram: noopMetric,
+        createGauge: noopMetric,
+        createCounter: noopMetric,
+        createUpDownCounter: noopMetric,
+      } as any,
       { startActiveSpan: (_n: string, fn: any) => fn({ end: () => {} }) } as any,
     );
     l2BlockSource.getL1Constants.mockResolvedValue(l1Constants);
@@ -73,6 +82,8 @@ describe('SessionManager', () => {
           sessionFailures.push(session);
           return Promise.resolve();
         },
+        checkSubmissionAffordable: () =>
+          submissionAffordable ? Promise.resolve() : Promise.reject(makeNoAffordablePublisherError()),
       },
       (spec, provers) => {
         const stub = makeStubSession(spec, provers);
@@ -198,6 +209,35 @@ describe('SessionManager', () => {
     await manager.onCheckpointAdded(EpochNumber(4));
     expect(stubs.length).toBe(1);
     expect(manager.getFullSession(EpochNumber(4))).toBeUndefined();
+  });
+
+  // ---------------- submission affordability ----------------
+
+  it('does not start proving while no publisher can afford the submission, and retries on a later tick', async () => {
+    mockNextUnprovenSlot(2, 6);
+    l2BlockSource.isEpochComplete.mockResolvedValue(true);
+    l2BlockSource.getCheckpoints.mockResolvedValue([archiverCp(1, 6)]);
+    store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 6)]);
+    submissionAffordable = false;
+
+    await manager.onTick();
+    await manager.onCheckpointAdded(EpochNumber(3));
+    expect(stubs).toHaveLength(0);
+    expect(manager.getFullSession(EpochNumber(3))).toBeUndefined();
+
+    submissionAffordable = true;
+    await manager.onTick();
+    expect(stubs).toHaveLength(1);
+    expect(manager.getFullSession(EpochNumber(3))).toBeDefined();
+  });
+
+  it('startProof throws without scheduling a session when no publisher can afford the submission', async () => {
+    store.listForEpoch.mockResolvedValue([proverForCheckpoint(1, 14)]);
+    store.listInSlotRange.mockReturnValue([proverForCheckpoint(1, 14)]);
+    submissionAffordable = false;
+
+    await expect(manager.startProof(EpochNumber(7))).rejects.toThrow(NoAffordablePublisherError);
+    expect(stubs).toHaveLength(0);
   });
 
   // ---------------- onTick ----------------
@@ -1104,6 +1144,15 @@ function proverWithSlot(slot: number): CheckpointProver {
 }
 
 /** Minimal Histogram/Gauge/Counter stub: only the methods ProverNodeJobMetrics records into. */
+function makeNoAffordablePublisherError() {
+  return new NoAffordablePublisherError(
+    1000n,
+    { gasLimit: 1n, blobCount: 0 },
+    { maxFeePerGas: 1000n, maxPriorityFeePerGas: 1n },
+    [{ address: EthAddress.ZERO.toString(), balance: 1n, state: 'IDLE' }],
+  );
+}
+
 function noopMetric() {
   return { record: () => {}, add: () => {} };
 }
