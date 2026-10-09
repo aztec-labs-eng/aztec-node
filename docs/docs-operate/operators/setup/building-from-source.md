@@ -65,12 +65,12 @@ Build the container image with all necessary compilation tools:
 
 ```bash
 cd build-images/src
-docker build --target build -t aztec-build-local:3.0 .
+docker build --target build -t aztec-build-local:3.1 .
 cd ../..
 ```
 
 :::tip
-The tag `aztec-build-local:3.0` avoids conflicts with the official Docker Hub image and clearly indicates this is a locally-built version.
+The tag `aztec-build-local:3.1` avoids conflicts with the official Docker Hub image and clearly indicates this is a locally-built version.
 :::
 
 **What this does:**
@@ -91,7 +91,7 @@ After the build completes, inspect the image to verify its contents:
 
 ```bash
 # Run a shell in the container to explore
-docker run -it --rm aztec-build-local:3.0 /bin/bash
+docker run -it --rm aztec-build-local:3.1 /bin/bash
 
 # Check specific versions once inside:
 node --version        # Should show v24.12.0
@@ -112,7 +112,7 @@ Run the bootstrap script inside the build container to compile all source code:
 docker run --rm \
   -v $(pwd):/workspaces/aztec-packages \
   -w /workspaces/aztec-packages \
-  aztec-build-local:3.0 \
+  aztec-build-local:3.1 \
   ./bootstrap.sh full
 ```
 
@@ -215,7 +215,7 @@ If all checks pass, your image is ready to use.
 
 ### Build image fails
 
-**Issue**: Errors during Step 3 when building `aztec-build-local:3.0`.
+**Issue**: Errors during Step 3 when building `aztec-build-local:3.1`.
 
 **Solutions**:
 - Verify you're in the `build-images/src` directory
@@ -237,7 +237,7 @@ If all checks pass, your image is ready to use.
 **Issue**: Errors during `./bootstrap.sh` in Step 4.
 
 **Solutions**:
-- Verify you're using the correct build image: `aztec-build-local:3.0`
+- Verify you're using the correct build image: `aztec-build-local:3.1`
 - Confirm you checked out a valid release tag (not a branch)
 - Retry the build—the bootstrap script is incremental and resumes where it left off
 - Review error messages for specifics—missing dependencies should not occur in the build container
@@ -289,8 +289,8 @@ docker run --rm aztec-local:#release_version --version
 To save time, skip Step 3 and pull the pre-built image from Docker Hub, then tag it locally:
 
 ```bash
-docker pull aztecprotocol/build:3.0
-docker tag aztecprotocol/build:3.0 aztec-build-local:3.0
+docker pull aztecprotocol/build:3.1
+docker tag aztecprotocol/build:3.1 aztec-build-local:3.1
 ```
 
 This approach is faster but requires trusting the published image. The official image is built from the same `build-images/src/Dockerfile`.

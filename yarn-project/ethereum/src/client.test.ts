@@ -1,9 +1,33 @@
 import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
 import { type Server, createServer } from 'node:http';
 import { createPublicClient } from 'viem';
-import { foundry } from 'viem/chains';
+import { foundry, sepolia } from 'viem/chains';
 
-import { L1RpcError, getL1RpcHttpStatus, isL1RpcHttpStatus, makeL1HttpTransport } from './client.js';
+import {
+  L1RpcError,
+  createExtendedL1Client,
+  getL1RpcHttpStatus,
+  isL1RpcHttpStatus,
+  makeL1HttpTransport,
+} from './client.js';
+
+describe('createExtendedL1Client polling', () => {
+  const privateKey = `0x${'01'.repeat(32)}`;
+  const rpcUrls = ['http://127.0.0.1:8545'];
+
+  it('defaults to short polling on Anvil', () => {
+    expect(createExtendedL1Client(rpcUrls, privateKey, foundry).pollingInterval).toBe(100);
+  });
+
+  it('preserves explicit polling intervals, including zero', () => {
+    expect(createExtendedL1Client(rpcUrls, privateKey, foundry, 250).pollingInterval).toBe(250);
+    expect(createExtendedL1Client(rpcUrls, privateKey, foundry, 0).pollingInterval).toBe(0);
+  });
+
+  it('preserves the public-chain default', () => {
+    expect(createExtendedL1Client(rpcUrls, privateKey, sepolia).pollingInterval).toBe(4000);
+  });
+});
 
 async function startRateLimitedL1Server(): Promise<{ server: Server; url: string }> {
   const server = createServer((_req, res) => {
