@@ -1454,6 +1454,60 @@ describe('BatchTxRequester', () => {
         // Nothing is left to request, so the run ends without waiting out its deadline.
         expect(Date.now() - startedAt).toBeLessThan(deadlineMs);
       });
+
+      it('counts one verification shared by concurrent responses as a single attempt', async () => {
+        const peers = await Promise.all(
+          Array.from({ length: MAX_UNVERIFIABLE_ATTEMPTS_PER_TX }, createSecp256k1PeerId),
+        );
+        connectionSampler.getPeerListSortedByConnectionCountAsc.mockReturnValue(peers);
+        const peerTransactions = new Map(peers.map(p => [p.toString(), Array.from({ length: txCount }, (_, i) => i)]));
+        const { mockImplementation } = createRequestLogger(blockProposal, new Set(), peerTransactions);
+        reqResp.sendRequestToPeer.mockImplementation(mockImplementation);
+
+        // Like the validation cache, callers that arrive while the tx is being verified share that verification. The
+        // first one cannot reach the verifier; any later one can.
+        let verifications = 0;
+        let inFlight: Promise<TxValidationResult> | undefined;
+        const validator: TxValidator = {
+          validateTx: (tx: Tx) => {
+            if (!tx.txHash.equals(missing[2])) {
+              return Promise.resolve({ result: 'valid' });
+            }
+            if (!inFlight) {
+              verifications++;
+              const result: TxValidationResult =
+                verifications === 1 ? { result: 'unverifiable', reason: ['verifier down'] } : { result: 'valid' };
+              inFlight = (async () => {
+                await sleep(200);
+                inFlight = undefined;
+                return result;
+              })();
+            }
+            return inFlight;
+          },
+        };
+
+        const result = await BatchTxRequester.collectAllTxs(
+          new BatchTxRequester(
+            RequestTracker.create(missing, new Date(Date.now() + 5_000)),
+            blockProposal,
+            undefined,
+            mockP2PService,
+            logger,
+            new DateProvider(),
+            {
+              smartParallelWorkerCount: 0,
+              dumbParallelWorkerCount: peers.length,
+              txBatchSize: txCount,
+              peerCollection,
+              txValidator: validator,
+            },
+          ).run(),
+        );
+
+        expect(new Set(result.map(tx => tx.txHash.toString()))).toEqual(new Set(missing.map(h => h.toString())));
+        expect(peerCollection.peersPenalised).toEqual([]);
+      });
     });
   });
 

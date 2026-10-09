@@ -60,6 +60,8 @@ export class BatchTxRequester {
   private readonly smartParallelWorkerCount: number;
   private readonly dumbParallelWorkerCount: number;
   private readonly txBatchSize: number;
+  /** Hashes of txs whose validation is in progress, so a copy of one in another response is not validated again. */
+  private readonly txsBeingValidated = new Set<string>();
 
   constructor(
     requestTracker: IRequestTracker,
@@ -504,12 +506,45 @@ export class BatchTxRequester {
    */
   private async handleReceivedTxs(peerId: PeerId, txs: TxArray) {
     const stillMissing = this.txsMetadata.getMissingTxHashes();
-    const newTxs = txs.filter(tx => stillMissing.has(tx.txHash.toString()));
+    // A tx another response is already validating is skipped here, and that validation decides it. Validating it again
+    // would usually share the same verification through the validation cache, but count it as one more unverifiable
+    // attempt per response, so concurrent responses could use up the tx's attempts on a single failed verification.
+    const newTxs: Tx[] = [];
+    for (const tx of txs) {
+      const txHash = tx.txHash.toString();
+      if (stillMissing.has(txHash) && !this.txsBeingValidated.has(txHash)) {
+        this.txsBeingValidated.add(txHash);
+        newTxs.push(tx);
+      }
+    }
 
     if (newTxs.length === 0) {
       return;
     }
 
+    try {
+      await this.validateReceivedTxs(peerId, newTxs);
+    } finally {
+      for (const tx of newTxs) {
+        this.txsBeingValidated.delete(tx.txHash.toString());
+      }
+    }
+
+    const missingTxHashes = this.txsMetadata.getMissingTxHashes();
+    if (missingTxHashes.size === 0) {
+      // wake sleepers so they can see shouldStop() and exit before waiting on timeout
+      this.unlockSmartRequesterSemaphores();
+    } else {
+      this.logger.trace(
+        `Missing txs: ${Array.from(this.txsMetadata.getMissingTxHashes())
+          .map(tx => tx.toString())
+          .join(', ')}`,
+      );
+    }
+  }
+
+  /** Validates txs received from a peer, queues the valid ones, and penalises or redeems the peer by the outcome. */
+  private async validateReceivedTxs(peerId: PeerId, newTxs: Tx[]) {
     // TODO: this validation can be slow, maybe spawn worker just for validation
     // We could use the async queue for communication.
     const validationResults = await Promise.allSettled(
@@ -551,18 +586,6 @@ export class BatchTxRequester {
     } else if (!hasUnverifiableTx) {
       // If we have received successful response from the peer, they have "redeemed" themselves and not considered bad anymore
       this.peers.unMarkPeerAsBad(peerId);
-    }
-
-    const missingTxHashes = this.txsMetadata.getMissingTxHashes();
-    if (missingTxHashes.size === 0) {
-      // wake sleepers so they can see shouldStop() and exit before waiting on timeout
-      this.unlockSmartRequesterSemaphores();
-    } else {
-      this.logger.trace(
-        `Missing txs: ${Array.from(this.txsMetadata.getMissingTxHashes())
-          .map(tx => tx.toString())
-          .join(', ')}`,
-      );
     }
   }
 
