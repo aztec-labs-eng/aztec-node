@@ -445,7 +445,7 @@ export class CheckpointProposalJob implements Traceable {
         });
         this.eventEmitter.emit('checkpoint-published', { checkpoint: this.checkpointNumber, slot: this.targetSlot });
         const coinbase = checkpoint.header.coinbase;
-        await this.metrics.incFilledSlot(this.publisher.getSenderAddress().toString(), coinbase);
+        await this.metrics.incFilledSlot(coinbase);
       } else {
         this.logCheckpointEvent('publish-failed', `Checkpoint publish failed for slot ${this.targetSlot}`, {
           slot: this.targetSlot,
@@ -886,7 +886,7 @@ export class CheckpointProposalJob implements Traceable {
         publisherAddress: this.publisher.getSenderAddress().toString(),
         coinbase: coinbase.toString(),
       });
-      this.metrics.incOpenSlot(this.targetSlot, this.proposer?.toString() ?? 'unknown');
+      this.metrics.incOpenSlot(this.targetSlot);
 
       // Enqueues checkpoint invalidation (constant for the whole slot)
       if (this.invalidateCheckpoint && !this.config.skipInvalidateBlockAsProposer) {
