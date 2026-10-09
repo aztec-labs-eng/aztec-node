@@ -1,5 +1,4 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
-import { type Blob, getBlobsPerL1Block } from '@aztec-labs/blob-lib';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
 import { CheckpointNumber, EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray } from '@aztec-labs/foundation/collection';
@@ -728,35 +727,6 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       step,
     });
     return true;
-  }
-
-  /**
-   * Uploads blobs for a checkpoint to the filestore (fire and forget).
-   */
-  protected async uploadBlobsForCheckpoint(proposal: CheckpointProposalCore, proposalInfo: LogData): Promise<void> {
-    try {
-      const lastBlockHeader = (await this.blockSource.getBlockData({ archive: proposal.archive }))?.header;
-      if (!lastBlockHeader) {
-        this.log.warn(`Failed to get last block header for blob upload`, proposalInfo);
-        return;
-      }
-
-      const blocks = await this.blockSource.getBlocksForSlot(proposal.slotNumber);
-      if (blocks.length === 0) {
-        this.log.warn(`No blocks found for blob upload`, proposalInfo);
-        return;
-      }
-
-      const blobFields = blocks.flatMap(b => b.toBlobFields());
-      const blobs: Blob[] = await getBlobsPerL1Block(blobFields);
-      await this.blobClient.sendBlobsToFilestore(blobs);
-      this.log.debug(`Uploaded ${blobs.length} blobs to filestore for checkpoint at slot ${proposal.slotNumber}`, {
-        ...proposalInfo,
-        numBlobs: blobs.length,
-      });
-    } catch (err) {
-      this.log.warn(`Failed to upload blobs for checkpoint: ${err}`, proposalInfo);
-    }
   }
 
   private slashInvalidBlock(proposal: BlockProposal) {
