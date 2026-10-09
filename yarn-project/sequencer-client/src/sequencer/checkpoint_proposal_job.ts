@@ -903,7 +903,8 @@ export class CheckpointProposalJob implements Traceable {
         blockSource: this.l2BlockSource,
         epoch: this.targetEpoch,
         checkpointNumber: this.checkpointNumber,
-        l1Constants: this.l1Constants,
+        // The rollup's epoch duration, as validators use: the job's own constants take it from node config.
+        l1Constants: this.epochCache.getL1Constants(),
         pipeliningEnabled: true,
         proposedCheckpointData: this.proposedCheckpointData,
         log: this.log,
