@@ -82,7 +82,8 @@ export class CheckpointStore {
   /**
    * Registers a checkpoint with the store. If a prover already exists for the
    * `(number, slot, archive root)` content key it is reused (an at-least-once re-registration of
-   * still-canonical content); otherwise a new prover is constructed.
+   * still-canonical content); otherwise a new prover is constructed. A new prover does no work until started, which the
+   * session manager does once a publisher can afford submitting the epoch proof.
    */
   public async addOrUpdate(checkpoint: Checkpoint, data: RegisterCheckpointData): Promise<CheckpointProver> {
     const l1Constants = await this.l2BlockSource.getL1Constants();

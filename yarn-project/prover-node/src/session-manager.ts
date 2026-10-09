@@ -104,6 +104,11 @@ export class SessionManager {
   private epochTicker: RunningPromise | undefined;
   /** Last time proving held back by a lack of an affordable publisher was logged at error level. */
   private lastUnaffordableLogAt: number | undefined;
+  /**
+   * Specs of partial sessions whose recreation was held back because no publisher could afford the submission, keyed
+   * like `partialSessions`. Re-opened by a later reconcile once one can, and dropped once there is nothing left to prove.
+   */
+  private readonly deferredPartialSpecs: Map<string, SessionSpec> = new Map();
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.log = createLogger('prover-node:session-manager', deps.bindings);
@@ -249,12 +254,16 @@ export class SessionManager {
   private async reconcile(trigger: ReconcileTrigger): Promise<void> {
     this.log.debug(`Reconciling`, { trigger });
 
+    await this.startDeferredProvers();
+
     await this.recreateInvalidSessions();
 
     const implicatedEpochs = await this.epochsForTrigger(trigger);
     for (const epoch of implicatedEpochs) {
       await this.openFullSessionIfReady(epoch);
     }
+
+    await this.reopenDeferredPartialSessions();
 
     if (trigger.kind === 'start-proof') {
       this.openPartialSession(trigger.spec);
@@ -275,7 +284,7 @@ export class SessionManager {
         }
         this.fullSessions.delete(key);
         if (contentChanged && (await this.canStartSession(session.getSpec(), canonical))) {
-          const newSession = this.constructSession(session.getSpec(), canonical);
+          const newSession = this.createSession(session.getSpec(), canonical);
           this.fullSessions.set(key, newSession);
           void this.runSession(newSession);
         }
@@ -286,7 +295,7 @@ export class SessionManager {
         this.fireAndForgetCancel(session, 'canonical content changed');
         this.fullSessions.delete(key);
         if (await this.canStartSession(session.getSpec(), canonical)) {
-          const newSession = this.constructSession(session.getSpec(), canonical);
+          const newSession = this.createSession(session.getSpec(), canonical);
           this.fullSessions.set(key, newSession);
           void this.runSession(newSession);
         }
@@ -301,12 +310,63 @@ export class SessionManager {
       if (!this.checkpointsMatch(session.getCheckpoints(), canonical)) {
         this.fireAndForgetCancel(session, 'canonical content changed');
         this.partialSessions.delete(key);
-        if (await this.canStartSession(session.getSpec(), canonical)) {
-          const newSession = this.constructSession(session.getSpec(), canonical);
-          this.partialSessions.set(key, newSession);
-          void this.runSession(newSession);
+        if (!this.canBuildOver(canonical)) {
+          continue;
         }
+        if (await this.checkSubmissionAffordable(session.getEpochNumber())) {
+          // Unlike a full session, nothing re-opens a partial session on its own, so keep the request for later.
+          this.deferredPartialSpecs.set(key, session.getSpec());
+          continue;
+        }
+        const newSession = this.createSession(session.getSpec(), canonical);
+        this.partialSessions.set(key, newSession);
+        void this.runSession(newSession);
       }
+    }
+  }
+
+  /**
+   * Starts the sub-tree proving of checkpoints registered with the store but not yet started, unless no publisher can
+   * afford submitting an epoch proof: an unfunded prover would otherwise keep executing and proving checkpoints for a
+   * proof that can never land. Held back provers stay in the store, so they are started by a later reconcile once a
+   * publisher can afford the submission, and are dropped by the store as usual when pruned or expired. Provers whose
+   * blocks are already proven on L1 are left unstarted, unless a session is built over them.
+   */
+  private async startDeferredProvers(): Promise<void> {
+    const unstarted = this.deps.checkpointStore.listAll().filter(p => !p.isStarted() && !p.isCancelled());
+    if (unstarted.length === 0) {
+      return;
+    }
+    const provenBlock = (await this.deps.l2BlockSource.getBlockNumber({ tag: 'proven' })) ?? BlockNumber.ZERO;
+    const toStart = unstarted.filter(p => p.checkpoint.blocks.at(-1)!.number > provenBlock);
+    if (toStart.length === 0 || (await this.checkSubmissionAffordable(toStart[0].epochNumber))) {
+      return;
+    }
+    for (const prover of toStart) {
+      prover.start();
+    }
+  }
+
+  /**
+   * Re-opens partial sessions held back by `recreateInvalidSessions` once a publisher can afford the submission. A
+   * deferred request is dropped once its checkpoints are gone (pruned or expired) or already proven on L1.
+   */
+  private async reopenDeferredPartialSessions(): Promise<void> {
+    for (const [key, spec] of Array.from(this.deferredPartialSpecs.entries())) {
+      const canonical = this.checkpointsForSpec(spec);
+      if (
+        canonical.length === 0 ||
+        this.partialSessions.has(key) ||
+        (await this.isProvenChainEncompassing(canonical))
+      ) {
+        this.deferredPartialSpecs.delete(key);
+        continue;
+      }
+      if (this.atMaxSessionLimit() || (await this.checkSubmissionAffordable(spec.epochNumber))) {
+        return;
+      }
+      this.deferredPartialSpecs.delete(key);
+      this.openPartialSession(spec);
     }
   }
 
@@ -397,7 +457,7 @@ export class SessionManager {
       return;
     }
     const spec: SessionSpec = { kind: 'full', epochNumber: epoch, fromSlot, toSlot };
-    const session = this.constructSession(spec, canonical);
+    const session = this.createSession(spec, canonical);
     this.fullSessions.set(epoch, session);
     void this.runSession(session);
   }
@@ -422,12 +482,21 @@ export class SessionManager {
     if (this.atMaxSessionLimit()) {
       throw new Error(`Maximum pending proving jobs ${this.deps.config.maxPendingJobs} reached.`);
     }
-    const session = this.constructSession(spec, canonical);
+    const session = this.createSession(spec, canonical);
     this.partialSessions.set(specKey(spec), session);
     void this.runSession(session);
   }
 
   // ---------------- session construction ----------------
+
+  /** Constructs a session over the checkpoints, starting any of their provers still held back by `startDeferredProvers`. */
+  private createSession(spec: SessionSpec, checkpoints: readonly CheckpointProver[]): EpochSession {
+    // A session waits on the block proofs of every checkpoint in it, so every prover in it must be running.
+    for (const checkpoint of checkpoints) {
+      checkpoint.start();
+    }
+    return this.constructSession(spec, checkpoints);
+  }
 
   protected constructSession(spec: SessionSpec, checkpoints: readonly CheckpointProver[]): EpochSession {
     return this.doConstructSession(spec, checkpoints, this.buildSessionDeps(spec.epochNumber), this.sessionHooks);

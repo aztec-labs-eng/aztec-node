@@ -160,7 +160,7 @@ async function createRerunContext(
   };
 }
 
-/** Reconstructs the `CheckpointProver` for the checkpoint at `index` in the job, ready to prove. */
+/** Reconstructs the `CheckpointProver` for the checkpoint at `index` in the job and starts it. */
 async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logger): Promise<CheckpointProver> {
   const { jobData, worldState, prover, chonkCache, publicProcessorFactory, txProvider, metrics } = ctx;
   const checkpoint = jobData.checkpoints[index];
@@ -177,7 +177,7 @@ async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logg
   const verbatimAttestations = isLastCheckpoint
     ? jobData.verbatimAttestations
     : CommitteeAttestationsAndSigners.packAttestations([]);
-  return new CheckpointProver(
+  const checkpointProver = new CheckpointProver(
     {
       checkpoint,
       epochNumber: jobData.epochNumber,
@@ -201,6 +201,8 @@ async function buildCheckpointProver(ctx: RerunContext, index: number, log: Logg
       log,
     },
   );
+  checkpointProver.start();
+  return checkpointProver;
 }
 
 /** Build a synthetic ITxProvider that returns the supplied txs map by lookup. */
