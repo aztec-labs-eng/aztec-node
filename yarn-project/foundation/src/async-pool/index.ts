@@ -49,3 +49,41 @@ export function asyncPool<T, R>(poolLimit: number, iterable: T[], iteratorFn: (i
   };
   return enqueue().then(() => Promise.all(ret));
 }
+
+/**
+ * Runs `iteratorFn` over `items` with at most `poolLimit` calls in flight, returning results in input order.
+ *
+ * Unlike {@link asyncPool}, a failure does not abandon the calls still running: no new call starts once one has
+ * failed, and the returned promise rejects with the first error only after every started call has settled. Use it when
+ * the calls depend on a resource (such as a transaction) that the caller releases as soon as this promise settles.
+ */
+export async function asyncPoolToCompletion<T, R>(
+  poolLimit: number,
+  items: readonly T[],
+  iteratorFn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (!Number.isInteger(poolLimit) || poolLimit < 1) {
+    throw new Error(`Invalid pool limit: ${poolLimit}`);
+  }
+
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  let failure: { error: unknown } | undefined;
+
+  const worker = async () => {
+    while (failure === undefined && nextIndex < items.length) {
+      const index = nextIndex++;
+      try {
+        results[index] = await iteratorFn(items[index], index);
+      } catch (error) {
+        failure ??= { error };
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(poolLimit, items.length) }, worker));
+  if (failure !== undefined) {
+    throw failure.error;
+  }
+  return results;
+}

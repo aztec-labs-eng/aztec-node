@@ -1,5 +1,5 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
-import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { asyncPoolToCompletion } from '@aztec-labs/foundation/async-pool';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
@@ -275,7 +275,8 @@ export class LogStore {
 
     const limit = query.limitPerTag ?? MAX_LOGS_PER_TAG;
 
-    const perTagResults = await asyncPool(TAG_SCAN_CONCURRENCY, [...tags], async tagEntry => {
+    // Every started scan settles before this returns, even on failure, so none outlives the enclosing transaction.
+    const perTagResults = await asyncPoolToCompletion(TAG_SCAN_CONCURRENCY, tags, async tagEntry => {
       const { tagHex, afterLog } = normalizeTagEntry(tagEntry);
       const prefix = contractHex !== undefined ? encodePublicPrefix(contractHex, tagHex) : tagHex;
 
