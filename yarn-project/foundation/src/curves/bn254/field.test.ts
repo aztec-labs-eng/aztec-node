@@ -27,9 +27,13 @@ describe('Fr hex parsing', () => {
     expect(Fr.fromHexString(original.toString())).toEqual(original);
   });
 
-  it('rejects values longer than 32 bytes even when their leading bytes are zero', () => {
-    expect(() => Fr.fromHexString('0x' + '0'.repeat(66))).toThrow('Value length 33 exceeds 32');
-    expect(() => Fr.fromHexString('0x' + '0'.repeat(65))).toThrow('Value length 33 exceeds 32');
+  it('accepts leading zeros beyond 32 bytes', () => {
+    expect(Fr.fromHexString('0x' + '0'.repeat(65) + '1').toBigInt()).toBe(1n);
+    expect(Fr.fromHexString('0x' + '0'.repeat(66)).toBigInt()).toBe(0n);
+  });
+
+  it('rejects values that do not fit in the field', () => {
+    expect(() => Fr.fromHexString('0x1' + '0'.repeat(64))).toThrow('greater or equal to field modulus');
   });
 
   it('rejects strings that are not hex', () => {

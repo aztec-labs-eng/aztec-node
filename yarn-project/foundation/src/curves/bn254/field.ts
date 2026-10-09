@@ -187,13 +187,8 @@ function fromHexString<T extends BaseField>(buf: string, f: DerivedField<T>) {
   }
 
   // Going straight to a bigint rather than through a Buffer is measurably faster, which matters when deserializing
-  // thousands of field elements from JSON-RPC responses. The length check keeps rejecting over-long values the way
-  // the Buffer-based constructor does.
-  const byteLength = Math.ceil(checked.length / 2);
-  if (byteLength > BaseField.SIZE_IN_BYTES) {
-    throw new Error(`Value length ${byteLength} exceeds ${BaseField.SIZE_IN_BYTES}`);
-  }
-
+  // thousands of field elements from JSON-RPC responses. The string length is not limited: leading zeros are allowed,
+  // and the constructor rejects any value that does not fit in the field.
   return new f(BigInt(`0x${checked}`));
 }
 
