@@ -1,10 +1,12 @@
 import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
+import { isRetryableError } from '@aztec-labs/foundation/error';
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { SerialQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
+import { ProofVerifierUnavailableError } from '@aztec-labs/stdlib/errors';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -158,6 +160,12 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       const proofFields = proofWithPubInputs.fieldsWithPublicInputs.map(f => f.toBuffer());
       return await this.enqueueProof(vkIndex, proofFields);
     })().catch(err => {
+      // A verifier that could not check the proof has not judged it. Saying otherwise makes a dead
+      // bb look like a bad transaction, and this result feeds gossip validation, so the peer that
+      // sent a perfectly good proof is the one penalised for it.
+      if (err instanceof ProofVerifierUnavailableError) {
+        throw err;
+      }
       this.logger.warn(`Failed to verify Chonk proof for tx ${tx.getTxHash().toString()}: ${String(err)}`);
       return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
     });
@@ -166,7 +174,8 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   /** Enqueue raw proof fields for verification. Used directly by tests with custom VKs. */
   public enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
     if (this.stopped) {
-      return Promise.reject(new Error('BatchChonkVerifier stopped'));
+      // A stopped verifier has not checked the proof, so this is not a verdict on it either.
+      return Promise.reject(new ProofVerifierUnavailableError('BatchChonkVerifier stopped'));
     }
     if (this.fatalError) {
       return Promise.reject(this.fatalError);
@@ -208,12 +217,27 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
         if (pending) {
           this.pendingRequests.delete(requestId);
           clearTimeout(pending.timeout);
-          pending.reject(err instanceof Error ? err : new Error(String(err)));
+          // bb failing to take the proof is not a verdict on it.
+          pending.reject(
+            isRetryableError(err)
+              ? new ProofVerifierUnavailableError('bb failed while queueing the proof', { cause: err })
+              : err instanceof Error
+                ? err
+                : new Error(String(err)),
+          );
           this.notifyPendingDrained();
         }
       });
 
     return resultPromise;
+  }
+
+  /**
+   * Whether the verifier has failed for good: its bb process or result stream broke, and every proof
+   * enqueued from now on is rejected as unavailable. A failed verifier never recovers; replace it.
+   */
+  public isFailed(): boolean {
+    return this.fatalError !== undefined;
   }
 
   public async stop(): Promise<void> {
@@ -355,10 +379,12 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   }
 
   private failVerifier(error: Error): void {
+    // Proofs in flight were never checked, so they fail as unavailable rather than as a verdict on the proof.
+    const unavailable = new ProofVerifierUnavailableError('BatchChonkVerifier failed', { cause: error });
     if (!this.fatalError) {
-      this.fatalError = error;
+      this.fatalError = unavailable;
     }
-    this.rejectPendingRequests(error);
+    this.rejectPendingRequests(unavailable);
   }
 
   private waitForPendingRequestsToDrain(timeoutMs: number): Promise<boolean> {

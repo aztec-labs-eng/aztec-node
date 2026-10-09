@@ -1,5 +1,5 @@
 import { Archiver } from '@aztec-labs/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
+import { BBCircuitVerifier, QueuedIVCVerifier, SelfHealingChonkVerifier } from '@aztec-labs/bb-prover';
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { ARCHIVE_HEIGHT, type L1_TO_L2_MSG_TREE_HEIGHT, type NOTE_HASH_TREE_HEIGHT } from '@aztec-labs/constants';
@@ -907,7 +907,7 @@ export class AztecNodeService implements AztecNode, AztecNodeAdmin, AztecNodeDeb
     if (newConfig.realProofs !== this.config.realProofs) {
       await Promise.all([tryStop(this.peerProofVerifier), tryStop(this.rpcProofVerifier)]);
       if (newConfig.realProofs) {
-        this.peerProofVerifier = await BatchChonkVerifier.new(newConfig, newConfig.bbChonkVerifyMaxBatch, 'peer');
+        this.peerProofVerifier = await SelfHealingChonkVerifier.new(newConfig, newConfig.bbChonkVerifyMaxBatch, 'peer');
         const rpcVerifier = await BBCircuitVerifier.new(newConfig);
         this.rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, newConfig.numConcurrentIVCVerifiers);
       } else {
