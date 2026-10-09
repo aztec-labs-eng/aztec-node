@@ -197,6 +197,12 @@ container_script=$(
   git fetch --depth 1 origin $current_commit
   git checkout FETCH_HEAD
   git checkout -b \$REF_NAME
+  # Commits the private patch before ci3/source derives COMMIT_HASH from HEAD. Its output is replayed
+  # in run: ci3/ssm_send_command shows only stderr, and only on failure.
+  private_release_patch_log=
+  if [ "\${RELEASE_TARGET:-}" = private ]; then
+    private_release_patch_log=\$(ci3/apply_private_release_patch)
+  fi
   source ci3/source
   ci_log_id=\$CI_LOG_ID
   log_ci_run \$ci_log_id
@@ -217,6 +223,7 @@ container_script=$(
     if semver check "\$REF_NAME"; then
       echo "Performing a release because \$REF_NAME is a semver."
     fi
+    [ -z "\$private_release_patch_log" ] || echo "\$private_release_patch_log"
 
     # Background monitors. cache_log and add_timestamps both close inherited pipeline
     # fds internally, so these long-running processes won't block the outer pipeline.
