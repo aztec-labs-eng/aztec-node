@@ -239,6 +239,10 @@ export class ArchiverL1Synchronizer implements Traceable {
     // tip can be reconciled from L1, but the iteration then does not advertise the head as synced.
     const messageSync = await this.syncL1ToL2Messages(currentL1BlockData, finalizedL1Block);
 
+    // A behind-syncpoint rollback rewinds the persisted scan point but not this iteration's head. Advertising the
+    // head as synced now would let the next same-head sync return early before the rewound scan point is re-read,
+    // leaving the detected checkpoint absent until another L1 block arrives.
+    let rolledBackScanPoint = false;
     if (currentL1BlockNumber > blocksSynchedTo) {
       // First we retrieve new checkpoints and L2 blocks and store them in the DB. This will also update the
       // pending chain validation status, proven checkpoint number, and synched L1 block number.
@@ -263,12 +267,19 @@ export class ArchiverL1Synchronizer implements Traceable {
       // We only do this if rollup cant prune on the next submission. Otherwise we will end up
       // re-syncing the checkpoints we have just unwound above.
       if (!rollupCanPrune) {
-        await this.checkForNewCheckpointsBeforeL1SyncPoint(rollupStatus, blocksSynchedTo, currentL1BlockNumber);
+        rolledBackScanPoint = await this.checkForNewCheckpointsBeforeL1SyncPoint(
+          rollupStatus,
+          blocksSynchedTo,
+          currentL1BlockNumber,
+        );
       }
 
       this.instrumentation.updateL1BlockHeight(currentL1BlockNumber);
     } else if (await this.checkpointedChainNeedsReconciliation(currentL1BlockData)) {
-      await this.reconcileCheckpointedChainAtNonAdvancingHead(blocksSynchedTo, currentL1BlockNumber);
+      rolledBackScanPoint = await this.reconcileCheckpointedChainAtNonAdvancingHead(
+        blocksSynchedTo,
+        currentL1BlockNumber,
+      );
     }
 
     // Update the finalized L2 checkpoint based on L1 finality.
@@ -279,10 +290,11 @@ export class ArchiverL1Synchronizer implements Traceable {
     // Readiness (the synced L1 block, which drives the synced L2 slot proposers build on) is only advanced once the
     // messages agree with L1 at this head and the checkpointed tip agrees with them: while either is pending, nothing
     // may build on the local tip.
-    if (messageSync !== 'synced' || this.speculationGate !== undefined) {
+    if (messageSync !== 'synced' || this.speculationGate !== undefined || rolledBackScanPoint) {
       this.log.verbose(`Not advertising L1 block ${currentL1BlockNumber} as synced`, {
         currentL1BlockNumber,
         messageSync,
+        rolledBackScanPoint,
         speculationGate: this.speculationGate,
         recovery: this.messageSynchronizer.getRecoveryProgress(),
       });
@@ -605,7 +617,7 @@ export class ArchiverL1Synchronizer implements Traceable {
   private async reconcileCheckpointedChainAtNonAdvancingHead(
     blocksSynchedTo: bigint,
     currentL1BlockNumber: bigint,
-  ): Promise<void> {
+  ): Promise<boolean> {
     this.log.warn(
       `L1 head ${currentL1BlockNumber} is not past the checkpoint syncpoint ${blocksSynchedTo}; reconciling the checkpointed chain with it`,
       { blocksSynchedTo, currentL1BlockNumber },
@@ -614,7 +626,7 @@ export class ArchiverL1Synchronizer implements Traceable {
     if (currentL1BlockNumber < (await this.stores.blocks.getSynchedL1BlockNumber())!) {
       await this.stores.blocks.setSynchedL1BlockNumber(currentL1BlockNumber);
     }
-    await this.checkForNewCheckpointsBeforeL1SyncPoint(rollupStatus, blocksSynchedTo, currentL1BlockNumber);
+    return this.checkForNewCheckpointsBeforeL1SyncPoint(rollupStatus, blocksSynchedTo, currentL1BlockNumber);
   }
 
   /**
@@ -1293,7 +1305,7 @@ export class ArchiverL1Synchronizer implements Traceable {
     status: RollupStatus,
     blocksSynchedTo: bigint,
     currentL1BlockNumber: bigint,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { lastSeenCheckpoint, pendingCheckpointNumber } = status;
     // Compare the last checkpoint (valid or not) we have (either retrieved in this round or loaded from store)
     // with what the rollup contract told us was the latest one (pinned at the currentL1BlockNumber).
@@ -1322,12 +1334,14 @@ export class ArchiverL1Synchronizer implements Traceable {
         },
       );
       await this.stores.blocks.setSynchedL1BlockNumber(targetL1BlockNumber);
+      return true;
     } else {
       this.log.trace(`No new checkpoints behind L1 sync point to retrieve.`, {
         latestLocalCheckpointNumber,
         pendingCheckpointNumber,
       });
     }
+    return false;
   }
 
   /**
