@@ -8,11 +8,22 @@ import type { Fr } from '@aztec-labs/foundation/schemas';
 import { parse as parseToml } from '@iarna/toml';
 import { bn254 } from '@noble/curves/bn254';
 import type { Abi, Narrow } from 'abitype';
-import { spawn } from 'child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { execFileSync, spawn } from 'child_process';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'os';
-import { basename, dirname, join, resolve } from 'path';
+import { basename, dirname, isAbsolute, join, resolve } from 'path';
 import readline from 'readline';
 import type { Hex } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
@@ -393,10 +404,78 @@ export function prepareL1ContractsForDeployment(): string {
     foundryToml = foundryToml.replace(/solc\s*=\s*"\.\/solc-[^"]+"/, `solc = "${absoluteSolcPath}"`);
     logger.verbose(`Updated solc path in foundry.toml to: ${absoluteSolcPath}`);
   }
+
+  const cachePath = join(tempDir, FORGE_CACHE_FILE);
+  const cache: ForgeCache = JSON.parse(readFileSync(cachePath, 'utf-8'));
+  if (!cache.preprocessed) {
+    // A cache written without test preprocessing is only accepted by forge 1.8 if dynamic test linking is off. Test
+    // preprocessing does not affect the contracts and scripts we deploy.
+    foundryToml = foundryToml.replace(/^\[profile\.default\]$/m, '$&\ndynamic_test_linking = false');
+  }
   writeFileSync(join(tempDir, 'foundry.toml'), foundryToml);
+
+  try {
+    patchForgeCache(tempDir, cache);
+  } catch (err) {
+    logger.warn(`Failed to patch the forge cache, forge will recompile the L1 contracts`, { err });
+  }
 
   mkdirSync(join(tempDir, 'broadcast'));
   return tempDir;
+}
+
+const FORGE_CACHE_FILE = join('cache', 'solidity-files-cache.json');
+
+/** The fields of forge's `solidity-files-cache.json` that depend on the forge version or the project location. */
+type ForgeCache = {
+  profiles?: Record<string, { solc?: Record<string, unknown> }>;
+  remappings?: string[];
+  preprocessed?: boolean;
+};
+
+/**
+ * Makes the forge build cache shipped in l1-artifacts valid in a deploy directory, so forge uses the shipped artifacts
+ * instead of recompiling all L1 contracts, which takes ~10s per process and yields bytecode with a different metadata
+ * hash than the published one.
+ *
+ * Since 1.8, forge stores the absolute remappings of the project in its cache, and discards a cache whose remappings do
+ * not match the current project root. So a cache written in the directory where l1-artifacts was built never matches a
+ * copy of it. We regenerate the remappings for the deploy directory in the format forge writes them, which lists every
+ * context remapping twice: once with a relative context and once with an absolute one.
+ *
+ * Caches written by forge before 1.8 also lack the `viaSSACFG` and `experimental` solc settings, and need dynamic test
+ * linking disabled (see `prepareL1ContractsForDeployment`).
+ *
+ * TODO: Once l1-artifacts is built with forge 1.8.5 or later, remove the `viaSSACFG`/`experimental` backfill and the
+ * `dynamic_test_linking = false` override, as such caches already carry both settings and record `preprocessed: true`.
+ * Keep the remappings rewrite: a forge 1.8 cache stays tied to the directory where it was written.
+ */
+function patchForgeCache(deployDir: string, cache: ForgeCache) {
+  const root = realpathSync(deployDir);
+  const remappings = execFileSync(resolveFoundryBinary('forge'), ['remappings'], { cwd: root, encoding: 'utf-8' })
+    .split('\n')
+    .filter(line => line.trim())
+    .flatMap(line => {
+      const separator = line.indexOf('=');
+      const context = line.slice(0, separator).trim();
+      const target = line.slice(separator + 1).trim();
+      const absoluteTarget = isAbsolute(target) ? target : `${root}/${target}`;
+      const remapping = `${context}=${absoluteTarget}`;
+      return context.includes(':') ? [remapping, `${root}/${remapping}`] : [remapping];
+    });
+
+  for (const profile of Object.values(cache.profiles ?? {})) {
+    if (profile.solc) {
+      profile.solc.viaSSACFG ??= false;
+      profile.solc.experimental ??= false;
+    }
+  }
+  cache.remappings = remappings;
+
+  const cachePath = join(deployDir, FORGE_CACHE_FILE);
+  const { atime, mtime } = statSync(cachePath);
+  writeFileSync(cachePath, JSON.stringify(cache));
+  utimesSync(cachePath, atime, mtime);
 }
 
 /**
