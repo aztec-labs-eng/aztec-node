@@ -40,6 +40,7 @@ import {
 } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, Tx, TxEffect, TxHash, type TxValidator } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { AggregateTxValidator } from '../../msg_validators/tx_validator/aggregate_tx_validator.js';
@@ -600,6 +601,83 @@ describe('TxPoolV2', () => {
 
       expect(await txsDB.getAsync(txHashStr)).toBeUndefined();
       expect(await proofsDB.getAsync(txHashStr)).toBeUndefined();
+    });
+
+    it('reads a tx body and its proof inside one store transaction', async () => {
+      // The body (txs) and proof (tx_proofs) are two sub-databases that writers delete in lockstep
+      // inside one transaction. getTxByHash must read both inside one snapshot too; otherwise an
+      // eviction that commits between the two reads leaves the body present and the proof gone, and
+      // we serve a proofless tx that an honest requester then penalises us for. The race has no
+      // deterministic public seam (the two reads cannot be paused from outside), so assert the
+      // guarantee that prevents it: both reads happen inside the same store transaction.
+      const spyStore = await openTmpStore('p2p-txn-read');
+      const spyArchive = await openTmpStore('archive-txn-read');
+
+      // Tag each transactionAsync call with a unique id. A read done inside a transaction sees that
+      // id; a read done outside any transaction sees 0. Restoring the previous id on exit keeps a
+      // nested transaction reporting its own id rather than the outer one.
+      let txnSeq = 0;
+      let activeTxn = 0;
+      const realTxnAsync = spyStore.transactionAsync.bind(spyStore);
+      jest.spyOn(spyStore, 'transactionAsync').mockImplementation(async cb => {
+        const id = ++txnSeq;
+        const prev = activeTxn;
+        activeTxn = id;
+        try {
+          return await realTxnAsync(cb);
+        } finally {
+          activeTxn = prev;
+        }
+      });
+
+      // Record the transaction id active when the body (txs) and the proof (tx_proofs) are read.
+      let bodyReadTxn = -1;
+      let proofReadTxn = -1;
+      const realOpenMap = spyStore.openMap.bind(spyStore);
+      jest.spyOn(spyStore, 'openMap').mockImplementation((name: string) => {
+        const map = realOpenMap(name);
+        if (name !== 'txs' && name !== 'tx_proofs') {
+          return map;
+        }
+        const realGetAsync = map.getAsync.bind(map);
+        jest.spyOn(map, 'getAsync').mockImplementation(key => {
+          if (name === 'txs') {
+            bodyReadTxn = activeTxn;
+          } else {
+            proofReadTxn = activeTxn;
+          }
+          return realGetAsync(key);
+        });
+        return map;
+      });
+
+      const txnPool = new AztecKVTxPoolV2(spyStore, spyArchive, {
+        l2BlockSource: mockL2BlockSource,
+        worldStateSynchronizer: mockWorldState,
+        createTxValidator: () => Promise.resolve(alwaysValidValidator),
+        checkAllowedSetupCalls: () => Promise.resolve(true),
+        blockMinFeesProvider: { getCurrentMinFees: () => Promise.resolve(GasFees.empty()) },
+      });
+      try {
+        await txnPool.start();
+
+        const tx = await mockTx(1);
+        await txnPool.addPendingTxs([tx]);
+
+        bodyReadTxn = -1;
+        proofReadTxn = -1;
+        const retrieved = await txnPool.getTxByHash(tx.getTxHash());
+        expect(retrieved).toBeDefined();
+        // Both reads must land inside a transaction (id > 0) and inside the SAME one, so no eviction
+        // can commit between them.
+        expect(bodyReadTxn).toBeGreaterThan(0);
+        expect(proofReadTxn).toBeGreaterThan(0);
+        expect(bodyReadTxn).toBe(proofReadTxn);
+      } finally {
+        await txnPool.stop();
+        await spyStore.delete();
+        await spyArchive.delete();
+      }
     });
   });
 
