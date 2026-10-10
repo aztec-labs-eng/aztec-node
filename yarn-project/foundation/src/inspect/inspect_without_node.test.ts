@@ -45,6 +45,13 @@ describe('inspectWithoutNode', () => {
     expect(inspectWithoutNode(error)).toBe(`Error: outer [cause]: RangeError: inner [cause]: 'root'`);
   });
 
+  it('does not recurse forever on a circular error cause', () => {
+    const outer = new Error('outer');
+    const inner = new Error('inner', { cause: outer });
+    outer.cause = inner;
+    expect(inspectWithoutNode(outer)).toBe('Error: outer [cause]: Error: inner [cause]: Error: outer');
+  });
+
   it('does not throw on a value with circular references', () => {
     const circular: { self?: unknown } = {};
     circular.self = circular;

@@ -1,6 +1,6 @@
-/** A simple immutable Merkle tree container. Use a MerkleTreeCalculator to create a new instance from a set of leaves. */
 import { Buffer } from 'buffer';
 
+/** A simple immutable Merkle tree container. Use a MerkleTreeCalculator to create a new instance from a set of leaves. */
 export class MerkleTree {
   constructor(
     public readonly height: number,

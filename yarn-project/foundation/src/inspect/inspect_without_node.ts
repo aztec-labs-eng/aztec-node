@@ -5,9 +5,15 @@ function hasCustomInspect(value: object): value is { [custom]: () => unknown } {
   return custom in value && typeof value[custom] === 'function';
 }
 
-function describeError(error: Error): string {
+function describeError(error: Error, seen: WeakSet<Error> = new WeakSet()): string {
   const description = `${error.name}: ${error.message}`;
-  return error.cause === undefined ? description : `${description} [cause]: ${inspectWithoutNode(error.cause)}`;
+  // A `cause` can point back into its own chain; tracking visited errors keeps a cycle from overflowing the stack.
+  if (error.cause === undefined || seen.has(error)) {
+    return description;
+  }
+  seen.add(error);
+  const cause = error.cause instanceof Error ? describeError(error.cause, seen) : inspectWithoutNode(error.cause);
+  return `${description} [cause]: ${cause}`;
 }
 
 /**
