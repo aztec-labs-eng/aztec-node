@@ -1,7 +1,8 @@
 import { BLS12Fr, BLS12Point } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
+import { Buffer } from 'buffer';
 
 /**
  * See `noir-projects/fnd/noir-protocol-circuits/crates/blob/src/abis/final_blob_accumulator.nr` for documentation.

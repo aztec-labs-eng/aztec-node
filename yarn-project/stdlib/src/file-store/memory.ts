@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { writeFile } from 'fs/promises';
 import { promisify } from 'util';
 import { gunzip as gunzipCb, gzip as gzipCb } from 'zlib';

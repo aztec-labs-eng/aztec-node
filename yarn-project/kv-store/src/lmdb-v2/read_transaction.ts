@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { CURSOR_PAGE_SIZE, Database, type LMDBMessageChannel, LMDBMessageType } from './message.js';
 
 export class ReadTransaction {

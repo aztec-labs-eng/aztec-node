@@ -1,7 +1,7 @@
 import { DomainSeparator, MAX_PACKED_PUBLIC_BYTECODE_SIZE_IN_FIELDS } from '@aztec-labs/constants';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { strict as assert } from 'assert';
+import { assert } from '@aztec-labs/foundation/validation';
 
 import { bufferAsFields } from '../abi/index.js';
 import type { ContractClass } from './interfaces/contract_class.js';

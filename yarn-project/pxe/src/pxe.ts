@@ -2,6 +2,7 @@ import type { PrivateEventFilter } from '@aztec-labs/aztec.js/wallet';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { allToCompletion } from '@aztec-labs/foundation/promise';
 import { Timer } from '@aztec-labs/foundation/timer';
@@ -55,7 +56,6 @@ import {
   TxSimulationResult,
   UtilityExecutionResult,
 } from '@aztec-labs/stdlib/tx';
-import { inspect } from 'util';
 
 import { BlockSynchronizer } from './block_synchronizer/index.js';
 import type { PXEConfig } from './config/index.js';

@@ -58,6 +58,7 @@ import {
 import { VkData } from '@aztec-labs/stdlib/vks';
 import { Attributes, type Span, runInSpan } from '@aztec-labs/telemetry-client';
 import type { MerkleTreeReadOperations } from '@aztec-labs/world-state';
+import { Buffer } from 'buffer';
 
 /**
  * Type representing the names of the trees for the base rollup.

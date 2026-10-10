@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import http from 'http';
 import request from 'supertest';
 

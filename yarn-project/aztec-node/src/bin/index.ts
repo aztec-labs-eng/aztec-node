@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --no-warnings
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import {
   type NamespacedApiHandlers,
   createNamespacedSafeJsonRpcServer,
@@ -19,7 +20,7 @@ import {
   registerAztecNodeRpcHandlers,
 } from '../index.js';
 
-const { AZTEC_NODE_PORT = 8081, API_PREFIX = '' } = process.env;
+const { AZTEC_NODE_PORT = 8081, API_PREFIX = '' } = getEnv();
 
 const logger = createLogger('node');
 

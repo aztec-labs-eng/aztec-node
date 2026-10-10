@@ -7,6 +7,7 @@ import {
   DelayedPublicMutableValuesWithHash,
 } from '@aztec-labs/stdlib/delayed-public-mutable';
 import type { AztecNode } from '@aztec-labs/stdlib/interfaces/client';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { fastForwardContractUpdate } from './fastforward_contract_update.js';

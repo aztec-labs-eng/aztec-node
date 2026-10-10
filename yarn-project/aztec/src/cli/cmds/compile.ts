@@ -1,5 +1,6 @@
 import { findBbBinary } from '@aztec-foundation/bb.js';
 
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { getPackageVersion } from '@aztec-labs/stdlib/update-checker';
 import { execFileSync } from 'child_process';
@@ -143,8 +144,8 @@ async function checkNoTestsInContracts(nargo: string, log: LogFn): Promise<void>
 async function compileAztecContract(nargoArgs: string[], log: LogFn): Promise<void> {
   await warnIfAztecVersionMismatch(log);
 
-  const nargo = process.env.NARGO ?? 'nargo';
-  const bb = process.env.BB ?? findBbBinary() ?? 'bb';
+  const nargo = getEnv().NARGO ?? 'nargo';
+  const bb = getEnv().BB ?? findBbBinary() ?? 'bb';
 
   const shouldRecompile = await needsRecompile();
   if (shouldRecompile) {
@@ -184,7 +185,7 @@ export function injectCompileCommand(program: Command, log: LogFn): Command {
     )
     .addHelpText('after', () => {
       // Show nargo's own compile options so users see all available flags in one place.
-      const nargo = process.env.NARGO ?? 'nargo';
+      const nargo = getEnv().NARGO ?? 'nargo';
       try {
         const output = execFileSync(nargo, ['compile', '--help'], { encoding: 'utf-8' });
         return `\nUnderlying nargo compile options:\n\n${output}`;

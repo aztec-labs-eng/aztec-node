@@ -35,6 +35,7 @@ import { PrivateLogData, ScopedPrivateLogData } from '@aztec-labs/stdlib/kernel'
 import { PrivateLog } from '@aztec-labs/stdlib/logs';
 import { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
+import { Buffer } from 'buffer';
 
 const DEFAULT_CONTRACT_ADDRESS = AztecAddress.fromBigIntUnsafe(987654n);
 

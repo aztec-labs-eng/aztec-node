@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import type { AbiType } from './abi.js';
 
 /**

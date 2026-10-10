@@ -4,6 +4,7 @@ import { AvmGadgetsTestContractArtifact } from '@aztec-labs/noir-test-contracts.
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { ContractInstanceWithAddress } from '@aztec-labs/stdlib/contract';
 import { NativeWorldStateService } from '@aztec-labs/world-state';
+import { Buffer } from 'buffer';
 
 import { PublicTxSimulationTester, defaultGlobals } from '../../fixtures/public_tx_simulation_tester.js';
 

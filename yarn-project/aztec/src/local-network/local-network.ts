@@ -29,6 +29,7 @@ import {
 import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { createFundedInitializerlessAccounts } from '@aztec-labs/wallets/testing';
 import { getGenesisValues } from '@aztec-labs/world-state/testing';
+import { Buffer } from 'buffer';
 import type { Hex } from 'viem';
 import { mnemonicToAccount, privateKeyToAddress } from 'viem/accounts';
 import { foundry } from 'viem/chains';

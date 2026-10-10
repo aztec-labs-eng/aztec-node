@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { LoggerBindings } from '@aztec-labs/foundation/log';
 import { DEFAULT_GENESIS_DATA } from '@aztec-labs/protocol-contracts';
 import type { L2BlockSource } from '@aztec-labs/stdlib/block';
@@ -74,7 +75,7 @@ export async function createWorldState(
         bindings,
       )
     : await NativeWorldStateService.tmp(
-        !['true', '1'].includes(process.env.DEBUG_WORLD_STATE!),
+        !['true', '1'].includes(getEnv().DEBUG_WORLD_STATE!),
         genesis,
         instrumentation,
         bindings,

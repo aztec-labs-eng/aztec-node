@@ -5,6 +5,7 @@ import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import type { AuthWitness } from '@aztec-labs/stdlib/auth-witness';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import type { TxHash } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import type { AccountType } from '../utils/constants.js';
 import { extractECDSAPublicKeyFromBase64String } from '../utils/ecdsa.js';

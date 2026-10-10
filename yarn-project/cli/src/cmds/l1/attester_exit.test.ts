@@ -4,6 +4,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { Command } from 'commander';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

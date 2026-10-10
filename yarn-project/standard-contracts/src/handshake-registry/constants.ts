@@ -4,6 +4,7 @@
 import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Buffer } from 'buffer';
 
 import { StandardContractAddress, StandardContractClassId, StandardContractSalt } from '../standard_contract_data.js';
 

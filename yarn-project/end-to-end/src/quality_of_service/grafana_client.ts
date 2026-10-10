@@ -1,4 +1,5 @@
 import type { Logger } from '@aztec-labs/aztec.js/log';
+import { Buffer } from 'buffer';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 

@@ -1,6 +1,7 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { join } from 'path';
 
 import { DatabaseVersion } from './database_version.js';

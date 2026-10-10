@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import type { TestDateProvider } from '@aztec-labs/foundation/timer';
@@ -89,7 +90,8 @@ export async function startAnvil(
       // `--port 0` lets anvil bind an OS-assigned ephemeral port; the actual port is read back from
       // its "Listening on host:port" stdout below, so independent suites can spawn their own anvil
       // in parallel without fighting over a fixed port.
-      const port = opts.port ?? (process.env.ANVIL_PORT ? parseInt(process.env.ANVIL_PORT) : 8545);
+      const { ANVIL_PORT } = getEnv();
+      const port = opts.port ?? (ANVIL_PORT ? parseInt(ANVIL_PORT) : 8545);
       const args: string[] = [
         '--host',
         '127.0.0.1',
@@ -117,7 +119,7 @@ export async function startAnvil(
       const child = spawn('bash', ['-c', ANVIL_WATCHDOG, 'bash', ...args], {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
-        env: { ...process.env, ANVIL_BIN: anvilBinary, RAYON_NUM_THREADS: '1' },
+        env: { ...getEnv(), ANVIL_BIN: anvilBinary, RAYON_NUM_THREADS: '1' },
       });
 
       // Wait for "Listening on", an early exit, or the startup budget running out. Both streams are

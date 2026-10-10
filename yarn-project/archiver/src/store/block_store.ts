@@ -41,6 +41,7 @@ import {
   deserializeIndexedTxEffect,
   serializeIndexedTxEffect,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import {
   BlockArchiveNotConsistentError,

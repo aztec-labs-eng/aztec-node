@@ -4,6 +4,7 @@ import { AsyncApi } from '@aztec-foundation/wsdb';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 
 import { NativeWorldStateService } from './native_world_state.js';
 

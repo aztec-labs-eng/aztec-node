@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 

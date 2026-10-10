@@ -14,6 +14,7 @@ import { schemas } from '@aztec-labs/foundation/schemas';
 import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, withoutHexPrefix } from '@aztec-labs/foundation/string';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { PublicKey, hashPublicKey } from './public_key.js';

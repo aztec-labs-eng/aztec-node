@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { MAXIMUM_KEY, fromBufferKey, toBufferKey } from 'ordered-binary';
 
 import type { Key } from '../interfaces/common.js';

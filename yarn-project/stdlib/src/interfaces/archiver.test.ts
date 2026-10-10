@@ -5,6 +5,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 import { SiblingPath } from '@aztec-labs/foundation/trees';
+import { Buffer } from 'buffer';
 import omit from 'lodash.omit';
 
 import type { ContractArtifact } from '../abi/abi.js';

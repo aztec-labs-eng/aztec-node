@@ -1,8 +1,10 @@
+import { getEnv } from '../config/env.js';
+
 const testData: { [key: string]: unknown[] } = {};
 
 /** Returns whether test data generation is enabled */
 export function isGenerateTestDataEnabled() {
-  return ['1', 'true'].includes(process.env.AZTEC_GENERATE_TEST_DATA ?? '') && typeof expect !== 'undefined';
+  return ['1', 'true'].includes(getEnv().AZTEC_GENERATE_TEST_DATA ?? '') && typeof expect !== 'undefined';
 }
 
 /** Pushes test data with the given name, only if test data generation is enabled. */

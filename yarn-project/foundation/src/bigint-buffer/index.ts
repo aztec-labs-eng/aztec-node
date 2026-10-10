@@ -3,6 +3,8 @@
  * @param buf - The little-endian buffer to convert.
  * @returns A BigInt with the little-endian representation of buf.
  */
+import { Buffer } from 'buffer';
+
 export function toBigIntLE(buf: Buffer): bigint {
   const reversed = Buffer.from(buf);
   reversed.reverse();

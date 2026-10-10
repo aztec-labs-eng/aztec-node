@@ -2,6 +2,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { hexSchemaFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { computeAddress, computePreaddress, deriveKeys } from '../keys/index.js';

@@ -1,5 +1,4 @@
-import { format, inspect } from 'util';
-
+import { inspect } from '../../inspect/index.js';
 import { type Logger, createLogger } from '../../log/index.js';
 import { NoRetryError, makeBackoff, retry } from '../../retry/index.js';
 import { jsonStringify } from '../convert.js';
@@ -35,7 +34,7 @@ export async function defaultFetch(
   noRetry = false,
   config: JsonRpcFetchConfig = {},
 ): Promise<{ response: any; headers: { get: (header: string) => string | null | undefined } }> {
-  log.debug(format(`JsonRpcClient.fetch`, host, '->', body));
+  log.debug(`JsonRpcClient.fetch ${host} -> ${inspect(body)}`);
   let resp: Response;
   try {
     resp = await fetch(host, {

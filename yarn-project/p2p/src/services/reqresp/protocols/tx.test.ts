@@ -2,6 +2,7 @@ import { MAX_TX_SIZE_KB } from '@aztec-labs/stdlib/p2p';
 import { TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
+import { Buffer } from 'buffer';
 import { mock, mockDeep } from 'jest-mock-extended';
 
 import type { MemPools } from '../../../mem_pools/interface.js';

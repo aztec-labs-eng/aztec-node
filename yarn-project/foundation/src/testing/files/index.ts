@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 
+import { getEnv } from '../../config/env.js';
 import { createConsoleLogger } from '../../log/console.js';
 import { fileURLToPath } from '../../url/index.js';
 import { isGenerateTestDataEnabled } from '../test_data.js';
@@ -87,7 +88,7 @@ export function updateProtocolCircuitSampleInputs(circuitName: string, value: st
  * relative to the running package's working directory.
  */
 export function getL1FixturePath(fileName: string) {
-  return join(process.env.AZTEC_L1_FIXTURES_DIR ?? '../../l1-contracts/test/fixtures', fileName);
+  return join(getEnv().AZTEC_L1_FIXTURES_DIR ?? '../../l1-contracts/test/fixtures', fileName);
 }
 
 export function getPathToFile(targetFileFromRepoRoot: string) {

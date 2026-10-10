@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { EcdsaSignature } from './signature.js';
 
 describe('ecdsa_signature', () => {

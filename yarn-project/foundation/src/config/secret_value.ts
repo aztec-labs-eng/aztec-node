@@ -1,5 +1,6 @@
-import { inspect } from 'util';
 import type { ZodType } from 'zod';
+
+import { inspect } from '../inspect/index.js';
 
 /**
  * A class wrapping a secret value to protect it from accidently being leaked in logs

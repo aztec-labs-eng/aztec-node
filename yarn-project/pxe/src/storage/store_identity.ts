@@ -1,6 +1,7 @@
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { DatabaseVersion } from '@aztec-labs/stdlib/database-version/version';
+import { Buffer } from 'buffer';
 
 /** The triple that determine which physical store a logical store name maps to. */
 export type StoreIdentity = {

@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { promisify } from 'node:util';
 import { gunzip as gunzipCb, gzip as gzipCb } from 'node:zlib';
 import { Agent, type Dispatcher } from 'undici';

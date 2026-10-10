@@ -3,6 +3,7 @@ import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
@@ -13,7 +14,6 @@ import {
 } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { BlockHash } from '../block/block_hash.js';

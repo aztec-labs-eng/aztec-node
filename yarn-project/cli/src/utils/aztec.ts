@@ -15,6 +15,7 @@ import { type LogFn, createLogger } from '@aztec-labs/foundation/log';
 import type { NoirPackageConfig } from '@aztec-labs/foundation/noir';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import TOML from '@iarna/toml';
+import { Buffer } from 'buffer';
 import { readFile } from 'fs/promises';
 import type { HDAccount, Hex, PrivateKeyAccount } from 'viem';
 

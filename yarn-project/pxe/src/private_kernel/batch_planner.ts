@@ -9,6 +9,7 @@ import {
 } from '@aztec-labs/stdlib/kernel';
 import type { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
+import { Buffer } from 'buffer';
 
 import { PrivateKernelResetPrivateInputsBuilder } from './hints/private_kernel_reset_private_inputs_builder.js';
 

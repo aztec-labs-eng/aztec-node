@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import EventEmitter from 'node:events';
 import * as fs from 'node:fs';
 import * as net from 'node:net';

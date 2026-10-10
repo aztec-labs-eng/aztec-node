@@ -72,6 +72,7 @@ import {
 import type { CircuitProvingStats, CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import { Attributes, type TelemetryClient, getTelemetryClient, trackSpan } from '@aztec-labs/telemetry-client';
+import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
 import { ungzip } from 'pako';
 import * as path from 'path';

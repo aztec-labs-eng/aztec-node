@@ -2,6 +2,7 @@ import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import { TxHash } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 export const NUMERIC_HEX_LEN = 8;
 export const SEP = '-';

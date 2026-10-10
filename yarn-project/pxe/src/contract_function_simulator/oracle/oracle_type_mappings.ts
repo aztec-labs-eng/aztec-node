@@ -49,6 +49,7 @@ import {
   type StateReference,
   TxHash,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import {
   type BlockReference,

@@ -16,6 +16,7 @@ import { Checkpoint, type PublishedCheckpoint } from '@aztec-labs/stdlib/checkpo
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { ConsensusPayload, type CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '@aztec-labs/stdlib/testing';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import assert from 'node:assert';
 

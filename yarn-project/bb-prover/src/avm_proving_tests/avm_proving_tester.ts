@@ -1,5 +1,6 @@
 import type { AvmStat } from '@aztec-foundation/bb.js';
 
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import {
@@ -36,7 +37,7 @@ const provingConfig: PublicSimulatorConfig = PublicSimulatorConfig.from({
 
 export class AvmProvingTester extends PublicTxSimulationTester {
   private readonly bbJsFactory = new BBJsFactory(BB_PATH, {
-    debugDir: process.env.BB_DEBUG_OUTPUT_DIR,
+    debugDir: getEnv().BB_DEBUG_OUTPUT_DIR,
     logger: createLogger('bb-prover:avm-proving-tester'),
   });
 

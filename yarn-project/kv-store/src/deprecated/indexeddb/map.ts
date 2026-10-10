@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import type { IDBPDatabase, IDBPObjectStore } from 'idb';
 import { hash } from 'ohash';
 

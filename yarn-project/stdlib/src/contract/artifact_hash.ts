@@ -3,6 +3,7 @@ import { Fr, reduceFn } from '@aztec-labs/foundation/curves/bn254';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { numToUInt8 } from '@aztec-labs/foundation/serialize';
 import { MerkleTree, MerkleTreeCalculator } from '@aztec-labs/foundation/trees';
+import { Buffer } from 'buffer';
 import deterministicStringify from 'json-stringify-deterministic';
 
 import {

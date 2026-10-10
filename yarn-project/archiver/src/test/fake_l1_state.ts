@@ -29,6 +29,7 @@ import {
 import { ConsensusPayload, getHashedSignaturePayloadTypedData } from '@aztec-labs/stdlib/p2p';
 import { mockCheckpointAndMessages } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type FormattedBlock, type Transaction, encodeFunctionData, multicall3Abi, toHex } from 'viem';
 

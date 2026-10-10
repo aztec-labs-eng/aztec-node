@@ -1,4 +1,5 @@
 import { type NetworkConfig, NetworkConfigMapSchema, type NetworkNames } from '@aztec-labs/foundation/config';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -23,7 +24,7 @@ export async function getNetworkConfig(
   cacheDir?: string,
 ): Promise<NetworkConfig | undefined> {
   // Try with the primary URL (env var or default)
-  const configLocation = process.env.NETWORK_CONFIG_LOCATION || DEFAULT_CONFIG_URL;
+  const configLocation = getEnv().NETWORK_CONFIG_LOCATION || DEFAULT_CONFIG_URL;
 
   let primaryError: Error | undefined;
   let config: NetworkConfig | undefined;
@@ -119,7 +120,8 @@ export async function enrichEnvironmentWithNetworkConfig(networkName: NetworkNam
     return; // No remote config for local development
   }
 
-  const cacheDir = process.env.DATA_DIRECTORY ? join(process.env.DATA_DIRECTORY, 'cache') : undefined;
+  const { DATA_DIRECTORY } = getEnv();
+  const cacheDir = DATA_DIRECTORY ? join(DATA_DIRECTORY, 'cache') : undefined;
   const networkConfig = await getNetworkConfig(networkName, cacheDir);
 
   if (!networkConfig) {

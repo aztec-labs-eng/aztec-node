@@ -21,6 +21,7 @@ import { peerIdFromString } from '@libp2p/peer-id';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
 import { type ENR, SignableENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { generatePrivateKey } from 'viem/accounts';
 

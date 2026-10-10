@@ -1,6 +1,7 @@
 import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { numToUInt32BE } from '@aztec-labs/foundation/serialize';
+import { Buffer } from 'buffer';
 
 import { ChonkProof, ChonkProofWithPublicInputs } from './chonk_proof.js';
 

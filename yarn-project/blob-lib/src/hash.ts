@@ -3,6 +3,7 @@ import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseid
 import { sha256, sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import { BLS12Fr } from '@aztec-labs/foundation/curves/bls12';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Buffer } from 'buffer';
 
 import { getBytesPerBlob, getBytesPerCommitment, getKzg } from './kzg_context.js';
 import { SpongeBlob } from './sponge_blob.js';

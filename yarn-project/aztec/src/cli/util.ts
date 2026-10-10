@@ -1,6 +1,7 @@
 import type { AztecNodeConfig } from '@aztec-labs/aztec-node';
 import type { AccountManager } from '@aztec-labs/aztec.js/wallet';
 import type { ConfigMappingsType } from '@aztec-labs/foundation/config';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import type { ProverConfig } from '@aztec-labs/stdlib/interfaces/server';
@@ -148,13 +149,13 @@ const getDefaultOrEnvValue = (opt: AztecStartOption) => {
 
   // if the option is set in the environment, use that
   if (opt.env) {
-    val = process.env[opt.env];
+    val = getEnv()[opt.env];
   }
 
   // if we have fallback env vars, check those
   if (!val && opt.fallback && opt.fallback.length > 0) {
     for (const fallback of opt.fallback) {
-      val = process.env[fallback];
+      val = getEnv()[fallback];
       if (val) {
         break;
       }

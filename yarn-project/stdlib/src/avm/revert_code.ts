@@ -1,7 +1,8 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, FieldReader } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 /** Whether a transaction's public execution reverted. */

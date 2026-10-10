@@ -38,6 +38,7 @@ import {
 } from '@aztec-labs/stdlib/testing';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, TxHash } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 import { mock } from 'jest-mock-extended';
 import type { MockProxy } from 'jest-mock-extended/lib/Mock.js';
 

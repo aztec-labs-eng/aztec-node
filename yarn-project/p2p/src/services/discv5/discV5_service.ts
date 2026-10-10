@@ -8,6 +8,7 @@ import type { PeerId } from '@libp2p/interface';
 import { type Multiaddr, multiaddr } from '@multiformats/multiaddr';
 import { Discv5, type Discv5EventEmitter, type IDiscv5CreateOptions } from '@nethermindeth/discv5';
 import { ENR, SignableENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import EventEmitter from 'events';
 
 import { DISCV5_RATE_LIMITER_OPTS, type P2PConfig } from '../../config.js';

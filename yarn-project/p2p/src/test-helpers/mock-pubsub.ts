@@ -17,6 +17,7 @@ import {
   TypedEventEmitter,
 } from '@libp2p/interface';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
+import { Buffer } from 'buffer';
 
 import type { P2PConfig } from '../config.js';
 import type { MemPools } from '../mem_pools/interface.js';

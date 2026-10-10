@@ -1,4 +1,5 @@
 import { MAX_TX_SIZE_KB, P2PMessage, TopicType } from '@aztec-labs/stdlib/p2p';
+import { Buffer } from 'buffer';
 import { compressSync, uncompressSync } from 'snappy';
 
 import { SnappyTransform, getMsgIdFn, readSnappyPreamble } from './encoding.js';

@@ -12,6 +12,7 @@ import { Signature, type ViemSignature } from '@aztec-labs/foundation/eth-signat
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import { getErrorCause } from '@aztec-labs/foundation/types';
+import { Buffer } from 'buffer';
 import chunk from 'lodash.chunk';
 import {
   type AbiParameter,

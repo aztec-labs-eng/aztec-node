@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { createStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { type BootnodeConfig, BootstrapNode } from '@aztec-labs/p2p';
@@ -5,7 +6,7 @@ import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-
 import Koa from 'koa';
 import Router from 'koa-router';
 
-const { HTTP_PORT } = process.env;
+const { HTTP_PORT } = getEnv();
 
 /**
  * The application entry point.

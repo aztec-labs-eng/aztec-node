@@ -1,13 +1,15 @@
 import { BatchedBlob, Blob, getEthBlobEvaluationInputs, getPrefixedEthBlobCommitments } from '@aztec-labs/blob-lib';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { getL1FixturePath } from '@aztec-labs/foundation/testing/files';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { L2Block } from '@aztec-labs/stdlib/block';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { Buffer } from 'buffer';
 import { writeFile } from 'fs/promises';
 
-const AZTEC_GENERATE_TEST_DATA = !!process.env.AZTEC_GENERATE_TEST_DATA;
+const AZTEC_GENERATE_TEST_DATA = !!getEnv().AZTEC_GENERATE_TEST_DATA;
 
 /**
  * Creates a json object that can be used to test the solidity contract.

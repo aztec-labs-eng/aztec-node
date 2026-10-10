@@ -6,6 +6,7 @@ import { AuthWitness, computeInnerAuthWitHash, computeOuterAuthWitHash } from '@
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { computeVarArgsHash } from '@aztec-labs/stdlib/hash';
 import type { TxProfileResult } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import { ContractFunctionInteraction } from '../contract/contract_function_interaction.js';
 import type {

@@ -2,6 +2,8 @@
  * A value that can be appended to a {@link BufferSink}. Mirrors `Bufferable`, but the object arm allows the
  * optional-sink overload of `toBuffer` so a legacy `toBuffer(): Buffer` and a migrated `toBuffer(sink?)` both fit.
  */
+import { Buffer } from 'buffer';
+
 export type Sinkable =
   | boolean
   | Buffer

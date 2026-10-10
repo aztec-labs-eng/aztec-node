@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { toBufferBE } from '../bigint-buffer/index.js';
 import { Fr } from '../curves/bn254/field.js';
 import type { Tuple } from './types.js';

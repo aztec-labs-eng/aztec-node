@@ -4,6 +4,7 @@ import { RollupAbi } from '@aztec-foundation/l1-artifacts/RollupAbi';
 import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
 import type { ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber } from '@aztec-labs/foundation/branded-types';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { CommitteeAttestation } from '@aztec-labs/stdlib/block';
@@ -48,7 +49,7 @@ function parseArgs(): ScriptArgs {
   const txHash = args[1] as Hex;
   const targetCommitteeSize = args[2] ? parseInt(args[2], 10) : 24;
 
-  const rpcUrl = process.env.ETHEREUM_HOST || process.env.RPC_URL;
+  const rpcUrl = getEnv().ETHEREUM_HOST || getEnv().RPC_URL;
   if (!rpcUrl) {
     // eslint-disable-next-line no-console
     console.error('Error: ETHEREUM_HOST or RPC_URL environment variable must be set');

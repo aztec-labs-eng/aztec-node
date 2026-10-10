@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { compressSync, uncompressSync } from 'snappy';
 
 /**
