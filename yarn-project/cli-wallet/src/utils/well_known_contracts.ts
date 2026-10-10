@@ -3,6 +3,7 @@ import { getSponsoredFPCAddress } from '@aztec-labs/cli/cli-utils';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { StandardContractAddress } from '@aztec-labs/standard-contracts/data';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Buffer } from 'buffer';
 
 import type { WalletDB } from '../storage/wallet_db.js';
 

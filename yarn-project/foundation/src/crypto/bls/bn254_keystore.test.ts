@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { createDecipheriv, pbkdf2Sync } from 'crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';

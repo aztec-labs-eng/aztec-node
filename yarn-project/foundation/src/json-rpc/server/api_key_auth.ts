@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { timingSafeEqual } from 'crypto';
 import type Koa from 'koa';
 

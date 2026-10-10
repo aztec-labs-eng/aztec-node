@@ -1,5 +1,7 @@
+import { Buffer } from 'buffer';
 import type { NewPlugin } from 'pretty-format';
-import { inspect } from 'util';
+
+import { inspect } from '../inspect/index.js';
 
 function makeSerializerForCustomInspect(prefix: string): NewPlugin {
   return {

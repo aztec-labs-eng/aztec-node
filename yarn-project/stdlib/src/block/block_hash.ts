@@ -1,8 +1,8 @@
 import { GENESIS_BLOCK_HEADER_HASH as GENESIS_BLOCK_HEADER_HASH_FR } from '@aztec-labs/constants';
 import { BaseFr, Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import type { BufferReader } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
 
 import { hexSchemaFor } from '../schemas/schemas.js';
 

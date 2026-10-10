@@ -16,6 +16,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, SeverityNumber, logs } from '@opentelemetry/api-logs';
 import { millisToHrTime } from '@opentelemetry/core';
 import { Writable } from 'stream';
@@ -271,7 +272,7 @@ export class OTelPinoStream extends Writable {
 // Note that the original open-telemetry/opentelemetry-js-contrib was set up to run on the main
 // nodejs loop, as opposed to in a worker as pino recommends.
 export default function (options: OTelPinoStreamOptions): OTelPinoStream {
-  const url = process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
+  const url = getEnv().OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
   const resource = getOtelResource();
   // We re-register here because this runs on a worker thread
   registerOtelLoggerProvider(resource, url ? new URL(url) : undefined);

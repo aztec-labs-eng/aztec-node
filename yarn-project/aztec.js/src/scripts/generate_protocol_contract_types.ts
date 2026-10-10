@@ -100,6 +100,7 @@ async function generateProtocolContractInterface(
 /* eslint-disable */
 import { ProtocolContractAddress } from '@aztec-labs/protocol-contracts';
 import { FunctionType } from '@aztec-labs/stdlib/abi';
+import { Buffer } from 'buffer';
 
 import type { ContractArtifact } from '../../api/abi.js';
 import { PublicKeys } from '../../api/keys.js';

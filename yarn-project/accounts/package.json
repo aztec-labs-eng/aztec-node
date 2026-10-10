@@ -83,6 +83,7 @@
     "@aztec-labs/entrypoints": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
+    "buffer": "^6.0.3",
     "tslib": "^2.4.0"
   },
   "devDependencies": {
@@ -103,6 +104,6 @@
     "artifacts"
   ],
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

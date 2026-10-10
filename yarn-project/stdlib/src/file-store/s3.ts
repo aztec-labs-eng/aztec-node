@@ -5,7 +5,9 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
+import { Buffer } from 'buffer';
 import { createReadStream, createWriteStream } from 'fs';
 import { mkdir, mkdtemp, stat, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -37,7 +39,7 @@ export class S3FileStore implements FileStore {
     private readonly log: Logger = createLogger('stdlib:s3-file-store'),
   ) {
     this.endpoint = opts.endpoint;
-    this.region = this.endpoint ? 'auto' : (process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'us-east-1');
+    this.region = this.endpoint ? 'auto' : (getEnv().AWS_REGION ?? getEnv().AWS_DEFAULT_REGION ?? 'us-east-1');
     this.publicBaseUrl = opts.publicBaseUrl;
 
     const clientOptions: any = {};

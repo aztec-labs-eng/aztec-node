@@ -17,6 +17,7 @@ import {
   derivePublicKeyFromSecretKey,
   hashPublicKey,
 } from '@aztec-labs/stdlib/keys';
+import { Buffer } from 'buffer';
 
 import type { AccountPrivacyKeys, AccountPrivacySecretKeys } from './account_privacy_keys.js';
 

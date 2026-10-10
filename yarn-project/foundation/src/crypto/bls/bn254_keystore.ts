@@ -1,4 +1,5 @@
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
+import { Buffer } from 'buffer';
 import { createCipheriv, createDecipheriv, createHash, pbkdf2, pbkdf2Sync, randomUUID } from 'crypto';
 import { readFileSync } from 'fs';
 import { promisify } from 'util';

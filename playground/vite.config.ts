@@ -1,26 +1,11 @@
 import { defineConfig, loadEnv, searchForWorkspaceRoot, Plugin, ResolvedConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import { PolyfillOptions, nodePolyfills } from 'vite-plugin-node-polyfills';
 import fs from 'fs';
+import { builtinModules } from 'module';
 import path from 'path';
 
 // Only required for alternative bb wasm file, left as reference
 //import { viteStaticCopy } from 'vite-plugin-static-copy';
-
-// Unfortunate, but needed due to https://github.com/davidmyersdev/vite-plugin-node-polyfills/issues/81
-// Suspected to be because of the yarn workspace setup, but not sure
-const nodePolyfillsFix = (options?: PolyfillOptions | undefined): Plugin => {
-  return {
-    ...nodePolyfills(options),
-    /* @ts-ignore */
-    resolveId(source: string) {
-      const m = /^vite-plugin-node-polyfills\/shims\/(buffer|global|process)$/.exec(source);
-      if (m) {
-        return `./node_modules/vite-plugin-node-polyfills/shims/${m[1]}/dist/index.cjs`;
-      }
-    },
-  };
-};
 
 /**
  * Lightweight chunk size validator plugin
@@ -100,6 +85,87 @@ const chunkSizeValidator = (limits: ChunkSizeLimit[]): Plugin => {
   };
 };
 
+/**
+ * Imports of Node.js builtin modules that are harmless in a browser, where such a module resolves to an empty one.
+ * Each entry names the importing file by the end of its path, and the builtin it imports.
+ */
+const TOLERATED_NODE_BUILTIN_IMPORTS: { importer: string; builtin: string }[] = [
+  // Checks that `tty.isatty` exists before calling it.
+  { importer: '/node_modules/colorette/index.js', builtin: 'tty' },
+  // Opens a socket to an SSH agent only when asked to sign with one, which a browser cannot do.
+  { importer: '/accounts/dest/utils/ssh_agent.js', builtin: 'net' },
+  // Opens a server only when asked for a free port, which tests on Node.js do.
+  { importer: '/foundation/dest/testing/port_allocator.js', builtin: 'net' },
+];
+
+/**
+ * Fails the build on an undeclared Node.js builtin import.
+ *
+ * Such an import only resolves here because this workspace happens to install a package named like the builtin, so
+ * it breaks the build of an app that installs the importing package on its own. An entry of
+ * `TOLERATED_NODE_BUILTIN_IMPORTS` that no import matches fails the build too, so the list cannot go stale.
+ */
+const nodeBuiltinImportValidator = (): Plugin => {
+  const importersByViolation = new Map<string, Set<string>>();
+  const matchedTolerations = new Set<(typeof TOLERATED_NODE_BUILTIN_IMPORTS)[number]>();
+
+  const packageOf = (file: string): { name: string; dependencies: Record<string, string> } => {
+    for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+      const manifestPath = path.join(dir, 'package.json');
+      if (fs.existsSync(manifestPath)) {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        // Build output can hold manifests that only set the module type; the package is the one with a name.
+        if (manifest.name) {
+          return {
+            name: manifest.name,
+            dependencies: { ...manifest.dependencies, ...manifest.peerDependencies, ...manifest.optionalDependencies },
+          };
+        }
+      }
+    }
+    return { name: file, dependencies: {} };
+  };
+
+  return {
+    name: 'node-builtin-import-validator',
+    enforce: 'pre',
+    apply: 'build',
+    resolveId(source, importer) {
+      const builtin = source.replace(/^node:/, '').split('/')[0];
+      if (!importer || !builtinModules.includes(builtin)) {
+        return null;
+      }
+      const importerFile = importer.split('?')[0];
+      const toleration = TOLERATED_NODE_BUILTIN_IMPORTS.find(
+        tolerated => tolerated.builtin === builtin && importerFile.endsWith(tolerated.importer),
+      );
+      if (toleration) {
+        matchedTolerations.add(toleration);
+        return null;
+      }
+      const { name, dependencies } = packageOf(importerFile);
+      if (source.startsWith('node:') || !(builtin in dependencies)) {
+        const violation = `${name} imports '${source}'`;
+        importersByViolation.set(violation, (importersByViolation.get(violation) ?? new Set()).add(importerFile));
+      }
+      return null;
+    },
+    buildEnd() {
+      if (importersByViolation.size > 0) {
+        const violations = [...importersByViolation].map(
+          ([violation, importers]) => `  ${violation} in:\n${[...importers].map(file => `    ${file}`).join('\n')}`,
+        );
+        throw new Error(`Node.js builtin modules imported without a declared dependency:\n${violations.join('\n')}`);
+      }
+      const unmatched = TOLERATED_NODE_BUILTIN_IMPORTS.filter(tolerated => !matchedTolerations.has(tolerated));
+      if (unmatched.length > 0) {
+        const entries = unmatched.map(({ importer, builtin }) => `  '${builtin}' in ${importer}`);
+        throw new Error(`Tolerated imports of Node.js builtin modules that no longer exist:\n${entries.join('\n')}`);
+      }
+    },
+  };
+};
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -120,7 +186,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react({ jsxImportSource: '@emotion/react' }),
-      nodePolyfillsFix({ include: ['buffer', 'path', 'process', 'net', 'tty'] }),
+      nodeBuiltinImportValidator(),
       // This is unnecessary unless BB_WASM_PATH is defined (default would be /assets/barretenberg.wasm.gz)
       // Left as an example of how to use a different bb wasm file than the default lazily loaded one
       // viteStaticCopy({

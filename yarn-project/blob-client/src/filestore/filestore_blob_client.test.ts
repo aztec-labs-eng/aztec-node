@@ -1,6 +1,7 @@
 import { Blob } from '@aztec-labs/blob-lib';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { FileStore, ReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
+import { Buffer } from 'buffer';
 
 import { inboundTransform, outboundTransform } from '../encoding/index.js';
 import { FileStoreBlobClient } from './filestore_blob_client.js';

@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { TextEncoder } from 'util';
 
 import { Ecdsa } from './index.js';

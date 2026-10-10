@@ -1,7 +1,7 @@
 import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
-import { strict as assert } from 'assert';
+import { assert } from '@aztec-labs/foundation/validation';
 import { Decoder, Encoder, addExtension } from 'msgpackr';
 
 import { AztecAddress } from '../aztec-address/index.js';

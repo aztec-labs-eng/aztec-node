@@ -3,6 +3,7 @@ import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { bufferToHex } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 import { type AbiParameter, encodeAbiParameters, keccak256 } from 'viem';
 
 import { TEST_COORDINATION_SIGNATURE_CONTEXT } from '../../tests/mocks.js';

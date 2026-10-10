@@ -2,6 +2,7 @@ import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { RegistryContract } from '@aztec-labs/ethereum/contracts';
 import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import { getL1ContractsConfig } from '@aztec-labs/ethereum/queries';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 
 export async function getL1Config(
@@ -22,7 +23,7 @@ export async function getL1Config(
 }
 
 export async function getL1RollupAddressFromEnv(l1RpcUrls: string[], l1ChainId: number) {
-  const registryAddress = process.env.REGISTRY_CONTRACT_ADDRESS;
+  const registryAddress = getEnv().REGISTRY_CONTRACT_ADDRESS;
   if (!registryAddress || !EthAddress.isAddress(registryAddress)) {
     throw new Error(`Failed to extract registry address`);
   }

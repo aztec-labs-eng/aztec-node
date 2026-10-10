@@ -5,6 +5,7 @@ import type { InputMap, WitnessMap } from '@aztec-foundation/noir-types';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
+import { Buffer } from 'buffer';
 
 import type { ACIRCallback, ACIRExecutionResult } from './acvm/acvm.js';
 import type { ACVMWitness } from './acvm/acvm_types.js';

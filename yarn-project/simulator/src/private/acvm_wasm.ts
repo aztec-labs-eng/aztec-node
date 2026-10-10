@@ -6,6 +6,7 @@ import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/fou
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
+import { Buffer } from 'buffer';
 
 import { type ACIRCallback, type ACIRExecutionResult, acvm } from './acvm/acvm.js';
 import type { ACVMWitness } from './acvm/acvm_types.js';

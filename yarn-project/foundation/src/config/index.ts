@@ -1,5 +1,6 @@
 import { Fq, Fr } from '../curves/bn254/field.js';
 import { createConsoleLogger } from '../log/console.js';
+import { getEnv } from './env.js';
 import type { EnvVar } from './env_var.js';
 import { type NetworkNames, getActiveNetworkName } from './network_name.js';
 import { parseBooleanEnv } from './parse-env.js';
@@ -54,13 +55,13 @@ export function getValueFromEnvWithFallback<T>(
 
   // Try primary env var
   if (env) {
-    value = process.env[env];
+    value = getEnv()[env];
   }
 
   // If primary not found, try fallbacks
   if (value === undefined && fallback && fallback.length > 0) {
     for (const fallbackEnv of fallback) {
-      const fallbackVal = process.env[fallbackEnv];
+      const fallbackVal = getEnv()[fallbackEnv];
       if (fallbackVal !== undefined) {
         value = fallbackVal;
         break;
@@ -91,7 +92,7 @@ export function getConfigFromMappings<T>(configMappings: ConfigMappingsType<T>):
     if (deprecatedFallback?.length) {
       const userLog = createConsoleLogger('[DEPRECATED]');
       for (const { env: deprecatedEnv, message } of deprecatedFallback) {
-        if (process.env[deprecatedEnv]) {
+        if (getEnv()[deprecatedEnv]) {
           const warningMessage =
             message ?? `Environment variable ${deprecatedEnv} is deprecated. Please use ${env} instead.`;
           userLog(warningMessage, { deprecatedEnvVar: deprecatedEnv, newEnvVar: env });

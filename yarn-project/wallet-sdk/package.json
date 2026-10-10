@@ -80,7 +80,8 @@
     "@aztec-labs/entrypoints": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/pxe": "workspace:^",
-    "@aztec-labs/stdlib": "workspace:^"
+    "@aztec-labs/stdlib": "workspace:^",
+    "buffer": "^6.0.3"
   },
   "devDependencies": {
     "@aztec-labs/noir-contracts.js": "workspace:^",
@@ -104,6 +105,6 @@
   ],
   "types": "./dest/index.d.ts",
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

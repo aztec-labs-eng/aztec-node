@@ -58,6 +58,7 @@ import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, TX_ERROR_INVALID_PROOF, type Tx, TxEffect, TxHash } from '@aztec-labs/stdlib/tx';
 import { AttestationTimeoutError, InvalidBlockProposalTxsError } from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type PrivateKeyAccount, generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 

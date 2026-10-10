@@ -62,6 +62,7 @@ import type { AddressManager, ConnectionManager } from '@libp2p/interface-intern
 import { tcp } from '@libp2p/tcp';
 import { multiaddr } from '@multiformats/multiaddr';
 import { ENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import { createLibp2p } from 'libp2p';
 
 import type { P2PConfig } from '../../config.js';

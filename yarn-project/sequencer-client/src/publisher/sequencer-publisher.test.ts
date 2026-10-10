@@ -39,6 +39,7 @@ import { Checkpoint } from '@aztec-labs/stdlib/checkpoint';
 import { EmptyL1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

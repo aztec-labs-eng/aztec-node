@@ -4,6 +4,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { hexSchemaFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader } from '@aztec-labs/foundation/serialize';
+import { Buffer } from 'buffer';
 
 import { Selector } from './selector.js';
 

@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import type { ABIParameterVisibility, AbiType, FunctionArtifact } from './abi.js';

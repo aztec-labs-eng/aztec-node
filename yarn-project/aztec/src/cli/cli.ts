@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { Command } from 'commander';
 
@@ -30,7 +31,7 @@ export function injectAztecCommands(program: Command, userLog: LogFn, debugLogge
 
   program.configureHelp({ sortSubcommands: true });
 
-  if (process.env.AZTEC_SHELL_WRAPPER) {
+  if (getEnv().AZTEC_SHELL_WRAPPER) {
     program.addHelpText(
       'after',
       `

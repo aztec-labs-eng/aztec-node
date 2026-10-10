@@ -19,6 +19,7 @@ import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import { makeTxRequest } from '@aztec-labs/stdlib/testing';
 import { PrivateCallExecutionResult, PrivateExecutionResult, type TxRequest } from '@aztec-labs/stdlib/tx';
 import { VerificationKeyData } from '@aztec-labs/stdlib/vks';
+import { Buffer } from 'buffer';
 import { mock } from 'jest-mock-extended';
 import times from 'lodash.times';
 

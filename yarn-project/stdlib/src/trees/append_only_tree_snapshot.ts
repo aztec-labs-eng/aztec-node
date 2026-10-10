@@ -1,9 +1,9 @@
 import { TreeLeafIndex, TreeLeafIndexSchema } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { BufferReader, BufferSink, FieldReader } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 /**

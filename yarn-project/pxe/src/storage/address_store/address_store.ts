@@ -3,6 +3,7 @@ import { allToCompletion } from '@aztec-labs/foundation/promise';
 import type { AztecAsyncArray, AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { CompleteAddress } from '@aztec-labs/stdlib/contract';
+import { Buffer } from 'buffer';
 
 export class AddressStore {
   #store: AztecAsyncKVStore;

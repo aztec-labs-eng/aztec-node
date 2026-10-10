@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { Buffer } from 'buffer';
 
 import { RevertCode } from './revert_code.js';
 

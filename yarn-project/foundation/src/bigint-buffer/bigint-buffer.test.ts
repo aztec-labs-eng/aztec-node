@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { fromHex, toBufferBE, toHex } from './index.js';
 
 describe('bigint-buffer', () => {

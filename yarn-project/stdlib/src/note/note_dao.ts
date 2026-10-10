@@ -4,6 +4,7 @@ import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serializ
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Note } from '@aztec-labs/stdlib/note';
 import { TxHash } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 /**
  * A Note Data Access Object, representing a note that was committed to the note hash tree, holding all of the

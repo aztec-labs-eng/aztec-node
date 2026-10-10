@@ -5,6 +5,7 @@ import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { pluralize } from '@aztec-labs/foundation/string';
 import type { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
+import { Buffer } from 'buffer';
 import {
   type Chain,
   type Hex,

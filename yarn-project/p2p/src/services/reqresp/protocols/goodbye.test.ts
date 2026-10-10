@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { GoodByeReason, decodeGoodbyeReason, encodeGoodbyeReason } from './goodbye.js';
 
 describe('goodbye', () => {

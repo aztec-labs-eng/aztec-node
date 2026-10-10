@@ -48,6 +48,7 @@ import {
   TxEffect,
   TxHash,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import { AddressStore } from '../address_store/address_store.js';
 import { AnchorBlockStore } from '../anchor_block_store/index.js';

@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fr } from '../curves/bn254/field.js';
 import { updateInlineFndTestData } from '../testing/files/index.js';
 import { computeBalancedMerkleTreeRootAsync, computeBalancedShaRoot } from './balanced_merkle_tree_root.js';

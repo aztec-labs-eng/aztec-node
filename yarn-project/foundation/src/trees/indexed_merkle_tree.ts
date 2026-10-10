@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fr } from '../curves/bn254/index.js';
 import { assertLength } from '../serialize/index.js';
 import type { IndexedTreeLeafPreimage } from './indexed_tree_leaf.js';

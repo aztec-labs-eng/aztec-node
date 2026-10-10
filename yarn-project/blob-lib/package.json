@@ -30,6 +30,7 @@
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@crate-crypto/node-eth-kzg": "^0.10.0",
+    "buffer": "^6.0.3",
     "tslib": "^2.4.0"
   },
   "devDependencies": {
@@ -86,6 +87,6 @@
     ]
   },
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

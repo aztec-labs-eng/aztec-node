@@ -1,6 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, BufferSink, serializeToSink } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { FunctionSelector } from '../abi/function_selector.js';

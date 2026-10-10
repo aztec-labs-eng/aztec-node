@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fq, Fr } from '../curves/bn254/field.js';
 import { BufferReader } from './buffer_reader.js';
 import { BufferSink, serializeArrayToSink, serializeToSink } from './buffer_sink.js';

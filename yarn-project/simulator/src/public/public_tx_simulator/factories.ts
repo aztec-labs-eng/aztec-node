@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { LoggerBindings } from '@aztec-labs/foundation/log';
 import { PublicSimulatorConfig } from '@aztec-labs/stdlib/avm';
 import type { GlobalVariables } from '@aztec-labs/stdlib/tx';
@@ -31,7 +32,7 @@ export function createPublicTxSimulatorForBlockBuilding(
     collectCallMetadata: false,
   });
 
-  const dumpDir = process.env.DUMP_AVM_INPUTS_TO_DIR;
+  const dumpDir = getEnv().DUMP_AVM_INPUTS_TO_DIR;
   if (dumpDir) {
     // must collect hints and PIs for dumping
     const dumpingConfig = {

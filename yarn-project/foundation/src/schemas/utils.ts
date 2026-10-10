@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { type ZodObject, type ZodRawShape, type ZodType, type ZodTypeAny, z } from 'zod';
 
 import { pick } from '../collection/object.js';

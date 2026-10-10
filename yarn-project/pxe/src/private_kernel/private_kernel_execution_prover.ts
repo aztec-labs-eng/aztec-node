@@ -47,6 +47,7 @@ import {
   getFinalMinRevertibleSideEffectCounter,
 } from '@aztec-labs/stdlib/tx';
 import { VerificationKeyAsFields, VerificationKeyData, VkData } from '@aztec-labs/stdlib/vks';
+import { Buffer } from 'buffer';
 
 import { BatchPlanner } from './batch_planner.js';
 import { computeTxExpirationTimestamp } from './hints/compute_tx_expiration_timestamp.js';

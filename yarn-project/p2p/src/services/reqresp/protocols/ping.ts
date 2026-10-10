@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 /**
  * Handles the ping request.
  * @param _msg - The ping request message.

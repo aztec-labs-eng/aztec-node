@@ -2,6 +2,7 @@ import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { AztecAsyncMap } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { Buffer } from 'buffer';
 
 import { DeletedPool } from './deleted_pool.js';
 

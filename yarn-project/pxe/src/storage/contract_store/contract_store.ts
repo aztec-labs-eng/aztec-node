@@ -28,6 +28,7 @@ import {
   SerializableContractInstancePreimage,
   getContractClassFromArtifact,
 } from '@aztec-labs/stdlib/contract';
+import { Buffer } from 'buffer';
 
 import { PrivateFunctionsTree } from './private_functions_tree.js';
 

@@ -2,6 +2,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { ChainConfig } from '@aztec-labs/stdlib/config';
 import { checkCompressedComponentVersion, compressComponentVersions } from '@aztec-labs/stdlib/versioning';
 import type { SignableENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { AZTEC_ENR_KEY } from './types/index.js';

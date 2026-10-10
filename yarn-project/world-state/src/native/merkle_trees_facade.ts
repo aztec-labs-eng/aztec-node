@@ -24,6 +24,7 @@ import {
 import { type BlockHeader, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
 import type { WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 import assert from 'assert';
+import { Buffer } from 'buffer';
 
 import {
   type SerializedIndexedLeaf,

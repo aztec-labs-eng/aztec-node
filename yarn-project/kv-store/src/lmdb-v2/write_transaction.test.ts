@@ -1,4 +1,5 @@
 import { toArray } from '@aztec-labs/foundation/iterable';
+import { Buffer } from 'buffer';
 import { vi } from 'vitest';
 
 import { type Batch, CURSOR_PAGE_SIZE, Database, type LMDBMessageChannel, LMDBMessageType } from './message.js';

@@ -1,3 +1,5 @@
+import { getEnv } from './env.js';
+
 export type NetworkNames =
   | 'local'
   | 'staging'
@@ -8,7 +10,7 @@ export type NetworkNames =
   | `v${number}-devnet-${number}`;
 
 export function getActiveNetworkName(name?: string): NetworkNames {
-  const network = name || process.env.NETWORK;
+  const network = name || getEnv().NETWORK;
   if (!network || network === '' || network === 'local') {
     return 'local';
   } else if (network === 'staging') {

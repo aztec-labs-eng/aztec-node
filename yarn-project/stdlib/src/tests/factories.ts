@@ -52,6 +52,7 @@ import { GrumpkinScalar, Point } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Bufferable, Serializable, Tuple } from '@aztec-labs/foundation/serialize';
 import { MembershipWitness } from '@aztec-labs/foundation/trees';
+import { Buffer } from 'buffer';
 
 import { FunctionSelector } from '../abi/function_selector.js';
 import {

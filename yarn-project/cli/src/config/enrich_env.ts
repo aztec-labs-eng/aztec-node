@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-properties -- this module sets variables of the Node.js process */
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import type { EnvVar } from '@aztec-labs/foundation/config';
 

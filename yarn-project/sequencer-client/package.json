@@ -76,7 +76,7 @@
   ],
   "types": "./dest/index.d.ts",
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   },
   "jest": {
     "extensionsToTreatAsEsm": [

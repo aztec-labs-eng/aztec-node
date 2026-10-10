@@ -8,6 +8,7 @@ import {
 import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
 import { arraySerializedSizeOfNonEmpty } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
@@ -18,7 +19,6 @@ import {
   serializeToFields,
 } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { countAccumulatedItems } from '../kernel/utils/index.js';

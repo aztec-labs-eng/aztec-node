@@ -10,6 +10,7 @@ import {
   getProvingJobInputClassFor,
 } from '@aztec-labs/stdlib/interfaces/server';
 import { ProvingRequestType } from '@aztec-labs/stdlib/proofs';
+import { Buffer } from 'buffer';
 
 import type { ProofStore } from './proof_store.js';
 

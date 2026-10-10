@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fq, Fr } from './field.js';
 
 describe('Fr Serialization', () => {

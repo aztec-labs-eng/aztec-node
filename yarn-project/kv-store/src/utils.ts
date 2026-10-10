@@ -1,6 +1,7 @@
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { DatabaseVersion } from '@aztec-labs/stdlib/database-version/version';
+import { Buffer } from 'buffer';
 
 import type { AztecAsyncSingleton, AztecSingleton } from './interfaces/singleton.js';
 import type { AztecAsyncKVStore, AztecKVStore } from './interfaces/store.js';

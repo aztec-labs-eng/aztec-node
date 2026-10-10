@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 /**
  * Convert a little-endian buffer into a BigInt.
  * @param buf - The little-endian buffer to convert.

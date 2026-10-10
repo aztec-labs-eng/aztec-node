@@ -3,6 +3,7 @@ import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Capsule } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';

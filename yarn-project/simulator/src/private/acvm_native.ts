@@ -7,6 +7,7 @@ import { type Logger, type LoggerBindings, resolveLogger } from '@aztec-labs/fou
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { FunctionArtifactWithContractName } from '@aztec-labs/stdlib/abi';
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
+import { Buffer } from 'buffer';
 import * as proc from 'child_process';
 import { promises as fs } from 'fs';
 import { randomUUID } from 'node:crypto';

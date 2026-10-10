@@ -6,6 +6,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { bufferSchemaFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, BufferSink } from '@aztec-labs/foundation/serialize';
+import { Buffer } from 'buffer';
 
 /**
  * Serialization format detection for ChonkProof is value-based on the leading uint32:

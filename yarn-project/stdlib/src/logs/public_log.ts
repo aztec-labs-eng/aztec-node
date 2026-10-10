@@ -1,9 +1,9 @@
 import { FLAT_PUBLIC_LOGS_PAYLOAD_LENGTH, PUBLIC_LOG_HEADER_LENGTH } from '@aztec-labs/constants';
 import type { FieldsOf } from '@aztec-labs/foundation/array';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { BufferReader, FieldReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

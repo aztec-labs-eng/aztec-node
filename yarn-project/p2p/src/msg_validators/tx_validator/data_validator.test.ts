@@ -27,6 +27,7 @@ import {
   type Tx,
 } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 
 import { DataTxValidator } from './data_validator.js';
 

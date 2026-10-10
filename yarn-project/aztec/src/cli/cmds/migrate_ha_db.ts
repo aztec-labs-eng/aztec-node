@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { runMigrations } from '@aztec-labs/validator-ha-signer/migrations';
 import type { Command } from 'commander';
 
@@ -7,7 +8,7 @@ export function injectMigrateCommand(program: Command, log: (msg: string) => voi
   migrateCommand
     .command('up')
     .description('Apply pending migrations')
-    .requiredOption('--database-url <string>', 'PostgreSQL connection string', process.env.DATABASE_URL)
+    .requiredOption('--database-url <string>', 'PostgreSQL connection string', getEnv().DATABASE_URL)
     .option('--verbose', 'Enable verbose output', false)
     .action(async options => {
       const migrations = await runMigrations(options.databaseUrl, {
@@ -24,7 +25,7 @@ export function injectMigrateCommand(program: Command, log: (msg: string) => voi
   migrateCommand
     .command('down')
     .description('Rollback the last migration')
-    .requiredOption('--database-url <string>', 'PostgreSQL connection string', process.env.DATABASE_URL)
+    .requiredOption('--database-url <string>', 'PostgreSQL connection string', getEnv().DATABASE_URL)
     .option('--verbose', 'Enable verbose output', false)
     .action(async options => {
       const migrations = await runMigrations(options.databaseUrl, {

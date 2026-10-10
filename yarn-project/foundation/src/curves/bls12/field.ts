@@ -1,9 +1,10 @@
 /* eslint-disable camelcase */
 import { bls12_381 } from '@noble/curves/bls12-381';
-import { inspect } from 'util';
+import { Buffer } from 'buffer';
 
 import { toBigIntBE, toBufferBE } from '../../bigint-buffer/index.js';
 import { randomBytes } from '../../crypto/random/index.js';
+import { inspect } from '../../inspect/index.js';
 import { hexSchemaFor } from '../../schemas/utils.js';
 import { BufferReader } from '../../serialize/buffer_reader.js';
 import { Fr } from '../bn254/field.js';

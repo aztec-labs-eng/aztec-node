@@ -1,5 +1,6 @@
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue, getActiveNetworkName } from '@aztec-labs/foundation/config';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -46,7 +47,7 @@ function runProcess<T>(
   const { promise, resolve, reject } = promiseWithResolvers<T | undefined>();
   const proc = spawn(command, args, {
     cwd,
-    env: { ...process.env, ...env },
+    env: { ...getEnv(), ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -450,9 +451,9 @@ export async function deployAztecL1Contracts(
 
   // Verify contracts on Etherscan when on mainnet/sepolia and ETHERSCAN_API_KEY is available.
   const isVerifiableChain = chainId === mainnet.id || chainId === sepolia.id;
-  const shouldVerify = isVerifiableChain && !!process.env.ETHERSCAN_API_KEY;
+  const shouldVerify = isVerifiableChain && !!getEnv().ETHERSCAN_API_KEY;
 
-  if (isVerifiableChain && !process.env.ETHERSCAN_API_KEY) {
+  if (isVerifiableChain && !getEnv().ETHERSCAN_API_KEY) {
     logger.warn(
       `Deploying to chain ${chainId} (${chainId === mainnet.id ? 'mainnet' : 'sepolia'}) without ETHERSCAN_API_KEY. ` +
         `Contracts will NOT be verified on Etherscan. Set ETHERSCAN_API_KEY environment variable to enable verification.`,

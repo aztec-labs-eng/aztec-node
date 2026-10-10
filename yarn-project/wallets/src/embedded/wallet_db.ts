@@ -3,6 +3,7 @@ import { Fq, Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Buffer } from 'buffer';
 
 export const AccountTypes = ['schnorr', 'schnorr_initializerless', 'ecdsasecp256r1', 'ecdsasecp256k1'] as const;
 export type AccountType = (typeof AccountTypes)[number];

@@ -3,6 +3,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import { L1Actor, L1ToL2Message, L2Actor } from '@aztec-labs/aztec.js/messaging';
 import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { toFunctionSelector } from 'viem';
 
 import {

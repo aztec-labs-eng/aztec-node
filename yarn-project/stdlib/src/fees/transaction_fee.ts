@@ -1,5 +1,5 @@
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { strict as assert } from 'assert';
+import { assert } from '@aztec-labs/foundation/validation';
 
 import type { Gas } from '../gas/gas.js';
 import { GasFees } from '../gas/gas_fees.js';

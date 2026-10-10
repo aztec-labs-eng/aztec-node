@@ -30,6 +30,7 @@ import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import '@aztec-labs/stdlib/testing/jest';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';

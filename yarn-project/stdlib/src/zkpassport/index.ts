@@ -3,6 +3,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { withoutHexPrefix } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 
 export type ViemZkPassportProofParams = {
   version: `0x${string}`;
