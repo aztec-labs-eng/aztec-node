@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Buffer } from 'buffer';
 
 import type { FactScope } from './fact_scope.js';
 import { FactCollectionKey } from './fact_store_keys.js';

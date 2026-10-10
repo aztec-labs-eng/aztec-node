@@ -2,6 +2,7 @@ import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
+import { Buffer } from 'buffer';
 
 import type { FactScope } from './fact_scope.js';
 import { type BlockReference, FactCollectionKey } from './fact_store_keys.js';
