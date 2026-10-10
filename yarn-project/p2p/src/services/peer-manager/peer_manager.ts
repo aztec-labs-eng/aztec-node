@@ -13,6 +13,7 @@ import type { Connection, PeerId } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';
 import type { Multiaddr } from '@multiformats/multiaddr';
 import { ENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 import { inspect } from 'util';
 
 import type { P2PConfig } from '../../config.js';

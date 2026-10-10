@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-properties -- this module sets variables of the Node.js process */
 import type { NetworkNames } from '@aztec-labs/foundation/config';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { type ConsensusEnvVar, checkConsensusEnvOverrides } from '@aztec-labs/stdlib/config';

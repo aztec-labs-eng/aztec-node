@@ -1,5 +1,7 @@
 import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
+import { Buffer } from 'buffer';
+
 import { toBufferBE } from '../../bigint-buffer/index.js';
 import { setupCustomSnapshotSerializers } from '../../testing/index.js';
 import { pedersenCommit, pedersenHash, pedersenHashBuffer } from './index.js';

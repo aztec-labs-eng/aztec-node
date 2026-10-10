@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { EpochNumber, EpochNumberSchema } from '../branded-types/epoch.js';

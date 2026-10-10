@@ -1,5 +1,6 @@
 import { AvmService } from '@aztec-foundation/bb-avm-sim';
 
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { AbortError, isRetryableError } from '@aztec-labs/foundation/error';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
@@ -106,7 +107,7 @@ export class AvmSimulatorPool implements AvmSimulator {
 
   constructor(private options: AvmSimulatorPoolOptions) {
     this.log = createLogger('simulator:avm-pool');
-    this.maxSize = options.maxSize ?? parseInt(process.env.AVM_MAX_CONCURRENT_SIMULATIONS ?? '4', 10);
+    this.maxSize = options.maxSize ?? parseInt(getEnv().AVM_MAX_CONCURRENT_SIMULATIONS ?? '4', 10);
     this.cdbServer = new CdbIpcServer();
     this.spawnRetryIntervalMs = options.spawnRetryIntervalMs ?? 1_000;
     this.spawnProcess = options.spawnProcess ?? (spawnOptions => AvmSimulatorProcess.spawn(spawnOptions));

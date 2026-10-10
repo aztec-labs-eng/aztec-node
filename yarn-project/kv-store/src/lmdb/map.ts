@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import type { Database, RangeOptions } from 'lmdb';
 
 import type { Key, Range, Value } from '../interfaces/common.js';

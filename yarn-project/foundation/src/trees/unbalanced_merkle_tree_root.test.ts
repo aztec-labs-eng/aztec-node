@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fr } from '../curves/bn254/index.js';
 import { computeBalancedMerkleTreeRoot } from './balanced_merkle_tree_root.js';
 import { shaMerkleHash } from './hasher.js';

@@ -22,6 +22,7 @@ import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, TxEffect } from '@aztec-labs/stdlib/tx';
 import { WorldStateSynchronizerError } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import type { NextBlockPlan, NextBlockPredictor } from './next_block/index.js';

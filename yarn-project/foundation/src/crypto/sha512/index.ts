@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { default as hash } from 'hash.js';
 
 import { GrumpkinScalar } from '../../curves/grumpkin/index.js';

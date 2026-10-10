@@ -1,8 +1,8 @@
 import { omit } from '@aztec-labs/foundation/collection';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
-import { inspect } from 'util';
 import { type Client, type Hex, type PublicClient, publicActions, walletActions } from 'viem';
 
 import { computeSignedTransactionHash, parseSignedTransaction, recoverSignedTransactionAddress } from '../blob_tx.js';

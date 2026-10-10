@@ -1,6 +1,7 @@
 import { MAX_ENQUEUED_CALLS_PER_TX } from '@aztec-labs/constants';
 import { makeTuple } from '@aztec-labs/foundation/array';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
@@ -10,7 +11,6 @@ import {
   serializeToBuffer,
 } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

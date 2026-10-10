@@ -6,6 +6,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { AttesterAccount, BLSAccount, EthAccount } from '@aztec-labs/node-keystore/types';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
+import { Buffer } from 'buffer';
 import { generateMnemonic, mnemonicToAccount, privateKeyToAddress } from 'viem/accounts';
 
 import { processAttesterAccounts } from './staker.js';

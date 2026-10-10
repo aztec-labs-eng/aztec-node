@@ -21,10 +21,10 @@ import { type FieldsOf, makeTuple, makeTupleAsync } from '@aztec-labs/foundation
 import { poseidon2HashWithSeparator } from '@aztec-labs/foundation/crypto/poseidon';
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type ZodFor, schemas } from '@aztec-labs/foundation/schemas';
 import { BufferReader, serializeArrayOfBufferableToVector, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { PublicDataWrite } from '../avm/public_data_write.js';

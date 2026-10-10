@@ -4,6 +4,7 @@ import { mockTx } from '@aztec-labs/stdlib/testing';
 import { Tx, TxArray, TxHash, TxHashArray } from '@aztec-labs/stdlib/tx';
 import { describe, expect, it, jest } from '@jest/globals';
 import type { PeerId } from '@libp2p/interface';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import type { Libp2p } from 'libp2p';
 

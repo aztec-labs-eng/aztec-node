@@ -20,6 +20,7 @@ import { CommitteeAttestation, CommitteeAttestationsAndSigners } from '@aztec-la
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { decodeFunctionData, getAddress } from 'viem';
 

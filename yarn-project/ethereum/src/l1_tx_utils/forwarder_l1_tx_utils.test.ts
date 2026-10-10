@@ -4,6 +4,7 @@ import { Blob } from '@aztec-labs/blob-lib';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { Buffer } from 'buffer';
 import { type Hex, encodeFunctionData, parseEventLogs } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

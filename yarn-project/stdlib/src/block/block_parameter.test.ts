@@ -1,5 +1,6 @@
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Buffer } from 'buffer';
 
 import { BlockHash } from './block_hash.js';
 import {

@@ -30,6 +30,7 @@ import { Proof } from '@aztec-labs/stdlib/proofs';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, GlobalVariables, PartialStateReference, StateReference } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 import { type Hex, decodeFunctionData, getAbiItem, hexToBytes } from 'viem';
 
 import { NoBlobBodiesFoundError } from '../errors.js';

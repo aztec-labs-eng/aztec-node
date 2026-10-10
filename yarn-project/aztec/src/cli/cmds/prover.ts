@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { createProverNodeAdminClient } from '@aztec-labs/stdlib/interfaces/server';
@@ -19,7 +20,7 @@ export function injectProverCommand(program: Command, log: LogFn): Command {
     .description('Schedules proving for the given epoch')
     .requiredOption('--epoch <n>', 'Epoch number to prove', parseEpoch)
     .requiredOption('--admin-url <url>', 'URL of the prover node admin JSON-RPC endpoint')
-    .option('--api-key <key>', 'Admin API key', process.env.AZTEC_ADMIN_API_KEY)
+    .option('--api-key <key>', 'Admin API key', getEnv().AZTEC_ADMIN_API_KEY)
     .action(async options => {
       const client = createProverNodeAdminClient(options.adminUrl, {}, undefined, options.apiKey);
       const jobId = await client.startProof(options.epoch);
@@ -30,7 +31,7 @@ export function injectProverCommand(program: Command, log: LogFn): Command {
     .command('get-jobs')
     .description('Lists the prover node proving jobs')
     .requiredOption('--admin-url <url>', 'URL of the prover node admin JSON-RPC endpoint')
-    .option('--api-key <key>', 'Admin API key', process.env.AZTEC_ADMIN_API_KEY)
+    .option('--api-key <key>', 'Admin API key', getEnv().AZTEC_ADMIN_API_KEY)
     .action(async options => {
       const client = createProverNodeAdminClient(options.adminUrl, {}, undefined, options.apiKey);
       const jobs = await client.getJobs();

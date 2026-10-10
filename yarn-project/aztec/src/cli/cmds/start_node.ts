@@ -106,6 +106,7 @@ export async function startNode(
     nodeConfig.rollupVersion,
   );
 
+  // eslint-disable-next-line no-restricted-properties -- sets a variable of the Node.js process
   process.env.ROLLUP_CONTRACT_ADDRESS ??= addresses.rollupAddress.toString();
 
   if (!Fr.fromHexString(config.genesisArchiveTreeRoot).equals(genesisArchiveRoot)) {

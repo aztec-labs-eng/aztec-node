@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { schemas, zodFor } from '@aztec-labs/foundation/schemas';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { FunctionSelector } from '../../abi/index.js';

@@ -15,6 +15,7 @@ import {
   computeSaltedInitializationHash,
 } from '@aztec-labs/stdlib/contract';
 import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { Buffer } from 'buffer';
 
 describe('Data generation for noir tests', () => {
   setupCustomSnapshotSerializers(expect);

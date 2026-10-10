@@ -1,4 +1,5 @@
 import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -22,7 +23,7 @@ const {
   BB_SKIP_CLEANUP = '',
   NOIR_EXECUTE_BINARY_PATH = '',
   NOIR_EXECUTE_WORKING_DIRECTORY = '',
-} = process.env;
+} = getEnv();
 
 // Determines if we have access to the bb binary and a tmp folder for temp files
 export const getEnvironmentConfig = async (logger: Logger) => {

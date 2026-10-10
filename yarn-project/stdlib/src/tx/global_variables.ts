@@ -3,6 +3,7 @@ import { BlockNumber, BlockNumberSchema, SlotNumber } from '@aztec-labs/foundati
 import { randomInt } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import {
   BufferReader,
@@ -12,7 +13,6 @@ import {
   serializeToSink,
 } from '@aztec-labs/foundation/serialize';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { jsonParseWithSchema, jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { FunctionSelector } from '../abi/index.js';

@@ -12,6 +12,7 @@ import {
 import { createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EthCheatCodes } from '@aztec-labs/ethereum/test';
 import { getActiveNetworkName } from '@aztec-labs/foundation/config';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
@@ -285,7 +286,8 @@ export type AttesterExitNetwork = {
 /** Loads the published config of the network selected with --network, which takes precedence over the environment. */
 export async function getAttesterExitNetwork(name: string): Promise<AttesterExitNetwork> {
   const networkName = getActiveNetworkName(name);
-  const cacheDir = process.env.DATA_DIRECTORY ? join(process.env.DATA_DIRECTORY, 'cache') : undefined;
+  const { DATA_DIRECTORY } = getEnv();
+  const cacheDir = DATA_DIRECTORY ? join(DATA_DIRECTORY, 'cache') : undefined;
   const config = networkName === 'local' ? undefined : await getNetworkConfig(networkName, cacheDir);
   if (networkName !== 'local' && !config) {
     throw new Error(`Network ${networkName} has no published config`);

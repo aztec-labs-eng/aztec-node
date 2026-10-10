@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { createSafeJsonRpcServer } from '@aztec-labs/foundation/json-rpc/server';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { Socket } from 'node:net';
@@ -25,7 +26,7 @@ type TaggedSocket = Socket & { [SESSION_SYMBOL]?: number };
  * Lives in its own module so the worker bundle does not pull in the HTTP server stack.
  */
 export async function createTXERpcServer(logger: Logger) {
-  const workerCount = Number(process.env.TXE_WORKERS);
+  const workerCount = Number(getEnv().TXE_WORKERS);
   let dispatcher: TXEDispatcher | TXEDispatcherPool;
   if (workerCount === 1) {
     const { dataDir, schnorrClassId } = await buildSharedContractStore();

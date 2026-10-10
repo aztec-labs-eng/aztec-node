@@ -3,6 +3,7 @@ import { keccak256, keccak256String } from '@aztec-labs/foundation/crypto/keccak
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 import { encodeAbiParameters, parseAbiParameters } from 'viem';
 
 import { CommitteeAttestationsAndSigners } from '../block/proposal/attestations_and_signers.js';

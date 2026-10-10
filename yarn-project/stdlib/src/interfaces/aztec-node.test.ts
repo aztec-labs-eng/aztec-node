@@ -13,6 +13,7 @@ import { memoize } from '@aztec-labs/foundation/decorators';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type JsonRpcTestContext, createJsonRpcTestSetup } from '@aztec-labs/foundation/json-rpc/test';
 import { MembershipWitness, SiblingPath } from '@aztec-labs/foundation/trees';
+import { Buffer } from 'buffer';
 import omit from 'lodash.omit';
 import times from 'lodash.times';
 

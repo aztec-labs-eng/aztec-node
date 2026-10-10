@@ -35,6 +35,7 @@
     "./branded-types": "./dest/branded-types/index.js",
     "./collection": "./dest/collection/index.js",
     "./config": "./dest/config/index.js",
+    "./config/env": "./dest/config/env.js",
     "./crypto/aes128": "./dest/crypto/aes128/index.js",
     "./crypto/bls": "./dest/crypto/bls/index.js",
     "./crypto/bls/bn254_keystore": "./dest/crypto/bls/bn254_keystore.js",
@@ -70,6 +71,7 @@
     "./json-rpc/server": "./dest/json-rpc/server/index.js",
     "./json-rpc/undici": "./dest/json-rpc/client/undici.js",
     "./json-rpc/test": "./dest/json-rpc/test/index.js",
+    "./inspect": "./dest/inspect/index.js",
     "./iterable": "./dest/iterable/index.js",
     "./iterator": "./dest/iterator/index.js",
     "./log": "./dest/log/index.js",
@@ -152,6 +154,7 @@
     "@noble/hashes": "^1.6.1",
     "@scure/bip39": "^2.0.1",
     "bn.js": "^5.2.3",
+    "buffer": "^6.0.3",
     "colorette": "^2.0.20",
     "detect-node": "^2.1.0",
     "hash.js": "^1.1.7",
@@ -208,6 +211,6 @@
     "!*.test.*"
   ],
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

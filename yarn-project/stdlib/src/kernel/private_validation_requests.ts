@@ -3,9 +3,9 @@ import {
   MAX_NOTE_HASH_READ_REQUESTS_PER_TX,
   MAX_NULLIFIER_READ_REQUESTS_PER_TX,
 } from '@aztec-labs/constants';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
-import { inspect } from 'util';
 
 import { ScopedKeyValidationRequestAndSeparator } from '../kernel/hints/scoped_key_validation_request_and_separator.js';
 import { ClaimedLengthArray, ClaimedLengthArrayFromBuffer } from './claimed_length_array.js';

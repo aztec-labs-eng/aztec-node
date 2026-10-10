@@ -10,6 +10,7 @@ import {
   type AztecNodeAdminConfig,
   createAztecNodeAdminClient,
 } from '@aztec-labs/stdlib/interfaces/client';
+import { Buffer } from 'buffer';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 

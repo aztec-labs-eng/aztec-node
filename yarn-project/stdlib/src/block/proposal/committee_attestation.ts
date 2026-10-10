@@ -3,6 +3,7 @@ import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 export { EthAddress, Signature };

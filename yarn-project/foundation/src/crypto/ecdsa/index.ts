@@ -1,5 +1,7 @@
 import { BarretenbergSync } from '@aztec-foundation/bb.js';
 
+import { Buffer } from 'buffer';
+
 import { EcdsaSignature } from './signature.js';
 
 export * from './signature.js';

@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { type ZodTypeAny, z } from 'zod';
 
 import { schemas } from '../schemas/schemas.js';

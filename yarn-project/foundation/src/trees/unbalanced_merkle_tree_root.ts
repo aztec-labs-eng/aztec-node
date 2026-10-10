@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { computeBalancedMerkleTreeRoot, computeBalancedMerkleTreeRootAsync } from './balanced_merkle_tree_root.js';
 import { shaMerkleHash } from './hasher.js';
 import { UnbalancedMerkleTreeCalculator } from './unbalanced_merkle_tree_calculator.js';

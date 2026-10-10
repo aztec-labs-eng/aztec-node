@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
@@ -115,7 +116,7 @@ class WorkerClientManager {
     }
 
     const env = {
-      ...process.env,
+      ...getEnv(),
       TS_NODE_PROJECT: tsconfigPath,
     };
 

@@ -3,6 +3,7 @@ import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { createLogger } from '@aztec-labs/foundation/log';
 import type { AztecAsyncKVStore, AztecAsyncMap } from '@aztec-labs/kv-store';
+import { Buffer } from 'buffer';
 import type { TransactionReceipt } from 'viem';
 
 /**

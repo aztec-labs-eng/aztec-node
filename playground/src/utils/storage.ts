@@ -5,6 +5,7 @@ import type { AuthWitness } from '@aztec-labs/aztec.js/authorization';
 import { type TxHash, type TxReceipt, TxStatus } from '@aztec-labs/aztec.js/tx';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { type AztecAsyncMap, type AztecAsyncKVStore, type AztecAsyncMultiMap } from '@aztec-labs/kv-store';
+import { Buffer } from 'buffer';
 import { stringify } from 'buffer-json';
 
 export const Aliases = ['accounts', 'artifacts', 'secrets', 'transactions', 'authwits', 'contracts'] as const;

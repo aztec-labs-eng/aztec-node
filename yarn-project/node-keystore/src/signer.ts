@@ -12,6 +12,7 @@ import type { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature, type ViemTransactionSignature } from '@aztec-labs/foundation/eth-signature';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { bufferToHex, withHexPrefix } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 import {
   type TransactionSerializable,
   type TypedDataDefinition,

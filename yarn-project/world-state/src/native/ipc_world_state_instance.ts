@@ -21,11 +21,13 @@ import {
   PUBLIC_DATA_TREE_HEIGHT,
 } from '@aztec-labs/constants';
 import type { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import type { IndexedTreeId, TreeInfo } from '@aztec-labs/stdlib/interfaces/server';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import type { GenesisData, WorldStateRevision } from '@aztec-labs/stdlib/world-state';
+import { Buffer } from 'buffer';
 import { cpus } from 'node:os';
 
 import type { WorldStateInstrumentation } from '../instrumentation/instrumentation.js';
@@ -382,7 +384,7 @@ export class IpcWorldState implements NativeWorldStateInstance {
     bindings?: LoggerBindings,
     threads: number = getWsdbThreadCount(),
   ): Promise<IpcWorldState> {
-    const transport = process.env.WSDB_TRANSPORT === 'shm' ? 'shm' : 'uds';
+    const transport = getEnv().WSDB_TRANSPORT === 'shm' ? 'shm' : 'uds';
     const wsdb = await WsdbService.spawn({
       transport,
       extraArgs: getWsdbExtraArgs(dataDir, wsTreeMapSizes, genesis, threads),

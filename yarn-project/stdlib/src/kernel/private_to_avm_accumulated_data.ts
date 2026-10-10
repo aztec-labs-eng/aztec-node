@@ -7,6 +7,7 @@ import {
 import { type FieldsOf, makeTuple } from '@aztec-labs/foundation/array';
 import { arraySerializedSizeOfNonEmpty } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
@@ -17,7 +18,6 @@ import {
   serializeToFields,
   serializeToSink,
 } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { ScopedL2ToL1Message } from '../messaging/l2_to_l1_message.js';

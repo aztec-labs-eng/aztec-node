@@ -1,8 +1,8 @@
 import { CALL_CONTEXT_LENGTH } from '@aztec-labs/constants';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, FieldReader, serializeToBuffer, serializeToFields } from '@aztec-labs/foundation/serialize';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { FunctionSelector } from '../abi/index.js';

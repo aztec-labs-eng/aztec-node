@@ -7,6 +7,7 @@ import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { getErrorCause } from '@aztec-labs/foundation/types';
+import { Buffer } from 'buffer';
 import { type Hex, RpcRequestError, encodeFunctionData, getContract, parseEther } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';

@@ -3,6 +3,7 @@ import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { toInlineStrArray } from '@aztec-labs/foundation/testing';
 import { updateInlineFndTestData } from '@aztec-labs/foundation/testing/files';
+import { Buffer } from 'buffer';
 
 import { Blob } from './blob.js';
 import { commitmentToFields } from './hash.js';

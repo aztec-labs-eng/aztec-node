@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { Buffer } from 'buffer';
 import net from 'net';
 
@@ -10,7 +11,7 @@ const SSH_AGENT_SIGN_RESPONSE = 14;
  * Connect to the SSH agent via a TCP socket using the standard env variable
  */
 export function connectToAgent() {
-  const socketPath = process.env.SSH_AUTH_SOCK;
+  const socketPath = getEnv().SSH_AUTH_SOCK;
   if (!socketPath) {
     throw new Error('SSH_AUTH_SOCK is not set');
   }

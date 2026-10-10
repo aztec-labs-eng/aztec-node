@@ -8,6 +8,7 @@ import type { Identify } from '@libp2p/identify';
 import type { PeerId, PrivateKey } from '@libp2p/interface';
 import type { AddressManager, ConnectionManager } from '@libp2p/interface-internal';
 import { createFromPrivKey } from '@libp2p/peer-id-factory';
+import { Buffer } from 'buffer';
 import { resolve } from 'dns/promises';
 import { promises as fs } from 'fs';
 import type { Libp2p } from 'libp2p';

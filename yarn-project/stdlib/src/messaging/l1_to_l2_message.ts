@@ -5,6 +5,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { SiblingPath } from '@aztec-labs/foundation/trees';
+import { Buffer } from 'buffer';
 
 import type { AztecAddress } from '../aztec-address/index.js';
 import type { BlockParameter } from '../block/block_parameter.js';

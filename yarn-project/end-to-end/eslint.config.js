@@ -9,6 +9,12 @@ export default [
   // from linting too, matching how foundation ignores its own src/jest/*.mjs env files.
   globalIgnores(['src/shared/timing_env.mjs']),
   {
+    // Everything in this package is test code for Node.js, which sets and reads the variables of its own process.
+    rules: {
+      'no-restricted-properties': 'off',
+    },
+  },
+  {
     files: ['**/*.mjs'],
     languageOptions: {
       globals: {

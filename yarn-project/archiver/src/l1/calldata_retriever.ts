@@ -14,6 +14,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { computeCheckpointPayloadDigest } from '@aztec-labs/stdlib/checkpoint';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { Buffer } from 'buffer';
 import { type Hex, type Transaction, decodeFunctionData, hexToBytes, multicall3Abi, toFunctionSelector } from 'viem';
 
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';

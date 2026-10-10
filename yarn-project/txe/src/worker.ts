@@ -1,5 +1,6 @@
 import { BackendType, Barretenberg, BarretenbergSync } from '@aztec-foundation/bb.js';
 
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { parentPort, workerData } from 'node:worker_threads';
 
@@ -63,7 +64,7 @@ function serializeError(err: unknown): SerializedError {
 // Periodic memstat for diagnostic builds — set TXE_WORKER_MEMSTAT=1 to enable. Posts JS-heap
 // breakdown + active-session count back to the dispatcher so we can attribute RSS growth
 // between V8 heap (would show in heapUsed) and native (LMDB / world-state / WASM).
-if (process.env.TXE_WORKER_MEMSTAT === '1') {
+if (getEnv().TXE_WORKER_MEMSTAT === '1') {
   setInterval(() => {
     const m = process.memoryUsage();
     port.postMessage({

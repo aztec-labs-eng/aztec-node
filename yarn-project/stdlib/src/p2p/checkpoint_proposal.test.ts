@@ -4,6 +4,7 @@ import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer'
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 
 import { InboxMessagePrefixRef } from '../messaging/inbox_message_prefix_ref.js';
 import { CheckpointHeader } from '../rollup/checkpoint_header.js';

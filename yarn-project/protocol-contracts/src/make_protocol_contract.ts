@@ -1,6 +1,7 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { ContractArtifact } from '@aztec-labs/stdlib/abi';
 import { PublicKeys } from '@aztec-labs/stdlib/keys';
+import { Buffer } from 'buffer';
 
 import type { ProtocolContract } from './protocol_contract.js';
 import {

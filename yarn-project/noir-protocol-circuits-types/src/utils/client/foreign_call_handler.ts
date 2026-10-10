@@ -2,7 +2,7 @@ import type { ForeignCallInput, ForeignCallOutput } from '@aztec-foundation/noir
 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { LogLevels, applyStringFormatting, createLogger } from '@aztec-labs/foundation/log';
-import { strict as assert } from 'assert';
+import { assert } from '@aztec-labs/foundation/validation';
 
 export function foreignCallHandler(name: string, args: ForeignCallInput[]): Promise<ForeignCallOutput[]> {
   // ForeignCallInput is actually a string[], so the args are string[][].

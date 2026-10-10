@@ -76,6 +76,7 @@
     "@aztec-labs/constants": "workspace:^",
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
+    "buffer": "^6.0.3",
     "lodash.chunk": "^4.2.0",
     "lodash.omit": "^4.5.0",
     "tslib": "^2.4.0"
@@ -102,6 +103,6 @@
     "!src/scripts/*"
   ],
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

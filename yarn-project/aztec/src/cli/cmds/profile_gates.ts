@@ -1,6 +1,7 @@
 import { findBbBinary } from '@aztec-foundation/bb.js';
 
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { execFile as execFileCb } from 'child_process';
 import { rm } from 'fs/promises';
@@ -34,7 +35,7 @@ async function getGateCount(bb: string, artifactPath: string): Promise<number> {
 
 /** Profiles all compiled artifacts in a target directory and prints gate counts. */
 export async function profileGates(targetDir: string, json: boolean, log: LogFn): Promise<void> {
-  const bb = process.env.BB ?? findBbBinary() ?? 'bb';
+  const bb = getEnv().BB ?? findBbBinary() ?? 'bb';
   const { artifacts, tmpDir } = await discoverArtifacts(targetDir);
 
   if (artifacts.length === 0) {

@@ -83,8 +83,8 @@ Run from `yarn-project`:
 Use `yarn workspace` to run tests without changing directories:
 
 ```bash
-yarn workspace @aztec/<package-name> test src/file.test.ts                 # Run test file
-yarn workspace @aztec/<package-name> test src/file.test.ts -t 'test name'  # Run specific test
+yarn workspace @aztec-labs/<package-name> test src/file.test.ts                 # Run test file
+yarn workspace @aztec-labs/<package-name> test src/file.test.ts -t 'test name'  # Run specific test
 ```
 
 ### Capturing Test Output
@@ -92,7 +92,7 @@ yarn workspace @aztec/<package-name> test src/file.test.ts -t 'test name'  # Run
 For long-running tests or verbose output, redirect to a temp file and use native tools to examine:
 
 ```bash
-yarn workspace @aztec/<package-name> test src/file.test.ts > /tmp/test-output.log 2>&1
+yarn workspace @aztec-labs/<package-name> test src/file.test.ts > /tmp/test-output.log 2>&1
 ```
 
 Then use **Read** or **Grep** to examine `/tmp/test-output.log`. Never use `| tail` or `| head` to limit output—use native tools instead.
@@ -109,10 +109,10 @@ yarn workspace @aztec-labs/end-to-end test:e2e e2e_something.test.ts
 
 ### Sequential Testing (Port Conflicts)
 
-Some packages (e.g., `ethereum`) require sequential execution:
+Some packages (e.g., `ethereum`) require sequential execution. The `test` script already passes `--maxWorkers`, which jest refuses to combine with `--runInBand`, so set the worker count instead:
 
 ```bash
-yarn workspace @aztec/<package-name> test --runInBand
+JEST_MAX_WORKERS=1 yarn workspace @aztec-labs/<package-name> test
 ```
 
 ### Test Logging
@@ -122,12 +122,12 @@ that tests or operators rely on, or for payload size and serialization requireme
 Match structured fields rather than message prose.
 
 ```bash
-LOG_LEVEL=verbose yarn workspace @aztec/<package-name> test src/file.test.ts  # Recommended
-LOG_LEVEL="debug; info: json-rpc, simulator" yarn workspace @aztec/<package-name> test src/file.test.ts    # More detail
+LOG_LEVEL=verbose yarn workspace @aztec-labs/<package-name> test src/file.test.ts  # Recommended
+LOG_LEVEL="debug; info: json-rpc, simulator" yarn workspace @aztec-labs/<package-name> test src/file.test.ts    # More detail
 # Available levels: trace, debug, verbose, info, warn
 
 # Module-specific logging
-LOG_LEVEL='info; debug:sequencer,archiver' yarn workspace @aztec/<package-name> test src/file.test.ts
+LOG_LEVEL='info; debug:sequencer,archiver' yarn workspace @aztec-labs/<package-name> test src/file.test.ts
 ```
 
 ## Format & Lint

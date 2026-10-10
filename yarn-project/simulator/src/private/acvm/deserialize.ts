@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { hexToBuffer } from '@aztec-labs/foundation/string';
+import { Buffer } from 'buffer';
 
 import type { ACVMField, ACVMWitness } from './acvm_types.js';
 

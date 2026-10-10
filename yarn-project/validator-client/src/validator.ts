@@ -62,6 +62,7 @@ import {
 } from '@aztec-labs/validator-ha-signer/factory';
 import { DutyType, type SigningContext, type SlashingProtectionDatabase } from '@aztec-labs/validator-ha-signer/types';
 import type { ValidatorHASigner } from '@aztec-labs/validator-ha-signer/validator-ha-signer';
+import { Buffer } from 'buffer';
 import { EventEmitter } from 'events';
 import type { TypedDataDefinition } from 'viem';
 

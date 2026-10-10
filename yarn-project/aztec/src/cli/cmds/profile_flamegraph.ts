@@ -1,5 +1,6 @@
 import { findBbBinary } from '@aztec-foundation/bb.js';
 
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { readFile, rename, rm, writeFile } from 'fs/promises';
 import { basename, dirname, join } from 'path';
@@ -33,8 +34,8 @@ export async function profileFlamegraph(artifactPath: string, functionName: stri
   try {
     await writeFile(functionArtifact, makeFunctionArtifact(artifact, func));
 
-    const profiler = process.env.PROFILER_PATH ?? 'noir-profiler';
-    const bb = process.env.BB ?? findBbBinary() ?? 'bb';
+    const profiler = getEnv().PROFILER_PATH ?? 'noir-profiler';
+    const bb = getEnv().BB ?? findBbBinary() ?? 'bb';
 
     await run(profiler, [
       'gates',

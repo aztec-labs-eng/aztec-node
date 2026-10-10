@@ -4,6 +4,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import type { IndexedTreeLeaf, IndexedTreeLeafPreimage } from '@aztec-labs/foundation/trees';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 /**

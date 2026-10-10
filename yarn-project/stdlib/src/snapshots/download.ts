@@ -1,6 +1,7 @@
 import { fromEntries, getEntries, maxBy } from '@aztec-labs/foundation/collection';
 import { jsonParseWithSchema } from '@aztec-labs/foundation/json-rpc';
 import type { ReadOnlyFileStore } from '@aztec-labs/stdlib/file-store';
+import { Buffer } from 'buffer';
 import { createReadStream, createWriteStream } from 'fs';
 import fs from 'fs/promises';
 import pathMod from 'path';

@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { createFileStore, createReadOnlyFileStore } from './factory.js';
 import { InMemoryFileStore } from './memory.js';
 

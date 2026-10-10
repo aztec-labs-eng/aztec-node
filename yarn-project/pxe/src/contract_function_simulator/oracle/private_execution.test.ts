@@ -49,6 +49,7 @@ import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { BlockHeader, HashedValues, TxContext, TxExecutionRequest, TxHash } from '@aztec-labs/stdlib/tx';
 import { NativeWorldStateService } from '@aztec-labs/world-state';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { Matcher, type MatcherCreator, type MockProxy, mock } from 'jest-mock-extended';
 import { toFunctionSelector } from 'viem';
 

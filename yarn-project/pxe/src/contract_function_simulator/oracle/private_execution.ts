@@ -20,6 +20,7 @@ import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { PrivateCircuitPublicInputs } from '@aztec-labs/stdlib/kernel';
 import type { CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
 import { PrivateCallExecutionResult } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import { buildACIRCallback } from './acir_callback.js';
 import type { PrivateExecutionOracle } from './private_execution_oracle.js';

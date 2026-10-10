@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { spawnSync } from 'child_process';
 import { accessSync, constants } from 'fs';
 import { homedir } from 'os';
@@ -25,7 +26,7 @@ function isExecutable(path: string): boolean {
  */
 export function resolveFoundryBinary(name: string): string {
   const envVar = `${name.toUpperCase()}_BIN`;
-  const envBin = process.env[envVar];
+  const envBin = getEnv()[envVar];
   if (envBin) {
     if (!isExecutable(envBin)) {
       throw new Error(`$${envVar} is set to ${envBin}, which does not exist or is not executable.`);

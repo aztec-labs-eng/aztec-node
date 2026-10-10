@@ -1,5 +1,6 @@
 import { TreeLeafIndex } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Buffer } from 'buffer';
 
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';
 import { TreeSnapshots } from '../tx/tree_snapshots.js';

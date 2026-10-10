@@ -5,6 +5,7 @@ import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { generateKeyPair, marshalPrivateKey } from '@libp2p/crypto/keys';
 import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
+import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';

@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Comparator, type Note } from '@aztec-labs/stdlib/note';
+import { Buffer } from 'buffer';
 
 export interface PropertySelector {
   index: number;

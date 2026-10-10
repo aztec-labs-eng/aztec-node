@@ -5,6 +5,7 @@ import { bytesToNumberBE } from '@noble/curves/abstract/utils';
 import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha2';
 import { mnemonicToSeedSync } from '@scure/bip39';
+import { Buffer } from 'buffer';
 
 export function deriveBlsPrivateKey(mnemonic: string | undefined, ikm: string | undefined, path: string): Hex<32> {
   if (ikm) {

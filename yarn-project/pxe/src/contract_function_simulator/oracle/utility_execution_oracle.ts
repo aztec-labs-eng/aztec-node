@@ -48,6 +48,7 @@ import {
   type TxHash,
   type TxReceipt,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 import type { ContractSyncService } from '../../contract/contract_sync_service.js';
 import { createContractLogger, logContractMessage, stripAztecnrLogPrefix } from '../../contract_logging.js';

@@ -1,4 +1,5 @@
 /* eslint-disable camelcase */
+import { Buffer } from 'buffer';
 import { default as hash } from 'hash.js';
 
 import { Fr } from '../../curves/bn254/field.js';

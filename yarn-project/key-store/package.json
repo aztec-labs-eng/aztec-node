@@ -61,6 +61,7 @@
     "@aztec-labs/foundation": "workspace:^",
     "@aztec-labs/kv-store": "workspace:^",
     "@aztec-labs/stdlib": "workspace:^",
+    "buffer": "^6.0.3",
     "tslib": "^2.4.0"
   },
   "devDependencies": {
@@ -79,6 +80,6 @@
   ],
   "types": "./dest/index.d.ts",
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.16"
   }
 }

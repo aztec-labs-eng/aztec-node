@@ -9,6 +9,7 @@ import { sleep } from '@aztec-labs/foundation/sleep';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { getErrorCause } from '@aztec-labs/foundation/types';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import assert from 'node:assert';
 import {

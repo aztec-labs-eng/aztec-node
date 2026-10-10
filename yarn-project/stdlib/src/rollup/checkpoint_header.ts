@@ -3,11 +3,11 @@ import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import type { ZodFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, bigintToUInt64BE, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

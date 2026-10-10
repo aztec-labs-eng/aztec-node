@@ -15,6 +15,7 @@ import type { SequencerClient } from '@aztec-labs/sequencer-client';
 import type { TestSequencerClient } from '@aztec-labs/sequencer-client/test';
 import type { AztecNode, AztecNodeAdmin } from '@aztec-labs/stdlib/interfaces/client';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import 'jest-extended';
 import { type Hex, type TransactionSerialized, recoverTransactionAddress } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';

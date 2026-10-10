@@ -2,6 +2,7 @@ import { poseidon2Hash } from '@aztec-labs/foundation/crypto/poseidon';
 import { sha256ToField } from '@aztec-labs/foundation/crypto/sha256';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
+import { Buffer } from 'buffer';
 
 // Frozen string, not a package reference: it is hashed into every secret key derived below, so
 // changing it changes the address of every account derived from a signing key. It keeps the old

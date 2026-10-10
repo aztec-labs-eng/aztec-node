@@ -1,5 +1,6 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { MessageHeader, TypedMessage } from '@aztec-labs/foundation/message';
+import { Buffer } from 'buffer';
 import { Encoder, addExtension } from 'msgpackr';
 import { isAnyArrayBuffer } from 'util/types';
 

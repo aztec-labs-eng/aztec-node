@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fq, Fr } from '../../curves/bn254/field.js';
 import { deriveBlsKeyFromEntropy, deriveBlsKeyFromMnemonic } from './index.js';
 
