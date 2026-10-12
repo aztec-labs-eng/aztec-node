@@ -842,8 +842,8 @@ describe('L1TxUtils', () => {
         value: 0n,
       };
 
-      const baseEstimate = await l1Client.estimateGas(request);
-      const bufferedEstimate = await gasUtils.estimateGas(l1Client.account!, request);
+      const baseEstimate = await l1Client.estimateGas({ ...request, account: l1Client.account.address });
+      const bufferedEstimate = await gasUtils.estimateGas(l1Client.account.address, request);
 
       // adds 20% buffer
       const expectedEstimate = baseEstimate + (baseEstimate * 20n) / 100n;
@@ -886,10 +886,10 @@ describe('L1TxUtils', () => {
       };
 
       // Estimate gas without blobs first
-      const baseEstimate = await gasUtils.estimateGas(l1Client.account!, request);
+      const baseEstimate = await gasUtils.estimateGas(l1Client.account.address, request);
 
       // Estimate gas with blobs
-      const blobEstimate = await gasUtils.estimateGas(l1Client.account!, request, undefined, {
+      const blobEstimate = await gasUtils.estimateGas(l1Client.account.address, request, undefined, {
         blobs: [blobData],
         kzg,
         maxFeePerBlobGas: 10000000000n,

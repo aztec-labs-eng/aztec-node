@@ -103,11 +103,13 @@ describe('EpochCache integration', () => {
   });
 
   it('returns committee for a finalized epoch and marks it as finalized', async () => {
-    const lagInEpochsForRandao = await rollup.getLagInEpochsForRandao();
+    const lagInEpochsForValidatorSet = await rollup.getLagInEpochsForValidatorSet();
     const epochDuration = await rollup.getEpochDuration();
+    const currentEpoch = await rollup.getCurrentEpoch();
 
-    // Advance well past the lag so the epoch's sampling data is finalized.
-    const targetEpoch = EpochNumber(lagInEpochsForRandao + 2);
+    // With this Anvil version, deployment and activation can span several epochs, so attesters may not be ready
+    // for epoch 3. Choose an epoch whose validator sample falls after activation instead of assuming they are.
+    const targetEpoch = EpochNumber(currentEpoch + lagInEpochsForValidatorSet + 2);
     await rollupCheatCodes.advanceToEpoch(targetEpoch);
     await rollupCheatCodes.setupEpoch();
     // Mine enough blocks so finalized catches up (finalized = latest - 16 with slotsInAnEpoch=8).
