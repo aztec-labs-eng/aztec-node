@@ -8,7 +8,6 @@
     "./config": "./dest/config.js",
     "./errors": "./dest/errors/index.js"
   },
-  "bin": "./dest/bin/index.js",
   "typedocOptions": {
     "entryPoints": [
       "./src/index.ts"
@@ -17,7 +16,6 @@
     "tsconfig": "./tsconfig.json"
   },
   "scripts": {
-    "start": "node --no-warnings ./dest/bin",
     "build": "yarn clean && ../scripts/tsc.sh",
     "build:dev": "../scripts/tsc.sh --watch",
     "clean": "rm -rf ./dest .tsbuildinfo",
