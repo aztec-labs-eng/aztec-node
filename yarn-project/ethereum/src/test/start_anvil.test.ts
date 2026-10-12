@@ -1,6 +1,7 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { jest } from '@jest/globals';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { type AddressInfo, createServer } from 'node:net';
 import { tmpdir } from 'os';
@@ -9,7 +10,28 @@ import { createPublicClient, http, parseAbiItem } from 'viem';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
 import type { Anvil } from './start_anvil.js';
-import { startAnvil } from './start_anvil.js';
+import { startAnvil, syncDateProviderFromAnvilOutput } from './start_anvil.js';
+
+describe('Anvil clock synchronization', () => {
+  const now = Date.parse('2026-10-12T15:42:21Z');
+
+  it('keeps replayed block timestamps from moving the clock backwards', () => {
+    using _now = jest.spyOn(Date, 'now').mockReturnValue(now);
+    const dateProvider = new TestDateProvider();
+    syncDateProviderFromAnvilOutput('Block Time: "Mon, 12 Oct 2026 15:42:05 +0000"', dateProvider);
+    expect(dateProvider.now()).toBe(now);
+  });
+
+  it('uses the newest block timestamp when stdout batches multiple blocks', () => {
+    using _now = jest.spyOn(Date, 'now').mockReturnValue(now);
+    const dateProvider = new TestDateProvider();
+    syncDateProviderFromAnvilOutput(
+      'Block Time: "Mon, 12 Oct 2026 15:41:41 +0000"\nBlock Time: "Mon, 12 Oct 2026 15:42:25 +0000"',
+      dateProvider,
+    );
+    expect(dateProvider.now()).toBe(Date.parse('2026-10-12T15:42:25Z'));
+  });
+});
 
 /**
  * Stands in for an anvil that announces itself, holds its port, and refuses to die on SIGTERM. It holds
