@@ -601,6 +601,25 @@ describe('TxPoolV2', () => {
       expect(await txsDB.getAsync(txHashStr)).toBeUndefined();
       expect(await proofsDB.getAsync(txHashStr)).toBeUndefined();
     });
+
+    it('returns undefined instead of a proofless tx when the proof row was evicted between reads', async () => {
+      // The body (txs) and proof (tx_proofs) are read in two steps, not atomically: an eviction can
+      // delete the proof row after the body read. getTxByHash must not serve a proofless tx (an honest
+      // requester would penalise us for it), so it returns undefined when the proof row is gone.
+      // includeProof: false reads only the body, so it still serves the tx.
+      const tx = await mockTx(1);
+      await pool.addPendingTxs([tx]);
+      const txHashStr = tx.getTxHash().toString();
+
+      const proofsDB: AztecAsyncMap<string, Buffer> = store.openMap('tx_proofs');
+      await store.transactionAsync(() => proofsDB.delete(txHashStr));
+
+      expect(await pool.getTxByHash(tx.getTxHash())).toBeUndefined();
+
+      const bodyOnly = await pool.getTxByHash(tx.getTxHash(), { includeProof: false });
+      expect(bodyOnly).toBeDefined();
+      expect(bodyOnly!.chonkProof.isEmpty()).toBe(true);
+    });
   });
 
   describe('validator rejection', () => {
