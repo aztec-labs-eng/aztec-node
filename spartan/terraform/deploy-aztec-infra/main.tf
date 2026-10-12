@@ -396,10 +396,14 @@ locals {
       name   = "${var.RELEASE_PREFIX}-snapshot"
       chart  = "aztec-snapshots"
       values = []
+      inline_values = [yamlencode({
+        snapshots = {
+          frequency = var.SNAPSHOT_CRON
+        }
+      })]
       custom_settings = {
         "snapshots.aztecNodeAdminUrl" = local.internal_rpc_admin_url
         "snapshots.uploadLocation"    = var.STORE_SNAPSHOT_URL
-        "snapshots.frequency"         = var.SNAPSHOT_CRON
         "nodeSelector.node-type"      = "network"
       }
       boot_node_host_path  = ""
