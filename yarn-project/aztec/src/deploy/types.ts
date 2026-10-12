@@ -68,20 +68,40 @@ export interface ContractClass<T extends ContractBase = ContractBase> {
 }
 
 /**
+ * Who sends a contract step's deploy, and whether the address commits to them:
+ * - `deployer` — a bound deploy: the account salts + sends, and the address commits to it.
+ * - `universal: true` + `from` — a universal deploy: the address is the same whoever sends it, so
+ *   it can be shared before anyone commits to deploying it; `from` sends and pays.
+ */
+type ContractSender =
+  | {
+      /** Account that salts + sends the deploy, e.g. `(r) => r.account("admin")`. */
+      deployer: (resolve: Resolver) => AztecAddress;
+      universal?: never;
+      from?: never;
+    }
+  | {
+      /** Publish without binding the sender into the address. */
+      universal: true;
+      /** Account that sends (and pays for) the deploy, e.g. `(r) => r.account("admin")`. */
+      from: (resolve: Resolver) => AztecAddress;
+      deployer?: never;
+    };
+
+/**
  * A step that puts a contract on-chain (or in the PXE):
  * - `publish`  → register the class + deploy the instance + run its initializer (a tx).
  * - `register` → private; only derive the deterministic address and register it in the PXE (no tx).
  *
- * The address is deterministic in (class id, deployer, salt, initializer + its args). Provide args
- * via {@link initializerArgs} (deterministic — addresses/static, resolved UPFRONT) or
+ * The address is deterministic in (class id, deployer, salt, initializer + its args) — with the
+ * deployer omitted for {@link ContractSender | universal} steps. Provide args via
+ * {@link initializerArgs} (deterministic — addresses/static, resolved UPFRONT) or
  * {@link deferredInitializerArgs} (may read runtime state — resolved AT EXECUTION TIME). At most one.
  */
-export interface ContractStep<C = Steps, T extends ContractBase = ContractBase> {
+export type ContractStep<C = Steps, T extends ContractBase = ContractBase> = ContractSender & {
   kind: 'contract';
   /** The generated contract class — provides the artifact and the typed `.at`. */
   contract: ContractClass<T>;
-  /** Account that salts + sends the deploy, e.g. `(r) => r.account("admin")`. */
-  deployer: (resolve: Resolver) => AztecAddress;
   mode: 'publish' | 'register';
   /** Per-contract salt, overriding {@link DeploymentSpec.salt}. */
   salt?: Fr;
@@ -112,7 +132,7 @@ export interface ContractStep<C = Steps, T extends ContractBase = ContractBase> 
    * if they only read pre-existing state.
    */
   dependsOn?: string[];
-}
+};
 
 /** A step that sends a tx once its dependencies exist. */
 export interface ActionStep<C = Steps> {
