@@ -35,6 +35,18 @@ export function reqRespBlockTxsHandler(
       throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST, { cause: err });
     }
 
+    // Cheap early bound before any attestation-pool / archiver / tx-pool work: reject when the
+    // explicit-hash list, or the number of requested indices, already exceeds the per-request cap on
+    // its own. The index bitvector has no duplicate positions, so its set-bit count is a lower bound
+    // on the served set; the explicit-hash list is bounded as it was before. The deduplicated
+    // served-set cap below stays the authoritative gate for the dual-form (index + explicit) overlap.
+    if (
+      request.txHashes.length > MAX_BLOCK_TXS_PER_REQUEST ||
+      request.txIndices.getTrueIndices().length > MAX_BLOCK_TXS_PER_REQUEST
+    ) {
+      throw new ReqRespStatusError(ReqRespStatus.BADLY_FORMED_REQUEST);
+    }
+
     // In principle assume we haven't found the block. This is how that is signaled to the requester.
     let availableIndicesBitVector: BitVector = BitVector.init(0, []);
     // We always try to service the explicitly requested tx hashes, even if we don't have the block.

@@ -90,6 +90,53 @@ describe('reqRespBlockTxsHandler', () => {
       expect((err as ReqRespStatusError).status).toBe(ReqRespStatus.BADLY_FORMED_REQUEST);
       expect(txPool.getTxsByHash).not.toHaveBeenCalled();
     });
+
+    it('rejects an over-cap request before any pool or archiver lookup', async () => {
+      // The cheap early bound short-circuits before the attestation pool / archiver / tx pool are
+      // touched, so one oversized request drives no lookup work.
+      const tooMany = Array.from({ length: MAX_BLOCK_TXS_PER_REQUEST + 1 }, () => TxHash.random());
+      const request = makeRequest(Fr.random(), BitVector.init(0, []), [], tooMany);
+
+      const err = await callHandler(request).then(
+        () => undefined,
+        e => e,
+      );
+      expect(err).toBeInstanceOf(ReqRespStatusError);
+      expect((err as ReqRespStatusError).status).toBe(ReqRespStatus.BADLY_FORMED_REQUEST);
+      expect(attestationPool.getBlockProposalByArchive).not.toHaveBeenCalled();
+      expect(archiver.getBlock).not.toHaveBeenCalled();
+      expect(txPool.getTxsByHash).not.toHaveBeenCalled();
+    });
+
+    it('rejects a dual-form request whose deduplicated set exceeds the cap even when neither form alone does', async () => {
+      // Each form is under the cap (so the early bound passes), but the deduplicated served set is
+      // over it; the final deduplicated cap must reject it after looking the proposal up.
+      const under = Math.ceil(MAX_BLOCK_TXS_PER_REQUEST * 0.8);
+      const blockTxHashes = Array.from({ length: MAX_BLOCK_TXS_PER_REQUEST }, () => TxHash.random());
+      const explicit = Array.from({ length: under }, () => TxHash.random()); // distinct from the block
+      const proposal = await createBlockProposal(blockTxHashes);
+      attestationPool.getBlockProposalByArchive.mockResolvedValue(proposal);
+      txPool.hasTxs.mockResolvedValue(blockTxHashes.map(() => true));
+
+      const request = makeRequest(
+        proposal.archive,
+        BitVector.init(
+          MAX_BLOCK_TXS_PER_REQUEST,
+          Array.from({ length: under }, (_, i) => i),
+        ),
+        blockTxHashes,
+        explicit,
+      );
+
+      const err = await callHandler(request).then(
+        () => undefined,
+        e => e,
+      );
+      expect(err).toBeInstanceOf(ReqRespStatusError);
+      expect((err as ReqRespStatusError).status).toBe(ReqRespStatus.BADLY_FORMED_REQUEST);
+      expect(attestationPool.getBlockProposalByArchive).toHaveBeenCalled();
+      expect(txPool.getTxsByHash).not.toHaveBeenCalled();
+    });
   });
 
   describe('no block proposal or archived block, explicit tx hashes', () => {
