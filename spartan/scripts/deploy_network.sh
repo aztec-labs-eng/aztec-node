@@ -748,6 +748,7 @@ WAIT_FOR_PROVER_DEPLOY = ${WAIT_FOR_PROVER_DEPLOY:-null}
 ADMIN_API_KEY_HASH = "${ADMIN_API_KEY_HASH}"
 EOF
 
+append_optional_tfvar "${DEPLOY_AZTEC_INFRA_DIR}/terraform.tfvars" SNAPSHOT_CRON string
 append_optional_tfvar "${DEPLOY_AZTEC_INFRA_DIR}/terraform.tfvars" RPC_GATEWAY_ENABLED
 append_optional_tfvar "${DEPLOY_AZTEC_INFRA_DIR}/terraform.tfvars" RPC_GATEWAY_HOSTS
 append_optional_tfvar "${DEPLOY_AZTEC_INFRA_DIR}/terraform.tfvars" RPC_GATEWAY_API_KEY_SECRET_NAMES

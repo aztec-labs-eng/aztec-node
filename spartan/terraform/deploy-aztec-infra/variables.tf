@@ -606,7 +606,7 @@ variable "STORE_SNAPSHOT_URL" {
 }
 
 variable "SNAPSHOT_CRON" {
-  description = "Location to store snapshots in"
+  description = "Cron schedule for snapshot uploads"
   type        = string
   default     = "0 */12 * * *"
 }
