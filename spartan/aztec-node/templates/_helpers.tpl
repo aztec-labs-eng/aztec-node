@@ -71,3 +71,13 @@ It needs to be namespace prefixed to avoid naming conflicts when using the same 
 {{ .Release.Namespace }}-{{ include "chart.fullname" . }}
 {{- end }}
 
+
+{{- define "chart.renderExtension" -}}
+{{- with .value -}}
+{{- if kindIs "string" . -}}
+{{- tpl . $.context -}}
+{{- else -}}
+{{- tpl (toYaml .) $.context -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

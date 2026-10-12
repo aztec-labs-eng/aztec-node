@@ -11,8 +11,12 @@ echo "PUBLISHERS_PER_PROVER: $PUBLISHERS_PER_PROVER"
 echo "WEB3_SIGNER_URL: ${WEB3_SIGNER_URL}"
 
 # Generate prover ID key
-private_key=$(cast wallet private-key "$MNEMONIC" --mnemonic-index $KEY_INDEX_START)
-address=$(cast wallet address "$private_key")
+if [ -f /shared/prover-id ]; then
+  address=$(cat /shared/prover-id)
+else
+  private_key=$(cast wallet private-key "$MNEMONIC" --mnemonic-index $KEY_INDEX_START)
+  address=$(cast wallet address "$private_key")
+fi
 
 # Generate publisher keys
 publishers=()
