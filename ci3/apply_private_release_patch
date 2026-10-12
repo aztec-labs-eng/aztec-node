@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Downloads this private release's patch, applies it to HEAD and commits it, so the build sees a
+# clean tree. Prints the patch's location and sha256, never the patch or the paths it touches.
+#
+# Run from ci3/bootstrap_ec2 right after checkout, before ci3/source computes COMMIT_HASH. A
+# missing patch leaves the tree as tagged; any other failure, an empty patch included, fails the
+# release.
+set -euo pipefail
+
+bucket=aztec-node-ci-private
+key="${REF_NAME:?REF_NAME is required}.patch"
+echo "Private release patch: s3://$bucket/$key"
+
+patch=$(mktemp)
+trap 'rm -f "$patch"' EXIT
+
+# Read access comes from the private release's instance profile (CI3_INSTANCE_PROFILE_NAME on the
+# release-private environment). The owner check keeps a bucket of the same name in another account
+# from serving a patch.
+owner=$(aws sts get-caller-identity --region eu-west-2 --query Account --output text)
+if ! err=$(aws s3api get-object --region eu-west-2 --bucket "$bucket" --key "$key" \
+  --expected-bucket-owner "$owner" "$patch" 2>&1 >/dev/null); then
+  # Only a missing key means there is no patch: a missing bucket or lost access must fail.
+  if [[ "$err" == *"(NoSuchKey)"* ]]; then
+    echo "No private release patch at s3://$bucket/$key; building the tagged tree."
+    exit 0
+  fi
+  echo "$err" >&2
+  echo "Failed to download the private release patch s3://$bucket/$key." >&2
+  exit 1
+fi
+
+sha=$(sha256sum "$patch" | cut -d' ' -f1)
+echo "Private release patch sha256: $sha"
+
+if [ ! -s "$patch" ]; then
+  echo "The private release patch s3://$bucket/$key is empty." >&2
+  exit 1
+fi
+
+# git apply's warnings and errors quote paths and lines from the patch, so its output is dropped.
+if ! git apply --index "$patch" &>/dev/null; then
+  echo "The private release patch (sha256 $sha) does not apply cleanly to $(git rev-parse HEAD)." >&2
+  exit 1
+fi
+# -q: without it commit prints "create mode <path>" for each new file.
+git -c user.name="Aztec Private Release" -c user.email=tech@aztecprotocol.com \
+  commit -q --no-verify -m "Private release patch sha256:$sha"
