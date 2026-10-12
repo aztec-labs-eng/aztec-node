@@ -3,7 +3,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { BlockHeader } from '@aztec-labs/stdlib/tx';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
-import { type TxMetaData, stubTxMetaData } from '../tx_metadata.js';
+import { type TxMetaData, comparePriority, stubTxMetaData } from '../tx_metadata.js';
 import { EvictionManager } from './eviction_manager.js';
 import {
   EvictionEvent,
@@ -214,7 +214,7 @@ describe('EvictionManager', () => {
 
       expect(result.shouldIgnore).toBe(false);
       expect(result.txHashesToEvict).toContain('0x2222');
-      expect(preAddRule.check).toHaveBeenCalledWith(incomingMeta, poolAccess, undefined);
+      expect(preAddRule.check).toHaveBeenCalledWith(incomingMeta, expect.anything(), undefined);
     });
 
     it('forwards PreAddContext to rules', async () => {
@@ -229,7 +229,7 @@ describe('EvictionManager', () => {
 
       await evictionManager.runPreAddRules(incomingMeta, poolAccess, context);
 
-      expect(preAddRule.check).toHaveBeenCalledWith(incomingMeta, poolAccess, context);
+      expect(preAddRule.check).toHaveBeenCalledWith(incomingMeta, expect.anything(), context);
     });
 
     it('returns ignore result immediately when a rule says to ignore', async () => {
@@ -309,6 +309,52 @@ describe('EvictionManager', () => {
       expect(result.txHashesToEvict).toContain('0x2222');
       expect(result.txHashesToEvict).toContain('0x3333');
       expect(result.txHashesToEvict).toContain('0x4444');
+    });
+
+    it('hides txs picked for eviction by earlier rules from later rules', async () => {
+      const picked = stubTxMetaData('0x2222', { priorityFee: 1n, nullifiers: ['0xaa'] });
+      const kept = stubTxMetaData('0x3333', { priorityFee: 2n, nullifiers: ['0xbb'] });
+      const pending = [picked, kept];
+      const listPoolAccess: PreAddPoolAccess = {
+        getMetadata: txHash => pending.find(m => m.txHash === txHash),
+        getTxHashByNullifier: nullifier => pending.find(m => m.nullifiers.includes(nullifier))?.txHash,
+        getFeePayerBalance: () => Promise.resolve(0n),
+        getFeePayerPendingTxs: feePayer => pending.filter(m => m.feePayer === feePayer),
+        getPendingTxCount: () => pending.length,
+        iteratePendingByPriority: order => {
+          const ascending = [...pending].sort(comparePriority).map(m => m.txHash);
+          return order === 'asc' ? ascending : ascending.reverse();
+        },
+      };
+
+      preAddRule.check.mockResolvedValue({ shouldIgnore: false, txHashesToEvict: [picked.txHash] });
+      let seenByLaterRule: object | undefined;
+      const laterRule: PreAddRule = {
+        name: 'laterRule',
+        check: (_incomingMeta, view) => {
+          seenByLaterRule = {
+            pendingCount: view.getPendingTxCount(),
+            pickedMeta: view.getMetadata(picked.txHash),
+            pickedByNullifier: view.getTxHashByNullifier('0xaa'),
+            feePayerTxs: view.getFeePayerPendingTxs(picked.feePayer).map(m => m.txHash),
+            pendingByPriority: [...view.iteratePendingByPriority('asc')],
+          };
+          return Promise.resolve({ shouldIgnore: false, txHashesToEvict: [] });
+        },
+      };
+
+      evictionManager.registerPreAddRule(preAddRule);
+      evictionManager.registerPreAddRule(laterRule);
+      const result = await evictionManager.runPreAddRules(createMeta('0x1111', 100n), listPoolAccess);
+
+      expect(result.txHashesToEvict).toEqual([picked.txHash]);
+      expect(seenByLaterRule).toEqual({
+        pendingCount: 1,
+        pickedMeta: undefined,
+        pickedByNullifier: undefined,
+        feePayerTxs: [kept.txHash],
+        pendingByPriority: [kept.txHash],
+      });
     });
   });
 

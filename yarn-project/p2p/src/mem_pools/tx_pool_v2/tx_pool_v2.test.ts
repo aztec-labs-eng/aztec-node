@@ -381,6 +381,25 @@ describe('TxPoolV2', () => {
       expect(pending).not.toContain(hashOf(tx1));
       expect(pending).not.toContain(hashOf(tx2));
     });
+
+    it('replacing a pending tx in a full pool does not also evict the lowest-priority tx', async () => {
+      await pool.updateConfig({ maxPendingTxCount: 3 });
+
+      const victim = await mockPublicTx(1, 2);
+      const other = await mockPublicTx(2, 6);
+      const original = await mockPublicTx(3, 5);
+      const replacement = await mockPublicTx(4, 7);
+      setNullifier(replacement, 0, getNullifier(original, 0));
+
+      await pool.addPendingTxs([victim, other, original]);
+      const result = await pool.addPendingTxs([replacement]);
+
+      expect(toStrings(result.accepted)).toEqual([hashOf(replacement)]);
+      expect(toStrings(await pool.getPendingTxHashes()).sort()).toEqual(
+        [hashOf(victim), hashOf(other), hashOf(replacement)].sort(),
+      );
+      expect(await pool.getTxStatus(original.getTxHash())).toBe('deleted');
+    });
   });
 
   describe('canAddPendingTx', () => {
@@ -3992,6 +4011,36 @@ describe('TxPoolV2', () => {
       expect(ignored).toContain(hashOf(tx1));
       expect(result.rejected).toHaveLength(0);
       expect(await pool.getPendingTxCount()).toBe(2);
+    });
+
+    it('replacing a pending tx does not evict an affordable lower-priority tx from the same fee payer', async () => {
+      const sharedFeePayer = AztecAddress.fromBigIntUnsafe(999n);
+      // Balance covers exactly 2 tx fee limits
+      setFeePayerBalance(DEFAULT_TX_FEE_LIMIT * 2n + DEFAULT_TX_FEE_LIMIT / 2n);
+
+      const original = await mockTx(1, {
+        feePayer: sharedFeePayer,
+        maxPriorityFeesPerGas: new GasFees(5, 5),
+        numberOfNonRevertiblePublicCallRequests: 1,
+      });
+      const victim = await mockTx(2, {
+        feePayer: sharedFeePayer,
+        maxPriorityFeesPerGas: new GasFees(2, 2),
+        numberOfNonRevertiblePublicCallRequests: 1,
+      });
+      const replacement = await mockTx(3, {
+        feePayer: sharedFeePayer,
+        maxPriorityFeesPerGas: new GasFees(8, 8),
+        numberOfNonRevertiblePublicCallRequests: 1,
+      });
+      setNullifier(replacement, 0, getNullifier(original, 0));
+
+      await pool.addPendingTxs([original, victim]);
+      const result = await pool.addPendingTxs([replacement]);
+
+      expect(toStrings(result.accepted)).toEqual([hashOf(replacement)]);
+      expect(toStrings(await pool.getPendingTxHashes()).sort()).toEqual([hashOf(victim), hashOf(replacement)].sort());
+      expect(await pool.getTxStatus(original.getTxHash())).toBe('deleted');
     });
   });
 

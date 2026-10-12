@@ -131,6 +131,8 @@ export class TxPoolV2Impl {
     this.#evictionManager = new EvictionManager(this.#createPoolOperations(), log);
 
     // Pre-add rules (run during addPendingTxs) - work with TxMetaData
+    // Order matters: each rule sees the pool without the txs that earlier rules picked for eviction.
+    // Each eviction pick is final: later rules cannot roll back an eviction.
     this.#evictionManager.registerPreAddRule(new NullifierConflictRule());
     this.#evictionManager.registerPreAddRule(new FeePayerBalancePreAddRule());
     this.#evictionManager.registerPreAddRule(
@@ -1291,7 +1293,7 @@ export class TxPoolV2Impl {
       },
       getFeePayerPendingTxs: (feePayer: string) => this.#indices.getFeePayerPendingTxs(feePayer),
       getPendingTxCount: () => this.#indices.getPendingTxCount(),
-      getLowestPriorityPendingTx: () => this.#indices.getLowestPriorityPendingTx(),
+      iteratePendingByPriority: (order: 'asc' | 'desc') => this.#indices.iteratePendingByPriority(order),
     };
   }
 }

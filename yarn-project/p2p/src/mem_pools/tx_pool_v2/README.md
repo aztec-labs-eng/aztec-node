@@ -139,6 +139,8 @@ On node restart, slot-soft-deleted transactions are immediately hard-deleted (th
 - Used for external transactions entering the pool
 - Can reject the incoming tx entirely
 - Can evict lower-priority existing txs to make room
+- Run in registration order; each rule sees the pool without the txs that earlier rules picked for eviction
+- Evictions are applied only after every rule has accepted the incoming tx
 - Rules: NullifierConflictRule, FeePayerBalancePreAddRule, LowPriorityPreAddRule
 
 **Post-event rules** (run after state transitions):
