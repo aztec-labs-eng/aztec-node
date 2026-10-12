@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +10,7 @@ import {
   prepareL1ContractsForDeployment,
   runProcess,
 } from './deploy_aztec_l1_contracts.js';
+import { resolveFoundryBinary } from './foundry_binary.js';
 
 describe('deployment directories', () => {
   it('isolates recovery state between deployments', () => {
@@ -60,6 +62,20 @@ describe('Forge broadcast options', () => {
 
   it.each(['-1', 'NaN', 'Infinity'])('rejects invalid timeout %s before broadcasting', value => {
     expect(() => getForgeBroadcastTimeout(sepolia.id, value)).toThrow('FORGE_BROADCAST_TIMEOUT_MS');
+  });
+});
+
+describe('deployment directory', () => {
+  it('reuses the compiled L1 contracts shipped in l1-artifacts', () => {
+    const deployDir = prepareL1ContractsForDeployment();
+    const { status, stdout, stderr } = spawnSync(resolveFoundryBinary('forge'), ['build'], {
+      cwd: deployDir,
+      encoding: 'utf-8',
+    });
+    expect({ status, output: stdout + stderr }).toEqual({
+      status: 0,
+      output: expect.stringContaining('No files changed, compilation skipped'),
+    });
   });
 });
 
