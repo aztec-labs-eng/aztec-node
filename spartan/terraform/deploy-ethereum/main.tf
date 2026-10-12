@@ -68,7 +68,7 @@ locals {
       }
       execution_hosts       = ["json-rpc.eth-sepolia.rpc.aztec-labs.com"]
       beacon_hosts          = ["beacon.eth-sepolia.rpc.aztec-labs.com"]
-      reth_extra_args       = []
+      reth_extra_args       = ["--gpo.ignoreprice=2"]
       lighthouse_extra_args = []
     }
     mainnet = {
@@ -87,7 +87,7 @@ locals {
       }
       execution_hosts       = ["json-rpc.eth-mainnet.rpc.aztec-labs.com"]
       beacon_hosts          = ["beacon.eth-mainnet.rpc.aztec-labs.com"]
-      reth_extra_args       = []
+      reth_extra_args       = ["--gpo.ignoreprice=2"]
       lighthouse_extra_args = []
     }
   }
