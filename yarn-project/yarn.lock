@@ -1071,6 +1071,7 @@ __metadata:
     "@aztec-labs/builder": "workspace:^"
     "@aztec-labs/cli": "workspace:^"
     "@aztec-labs/constants": "workspace:^"
+    "@aztec-labs/entrypoints": "workspace:^"
     "@aztec-labs/ethereum": "workspace:^"
     "@aztec-labs/foundation": "workspace:^"
     "@aztec-labs/kv-store": "workspace:^"
@@ -1105,6 +1106,7 @@ __metadata:
     ts-node: "npm:^10.9.1"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
+    zod: "npm:~4.4.3"
   bin:
     aztec: ./scripts/aztec.sh
   languageName: unknown
