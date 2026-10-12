@@ -9,6 +9,22 @@ Aztec is in active development. Each version may introduce breaking changes that
 
 ## TBD
 
+### [Aztec.nr] ECDSA note and protocol contract interfaces are published with aztec-nr
+
+`ecdsa_public_key_note` and the protocol contract interfaces now ship in `aztec-labs-eng/aztec-nr`. Depending
+on them from `AztecProtocol/aztec-packages` or `aztec-labs-eng/aztec-node` pulls in a second copy of `aztec`,
+which fails to compile with errors such as `No matching impl found` or `found type &mut PrivateContext`.
+Depend on them from `aztec-labs-eng/aztec-nr`, at the same tag as `aztec`:
+
+```diff
+-ecdsa_public_key_note = { git = "https://github.com/AztecProtocol/aztec-packages", tag = "v5.2.0", directory = "noir-projects/noir-contracts/contracts/libs/ecdsa_public_key_note" }
+-contract_instance_registry = { git = "https://github.com/AztecProtocol/aztec-packages", tag = "v5.2.0", directory = "noir-projects/noir-contracts/contracts/protocol_interface/contract_instance_registry_interface" }
+-fee_juice = { git = "https://github.com/AztecProtocol/aztec-packages", tag = "v5.2.0", directory = "noir-projects/noir-contracts/contracts/protocol_interface/fee_juice_interface" }
++ecdsa_public_key_note = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v<version>", directory = "ecdsa-public-key-note" }
++contract_instance_registry = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v<version>", directory = "contract-instance-registry-interface" }
++fee_juice = { git = "https://github.com/aztec-labs-eng/aztec-nr", tag = "v<version>", directory = "fee-juice-interface" }
+```
+
 ### [Aztec.nr] Fact collections are scoped by `FactScope`
 
 The `aztec::facts` functions now take the collection's scope as an `aztec::facts::FactScope` instead of an `AztecAddress`, and `FactCollection::scope` is a `FactScope`. `FactScope::account(address)` is the scope of a single account, as before. The new `FactScope::public()` is shared by all accounts: any execution of the contract can access its collections, whichever accounts are in scope.
