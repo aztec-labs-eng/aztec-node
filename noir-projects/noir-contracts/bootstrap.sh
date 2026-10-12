@@ -209,10 +209,10 @@ function test_cmds {
   # Chunks spread over the NUM_TXES TXEs on consecutive ports from $txe_port.
   local -A cache
   $NARGO test --list-tests --silence-warnings | $ROOT/noir-projects/scripts/test_chunks.sh |
-    while read -r package kind chunk num_chunks; do
+    while read -r package kind chunk; do
       [ -z "${cache[$package]:-}" ] && cache[$package]=$(get_contract_hash_for_testing $package $folder_name)
-      echo "${cache[$package]} noir-projects/scripts/run_test_chunk.sh noir-contracts $package $kind" \
-        "$chunk $num_chunks $txe_port ${NUM_TXES:-1}"
+      echo "${cache[$package]} noir-projects/scripts/run_test_chunk.sh noir-contracts $package $kind $chunk" \
+        "$txe_port ${NUM_TXES:-1}"
     done
 }
 
