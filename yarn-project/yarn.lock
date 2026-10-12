@@ -2333,8 +2333,6 @@ __metadata:
     tslib: "npm:^2.4.0"
     typescript: "npm:^5.3.3"
     viem: "npm:2.57.1"
-  bin:
-    validator-client: ./dest/bin/index.js
   languageName: unknown
   linkType: soft
 
