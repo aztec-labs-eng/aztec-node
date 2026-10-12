@@ -821,14 +821,20 @@ class DeploymentRun<C extends Steps> {
     // txs, and two bridges signed by the same funder key would race on nonces.
     const fundRest = rest.filter(unit => unit.kind === 'fund');
     const parallelRest = rest.filter(unit => unit.kind !== 'fund');
-    await Promise.all([
-      Promise.all(parallelRest.map(unit => this.runUnit(unit, feeSession))),
-      (async () => {
-        for (const unit of fundRest) {
-          await this.runUnit(unit, feeSession);
-        }
-      })(),
-    ]);
+    const runParallel = () => Promise.all(parallelRest.map(unit => this.runUnit(unit, feeSession)));
+    const runFunds = async () => {
+      for (const unit of fundRest) {
+        await this.runUnit(unit, feeSession);
+      }
+    };
+    if (this.local) {
+      // Locally a fund unit warps L2 time, building blocks under any tx still in flight. A tx anchored to the genesis
+      // block is only valid in block 1, so a warp that lands first leaves it unincludable.
+      await runParallel();
+      await runFunds();
+    } else {
+      await Promise.all([runParallel(), runFunds()]);
+    }
   }
 
   private async runUnit(unit: ExecutionUnit, feeSession: FeeSession): Promise<void> {
