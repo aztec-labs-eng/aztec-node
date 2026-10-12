@@ -10,8 +10,8 @@ export AZTEC_TOOLCHAIN_HASH=${AZTEC_TOOLCHAIN_HASH:-$($ROOT/labs-aztec-toolchain
 hash=$(hash_str $AZTEC_TOOLCHAIN_HASH $(cache_content_hash "^noir-projects/aztec-nr"))
 
 # Below the Linux ephemeral range (32768-60999) to avoid conflicts.
-TXE_PORT=14730
-RESOLVER_PORT=14830
+DEFAULT_TXE_PORT=14730
+DEFAULT_RESOLVER_PORT=14830
 
 function build {
   # Being a library, aztec-nr does not technically need to be built. But we can still run nargo check to find any type
@@ -42,14 +42,14 @@ function test_cmds {
 
   # Oracle roundtrip tests run against a dedicated resolver instead of TXE. The rest spread over the
   # NUM_TXES TXEs on consecutive ports.
-  local resolver_port=${1:-$RESOLVER_PORT}
+  local resolver_port=${1:-$DEFAULT_RESOLVER_PORT}
   $NARGO test --list-tests --silence-warnings | $ROOT/noir-projects/scripts/test_chunks.sh |
     while read -r package kind chunk; do
       local cmd="noir-projects/scripts/run_test_chunk.sh aztec-nr $package $kind $chunk"
       if [ "$kind" == oracle ]; then
         echo "$resolver_test_hash $cmd $resolver_port"
       else
-        echo "$txe_test_hash $cmd $TXE_PORT ${NUM_TXES:-1}"
+        echo "$txe_test_hash $cmd $DEFAULT_TXE_PORT ${NUM_TXES:-1}"
       fi
     done
 }
@@ -58,11 +58,11 @@ function test_cmds {
 function start_servers {
   trap 'kill $(jobs -p)' EXIT
 
-  check_port $TXE_PORT || echo "WARNING: port $TXE_PORT is in use, TXE may fail to start"
-  (cd $root/yarn-project/txe && UV_THREADPOOL_SIZE=8 LOG_LEVEL=error TXE_PORT=$TXE_PORT yarn start) &
+  check_port $DEFAULT_TXE_PORT || echo "WARNING: port $DEFAULT_TXE_PORT is in use, TXE may fail to start"
+  (cd $root/yarn-project/txe && UV_THREADPOOL_SIZE=8 LOG_LEVEL=error TXE_PORT=$DEFAULT_TXE_PORT yarn start) &
 
-  check_port $RESOLVER_PORT || echo "WARNING: port $RESOLVER_PORT is in use, oracle test resolver may fail to start"
-  (cd $root/yarn-project/txe && LOG_LEVEL=error ORACLE_TEST_PORT=$RESOLVER_PORT yarn start:oracle-test-resolver) &
+  check_port $DEFAULT_RESOLVER_PORT || echo "WARNING: port $DEFAULT_RESOLVER_PORT is in use, oracle test resolver may fail to start"
+  (cd $root/yarn-project/txe && LOG_LEVEL=error ORACLE_TEST_PORT=$DEFAULT_RESOLVER_PORT yarn start:oracle-test-resolver) &
 
   wait_for_port() {
     local port=$1 name=$2 j=0
@@ -77,8 +77,8 @@ function start_servers {
       j=$((j+1))
     done
   }
-  wait_for_port $TXE_PORT "TXE"
-  wait_for_port $RESOLVER_PORT "oracle test resolver"
+  wait_for_port $DEFAULT_TXE_PORT "TXE"
+  wait_for_port $DEFAULT_RESOLVER_PORT "oracle test resolver"
 }
 
 function test {
@@ -95,8 +95,8 @@ function test-one {
 
   local package=$1
   local test_name=$2
-  local port=$TXE_PORT
-  [[ "$test_name" == *__oracle_test__* ]] && port=$RESOLVER_PORT
+  local port=$DEFAULT_TXE_PORT
+  [[ "$test_name" == *__oracle_test__* ]] && port=$DEFAULT_RESOLVER_PORT
   start_servers
 
   $root/noir-projects/scripts/run_test.sh aztec-nr "$package" "$test_name" "$port"
