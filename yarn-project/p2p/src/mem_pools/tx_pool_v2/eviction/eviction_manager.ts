@@ -173,7 +173,10 @@ export class EvictionManager {
   }
 }
 
-/** Returns a view of the pending pool without the `excluded` txs. Reads `excluded` live, so later additions apply. */
+/**
+ * Returns a view of the pending pool without the `excluded` txs. Reads `excluded` live, so later additions apply.
+ * Every excluded tx must be pending in `poolAccess`, which holds for picks made through the view.
+ */
 function withoutTxs(poolAccess: PreAddPoolAccess, excluded: ReadonlySet<string>): PreAddPoolAccess {
   return {
     getMetadata: txHash => (excluded.has(txHash) ? undefined : poolAccess.getMetadata(txHash)),
@@ -184,8 +187,7 @@ function withoutTxs(poolAccess: PreAddPoolAccess, excluded: ReadonlySet<string>)
     getFeePayerBalance: feePayer => poolAccess.getFeePayerBalance(feePayer),
     getFeePayerPendingTxs: feePayer =>
       poolAccess.getFeePayerPendingTxs(feePayer).filter(meta => !excluded.has(meta.txHash)),
-    getPendingTxCount: () =>
-      poolAccess.getPendingTxCount() - [...excluded].filter(txHash => poolAccess.getMetadata(txHash)).length,
+    getPendingTxCount: () => poolAccess.getPendingTxCount() - excluded.size,
     *iteratePendingByPriority(order) {
       for (const txHash of poolAccess.iteratePendingByPriority(order)) {
         if (!excluded.has(txHash)) {
