@@ -20,7 +20,7 @@ describe('NullifierConflictRule', () => {
     getFeePayerBalance: () => Promise.resolve(10n ** 18n),
     getFeePayerPendingTxs: () => [],
     getPendingTxCount: () => metadataMap.size,
-    getLowestPriorityPendingTx: () => undefined,
+    iteratePendingByPriority: () => [],
   });
 
   beforeEach(() => {

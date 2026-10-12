@@ -68,8 +68,8 @@ export interface PreAddPoolAccess {
   /** Get current count of pending transactions */
   getPendingTxCount(): number;
 
-  /** Get the lowest priority pending tx metadata */
-  getLowestPriorityPendingTx(): TxMetaData | undefined;
+  /** Iterate pending tx hashes in priority order ('asc' yields the lowest priority first) */
+  iteratePendingByPriority(order: 'asc' | 'desc'): Iterable<string>;
 }
 
 /** A single eviction tagged with the rule that caused it. */

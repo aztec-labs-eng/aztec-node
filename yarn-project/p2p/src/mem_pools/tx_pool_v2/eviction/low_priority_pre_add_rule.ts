@@ -41,7 +41,7 @@ export class LowPriorityPreAddRule implements PreAddRule {
     }
 
     // Pool is at capacity - need to compare priorities
-    const lowestPriorityMeta = poolAccess.getLowestPriorityPendingTx();
+    const lowestPriorityMeta = this.getLowestPriorityPendingTx(poolAccess);
     if (!lowestPriorityMeta) {
       // No pending txs (shouldn't happen if count > 0, but handle gracefully)
       return Promise.resolve({ shouldIgnore: false, txHashesToEvict: [] });
@@ -95,5 +95,15 @@ export class LowPriorityPreAddRule implements PreAddRule {
     if (config.maxPendingTxCount !== undefined) {
       this.maxPoolSize = config.maxPendingTxCount;
     }
+  }
+
+  private getLowestPriorityPendingTx(poolAccess: PreAddPoolAccess): TxMetaData | undefined {
+    for (const txHash of poolAccess.iteratePendingByPriority('asc')) {
+      const meta = poolAccess.getMetadata(txHash);
+      if (meta) {
+        return meta;
+      }
+    }
+    return undefined;
   }
 }
