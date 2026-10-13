@@ -693,11 +693,11 @@ export class Sequencer extends (EventEmitter as new () => TypedEventEmitter<Sequ
       if (!(err instanceof NoAffordablePublisherError)) {
         throw err;
       }
-      this.log.error(`Skipping checkpoint proposal for slot ${targetSlot} since no publisher can afford it`, err, {
-        ...logCtx,
-        proposer,
-        ...err.toLogContext(),
-      });
+      this.log.error(
+        `Skipping checkpoint proposal for slot ${targetSlot}: no publisher can afford it, ${err.describeFunding()}`,
+        err,
+        { ...logCtx, proposer, ...err.toLogContext() },
+      );
       this.metrics.recordCheckpointPrecheckFailed('insufficient_publisher_balance');
       // Mark the slot as attempted so we do not re-check on every tick. Votes are cheaper and optional, so still try.
       await this.tryVoteAndPruneWhenCannotBuild({ slot, targetSlot });

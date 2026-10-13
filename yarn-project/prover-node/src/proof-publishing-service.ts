@@ -331,12 +331,17 @@ export class ProofPublishingService {
         if (!this.unaffordableCandidates.has(winner.id)) {
           this.unaffordableCandidates.add(winner.id);
           this.deps.metrics?.recordProofSubmissionUnaffordable();
-          this.log.error(`No publisher can afford submitting the proof for candidate ${winner.id}; retrying`, err, {
-            candidateId: winner.id,
-            epoch: winner.epoch,
-            retryDelayMs: PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS,
-            ...err.toLogContext(),
-          });
+          this.log.error(
+            `Holding back the proof for candidate ${winner.id}: no publisher can afford submitting it, ` +
+              `${err.describeFunding()}; retrying`,
+            err,
+            {
+              candidateId: winner.id,
+              epoch: winner.epoch,
+              retryDelayMs: PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS,
+              ...err.toLogContext(),
+            },
+          );
         }
         this.scheduleRetry(PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS);
         return;
