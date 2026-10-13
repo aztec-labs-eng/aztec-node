@@ -469,27 +469,8 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
   private async pruneAbandonedProposedBlocksNow(request: PruneAbandonedBlocksRequest): Promise<void> {
     const { afterBlockNumber, firstBlockHash, resolve, reject } = request;
     try {
-      // A checkpoint proposal received for the slot means some proposer, such as an HA peer of the caller, may still
-      // be proposing these blocks, so they are left to the orphan prune, which waits for the proposal to materialize.
-      const firstBlock = await this.stores.blocks.getBlockData({ number: BlockNumber(afterBlockNumber + 1) });
-      if (
-        firstBlock?.blockHash.equals(firstBlockHash) &&
-        (await this.checkpointProposalPresence.hasCheckpointProposalForSlot(firstBlock.header.getSlot()))
-      ) {
-        this.log.verbose(`Not pruning abandoned proposed blocks after block ${afterBlockNumber}`, {
-          afterBlockNumber,
-          firstBlockHash: firstBlockHash.toString(),
-          refusal: 'checkpoint-proposal-received',
-        });
-        resolve([]);
-        return;
-      }
-
-      const { removed, refusal } = await this.updater.removeAbandonedProposedBlocksAfter(
-        afterBlockNumber,
-        firstBlockHash,
-      );
-      if (removed.length === 0) {
+      const refusal = await this.getAbandonedBlocksPruneRefusal(afterBlockNumber, firstBlockHash);
+      if (refusal !== undefined) {
         this.log.verbose(`Not pruning abandoned proposed blocks after block ${afterBlockNumber}`, {
           afterBlockNumber,
           firstBlockHash: firstBlockHash.toString(),
@@ -499,6 +480,7 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
         return;
       }
 
+      const removed = await this.updater.removeBlocksWithoutProposedCheckpointAfter(afterBlockNumber);
       const slotNumber = removed[0].slot;
       const prunedBlocks = removed.map(block => block.number);
       this.log.warn(`Pruned proposed blocks after block ${afterBlockNumber} abandoned by their proposer`, {
@@ -520,6 +502,30 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
       });
       reject(err);
     }
+  }
+
+  /**
+   * Returns why the blocks after `afterBlockNumber` must be kept, or undefined if they are still the caller's
+   * abandoned blocks and can be pruned. Runs in the sync loop, so no other archiver write lands between these checks
+   * and the removal.
+   */
+  private async getAbandonedBlocksPruneRefusal(
+    afterBlockNumber: BlockNumber,
+    firstBlockHash: BlockHash,
+  ): Promise<'not-caller-blocks' | 'checkpointed' | 'checkpoint-proposal-received' | undefined> {
+    const firstBlock = await this.stores.blocks.getBlockData({ number: BlockNumber(afterBlockNumber + 1) });
+    if (firstBlock === undefined || !firstBlock.blockHash.equals(firstBlockHash)) {
+      return 'not-caller-blocks';
+    }
+    if ((await this.stores.blocks.getProposedCheckpointL2BlockNumber()) > afterBlockNumber) {
+      return 'checkpointed';
+    }
+    // Another proposer, such as an HA peer of the caller, may still be proposing these blocks, so they are left to
+    // the orphan prune, which waits for the proposal to materialize.
+    if (await this.checkpointProposalPresence.hasCheckpointProposalForSlot(firstBlock.header.getSlot())) {
+      return 'checkpoint-proposal-received';
+    }
+    return undefined;
   }
 
   public waitForInitialSync() {
