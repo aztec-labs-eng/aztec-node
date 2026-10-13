@@ -13,7 +13,12 @@
  */
 import type { ContractArtifact } from '@aztec-labs/aztec.js/abi';
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
-import type { ContractBase, ContractFunctionInteraction } from '@aztec-labs/aztec.js/contracts';
+import type {
+  ContractBase,
+  ContractFunctionInteraction,
+  ContractInstanceWithAddress,
+} from '@aztec-labs/aztec.js/contracts';
+import type { FeePaymentMethod } from '@aztec-labs/aztec.js/fee';
 import type { Fr } from '@aztec-labs/aztec.js/fields';
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
@@ -28,6 +33,9 @@ import type { DeployReporter } from './reporter.js';
  *   `l1ChainId` are caller-supplied; omit `l1FunderKey` for the faucet + ephemeral key. On a
  *   non-local network `l1RpcUrl` and `l1ChainId` are required (there are no hardcoded defaults);
  *   on local they default to anvil (`127.0.0.1:8545`, chain `31337`).
+ * - `payment-method`: a caller-supplied {@link FeePaymentMethod} (e.g. a deployed FPC) pays every tx
+ *   with its own gas settings; nothing is read or bridged. `instance` + `artifact` register the paying
+ *   contract in the run's PXE.
  */
 export type FeePolicy =
   | { kind: 'sponsored' }
@@ -38,6 +46,12 @@ export type FeePolicy =
       l1FunderKey?: `0x${string}`;
       l1RpcUrl?: string;
       l1ChainId?: number;
+    }
+  | {
+      kind: 'payment-method';
+      paymentMethod: FeePaymentMethod;
+      instance: ContractInstanceWithAddress;
+      artifact: ContractArtifact;
     };
 
 /** An account the deployment sends from: a v0 initializerless Schnorr account (no deploy tx). */
