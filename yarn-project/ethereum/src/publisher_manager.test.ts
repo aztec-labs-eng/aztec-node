@@ -523,6 +523,34 @@ describe('PublisherManager', () => {
       expect(funder.balanceReads).toEqual(1);
     });
 
+    it('does not repeat the no affordable publisher error after a check that could not tell', async () => {
+      mockPublishers.forEach(p => (p.balance = 0n));
+      createManager({ referenceSend });
+      const errorSpy = jest.spyOn(manager.getLogger(), 'error');
+
+      await manager.checkBalances();
+      mockPublishers[0].failFeeRead = true;
+      await manager.checkBalances();
+      mockPublishers[0].failFeeRead = false;
+      await manager.checkBalances();
+
+      expect(errorSpy.mock.calls.filter(([msg]) => msg.startsWith('No publisher can afford'))).toHaveLength(1);
+    });
+
+    it('logs the no affordable publisher error again after a publisher became affordable', async () => {
+      mockPublishers.forEach(p => (p.balance = 0n));
+      createManager({ referenceSend });
+      const errorSpy = jest.spyOn(manager.getLogger(), 'error');
+
+      await manager.checkBalances();
+      mockPublishers[0].balance = required;
+      await manager.checkBalances();
+      mockPublishers[0].balance = 0n;
+      await manager.checkBalances();
+
+      expect(errorSpy.mock.calls.filter(([msg]) => msg.startsWith('No publisher can afford'))).toHaveLength(2);
+    });
+
     it('runs right after start and clears the recorded balances on stop', async () => {
       mockPublishers.forEach(p => (p.balance = required));
       createManager({ referenceSend });
@@ -859,6 +887,10 @@ describe('PublisherManager', () => {
 class TestPublisherManager extends PublisherManager<L1TxUtils> {
   public override checkBalances(): Promise<void> {
     return super.checkBalances();
+  }
+
+  public getLogger() {
+    return this.log;
   }
 }
 

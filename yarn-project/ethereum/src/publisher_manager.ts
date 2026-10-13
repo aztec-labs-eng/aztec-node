@@ -157,7 +157,7 @@ type PublisherWithBalance<UtilsType> = { publisher: UtilsType; balance: bigint }
 
 export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
   private static readonly BALANCE_CHECK_INTERVAL_MS = 60 * 1000;
-  private log: Logger;
+  protected log: Logger;
   private config: PublisherManagerConfig;
   protected funder?: UtilsType;
   protected readonly balanceCheckPromise: RunningPromise;
@@ -494,7 +494,11 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
       snapshot.publishers.every(p => (p.sendsAffordable ?? 0) < 1);
 
     if (!noneAffordable) {
-      this.lastLowBalanceWarningAt.delete(NO_AFFORDABLE_PUBLISHER_WARNING_KEY);
+      // Only a publisher seen affording the send ends an episode. A check that could not tell (failed reads) must not
+      // reset the rate limit, or alternating failed and empty checks would log the error on every empty one.
+      if (snapshot.publishers.some(p => (p.sendsAffordable ?? 0) >= 1)) {
+        this.lastLowBalanceWarningAt.delete(NO_AFFORDABLE_PUBLISHER_WARNING_KEY);
+      }
       if (firstCheck) {
         this.log.info(`Publisher balances`, context);
       }
