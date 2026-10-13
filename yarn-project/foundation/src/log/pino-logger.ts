@@ -372,7 +372,12 @@ type ErrorLogFn = (msg: string, err?: unknown, data?: LogData) => void;
 /**
  * Logger that supports multiple severity levels.
  */
-export type Logger = { [K in LogLevel]: LogFn } & { /** Error log function */ error: ErrorLogFn } & {
+export type Logger = { [K in LogLevel]: LogFn } & {
+  /** Fatal log function */
+  fatal: ErrorLogFn;
+  /** Error log function */
+  error: ErrorLogFn;
+} & {
   level: LogLevel;
   isLevelEnabled: (level: LogLevel) => boolean;
   module: string;

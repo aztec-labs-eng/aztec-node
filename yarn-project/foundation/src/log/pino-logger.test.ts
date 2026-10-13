@@ -98,6 +98,17 @@ describe('pino-logger', () => {
     });
   });
 
+  it('logs fatal with the error in the message and the data as structured fields', () => {
+    const testLogger = createLogger('fatal-test');
+    capturingStream.clear();
+
+    testLogger.fatal('Process died', new Error('boom'), { code: 137, signal: 'SIGKILL' });
+
+    const [entry] = capturingStream.getJsonLines();
+    expect(entry).toMatchObject({ module: 'fatal-test', level: 60, code: 137, signal: 'SIGKILL' });
+    expect((entry as { msg: string }).msg).toMatch(/^Process died: Error: boom/);
+  });
+
   it('can use overwriteLoggingStream for isolated capture', () => {
     // overwriteLoggingStream replaces the stream entirely (no accumulation)
     const isolatedStream = new CapturingStream();
