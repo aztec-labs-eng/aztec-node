@@ -65,8 +65,9 @@ class FifoFakeBb {
 /* eslint-enable camelcase */
 
 let fakeBb: FifoFakeBb;
+const actualBbJs = await import('@aztec-foundation/bb.js');
 jest.unstable_mockModule('@aztec-foundation/bb.js', () => ({
-  BackendType: { NativeUnixSocket: 'NativeUnixSocket' },
+  ...actualBbJs,
   Barretenberg: { new: () => Promise.resolve(fakeBb) },
 }));
 const { BatchChonkVerifier, MAX_PROOFS_IN_FLIGHT } = await import('./batch_chonk_verifier.js');

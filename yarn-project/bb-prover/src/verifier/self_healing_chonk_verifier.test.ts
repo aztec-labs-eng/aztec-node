@@ -1,6 +1,7 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import type { IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
+import { ChonkProof } from '@aztec-labs/stdlib/proofs';
 import { mockTx } from '@aztec-labs/stdlib/testing';
 import type { Tx } from '@aztec-labs/stdlib/tx';
 
@@ -24,6 +25,10 @@ class FakeVerifier implements FailingChonkVerifier {
   private inFlight = 0;
 
   public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
+    // Like BatchChonkVerifier, an empty proof is rejected without reaching bb.
+    if (tx.chonkProof.fields.length === 0) {
+      return { valid: false, durationMs: 0, totalDurationMs: 0 };
+    }
     if (poisoned.has(tx.getTxHash().toString())) {
       this.dieOnNextVerification = true;
     }
@@ -219,6 +224,27 @@ describe('SelfHealingChonkVerifier', () => {
     expect(settled).toBe(false);
     await verdictOnAnotherProof(verifier, 3);
     await expect(waitingAgain).resolves.toMatchObject({ valid: false });
+  });
+
+  it('does not count a proof rejected without reaching bb as bb giving a verdict', async () => {
+    const verifier = newVerifier(create);
+    poison(tx);
+    const waiting = verifier.verifyProof(tx);
+    await sleep(20);
+
+    // A tx with no proof is rejected up front, so says nothing about whether bb works.
+    const noProof = await mockTx(1, { chonkProof: ChonkProof.empty() });
+    await expect(verifier.verifyProof(noProof)).resolves.toMatchObject({ valid: false });
+
+    let settled = false;
+    void waiting.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    await sleep(20);
+    expect(settled).toBe(false);
+    await verifier.stop();
+    await expect(waiting).rejects.toThrow('stopped');
   });
 
   it('exits the node when no bb can be started to replace a failed one', async () => {

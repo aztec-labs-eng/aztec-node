@@ -1,3 +1,4 @@
+import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { LruMap } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
@@ -79,6 +80,10 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
 
   public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const timer = new Timer();
+    // A tx with no proof is invalid without asking bb, and must not count as bb giving a verdict.
+    if (tx.chonkProof.fields.length !== CHONK_PROOF_LENGTH) {
+      return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
+    }
     if (this.crashedProofs.size > 0 && this.crashedProofs.has(crashKey(tx))) {
       return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
     }
