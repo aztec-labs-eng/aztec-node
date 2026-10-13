@@ -17,9 +17,6 @@ export {
   PROTOCOL_INBOX_CONSUMPTION_CAPS,
   type StreamingMessageSource,
   getEndpointUpperBound,
-  getOrdinaryCeiling,
-  mustQueryEndpoint,
   resolveEndpoint,
-  selectOrdinaryMessageEnd,
   selectSafeLocalEnd,
 } from './sequencer/inbox_message_selection.js';
