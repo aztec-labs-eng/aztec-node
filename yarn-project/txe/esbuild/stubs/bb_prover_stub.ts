@@ -17,3 +17,9 @@ export class QueuedIVCVerifier {
     throwStub('QueuedIVCVerifier');
   }
 }
+
+export class SelfHealingChonkVerifier {
+  constructor(..._args: unknown[]) {
+    throwStub('SelfHealingChonkVerifier');
+  }
+}

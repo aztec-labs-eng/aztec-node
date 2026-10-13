@@ -13,7 +13,7 @@ import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { jest } from '@jest/globals';
 
-import { corruptProofFields, runBatchVerifier } from './batch_verifier_test_helpers.js';
+import { corruptProofFields, offCurveProofFields, runBatchVerifier } from './batch_verifier_test_helpers.js';
 import { generateTestingIVCStack } from './witgen.js';
 
 const logger = createLogger('ivc-integration:test:batch-verifier-queue');
@@ -59,6 +59,18 @@ describe('Batch Chonk Verifier Queue', () => {
   }
 
   // -- Basic cases --
+
+  it('a proof with an off-curve commitment is invalid, not unverifiable', async () => {
+    // bb reports the deserialization exception as a FAILED result: that must stay a verdict on the proof, or a sender
+    // could swap a garbage proof into a real tx without penalty.
+    const results = await run({
+      proofs: [
+        { vkIndex: 0, proofFields: offCurveProofFields(validProofFields) },
+        { vkIndex: 0, proofFields: validProofFields },
+      ],
+    });
+    expect(results.map(r => r.valid)).toEqual([false, true]);
+  });
 
   it('single valid proof', async () => {
     const results = await run({
