@@ -92,7 +92,7 @@ export class SequencerClient {
     const l1Metrics = new L1Metrics(
       telemetryClient.getMeter('L1PublisherMetrics'),
       publicClient,
-      l1TxUtils.map(x => x.getSenderAddress()),
+      l1TxUtils.length,
       'sequencer',
     );
     const publisherManager = new PublisherManager(l1TxUtils, getPublisherConfigFromSequencerConfig(config), {

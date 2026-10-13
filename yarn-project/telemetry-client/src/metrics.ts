@@ -873,12 +873,6 @@ export const L1_BLOCK_HEIGHT: MetricDefinition = {
   description: 'The current L1 block height',
   valueType: ValueType.INT,
 };
-export const L1_BALANCE_ETH: MetricDefinition = {
-  name: 'aztec.l1.balance',
-  description: 'ETH balance of an address',
-  unit: 'eth',
-  valueType: ValueType.DOUBLE,
-};
 export const L1_GAS_PRICE_WEI: MetricDefinition = {
   name: 'aztec.l1.gas_price',
   description: 'Current L1 gas price',

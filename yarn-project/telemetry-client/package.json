@@ -10,6 +10,7 @@
     "./bench": "./dest/bench.js",
     "./config": "./dest/config.js",
     "./start": "./dest/start.js",
+    "./test": "./dest/test/index.js",
     "./otel-pino-stream": "./dest/vendor/otel-pino-stream.js"
   },
   "scripts": {
