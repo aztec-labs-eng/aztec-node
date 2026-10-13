@@ -6,6 +6,7 @@ import { DateProvider } from '@aztec-labs/foundation/timer';
 import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
+import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import {
@@ -387,6 +388,37 @@ describe('ProofPublishingService', () => {
     service.onChainProven(BlockNumber(0));
     expect(await outcome).toEqual('published');
     expect(publishers).toHaveLength(1);
+  });
+
+  it('retries an unaffordable candidate once per backoff however many drains hit it', async () => {
+    jest.useFakeTimers();
+    try {
+      startService();
+      publisherFactory.create.mockRejectedValue(
+        new NoAffordablePublisherError(
+          1000n,
+          { gasLimit: 1n, blobCount: 0 },
+          { maxFeePerGas: 1000n, maxPriorityFeePerGas: 1n },
+          [],
+        ),
+      );
+
+      void service.submit(makeCandidate());
+      service.onChainProven(BlockNumber(0));
+      service.onChainProven(BlockNumber(0));
+      await service.drainSyncPoint();
+      expect(publisherFactory.create).toHaveBeenCalledTimes(3);
+
+      await jest.advanceTimersByTimeAsync(12_000);
+      await service.drainSyncPoint();
+      expect(publisherFactory.create).toHaveBeenCalledTimes(4);
+
+      await jest.advanceTimersByTimeAsync(12_000);
+      await service.drainSyncPoint();
+      expect(publisherFactory.create).toHaveBeenCalledTimes(5);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('expires a candidate that keeps hitting publisher acquire failures past its deadline', async () => {

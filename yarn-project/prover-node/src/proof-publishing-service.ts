@@ -133,6 +133,8 @@ export class ProofPublishingService {
   private stopped = false;
   /** Candidates for which the lack of an affordable publisher has already been logged. */
   private readonly unaffordableCandidates = new Set<string>();
+  /** Pending drain retry after a failed publisher acquisition, so repeated failures never stack up retry timers. */
+  private retryTimer: NodeJS.Timeout | undefined;
 
   constructor(private readonly deps: ProofPublishingServiceDeps) {
     this.log = createLogger('prover-node:proof-publishing-service', deps.bindings);
@@ -211,6 +213,8 @@ export class ProofPublishingService {
    */
   public async stop(): Promise<void> {
     this.stopped = true;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
     await this.drainQueue.end();
     // Anything still parked in a bucket never ran through drain — resolve it as withdrawn so
     // callers awaiting `submit()` aren't left hanging.
@@ -233,6 +237,17 @@ export class ProofPublishingService {
       .catch(err => {
         this.log.error(`Drain task threw`, err);
       });
+  }
+
+  /** Schedules a drain after the delay, unless a retry is already pending. */
+  private scheduleRetry(delayMs: number): void {
+    if (this.stopped || this.retryTimer) {
+      return;
+    }
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      this.scheduleDrain();
+    }, delayMs);
   }
 
   private async drain(): Promise<void> {
@@ -308,6 +323,10 @@ export class ProofPublishingService {
       });
     } catch (err) {
       if (err instanceof NoAffordablePublisherError) {
+        // The candidate may have expired or been withdrawn while the publisher was being acquired.
+        if (!bucket.candidates.has(winner.id)) {
+          return;
+        }
         // Logged once per candidate: retrying every few seconds until a top-up or the deadline would spam errors.
         if (!this.unaffordableCandidates.has(winner.id)) {
           this.unaffordableCandidates.add(winner.id);
@@ -319,7 +338,7 @@ export class ProofPublishingService {
             ...err.toLogContext(),
           });
         }
-        setTimeout(() => this.scheduleDrain(), PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS);
+        this.scheduleRetry(PUBLISHER_UNAFFORDABLE_RETRY_DELAY_MS);
         return;
       }
       // Treat this as transient: the publisher pool may be temporarily exhausted
@@ -332,7 +351,7 @@ export class ProofPublishingService {
         retryDelayMs: PUBLISHER_ACQUIRE_RETRY_DELAY_MS,
         err,
       });
-      setTimeout(() => this.scheduleDrain(), PUBLISHER_ACQUIRE_RETRY_DELAY_MS);
+      this.scheduleRetry(PUBLISHER_ACQUIRE_RETRY_DELAY_MS);
       return;
     }
 

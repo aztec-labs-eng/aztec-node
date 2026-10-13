@@ -1,9 +1,10 @@
 import type { SendCostRequirement } from '@aztec-labs/ethereum/l1-tx-utils';
 
 /**
- * Worst-case gas limit of an epoch proof submission, used to check that a publisher can afford it before proving.
- * Measured on testnet v6 (p50, Sepolia after Glamsterdam): the first `submitEpochRootProof` of an epoch used 2.36M gas
- * and later ones 1.55M. The tx gas limit adds the configured gas limit buffer (20% by default) on top of the estimate.
+ * Worst-case gas limit of an epoch proof submission, used to check that a publisher can afford sending a finished proof.
+ * Measured on testnet v6 (Sepolia after Glamsterdam): the first `submitEpochRootProof` of an epoch used at most 2.51M
+ * gas, sent with a 3.06M gas limit after the gas limit buffer (20% by default). Proofs sent through a forwarder contract
+ * use about 2.89M gas, so roughly 3.5M once the buffer is added.
  */
 export const SUBMIT_EPOCH_PROOF_GAS = 3_500_000n;
 
