@@ -131,6 +131,7 @@ describe('OTelPinoStream', () => {
     const { exitCode, exitDurationMs } = await logFatalAndExit(url, 'otlp-exit-marker', 1000);
 
     expect(exitCode).toBe(1);
+    expect(collector.hasRecordWithMarker('otlp-exit-marker')).toBe(true);
     expect(exitDurationMs).toBeLessThan(6_000);
   });
 });
