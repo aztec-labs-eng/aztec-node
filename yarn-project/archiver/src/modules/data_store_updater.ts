@@ -7,7 +7,7 @@ import {
   ContractInstancePublishedEvent,
   ContractInstanceUpdatedEvent,
 } from '@aztec-labs/protocol-contracts/instance-registry';
-import type { BlockData, BlockHash, L2Block, ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
+import type { BlockData, L2Block, ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
 import {
   type ProposedCheckpointInput,
   type PublishedCheckpoint,
@@ -469,36 +469,6 @@ export class ArchiverDataStoreUpdater {
       return await this.removeBlocksAfter(blockNumber);
     });
     await this.l2FrontierCache?.refresh();
-    return result;
-  }
-
-  /**
-   * Removes the blocks of a checkpoint its proposer abandoned: every block strictly after `blockNumber`, provided the
-   * block right after it is still `firstBlockHash` and no proposed or L1 checkpoint covers it. The check and the
-   * removal share one transaction, so a checkpoint or a different chain landing in between cannot be pruned.
-   *
-   * @returns The removed blocks, or an empty array together with the reason the guard refused.
-   */
-  public async removeAbandonedProposedBlocksAfter(
-    blockNumber: BlockNumber,
-    firstBlockHash: BlockHash,
-  ): Promise<{ removed: L2Block[]; refusal?: 'no-blocks-after' | 'first-block-mismatch' | 'checkpointed' }> {
-    const result = await this.stores.db.transactionAsync(async () => {
-      const firstBlock = await this.stores.blocks.getBlockData({ number: BlockNumber(blockNumber + 1) });
-      if (firstBlock === undefined) {
-        return { removed: [], refusal: 'no-blocks-after' as const };
-      }
-      if (!firstBlock.blockHash.equals(firstBlockHash)) {
-        return { removed: [], refusal: 'first-block-mismatch' as const };
-      }
-      if ((await this.stores.blocks.getProposedCheckpointL2BlockNumber()) > blockNumber) {
-        return { removed: [], refusal: 'checkpointed' as const };
-      }
-      return { removed: await this.removeBlocksAfter(blockNumber) };
-    });
-    if (result.removed.length > 0) {
-      await this.l2FrontierCache?.refresh();
-    }
     return result;
   }
 
