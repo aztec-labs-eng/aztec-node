@@ -16,7 +16,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { executeTimeout } from '@aztec-labs/foundation/timer';
 import { type Logger, SeverityNumber, logs } from '@opentelemetry/api-logs';
 import { millisToHrTime } from '@opentelemetry/core';
 import type { LoggerProvider } from '@opentelemetry/sdk-logs';
@@ -137,8 +136,8 @@ interface OTelPinoStreamOptions {
   messageKey?: string;
   levels: any; // Pino.LevelMapping
   otelTimestampFromTime?: (time: any) => number;
-  // [aztec] Provider whose buffered records are exported when the stream ends.
-  loggerProvider?: Pick<LoggerProvider, 'forceFlush'>;
+  // [aztec] Provider shut down when the stream ends, which exports the records it still holds.
+  loggerProvider?: Pick<LoggerProvider, 'shutdown'>;
 }
 
 /**
@@ -152,7 +151,7 @@ export class OTelPinoStream extends Writable {
   private _messageKey: string;
   private _levels;
   private _otelTimestampFromTime;
-  private _loggerProvider?: Pick<LoggerProvider, 'forceFlush'>;
+  private _loggerProvider?: Pick<LoggerProvider, 'shutdown'>;
 
   constructor(options: OTelPinoStreamOptions) {
     super();
@@ -175,19 +174,31 @@ export class OTelPinoStream extends Writable {
   }
 
   // [aztec] pino ends its transport streams when the process exits and waits for them to close, but the batch
-  // processor only exports on a timer, so without this flush the records logged right before an exit are dropped.
+  // processor only exports on a timer, so without this the records logged right before an exit are dropped. Shutdown
+  // rather than forceFlush, since only shutdown also waits for exports the timer already started. The timeout is hand
+  // rolled because importing foundation here would create a logger, and with it another transport worker.
   override _final(callback: (error?: Error | null) => void) {
-    if (!this._loggerProvider) {
+    const provider = this._loggerProvider;
+    if (!provider) {
       callback();
       return;
     }
-    const provider = this._loggerProvider;
-    executeTimeout(() => provider.forceFlush(), FLUSH_ON_END_TIMEOUT_MS, 'flushing logs to OTLP')
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`timed out after ${FLUSH_ON_END_TIMEOUT_MS}ms`)),
+        FLUSH_ON_END_TIMEOUT_MS,
+      );
+    });
+    Promise.race([provider.shutdown(), timeout])
       .catch(err => {
         // eslint-disable-next-line no-console
-        console.error(`Error flushing OTelPinoStream: ${err}`);
+        console.error(`Error exporting logs on OTelPinoStream end: ${err}`);
       })
-      .finally(() => callback());
+      .finally(() => {
+        clearTimeout(timer);
+        callback();
+      });
   }
 
   override _write(s: string, _encoding: string, callback: Function) {
