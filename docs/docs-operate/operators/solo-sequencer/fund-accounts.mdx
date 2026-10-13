@@ -2,7 +2,7 @@
 title: "Fund accounts"
 description: "Fund the publisher with ETH and confirm your AZTEC self-stake is available."
 displayed_sidebar: operatorsSidebar
-references: ["yarn-project/ethereum/src/l1_tx_utils/config.ts", "yarn-project/sequencer-client/src/publisher/*"]
+references: ["yarn-project/ethereum/src/l1_tx_utils/config.ts", "yarn-project/ethereum/src/publisher_manager.ts", "yarn-project/sequencer-client/src/publisher/*"]
 ---
 
 # Fund accounts
@@ -30,9 +30,38 @@ In HA mode the publisher runs on a separate server, but the publisher *address* 
 </IfChoice>
 
 :::warning Monitor publisher balance
-If the publisher balance runs dry, your sequencer cannot publish blocks, and an inactive sequencer is a slashable offense. Set a refill threshold and an alert using `aztec_l1_publisher_balance` from your Prometheus stack, leaving enough headroom to refill before the publisher dries up at the worst-case gas price you expect.
+If the publisher balance runs dry, your sequencer cannot publish blocks, and an inactive sequencer is a slashable offense. Set a refill threshold and an alert using `aztec_l1_publisher_balance_eth` and `aztec_l1_publisher_sends_affordable` from your Prometheus stack (see [Metrics reference](../monitoring/metrics-reference#l1-publisher-eth-balance)), leaving enough headroom to refill before the publisher dries up at the worst-case gas price you expect, or set up [automatic top-ups](#optional-automatic-top-ups).
 :::
 
+
+## Optional: automatic top-ups
+
+Your node can refill its publishers from a separate funding account, so a publisher does not run dry between manual top-ups. Once a minute the node reads every publisher's balance, and sends `PUBLISHER_FUNDING_AMOUNT` to each publisher below `PUBLISHER_FUNDING_THRESHOLD`, in a single transaction from the funding account.
+
+To set it up:
+
+1. Add a funding account to your keystore. It goes in the top-level `fundingAccount` field, next to `validators`, and takes a private key, or an address held by a remote signer. You can set it with the CLI:
+
+   ```bash
+   aztec validator-keys set-funding-account [KEYSTORE_PATH] [FUNDING_PRIVATE_KEY_OR_ADDRESS]
+   ```
+
+   Pass `--remote-signer [URL]` for an address held by a remote signer, or `--password [PASSWORD]` to store the key encrypted.
+
+2. Set both environment variables on the node. Both are in ETH (for example `0.05`), and top-ups stay off unless both are set.
+
+   | Env var | What it does |
+   |---|---|
+   | `PUBLISHER_FUNDING_THRESHOLD` | A publisher whose balance falls below this amount gets topped up. |
+   | `PUBLISHER_FUNDING_AMOUNT` | ETH sent to the publisher in each top-up. |
+
+3. Fund the funding account, and restart the node.
+
+Keep in mind:
+
+- The funding account must not also be one of your publishers. If it is, the node logs an error and disables top-ups.
+- Set the threshold above the low-balance warning level, so publishers are refilled before the node warns that they are running low. The warning level is 4 times the cost of a proposal at current L1 fees by default (`PUBLISHER_LOW_BALANCE_WARNING_MULTIPLIER`). The node warns if the threshold is below it.
+- The node warns when the funding account holds less than 10 top-ups, and logs an error when it cannot pay for any. Watch `aztec_l1_publisher_funder_balance_eth` to refill it in time.
 
 ## Optional: tuning publisher gas settings
 
