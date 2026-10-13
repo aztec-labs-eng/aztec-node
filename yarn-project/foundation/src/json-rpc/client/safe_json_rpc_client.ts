@@ -225,9 +225,14 @@ export function createSafeJsonRpcClient<T extends object>(
       sendBatchTimeoutHandle = setTimeout(sendBatch, batchWindowMS);
     }
 
-    log.debug(`request ${method} ${inspect(params)}`);
+    // Inspecting a large payload such as a Tx is expensive, so it is only done when the message will be logged.
+    if (log.isLevelEnabled('debug')) {
+      log.debug(`request ${method} ${inspect(params)}`);
+    }
     const response = await deferred.promise;
-    log.debug(`result ${method} ${inspect(response)}`);
+    if (log.isLevelEnabled('debug')) {
+      log.debug(`result ${method} ${inspect(response)}`);
+    }
 
     if ('error' in response) {
       throw new Error(response.error.message, { cause: response.error });

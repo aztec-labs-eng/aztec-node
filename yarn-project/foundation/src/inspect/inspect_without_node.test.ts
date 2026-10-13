@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { custom, inspectWithoutNode } from './inspect_without_node.js';
 
 class WithCustomRepresentation {
@@ -33,7 +35,15 @@ describe('inspectWithoutNode', () => {
   });
 
   it('represents bigints nested in an object', () => {
-    expect(inspectWithoutNode({ value: 5n })).toBe('{"value":"5n"}');
+    expect(inspectWithoutNode({ value: 5n })).toBe('{"value":"5"}');
+  });
+
+  it('represents a buffer nested in an object as base64', () => {
+    expect(inspectWithoutNode({ data: Buffer.from([0xde, 0xad, 0xbe, 0xef]) })).toBe('{"data":"3q2+7w=="}');
+  });
+
+  it('represents maps and sets nested in an object as arrays', () => {
+    expect(inspectWithoutNode({ map: new Map([['a', 1]]), set: new Set([2]) })).toBe('{"map":[["a",1]],"set":[2]}');
   });
 
   it('represents an error by its name and message', () => {

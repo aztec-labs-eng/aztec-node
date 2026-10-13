@@ -34,7 +34,10 @@ export async function defaultFetch(
   noRetry = false,
   config: JsonRpcFetchConfig = {},
 ): Promise<{ response: any; headers: { get: (header: string) => string | null | undefined } }> {
-  log.debug(`JsonRpcClient.fetch ${host} -> ${inspect(body)}`);
+  // Inspecting a large payload such as a Tx is expensive, so it is only done when the message will be logged.
+  if (log.isLevelEnabled('debug')) {
+    log.debug(`JsonRpcClient.fetch ${host} -> ${inspect(body)}`);
+  }
   let resp: Response;
   try {
     resp = await fetch(host, {
