@@ -108,8 +108,8 @@ export class ValidationService {
   ): Promise<CheckpointProposal> {
     // For testing: corrupt the checkpoint so observers' checkpoint validation fails.
     //
-    // Keep `archive` aligned with `lastBlockProposal.archiveRoot` so the archive-based lookup
-    // in `validateCheckpointProposal` (`getBlockData({ archive })`) still succeeds
+    // Keep `archive` aligned with `lastBlockProposal.archiveRoot` so validation still finds the
+    // checkpoint's blocks by the signed archive and attributes the rejection to the proposer
     if (options.broadcastInvalidCheckpointProposal) {
       archive = lastBlockProposal?.archiveRoot ?? Fr.random();
       checkpointHeader = CheckpointHeader.from({
