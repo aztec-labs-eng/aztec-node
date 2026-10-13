@@ -1,3 +1,4 @@
+import { IpcProcessExitedError } from '@aztec-foundation/ipc-runtime';
 import { AsyncApi, WsdbService } from '@aztec-foundation/wsdb';
 import type {
   WorldStateDBStats as WsdbDBStats,
@@ -806,10 +807,29 @@ export class IpcWorldState implements NativeWorldStateInstance {
       this.instrumentation.recordRoundTrip(durationMs * 1000, operation);
       return response;
     } catch (error) {
+      if (error instanceof IpcProcessExitedError) {
+        exitOnWsdbDeath(operation, error, this.log);
+      }
       this.log.error(`Call ${operation} failed: ${error}`, error);
       throw error;
     }
   }
+}
+
+/**
+ * Exits the process because wsdb died under it. wsdb holds the forks and uncommitted state every caller depends on,
+ * so a respawn would leave them dangling and nothing can continue: crash like the in-process world state did, and let
+ * the orchestrator restart the node. Every wsdb call funnels through {@link IpcWorldState.send}, so this is the one
+ * place that needs it; it moves to the IPC backend's `exitOnDeath` option once callers use the wsdb API directly.
+ */
+function exitOnWsdbDeath(operation: WorldStateOperationName, error: IpcProcessExitedError, log: Logger): never {
+  log.fatal(`World state database process died during ${operation}; exiting`, {
+    error: error.message,
+    code: error.code,
+    signal: error.signal,
+    logPath: error.logPath,
+  });
+  process.exit(1);
 }
 
 /**
