@@ -14,6 +14,7 @@ import { formatEther } from 'viem';
  */
 export class PublisherManagerMetrics implements IPublisherManagerMetrics {
   private readonly balance: ObservableGauge;
+  private readonly deprecatedBalance: ObservableGauge;
   private readonly sendsAffordable: ObservableGauge;
   private readonly funderBalance: ObservableGauge;
   private readonly requiredBalance: ObservableGauge;
@@ -25,11 +26,13 @@ export class PublisherManagerMetrics implements IPublisherManagerMetrics {
   ) {
     const meter = client.getMeter('PublisherManager');
     this.balance = meter.createObservableGauge(Metrics.L1_PUBLISHER_BALANCE);
+    this.deprecatedBalance = meter.createObservableGauge(Metrics.L1_BALANCE_ETH);
     this.sendsAffordable = meter.createObservableGauge(Metrics.L1_PUBLISHER_SENDS_AFFORDABLE);
     this.funderBalance = meter.createObservableGauge(Metrics.L1_FUNDER_BALANCE);
     this.requiredBalance = meter.createObservableGauge(Metrics.L1_PUBLISHER_REQUIRED_BALANCE);
     meter.addBatchObservableCallback(this.observe, [
       this.balance,
+      this.deprecatedBalance,
       this.sendsAffordable,
       this.funderBalance,
       this.requiredBalance,
@@ -49,6 +52,7 @@ export class PublisherManagerMetrics implements IPublisherManagerMetrics {
     for (const { address, balance, sendsAffordable } of snapshot.publishers) {
       const attributes = { [Attributes.SENDER_ADDRESS]: address, [Attributes.L1_TX_SCOPE]: scope };
       observer.observe(this.balance, toEth(balance), attributes);
+      observer.observe(this.deprecatedBalance, toEth(balance), { [Attributes.L1_SENDER]: address });
       if (sendsAffordable !== undefined) {
         observer.observe(this.sendsAffordable, sendsAffordable, attributes);
       }

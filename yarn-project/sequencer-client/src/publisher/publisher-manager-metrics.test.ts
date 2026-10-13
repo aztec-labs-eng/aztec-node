@@ -38,6 +38,10 @@ describe('PublisherManagerMetrics', () => {
       { value: 2, attributes: sender('0x01') },
       { value: 0.5, attributes: sender('0x02') },
     ]);
+    expect(exported[Metrics.L1_BALANCE_ETH.name]).toEqual([
+      { value: 2, attributes: { [Attributes.L1_SENDER]: '0x01' } },
+      { value: 0.5, attributes: { [Attributes.L1_SENDER]: '0x02' } },
+    ]);
     expect(exported[Metrics.L1_PUBLISHER_SENDS_AFFORDABLE.name]).toEqual([
       { value: 40, attributes: sender('0x01') },
       { value: 10, attributes: sender('0x02') },

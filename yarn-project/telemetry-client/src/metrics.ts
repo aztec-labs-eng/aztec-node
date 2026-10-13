@@ -842,6 +842,13 @@ export const L1_PUBLISHER_SENDS_AFFORDABLE: MetricDefinition = {
     '0 while it is backed off after an insufficient funds rejection',
   valueType: ValueType.INT,
 };
+/** Same values as {@link L1_PUBLISHER_BALANCE}, kept while the docs monitoring installer still alerts on it. */
+export const L1_BALANCE_ETH: MetricDefinition = {
+  name: 'aztec.l1.balance',
+  description: 'Deprecated, use aztec.l1_publisher.balance instead. ETH balance of a publisher, read every minute',
+  unit: 'eth',
+  valueType: ValueType.DOUBLE,
+};
 export const L1_FUNDER_BALANCE: MetricDefinition = {
   name: 'aztec.l1_publisher.funder_balance',
   description: 'ETH balance of the funding account that tops up publishers, read every minute',
