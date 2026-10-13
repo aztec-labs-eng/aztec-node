@@ -1,5 +1,4 @@
 import { INITIAL_L2_BLOCK_NUM } from '@aztec-labs/constants';
-import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { filterAsync } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -8,9 +7,8 @@ import {
   ContractInstancePublishedEvent,
   ContractInstanceUpdatedEvent,
 } from '@aztec-labs/protocol-contracts/instance-registry';
-import type { BlockData, CommitteeAttestation, L2Block, ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
+import type { BlockData, L2Block, ValidateCheckpointResult } from '@aztec-labs/stdlib/block';
 import {
-  type L1PublishedData,
   type ProposedCheckpointInput,
   type PublishedCheckpoint,
   validateCheckpoint,
@@ -196,18 +194,14 @@ export class ArchiverDataStoreUpdater {
    *
    * @param checkpoints - The published checkpoints to add (excluding any being promoted from proposed).
    * @param pendingChainValidationStatus - Optional validation status to set.
-   * @param promoteProposed - Optional promotion of the current proposed checkpoint (fast path when blocks are already local).
+   * @param promoteProposed - Optional proposed checkpoint to promote, published with the L1 data and attestations L1
+   * carries for it (fast path when blocks are already local).
    * @returns Result with information about any pruned blocks.
    */
   public async addCheckpoints(
     checkpoints: PublishedCheckpoint[],
     pendingChainValidationStatus?: ValidateCheckpointResult,
-    promoteProposed?: {
-      l1: L1PublishedData;
-      attestations: CommitteeAttestation[];
-      verbatimAttestations: ViemCommitteeAttestations;
-      checkpoint: PublishedCheckpoint;
-    },
+    promoteProposed?: PublishedCheckpoint,
     evictProposedFrom?: CheckpointNumber,
   ): Promise<ReconcileCheckpointsResult> {
     const validateOpts = { rollupManaLimit: this.opts?.rollupManaLimit };
@@ -215,7 +209,7 @@ export class ArchiverDataStoreUpdater {
       validateCheckpoint(checkpoint.checkpoint, validateOpts);
     }
     if (promoteProposed) {
-      validateCheckpoint(promoteProposed.checkpoint.checkpoint, validateOpts);
+      validateCheckpoint(promoteProposed.checkpoint, validateOpts);
     }
 
     await prepareBlockTxEffectsTreeData(checkpoints.flatMap(published => published.checkpoint.blocks));
@@ -242,11 +236,11 @@ export class ArchiverDataStoreUpdater {
         // Promote the proposed checkpoint if requested (uses explicit checkpoint number)
         promoteProposed
           ? this.stores.blocks.promoteProposedToCheckpointed(
-              promoteProposed.checkpoint.checkpoint.number,
+              promoteProposed.checkpoint.number,
               promoteProposed.l1,
               promoteProposed.attestations,
               promoteProposed.verbatimAttestations,
-              promoteProposed.checkpoint.checkpoint.archive.root,
+              promoteProposed.checkpoint.archive.root,
             )
           : undefined,
         // Evict pending checkpoints that diverged from what L1 mined
