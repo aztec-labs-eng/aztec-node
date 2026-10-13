@@ -174,12 +174,16 @@ describe('single-node/cross-chain/inbox_bot', () => {
    *   has to be mined and synced before then. It also has to be mined after the proposer of the slot before picked
    *   the messages for its last block, or that proposer takes the first bucket on its own.
    * The next L1 block's mining time is predicted from when the latest one was first seen, so the L1 tip is polled
-   * finely and a block already mined at the first poll is not used.
+   * finely and a block already mined at the first poll is not used. The prediction only holds if nothing pauses L1
+   * mining before that block, so blocks around an epoch boundary, where the epoch settler marks the epoch proven, are
+   * passed over.
    */
   const waitForSaturationSendWindow = async () => {
-    const { slotDuration, ethereumSlotDuration } = t.constants;
+    const { slotDuration, ethereumSlotDuration, epochDuration } = t.constants;
     const timetable = buildProposerTimetable(t.aztecNodeConfig, t.constants);
     const lastSubslot = timetable.getMaxBlocksPerCheckpoint() - 1;
+    /** Seconds kept clear of the previous proposer's last pick and of the archiver syncing the batch in time. */
+    const margin = 2;
     let latestSeen: bigint | undefined;
     return await retryUntil(
       async () => {
@@ -191,21 +195,26 @@ describe('single-node/cross-chain/inbox_bot', () => {
           return undefined;
         }
 
+        const slotInEpoch = getSlotAtTimestamp(latest.timestamp, t.constants) % epochDuration;
+        if (slotInEpoch === 0 || slotInEpoch === epochDuration - 1) {
+          return undefined;
+        }
+
         const batchTimestamp = latest.timestamp + BigInt(ethereumSlotDuration);
         const batchMinedAt = seenAt + ethereumSlotDuration;
         const obligedSlot = firstSlotObligedToConsume(batchTimestamp);
         const previousLastPick = timetable.getBlockBuildDeadline(SlotNumber.add(obligedSlot, -1), lastSubslot - 1);
         const obligedFrameStart = timetable.getBuildFrameStart(obligedSlot);
-        // A second clear of the previous proposer's last pick, and two before the frame start so the archiver,
-        // polling every half second, has synced the batch by then.
-        if (batchMinedAt < previousLastPick + 1 || batchMinedAt > obligedFrameStart - 2) {
+        if (batchMinedAt < previousLastPick + margin || batchMinedAt > obligedFrameStart - margin) {
           return undefined;
         }
 
+        // `getCheckpoint` also serves proposed checkpoints, so only those at or below the checkpointed tip count.
+        const checkpointedTip = await aztecNode.getCheckpointNumber();
         const onTimeCheckpoints = await Promise.all(
           [3, 4].map(slotsBack => aztecNode.getCheckpoint({ slot: SlotNumber.add(obligedSlot, -slotsBack) })),
         );
-        if (onTimeCheckpoints.some(checkpoint => checkpoint === undefined)) {
+        if (onTimeCheckpoints.some(checkpoint => checkpoint === undefined || checkpoint.number > checkpointedTip)) {
           return undefined;
         }
         log.warn(`Sending the saturation batch for obliged slot ${obligedSlot}`, {
@@ -347,9 +356,9 @@ describe('single-node/cross-chain/inbox_bot', () => {
     // first production step runs the saturation batch instead of waiting a day for it.
     await store.inbox.setSchedule({ enabled: true, nextDueAt: 0, runInFlight: false, consecutiveFailures: 0 });
 
-    const batchTimestamp = await waitForSaturationSendWindow();
-    await bot.start();
     try {
+      const batchTimestamp = await waitForSaturationSendWindow();
+      await bot.start();
       const batchId = await waitForBatch(store);
       const batch = await retryUntil(
         async () => {
@@ -406,7 +415,10 @@ describe('single-node/cross-chain/inbox_bot', () => {
         t.constants.slotDuration * 4,
         1,
       );
-      const obligedCheckpoint = await aztecNode.getCheckpoint({ slot: obligedSlot }, { includeBlocks: true });
+      const obligedCheckpoint = await aztecNode.getCheckpoint(
+        { slot: obligedSlot },
+        { includeBlocks: true, includeL1PublishInfo: true },
+      );
       expect(obligedCheckpoint).toBeDefined();
       expect(await consumedThrough(BlockNumber(obligedCheckpoint!.startBlock - 1))).toBeLessThanOrEqual(indices[0]);
       expect(
