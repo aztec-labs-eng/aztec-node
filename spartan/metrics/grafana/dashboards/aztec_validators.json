@@ -2396,25 +2396,13 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${data_source}"
           },
           "editorMode": "code",
           "expr": "sum by (k8s_pod_name) (increase(aztec_sequencer_checkpoint_precheck_failed_count{service_instance_id=~\"$service_instance\",aztec_error_type=\"insufficient_publisher_balance\"}[$__rate_interval]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.9, sum(rate(aztec_l1_publisher_tx_blobdata_gas_cost_gwei_bucket{service_instance_id=~\"$service_instance\"}[$__rate_interval])) by (le))",
-          "hide": false,
-          "legendFormat": "90th percentile",
-          "range": true,
-          "refId": "B"
         }
       ],
       "title": "Proposals skipped for insufficient balance",

@@ -1197,7 +1197,7 @@ groups:
               datasourceUid: spartan-metrics-prometheus
               model:
                 editorMode: code
-                expr: max by (k8s_namespace_name, service_name, aztec_l1_tx_scope) (aztec_l1_publisher_sends_affordable)
+                expr: max by (k8s_namespace_name, service_name, service_instance_id, aztec_l1_tx_scope) (aztec_l1_publisher_sends_affordable)
                 instant: true
                 intervalMs: 60000
                 legendFormat: __auto
@@ -1281,7 +1281,7 @@ groups:
               datasourceUid: spartan-metrics-prometheus
               model:
                 editorMode: code
-                expr: min by (k8s_namespace_name, service_name, aztec_address_sender) (aztec_l1_publisher_sends_affordable)
+                expr: min by (k8s_namespace_name, service_name, service_instance_id, aztec_address_sender) (aztec_l1_publisher_sends_affordable)
                 instant: true
                 intervalMs: 60000
                 legendFormat: __auto

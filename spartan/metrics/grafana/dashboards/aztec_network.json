@@ -728,7 +728,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "-sum by(service_name) (clamp_min(-delta(aztec_l1_publisher_balance_eth{k8s_namespace_name=\"$namespace\"}[1m]), 0))",
+          "expr": "sum by(service_name) (clamp_min(-delta(aztec_l1_publisher_balance_eth{k8s_namespace_name=\"$namespace\"}[1m]), 0))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
