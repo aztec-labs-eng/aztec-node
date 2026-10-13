@@ -14,7 +14,12 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
-import { GENESIS_BLOCK_HEADER_HASH, L2Block } from '@aztec-labs/stdlib/block';
+import {
+  GENESIS_BLOCK_HEADER_HASH,
+  L2Block,
+  L2BlockSourceEvents,
+  type L2PruneUncheckpointedEvent,
+} from '@aztec-labs/stdlib/block';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { InboxMessagePrefixRef } from '@aztec-labs/stdlib/messaging';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
@@ -701,6 +706,75 @@ describe('Archiver Store', () => {
       expect(blocks.length).toEqual(2);
       expect(await blocks[0].hash()).toEqual(await block1.hash());
       expect(await blocks[1].hash()).toEqual(await block2.hash());
+    });
+
+    describe('pruneAbandonedProposedBlocks', () => {
+      let blocks: L2Block[];
+
+      beforeEach(async () => {
+        const block1 = await makeBlock(BlockNumber(1), IndexWithinCheckpoint(0), genesisArchive);
+        const block2 = await makeBlock(BlockNumber(2), IndexWithinCheckpoint(1), block1.archive);
+        const block3 = await makeBlock(BlockNumber(3), IndexWithinCheckpoint(2), block2.archive);
+        blocks = [block1, block2, block3];
+        for (const block of blocks) {
+          await archiver.addBlock(block, emptyPrefix);
+        }
+      });
+
+      it('prunes every block after the parent and announces it as an uncheckpointed prune', async () => {
+        const pruneEvents: L2PruneUncheckpointedEvent[] = [];
+        archiver.events.on(L2BlockSourceEvents.L2PruneUncheckpointed, event => pruneEvents.push(event));
+
+        const pruned = await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[1].hash());
+
+        expect(pruned).toEqual([BlockNumber(2), BlockNumber(3)]);
+        expect((await archiver.getL2Tips()).proposed.number).toEqual(BlockNumber(1));
+        expect(await archiver.getBlock({ number: BlockNumber(2) })).toBeUndefined();
+        expect(pruneEvents).toHaveLength(1);
+        expect(pruneEvents[0].slotNumber).toEqual(blocks[1].slot);
+        expect(pruneEvents[0].blocks.map(block => block.number)).toEqual([BlockNumber(2), BlockNumber(3)]);
+      });
+
+      it('accepts the next block on top of the parent once the abandoned blocks are pruned', async () => {
+        await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[1].hash());
+
+        const replacement = await makeBlock(BlockNumber(2), IndexWithinCheckpoint(1), blocks[0].archive);
+        await archiver.addBlock(replacement, emptyPrefix);
+
+        expect(await (await archiver.getBlock({ number: BlockNumber(2) }))!.hash()).toEqual(await replacement.hash());
+      });
+
+      it('prunes nothing when the block after the parent is not the caller first block', async () => {
+        const pruned = await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[0].hash());
+
+        expect(pruned).toEqual([]);
+        expect((await archiver.getL2Tips()).proposed.number).toEqual(BlockNumber(3));
+      });
+
+      it('prunes nothing when a proposed checkpoint already covers the blocks', async () => {
+        await archiverStore.blocks.addProposedCheckpoint({
+          checkpointNumber: CheckpointNumber(1),
+          header: CheckpointHeader.random({ slotNumber: blocks[0].slot }),
+          startBlock: BlockNumber(1),
+          blockCount: 3,
+          totalManaUsed: 0n,
+          feeAssetPriceModifier: 0n,
+        });
+
+        const pruned = await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[1].hash());
+
+        expect(pruned).toEqual([]);
+        expect((await archiver.getL2Tips()).proposed.number).toEqual(BlockNumber(3));
+      });
+
+      it('prunes nothing when the blocks are already gone', async () => {
+        await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[1].hash());
+
+        const pruned = await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[1].hash());
+
+        expect(pruned).toEqual([]);
+        expect((await archiver.getL2Tips()).proposed.number).toEqual(BlockNumber(1));
+      });
     });
   });
 

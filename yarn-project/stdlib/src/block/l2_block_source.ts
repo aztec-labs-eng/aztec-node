@@ -391,6 +391,20 @@ export interface L2BlockSink {
    *   prefix reference does not match the sink's canonical messages at the block's L1-to-L2 leaf count.
    */
   addBlock(block: L2Block, inboxPrefixRef: InboxMessagePrefixRef): Promise<void>;
+
+  /**
+   * Prunes the proposed blocks of a checkpoint its proposer abandoned before enclosing them in a proposed checkpoint,
+   * instead of leaving them on the local chain until the orphan prune notices that no checkpoint ever came. Removes
+   * every block after `afterBlockNumber`, the block the abandoned checkpoint built on, and notifies subscribers exactly
+   * as an orphan prune does.
+   *
+   * Prunes nothing when the range no longer holds the caller's blocks: when the block after `afterBlockNumber` is not
+   * `firstBlockHash`, or when a proposed or L1 checkpoint already covers it.
+   * @param afterBlockNumber - The parent block of the abandoned checkpoint; it and everything before it are kept.
+   * @param firstBlockHash - The hash of the abandoned checkpoint's first block, as the caller pushed it.
+   * @returns The numbers of the pruned blocks, empty when the guard left the chain untouched.
+   */
+  pruneAbandonedProposedBlocks(afterBlockNumber: BlockNumber, firstBlockHash: BlockHash): Promise<BlockNumber[]>;
 }
 
 /**
