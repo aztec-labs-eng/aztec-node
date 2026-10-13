@@ -1,4 +1,4 @@
-import { pick } from '@aztec-labs/foundation/collection';
+import { maxBy, pick } from '@aztec-labs/foundation/collection';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { RunningPromise } from '@aztec-labs/foundation/running-promise';
 import { formatEther } from 'viem';
@@ -6,6 +6,7 @@ import { formatEther } from 'viem';
 import { Multicall3 } from './contracts/multicall.js';
 import {
   type FeesPerGas,
+  INSUFFICIENT_FUNDS_BACKOFF_MS,
   L1TxUtils,
   type SendCostRequirement,
   TxUtilsState,
@@ -36,6 +37,7 @@ const busyStates: TxUtilsState[] = [
 
 const LOW_BALANCE_WARNING_INTERVAL_MS = 10 * 60 * 1000;
 const DEFAULT_LOW_BALANCE_WARNING_MULTIPLIER = 4;
+const NO_AFFORDABLE_PUBLISHER_WARNING_KEY = 'no-affordable-publisher';
 
 export type PublisherFilter<UtilsType extends L1TxUtils> = (utils: UtilsType) => boolean;
 
@@ -44,16 +46,38 @@ type PublisherManagerConfig = {
   publisherAllowInvalidStates?: boolean;
   publisherFundingThreshold?: bigint;
   publisherFundingAmount?: bigint;
-  /** Warn when a publisher balance is below this multiple of the ETH required for a send. */
+  /** Warn when a publisher balance is below this multiple of the ETH required for the reference send. */
   publisherLowBalanceWarningMultiplier?: number;
 };
 
-/** Metrics emitted by the PublisherManager when evaluating whether publishers can afford a send. */
+/** A send the periodic balance check prices at current fees, to report whether publishers can afford it. */
+export type ReferenceSend = {
+  /** Short name of the send for logs, such as "proposal" or "epoch proof". */
+  name: string;
+  requirement: SendCostRequirement;
+};
+
+/** Balances read by a periodic balance check, and how many reference sends each publisher can afford. */
+export type PublisherBalanceSnapshot = {
+  /** Publishers whose balance could be read. */
+  publishers: {
+    address: string;
+    balance: bigint;
+    /**
+     * Number of reference sends the balance covers at current fees, 0 while backed off after an insufficient funds
+     * rejection. Unset without a reference send or if fees could not be read.
+     */
+    sendsAffordable?: number;
+  }[];
+  funder?: { address: string; balance: bigint };
+  /** ETH needed for the reference send at current fees. Unset without a reference send or if fees could not be read. */
+  required?: bigint;
+};
+
+/** Metrics emitted by the PublisherManager from its periodic balance check. */
 export interface IPublisherManagerMetrics {
-  /** Records the latest ETH amount (in wei) a publisher must hold to afford a send. */
-  recordRequiredBalance(required: bigint): void;
-  /** Records that a publisher balance is below the low-balance warning level. */
-  recordLowBalance(address: string): void;
+  /** Records the latest balance snapshot, replacing the previous one. Undefined clears it once the manager stops. */
+  recordBalanceSnapshot(snapshot: PublisherBalanceSnapshot | undefined): void;
 }
 
 /** Balance snapshot of a publisher considered for an L1 send. */
@@ -80,10 +104,39 @@ export class NoAffordablePublisherError extends Error {
     this.name = 'NoAffordablePublisherError';
   }
 
+  /**
+   * ETH the best funded publisher that is not backed off after an insufficient funds rejection is missing to afford the
+   * send. Undefined if every publisher is backed off.
+   */
+  public shortfall(): bigint | undefined {
+    const richest = this.getRichestNotBackedOff();
+    return richest === undefined ? undefined : this.required - richest.balance;
+  }
+
+  /** Tells the operator which publisher to fund and with how much ETH for the send to become affordable. */
+  public describeFunding(): string {
+    const richest = this.getRichestNotBackedOff();
+    if (richest === undefined || this.required <= richest.balance) {
+      const minutes = INSUFFICIENT_FUNDS_BACKOFF_MS / 60_000;
+      return (
+        `every publisher is backed off after an insufficient funds rejection ` +
+        `until its balance increases or ${minutes} minutes pass`
+      );
+    }
+    const shortfall = formatEther(this.required - richest.balance);
+    const others = this.publishers.filter(p => p.address !== richest.address);
+    const alternative =
+      others.length === 0
+        ? ''
+        : `, or top up any of ${others.map(p => p.address).join(', ')} to ${formatEther(this.required)} ETH`;
+    return `fund ${richest.address} with ${shortfall} ETH more${alternative}`;
+  }
+
   /** Structured context for logging. */
   public toLogContext() {
     return {
       required: this.required,
+      shortfall: this.shortfall(),
       gasLimit: this.requirement.gasLimit,
       blobCount: this.requirement.blobCount,
       maxFeePerGas: this.fees.maxFeePerGas,
@@ -91,28 +144,48 @@ export class NoAffordablePublisherError extends Error {
       publishers: this.publishers,
     };
   }
+
+  private getRichestNotBackedOff(): PublisherBalanceInfo | undefined {
+    return maxBy(
+      this.publishers.filter(p => p.insufficientFundsAtBalance === undefined),
+      p => p.balance,
+    );
+  }
 }
 
 type PublisherWithBalance<UtilsType> = { publisher: UtilsType; balance: bigint };
 
 export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
-  private static readonly FUNDING_CHECK_INTERVAL_MS = 2 * 60 * 1000;
+  private static readonly BALANCE_CHECK_INTERVAL_MS = 60 * 1000;
   private log: Logger;
   private config: PublisherManagerConfig;
   protected funder?: UtilsType;
-  protected readonly fundingPromise?: RunningPromise;
+  protected readonly balanceCheckPromise: RunningPromise;
   private started = false;
   private readonly metrics?: IPublisherManagerMetrics;
-  /** Last time a low-balance warning was logged, per publisher address (and for the funding threshold check). */
+  private readonly referenceSend?: ReferenceSend;
+  /** Whether the balance check has run since the last start, so the first one logs a summary of all balances. */
+  private loggedBalanceSummary = false;
+  /** Last time a balance warning was logged, per publisher address or per kind of warning. */
   private readonly lastLowBalanceWarningAt = new Map<string, number>();
 
   constructor(
     protected publishers: UtilsType[],
     config: PublisherManagerConfig,
-    opts?: { bindings?: LoggerBindings; funder?: UtilsType; metrics?: IPublisherManagerMetrics },
+    opts?: {
+      bindings?: LoggerBindings;
+      funder?: UtilsType;
+      metrics?: IPublisherManagerMetrics;
+      /**
+       * Send the balance check prices to report whether publishers can afford it. Without one, balances are still
+       * recorded, but affordability is neither recorded nor warned about.
+       */
+      referenceSend?: ReferenceSend;
+    },
   ) {
     this.funder = opts?.funder;
     this.metrics = opts?.metrics;
+    this.referenceSend = opts?.referenceSend;
     this.log = createLogger('publisher:manager', opts?.bindings);
     this.log.info(`PublisherManager initialized with ${publishers.length} publishers.`);
     this.publishers = publishers;
@@ -138,21 +211,19 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
       }
     }
 
-    if (this.funder && hasThreshold && hasAmount) {
-      this.fundingPromise = new RunningPromise(
-        () => this.triggerFundingIfNeeded(),
-        this.log,
-        PublisherManager.FUNDING_CHECK_INTERVAL_MS,
-      );
-    }
+    this.balanceCheckPromise = new RunningPromise(
+      () => this.checkBalances(),
+      this.log,
+      PublisherManager.BALANCE_CHECK_INTERVAL_MS,
+    );
   }
 
   /**
    * Clears any interrupted flag left by a previous {@link stop} so publishing works again after a restart,
-   * loads the state of all publishers and the funder, and starts periodic funding checks. Idempotent: a
-   * start while already started is a no-op, so it never re-runs `loadStateAndResumeMonitoring` (which
-   * would spawn a duplicate background monitor per pending nonce). Lifecycle calls are expected to be
-   * serialized by the caller.
+   * loads the state of all publishers and the funder, and starts the periodic balance check, which also tops up
+   * publishers if funding is configured. Idempotent: a start while already started is a no-op, so it never re-runs
+   * `loadStateAndResumeMonitoring` (which would spawn a duplicate background monitor per pending nonce). Lifecycle
+   * calls are expected to be serialized by the caller.
    */
   public async start(): Promise<void> {
     if (this.started) {
@@ -170,19 +241,22 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
       this.funder?.loadStateAndResumeMonitoring(),
     ]);
 
-    this.fundingPromise?.start();
+    this.loggedBalanceSummary = false;
+    this.lastLowBalanceWarningAt.delete(NO_AFFORDABLE_PUBLISHER_WARNING_KEY);
+    this.balanceCheckPromise.start();
     // Marked started only once fully up, so a start that failed to load state can be retried.
     this.started = true;
   }
 
   /**
-   * Stops the funding loop, interrupts all publishers so no further L1 txs are sent, and waits (bounded)
+   * Stops the balance check loop, interrupts all publishers so no further L1 txs are sent, and waits (bounded)
    * for their in-flight tx monitor loops to wind down. Idempotent, and the manager may be restarted
    * afterwards via {@link start}, which clears the interrupted flag.
    */
   public async stop(): Promise<void> {
     this.started = false;
-    await this.fundingPromise?.stop();
+    await this.balanceCheckPromise.stop();
+    this.metrics?.recordBalanceSnapshot(undefined);
     this.publishers.forEach(pub => pub.interrupt());
     this.funder?.interrupt();
     // Wait for in-flight tx monitor loops to observe the interrupt, so no L1 requests are still
@@ -259,6 +333,51 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     return sortedPublishers[0].publisher;
   }
 
+  /**
+   * Reads the balance of every publisher and the funder, prices the reference send at current fees, records metrics,
+   * logs balances that are low or cannot afford the reference send, and tops up publishers below the funding threshold
+   * if funding is configured. Runs once a minute while started.
+   */
+  protected async checkBalances(): Promise<void> {
+    const funder = this.funder;
+    const [publisherBalances, funderBalance] = await Promise.all([
+      Promise.all(this.publishers.map(publisher => this.tryGetBalance(publisher))),
+      funder ? this.tryGetBalance(funder) : undefined,
+    ]);
+    const withBalance = this.publishers.flatMap((publisher, i) => {
+      const balance = publisherBalances[i];
+      return balance === undefined ? [] : [{ publisher, balance }];
+    });
+    const cost = await this.tryGetReferenceCost();
+    const required = cost !== undefined && cost.required > 0n ? cost.required : undefined;
+
+    const snapshot: PublisherBalanceSnapshot = {
+      publishers: withBalance.map(({ publisher, balance }) => ({
+        address: publisher.getSenderAddress().toString(),
+        balance,
+        sendsAffordable:
+          required === undefined
+            ? undefined
+            : publisher.hasActiveInsufficientFundsBackoff(balance)
+              ? 0
+              : Number(balance / required),
+      })),
+      funder:
+        funder && funderBalance !== undefined
+          ? { address: funder.getSenderAddress().toString(), balance: funderBalance }
+          : undefined,
+      required,
+    };
+    this.metrics?.recordBalanceSnapshot(snapshot);
+
+    this.logBalances(withBalance, snapshot, cost?.fees);
+    if (required !== undefined) {
+      this.warnOnLowBalances(withBalance, required);
+    }
+
+    await this.fundIfNeeded(withBalance, funderBalance);
+  }
+
   private getBalances(publishers: UtilsType[]): Promise<PublisherWithBalance<UtilsType>[]> {
     return Promise.all(publishers.map(async publisher => ({ publisher, balance: await publisher.getSenderBalance() })));
   }
@@ -274,26 +393,25 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     // All publishers share the L1 network, so fees are fetched once rather than per publisher.
     const fees = await publishers[0].publisher.getFeesPerGas(undefined, requirement.blobCount > 0, 0);
     const required = computeSendCost(fees, requirement);
-    this.metrics?.recordRequiredBalance(required);
-    this.warnOnLowBalances(publishers, required);
 
     const affordable = publishers.filter(
       p => p.balance >= required && !p.publisher.isBackedOffForInsufficientFunds(p.balance),
     );
     if (affordable.length === 0) {
-      throw new NoAffordablePublisherError(
-        required,
-        requirement,
-        fees,
-        publishers.map(({ publisher, balance }) => ({
-          address: publisher.getSenderAddress().toString(),
-          balance,
-          state: TxUtilsState[publisher.state],
-          insufficientFundsAtBalance: publisher.getInsufficientFundsAtBalance(),
-        })),
-      );
+      throw new NoAffordablePublisherError(required, requirement, fees, this.toBalanceInfo(publishers));
     }
     return affordable;
+  }
+
+  private toBalanceInfo(publishers: PublisherWithBalance<UtilsType>[]): PublisherBalanceInfo[] {
+    return publishers.map(({ publisher, balance }) => ({
+      address: publisher.getSenderAddress().toString(),
+      balance,
+      state: TxUtilsState[publisher.state],
+      insufficientFundsAtBalance: publisher.hasActiveInsufficientFundsBackoff(balance)
+        ? publisher.getInsufficientFundsAtBalance()
+        : undefined,
+    }));
   }
 
   /**
@@ -313,7 +431,91 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     return publishers;
   }
 
-  /** Records a metric for every publisher below the low-balance level, and warns at most once per interval each. */
+  private async tryGetBalance(utils: UtilsType): Promise<bigint | undefined> {
+    try {
+      return await utils.getSenderBalance();
+    } catch (err) {
+      const address = utils.getSenderAddress().toString();
+      if (this.shouldWarn(`balance-read:${address}`)) {
+        this.log.warn(`Failed to read L1 balance of account`, { address, err });
+      }
+      return undefined;
+    }
+  }
+
+  private async tryGetReferenceCost(): Promise<{ fees: FeesPerGas; required: bigint } | undefined> {
+    const { referenceSend } = this;
+    if (referenceSend === undefined || this.publishers.length === 0) {
+      return undefined;
+    }
+    try {
+      // All publishers share the L1 network, so fees are fetched once rather than per publisher.
+      const fees = await this.publishers[0].getFeesPerGas(undefined, referenceSend.requirement.blobCount > 0, 0);
+      return { fees, required: computeSendCost(fees, referenceSend.requirement) };
+    } catch (err) {
+      if (this.shouldWarn('fee-read')) {
+        this.log.warn(`Failed to read L1 fees to check whether publishers can afford a ${referenceSend.name}`, { err });
+      }
+      return undefined;
+    }
+  }
+
+  /**
+   * Logs a summary of all balances on the first check after a start, and an error (at most once per interval) while no
+   * publisher can afford the reference send.
+   */
+  private logBalances(
+    publishers: PublisherWithBalance<UtilsType>[],
+    snapshot: PublisherBalanceSnapshot,
+    fees: FeesPerGas | undefined,
+  ): void {
+    const firstCheck = !this.loggedBalanceSummary;
+    this.loggedBalanceSummary = true;
+    const { referenceSend } = this;
+    const { required } = snapshot;
+    const context = {
+      publishers: snapshot.publishers.map(p => ({
+        address: p.address,
+        balance: formatEther(p.balance),
+        sendsAffordable: p.sendsAffordable,
+      })),
+      referenceSend: referenceSend?.name,
+      required: required === undefined ? undefined : formatEther(required),
+      funder: snapshot.funder && { address: snapshot.funder.address, balance: formatEther(snapshot.funder.balance) },
+    };
+
+    const allRead = publishers.length === this.publishers.length;
+    const noneAffordable =
+      referenceSend !== undefined &&
+      required !== undefined &&
+      fees !== undefined &&
+      allRead &&
+      snapshot.publishers.length > 0 &&
+      snapshot.publishers.every(p => (p.sendsAffordable ?? 0) < 1);
+
+    if (!noneAffordable) {
+      this.lastLowBalanceWarningAt.delete(NO_AFFORDABLE_PUBLISHER_WARNING_KEY);
+      if (firstCheck) {
+        this.log.info(`Publisher balances`, context);
+      }
+      return;
+    }
+
+    if (this.shouldWarn(NO_AFFORDABLE_PUBLISHER_WARNING_KEY)) {
+      const err = new NoAffordablePublisherError(
+        required,
+        referenceSend.requirement,
+        fees,
+        this.toBalanceInfo(publishers),
+      );
+      this.log.error(`No publisher can afford a ${referenceSend.name} at current L1 fees: ${err.describeFunding()}`, {
+        ...context,
+        shortfall: err.shortfall(),
+      });
+    }
+  }
+
+  /** Warns at most once per interval for every publisher below the low-balance level. */
   private warnOnLowBalances(publishers: PublisherWithBalance<UtilsType>[], required: bigint): void {
     const multiplier = this.config.publisherLowBalanceWarningMultiplier ?? DEFAULT_LOW_BALANCE_WARNING_MULTIPLIER;
     const warningLevel = (required * BigInt(Math.round(multiplier * 1000))) / 1000n;
@@ -323,7 +525,6 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
         continue;
       }
       const address = publisher.getSenderAddress().toString();
-      this.metrics?.recordLowBalance(address);
       if (this.shouldWarn(address)) {
         this.log.warn(`Publisher balance is low relative to the ETH required for an L1 send`, {
           address,
@@ -361,23 +562,21 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     return true;
   }
 
-  /** Check all publisher balances and fund those below threshold. */
-  private async triggerFundingIfNeeded(): Promise<void> {
+  /** Funds the publishers below the funding threshold, using the balances read in the same balance check. */
+  private async fundIfNeeded(
+    publishers: PublisherWithBalance<UtilsType>[],
+    funderBalance: bigint | undefined,
+  ): Promise<void> {
     const { funder, config } = this;
-    if (!funder || config.publisherFundingThreshold === undefined || config.publisherFundingAmount === undefined) {
+    const { publisherFundingThreshold, publisherFundingAmount: fundingAmount } = config;
+    if (!funder || publisherFundingThreshold === undefined || fundingAmount === undefined) {
       return;
     }
 
-    const allBalances = await Promise.all(
-      this.publishers.map(async pub => ({ balance: await pub.getSenderBalance(), publisher: pub })),
-    );
-    const lowBalance = allBalances.filter(p => p.balance < config.publisherFundingThreshold!);
-    if (lowBalance.length === 0) {
+    const lowBalance = publishers.filter(p => p.balance < publisherFundingThreshold);
+    if (lowBalance.length === 0 || funderBalance === undefined) {
       return;
     }
-
-    const fundingAmount = config.publisherFundingAmount!;
-    const funderBalance = await funder.getSenderBalance();
 
     if (funderBalance < 10n * fundingAmount) {
       this.log.warn(`Funding account balance is low`, { funderBalance, threshold: 10n * fundingAmount });
@@ -395,18 +594,17 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     }
 
     const toFund = lowBalance.slice(0, affordableCount).map(p => p.publisher);
-    await this.fundPublishers(toFund);
+    await this.fundPublishers(funder, toFund, fundingAmount);
   }
 
   /** Fund publishers via a single Multicall3 aggregate3Value transaction. */
-  private async fundPublishers(publishers: UtilsType[]): Promise<void> {
-    const fundingAmount = this.config.publisherFundingAmount!;
+  private async fundPublishers(funder: UtilsType, publishers: UtilsType[], fundingAmount: bigint): Promise<void> {
     const calls = publishers.map(pub => ({
       to: pub.getSenderAddress().toString(),
       value: fundingAmount,
     }));
 
-    await Multicall3.forwardValue(calls, this.funder!, this.log);
+    await Multicall3.forwardValue(calls, funder, this.log);
     this.log.info(`Funded ${publishers.length} publishers`);
   }
 }

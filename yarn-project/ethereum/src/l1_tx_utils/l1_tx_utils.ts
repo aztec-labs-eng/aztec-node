@@ -178,20 +178,30 @@ export class L1TxUtils extends ReadOnlyL1TxUtils {
     if (this.insufficientFunds === undefined) {
       return false;
     }
-    const { balance, atMs } = this.insufficientFunds;
-    const balanceIncreased = currentBalance > balance;
-    const expired = this.dateProvider.now() - atMs >= INSUFFICIENT_FUNDS_BACKOFF_MS;
-    if (balanceIncreased || expired) {
-      this.logger.info(`Clearing insufficient funds backoff for publisher`, {
-        account: this.getSenderAddress().toString(),
-        balance: currentBalance,
-        insufficientFundsAtBalance: balance,
-        reason: balanceIncreased ? 'balance-increased' : 'expired',
-      });
-      this.insufficientFunds = undefined;
+    if (this.hasActiveInsufficientFundsBackoff(currentBalance)) {
+      return true;
+    }
+    const { balance } = this.insufficientFunds;
+    this.logger.info(`Clearing insufficient funds backoff for publisher`, {
+      account: this.getSenderAddress().toString(),
+      balance: currentBalance,
+      insufficientFundsAtBalance: balance,
+      reason: currentBalance > balance ? 'balance-increased' : 'expired',
+    });
+    this.insufficientFunds = undefined;
+    return false;
+  }
+
+  /**
+   * Same check as {@link isBackedOffForInsufficientFunds}, but without clearing a lifted backoff or logging, so it can be
+   * used for reporting without affecting publisher selection.
+   */
+  public hasActiveInsufficientFundsBackoff(currentBalance: bigint): boolean {
+    if (this.insufficientFunds === undefined) {
       return false;
     }
-    return true;
+    const { balance, atMs } = this.insufficientFunds;
+    return currentBalance <= balance && this.dateProvider.now() - atMs < INSUFFICIENT_FUNDS_BACKOFF_MS;
   }
 
   /**
