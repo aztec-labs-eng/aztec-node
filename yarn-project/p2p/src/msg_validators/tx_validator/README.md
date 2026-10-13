@@ -22,12 +22,12 @@ Unsolicited transactions from any peer. Fully validated in two stages with a poo
 
 | Step | What runs | On failure |
 |------|-----------|------------|
-| **Stage 1** (fast) | TxPermitted, Data, Metadata, Timestamp, DoubleSpend, MinGasLimits, MaxGasLimits, MaxFeePerGas, MaxFeePerGasFloor, FeePayerBalance, Phases, BlockHeader | Penalize peer, reject tx (except MaxFeePerGas: ignore tx, no penalty) |
+| **Stage 1** (fast) | TxPermitted, Data, Metadata, Timestamp, DoubleSpend, MinGasLimits, MaxGasLimits, MaxFeePerGas, MaxFeePerGasFloor, FeePayerBalance, Phases, BlockHeader | Penalize peer, reject tx (except MaxFeePerGas, and Timestamp within the last slot: ignore tx, no penalty) |
 | **Pool pre-check** | `canAddPendingTx` — checks for duplicates, pool capacity | Ignore tx (no penalty) |
 | **Stage 2** (slow) | Proof verification | Penalize peer, reject tx |
 | **Pool add** | `addPendingTxs` | Accept, ignore, or reject |
 
-Each stage-1 and stage-2 validator is paired with a `PeerErrorSeverity`, and the sending peer is penalized with that severity when it fails. When several validators fail, the harshest consequence wins. The `doubleSpendValidator` has special handling: its severity is determined by how recently the nullifier appeared (recent = high tolerance, old = low tolerance).
+Each stage-1 and stage-2 validator is paired with a `PeerErrorSeverity`, and the sending peer is penalized with that severity when it fails. When several validators fail, the harshest consequence wins. The `doubleSpendValidator` has special handling: its severity is determined by how recently the nullifier appeared (recent = high tolerance, old = low tolerance). The `timestampValidator` is handled the same way: a tx whose expiration falls within the last slot is ignored without penalty, since the next-slot timestamp it is checked against advances a full slot at each boundary and a relayer a slot behind may still have seen it as valid; a tx expired by more than a slot is rejected and penalized.
 
 `maxFeePerGasValidator` is the exception, marked `IgnoreWithoutPenalty`: a tx below this node's admission fee (the next-block fee, or the L1-forward fee while the next block cannot be priced) may be perfectly valid for a peer ahead of us, so it is dropped without propagating and the peer keeps its score. That excuse stops at a penalty floor, half the lower of the admission and L1-forward fees: `maxFeePerGasFloorValidator` checks it with a mid-tolerance penalty. The slack covers a peer that has seen a checkpoint we have not, or a fresher L1 block, while zero-fee and negligible-fee spam still costs the sender. Being the mildest consequence, the ignore never masks a penalized failure on the same tx — which is also why the fee-payer balance check is a separate entry (`feePayerBalanceValidator`) that stays penalized.
 

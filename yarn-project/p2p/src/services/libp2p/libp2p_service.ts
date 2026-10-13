@@ -1141,15 +1141,18 @@ export class LibP2PService extends WithTracer implements P2PService {
       }
 
       // Stage 1 setup: chain tip, epoch info, gas fees, and L1 constants reads
-      const { currentBlockNumber, firstStageValidators } = await timed('fast_validation_setup', async () => {
-        const currentBlockNumber = await this.archiver.getBlockNumber();
-        const { ts: nextSlotTimestamp } = this.epochCache.getEpochAndSlotInNextL1Slot();
-        const firstStageValidators = await this.createFirstStageMessageValidators(
-          currentBlockNumber,
-          nextSlotTimestamp,
-        );
-        return { currentBlockNumber, firstStageValidators };
-      });
+      const { currentBlockNumber, nextSlotTimestamp, firstStageValidators } = await timed(
+        'fast_validation_setup',
+        async () => {
+          const currentBlockNumber = await this.archiver.getBlockNumber();
+          const { ts: nextSlotTimestamp } = this.epochCache.getEpochAndSlotInNextL1Slot();
+          const firstStageValidators = await this.createFirstStageMessageValidators(
+            currentBlockNumber,
+            nextSlotTimestamp,
+          );
+          return { currentBlockNumber, nextSlotTimestamp, firstStageValidators };
+        },
+      );
 
       // Stage 1: fast validators (metadata, data, timestamps, double-spend, gas, phases, block header)
       const firstStageOutcome = await timed('fast_validation', () => this.runValidations(tx, firstStageValidators));
@@ -1165,6 +1168,19 @@ export class LibP2PService extends WithTracer implements P2PService {
             source: source.toString(),
           });
           return { result: TopicValidatorResult.Ignore, obj: tx };
+        }
+
+        // The next-slot timestamp jumps a full slot at each boundary, so a tx expired within the last slot
+        // may have been valid when the relayer sent it: ignore it, no penalty. Older than that, reject.
+        if (name === 'timestampValidator') {
+          const slotDuration = BigInt(this.epochCache.getL1Constants().slotDuration);
+          if (tx.data.expirationTimestamp + slotDuration >= nextSlotTimestamp) {
+            this.logger.verbose(
+              `Ignoring gossiped tx ${tx.getTxHash().toString()}: timestamp expired within the last slot`,
+              { source: source.toString() },
+            );
+            return { result: TopicValidatorResult.Ignore, obj: tx };
+          }
         }
 
         // Double spend validator has a special case handler. We perform more detailed examination
