@@ -180,21 +180,23 @@ For a sequencer, the reference transaction is the first checkpoint proposal of a
 ```yaml
 - alert: NoAffordablePublisher
   expr: max by (service_instance_id, aztec_l1_tx_scope) (aztec_l1_publisher_sends_affordable) < 1
-  for: 5m
   labels:
     severity: critical
   annotations:
     summary: "No L1 publisher can afford a transaction"
     description: "No {{ $labels.aztec_l1_tx_scope }} publisher can afford its next L1 transaction at current fees. Proposals or proof submissions are being skipped. Fund a publisher now."
 
-- alert: LowL1PublisherHeadroom
-  expr: min by (service_instance_id, aztec_address_sender) (aztec_l1_publisher_sends_affordable) < 4
+- alert: LowL1PublisherRunway
+  expr: |
+    predict_linear(aztec_l1_publisher_balance_eth[1d], 3 * 86400)
+      < on (service_instance_id, aztec_l1_tx_scope) group_left
+        aztec_l1_publisher_required_balance_eth
   for: 15m
   labels:
     severity: warning
   annotations:
-    summary: "L1 publisher running low on ETH"
-    description: "Publisher {{ $labels.aztec_address_sender }} can afford only {{ $value }} more L1 transactions at current fees. Top it up."
+    summary: "L1 publisher will run out of ETH within 3 days"
+    description: "At its burn rate over the last day, publisher {{ $labels.aztec_address_sender }} will not afford its next L1 transaction within 3 days. Top it up."
 
 - alert: LowL1PublisherBalance
   expr: aztec_l1_publisher_balance_eth < 0.5
@@ -206,7 +208,11 @@ For a sequencer, the reference transaction is the first checkpoint proposal of a
     description: "Publisher balance is {{ $value }} ETH. Refill immediately to avoid transaction failures."
 ```
 
-The `sends_affordable` alerts follow L1 fees, so they fire earlier during a gas spike. The fixed `LowL1PublisherBalance` threshold does not, so size it against the worst-case gas price you expect.
+`NoAffordablePublisher` has no `for` delay: below 1, the node skips its proposals or proof submissions right away, so waiting only adds missed slots.
+
+`LowL1PublisherRunway` projects each publisher's balance 3 days ahead from its spending over the last day and compares it with the cost of one transaction at current fees. It warns based on time left, which a fixed balance or transaction count can't do, since the same balance can last an hour or a week depending on how often your node publishes and on L1 fees. Set the projection to however long your top-ups take. It needs a day of history, and a top-up in the last day flattens the projection, so it stays quiet just after a restart or a refill.
+
+Keep `LowL1PublisherBalance` as a backstop for those cases. It doesn't follow L1 fees, so size it against the worst-case gas price you expect.
 
 ### Sequencer Liveness
 

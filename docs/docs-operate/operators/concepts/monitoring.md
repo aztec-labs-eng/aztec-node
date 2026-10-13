@@ -25,7 +25,7 @@ Aztec emits OpenTelemetry metrics, which Prometheus scrapes as snake-cased names
 | `aztec_archiver_l1_block_height` | Your local view of L1 progression | No advance for 5 minutes (likely your L1 RPC is down) |
 | `aztec_peer_manager_peer_count_peers` | P2P connectivity to other nodes | Drops below 5 |
 | `aztec_l1_publisher_balance_eth` | ETH in your publisher account for paying L1 gas, read every minute | Drops below 0.1 ETH |
-| `aztec_l1_publisher_sends_affordable` | How many proposals your publisher can still pay for at current L1 fees | Below 1 for 5 minutes |
+| `aztec_l1_publisher_sends_affordable` | How many proposals your publisher can still pay for at current L1 fees | Below 1 (alert right away) |
 | `aztec_mempool_tx_count` | Transactions waiting to be included | Sustained growth or sudden spike |
 
 Plus standard system metrics (`process_cpu_utilization`, `process_memory_usage`) for the underlying host.

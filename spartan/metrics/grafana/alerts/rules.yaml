@@ -1264,14 +1264,14 @@ groups:
           panelId: 0
           noDataState: NoData
           execErrState: Error
-          for: 5m
+          for: 0s
           annotations:
             summary: No {{ $labels.aztec_l1_tx_scope }} publisher of {{ $labels.service_name }} ({{ $labels.k8s_namespace_name }}) can afford an L1 send at current fees, so proposals or proof submissions are skipped
           labels:
             <<: *common_labels
           isPaused: false
-        - uid: l1PublisherLowHeadroom
-          title: L1 - Publisher low headroom
+        - uid: l1PublisherLowRunway
+          title: L1 - Publisher low runway
           condition: C
           data:
             - refId: A
@@ -1281,7 +1281,7 @@ groups:
               datasourceUid: spartan-metrics-prometheus
               model:
                 editorMode: code
-                expr: min by (k8s_namespace_name, service_name, service_instance_id, aztec_address_sender) (aztec_l1_publisher_sends_affordable)
+                expr: min by (k8s_namespace_name, service_name, service_instance_id, aztec_address_sender) (predict_linear(aztec_l1_publisher_balance_eth[1d], 3 * 86400) - on (k8s_namespace_name, service_instance_id, aztec_l1_tx_scope) group_left aztec_l1_publisher_required_balance_eth)
                 instant: true
                 intervalMs: 60000
                 legendFormat: __auto
@@ -1325,7 +1325,7 @@ groups:
                 conditions:
                     - evaluator:
                         params:
-                            - 4
+                            - 0
                         type: lt
                       operator:
                         type: and
@@ -1350,7 +1350,7 @@ groups:
           execErrState: Error
           for: 15m
           annotations:
-            summary: Publisher {{ $labels.aztec_address_sender }} of {{ $labels.service_name }} ({{ $labels.k8s_namespace_name }}) can afford fewer than 4 L1 sends at current fees
+            summary: At its burn rate over the last day, publisher {{ $labels.aztec_address_sender }} of {{ $labels.service_name }} ({{ $labels.k8s_namespace_name }}) will not afford an L1 send at current fees within 3 days
           labels:
             <<: *common_labels
           isPaused: false
