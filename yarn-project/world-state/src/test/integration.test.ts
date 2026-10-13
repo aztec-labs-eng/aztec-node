@@ -163,6 +163,19 @@ describe('world-state integration', () => {
     });
   });
 
+  describe('clear', () => {
+    it('resyncs from genesis after clearing the world state', async () => {
+      await archiver.createBlocks(5);
+      await synchronizer.start();
+      await expectSynchedToBlock(5);
+
+      await synchronizer.clear();
+
+      await awaitSync(5);
+      await expectSynchedToBlock(5);
+    });
+  });
+
   describe('reorgs', () => {
     it('prunes blocks upon a reorg and resyncs', async () => {
       await archiver.createBlocks(5);

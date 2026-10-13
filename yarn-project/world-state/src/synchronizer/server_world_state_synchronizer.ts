@@ -47,8 +47,6 @@ const MAX_BLOCK_PRUNE = 40;
 export class ServerWorldStateSynchronizer
   implements WorldStateSynchronizer, L2BlockStreamLocalDataProvider, L2BlockStreamEventHandler
 {
-  private readonly merkleTreeCommitted: MerkleTreeReadOperations;
-
   private latestBlockNumberAtStart = BlockNumber.ZERO;
   private historyToKeep: number | undefined;
   private currentState: WorldStateRunningState = WorldStateRunningState.IDLE;
@@ -75,7 +73,6 @@ export class ServerWorldStateSynchronizer
     private instrumentation = new WorldStateInstrumentation(getTelemetryClient()),
     private readonly log: Logger = createLogger('world_state'),
   ) {
-    this.merkleTreeCommitted = this.merkleTreeDb.getCommitted();
     this.mutationQueue.start();
     this.historyToKeep = config.worldStateCheckpointHistory < 1 ? undefined : config.worldStateCheckpointHistory;
     this.log.info(
@@ -100,7 +97,7 @@ export class ServerWorldStateSynchronizer
     // snapshot's own view so the exact handle we return is validated against the requested fork.
     const actualHash =
       blockNumber === BlockNumber.ZERO
-        ? (await this.merkleTreeCommitted.getInitialHeader().hash()).toString()
+        ? (await this.merkleTreeDb.getCommitted().getInitialHeader().hash()).toString()
         : (await snapshot.getLeafValue(MerkleTreeId.ARCHIVE, BigInt(blockNumber)))?.toString();
 
     if (actualHash === undefined) {
@@ -342,11 +339,12 @@ export class ServerWorldStateSynchronizer
   }
 
   /** Returns the L2 block hash for a given number. Used by the L2BlockStream for detecting reorgs. */
-  public getL2BlockHash(number: BlockNumber): Promise<string | undefined> {
+  public async getL2BlockHash(number: BlockNumber): Promise<string | undefined> {
     // Block 0 is read from the archive as well (its first leaf is the initial header hash, which init asserts) rather
     // than from the in-memory initial header, so every block stream poll reaches wsdb and a node idling at genesis
-    // still notices when wsdb dies.
-    return this.merkleTreeCommitted.getLeafValue(MerkleTreeId.ARCHIVE, BigInt(number)).then(leaf => leaf?.toString());
+    // still notices when wsdb dies. The committed view is fetched per call because clear() replaces the instance.
+    const leaf = await this.merkleTreeDb.getCommitted().getLeafValue(MerkleTreeId.ARCHIVE, BigInt(number));
+    return leaf?.toString();
   }
 
   /**

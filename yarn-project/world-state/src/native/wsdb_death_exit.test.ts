@@ -60,8 +60,8 @@ describe('wsdb death', () => {
       worldStateBlockCheckIntervalMS: 20,
       worldStateCheckpointHistory: 0,
     });
-    await synchronizer.start();
     try {
+      await synchronizer.start();
       expect(await synchronizer.getL2BlockHash(BlockNumber.ZERO)).toEqual(
         (await ws.getInitialHeader().hash()).toString(),
       );
