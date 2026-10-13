@@ -1,7 +1,11 @@
+import { MockPrefilledArchiver } from '@aztec-labs/archiver/test';
+import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
 
+import { ServerWorldStateSynchronizer } from '../synchronizer/server_world_state_synchronizer.js';
 import { NativeWorldStateService } from './native_world_state.js';
 
 // wsdb holds the forks and uncommitted state every world-state caller depends on, so the node cannot carry on
@@ -27,10 +31,11 @@ function wsdbPid(ipcPath: string): number {
 
 describe('wsdb death', () => {
   let ws: NativeWorldStateService;
+  let exit: jest.SpiedFunction<typeof process.exit>;
 
   beforeEach(async () => {
     ws = await NativeWorldStateService.tmp();
-    jest.spyOn(process, 'exit').mockImplementation(code => {
+    exit = jest.spyOn(process, 'exit').mockImplementation(code => {
       throw new ProcessExit(code);
     });
   });
@@ -46,5 +51,27 @@ describe('wsdb death', () => {
     process.kill(wsdbPid(ws.getIpcPath()), 'SIGKILL');
 
     await expect(ws.getCommitted().getTreeInfo(MerkleTreeId.NOTE_HASH_TREE)).rejects.toEqual(new ProcessExit(1));
+  });
+
+  it('exits an idle node still at genesis', async () => {
+    const archiver = new MockPrefilledArchiver([]);
+    await archiver.setInitialHeader(ws.getInitialHeader());
+    const synchronizer = new ServerWorldStateSynchronizer(ws, archiver, {
+      worldStateBlockCheckIntervalMS: 20,
+      worldStateCheckpointHistory: 0,
+    });
+    await synchronizer.start();
+    try {
+      expect(await synchronizer.getL2BlockHash(BlockNumber.ZERO)).toEqual(
+        (await ws.getInitialHeader().hash()).toString(),
+      );
+
+      process.kill(wsdbPid(ws.getIpcPath()), 'SIGKILL');
+
+      await retryUntil(() => exit.mock.calls.length > 0, 'process exit', 5, 0.05);
+      expect(exit).toHaveBeenCalledWith(1);
+    } finally {
+      await synchronizer.stop().catch(() => {});
+    }
   });
 });

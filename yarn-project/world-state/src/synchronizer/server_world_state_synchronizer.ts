@@ -342,10 +342,10 @@ export class ServerWorldStateSynchronizer
   }
 
   /** Returns the L2 block hash for a given number. Used by the L2BlockStream for detecting reorgs. */
-  public async getL2BlockHash(number: BlockNumber): Promise<string | undefined> {
-    if (number === BlockNumber.ZERO) {
-      return (await this.merkleTreeCommitted.getInitialHeader().hash()).toString();
-    }
+  public getL2BlockHash(number: BlockNumber): Promise<string | undefined> {
+    // Block 0 is read from the archive as well (its first leaf is the initial header hash, which init asserts) rather
+    // than from the in-memory initial header, so every block stream poll reaches wsdb and a node idling at genesis
+    // still notices when wsdb dies.
     return this.merkleTreeCommitted.getLeafValue(MerkleTreeId.ARCHIVE, BigInt(number)).then(leaf => leaf?.toString());
   }
 
