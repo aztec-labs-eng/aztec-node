@@ -110,6 +110,11 @@ export default [
               message:
                 "Import from 'buffer' instead, which a bundler can resolve to the package of that name for a browser.",
             },
+            ...['util', 'node:util'].map(name => ({
+              name,
+              importNames: ['inspect'],
+              message: "Import inspect from '@aztec-labs/foundation/inspect' instead, which also works in a browser.",
+            })),
           ],
           patterns: [
             {

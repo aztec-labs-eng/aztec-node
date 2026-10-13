@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-restricted-imports -- other libraries print secrets with the inspect of Node.js itself
 import { inspect } from 'node:util';
 
 import { SecretValue } from './secret_value.js';

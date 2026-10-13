@@ -12,11 +12,11 @@ import {
 } from '@aztec-labs/aztec.js/contracts';
 import { type AztecNode, waitForTx } from '@aztec-labs/aztec.js/node';
 import { timesAsync } from '@aztec-labs/foundation/collection';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import type { Logger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { SimulationError } from '@aztec-labs/stdlib/errors';
 import { type OffchainEffect, type ProvingStats, Tx, TxHash, type TxReceipt } from '@aztec-labs/stdlib/tx';
-import { inspect } from 'util';
 
 import { testSpan, withTestSpanOwner } from '../fixtures/timing.js';
 import type { TestWallet } from './test_wallet.js';

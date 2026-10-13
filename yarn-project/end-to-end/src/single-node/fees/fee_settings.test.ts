@@ -4,12 +4,12 @@ import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import { CheatCodes } from '@aztec-labs/aztec/testing';
 import { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
 import type { GasFees, GasSettings } from '@aztec-labs/stdlib/gas';
 import { TX_ERROR_INSUFFICIENT_FEE_PER_GAS } from '@aztec-labs/stdlib/tx';
 import { jest } from '@jest/globals';
-import { inspect } from 'util';
 
 import { DEFAULT_MIN_FEE_PADDING } from '../../fixtures/fixtures.js';
 import { waitForBlockNumber, waitForNodeCheckpoint } from '../../fixtures/wait_helpers.js';

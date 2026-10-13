@@ -5,9 +5,10 @@ import bodyParser from 'koa-bodyparser';
 import compress from 'koa-compress';
 import Router from 'koa-router';
 import type { AddressInfo } from 'net';
-import { format, inspect } from 'util';
+import { format } from 'util';
 import { ZodError } from 'zod';
 
+import { inspect } from '../../inspect/index.js';
 import { type Logger, createLogger } from '../../log/index.js';
 import { promiseWithResolvers } from '../../promise/utils.js';
 import {
