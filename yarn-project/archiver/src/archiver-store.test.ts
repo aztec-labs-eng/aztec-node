@@ -767,6 +767,17 @@ describe('Archiver Store', () => {
         expect((await archiver.getL2Tips()).proposed.number).toEqual(BlockNumber(3));
       });
 
+      it('prunes nothing when a checkpoint proposal for the slot has been received', async () => {
+        archiver.setCheckpointProposalPresence({
+          hasCheckpointProposalForSlot: slot => Promise.resolve(slot === blocks[1].slot),
+        });
+
+        const pruned = await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[1].hash());
+
+        expect(pruned).toEqual([]);
+        expect((await archiver.getL2Tips()).proposed.number).toEqual(BlockNumber(3));
+      });
+
       it('prunes nothing when the blocks are already gone', async () => {
         await archiver.pruneAbandonedProposedBlocks(BlockNumber(1), await blocks[1].hash());
 
