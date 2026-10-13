@@ -469,6 +469,22 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
   private async pruneAbandonedProposedBlocksNow(request: PruneAbandonedBlocksRequest): Promise<void> {
     const { afterBlockNumber, firstBlockHash, resolve, reject } = request;
     try {
+      // A checkpoint proposal received for the slot means some proposer, such as an HA peer of the caller, may still
+      // be proposing these blocks, so they are left to the orphan prune, which waits for the proposal to materialize.
+      const firstBlock = await this.stores.blocks.getBlockData({ number: BlockNumber(afterBlockNumber + 1) });
+      if (
+        firstBlock?.blockHash.equals(firstBlockHash) &&
+        (await this.checkpointProposalPresence.hasCheckpointProposalForSlot(firstBlock.header.getSlot()))
+      ) {
+        this.log.verbose(`Not pruning abandoned proposed blocks after block ${afterBlockNumber}`, {
+          afterBlockNumber,
+          firstBlockHash: firstBlockHash.toString(),
+          refusal: 'checkpoint-proposal-received',
+        });
+        resolve([]);
+        return;
+      }
+
       const { removed, refusal } = await this.updater.removeAbandonedProposedBlocksAfter(
         afterBlockNumber,
         firstBlockHash,
@@ -684,6 +700,12 @@ export class Archiver extends ArchiverDataSourceBase implements L2BlockSink, Tra
   public async stop(): Promise<void> {
     this.log.debug('Stopping...');
     await this.runningPromise.stop();
+
+    // Requests queued while the last sync pass ran are never processed; settle them so their callers do not wait on
+    // a loop that will not run again.
+    for (const item of this.inboundQueue.splice(0, this.inboundQueue.length)) {
+      item.reject(new Error(`Archiver stopped before processing the queued ${item.type} request`));
+    }
 
     this.log.info('Stopped.');
     return Promise.resolve();

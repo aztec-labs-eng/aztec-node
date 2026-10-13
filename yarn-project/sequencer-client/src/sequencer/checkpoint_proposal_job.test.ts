@@ -2987,7 +2987,6 @@ describe('CheckpointProposalJob', () => {
   describe('blocks of an abandoned checkpoint', () => {
     /** The proposer's local chain past the parent block, as the archiver behind the block sink holds it. */
     let localBlocks: L2Block[];
-    let checkpointHandedOver: boolean;
 
     const localBlockNumbers = () => localBlocks.map(block => block.number);
     const proposedTip = () => localBlocks.at(-1)?.number ?? lastBlockNumber;
@@ -3003,19 +3002,15 @@ describe('CheckpointProposalJob', () => {
     beforeEach(() => {
       job.setTimetable(makeProposerTimetable({ l1Constants, blockDurationMs: 3000 }));
       localBlocks = [];
-      checkpointHandedOver = false;
       blockSink.addBlock.mockImplementation(block => {
         localBlocks.push(block);
         return Promise.resolve();
       });
-      blockSink.addProposedCheckpoint.mockImplementation(() => {
-        checkpointHandedOver = true;
-        return Promise.resolve();
-      });
-      // Mirrors the archiver's guard: only the caller's own blocks, and only while no checkpoint covers them.
+      // Prunes whenever asked for the job's own blocks, without the archiver's checkpoint guard, so a test that keeps
+      // the blocks shows the job never asked rather than the archiver refusing.
       blockSink.pruneAbandonedProposedBlocks.mockImplementation(async (afterBlockNumber, firstBlockHash) => {
         const first = localBlocks.find(block => block.number === afterBlockNumber + 1);
-        if (checkpointHandedOver || first === undefined || !(await first.hash()).equals(firstBlockHash)) {
+        if (first === undefined || !(await first.hash()).equals(firstBlockHash)) {
           return [];
         }
         const pruned = localBlocks.filter(block => block.number > afterBlockNumber).map(block => block.number);
@@ -3091,14 +3086,43 @@ describe('CheckpointProposalJob', () => {
       expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
     });
 
-    it('leaves the blocks to the orphan prune when an HA peer already holds the slot', async () => {
+    it('keeps the blocks of a checkpoint handed to the archiver even when its broadcast fails', async () => {
+      mockSubslots(2);
+      p2p.broadcastCheckpointProposal.mockRejectedValue(new Error('gossipsub publish failed'));
+      const { blocks } = await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(localBlockNumbers()).toEqual(blocks.map(block => block.number));
+    });
+
+    it('still gives up the slot when the prune itself fails', async () => {
+      mockSubslots(2);
+      publisher.validateCheckpointHeaderAndInbox.mockRejectedValue(new Error('Rollup__UnconsumedInboxMessages(6)'));
+      blockSink.pruneAbandonedProposedBlocks.mockRejectedValue(new Error('Archiver stopped'));
+      await setupMultipleBlocks(2, [1, 1]);
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(publisher.sendRequestsAt).toHaveBeenCalledWith(SlotNumber(newSlotNumber));
+    });
+
+    it.each([
+      ['already signed', () => new DutyAlreadySignedError(SlotNumber(1), DutyType.BLOCK_PROPOSAL, 1, 'node-2')],
+      [
+        'blocked by slashing protection',
+        () => new SlashingProtectionError(SlotNumber(1), DutyType.BLOCK_PROPOSAL, 1, 'hash1', 'hash2', 'node-2'),
+      ],
+    ])('leaves the blocks to the orphan prune when an HA peer holds the slot (%s)', async (_, makeError) => {
       mockSubslots(2);
       const { blocks } = await setupMultipleBlocks(2, [1, 1]);
       const sign = validatorClient.createBlockProposal.getMockImplementation()!;
       let signed = 0;
       validatorClient.createBlockProposal.mockImplementation((...args) => {
         if (++signed === 2) {
-          throw new DutyAlreadySignedError(SlotNumber(newSlotNumber), DutyType.BLOCK_PROPOSAL, 1, 'node-2');
+          throw makeError();
         }
         return sign(...args);
       });

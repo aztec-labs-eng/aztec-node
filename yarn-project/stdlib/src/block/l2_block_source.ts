@@ -399,7 +399,8 @@ export interface L2BlockSink {
    * as an orphan prune does.
    *
    * Prunes nothing when the range no longer holds the caller's blocks: when the block after `afterBlockNumber` is not
-   * `firstBlockHash`, or when a proposed or L1 checkpoint already covers it.
+   * `firstBlockHash`, or when a proposed or L1 checkpoint already covers it. Also prunes nothing when a checkpoint
+   * proposal for the block's slot has been received, since another proposer may still be proposing these blocks.
    * @param afterBlockNumber - The parent block of the abandoned checkpoint; it and everything before it are kept.
    * @param firstBlockHash - The hash of the abandoned checkpoint's first block, as the caller pushed it.
    * @returns The numbers of the pruned blocks, empty when the guard left the chain untouched.
