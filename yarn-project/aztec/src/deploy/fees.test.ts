@@ -31,9 +31,12 @@ describe('payment-method fee policy', () => {
     } as unknown as Wallet;
   });
 
-  it('funds an account with work without reading its balance', async () => {
+  // Under `fee-juice` an account that sends txs reads its balance and is bridged a top-up when short. Here the
+  // payment method pays its fees, so the account needs no Fee Juice: the wallet stub throws on a balance read.
+  it('does not fund an account that its payment method pays for', async () => {
     const account = await AztecAddress.random();
-    await expect(accountFunding(policy, wallet, account, true)).resolves.toEqual({ kind: 'payment-method' });
+    const hasPendingTxs = true;
+    await expect(accountFunding(policy, wallet, account, hasPendingTxs)).resolves.toEqual({ kind: 'payment-method' });
   });
 
   it('registers the paying contract and pays every tx with the method', async () => {
