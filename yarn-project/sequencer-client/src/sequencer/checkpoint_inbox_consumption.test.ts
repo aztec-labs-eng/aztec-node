@@ -5,6 +5,7 @@ import { DateProvider } from '@aztec-labs/foundation/timer';
 import type { MerkleTreeReadOperations } from '@aztec-labs/stdlib/interfaces/server';
 import { InboxMessagePrefixRef, type L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { type MockStreamingInbox, mockStreamingInbox } from '../test/utils.js';

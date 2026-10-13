@@ -48,7 +48,7 @@ const JSON_DEPLOY_RESULT_PREFIX = 'JSON DEPLOY RESULT:';
 /** Returns the broadcast deadline, with an optional environment override in milliseconds. */
 export function getForgeBroadcastTimeout(
   chainId: number,
-  value = process.env.FORGE_BROADCAST_TIMEOUT_MS,
+  value = getEnv().FORGE_BROADCAST_TIMEOUT_MS,
 ): number | undefined {
   if (value === undefined || value === '') {
     return isAnvilTestChain(chainId) ? 120_000 : undefined;
