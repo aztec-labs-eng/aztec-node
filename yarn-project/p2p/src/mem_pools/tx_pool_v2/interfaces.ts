@@ -21,6 +21,11 @@ export type AddTxsResult = {
   rejected: TxHash[];
   /** Optional rejection errors, only present when there are rejections with structured errors. */
   errors?: Map<string, TxPoolRejectionError>;
+  /**
+   * Validator failure reasons per rejected tx, keyed by tx hash string. Lets a caller tell a
+   * receiver-local state-drift rejection from a sender-attributable one (see isReceiverLocalStateDrift).
+   */
+  rejectionReasons?: Map<string, string[]>;
 };
 
 /**

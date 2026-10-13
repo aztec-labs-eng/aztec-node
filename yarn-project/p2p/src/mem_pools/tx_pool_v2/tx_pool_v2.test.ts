@@ -687,6 +687,9 @@ describe('TxPoolV2', () => {
       expect(result.accepted).toHaveLength(0);
       expect(result.ignored).toHaveLength(0);
       expect(toStrings(result.rejected)).toContain(hashOf(tx));
+      // The validator's reason must reach rejectionReasons so receiver-local state drift can be told
+      // apart from a sender-attributable rejection; guard that contract here.
+      expect(result.rejectionReasons?.get(tx.getTxHash().toString())).toEqual(['test rejection']);
       expect(await rejectingPool.getPendingTxCount()).toBe(0);
     });
 
