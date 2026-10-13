@@ -39,9 +39,8 @@ describe('payment-method fee policy', () => {
     await expect(accountFunding(policy, wallet, account, hasPendingTxs)).resolves.toEqual({ kind: 'payment-method' });
   });
 
-  it('registers the paying contract and pays every tx with the method', async () => {
-    const address = await AztecAddress.random();
-    const session = await prepareFeeSession({
+  const prepareSession = (address: AztecAddress) =>
+    prepareFeeSession({
       local: false,
       node: {} as AztecNode,
       wallet,
@@ -51,10 +50,20 @@ describe('payment-method fee policy', () => {
       reporter: {},
     });
 
+  it('registers the paying contract and pays every tx with the method', async () => {
+    const address = await AztecAddress.random();
+    const session = await prepareSession(address);
+
     expect(registered).toEqual([fpc.address]);
     expect(session.next(address).fee).toEqual({ paymentMethod });
     expect(session.next(address).fee).toEqual({ paymentMethod });
     expect(session.hasPendingClaim(address)).toBe(false);
+  });
+
+  it("counts the method's calls when sizing a batch", async () => {
+    const address = await AztecAddress.random();
+    const session = await prepareSession(address);
+
     await expect(session.feeCallCount(address)).resolves.toBe(2);
   });
 });
