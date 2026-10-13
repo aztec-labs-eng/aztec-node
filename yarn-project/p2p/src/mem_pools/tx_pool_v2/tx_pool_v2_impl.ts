@@ -865,7 +865,18 @@ export class TxPoolV2Impl {
     if (!buffer) {
       return undefined;
     }
-    return opts.includeProof === false ? Tx.fromBuffer(buffer) : this.#loadTxWithProof(txHashStr, buffer);
+    if (opts.includeProof === false) {
+      return Tx.fromBuffer(buffer);
+    }
+    // The body and its separately-stored proof are read in two steps, not atomically: an eviction
+    // can delete the proof row after the body read. Serving a proofless tx makes the honest requester
+    // penalise us, so drop it. A present-but-empty proof is a valid sentinel; only a missing row is
+    // the evicted case.
+    const proofBuffer = await this.#proofsDB.getAsync(txHashStr);
+    if (!proofBuffer) {
+      return undefined;
+    }
+    return Tx.fromBuffers(buffer, proofBuffer);
   }
 
   async getTxsByHash(txHashes: TxHash[], opts: { includeProof?: boolean } = {}): Promise<(Tx | undefined)[]> {
