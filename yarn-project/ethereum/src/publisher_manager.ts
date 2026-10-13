@@ -259,19 +259,6 @@ export class PublisherManager<UtilsType extends L1TxUtils = L1TxUtils> {
     return sortedPublishers[0].publisher;
   }
 
-  /**
-   * Checks that at least one publisher passing the filter can afford a send with the given requirement, regardless of
-   * whether it is busy right now. Meant for gating long-running work whose result is published much later.
-   * @throws NoAffordablePublisherError if no publisher can afford it.
-   */
-  public async checkAffordablePublisher(
-    requirement: SendCostRequirement,
-    filter: PublisherFilter<UtilsType> = () => true,
-  ): Promise<void> {
-    const publishers = this.publishers.filter(pub => filter(pub));
-    await this.getAffordable(await this.getBalances(publishers), requirement);
-  }
-
   private getBalances(publishers: UtilsType[]): Promise<PublisherWithBalance<UtilsType>[]> {
     return Promise.all(publishers.map(async publisher => ({ publisher, balance: await publisher.getSenderBalance() })));
   }

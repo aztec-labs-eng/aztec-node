@@ -10,6 +10,7 @@ import type { L2BlockSource } from '@aztec-labs/stdlib/block';
 import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 
+import type { ProverNodeJobMetrics } from './metrics.js';
 import type { ProverNodePublisher } from './prover-node-publisher.js';
 import type { ProverPublisherFactory } from './prover-publisher-factory.js';
 
@@ -73,6 +74,7 @@ export type ProofPublishingServiceDeps = {
   l2BlockSource: Pick<L2BlockSource, 'getBlockNumber'>;
   dateProvider: DateProvider;
   config: ProofPublishingServiceConfig;
+  metrics?: Pick<ProverNodeJobMetrics, 'recordProofSubmissionUnaffordable'>;
   bindings?: LoggerBindings;
 };
 
@@ -309,6 +311,7 @@ export class ProofPublishingService {
         // Logged once per candidate: retrying every few seconds until a top-up or the deadline would spam errors.
         if (!this.unaffordableCandidates.has(winner.id)) {
           this.unaffordableCandidates.add(winner.id);
+          this.deps.metrics?.recordProofSubmissionUnaffordable();
           this.log.error(`No publisher can afford submitting the proof for candidate ${winner.id}; retrying`, err, {
             candidateId: winner.id,
             epoch: winner.epoch,

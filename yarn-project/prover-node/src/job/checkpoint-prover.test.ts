@@ -109,36 +109,11 @@ describe('CheckpointProver', () => {
       await cleanup(prover);
     });
 
-    it('eagerly starts tx gathering once started', async () => {
+    it('eagerly starts tx gathering on construction', async () => {
       const prover = makeProver();
-      // start() kicks off gatherTxs which calls getTxsForBlock for every block.
-      expect(prover.isStarted()).toBe(true);
+      // The constructor kicks off gatherTxs which calls getTxsForBlock for every block.
       expect(txProvider.getTxsForBlock).toHaveBeenCalledTimes(checkpoint.blocks.length);
       await cleanup(prover);
-    });
-
-    it('does no work until started', async () => {
-      const prover = makeProver({}, { start: false });
-      expect(prover.isStarted()).toBe(false);
-      expect(txProvider.getTxsForBlock).not.toHaveBeenCalled();
-
-      prover.start();
-      prover.start();
-      expect(prover.isStarted()).toBe(true);
-      expect(txProvider.getTxsForBlock).toHaveBeenCalledTimes(checkpoint.blocks.length);
-      await cleanup(prover);
-    });
-
-    it('never starts once cancelled before starting, and its teardown completes', async () => {
-      const prover = makeProver({}, { start: false });
-      const subTreeProofs = prover.whenSubTreeProofsReady();
-      prover.cancel();
-      prover.start();
-
-      expect(prover.isStarted()).toBe(false);
-      expect(txProvider.getTxsForBlock).not.toHaveBeenCalled();
-      await expect(subTreeProofs).rejects.toThrow(/cancelled/);
-      await expect(prover.whenDone()).resolves.toBeUndefined();
     });
   });
 
@@ -779,10 +754,7 @@ describe('CheckpointProver', () => {
     return header;
   }
 
-  function makeProver(
-    overrides: Partial<CheckpointProverArgs> = {},
-    { start = true }: { start?: boolean } = {},
-  ): CheckpointProver {
+  function makeProver(overrides: Partial<CheckpointProverArgs> = {}): CheckpointProver {
     const target = overrides.checkpoint ?? checkpoint;
     if (overrides.l1ToL2Messages === undefined && overrides.previousBlockHeader === undefined) {
       pinConsumedMessageCounts(target);
@@ -797,11 +769,7 @@ describe('CheckpointProver', () => {
       previousArchiveSiblingPath: makeTuple(ARCHIVE_HEIGHT, () => Fr.ZERO),
       ...overrides,
     };
-    const prover = new CheckpointProver(args, deps);
-    if (start) {
-      prover.start();
-    }
-    return prover;
+    return new CheckpointProver(args, deps);
   }
 
   async function cleanup(prover: CheckpointProver): Promise<void> {

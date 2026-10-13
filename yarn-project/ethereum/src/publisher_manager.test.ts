@@ -336,16 +336,6 @@ describe('PublisherManager', () => {
       await expect(publisherManager.getAvailablePublisher()).resolves.toBe(mockPublishers[0]);
     });
 
-    it('checkAffordablePublisher ignores busy state and rejects when nobody can afford the send', async () => {
-      mockPublishers.forEach(p => (p.state = TxUtilsState.SENT));
-      mockPublishers[2].balance = required;
-
-      await expect(publisherManager.checkAffordablePublisher(requirement)).resolves.toBeUndefined();
-
-      mockPublishers[2].balance = required - 1n;
-      await expect(publisherManager.checkAffordablePublisher(requirement)).rejects.toThrow(NoAffordablePublisherError);
-    });
-
     it('records the required balance and low balance publishers using the configured multiplier', async () => {
       publisherManager = new PublisherManager(mockPublishers, { publisherLowBalanceWarningMultiplier: 2 }, { metrics });
       mockPublishers[0].balance = 2n * required;

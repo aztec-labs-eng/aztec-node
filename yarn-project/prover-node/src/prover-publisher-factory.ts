@@ -30,14 +30,6 @@ export class ProverPublisherFactory {
   }
 
   /**
-   * Checks that some publisher can afford submitting an epoch proof, regardless of whether it is busy right now.
-   * @throws NoAffordablePublisherError if none can.
-   */
-  public checkSubmissionAffordable(): Promise<void> {
-    return this.deps.publisherManager.checkAffordablePublisher(SUBMIT_EPOCH_PROOF_REQUIREMENT);
-  }
-
-  /**
    * Creates a new Prover Publisher instance.
    * @param opts.requireAffordableSubmission - Only select a publisher that can afford submitting an epoch proof, and
    *   throw NoAffordablePublisherError if none can.

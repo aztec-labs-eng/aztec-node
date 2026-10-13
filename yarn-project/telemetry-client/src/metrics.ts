@@ -838,9 +838,9 @@ export const L1_PUBLISHER_LOW_BALANCE_COUNT: MetricDefinition = {
   description: 'Number of times a publisher balance was found below the low-balance warning level',
   valueType: ValueType.INT,
 };
-export const PROVER_NODE_PROVING_NOT_STARTED_UNAFFORDABLE_COUNT: MetricDefinition = {
-  name: 'aztec.prover_node.proving_not_started_unaffordable_count',
-  description: 'Number of times epoch proving was not started because no publisher could afford the proof submission',
+export const PROVER_NODE_PROOF_SUBMISSION_UNAFFORDABLE_COUNT: MetricDefinition = {
+  name: 'aztec.prover_node.proof_submission_unaffordable_count',
+  description: 'Number of finished epoch proofs held back from submission because no publisher could afford sending it',
   valueType: ValueType.INT,
 };
 export const L1_PUBLISHER_TX_TOTAL_FEE: MetricDefinition = {
