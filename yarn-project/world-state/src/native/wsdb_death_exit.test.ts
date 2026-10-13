@@ -103,7 +103,13 @@ describe('wsdb death', () => {
     await expect(ws.getCommitted().getTreeInfo(MerkleTreeId.NOTE_HASH_TREE)).rejects.toEqual(new ProcessExit(1));
 
     expect(entries).toContainEqual(
-      expect.objectContaining({ module: 'world-state:ipc-database', signal: 'SIGKILL', code: null }),
+      expect.objectContaining({
+        module: 'world-state:ipc-database',
+        level: 60,
+        signal: 'SIGKILL',
+        code: null,
+        logPath: expect.any(String),
+      }),
     );
   });
 });

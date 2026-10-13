@@ -193,7 +193,7 @@ export class TXEOracleTopLevelContext implements IMiscOracle, ITxeExecutionOracl
     }
     const levelName = LogLevels[level];
 
-    this.logger[levelName](`${applyStringFormatting(message, fields)}`, { module: `${this.logger.module}:debug_log` });
+    this.logger.createChild('debug_log')[levelName](applyStringFormatting(message, fields));
     return Promise.resolve();
   }
 
