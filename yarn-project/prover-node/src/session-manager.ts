@@ -222,10 +222,7 @@ export class SessionManager {
       return existingPartial.getId();
     }
 
-    const unaffordable = await this.checkSubmissionAffordable(epoch);
-    if (unaffordable) {
-      throw unaffordable;
-    }
+    await this.assertSubmissionAffordable(epoch);
 
     await this.scheduleReconcile({ kind: 'start-proof', spec });
     const created = this.getPartialSession(spec);
@@ -313,7 +310,7 @@ export class SessionManager {
         if (!this.canBuildOver(canonical)) {
           continue;
         }
-        if (await this.checkSubmissionAffordable(session.getEpochNumber())) {
+        if (!(await this.isSubmissionAffordable(session.getEpochNumber()))) {
           // Unlike a full session, nothing re-opens a partial session on its own, so keep the request for later.
           this.deferredPartialSpecs.set(key, session.getSpec());
           continue;
@@ -339,7 +336,7 @@ export class SessionManager {
     }
     const provenBlock = (await this.deps.l2BlockSource.getBlockNumber({ tag: 'proven' })) ?? BlockNumber.ZERO;
     const toStart = unstarted.filter(p => p.checkpoint.blocks.at(-1)!.number > provenBlock);
-    if (toStart.length === 0 || (await this.checkSubmissionAffordable(toStart[0].epochNumber))) {
+    if (toStart.length === 0 || !(await this.isSubmissionAffordable(toStart[0].epochNumber))) {
       return;
     }
     for (const prover of toStart) {
@@ -362,7 +359,7 @@ export class SessionManager {
         this.deferredPartialSpecs.delete(key);
         continue;
       }
-      if (this.atMaxSessionLimit() || (await this.checkSubmissionAffordable(spec.epochNumber))) {
+      if (this.atMaxSessionLimit() || !(await this.isSubmissionAffordable(spec.epochNumber))) {
         return;
       }
       this.deferredPartialSpecs.delete(key);
@@ -377,25 +374,37 @@ export class SessionManager {
 
   /** Whether a recreated session can be built over the checkpoint set and its proof could be submitted. */
   private async canStartSession(spec: SessionSpec, canonical: readonly CheckpointProver[]): Promise<boolean> {
-    return this.canBuildOver(canonical) && !(await this.checkSubmissionAffordable(spec.epochNumber));
+    return this.canBuildOver(canonical) && (await this.isSubmissionAffordable(spec.epochNumber));
+  }
+
+  /** Whether some publisher can afford submitting an epoch proof. See `assertSubmissionAffordable`. */
+  private async isSubmissionAffordable(epoch: EpochNumber): Promise<boolean> {
+    try {
+      await this.assertSubmissionAffordable(epoch);
+      return true;
+    } catch (err) {
+      if (err instanceof NoAffordablePublisherError) {
+        return false;
+      }
+      throw err;
+    }
   }
 
   /**
-   * Returns the error if no publisher can afford submitting an epoch proof, recording the metric and logging it at most
-   * once per interval, since the periodic tick re-checks every poll. If the check itself fails, does not hold proving
-   * back: the publisher selection at submission time still applies.
+   * Throws a `NoAffordablePublisherError` if no publisher can afford submitting an epoch proof, recording the metric and
+   * logging it at most once per interval, since the periodic tick re-checks every poll. If the check itself fails, does
+   * not hold proving back: the publisher selection at submission time still applies.
    */
-  private async checkSubmissionAffordable(epoch: EpochNumber): Promise<NoAffordablePublisherError | undefined> {
+  private async assertSubmissionAffordable(epoch: EpochNumber): Promise<void> {
     if (!this.deps.checkSubmissionAffordable) {
-      return undefined;
+      return;
     }
     try {
       await this.deps.checkSubmissionAffordable();
-      return undefined;
     } catch (err) {
       if (!(err instanceof NoAffordablePublisherError)) {
         this.log.warn(`Failed to check whether the epoch proof submission is affordable`, { epoch, err });
-        return undefined;
+        return;
       }
       this.deps.metrics.recordProvingNotStartedUnaffordable();
       const now = this.deps.dateProvider.now();
@@ -413,7 +422,7 @@ export class SessionManager {
       } else {
         this.log.debug(`Not starting proving for epoch ${epoch} since no publisher can afford the submission`, logCtx);
       }
-      return err;
+      throw err;
     }
   }
 
@@ -453,7 +462,7 @@ export class SessionManager {
       return;
     }
     // Not opened while no publisher can afford the submission; the periodic tick retries once one can.
-    if (await this.checkSubmissionAffordable(epoch)) {
+    if (!(await this.isSubmissionAffordable(epoch))) {
       return;
     }
     const spec: SessionSpec = { kind: 'full', epochNumber: epoch, fromSlot, toSlot };
