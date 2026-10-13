@@ -20,7 +20,7 @@ groups:
               datasourceUid: spartan-metrics-prometheus
               model:
                 editorMode: code
-                expr: sum by (k8s_namespace_name) (-delta(aztec_l1_publisher_balance_eth[$__rate_interval]))
+                expr: sum by (k8s_namespace_name) (clamp_min(-delta(aztec_l1_publisher_balance_eth[$__rate_interval]), 0))
                 instant: true
                 intervalMs: 60000
                 legendFormat: __auto
@@ -1183,6 +1183,174 @@ groups:
           noDataState: NoData
           execErrState: Error
           for: 1m
+          labels:
+            <<: *common_labels
+          isPaused: false
+        - uid: l1NoAffordablePublisher
+          title: L1 - No affordable publisher
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: spartan-metrics-prometheus
+              model:
+                editorMode: code
+                expr: max by (k8s_namespace_name, service_name, aztec_l1_tx_scope) (aztec_l1_publisher_sends_affordable)
+                instant: true
+                intervalMs: 60000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: B
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                type: reduce
+            - refId: C
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 1
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: B
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          dashboardUid: ""
+          panelId: 0
+          noDataState: NoData
+          execErrState: Error
+          for: 5m
+          annotations:
+            summary: No {{ $labels.aztec_l1_tx_scope }} publisher of {{ $labels.service_name }} ({{ $labels.k8s_namespace_name }}) can afford an L1 send at current fees, so proposals or proof submissions are skipped
+          labels:
+            <<: *common_labels
+          isPaused: false
+        - uid: l1PublisherLowHeadroom
+          title: L1 - Publisher low headroom
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: spartan-metrics-prometheus
+              model:
+                editorMode: code
+                expr: min by (k8s_namespace_name, service_name, aztec_address_sender) (aztec_l1_publisher_sends_affordable)
+                instant: true
+                intervalMs: 60000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: B
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params: []
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - B
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                reducer: last
+                refId: B
+                type: reduce
+            - refId: C
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 4
+                        type: lt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: B
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          dashboardUid: ""
+          panelId: 0
+          noDataState: NoData
+          execErrState: Error
+          for: 15m
+          annotations:
+            summary: Publisher {{ $labels.aztec_address_sender }} of {{ $labels.service_name }} ({{ $labels.k8s_namespace_name }}) can afford fewer than 4 L1 sends at current fees
           labels:
             <<: *common_labels
           isPaused: false
