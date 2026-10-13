@@ -16,8 +16,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { executeTimeout } from '@aztec-labs/foundation/timer';
 import { type Logger, SeverityNumber, logs } from '@opentelemetry/api-logs';
 import { millisToHrTime } from '@opentelemetry/core';
+import type { LoggerProvider } from '@opentelemetry/sdk-logs';
 import { Writable } from 'stream';
 
 import { registerOtelLoggerProvider } from '../otel_logger_provider.js';
@@ -126,10 +128,17 @@ export function getTimeConverter(pinoLogger: any, pinoMod: any) {
   }
 }
 
+// [aztec] Upper bound on how long ending the stream waits for buffered records to be exported. pino ends its transport
+// from the process exit hook and blocks the main thread until the stream closes (giving up after 10s), so an
+// unreachable collector must not hold up the exit for that long.
+const FLUSH_ON_END_TIMEOUT_MS = 3_000;
+
 interface OTelPinoStreamOptions {
   messageKey?: string;
   levels: any; // Pino.LevelMapping
   otelTimestampFromTime?: (time: any) => number;
+  // [aztec] Provider whose buffered records are exported when the stream ends.
+  loggerProvider?: Pick<LoggerProvider, 'forceFlush'>;
 }
 
 /**
@@ -143,6 +152,7 @@ export class OTelPinoStream extends Writable {
   private _messageKey: string;
   private _levels;
   private _otelTimestampFromTime;
+  private _loggerProvider?: Pick<LoggerProvider, 'forceFlush'>;
 
   constructor(options: OTelPinoStreamOptions) {
     super();
@@ -161,6 +171,23 @@ export class OTelPinoStream extends Writable {
     // https://github.com/open-telemetry/opentelemetry-js/issues/4399
     // [aztec] Use the name of this package
     this._otelLogger = logs.getLogger('@aztec-labs/telemetry-client/otel-pino-stream', '0.1.0');
+    this._loggerProvider = options.loggerProvider;
+  }
+
+  // [aztec] pino ends its transport streams when the process exits and waits for them to close, but the batch
+  // processor only exports on a timer, so without this flush the records logged right before an exit are dropped.
+  override _final(callback: (error?: Error | null) => void) {
+    if (!this._loggerProvider) {
+      callback();
+      return;
+    }
+    const provider = this._loggerProvider;
+    executeTimeout(() => provider.forceFlush(), FLUSH_ON_END_TIMEOUT_MS, 'flushing logs to OTLP')
+      .catch(err => {
+        // eslint-disable-next-line no-console
+        console.error(`Error flushing OTelPinoStream: ${err}`);
+      })
+      .finally(() => callback());
   }
 
   override _write(s: string, _encoding: string, callback: Function) {
@@ -274,6 +301,6 @@ export default function (options: OTelPinoStreamOptions): OTelPinoStream {
   const url = process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
   const resource = getOtelResource();
   // We re-register here because this runs on a worker thread
-  registerOtelLoggerProvider(resource, url ? new URL(url) : undefined);
-  return new OTelPinoStream(options);
+  const loggerProvider = registerOtelLoggerProvider(resource, url ? new URL(url) : undefined);
+  return new OTelPinoStream({ ...options, loggerProvider });
 }
