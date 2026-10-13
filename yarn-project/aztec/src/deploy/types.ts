@@ -33,10 +33,9 @@ import type { DeployReporter } from './reporter.js';
  *   `l1ChainId` are caller-supplied; omit `l1FunderKey` for the faucet + ephemeral key. On a
  *   non-local network `l1RpcUrl` and `l1ChainId` are required (there are no hardcoded defaults);
  *   on local they default to anvil (`127.0.0.1:8545`, chain `31337`).
- * - `payment-method`: a caller-supplied {@link FeePaymentMethod} (e.g. an already-deployed FPC) pays
- *   every tx. No balance is read and nothing is bridged, so the account never needs Fee Juice. The
- *   paying contract's `instance` + `artifact` are registered in the run's PXE so it can be called.
- *   The method's own gas settings apply.
+ * - `payment-method`: a caller-supplied {@link FeePaymentMethod} (e.g. a deployed FPC) pays every tx
+ *   with its own gas settings; nothing is read or bridged. `instance` + `artifact` register the paying
+ *   contract in the run's PXE.
  */
 export type FeePolicy =
   | { kind: 'sponsored' }

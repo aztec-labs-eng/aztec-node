@@ -8,8 +8,8 @@
  *   bridge `fundAmount` from L1. The bridge claim is single-use: the first paying tx claims it
  *   (`FeeJuicePaymentMethodWithClaim`) and the rest spend the balance. Pending claims are persisted
  *   (see ./state.ts) so a crash between bridge and claim resumes.
- * - `payment-method` → a caller-supplied payment method (e.g. an already-deployed FPC) pays every
- *   tx, with its own gas settings. Its contract is registered in the run's PXE.
+ * - `payment-method` → a caller-supplied payment method (e.g. a deployed FPC) pays every tx, with
+ *   its own gas settings.
  */
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import {
@@ -223,9 +223,9 @@ export interface PrepareFeeSessionOpts {
 }
 
 /**
- * Resolves fees ahead of execution, per account: registers the shared SponsoredFPC (for sponsored
- * accounts) or the contract behind a caller-supplied payment method, or tops up a fee-juice account
- * via a bridge (reusing a persisted pending claim when present). Returns a {@link FeeSession} that dispenses the right fee per tx, by sending account.
+ * Resolves fees ahead of execution, per account: registers the shared SponsoredFPC or a payment
+ * method's contract, or tops up a fee-juice account via a bridge (reusing a persisted pending claim
+ * when present). Returns a {@link FeeSession} that dispenses the right fee per tx, by sending account.
  */
 export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<FeeSession> {
   const { local, node, nodeUrl, wallet, accounts, state, persist, reporter } = opts;
@@ -243,9 +243,8 @@ export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<Fe
     };
   }
 
-  // Caller-supplied payment methods. The run's PXE is fresh, so the paying contract must be registered to be callable.
-  // No gasSettings override, unlike the sponsored branch: an override would replace the method's own gas settings,
-  // which an FPC may have already committed to (e.g. as the max fee it pays).
+  // The run's PXE is fresh, so register each paying contract. No gasSettings override: an FPC may
+  // have committed to its own.
   const paymentMethods = new Map<string, FeePaymentMethod>();
   for (const { address, policy } of accounts) {
     if (policy.kind !== 'payment-method') {
