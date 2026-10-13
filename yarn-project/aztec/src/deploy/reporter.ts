@@ -36,6 +36,7 @@ export interface DeployUnitResult {
 export type AccountFunding =
   | { kind: 'idle' } // no pending work this run, so funding is moot
   | { kind: 'sponsored' } // a SponsoredFPC pays
+  | { kind: 'payment-method' } // a caller-supplied payment method pays
   | { kind: 'funded'; balance: bigint } // pays from its own Fee Juice
   | { kind: 'not-funded'; balance: bigint; fundAmount: bigint }; // will bridge before paying
 
@@ -108,6 +109,8 @@ function describeFunding(f: AccountFunding): string {
       return 'idle (no work)';
     case 'sponsored':
       return 'sponsored';
+    case 'payment-method':
+      return 'payment method';
     case 'funded':
       return `funded (${feeJuice(f.balance)})`;
     case 'not-funded':

@@ -8,6 +8,8 @@
  *   bridge `fundAmount` from L1. The bridge claim is single-use: the first paying tx claims it
  *   (`FeeJuicePaymentMethodWithClaim`) and the rest spend the balance. Pending claims are persisted
  *   (see ./state.ts) so a crash between bridge and claim resumes.
+ * - `payment-method` → a caller-supplied payment method (e.g. an already-deployed FPC) pays every
+ *   tx, with its own gas settings. Its contract is registered in the run's PXE.
  */
 import type { AztecAddress } from '@aztec-labs/aztec.js/addresses';
 import {
@@ -82,6 +84,9 @@ export async function accountFunding(
   }
   if (policy.kind === 'sponsored') {
     return { kind: 'sponsored' };
+  }
+  if (policy.kind === 'payment-method') {
+    return { kind: 'payment-method' };
   }
   const balance = await publicFeeJuiceBalance(wallet, account, account);
   return balance >= policy.threshold
@@ -219,8 +224,8 @@ export interface PrepareFeeSessionOpts {
 
 /**
  * Resolves fees ahead of execution, per account: registers the shared SponsoredFPC (for sponsored
- * accounts), or tops up a fee-juice account via a bridge (reusing a persisted pending claim when
- * present). Returns a {@link FeeSession} that dispenses the right fee per tx, by sending account.
+ * accounts) or the contract behind a caller-supplied payment method, or tops up a fee-juice account
+ * via a bridge (reusing a persisted pending claim when present). Returns a {@link FeeSession} that dispenses the right fee per tx, by sending account.
  */
 export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<FeeSession> {
   const { local, node, nodeUrl, wallet, accounts, state, persist, reporter } = opts;
@@ -236,6 +241,18 @@ export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<Fe
       // parallel layers. Overstating the cap is free — txs pay the going rate, not the cap, and the FPC pays anyway.
       gasSettings: { maxFeesPerGas: (await node.getCurrentMinFees()).mul(10) },
     };
+  }
+
+  // Caller-supplied payment methods. The run's PXE is fresh, so the paying contract must be registered to be callable.
+  // No gasSettings override, unlike the sponsored branch: an override would replace the method's own gas settings,
+  // which an FPC may have already committed to (e.g. as the max fee it pays).
+  const paymentMethods = new Map<string, FeePaymentMethod>();
+  for (const { address, policy } of accounts) {
+    if (policy.kind !== 'payment-method') {
+      continue;
+    }
+    await wallet.registerContract(policy.instance, policy.artifact);
+    paymentMethods.set(address.toString(), policy.paymentMethod);
   }
 
   // Bridge fee-juice top-ups. The L1 sends stay sequential — a shared funder key would collide on
@@ -307,10 +324,17 @@ export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<Fe
 
   // Per-account dispenser state. A claim is single-use: the first `next()` for its account carries
   // it, and `onConsumed` (invoked by the runner once that tx mines) drops the persisted resume entry.
-  const sessions = new Map<string, { sponsored: boolean; claim?: FeeJuicePaymentMethodWithClaim }>();
+  const sessions = new Map<
+    string,
+    { sponsored: boolean; paymentMethod?: FeePaymentMethod; claim?: FeeJuicePaymentMethodWithClaim }
+  >();
   for (const { address, policy } of accounts) {
     const key = address.toString();
-    sessions.set(key, { sponsored: policy.kind === 'sponsored', claim: claims.get(key) });
+    sessions.set(key, {
+      sponsored: policy.kind === 'sponsored',
+      paymentMethod: paymentMethods.get(key),
+      claim: claims.get(key),
+    });
   }
 
   return {
@@ -319,6 +343,9 @@ export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<Fe
       const session = sessions.get(key);
       if (session?.sponsored) {
         return { fee: sponsoredFee ?? {}, onConsumed: () => {} };
+      }
+      if (session?.paymentMethod) {
+        return { fee: { paymentMethod: session.paymentMethod }, onConsumed: () => {} };
       }
       if (session?.claim) {
         const claim = session.claim;
@@ -337,7 +364,7 @@ export async function prepareFeeSession(opts: PrepareFeeSessionOpts): Promise<Fe
     hasPendingClaim: account => sessions.get(account.toString())?.claim !== undefined,
     feeCallCount: async account => {
       const session = sessions.get(account.toString());
-      const method = session?.sponsored ? sponsoredFee?.paymentMethod : session?.claim;
+      const method = session?.sponsored ? sponsoredFee?.paymentMethod : (session?.paymentMethod ?? session?.claim);
       return method ? (await method.getExecutionPayload()).calls.length : 0;
     },
   };
