@@ -424,6 +424,9 @@ export class PeerManager implements PeerManagerInterface {
       this.authenticatedPeerIdToValidatorAddress.delete(peerIdStr);
     }
 
+    // Keep a disconnected non-healthy peer's score so a reconnect resumes its penalty rather than starting
+    // clean. The score and ban maps are bounded (PeerScoring retention caps), so retaining them cannot grow
+    // the heartbeat-scanned state without limit under identity churn. A healthy peer carries no penalty to keep.
     if (this.peerScoring.getScoreState(peerIdStr) === PeerScoreState.Healthy) {
       this.peerScoring.removePeer(peerIdStr);
     }

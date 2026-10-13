@@ -32,7 +32,7 @@ import { AuthRequest, AuthResponse, GoodByeReason, StatusMessage } from '../reqr
 import { ReqResp } from '../reqresp/reqresp.js';
 import { ReqRespStatus } from '../reqresp/status.js';
 import { PeerManager } from './peer_manager.js';
-import { PeerScoring } from './peer_scoring.js';
+import { PeerScoreState, PeerScoring } from './peer_scoring.js';
 
 describe('PeerManager', () => {
   const mockLibP2PNode: any = createMockLibP2PNode();
@@ -2264,6 +2264,57 @@ describe('PeerManager', () => {
 
       // Peer should not be authenticated
       expect(peerManager.isAuthenticatedPeer(peerId)).toBe(false);
+    });
+  });
+
+  describe('disconnect penalty retention', () => {
+    // Drive the real DISCONNECTED listener instead of the private handler.
+    function fireDisconnect(node: ReturnType<typeof createMockLibP2PNode>, peerId: PeerId): void {
+      const call = node.addEventListener.mock.calls.find((c: unknown[]) => c[0] === PeerEvent.DISCONNECTED);
+      call[1](new CustomEvent(PeerEvent.DISCONNECTED, { detail: peerId }));
+    }
+
+    it('keeps a disconnected non-healthy peer score so a reconnect resumes its penalty', async () => {
+      const node = createMockLibP2PNode();
+      createMockPeerManager('disc-retain', node, 3);
+      const peerId = await createSecp256k1PeerId();
+      const peerIdStr = peerId.toString();
+
+      peerScoring.updateScore(peerIdStr, -60); // Disconnect: below disconnect, above ban
+      expect(peerScoring.getScoreState(peerIdStr)).toBe(PeerScoreState.Disconnect);
+
+      fireDisconnect(node, peerId);
+
+      // The penalty survives the disconnect, so a reconnecting identity does not start clean.
+      expect(peerScoring.getScoreState(peerIdStr)).toBe(PeerScoreState.Disconnect);
+      expect(peerScoring.getScore(peerIdStr)).toBeLessThan(0);
+    });
+
+    it('removes a healthy peer on disconnect, since it carries no penalty worth keeping', async () => {
+      const node = createMockLibP2PNode();
+      createMockPeerManager('disc-healthy', node, 3);
+      const peerId = await createSecp256k1PeerId();
+      const peerIdStr = peerId.toString();
+
+      peerScoring.updateScore(peerIdStr, -1); // still Healthy
+      expect(peerScoring.getScoreState(peerIdStr)).toBe(PeerScoreState.Healthy);
+
+      fireDisconnect(node, peerId);
+      expect(peerScoring.getScore(peerIdStr)).toBe(0);
+    });
+
+    it('keeps a banned identity refused on reconnect after disconnect', async () => {
+      const node = createMockLibP2PNode();
+      const pm = createMockPeerManager('disc-banned', node, 3);
+      const peerId = await createSecp256k1PeerId();
+
+      peerScoring.updateScore(peerId.toString(), -150); // crosses the ban threshold
+      expect(pm.isPeerAllowedToConnect(peerId)).toBe(false);
+
+      fireDisconnect(node, peerId);
+
+      // The ban is a separate record, so the peer stays refused.
+      expect(pm.isPeerAllowedToConnect(peerId)).toBe(false);
     });
   });
 
