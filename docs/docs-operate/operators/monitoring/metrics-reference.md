@@ -179,7 +179,7 @@ For a sequencer, the reference transaction is the first checkpoint proposal of a
 **Alert rules**:
 ```yaml
 - alert: NoAffordablePublisher
-  expr: max by (aztec_l1_tx_scope) (aztec_l1_publisher_sends_affordable) < 1
+  expr: max by (service_instance_id, aztec_l1_tx_scope) (aztec_l1_publisher_sends_affordable) < 1
   for: 5m
   labels:
     severity: critical
@@ -188,7 +188,7 @@ For a sequencer, the reference transaction is the first checkpoint proposal of a
     description: "No {{ $labels.aztec_l1_tx_scope }} publisher can afford its next L1 transaction at current fees. Proposals or proof submissions are being skipped. Fund a publisher now."
 
 - alert: LowL1PublisherHeadroom
-  expr: min by (aztec_address_sender) (aztec_l1_publisher_sends_affordable) < 4
+  expr: min by (service_instance_id, aztec_address_sender) (aztec_l1_publisher_sends_affordable) < 4
   for: 15m
   labels:
     severity: warning
