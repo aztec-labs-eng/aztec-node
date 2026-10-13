@@ -213,7 +213,6 @@ export class ProverNodePublisherMetrics {
   private gasPriceEstimated: Histogram;
   private txTotalFeeEstimated: Histogram;
 
-  private senderBalance: Gauge;
   private meter: Meter;
 
   constructor(
@@ -249,8 +248,6 @@ export class ProverNodePublisherMetrics {
     this.gasPriceEstimated = this.meter.createHistogram(Metrics.PROVER_NODE_ESTIMATED_SUBMISSION_GAS_PRICE);
 
     this.txTotalFeeEstimated = this.meter.createHistogram(Metrics.PROVER_NODE_ESTIMATED_SUBMISSION_TOTAL_FEE);
-
-    this.senderBalance = this.meter.createGauge(Metrics.L1_PUBLISHER_BALANCE);
   }
 
   recordFailedTx() {
@@ -282,13 +279,6 @@ export class ProverNodePublisherMetrics {
     } catch {
       // ignore
     }
-  }
-
-  public recordSenderBalance(wei: bigint, senderAddress: string) {
-    const eth = parseFloat(formatEther(wei, 'wei'));
-    this.senderBalance.record(eth, {
-      [Attributes.SENDER_ADDRESS]: senderAddress,
-    });
   }
 
   private recordTx(durationMs: number, stats: L1PublishStats) {

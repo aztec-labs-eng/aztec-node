@@ -19,6 +19,7 @@ import { FullNodeCheckpointsBuilder, NodeKeystoreAdapter, type ValidatorClient }
 
 import { type SequencerClientConfig, getPublisherConfigFromSequencerConfig } from '../config.js';
 import type { GlobalVariableBuilder } from '../global_variable_builder/index.js';
+import { PROPOSE_REFERENCE_SEND } from '../publisher/gas_constants.js';
 import { PublisherManagerMetrics } from '../publisher/publisher-manager-metrics.js';
 import { SequencerPublisherFactory } from '../publisher/sequencer-publisher-factory.js';
 import type { CheckpointProposalJobTestHooks } from '../sequencer/checkpoint_proposal_job_test_hooks.js';
@@ -99,6 +100,8 @@ export class SequencerClient {
       bindings: log.getBindings(),
       funder: deps.funderL1TxUtils,
       metrics: new PublisherManagerMetrics(telemetryClient, 'sequencer'),
+      // Fisherman nodes never send proposals, so their publishers are not expected to afford one.
+      referenceSend: config.fishermanMode ? undefined : PROPOSE_REFERENCE_SEND,
     });
     const rollupContract = new RollupContract(publicClient, config.rollupAddress.toString());
     const inboxContract = new InboxContract(publicClient, config.inboxAddress);

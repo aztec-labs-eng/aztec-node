@@ -713,15 +713,6 @@ export class SequencerPublisher implements Disposable {
         })();
       }
       return undefined;
-    } finally {
-      try {
-        this.metrics.recordSenderBalance(
-          await this.l1TxUtils.getSenderBalance(),
-          this.l1TxUtils.getSenderAddress().toString(),
-        );
-      } catch (err) {
-        this.log.warn(`Failed to record balance after sending tx: ${err}`);
-      }
     }
   }
 

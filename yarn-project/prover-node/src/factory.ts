@@ -32,6 +32,7 @@ import { L1Metrics, type TelemetryClient, getTelemetryClient } from '@aztec-labs
 import { createPublicClient } from 'viem';
 
 import type { SpecificProverNodeConfig } from './config.js';
+import { SUBMIT_EPOCH_PROOF_REFERENCE_SEND } from './gas_constants.js';
 import { ProverNode } from './prover-node.js';
 import { ProverPublisherFactory } from './prover-publisher-factory.js';
 
@@ -143,6 +144,7 @@ export async function createProverNode(
         bindings: log.getBindings(),
         funder: funderL1TxUtils,
         metrics: new PublisherManagerMetrics(telemetry, 'prover'),
+        referenceSend: config.proverNodeDisableProofPublish ? undefined : SUBMIT_EPOCH_PROOF_REFERENCE_SEND,
       }),
       telemetry,
     });

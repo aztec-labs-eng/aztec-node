@@ -1,5 +1,6 @@
 import { BLOBS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import type { SendCostRequirement } from '@aztec-labs/ethereum/l1-tx-utils';
+import type { ReferenceSend } from '@aztec-labs/ethereum/publisher-manager';
 
 /**
  * Worst-case gas limit of a checkpoint proposal tx in an epoch that is already set up on L1, used to check that a
@@ -36,6 +37,15 @@ export function getProposeRequirement(opts: { withInvalidate: boolean; withSetup
     blobCount: BLOBS_PER_CHECKPOINT,
   };
 }
+
+/**
+ * Send the periodic publisher balance check prices to report whether a sequencer can afford to propose: a first-of-epoch
+ * proposal without an invalidation, so that affording one means affording any proposal that does not invalidate.
+ */
+export const PROPOSE_REFERENCE_SEND: ReferenceSend = {
+  name: 'proposal',
+  requirement: getProposeRequirement({ withSetupEpoch: true, withInvalidate: false }),
+};
 
 /** Affordability requirement of a standalone checkpoint invalidation. */
 export const INVALIDATE_REQUIREMENT: SendCostRequirement = { gasLimit: INVALIDATE_GAS, blobCount: 0 };
