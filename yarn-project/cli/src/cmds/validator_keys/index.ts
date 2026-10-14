@@ -1,8 +1,9 @@
+import { minimumProofOfPossessionGas } from '@aztec-labs/ethereum/bn254';
 import type { LogFn } from '@aztec-labs/foundation/log';
 import { Command, Option } from 'commander';
 
 import { parseAztecAddress, parseEthereumAddress, parseHex, parseOptionalInteger } from '../../utils/commands.js';
-import { BLS_KEY_DERIVATION_V6, minimumProofOfPossessionGas } from './bls_key_derivation.js';
+import { BLS_KEY_DERIVATION_V6 } from './bls_key_derivation.js';
 import { defaultBlsPath } from './utils.js';
 
 function blsKeyDerivationV6Option() {

@@ -1,4 +1,5 @@
 import { bn254 } from '@noble/curves/bn254';
+import { Buffer } from 'buffer';
 
 import {
   BN254_STAKING_DOMAIN_SEPARATOR,

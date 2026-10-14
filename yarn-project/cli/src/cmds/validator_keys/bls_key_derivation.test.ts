@@ -1,6 +1,9 @@
+import {
+  AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL,
+  estimateBlsKeyProofOfPossessionGas,
+} from '@aztec-labs/ethereum/bn254';
 import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
 import { decryptBn254Keystore, loadBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
-import { computeBn254RegistrationDigest } from '@aztec-labs/foundation/crypto/bn254';
 import { loadKeystoreFile } from '@aztec-labs/node-keystore/loader';
 import type { ValidatorKeyStore } from '@aztec-labs/node-keystore/types';
 import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
@@ -14,12 +17,9 @@ import {
   type BlsKeyDerivationOptions,
   type BlsKeyDerivationPolicy,
   BlsKeyOverGasBudgetError,
-  estimateBlsKeyProofOfPossessionGas,
-  estimateProofOfPossessionGas,
   resolveBlsKeyDerivationPolicy,
   selectBlsKey,
 } from './bls_key_derivation.js';
-import gasVectors from './fixtures/bn254_pop_gas_vectors.json' with { type: 'json' };
 import { generateBlsKeypair } from './generate_bls_keypair.js';
 import { newValidatorKeystore } from './new.js';
 import { buildValidatorEntries, computeBlsPublicKeyCompressed, logValidatorSummaries } from './shared.js';
@@ -86,49 +86,22 @@ describe('BLS key derivation version', () => {
       ...overrides,
     });
 
-  describe('v6 gas model', () => {
-    const { minStipend } = gasVectors.model.amsterdam;
-
-    it('uses the measured amsterdam min-stipend model and a 10% margin under the 250k cap', () => {
+  describe('v6', () => {
+    it('freezes the amsterdam gas model and a 10% margin under the 250k cap', () => {
+      // v6 must keep selecting the same keys: if the measured model changes, add a new derivation version instead.
+      expect(BLS_KEY_DERIVATION_V6.gasModel).toEqual(AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL);
       expect(BLS_KEY_DERIVATION_V6.gasModel).toEqual({
-        fixed: minStipend.F,
-        perAttempt: minStipend.A,
-        perSqrtCall: minStipend.S,
-        memoryNumerator: minStipend.QNumerator,
-        memoryDenominator: minStipend.QDenominator,
+        fixed: 132_694,
+        perAttempt: 515,
+        perSqrtCall: 4_580,
+        memoryNumerator: 95_975,
+        memoryDenominator: 1_000_000,
       });
       expect(BLS_KEY_DERIVATION_V6.budget).toBe(250_000 * 0.9);
     });
 
-    it.each(gasVectors.vectors.map(v => [v.label, v] as const))(
-      'bounds the measured min stipend of %s tightly',
-      (_label, vector) => {
-        const digest = computeBn254RegistrationDigest({ x: BigInt(vector.pk1.x), y: BigInt(vector.pk1.y) });
-        expect(digest).toEqual({
-          point: { x: BigInt(vector.digest.x), y: BigInt(vector.digest.y) },
-          attempts: vector.attempts,
-          sqrtCalls: vector.sqrtCalls,
-        });
-
-        const estimated = estimateProofOfPossessionGas(
-          BLS_KEY_DERIVATION_V6.gasModel,
-          vector.attempts,
-          vector.sqrtCalls,
-        );
-        const measured = vector.gas.amsterdam.minStipend;
-        expect(estimated).toBeGreaterThanOrEqual(measured);
-        expect(estimated - measured).toBeLessThanOrEqual(200);
-      },
-    );
-
-    it('rounds the memory term up', () => {
-      // 0.095975 * 3^2 = 0.863775, rounded up to 1.
-      expect(estimateProofOfPossessionGas(BLS_KEY_DERIVATION_V6.gasModel, 3, 1)).toBe(132_694 + 3 * 515 + 4_580 + 1);
-    });
-
     it('puts sk = 57193 over the budget', () => {
-      const vector = gasVectors.vectors.find(v => v.label === 'tail-57193')!;
-      expect(vector).toMatchObject({ attempts: 95, sqrtCalls: 18 });
+      // 95 attempts and 18 square roots.
       expect(estimate(`0x${(57193).toString(16).padStart(64, '0')}`)).toBeGreaterThan(BLS_KEY_DERIVATION_V6.budget);
     });
   });

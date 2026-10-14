@@ -1,10 +1,10 @@
 import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { GSEContract } from '@aztec-labs/ethereum/contracts';
-import { computeBn254RegistrationDigest } from '@aztec-labs/foundation/crypto/bn254';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { bn254 } from '@noble/curves/bn254';
 import { foundry } from 'viem/chains';
 
+import { computeBn254RegistrationDigest } from '../bn254/hash_to_point.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import type { Anvil } from '../test/start_anvil.js';

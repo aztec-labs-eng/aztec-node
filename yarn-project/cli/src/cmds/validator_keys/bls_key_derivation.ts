@@ -1,23 +1,10 @@
+import {
+  type ProofOfPossessionGasModel,
+  estimateBlsKeyProofOfPossessionGas,
+  minimumProofOfPossessionGas,
+} from '@aztec-labs/ethereum/bn254';
 import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
-import { computeBn254RegistrationDigestForPrivateKey } from '@aztec-labs/foundation/crypto/bn254';
 import type { Hex } from '@aztec-labs/foundation/string';
-
-/**
- * Upper-bound model of the minimum gas stipend `Bn254LibWrapper.proofOfPossession` needs to accept a valid key, as a
- * function of the `hashToPoint` loop work for that key:
- * `fixed + perAttempt * attempts + perSqrtCall * sqrtCalls + ceil(memoryNumerator * attempts^2 / memoryDenominator)`.
- */
-export type ProofOfPossessionGasModel = {
-  /** Work that does not depend on the key: pairing, scalar multiplications, hashing, stipend headroom. */
-  fixed: number;
-  /** Per loop attempt: keccak, ABI encoding and loop overhead. */
-  perAttempt: number;
-  /** Per attempt that reaches the modexp square root. */
-  perSqrtCall: number;
-  /** Memory growth from allocations that every attempt leaves behind, quadratic in the attempts. */
-  memoryNumerator: number;
-  memoryDenominator: number;
-};
 
 /** What a BLS key derivation version checks: a key fits if its estimated minimum stipend is at most `budget`. */
 export type BlsKeyDerivationVersion = {
@@ -27,10 +14,8 @@ export type BlsKeyDerivationVersion = {
 };
 
 /**
- * BLS key derivation v6. The gas model is the conservative min-stipend fit of the BN254 proof-of-possession gas
- * calibration vectors measured under amsterdam pricing (aztec-packages `l1-contracts/test/fixtures/`, copied verbatim to
- * `fixtures/bn254_pop_gas_vectors.json` next to this file). The budget is the 250,000 gas default
- * `proofOfPossessionGasLimit` minus a 10% margin.
+ * BLS key derivation v6. The gas model is a frozen copy of `AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL` from
+ * `@aztec-labs/ethereum/bn254`. The budget is the 250,000 gas default `proofOfPossessionGasLimit` minus a 10% margin.
  *
  * With per-attempt probabilities 0.189030554816 of reaching the square root and 0.094515277408 of succeeding, about
  * 3.2925e-4 of keys (1 in 3,037) estimate over the budget, so they move to a later candidate under v6.
@@ -84,29 +69,6 @@ export type SelectedBlsKey = {
   /** The `--bls-key-derivation-max-gas` value, when it took part in selecting a candidate other than 0. */
   maxGas?: number;
 };
-
-/** Estimated minimum stipend for the proof-of-possession check of a key with the given `hashToPoint` work. */
-export function estimateProofOfPossessionGas(model: ProofOfPossessionGasModel, attempts: number, sqrtCalls: number) {
-  const memory = BigInt(model.memoryNumerator) * BigInt(attempts) ** 2n;
-  const denominator = BigInt(model.memoryDenominator);
-  return (
-    model.fixed +
-    model.perAttempt * attempts +
-    model.perSqrtCall * sqrtCalls +
-    Number((memory + denominator - 1n) / denominator)
-  );
-}
-
-/** Estimated minimum stipend for the proof-of-possession check of a BN254 BLS private key. */
-export function estimateBlsKeyProofOfPossessionGas(model: ProofOfPossessionGasModel, privateKey: string) {
-  const { attempts, sqrtCalls } = computeBn254RegistrationDigestForPrivateKey(privateKey);
-  return estimateProofOfPossessionGas(model, attempts, sqrtCalls);
-}
-
-/** Lowest gas estimate any key can have: one attempt that reaches the square root and succeeds. */
-export function minimumProofOfPossessionGas(model: ProofOfPossessionGasModel) {
-  return estimateProofOfPossessionGas(model, 1, 1);
-}
 
 /** Thrown when candidate 0 estimates over the budget and no flag says what to do about it. */
 export class BlsKeyOverGasBudgetError extends Error {

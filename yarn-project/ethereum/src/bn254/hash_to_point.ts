@@ -1,7 +1,7 @@
+import { toBigIntBE, toBufferBE } from '@aztec-labs/foundation/bigint-buffer';
+import { keccak256 } from '@aztec-labs/foundation/crypto/keccak';
 import { bn254 } from '@noble/curves/bn254';
-
-import { toBigIntBE, toBufferBE } from '../../bigint-buffer/index.js';
-import { keccak256 } from '../keccak/index.js';
+import { Buffer } from 'buffer';
 
 /** `BN254Lib.STAKING_DOMAIN_SEPARATOR`: `bytes32("AZTEC_BLS_POP_BN254_V1")`, left-aligned and zero-padded. */
 export const BN254_STAKING_DOMAIN_SEPARATOR: Buffer = Buffer.concat([

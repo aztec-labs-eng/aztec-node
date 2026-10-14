@@ -1,11 +1,4 @@
-import { getPublicClient } from '@aztec-labs/ethereum/client';
-import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
-import { GSEContract } from '@aztec-labs/ethereum/contracts';
-import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
-import { type Anvil, getAnvilVersion, startAnvil } from '@aztec-labs/ethereum/test';
-import type { ViemClient } from '@aztec-labs/ethereum/types';
 import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
-import { computeBn254RegistrationDigest } from '@aztec-labs/foundation/crypto/bn254';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import {
   type Hex,
@@ -19,8 +12,15 @@ import {
 } from 'viem';
 import { foundry } from 'viem/chains';
 
-import { BLS_KEY_DERIVATION_V6, estimateProofOfPossessionGas } from './bls_key_derivation.js';
+import { getPublicClient } from '../client.js';
+import { DefaultL1ContractsConfig } from '../config.js';
+import { GSEContract } from '../contracts/gse.js';
+import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
+import { type Anvil, startAnvil } from '../test/start_anvil.js';
+import type { ViemClient } from '../types.js';
 import gasVectors from './fixtures/bn254_pop_gas_vectors.json' with { type: 'json' };
+import { computeBn254RegistrationDigest } from './hash_to_point.js';
+import { AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL, estimateProofOfPossessionGas } from './proof_of_possession_gas.js';
 
 const TEST_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
@@ -56,20 +56,6 @@ const FORWARDER_CODE: Hex = `0x${[
 ].join('')}`;
 const FORWARDER_ADDRESS: Hex = '0x00000000000000000000000000000000000f0f0f';
 
-/** First Foundry release whose anvil implements the amsterdam hardfork; earlier ones panic on `--hardfork amsterdam`. */
-const MIN_AMSTERDAM_ANVIL_VERSION = [1, 8, 4];
-
-function anvilSupportsAmsterdam() {
-  const version = getAnvilVersion()?.split('.').map(Number);
-  if (!version) {
-    return false;
-  }
-  const index = version.findIndex((part, i) => part !== MIN_AMSTERDAM_ANVIL_VERSION[i]);
-  return index === -1 || version[index] > MIN_AMSTERDAM_ANVIL_VERSION[index];
-}
-
-const describeWithAmsterdamAnvil = anvilSupportsAmsterdam() ? describe : describe.skip;
-
 type RegistrationTuple = {
   pk1: { x: bigint; y: bigint };
   pk2: { x0: bigint; x1: bigint; y0: bigint; y1: bigint };
@@ -77,11 +63,11 @@ type RegistrationTuple = {
 };
 
 /**
- * Checks the v6 gas model against the deployed verifier on anvil under the amsterdam hardfork: for each key, the
- * smallest forwarded gas for which the wrapper's `proofOfPossession` returns true must be at most the local estimate.
- * Skipped when the anvil in use predates amsterdam support (Foundry 1.8.4).
+ * Checks the amsterdam gas model against the deployed verifier on anvil: for each key, the smallest forwarded gas for
+ * which the wrapper's `proofOfPossession` returns true must be at most the local estimate. Runs on osaka, which prices
+ * this path exactly like amsterdam (see the calibration vectors).
  */
-describeWithAmsterdamAnvil('BLS key gas model against the L1 verifier', () => {
+describe('BN254 proof-of-possession gas model against the L1 verifier', () => {
   let anvil: Anvil;
   let client: ViemClient;
   let gse: GSEContract;
@@ -89,14 +75,14 @@ describeWithAmsterdamAnvil('BLS key gas model against the L1 verifier', () => {
 
   beforeAll(async () => {
     let rpcUrl: string;
-    ({ anvil, rpcUrl } = await startAnvil({ port: 0, hardfork: 'amsterdam' }));
+    ({ anvil, rpcUrl } = await startAnvil({ port: 0, hardfork: 'osaka' }));
     client = getPublicClient({ l1RpcUrls: [rpcUrl], l1ChainId: foundry.id });
     const nodeInfo = await client.request<{
       Method: 'anvil_nodeInfo';
       Parameters: [];
       ReturnType: { hardFork: string };
     }>({ method: 'anvil_nodeInfo', params: [] });
-    expect(nodeInfo.hardFork.toLowerCase()).toBe('amsterdam');
+    expect(nodeInfo.hardFork.toLowerCase()).toBe('osaka');
     const { l1ContractAddresses } = await deployAztecL1Contracts(
       rpcUrl,
       '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba',
@@ -152,33 +138,34 @@ describeWithAmsterdamAnvil('BLS key gas model against the L1 verifier', () => {
     return high;
   }
 
+  // Calibration vectors, whose min stipend Forge measured on the same verifier code.
   const vectorKeys = gasVectors.vectors.map(v => ({
     label: v.label,
-    tuple: {
-      pk1: { x: BigInt(v.pk1.x), y: BigInt(v.pk1.y) },
-      pk2: { x0: BigInt(v.pk2.x0), x1: BigInt(v.pk2.x1), y0: BigInt(v.pk2.y0), y1: BigInt(v.pk2.y1) },
-      pop: { x: BigInt(v.signature.x), y: BigInt(v.signature.y) },
-    },
+    sk: BigInt(v.sk),
+    forgeMinStipend: v.gas.osaka.minStipend as number | undefined,
   }));
 
-  // Freshly derived keys, including the 95-attempt sk = 57193 and a 98-attempt mnemonic key.
+  // Freshly derived keys, including a mnemonic key with 98 attempts and 19 square roots.
   const derivedKeys = [
-    { label: 'sk-57193', sk: 57193n },
-    ...['m/12381/3600/0/0/0', 'm/12381/3600/0/0/712', 'm/12381/3600/0/0/1769'].map(path => ({
-      label: `mnemonic ${path}`,
-      sk: BigInt(deriveBlsPrivateKey(TEST_MNEMONIC, undefined, path)),
-    })),
-  ];
+    'm/12381/3600/0/0/0',
+    'm/12381/3600/0/0/712',
+    'm/12381/3600/0/0/1769',
+    'm/12381/3600/0/0/384795',
+  ].map(path => ({
+    label: `mnemonic ${path}`,
+    sk: BigInt(deriveBlsPrivateKey(TEST_MNEMONIC, undefined, path)),
+    forgeMinStipend: undefined,
+  }));
 
   async function registrationTupleOf(sk: bigint): Promise<RegistrationTuple> {
     const { publicKeyInG1, publicKeyInG2, proofOfPossession } = await gse.makeRegistrationTuple(sk);
     return { pk1: publicKeyInG1, pk2: publicKeyInG2, pop: proofOfPossession };
   }
 
-  it.each([...derivedKeys, ...vectorKeys].map(k => [k.label, 'tuple' in k ? k.tuple : k.sk] as const))(
+  it.each([...derivedKeys, ...vectorKeys].map(k => [k.label, k] as const))(
     'bounds the gas the verifier needs for %s',
-    async (_label, key) => {
-      const tuple = typeof key === 'bigint' ? await registrationTupleOf(key) : key;
+    async (_label, { sk, forgeMinStipend }) => {
+      const tuple = await registrationTupleOf(sk);
       const digest = computeBn254RegistrationDigest(tuple.pk1);
       const onChainDigest = await client.readContract({
         address: wrapper,
@@ -189,7 +176,14 @@ describeWithAmsterdamAnvil('BLS key gas model against the L1 verifier', () => {
       expect(digest.point).toEqual(onChainDigest);
 
       const measured = await measureMinStipend(tuple);
-      const estimated = estimateProofOfPossessionGas(BLS_KEY_DERIVATION_V6.gasModel, digest.attempts, digest.sqrtCalls);
+      if (forgeMinStipend !== undefined) {
+        expect(measured).toBe(forgeMinStipend);
+      }
+      const estimated = estimateProofOfPossessionGas(
+        AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL,
+        digest.attempts,
+        digest.sqrtCalls,
+      );
       expect(estimated).toBeGreaterThanOrEqual(measured);
       expect(estimated - measured).toBeLessThanOrEqual(200);
     },
