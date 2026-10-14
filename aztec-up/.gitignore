@@ -6,3 +6,4 @@ verdaccio-storage
 aztec-up-test-base-image
 aztec-up-test-image
 bin/0.0.1/packages.tar.gz
+release-lock

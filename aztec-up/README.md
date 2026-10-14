@@ -42,8 +42,14 @@ INSTALL_URI=file://$(git rev-parse --show-toplevel)/aztec-up/bin $(git rev-parse
 
 Each release includes `packages.tar.gz` with a standalone `package.json` and `package-lock.json`.
 The installer downloads the archive and runs `npm ci`. The lock records every installed package
-version and tarball integrity, including transitive dependencies. A later publication within a
-dependency range cannot change the installed tree for an existing release.
+version, including transitive dependencies, and the tarball integrity of every package outside the
+release itself. A later publication within a dependency range cannot change the installed tree for
+an existing release.
+
+The release generates the lock before it publishes anything to npm, against a local registry that
+holds the release's packages, and fails if the lock cannot be generated. Third-party versions are
+limited to those in `yarn-project/yarn.lock`. See
+`yarn-project/scripts/generate-aztec-up-package-lock.mjs`.
 
 To skip the release lock, explicitly select the original npm installation path:
 

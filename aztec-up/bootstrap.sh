@@ -17,9 +17,21 @@ function versions {
   echo "node: $(node --version | cut -d 'v' -f 2)"
 }
 
+# Where release_preflight leaves the installer lock for release to upload.
+release_lock=release-lock/packages.tar.gz
+
+# Hash of the inputs that decide the installer's dependency tree. yarn.lock records the workspace
+# manifests' dependency fields; the root resolutions become the lock's overrides. The registry seed
+# and the CI lock share it, so a cached lock is only reused with a seed holding its tarballs.
+function deps_hash {
+  hash_str \
+    "$(cache_content_hash ^yarn-project/yarn.lock ^yarn-project/scripts/generate-aztec-up-package-lock.mjs ^ci3/release_prep_package_json)" \
+    "$(jq -c '.resolutions // {}' $root/yarn-project/package.json)"
+}
+
 # Cache key of the proxied-npmjs registry seed, which start_local_registry downloads and build uploads.
 function verdaccio_seed_key {
-  echo "aztec-up-verdaccio-cache-$(cache_content_hash ^yarn-project/yarn.lock).zst"
+  echo "aztec-up-verdaccio-cache-$(deps_hash).zst"
 }
 
 # Starts a local verdaccio on :4873 seeded from the proxied-npmjs cache, and points npm at it for
@@ -81,7 +93,8 @@ EOF
 
   rm -rf verdaccio-storage
   # Registry storage is only a download cache; the release lock determines dependency versions.
-  cache_download "$(verdaccio_seed_key)" || true
+  verdaccio_seeded=0
+  cache_download "$(verdaccio_seed_key)" && verdaccio_seeded=1
   # Whatever already holds the port would answer the wait below and receive the publishes.
   if nc -z localhost 4873 &>/dev/null; then
     echo_stderr ":4873 is already in use; refusing to publish to an unknown registry."
@@ -169,8 +182,15 @@ function build {
     version=0.0.1
     publish_local $version
 
-    echo "Generating and fetching the locked installer dependencies..."
-    retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" bin/0.0.1"
+    # The lock omits the integrity of the fake-published packages, so a lock generated for the same
+    # dependency inputs is still valid, and the seed for those inputs holds every tarball it installs.
+    local lock_key="aztec-up-package-lock-$(deps_hash).zst"
+    if [ "$verdaccio_seeded" -eq 1 ] && cache_download "$lock_key"; then
+      echo "Reusing the installer lock generated for these dependencies."
+    else
+      echo "Generating and fetching the locked installer dependencies..."
+      retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" bin/0.0.1"
+    fi
 
     local t=$SECONDS
     docker build -t aztecprotocol/aztec-up-test .
@@ -186,11 +206,13 @@ function build {
     # into a later run's registry) and upload the proxied npmjs remainder. Strip by exact package
     # name — matching on the fake version would also delete real packages whose upstream version
     # happens to collide (e.g. concat-map@0.0.1). cache_upload skips existing keys, so this
-    # uploads once per yarn.lock change.
+    # uploads once per change to the dependency inputs.
     $root/yarn-project/bootstrap.sh get_projects | while read -r project; do
       rm -rf "verdaccio-storage/$(jq -r .name "$project/package.json")"
     done
     cache_upload "$(verdaccio_seed_key)" verdaccio-storage
+    # After the seed, so a cached lock always has a seed to pair with.
+    cache_upload "$lock_key" bin/0.0.1/packages.tar.gz
   else
     # The lock travels inside the image so a cache hit never pairs it with another run's registry.
     docker run --rm aztecprotocol/aztec-up-test cat /home/ubuntu/packages.tar.gz > bin/0.0.1/packages.tar.gz
@@ -208,9 +230,9 @@ function test {
   test_cmds | filter_test_cmds | parallelize
 }
 
-# Generates the release lock against a local registry holding the release version, so a tree the
-# generator rejects fails the release before anything is published. Runs under DRY_RUN too, since it
-# only publishes locally.
+# Generates the release's installer lock against a local registry holding the release version, so it
+# exists, or the release fails, before anything is published. release uploads it. Runs under DRY_RUN
+# too, since it only publishes locally.
 function release_preflight {
   echo_header "aztec-up release preflight"
   local version=${REF_NAME#v}
@@ -224,10 +246,8 @@ function release_preflight {
     fi
   done
   publish_local "$version"
-  local out
-  out=$(mktemp -d)
-  retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" \"$out\""
-  rm -rf "$out"
+  rm -rf "$(dirname $release_lock)"
+  retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" \"$(dirname $release_lock)\""
 }
 
 function release {
@@ -238,17 +258,17 @@ function release {
   # e.g. "4" from v4.1.0-nightly.20260319
   local major=$(semver major $REF_NAME)
 
-  if [ "${DRY_RUN:-0}" != 0 ]; then
-    echo "Would generate the package lock from the published npm packages."
-  else
-    local packages_dir
-    packages_dir=$(mktemp -d)
-    # npm can accept a publish before its versions become visible to installs.
-    RETRY_ATTEMPTS=20 RETRY_SLEEP=30 retry -p 'npm (ERR!|error) code (ETARGET|E404)' \
-      "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" \"$packages_dir\""
-    do_or_dryrun aws s3 cp "$packages_dir/packages.tar.gz" "s3://install.aztec.network/$version/packages.tar.gz"
-    rm -rf "$packages_dir"
+  if [ ! -f "$release_lock" ]; then
+    echo_stderr "No installer lock at aztec-up/$release_lock. Run release_preflight first."
+    exit 1
   fi
+  local lock_version
+  lock_version=$(tar -xzOf "$release_lock" package.json | jq -r .version)
+  if [ "$lock_version" != "$version" ]; then
+    echo_stderr "aztec-up/$release_lock is for $lock_version, not $version. Run release_preflight again."
+    exit 1
+  fi
+  do_or_dryrun aws s3 cp "$release_lock" "s3://install.aztec.network/$version/packages.tar.gz"
 
   # Upload each file in bin/0.0.1/, replacing VERSION= lines with the release version.
   for file in bin/0.0.1/*; do
