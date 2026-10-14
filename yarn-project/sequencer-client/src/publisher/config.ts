@@ -61,7 +61,7 @@ export type PublisherConfig = L1TxUtilsConfig &
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
-    /** Warn when a publisher balance is below this multiple of the ETH required for its next L1 send. */
+    /** Warn when a publisher balance is below this multiple of the ETH required for the reference L1 send. */
     publisherLowBalanceWarningMultiplier?: number;
   };
 
@@ -82,8 +82,9 @@ const publisherFundingConfigMappings = {
   publisherLowBalanceWarningMultiplier: {
     env: 'PUBLISHER_LOW_BALANCE_WARNING_MULTIPLIER' as const,
     description:
-      'Warn when a publisher balance is below this multiple of the ETH required for its next L1 send (gas limit times ' +
-      'max fee per gas, plus blob fees). Publishers that cannot afford the send itself are never used for it.',
+      'Warn when a publisher balance is below this multiple of the ETH required for a reference L1 send (a first-of-epoch ' +
+      'proposal for sequencers, an epoch proof for provers) at current fees. Publishers that cannot afford a send are ' +
+      'never used for it.',
     ...floatConfigHelper(4, val => {
       if (val <= 0) {
         throw new Error(`PUBLISHER_LOW_BALANCE_WARNING_MULTIPLIER must be positive, got ${val}`);
@@ -101,7 +102,7 @@ export type ProverPublisherConfig = L1TxUtilsConfig &
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
-    /** Warn when a publisher balance is below this multiple of the ETH required for its next L1 send. */
+    /** Warn when a publisher balance is below this multiple of the ETH required for the reference L1 send. */
     publisherLowBalanceWarningMultiplier?: number;
   };
 
@@ -120,7 +121,7 @@ export type SequencerPublisherConfig = L1TxUtilsConfig &
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
     publisherFundingAmount?: bigint;
-    /** Warn when a publisher balance is below this multiple of the ETH required for its next L1 send. */
+    /** Warn when a publisher balance is below this multiple of the ETH required for the reference L1 send. */
     publisherLowBalanceWarningMultiplier?: number;
   };
 

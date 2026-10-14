@@ -823,20 +823,37 @@ export const L1_PUBLISHER_BLOB_TX_FAILURE: MetricDefinition = {
 };
 export const L1_PUBLISHER_BALANCE: MetricDefinition = {
   name: 'aztec.l1_publisher.balance',
-  description: 'The balance of the sender address',
+  description: 'ETH balance of a publisher, read every minute',
   unit: 'eth',
   valueType: ValueType.DOUBLE,
 };
 export const L1_PUBLISHER_REQUIRED_BALANCE: MetricDefinition = {
   name: 'aztec.l1_publisher.required_balance',
-  description: 'ETH a publisher must hold to afford its next L1 send at current fees',
+  description:
+    'ETH a publisher must hold to afford a reference send at current fees: a first-of-epoch checkpoint proposal ' +
+    'without invalidation for sequencers, an epoch proof submission for provers',
   unit: 'eth',
   valueType: ValueType.DOUBLE,
 };
-export const L1_PUBLISHER_LOW_BALANCE_COUNT: MetricDefinition = {
-  name: 'aztec.l1_publisher.low_balance_count',
-  description: 'Number of times a publisher balance was found below the low-balance warning level',
+export const L1_PUBLISHER_SENDS_AFFORDABLE: MetricDefinition = {
+  name: 'aztec.l1_publisher.sends_affordable',
+  description:
+    'Number of reference sends (see aztec.l1_publisher.required_balance) a publisher balance covers at current fees, ' +
+    '0 while it is backed off after an insufficient funds rejection',
   valueType: ValueType.INT,
+};
+/** Same values as {@link L1_PUBLISHER_BALANCE}, kept while the docs monitoring installer still alerts on it. */
+export const L1_BALANCE_ETH: MetricDefinition = {
+  name: 'aztec.l1.balance',
+  description: 'Deprecated, use aztec.l1_publisher.balance instead. ETH balance of a publisher, read every minute',
+  unit: 'eth',
+  valueType: ValueType.DOUBLE,
+};
+export const L1_FUNDER_BALANCE: MetricDefinition = {
+  name: 'aztec.l1_publisher.funder_balance',
+  description: 'ETH balance of the funding account that tops up publishers, read every minute',
+  unit: 'eth',
+  valueType: ValueType.DOUBLE,
 };
 export const PROVER_NODE_PROOF_SUBMISSION_UNAFFORDABLE_COUNT: MetricDefinition = {
   name: 'aztec.prover_node.proof_submission_unaffordable_count',
@@ -872,12 +889,6 @@ export const L1_BLOCK_HEIGHT: MetricDefinition = {
   name: 'aztec.l1.block_height',
   description: 'The current L1 block height',
   valueType: ValueType.INT,
-};
-export const L1_BALANCE_ETH: MetricDefinition = {
-  name: 'aztec.l1.balance',
-  description: 'ETH balance of an address',
-  unit: 'eth',
-  valueType: ValueType.DOUBLE,
 };
 export const L1_GAS_PRICE_WEI: MetricDefinition = {
   name: 'aztec.l1.gas_price',

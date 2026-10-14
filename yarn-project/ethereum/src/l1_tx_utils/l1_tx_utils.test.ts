@@ -181,6 +181,11 @@ describe('L1TxUtils', () => {
       expect(gasUtils.getInsufficientFundsAtBalance()).toBe(dust);
       expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
 
+      // The side-effect free check reports the lifted backoff without clearing it.
+      expect(gasUtils.hasActiveInsufficientFundsBackoff(dust)).toBe(true);
+      expect(gasUtils.hasActiveInsufficientFundsBackoff(10n ** 18n)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBe(dust);
+
       await cheatCodes.setBalance(sender, 10n ** 18n);
       expect(gasUtils.isBackedOffForInsufficientFunds(10n ** 18n)).toBe(false);
       expect(gasUtils.getInsufficientFundsAtBalance()).toBeUndefined();
@@ -200,6 +205,8 @@ describe('L1TxUtils', () => {
       expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(true);
 
       dateProvider.setTime(dateProvider.now() + 1000);
+      expect(gasUtils.hasActiveInsufficientFundsBackoff(dust)).toBe(false);
+      expect(gasUtils.getInsufficientFundsAtBalance()).toBe(dust);
       expect(gasUtils.isBackedOffForInsufficientFunds(dust)).toBe(false);
       expect(gasUtils.getInsufficientFundsAtBalance()).toBeUndefined();
     }, 30_000);

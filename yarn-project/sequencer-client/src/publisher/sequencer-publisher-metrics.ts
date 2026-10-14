@@ -2,7 +2,6 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import type { L1PublishCheckpointStats, L1PublishStats } from '@aztec-labs/stdlib/stats';
 import {
   Attributes,
-  type Gauge,
   type Histogram,
   Metrics,
   type TelemetryClient,
@@ -29,8 +28,6 @@ export class SequencerPublisherMetrics {
   private readonly blobInclusionBlocksHistogram: Histogram;
   private readonly blobTxSuccessCounter: UpDownCounter;
   private readonly blobTxFailureCounter: UpDownCounter;
-
-  private senderBalance: Gauge;
 
   constructor(
     client: TelemetryClient,
@@ -67,8 +64,6 @@ export class SequencerPublisherMetrics {
     this.blobTxFailureCounter = createUpDownCounterWithDefault(meter, Metrics.L1_PUBLISHER_BLOB_TX_FAILURE);
 
     this.txTotalFee = meter.createHistogram(Metrics.L1_PUBLISHER_TX_TOTAL_FEE);
-
-    this.senderBalance = meter.createGauge(Metrics.L1_PUBLISHER_BALANCE);
   }
 
   recordFailedTx(txType: L1TxType) {
@@ -94,13 +89,6 @@ export class SequencerPublisherMetrics {
 
       this.blobTxSuccessCounter.add(1);
     }
-  }
-
-  recordSenderBalance(wei: bigint, senderAddress: string) {
-    const eth = parseFloat(formatEther(wei, 'wei'));
-    this.senderBalance.record(eth, {
-      [Attributes.SENDER_ADDRESS]: senderAddress,
-    });
   }
 
   private recordTx(txType: L1TxType, durationMs: number, stats: L1PublishStats) {

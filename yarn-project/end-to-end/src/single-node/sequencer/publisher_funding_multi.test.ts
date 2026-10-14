@@ -50,7 +50,7 @@ const FUNDING_AMOUNT = parseEther('2.1');
 class TestPublisherManager extends PublisherManager {
   declare public publishers: L1TxUtils[];
   declare public funder?: L1TxUtils;
-  declare public fundingPromise?: RunningPromise;
+  declare public readonly balanceCheckPromise: RunningPromise;
 }
 
 // Tests the PublisherManager's automatic L1 ETH top-up logic when a keystore carries two publishers and a
@@ -149,14 +149,13 @@ describe('single-node/sequencer/publisher_funding_multi', () => {
   it('funds both publishers when balances drop below threshold', async () => {
     const publishers: L1TxUtils[] = (publisherManager as TestPublisherManager).publishers;
     const funder: L1TxUtils | undefined = (publisherManager as TestPublisherManager).funder;
-    // The PublisherManager runs triggerFundingIfNeeded on a 2-minute RunningPromise. Driving that
-    // RunningPromise directly via trigger() forces an immediate funding cycle, so the test does not
-    // pay the (up to) 2-minute polling interval per round.
-    const fundingPromise: RunningPromise | undefined = (publisherManager as TestPublisherManager).fundingPromise;
+    // The PublisherManager checks balances and tops up publishers on a 1-minute RunningPromise. Driving
+    // that RunningPromise directly via trigger() forces an immediate check, so the test does not pay the
+    // (up to) 1-minute polling interval per round.
+    const balanceCheckPromise: RunningPromise = (publisherManager as TestPublisherManager).balanceCheckPromise;
 
     expect(publishers.length).toBe(2);
     expect(funder).toBeDefined();
-    expect(fundingPromise).toBeDefined();
 
     const publisher1Address = publishers[0].getSenderAddress();
     const publisher2Address = publishers[1].getSenderAddress();
@@ -172,9 +171,9 @@ describe('single-node/sequencer/publisher_funding_multi', () => {
 
     const funderBalanceBefore = await ethCheatCodes.getBalance(funderAddress);
 
-    // Force the funding cycle now rather than waiting for the next 2-minute poll, then confirm both
+    // Force the funding cycle now rather than waiting for the next 1-minute poll, then confirm both
     // publishers were topped up.
-    await fundingPromise!.trigger();
+    await balanceCheckPromise.trigger();
 
     await waitForBalancesAbove([publisher1Address, publisher2Address], LOW_BALANCE);
 
@@ -203,8 +202,8 @@ describe('single-node/sequencer/publisher_funding_multi', () => {
     const funderBalanceBefore2 = await ethCheatCodes.getBalance(funderAddress);
     logger.info(`Waiting for second funding round`);
 
-    // Force a second funding cycle rather than waiting for the next 2-minute poll.
-    await fundingPromise!.trigger();
+    // Force a second funding cycle rather than waiting for the next 1-minute poll.
+    await balanceCheckPromise.trigger();
 
     await waitForFunderSpend(funderAddress, funderBalanceBefore2, FUNDING_AMOUNT);
 
