@@ -434,6 +434,13 @@ describeAcrossL1Forks('EthCheatCodes', () => {
         expectOnGrid(await waitForBlockAfter(next.number), next);
       });
 
+      it('keeps a next-block timestamp set inside a pause', async () => {
+        const target = first.timestamp + 50;
+        await cheatCodes.execWithPausedAnvil(() => cheatCodes.setNextBlockTimestamp(target));
+
+        expect((await waitForBlockAfter(first.number)).timestamp).toBe(target);
+      });
+
       it('lets setIntervalMining cancel a pending resume', async () => {
         await sleep(1000);
         await cheatCodes.execWithPausedAnvil(() => sleep(100));
