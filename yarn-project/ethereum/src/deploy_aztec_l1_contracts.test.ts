@@ -7,6 +7,7 @@ import { foundry, sepolia } from 'viem/chains';
 import {
   getForgeBroadcastArgs,
   getForgeBroadcastTimeout,
+  getSlowBroadcastTimeout,
   prepareL1ContractsForDeployment,
   runProcess,
 } from './deploy_aztec_l1_contracts.js';
@@ -58,6 +59,11 @@ describe('Forge broadcast options', () => {
     expect(getForgeBroadcastTimeout(sepolia.id, undefined)).toBeUndefined();
     expect(getForgeBroadcastTimeout(sepolia.id, '500')).toBe(500);
     expect(getForgeBroadcastTimeout(foundry.id, '0')).toBeUndefined();
+  });
+
+  it('gives a slow broadcast one block per transaction on top of the deadline', () => {
+    expect(getSlowBroadcastTimeout(120_000, 33)).toBe(120_000 + 33 * 12_000);
+    expect(getSlowBroadcastTimeout(undefined, 33)).toBeUndefined();
   });
 
   it.each(['-1', 'NaN', 'Infinity'])('rejects invalid timeout %s before broadcasting', value => {

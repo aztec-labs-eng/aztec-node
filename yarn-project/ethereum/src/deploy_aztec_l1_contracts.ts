@@ -44,6 +44,17 @@ const require = createRequire(import.meta.url);
 
 const JSON_DEPLOY_RESULT_PREFIX = 'JSON DEPLOY RESULT:';
 
+/**
+ * Extends a broadcast deadline for a `--slow` broadcast, which waits for each transaction's receipt before sending the
+ * next, so on a chain that mines on an interval it needs at least one block per transaction.
+ */
+export function getSlowBroadcastTimeout(timeout: number | undefined, txCount: number): number | undefined {
+  return timeout === undefined ? undefined : timeout + txCount * SLOW_BROADCAST_ALLOWANCE_PER_TX_MS;
+}
+
+/** One mainnet slot per transaction, which also covers the slowest anvil block intervals the tests use. */
+const SLOW_BROADCAST_ALLOWANCE_PER_TX_MS = 12_000;
+
 /** Returns the broadcast deadline, with an optional environment override in milliseconds. */
 export function getForgeBroadcastTimeout(
   chainId: number,
@@ -270,7 +281,7 @@ async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
       [...baseArgs, ...broadcastArgs, '--resume', '--slow', ...verifyArgs],
       env,
       l1ContractsPath,
-      timeout,
+      getSlowBroadcastTimeout(timeout, sequence.transactions.length),
     );
   }
 
