@@ -1,3 +1,5 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
+
 const KNOWN_L1_HARDFORKS = ['osaka', 'amsterdam'] as const;
 
 /** An L1 hardfork that test anvils can be started on. */
@@ -8,7 +10,7 @@ export type L1Hardfork = (typeof KNOWN_L1_HARDFORKS)[number];
  * Throws on a name outside the known forks, so a typo fails at once instead of after anvil's spawn retries.
  */
 export function getL1Hardfork(): L1Hardfork | undefined {
-  const value = process.env.ANVIL_HARDFORK?.trim().toLowerCase();
+  const value = getEnv().ANVIL_HARDFORK?.trim().toLowerCase();
   if (!value) {
     return undefined;
   }
