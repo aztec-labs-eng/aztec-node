@@ -4,6 +4,7 @@ import type { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
+import { getL1Hardfork } from './l1_hardfork.js';
 
 /** Minimal interface matching the @viem/anvil Anvil shape used by callers. */
 export interface Anvil {
@@ -61,7 +62,10 @@ export async function startAnvil(
     captureMethodCalls?: boolean;
     accounts?: number;
     chainId?: number;
-    /** The hardfork to use (e.g. 'cancun', 'latest'). */
+    /**
+     * The hardfork to start on (e.g. 'osaka', 'amsterdam'). Defaults to `$ANVIL_HARDFORK`, else 'osaka'. Anvil's
+     * own default moves with each foundry release, so it is never relied on.
+     */
     hardfork?: string;
     /**
      * Number of slots per epoch used by anvil to compute the 'finalized' and 'safe' block tags.
@@ -84,6 +88,9 @@ export async function startAnvil(
 
   let detectedPort: number | undefined;
 
+  // Resolved before the retry loop so an unknown $ANVIL_HARDFORK fails at once rather than after every spawn attempt.
+  const hardfork = opts.hardfork ?? getL1Hardfork() ?? 'osaka';
+
   const anvil = await retry(
     async () => {
       // `--port 0` lets anvil bind an OS-assigned ephemeral port; the actual port is read back from
@@ -97,17 +104,16 @@ export async function startAnvil(
         String(port),
         '--accounts',
         String(opts.accounts ?? 20),
+        // Above the 50M Amsterdam per-tx cap (AMSTERDAM_MAX_L1_TX_LIMIT), so a bundle sized up to that cap fits a block.
         '--gas-limit',
-        String(45_000_000),
+        String(60_000_000),
         '--chain-id',
         String(opts.chainId ?? 31337),
       ];
       if (opts.l1BlockTime !== undefined) {
         args.push('--block-time', String(opts.l1BlockTime));
       }
-      if (opts.hardfork !== undefined) {
-        args.push('--hardfork', opts.hardfork);
-      }
+      args.push('--hardfork', hardfork);
       args.push('--slots-in-an-epoch', String(opts.slotsInAnEpoch ?? 1));
 
       // Spawn the watchdog (see ANVIL_WATCHDOG). It launches anvil with these args and reaps it if we
