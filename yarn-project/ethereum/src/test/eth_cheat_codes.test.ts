@@ -388,6 +388,18 @@ describeAcrossL1Forks('EthCheatCodes', () => {
         expectOnGrid(await waitForBlockAfter(next.number), next);
       });
 
+      it('mines a tick the pause just ran past straight away, stamped on the grid', async () => {
+        await sleep(1000);
+        await cheatCodes.execWithPausedAnvil(() => sleep(1500));
+        const resumedAt = dateProvider.now();
+
+        const next = await waitForBlockAfter(first.number);
+        expect(next.number).toBe(first.number + 1);
+        expect(next.timestamp).toBe(first.timestamp + interval);
+        expect(dateProvider.now() - resumedAt).toBeLessThan(maxLagMs);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
       it('skips the grid ticks a long pause ran past', async () => {
         await sleep(1000);
         await cheatCodes.execWithPausedAnvil(async () => {

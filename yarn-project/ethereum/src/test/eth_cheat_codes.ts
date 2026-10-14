@@ -64,10 +64,14 @@ export function resetAnvilMiningState(): void {
 }
 
 /**
- * A pause that ends at most this long after a grid tick still mines that tick's block straight away, rather than
- * leaving a gap in the chain and waiting for the next tick.
+ * A tick missed by at most this long, because a pause ended or the resume timer fired that much after it, is still
+ * mined straight away with its grid timestamp: the block lands up to this late rather than leaving a gap in the chain.
+ * A tick missed by more is skipped, like a missed L1 slot, and mining resumes on the next one.
  */
-const OVERDUE_TICK_GRACE_MS = 200;
+const OVERDUE_TICK_GRACE_MS = 1000;
+
+/** A grid block mined at most this long after its tick restarts anvil's countdown from it; a later one does not. */
+const ON_TIME_TOLERANCE_MS = 100;
 
 /**
  * A class that provides utility functions for interacting with ethereum (L1).
@@ -761,8 +765,9 @@ export class EthCheatCodes {
    * stamping it `latest + interval`, leaving L1 time behind the node clock for good. Instead mining stays off until
    * that tick, when a background timer mines the tick's block and restarts the countdown from it.
    *
-   * Ticks a long pause ran past are skipped rather than mined late, so a block stamped T is still mined when the node
-   * clock reads T, at the cost of a gap in the chain like a missed L1 slot. Must be called holding the mining lock.
+   * A tick the pause ran past by up to {@link OVERDUE_TICK_GRACE_MS} is mined straight away; one missed by more is
+   * skipped, so the lag stays bounded, at the cost of a gap in the chain like a missed L1 slot. Must be called holding
+   * the mining lock.
    */
   private async scheduleResume(interval: number): Promise<void> {
     const generation = anvilMining.generation;
@@ -805,6 +810,12 @@ export class EthCheatCodes {
           }
           await this.doRpcCall('evm_setNextBlockTimestamp', [tick]);
           await this.doEvmMine();
+          if (this.dateProvider.now() - tick * 1000 > ON_TIME_TOLERANCE_MS) {
+            // The tick was mined late, so a countdown restarted now would keep every later block that late too: wait
+            // for the next tick and restart it there instead.
+            await this.scheduleResume(resume.interval);
+            return;
+          }
         } catch (err) {
           this.logger.warn(`Failed to mine the L1 block due at ${tick}, restarting interval mining off the grid`, {
             err: String(err),
