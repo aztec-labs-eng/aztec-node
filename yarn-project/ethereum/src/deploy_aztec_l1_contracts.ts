@@ -248,7 +248,19 @@ async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
       const gas = BigInt(tx.transaction.gas);
       tx.transaction.gas = `0x${(gas < maxTxGas ? gas : maxTxGas).toString(16)}`;
     }
+    // Forge 1.8 resumes from a recovery snapshot under cache/ (fingerprinted, so it cannot be edited) instead of from the
+    // broadcast file, and would send the unclamped limits, some larger than a block. Dropping the snapshot and the
+    // generation the exported files point at makes it resume from the edited broadcast file, as older forge versions did.
+    delete sequence.recovery_generation;
     writeFileSync(sequencePath, JSON.stringify(sequence, null, 2));
+    const cacheDir = join(l1ContractsPath, 'cache', basename(script), String(chainId), 'dry-run');
+    const sensitivePath = join(cacheDir, 'run-latest.json');
+    if (existsSync(sensitivePath)) {
+      const sensitive = JSON.parse(readFileSync(sensitivePath, 'utf-8'));
+      delete sensitive.recovery_generation;
+      writeFileSync(sensitivePath, JSON.stringify(sensitive, null, 2));
+    }
+    rmSync(join(cacheDir, 'run-latest.json.recovery.json'), { force: true });
 
     logger.info(`Broadcasting ${sequence.transactions.length} transactions from ${script}`, { maxTxGas });
     // --slow waits for each receipt before sending the next tx, so the sender only needs balance for one gas limit at a
