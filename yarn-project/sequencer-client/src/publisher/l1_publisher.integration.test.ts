@@ -76,6 +76,7 @@ import {
 import { Checkpoint, L1PublishedData, PublishedCheckpoint } from '@aztec-labs/stdlib/checkpoint';
 import {
   type L1RollupConstants,
+  getEpochAtSlot,
   getNextL1SlotTimestamp,
   getSlotStartBuildTimestamp,
 } from '@aztec-labs/stdlib/epoch-helpers';
@@ -110,9 +111,10 @@ import {
   getEndpointUpperBound,
   resolveEndpoint,
 } from '../sequencer/inbox_message_selection.js';
+import { INVALIDATE_GAS, PROPOSE_GAS, PROPOSE_WITH_SETUP_EPOCH_GAS } from './gas_constants.js';
 import { sendL1ToL2Message } from './l1_to_l2_messaging.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
-import { SequencerPublisher } from './sequencer-publisher.js';
+import { type SendRequestsResult, SequencerPublisher } from './sequencer-publisher.js';
 import { writeJson } from './write_json.js';
 
 // To update the test data, run "export AZTEC_GENERATE_TEST_DATA=1" in shell and run the tests again
@@ -724,6 +726,10 @@ describe('L1Publisher integration', () => {
         const ethTx = await l1Client.getTransaction({
           hash: logs[i].transactionHash!,
         });
+        const receipt = await l1Client.getTransactionReceipt({ hash: logs[i].transactionHash! });
+        logger.info(`Propose gas for checkpoint ${i + 1}`, { gasUsed: receipt.gasUsed, gasLimit: ethTx.gas, numTxs });
+        expect(receipt.gasUsed).toBeLessThanOrEqual(PROPOSE_GAS);
+        expect(ethTx.gas).toBeLessThanOrEqual(PROPOSE_GAS);
         const expectedRollupData = encodeFunctionData({
           abi: RollupAbi,
           functionName: 'propose',
@@ -805,6 +811,16 @@ describe('L1Publisher integration', () => {
       const result = await publisher.sendRequests();
       expect(result!.successfulActions).toEqual(['propose']);
       expect(result!.failedActions).toEqual([]);
+      return result!;
+    };
+
+    /** Asserts the gas used and gas limit of a sent bundle stay within the affordability gas constant. */
+    const expectWithinGas = async (result: SendRequestsResult, max: bigint) => {
+      const { gasUsed, transactionHash } = result.result.receipt;
+      const { gas: gasLimit } = await l1Client.getTransaction({ hash: transactionHash });
+      logger.info(`Bundle gas`, { gasUsed, gasLimit, max });
+      expect(gasUsed).toBeLessThanOrEqual(max);
+      expect(gasLimit).toBeLessThanOrEqual(max);
     };
 
     it('publishes a block with attestations', async () => {
@@ -823,7 +839,32 @@ describe('L1Publisher integration', () => {
       const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());
       const attestationsAndSignersSignature = signAttestationsAndSigners(attestationsAndSigners, proposerSigner!);
 
-      await expectPublishCheckpoint(checkpoint, attestations, attestationsAndSignersSignature);
+      // The epoch is already set up, so this is an ordinary proposal that does not also run setupEpoch.
+      expect(await rollup.isEpochSetUp(getEpochAtSlot(block.header.getSlot(), l1Constants))).toBe(true);
+      const result = await expectPublishCheckpoint(checkpoint, attestations, attestationsAndSignersSignature);
+      await expectWithinGas(result, PROPOSE_GAS);
+    });
+
+    it('publishes the first checkpoint of an epoch, which also sets up the epoch, within the setup gas', async () => {
+      // Move to an epoch whose committee has not been set up yet, so the proposal itself runs setupEpoch.
+      const nextEpoch = EpochNumber((await rollup.getCurrentEpoch()) + 1);
+      await rollupCheatCodes.advanceToEpoch(nextEpoch);
+      await ethCheatCodes.syncDateProvider();
+      expect(await rollup.isEpochSetUp(nextEpoch)).toBe(false);
+      ({ committee } = await epochCache.getCommittee(await getPipelinedProposalSlot()));
+
+      const { checkpoint } = await buildSingleCheckpointForPipelinedProposer();
+      const checkpointAttestations = validators.map(v => makeCheckpointAttestationForCurrentContext(checkpoint, v));
+      const attestations = orderAttestations(checkpointAttestations, committee!);
+      const attestationsAndSigners = new CommitteeAttestationsAndSigners(attestations, getSignatureContext());
+      const signature = signAttestationsAndSigners(
+        attestationsAndSigners,
+        validators.find(v => v.address.equals(proposer!))!,
+      );
+
+      const result = await expectPublishCheckpoint(checkpoint, attestations, signature);
+      expect(await rollup.isEpochSetUp(nextEpoch)).toBe(true);
+      await expectWithinGas(result, PROPOSE_WITH_SETUP_EPOCH_GAS);
     });
 
     it('fails to publish a block without the proposer attestation', async () => {
@@ -977,6 +1018,8 @@ describe('L1Publisher integration', () => {
         reason: 'insufficient-attestations',
       });
       expect(invalidateRequest).toBeDefined();
+      logger.info(`Invalidate gas`, { gasUsed: invalidateRequest!.gasUsed });
+      expect(invalidateRequest!.gasUsed).toBeLessThanOrEqual(INVALIDATE_GAS);
       const forcePendingCheckpointNumber = invalidateRequest?.forcePendingCheckpointNumber;
       expect(forcePendingCheckpointNumber).toEqual(0);
       const invalidationSimulationOverridesPlan = new SimulationOverridesBuilder()
@@ -1017,6 +1060,7 @@ describe('L1Publisher integration', () => {
       const result = await publisher.sendRequests();
       expect(result!.successfulActions).toEqual(['invalidate-by-insufficient-attestations', 'propose']);
       expect(result!.failedActions).toEqual([]);
+      await expectWithinGas(result!, PROPOSE_GAS + INVALIDATE_GAS);
     });
   });
 

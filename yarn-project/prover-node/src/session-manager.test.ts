@@ -46,7 +46,12 @@ describe('SessionManager', () => {
     publishingService = mock<ProofPublishingService>();
     metrics = new ProverNodeJobMetrics(
       // Minimal Meter stub: every meter.create* returns an object with a no-op record.
-      { createHistogram: noopMetric, createGauge: noopMetric, createCounter: noopMetric } as any,
+      {
+        createHistogram: noopMetric,
+        createGauge: noopMetric,
+        createCounter: noopMetric,
+        createUpDownCounter: noopMetric,
+      } as any,
       { startActiveSpan: (_n: string, fn: any) => fn({ end: () => {} }) } as any,
     );
     l2BlockSource.getL1Constants.mockResolvedValue(l1Constants);

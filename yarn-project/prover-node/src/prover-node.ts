@@ -529,6 +529,7 @@ export class ProverNode implements L2BlockStreamEventHandler, ProverNodeApi, Tra
       l2BlockSource: this.l2BlockSource,
       dateProvider: this.dateProvider,
       config: { skipSubmitProof: !!this.config.proverNodeDisableProofPublish },
+      metrics: this.jobMetrics,
       bindings: this.log.getBindings(),
     });
     this.sessionManager = this.createSessionManager(this.publishingService);

@@ -131,6 +131,7 @@ export class SequencerMetrics {
           'rollup_contract_check_failed',
           'slot_mismatch',
           'block_number_mismatch',
+          'insufficient_publisher_balance',
         ],
       },
     );
@@ -322,7 +323,8 @@ export class SequencerMetrics {
       | 'rollup_contract_check_failed'
       | 'slot_mismatch'
       | 'block_number_mismatch'
-      | 'no_peers',
+      | 'no_peers'
+      | 'insufficient_publisher_balance',
   ) {
     this.checkpointPrecheckFailed.add(1, { [Attributes.ERROR_TYPE]: checkType });
   }

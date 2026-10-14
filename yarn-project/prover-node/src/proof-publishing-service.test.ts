@@ -1,10 +1,12 @@
 import { BatchedBlob } from '@aztec-labs/blob-lib/types';
+import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import { BlockNumber, CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { CommitteeAttestationsAndSigners, type L2BlockSource } from '@aztec-labs/stdlib/block';
 import { Proof } from '@aztec-labs/stdlib/proofs';
 import { RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
+import { jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import {
@@ -359,6 +361,66 @@ describe('ProofPublishingService', () => {
     expect(createCalls).toBe(3);
   });
 
+  it('keeps a candidate queued while no publisher can afford the submission, then publishes', async () => {
+    startService();
+    let affordable = false;
+    publisherFactory.create.mockImplementation(opts => {
+      if (opts?.requireAffordableSubmission && !affordable) {
+        return Promise.reject(
+          new NoAffordablePublisherError(
+            1000n,
+            { gasLimit: 1n, blobCount: 0 },
+            { maxFeePerGas: 1000n, maxPriorityFeePerGas: 1n },
+            [],
+          ),
+        );
+      }
+      const p = newPublisher();
+      publishers.push(p);
+      return Promise.resolve(p as unknown as Awaited<ReturnType<PublisherFactoryLike['create']>>);
+    });
+
+    const outcome = service.submit(makeCandidate());
+    await service.drainSyncPoint();
+    expect(publishers).toHaveLength(0);
+
+    affordable = true;
+    service.onChainProven(BlockNumber(0));
+    expect(await outcome).toEqual('published');
+    expect(publishers).toHaveLength(1);
+  });
+
+  it('retries an unaffordable candidate once per backoff however many drains hit it', async () => {
+    jest.useFakeTimers();
+    try {
+      startService();
+      publisherFactory.create.mockRejectedValue(
+        new NoAffordablePublisherError(
+          1000n,
+          { gasLimit: 1n, blobCount: 0 },
+          { maxFeePerGas: 1000n, maxPriorityFeePerGas: 1n },
+          [],
+        ),
+      );
+
+      void service.submit(makeCandidate());
+      service.onChainProven(BlockNumber(0));
+      service.onChainProven(BlockNumber(0));
+      await service.drainSyncPoint();
+      expect(publisherFactory.create).toHaveBeenCalledTimes(3);
+
+      await jest.advanceTimersByTimeAsync(12_000);
+      await service.drainSyncPoint();
+      expect(publisherFactory.create).toHaveBeenCalledTimes(4);
+
+      await jest.advanceTimersByTimeAsync(12_000);
+      await service.drainSyncPoint();
+      expect(publisherFactory.create).toHaveBeenCalledTimes(5);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('expires a candidate that keeps hitting publisher acquire failures past its deadline', async () => {
     // Persistent acquire failure + a short deadline: the expiry timer wins.
     startService();
@@ -374,6 +436,9 @@ describe('ProofPublishingService', () => {
   it('routes to analyzeEpochProofSubmission when skipSubmitProof is true', async () => {
     startService({ skipSubmitProof: true });
     const outcome = await service.submit(makeCandidate());
+
+    // Nothing is sent, so the publisher need not afford a submission.
+    expect(publisherFactory.create).toHaveBeenCalledWith({ requireAffordableSubmission: false });
 
     expect(outcome).toEqual('published');
     expect(publishers).toHaveLength(1);

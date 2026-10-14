@@ -17,6 +17,7 @@ import { createAndStartProvingBroker } from '@aztec-labs/prover-client/broker';
 import {
   type ProverPublisherConfig,
   type ProverTxSenderConfig,
+  PublisherManagerMetrics,
   getPublisherConfigFromProverConfig,
 } from '@aztec-labs/sequencer-client';
 import type { AvmSimulator } from '@aztec-labs/simulator/server';
@@ -141,6 +142,7 @@ export async function createProverNode(
       publisherManager: new PublisherManager(l1TxUtils, getPublisherConfigFromProverConfig(config), {
         bindings: log.getBindings(),
         funder: funderL1TxUtils,
+        metrics: new PublisherManagerMetrics(telemetry, 'prover'),
       }),
       telemetry,
     });

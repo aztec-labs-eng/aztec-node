@@ -51,7 +51,7 @@ const INSUFFICIENT_FUNDS_RPC_ERROR_CODE = -38014;
  * error code, since RPC gateways differ in how they wrap node errors. Apply this only to transport errors: an
  * execution revert string can mention insufficient funds without being this kind of rejection.
  */
-function isInsufficientFundsRpcError(err: unknown): boolean {
+export function isInsufficientFundsRpcError(err: unknown): boolean {
   if (getL1RpcErrorCode(err) === INSUFFICIENT_FUNDS_RPC_ERROR_CODE) {
     return true;
   }

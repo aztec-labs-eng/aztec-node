@@ -18,6 +18,7 @@ import {
   type L1TxUtils,
   type L1TxUtilsConfig,
   MAX_L1_TX_LIMIT,
+  type SendCostRequirement,
   defaultL1TxUtilsConfig,
 } from '@aztec-labs/ethereum/l1-tx-utils';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
@@ -50,6 +51,7 @@ import {
   type Hex,
   type PrivateKeyAccount,
   type TransactionReceipt,
+  decodeFunctionData,
   encodeFunctionData,
   encodeFunctionResult,
   multicall3Abi,
@@ -58,9 +60,10 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 
 import type { PublisherConfig, SequencerPublisherConfig, TxSenderConfig } from './config.js';
+import { PROPOSE_WITH_SETUP_EPOCH_GAS } from './gas_constants.js';
 import { type FailedL1Tx, FailedL1TxSchema } from './l1_tx_failed_store/index.js';
 import type { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
-import { type Action, SequencerPublisher, compareActions } from './sequencer-publisher.js';
+import { type Action, Actions, SequencerPublisher, compareActions } from './sequencer-publisher.js';
 
 // The failed-tx backup is fire-and-forget, so poll the store directory until the record lands.
 async function waitForFailedTxRecord(dir: string): Promise<FailedL1Tx> {
@@ -231,6 +234,7 @@ describe('SequencerPublisher', () => {
     (l1TxUtils as any).simulate.mockResolvedValue({ gasUsed: 1_000_000n, result: '0x' });
     (l1TxUtils as any).bumpGasLimit.mockImplementation((val: bigint) => val + (val * 20n) / 100n);
     l1TxUtils.getSenderBalance.mockResolvedValue(10_000_000_000_000_000_000n); // 10 ETH, sufficient for all tests
+    l1TxUtils.getFeesPerGas.mockResolvedValue({ maxFeePerGas: 1_000_000_000n, maxPriorityFeePerGas: 1n });
     (l1TxUtils as any).client = {
       account: {
         address: '0x1234567890123456789012345678901234567890',
@@ -503,7 +507,9 @@ describe('SequencerPublisher', () => {
 
   describe('publisher rotation on send failure', () => {
     let secondL1TxUtils: MockProxy<L1TxUtils>;
-    let getNextPublisher: jest.MockedFunction<(excludeAddresses: EthAddress[]) => Promise<L1TxUtils | undefined>>;
+    let getNextPublisher: jest.MockedFunction<
+      (excludeAddresses: EthAddress[], requirement?: SendCostRequirement) => Promise<L1TxUtils | undefined>
+    >;
     let rotatingPublisher: SequencerPublisher;
 
     beforeEach(() => {
@@ -592,12 +598,62 @@ describe('SequencerPublisher', () => {
         expect.anything(),
         expect.anything(),
       );
-      expect(getNextPublisher).toHaveBeenCalledWith([l1TxUtils.getSenderAddress()]);
+      // Without a simulated gas limit, the proposal is costed at the gas ceiling it is sent with
+      expect(getNextPublisher).toHaveBeenCalledWith([l1TxUtils.getSenderAddress()], {
+        gasLimit: MAX_L1_TX_LIMIT,
+        blobCount: expect.any(Number),
+      });
       // Result is defined (rotation succeeded and tx was sent)
       expect(result).toBeDefined();
       expect(result?.sentActions).toContain('propose');
       // l1TxUtils updated to the one that succeeded
       expect(rotatingPublisher.l1TxUtils).toBe(secondL1TxUtils);
+    });
+
+    it('rotates away from a publisher that cannot afford the gas ceiling a fallback bundle is sent with', async () => {
+      forwardSpy.mockResolvedValue({
+        receipt: proposeTxReceipt,
+        stats: undefined,
+        multicallData: '0x',
+        state: {} as any,
+      });
+      // Enough for the proposal gas constant at 1 gwei, but not for the MAX_L1_TX_LIMIT the fallback send uses
+      const balance = ((PROPOSE_WITH_SETUP_EPOCH_GAS + MAX_L1_TX_LIMIT) / 2n) * 1_000_000_000n;
+      l1TxUtils.getSenderBalance.mockResolvedValue(balance);
+      getNextPublisher.mockResolvedValueOnce(secondL1TxUtils);
+
+      await rotatingPublisher.enqueueProposeCheckpoint(
+        new Checkpoint(l2Block.archive, header, [l2Block], l2Block.checkpointNumber),
+        CommitteeAttestationsAndSigners.empty(testSignatureContext),
+        Signature.empty(),
+        0n,
+      );
+      const result = await rotatingPublisher.sendRequests();
+
+      expect(forwardSpy).toHaveBeenCalledTimes(1);
+      expect(forwardSpy.mock.calls[0][1]).toBe(secondL1TxUtils);
+      expect(forwardSpy.mock.calls[0][2]?.gasLimit).toEqual(MAX_L1_TX_LIMIT);
+      expect(getNextPublisher).toHaveBeenCalledWith([l1TxUtils.getSenderAddress()], {
+        gasLimit: MAX_L1_TX_LIMIT,
+        blobCount: expect.any(Number),
+      });
+      expect(result?.sentActions).toEqual(['propose']);
+    });
+
+    it('sends nothing when no publisher can afford the proposal', async () => {
+      l1TxUtils.getSenderBalance.mockResolvedValue(1n);
+      getNextPublisher.mockResolvedValueOnce(undefined);
+
+      await rotatingPublisher.enqueueProposeCheckpoint(
+        new Checkpoint(l2Block.archive, header, [l2Block], l2Block.checkpointNumber),
+        CommitteeAttestationsAndSigners.empty(testSignatureContext),
+        Signature.empty(),
+        0n,
+      );
+      const result = await rotatingPublisher.sendRequests();
+
+      expect(result).toBeUndefined();
+      expect(forwardSpy).not.toHaveBeenCalled();
     });
 
     it('does not rotate on TimeoutError, re-throws instead', async () => {
@@ -835,6 +891,106 @@ describe('SequencerPublisher', () => {
       expect(result?.sentActions).toEqual(['execute-slash']);
       // ceil(30_000_000 * 64 / 63) = 30_476_191, bumped by 20%.
       expect(forwardSpy.mock.calls[0][2]?.gasLimit).toEqual(36_571_429n);
+    });
+  });
+
+  describe('bundle affordability at send time', () => {
+    const gwei = 1_000_000_000n;
+
+    const addRequest = (action: Action) =>
+      publisher.addRequest({
+        action,
+        request: { to: mockRollupAddress, data: toHex(Actions.indexOf(action) + 1, { size: 4 }) },
+        lastValidL2Slot: SlotNumber(Number(publisher.getCurrentL2Slot()) + 2),
+        checkSuccess: () => true,
+      });
+
+    /** Bundle simulation where every entry succeeds and gas used grows with the number of entries. */
+    const simulateAllSucceed = (gasPerEntry: bigint) =>
+      l1TxUtils.simulate.mockImplementation(request => {
+        const { args } = decodeFunctionData({ abi: multicall3Abi, data: request.data! });
+        const calls = args[0] as readonly unknown[];
+        return Promise.resolve({
+          gasUsed: gasPerEntry * BigInt(calls.length),
+          result: encodeFunctionResult({
+            abi: multicall3Abi,
+            functionName: 'aggregate3',
+            result: calls.map(() => ({ success: true, returnData: '0x' as Hex })),
+          }),
+        });
+      });
+
+    /** Cost of sending a bundle simulated at the given gas, at 1 gwei, mirroring the bundle gas limit derivation. */
+    const costOf = (gasUsed: bigint) => {
+      const withEip150 = (gasUsed * 64n + 62n) / 63n;
+      return (withEip150 + (withEip150 * 20n) / 100n) * gwei;
+    };
+
+    beforeEach(() => {
+      l1TxUtils.getFeesPerGas.mockResolvedValue({ maxFeePerGas: gwei, maxPriorityFeePerGas: 1n });
+      forwardSpy.mockResolvedValue({
+        receipt: proposeTxReceipt,
+        stats: undefined,
+        multicallData: '0x',
+        state: {} as any,
+      });
+      simulateAllSucceed(1_000_000n);
+    });
+
+    it('drops optional votes when the publisher cannot afford the full bundle but can afford the proposal', async () => {
+      addRequest('propose');
+      addRequest('governance-signal');
+      addRequest('vote-offenses');
+      l1TxUtils.getSenderBalance.mockResolvedValue(costOf(1_000_000n));
+
+      const result = await publisher.sendRequests();
+
+      expect(result?.sentActions).toEqual(['propose']);
+      expect(result?.failedActions).toEqual(expect.arrayContaining(['governance-signal', 'vote-offenses']));
+      expect(forwardSpy).toHaveBeenCalledTimes(1);
+      expect(forwardSpy.mock.calls[0][0]).toHaveLength(1);
+    });
+
+    it('sends the full bundle when the publisher can afford it', async () => {
+      addRequest('propose');
+      addRequest('governance-signal');
+      l1TxUtils.getSenderBalance.mockResolvedValue(costOf(2_000_000n));
+
+      const result = await publisher.sendRequests();
+
+      expect(result?.sentActions).toEqual(['propose', 'governance-signal']);
+    });
+
+    it('never splits an invalidation from its proposal and sends nothing when unaffordable', async () => {
+      addRequest('invalidate-by-invalid-attestation');
+      addRequest('propose');
+      addRequest('governance-signal');
+      l1TxUtils.getSenderBalance.mockResolvedValue(costOf(2_000_000n) - 1n);
+
+      const result = await publisher.sendRequests();
+
+      expect(result).toBeUndefined();
+      expect(forwardSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not check affordability for a votes-only bundle', async () => {
+      addRequest('governance-signal');
+      addRequest('vote-offenses');
+      l1TxUtils.getSenderBalance.mockResolvedValue(0n);
+
+      const result = await publisher.sendRequests();
+
+      expect(result?.sentActions).toEqual(['governance-signal', 'vote-offenses']);
+    });
+
+    it('does not send a proposal from a publisher backed off for insufficient funds', async () => {
+      addRequest('propose');
+      l1TxUtils.isBackedOffForInsufficientFunds.mockReturnValue(true);
+
+      const result = await publisher.sendRequests();
+
+      expect(result).toBeUndefined();
+      expect(forwardSpy).not.toHaveBeenCalled();
     });
   });
 
