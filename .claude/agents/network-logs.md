@@ -20,46 +20,73 @@ You will receive:
 
 1. **Detect GCP project**: Run `gcloud config get-value project` to get the active project ID
 2. **Build filter**: Construct the appropriate gcloud logging filter (see recipes below)
-3. **Run query**: Execute `gcloud logging read` with the filter and `--format` field extraction
-4. **Summarize**: Read the plain-text output directly and summarize
-5. **Broaden if empty**: If no results, try relaxing filters (longer freshness, broader text match, fewer exclusions) and retry once
+3. **Run query**: Save broad `gcloud logging read` results locally as JSON; use direct field extraction only for small, bounded lookups
+4. **Inspect progressively**: Use the commands below to count, group, preview, and expand saved records before returning a concise answer
+5. **Broaden if empty**: After checking that the command succeeded, try relaxing filters (longer time range, broader text match, fewer exclusions) and retry once. No matching entries does not establish that no event occurred or that every pod was logging.
 
-## CRITICAL: Command Rules
+## Command and Output Rules
 
-**NEVER use `--format=json`**. JSON output is too large and causes problems.
+Use tools already in `PATH`, such as `gcloud`, `jq`, `rg`, and `mktemp`. Pipes, redirects, and inline filters are allowed; do not create a wrapper or install dependencies. Use `jq` to process GCP JSON.
 
-**NEVER use Python, node, jq, or any post-processing**. No pipes, no redirects, no scripts.
+- **Filter before returning output to the model.** Default to at most 20 preview rows and roughly 8 KB per tool response; narrow further if necessary. A row limit alone does not bound large messages or stack traces. Summarizing a dump after reading it does not remove it from context.
+- **Store full evidence locally.** Use a unique file per query, retain its exact filter/project/window/order/limit, and reuse it for follow-ups. Verify command success and valid JSON before interpreting an empty result. Do not print or `cat` the whole file.
+- **Keep coverage explicit.** Distinguish fetched entries from total matches. A result reaching `--limit` may be incomplete; split the time range or narrow the scope before claiming complete counts or absence. For a full sweep, cover all half-open intervals (`timestamp >= start`, `timestamp < end`); do not skip entries sharing a timestamp at a boundary. Raise the limit or narrow by source if even a tiny interval hits the cap.
+- **Preserve diagnostic fields.** Keep exact timestamps, pod/node/job identity, severity, module, error cause, exit code/signal, and retry status when relevant. Put constant project/cluster/namespace labels in the query summary, not every row. Short aliases must map back to full identifiers; never merge distinct jobs or pods by shortening their IDs.
+- **Group repetitions carefully.** Report counts, first/last occurrence, affected sources, and example references. Start with exact messages; normalize variable fields only when the template is understood, retaining the original IDs. Keep one full stack trace per distinct failure and retrieve others as needed.
+- **Retain surrounding events.** INFO-level startup, shutdown, scheduling, job claims, and recovery may explain an error. Preview truncation must be visible and reversible; expand decisive records before drawing conclusions. Do not use gcloud's `.slice(0,200)` as string truncation.
 
-**ALWAYS use gcloud's built-in `--format` flag** to extract only the fields you need as plain text:
+### Save and inspect a query
+
+Replace the filter/project placeholders and include an explicit time range in the filter. For a recent query without timestamps, use `--freshness` and descending order instead. Create a new `log_file` for each recipe below; the filename plus zero-based array index identifies a record.
 
 ```bash
+log_file=$(mktemp /tmp/aztec-logs.XXXXXX.json)
+log_limit=500
 gcloud logging read '<filter>' \
-  --limit=50 \
-  --format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.severity, jsonPayload.message.slice(0,200))' \
-  --freshness=10m \
-  --project=<project>
+  --project='<project>' --limit="$log_limit" --order=asc \
+  --format=json > "$log_file"
 ```
 
-This outputs clean tab-separated text like:
-```
-13:45:02  testnet-validator-0  info  Validated block proposal for block 42
-13:44:58  testnet-validator-1  info  Cannot propose block - not on committee
-```
+Inspect coverage first (set `log_limit` to the limit actually used). Run setup, fetch, and coverage in the same shell invocation, stopping if the fetch fails. Use the returned filename in later tool calls; shell variables may not persist between calls.
 
-You can read this output directly — no parsing needed.
-
-**Tip**: When searching for tx hashes or other long identifiers, use `.slice(0,300)` instead of `.slice(0,200)` to avoid truncating the relevant data.
-
-### Format variations
-
-**With module** (useful for debugging):
-```
---format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.severity, jsonPayload.module, jsonPayload.message.slice(0,180))'
+```bash
+jq --arg file "$log_file" --argjson limit "$log_limit" '{
+  file: $file, fetched: length, limit: $limit, possiblyCapped: (length >= $limit),
+  earliest: (map(.timestamp) | min), latest: (map(.timestamp) | max)
+}' "$log_file"
 ```
 
-**Timestamp only** (for duration calculations):
+Preview selected records as TSV: index, timestamp, pod/node, severity, module, message. This is a sample, not an inventory of all distinct failures. For Kubernetes events or audit logs, select the relevant structured fields if the message is absent or insufficient.
+
+```bash
+jq -r '
+  to_entries | .[:20][] | .key as $ref | .value |
+  [$ref, .timestamp,
+   (.resource.labels.pod_name // .resource.labels.node_name // "-"),
+   (.jsonPayload.severity // .severity // "-"), (.jsonPayload.module // "-"),
+   ((.jsonPayload.message // .textPayload // .protoPayload.methodName // "[inspect structured payload]") |
+     if length > 200 then .[:200] + "… [truncated]" else . end)] | @tsv
+' "$log_file"
 ```
---format='table[no-heading](timestamp, resource.labels.pod_name, jsonPayload.message.slice(0,150))'
+
+Group exact messages without printing each repetition. Columns: count, first/last timestamp, distinct pod count, example index. Page through groups beyond the first 20 when doing a complete sweep; counts cover only the saved entries. Include other source identities or structured error fields in the grouping key when they distinguish failures.
+
+```bash
+jq -r '
+  to_entries |
+  group_by([.value.severity, .value.jsonPayload.severity, .value.jsonPayload.module,
+            .value.jsonPayload.message, .value.textPayload, .value.protoPayload.methodName]) |
+  sort_by(-length) | .[:20][] |
+  [length, (map(.value.timestamp) | min), (map(.value.timestamp) | max),
+   (map(.value.resource.labels.pod_name) | map(select(. != null)) | unique | length),
+   .[0].key] | @tsv
+' "$log_file"
+```
+
+Expand an example by its index, choosing the fields needed. Inspect a whole record only if it fits the output budget; large proof/input payloads should stay in the file.
+
+```bash
+jq '.[17] | {timestamp, insertId, message: .jsonPayload.message, textPayload}' "$log_file"
 ```
 
 ## Cluster Mapping
@@ -137,10 +164,10 @@ resource.labels.pod_name="<namespace>-prover-node-0"
 ```
 
 ### Timestamp ranges (for historical queries)
-When querying specific past dates instead of recent logs, use timestamp filters **instead of** `--freshness` (they are mutually exclusive):
+When querying specific past dates instead of recent logs, use a half-open timestamp range **instead of** `--freshness` (freshness applies only without a timestamp filter and with descending order):
 ```
 timestamp>="2026-03-11T00:00:00Z"
-timestamp<="2026-03-12T00:00:00Z"
+timestamp<"2026-03-12T00:00:00Z"
 ```
 
 ### Severity filtering
@@ -160,6 +187,11 @@ jsonPayload.module=~"sequencer"
 
 ## Common Query Recipes
 
+Before each command, create a new `log_file` with `mktemp` and set `log_limit` as above
+(500 is a starting fetch cap; use less for a small lookup). These recipes save JSON;
+inspect it with the coverage, preview, and grouping commands instead of printing it all.
+For historical incidents, replace `--freshness` with explicit timestamps in the filter.
+
 ### 1. Block Production Check
 
 Are validators producing blocks?
@@ -171,7 +203,7 @@ gcloud logging read '
   resource.labels.container_name="aztec"
   resource.labels.pod_name=~"<ns>-validator-"
   (jsonPayload.message=~"Validated block proposal" OR jsonPayload.message=~"Built block" OR jsonPayload.message=~"Cannot propose" OR jsonPayload.message=~"Published checkpoint")
-' --limit=50 --format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.message.slice(0,200))' --freshness=10m --project=<project>
+' --limit="$log_limit" --format=json --freshness=10m --project='<project>' > "$log_file"
 ```
 
 **Look for**: "Validated block proposal" = blocks being produced. "Built block N ... with X txs" = shows tx count per block (0 = empty). "Published checkpoint" = checkpoints landing on L1. "Cannot propose...committee" = not on committee (normal if many validators). Check block numbers are incrementing. **Note**: The `pod_name=~"<ns>-validator-"` filter also matches HA validator pods (e.g., `validator-ha-1-1`) — expect both regular and HA validators in results.
@@ -187,7 +219,7 @@ gcloud logging read '
   resource.labels.container_name="aztec"
   resource.labels.pod_name=~"<ns>-prover-node-"
   jsonPayload.message=~"Starting epoch.*proving"
-' --limit=20 --format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.message.slice(0,200))' --freshness=6h --project=<project>
+' --limit="$log_limit" --format=json --freshness=6h --project='<project>' > "$log_file"
 ```
 
 ### 3. Proving Duration
@@ -201,10 +233,10 @@ gcloud logging read '
   resource.labels.container_name="aztec"
   resource.labels.pod_name=~"<ns>-prover-node-"
   (jsonPayload.message=~"Starting epoch" OR jsonPayload.message=~"Finalized proof")
-' --limit=20 --format='table[no-heading](timestamp, resource.labels.pod_name, jsonPayload.message.slice(0,200))' --freshness=24h --project=<project>
+' --limit="$log_limit" --format=json --freshness=24h --project='<project>' > "$log_file"
 ```
 
-Use full `timestamp` (not date-formatted) so you can calculate duration between start and end. For detailed proving breakdown, reference `spartan/scripts/extract_proving_metrics.ts`.
+Use the saved full `timestamp` values to calculate duration between start and end. For detailed proving breakdown, reference `spartan/scripts/extract_proving_metrics.ts`.
 
 ### 4. Unexpected Errors
 
@@ -226,7 +258,7 @@ gcloud logging read '
   NOT jsonPayload.message=~"Not enough txs"
   NOT jsonPayload.message=~"StateView contract not found"
   NOT jsonPayload.message=~"[Bb]lob"
-' --limit=100 --format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.severity, jsonPayload.module, jsonPayload.message.slice(0,180))' --freshness=<freshness> --project=<project>
+' --limit="$log_limit" --format=json --freshness='<freshness>' --project='<project>' > "$log_file"
 ```
 
 ### 5. Bot Status
@@ -240,7 +272,7 @@ gcloud logging read '
   resource.labels.container_name="aztec"
   resource.labels.pod_name=~"<ns>-bot-"
   (jsonPayload.message=~"IVC proof" OR jsonPayload.message=~"transfer" OR jsonPayload.message=~"Sent tx")
-' --limit=30 --format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.message.slice(0,200))' --freshness=10m --project=<project>
+' --limit="$log_limit" --format=json --freshness=10m --project='<project>' > "$log_file"
 ```
 
 ### 6. Checkpoint / Proof Submission
@@ -253,7 +285,7 @@ gcloud logging read '
   resource.labels.namespace_name="<ns>"
   resource.labels.container_name="aztec"
   (jsonPayload.message=~"checkpoint" OR jsonPayload.message=~"Submitted proof" OR jsonPayload.message=~"proof submitted")
-' --limit=30 --format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.message.slice(0,200))' --freshness=6h --project=<project>
+' --limit="$log_limit" --format=json --freshness=6h --project='<project>' > "$log_file"
 ```
 
 ### 7. Specific Pod Logs
@@ -266,12 +298,12 @@ gcloud logging read '
   resource.labels.namespace_name="<ns>"
   resource.labels.container_name="aztec"
   resource.labels.pod_name="<pod-name>"
-' --limit=100 --format='table[no-heading](timestamp.date("%H:%M:%S"), jsonPayload.severity, jsonPayload.module, jsonPayload.message.slice(0,180))' --freshness=10m --project=<project>
+' --limit="$log_limit" --format=json --freshness=10m --project='<project>' > "$log_file"
 ```
 
 ### 8. Transaction Debugging
 
-Trace a specific transaction by hash. Use the first 8-16 hex characters to search, and `.slice(0,300)` to avoid truncating hashes in output.
+Trace a specific transaction by hash. A prefix can help discovery; verify the full hash in saved records before attributing events to the transaction.
 
 ```bash
 gcloud logging read '
@@ -279,7 +311,7 @@ gcloud logging read '
   resource.labels.namespace_name="<ns>"
   resource.labels.container_name="aztec"
   jsonPayload.message=~"<first 8-16 hex chars of tx hash>"
-' --limit=50 --format='table[no-heading](timestamp, resource.labels.pod_name, jsonPayload.module, jsonPayload.message.slice(0,300))' --freshness=24h --project=<project>
+' --limit="$log_limit" --format=json --freshness=24h --project='<project>' > "$log_file"
 ```
 
 **Investigation steps**: Check which pod received the tx (RPC node vs validators). Look for "Received tx", "Added tx", "dropped", "rejected", "invalid", "revert". If only the RPC node has it, the tx wasn't propagated via P2P. Cross-reference with block production to see if blocks were empty during that period.
@@ -294,7 +326,7 @@ gcloud logging read '
   resource.labels.namespace_name="<ns>"
   resource.labels.container_name="aztec"
   (jsonPayload.message=~"Chain pruned" OR jsonPayload.message=~"Failed to publish" OR jsonPayload.message=~"L1 tx timed out" OR jsonPayload.message=~"proposal validation failed")
-' --limit=50 --format='table[no-heading](timestamp.date("%H:%M:%S"), resource.labels.pod_name, jsonPayload.message.slice(0,200))' --freshness=10m --project=<project>
+' --limit="$log_limit" --format=json --freshness=10m --project='<project>' > "$log_file"
 ```
 
 **Look for**: Repeated chain pruning = L1 publishing pipeline issues. "L1 tx timed out" = Ethereum congestion or gas issues. "proposal validation failed" = block proposal rejected by peers.
@@ -374,3 +406,4 @@ Return results in this format:
 ```
 
 Keep the summary focused and actionable. If the answer is simple (e.g., "yes, blocks are being produced, latest is block 42"), lead with that.
+Include query coverage/caps and the saved file/index references for evidence. List constant resource metadata once; do not repeat raw payloads already summarized.

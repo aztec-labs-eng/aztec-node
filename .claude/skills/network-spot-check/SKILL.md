@@ -25,10 +25,13 @@ procedure generalizes to any namespace.
 
 ## Procedure
 
-### 1. Delegate the sweep to a subagent
+### 1. Collect and summarize the sweep
 
-Spawn a **sonnet** `network-logs` subagent (keeps the token-heavy log dumps out of the main
-context). Its prompt must ask for, over the full window:
+Follow the command/output rules in [network-logs.md](../../agents/network-logs.md).
+Work in the current session unless the user requests delegation. Use installed tools
+such as `gcloud` and `jq` to save raw entries locally, group repetitions, and return
+bounded previews with references to full records. Do not create a wrapper.
+Over the full window, collect:
 
 1. All warn+error entries from the core block-building/sync modules — **sequencer**,
    **validator**, **archiver**, and **slasher** (`slasher:*` plus the offense watchers:
@@ -49,11 +52,13 @@ context). Its prompt must ask for, over the full window:
 6. Overall health signals: checkpoint/block heights advancing monotonically with no gaps,
    archiver download lag, pod restarts (a restart marks a redeploy — relevant for classification).
 
-Have it return raw structured data (tables, sample lines with timestamps and pods), not prose.
+Keep a compact table of distinct messages, counts, first/last timestamps, emitting pods,
+and file/index references. Inspect all groups in small batches; the top 20 are not a full
+sweep. Split queries that hit their limit and report any unresolved coverage gaps.
 
 ### 2. Verify the code mapping yourself
 
-The subagent greps the working checkout; re-check anything it could not find against the
+After searching the working checkout, re-check anything not found against the
 **deployed branch** (`git grep "<msg>" origin/<deployed-branch>`, `git log -S`). Read the
 emitting function before classifying: the surrounding code and comments usually state whether
 the path is expected (e.g. an early-return for empty blocks) or a genuine failure.
@@ -101,8 +106,9 @@ failures, or unclassified timeouts.
 (sequencer-publisher, from PR #24037) is the designed fallback when the L1 slot right before
 the target slot appears skipped. To confirm each occurrence against ground truth:
 
-1. Pull the entries with `--format=json`: the `jsonPayload` carries `previousL1BlockTs`,
-   `waitDeadlineTs` (= previousL1BlockTs + 8s default), `targetSlot`.
+1. Save the entries with `--format=json` to a unique temporary file, then use `jq` to
+   select timestamps, pods, and the `jsonPayload` fields `previousL1BlockTs`,
+   `waitDeadlineTs` (= previousL1BlockTs + 8s default), and `targetSlot`.
 2. For each `previousL1BlockTs`, find the bracketing L1 blocks via an execution RPC
    (`eth_getBlockByNumber`; estimate the block number from a latest-block anchor at 12s/slot,
    then step). L1 slot timestamps are 12s-aligned: if no block carries exactly that timestamp
