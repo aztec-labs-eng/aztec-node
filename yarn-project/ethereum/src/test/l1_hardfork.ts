@@ -26,17 +26,29 @@ export function isAmsterdamTestRun(): boolean {
   return getL1Hardfork() === 'amsterdam';
 }
 
+/**
+ * Returns a describe block name with the L1 hardfork from `$ANVIL_HARDFORK` appended, e.g. `Registry (amsterdam)`, so
+ * test output and reports show which fork a run used. Returns the name unchanged when `$ANVIL_HARDFORK` is unset.
+ */
+export function describeNameOnL1Fork(name: string): string {
+  const hardfork = getL1Hardfork();
+  return hardfork ? `${name} (${hardfork})` : name;
+}
+
 type DescribeBlock = (name: string, fn: () => void) => void;
 
-/** A `describe` that also tags its test file for CI test-command generation. */
+/**
+ * A `describe` that also tags its test file for CI test-command generation, and appends the L1 hardfork to the block's
+ * name when `$ANVIL_HARDFORK` is set.
+ */
 export type TaggedDescribe = DescribeBlock & { skip: DescribeBlock; only: DescribeBlock };
 
 function taggedDescribe(): TaggedDescribe {
   // Jest's global `describe` is read at call time, so importing this module outside Jest stays safe.
-  const tagged: TaggedDescribe = (name, fn) => describe(name, fn);
-  tagged.skip = (name, fn) => describe.skip(name, fn);
+  const tagged: TaggedDescribe = (name, fn) => describe(describeNameOnL1Fork(name), fn);
+  tagged.skip = (name, fn) => describe.skip(describeNameOnL1Fork(name), fn);
   // eslint-disable-next-line no-only-tests/no-only-tests
-  tagged.only = (name, fn) => describe.only(name, fn);
+  tagged.only = (name, fn) => describe.only(describeNameOnL1Fork(name), fn);
   return tagged;
 }
 
