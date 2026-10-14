@@ -81,6 +81,13 @@ export async function startAnvil(
      * the wall clock and the L1 chain when computing L1 slot timestamps.
      */
     dateProvider?: TestDateProvider;
+    /** Plain JSON state file to start from (`--load-state`), i.e. the gunzipped output of `anvil_dumpState`. */
+    loadState?: string;
+    /**
+     * Number of historical states anvil keeps (`--prune-history`). Each kept state is a full snapshot in a state dump
+     * with history, so this bounds how long a dump and reload take.
+     */
+    pruneHistory?: number;
   } = {},
 ): Promise<{ anvil: Anvil; methodCalls?: string[]; rpcUrl: string; stop: () => Promise<void> }> {
   const anvilBinary = resolveFoundryBinary('anvil');
@@ -117,6 +124,12 @@ export async function startAnvil(
       }
       args.push('--hardfork', hardfork);
       args.push('--slots-in-an-epoch', String(opts.slotsInAnEpoch ?? 1));
+      if (opts.pruneHistory !== undefined) {
+        args.push('--prune-history', String(opts.pruneHistory));
+      }
+      if (opts.loadState !== undefined) {
+        args.push('--load-state', opts.loadState);
+      }
 
       // Spawn the watchdog (see ANVIL_WATCHDOG). It launches anvil with these args and reaps it if we
       // die; `$0` is 'bash' and `$@` is the anvil argv.

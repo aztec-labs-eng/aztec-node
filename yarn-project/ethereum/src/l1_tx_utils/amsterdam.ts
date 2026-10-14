@@ -37,8 +37,11 @@ export class AmsterdamForkDetector {
 
   /** Records a freshly fetched latest L1 block. */
   public observe(block: object | null | undefined): void {
-    if (isAmsterdamBlock(block)) {
+    if (!this.active && isAmsterdamBlock(block)) {
       this.active = true;
+      (this.opts.log ?? createLogger('ethereum:amsterdam-fork-detector')).debug('Amsterdam fork detected on L1', {
+        blockNumber: block && 'number' in block ? block.number : undefined,
+      });
     }
     this.lastObservedAtMs = this.now();
   }
