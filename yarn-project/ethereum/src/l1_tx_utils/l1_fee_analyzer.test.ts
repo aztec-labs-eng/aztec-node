@@ -48,6 +48,14 @@ describe('L1FeeAnalyzer', () => {
     await cheatCodes.setNextBlockBaseFeePerGas(initialBaseFee);
     await cheatCodes.evmMine();
 
+    // Anvil mines on the phase of the second at which interval mining was armed and stamps blocks with whole seconds.
+    // Armed late in a second, the block after a snapshot carries a timestamp earlier than the snapshot, and
+    // timeBeforeBlockMs goes negative. Re-arming at the top of a second keeps block timestamps within a few ms of
+    // their mining time.
+    await cheatCodes.setIntervalMining(0, { silent: true });
+    await retryUntil(() => Date.now() % 1000 < 50, 'top of a second', 2, 0.005);
+    await cheatCodes.setIntervalMining(1, { silent: true });
+
     analyzer = new L1FeeAnalyzer(l1Client, new DateProvider(), logger);
   });
 
@@ -56,11 +64,7 @@ describe('L1FeeAnalyzer', () => {
     await anvil.stop().catch(err => createLogger('cleanup').error(err));
   }, 10000);
 
-  /**
-   * Anvil mines a block every second from the moment it started, and block timestamps are whole seconds, so a snapshot
-   * taken late in the interval reads as "before" a block that is timestamped earlier than it. Starting an analysis
-   * right after a block lands keeps timeBeforeBlockMs positive whatever anvil's mining phase.
-   */
+  /** Starting an analysis right after a block lands gives it the whole mining interval before the next block. */
   const waitForNextL1Block = async () => {
     const start = await l1Client.getBlockNumber();
     await retryUntil(async () => (await l1Client.getBlockNumber()) > start, 'next L1 block', 5, 0.02);
