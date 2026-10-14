@@ -856,6 +856,204 @@
         "type": "prometheus",
         "uid": "${data_source}"
       },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "id": 44,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${data_source}"
+          },
+          "editorMode": "code",
+          "expr": "min by (k8s_pod_name,aztec_address_sender) (aztec_l1_publisher_sends_affordable{k8s_namespace_name=\"$namespace\",aztec_l1_tx_scope=\"prover\"})",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Sends affordable",
+      "type": "timeseries",
+      "description": "How many epoch proof submissions each publisher can afford at current L1 fees. Below 1, finished proofs are held back."
+    },
+    {
+      "datasource": {
+        "default": true,
+        "type": "prometheus",
+        "uid": "${data_source}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "id": 45,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${data_source}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (k8s_pod_name) (increase(aztec_prover_node_proof_submission_unaffordable_count{k8s_namespace_name=\"$namespace\"}[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Proof submissions held back (unaffordable)",
+      "type": "timeseries",
+      "description": "Finished epoch proofs held back from submission because no publisher could afford sending them"
+    },
+    {
+      "datasource": {
+        "default": true,
+        "type": "prometheus",
+        "uid": "${data_source}"
+      },
       "description": "NOTE: this only includes the Nodejs process (not bb or acvm)",
       "fieldConfig": {
         "defaults": {
@@ -917,7 +1115,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 42
       },
       "id": 31,
       "options": {
@@ -1016,7 +1214,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 42
       },
       "id": 9,
       "options": {
@@ -1054,7 +1252,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 50
       },
       "id": 10,
       "panels": [],
@@ -1088,7 +1286,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 51
       },
       "id": 35,
       "maxDataPoints": 64,
@@ -1181,7 +1379,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 51
       },
       "id": 12,
       "maxDataPoints": 64,
@@ -1296,7 +1494,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 60
       },
       "id": 13,
       "interval": "20m",
@@ -1395,7 +1593,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 52
+        "y": 60
       },
       "id": 14,
       "interval": "20m",
@@ -1505,7 +1703,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 68
       },
       "id": 15,
       "interval": "20m",
@@ -1611,7 +1809,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 68
+        "y": 76
       },
       "id": 42,
       "options": {
@@ -1712,7 +1910,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 68
+        "y": 76
       },
       "id": 43,
       "options": {
@@ -1753,7 +1951,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "id": 16,
       "panels": [],
@@ -1826,7 +2024,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 77
+        "y": 85
       },
       "id": 17,
       "options": {
@@ -1928,7 +2126,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 77
+        "y": 85
       },
       "id": 18,
       "options": {
@@ -2029,7 +2227,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 85
+        "y": 93
       },
       "id": 19,
       "interval": "20m",
@@ -2133,7 +2331,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 85
+        "y": 93
       },
       "id": 20,
       "options": {
@@ -2176,7 +2374,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 93
+        "y": 101
       },
       "id": 21,
       "panels": [],
@@ -2232,7 +2430,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 94
+        "y": 102
       },
       "id": 22,
       "interval": "20m",
@@ -2304,7 +2502,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 94
+        "y": 102
       },
       "id": 23,
       "maxDataPoints": 32,
@@ -2433,7 +2631,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 102
+        "y": 110
       },
       "id": 24,
       "options": {
@@ -2475,7 +2673,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 110
+        "y": 118
       },
       "id": 25,
       "panels": [],
@@ -2515,7 +2713,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 111
+        "y": 119
       },
       "id": 26,
       "interval": "1m",
@@ -2585,7 +2783,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 111
+        "y": 119
       },
       "id": 28,
       "options": {
@@ -2687,7 +2885,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 119
+        "y": 127
       },
       "id": 29,
       "interval": "20m",
@@ -2756,7 +2954,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 127
+        "y": 135
       },
       "id": 30,
       "options": {
@@ -2803,7 +3001,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 135
+        "y": 143
       },
       "id": 37,
       "panels": [],
@@ -2873,7 +3071,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 136
+        "y": 144
       },
       "id": 38,
       "interval": "5m",
@@ -2972,7 +3170,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 136
+        "y": 144
       },
       "id": 39,
       "interval": "5m",
@@ -3070,7 +3268,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 144
+        "y": 152
       },
       "id": 40,
       "interval": "5m",
@@ -3137,7 +3335,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 144
+        "y": 152
       },
       "id": 41,
       "options": {

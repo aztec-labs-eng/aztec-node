@@ -165,15 +165,39 @@ Monitor whether your node is seeing new L1 blocks:
 
 If you're running a sequencer node, monitor these metrics for consensus participation, block production, and L1 publishing. Configure alerting for critical operations.
 
-### L1 Publisher ETH Balance
+### L1 publisher ETH balance
 
-Monitor the ETH balance used for publishing to L1 to prevent transaction failures:
+The node reads the balance of every publisher once a minute, whether or not it has sent anything, and prices a reference L1 transaction at current fees. Sequencers and prover nodes export:
 
-- **Metric**: `aztec_l1_publisher_balance_eth`
-- **Description**: Current ETH balance of the L1 publisher account
+- **`aztec_l1_publisher_balance_eth`**: ETH balance of each publisher, labelled by `aztec_address_sender` and `aztec_l1_tx_scope` (`sequencer` or `prover`).
+- **`aztec_l1_publisher_sends_affordable`**: how many reference transactions each publisher's balance covers at current L1 fees, with the same labels. It reads `0` while a publisher is skipped after an L1 rejection for insufficient funds.
+- **`aztec_l1_publisher_required_balance_eth`**: ETH one reference transaction needs at current L1 fees, labelled by `aztec_l1_tx_scope`.
+- **`aztec_l1_publisher_funder_balance_eth`**: ETH balance of the funding account, if you set up [automatic top-ups](../solo-sequencer/fund-accounts#optional-automatic-top-ups).
 
-**Alert rule**:
+For a sequencer, the reference transaction is the first checkpoint proposal of an epoch without an invalidation (1.75M gas and 6 blobs). Most proposals cost less, and a proposal that also invalidates a checkpoint costs about 1M gas more, so treat `sends_affordable` as an estimate of the proposals left rather than an exact count. For a prover node, it is an epoch proof submission (3.5M gas). Fisherman nodes and prover nodes with proof publishing disabled never send these transactions, so they export balances only.
+
+**Alert rules**:
 ```yaml
+- alert: NoAffordablePublisher
+  expr: max by (service_instance_id, aztec_l1_tx_scope) (aztec_l1_publisher_sends_affordable) < 1
+  labels:
+    severity: critical
+  annotations:
+    summary: "No L1 publisher can afford a transaction"
+    description: "No {{ $labels.aztec_l1_tx_scope }} publisher can afford its next L1 transaction at current fees. Proposals or proof submissions are being skipped. Fund a publisher now."
+
+- alert: LowL1PublisherRunway
+  expr: |
+    predict_linear(aztec_l1_publisher_balance_eth[1d], 3 * 86400)
+      < on (service_instance_id, aztec_l1_tx_scope) group_left
+        aztec_l1_publisher_required_balance_eth
+  for: 15m
+  labels:
+    severity: warning
+  annotations:
+    summary: "L1 publisher will run out of ETH within 3 days"
+    description: "At its burn rate over the last day, publisher {{ $labels.aztec_address_sender }} will not afford its next L1 transaction within 3 days. Top it up."
+
 - alert: LowL1PublisherBalance
   expr: aztec_l1_publisher_balance_eth < 0.5
   for: 5m
@@ -183,6 +207,12 @@ Monitor the ETH balance used for publishing to L1 to prevent transaction failure
     summary: "L1 publisher ETH balance critically low"
     description: "Publisher balance is {{ $value }} ETH. Refill immediately to avoid transaction failures."
 ```
+
+`NoAffordablePublisher` has no `for` delay: below 1, the node skips its proposals or proof submissions right away, so waiting only adds missed slots.
+
+`LowL1PublisherRunway` projects each publisher's balance 3 days ahead from its spending over the last day and compares it with the cost of one transaction at current fees. It warns based on time left, which a fixed balance or transaction count can't do, since the same balance can last an hour or a week depending on how often your node publishes and on L1 fees. Set the projection to however long your top-ups take. It needs a day of history, and a top-up in the last day flattens the projection, so it stays quiet just after a restart or a refill.
+
+Keep `LowL1PublisherBalance` as a backstop for those cases. It doesn't follow L1 fees, so size it against the worst-case gas price you expect.
 
 ### Sequencer Liveness
 
