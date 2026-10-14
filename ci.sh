@@ -206,7 +206,7 @@ case "$cmd" in
     # runs (post-merge full CI), "prs" otherwise.
     # Roomier than the 75-min default: full CI also runs the backwards-compat e2e sweep
     # (~5 min per stable release with committed artifacts in legacy-contracts/) and reruns
-    # every anvil-backed test against an Amsterdam L1 (yarn-project/scripts/hardfork_variants.sh).
+    # every anvil-backed test against an Amsterdam L1 (yarn-project/scripts/l1_fork_test_cmds.sh).
     export AWS_SHUTDOWN_TIME=120
     multi_job_run "x-$cmd amd64 ci-$cmd"
     ;;
