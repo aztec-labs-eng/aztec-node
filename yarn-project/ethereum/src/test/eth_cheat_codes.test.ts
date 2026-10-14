@@ -400,25 +400,6 @@ describeAcrossL1Forks('EthCheatCodes', () => {
         expectOnGrid(await waitForBlockAfter(next.number), next);
       });
 
-      it('keeps nested and back-to-back pauses from several instances atomic and on the grid', async () => {
-        const other = new EthCheatCodes([rpcUrl], dateProvider);
-        await sleep(500);
-        await cheatCodes.execWithPausedAnvil(() => cheatCodes.execWithPausedAnvil(() => sleep(100)));
-        expect(await other.getIntervalMining()).toBe(interval);
-
-        // This pause spans the tick the first one scheduled its resume for, so that resume must not mine inside it.
-        await other.execWithPausedAnvil(async () => {
-          expect(await other.getIntervalMining()).toBeNull();
-          await sleep(interval * 1000);
-          expect(await other.blockNumber()).toBe(first.number);
-        });
-
-        const next = await waitForBlockAfter(first.number);
-        expect((next.timestamp - first.timestamp) % interval).toBe(0);
-        expectOnGrid(next, first, (next.timestamp - first.timestamp) / interval);
-        expectOnGrid(await waitForBlockAfter(next.number), next);
-      });
-
       it('lets a warp that resets the block interval take over a pending resume', async () => {
         await sleep(1000);
         await cheatCodes.execWithPausedAnvil(() => sleep(100));

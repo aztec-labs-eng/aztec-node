@@ -5,7 +5,7 @@ import type { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
-import { forgetAnvilMiningState } from './eth_cheat_codes.js';
+import { resetAnvilMiningState } from './eth_cheat_codes.js';
 import { getL1Hardfork } from './l1_hardfork.js';
 
 /** Minimal interface matching the @viem/anvil Anvil shape used by callers. */
@@ -233,12 +233,11 @@ export async function startAnvil(
   }
 
   const port = detectedPort;
-  const rpcUrl = `http://127.0.0.1:${port}`;
   let status: 'listening' | 'idle' = 'listening';
 
   anvil.once('close', () => {
     status = 'idle';
-    forgetAnvilMiningState(rpcUrl);
+    resetAnvilMiningState();
   });
 
   let stopping: Promise<void> | undefined;
@@ -246,7 +245,7 @@ export async function startAnvil(
     if (status === 'idle') {
       return;
     }
-    forgetAnvilMiningState(rpcUrl);
+    resetAnvilMiningState();
     await (stopping ??= killChild(anvil));
   };
 
@@ -259,7 +258,7 @@ export async function startAnvil(
     stop,
   };
 
-  return { anvil: anvilObj, methodCalls, stop, rpcUrl };
+  return { anvil: anvilObj, methodCalls, stop, rpcUrl: `http://127.0.0.1:${port}` };
 }
 
 /** Advances the test clock from mined-block output without rewinding it when Anvil replays a reorg. */
