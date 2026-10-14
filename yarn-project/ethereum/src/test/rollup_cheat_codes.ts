@@ -8,17 +8,9 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
-import {
-  type GetContractReturnType,
-  type Hex,
-  createPublicClient,
-  fallback,
-  getContract,
-  hexToBigInt,
-  http,
-  keccak256,
-} from 'viem';
+import { type GetContractReturnType, type Hex, createPublicClient, getContract, hexToBigInt, keccak256 } from 'viem';
 
+import { createAnvilTransport } from './anvil_queue.js';
 import { EthCheatCodes } from './eth_cheat_codes.js';
 
 /** Cheat codes for the L1 rollup contract. */
@@ -34,7 +26,7 @@ export class RollupCheatCodes {
   ) {
     this.client = createPublicClient({
       chain: ethCheatCodes.chain,
-      transport: fallback(ethCheatCodes.rpcUrls.map(url => http(url, { batch: false }))),
+      transport: createAnvilTransport(ethCheatCodes.rpcUrls),
     });
     this.rollup = getContract({
       abi: RollupAbi,

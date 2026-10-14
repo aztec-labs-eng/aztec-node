@@ -421,6 +421,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
           port: opts.anvilPort ?? (process.env.ANVIL_PORT ? parseInt(process.env.ANVIL_PORT) : undefined),
           slotsInAnEpoch: opts.anvilSlotsInAnEpoch,
           dateProvider,
+          clientSideMining: true,
         }),
       );
       anvil = res.anvil;

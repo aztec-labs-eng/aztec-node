@@ -1,9 +1,11 @@
 import { createLogger } from '@aztec-labs/foundation/log';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
-import type { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, type TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
+import { registerAnvilQueue, unregisterAnvilQueue } from './anvil_queue.js';
+import { EthCheatCodes } from './eth_cheat_codes.js';
 
 /** Minimal interface matching the @viem/anvil Anvil shape used by callers. */
 export interface Anvil {
@@ -76,6 +78,14 @@ export async function startAnvil(
      * the wall clock and the L1 chain when computing L1 slot timestamps.
      */
     dateProvider?: TestDateProvider;
+    /**
+     * Mine the `l1BlockTime` blocks from this process instead of anvil's own interval timer. Each block is stamped one
+     * interval after its parent and mined when `dateProvider` reaches that stamp, through the request queue that
+     * {@link EthCheatCodes} sends every request through, so a cheat op that must not see a block mined midway holds
+     * the queue instead of pausing anvil and never shifts later blocks off their schedule. The miner lives until
+     * `stop`, so only use this for an anvil that does not outlive this process.
+     */
+    clientSideMining?: boolean;
   } = {},
 ): Promise<{ anvil: Anvil; methodCalls?: string[]; rpcUrl: string; stop: () => Promise<void> }> {
   const anvilBinary = resolveFoundryBinary('anvil');
@@ -102,7 +112,7 @@ export async function startAnvil(
         '--chain-id',
         String(opts.chainId ?? 31337),
       ];
-      if (opts.l1BlockTime !== undefined) {
+      if (opts.l1BlockTime !== undefined && !opts.clientSideMining) {
         args.push('--block-time', String(opts.l1BlockTime));
       }
       if (opts.hardfork !== undefined) {
@@ -211,19 +221,45 @@ export async function startAnvil(
   }
 
   const port = detectedPort;
+  const rpcUrl = `http://127.0.0.1:${port}`;
   let status: 'listening' | 'idle' = 'listening';
 
   anvil.once('close', () => {
     status = 'idle';
   });
 
+  const clientMiningInterval = opts.clientSideMining && opts.l1BlockTime ? opts.l1BlockTime : undefined;
+  const queue = registerAnvilQueue(rpcUrl, {
+    clientSideMining: clientMiningInterval !== undefined,
+    dateProvider: opts.dateProvider,
+  });
+
+  const shutdown = async () => {
+    try {
+      await unregisterAnvilQueue(queue);
+    } finally {
+      await killChild(anvil);
+    }
+  };
   let stopping: Promise<void> | undefined;
   const stop = async () => {
     if (status === 'idle') {
       return;
     }
-    await (stopping ??= killChild(anvil));
+    await (stopping ??= shutdown());
   };
+
+  if (clientMiningInterval !== undefined) {
+    // Anvil starts in automine mode when given no block time; `--block-time` would have turned that off.
+    const cheatCodes = new EthCheatCodes([rpcUrl], opts.dateProvider ?? new DateProvider());
+    try {
+      await cheatCodes.setAutomine(false, { silent: true });
+      await cheatCodes.setIntervalMining(clientMiningInterval, { silent: true });
+    } catch (err) {
+      await stop();
+      throw err;
+    }
+  }
 
   const anvilObj: Anvil = {
     port,
@@ -234,7 +270,7 @@ export async function startAnvil(
     stop,
   };
 
-  return { anvil: anvilObj, methodCalls, stop, rpcUrl: `http://127.0.0.1:${port}` };
+  return { anvil: anvilObj, methodCalls, stop, rpcUrl };
 }
 
 /** Advances the test clock from mined-block output without rewinding it when Anvil replays a reorg. */

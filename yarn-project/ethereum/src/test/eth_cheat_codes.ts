@@ -5,22 +5,15 @@ import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { pluralize } from '@aztec-labs/foundation/string';
 import type { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
-import {
-  type Chain,
-  type Hex,
-  type Transaction,
-  createPublicClient,
-  fallback,
-  hexToNumber,
-  http,
-  numberToHex,
-} from 'viem';
+import { type Chain, type Hex, type Transaction, createPublicClient, hexToNumber, numberToHex } from 'viem';
 import { foundry } from 'viem/chains';
 
 import type { ViemPublicClient } from '../types.js';
+import { type AnvilQueue, createAnvilTransport, getAnvilQueue } from './anvil_queue.js';
 
 /**
- * A class that provides utility functions for interacting with ethereum (L1).
+ * A class that provides utility functions for interacting with ethereum (L1). Every request goes through the
+ * {@link AnvilQueue} shared by all instances in this process that point at the same anvil.
  */
 export class EthCheatCodes {
   public readonly publicClient: ViemPublicClient;
@@ -42,10 +35,12 @@ export class EthCheatCodes {
      */
     public chain: Chain = foundry,
   ) {
-    this.publicClient = createPublicClient({
-      transport: fallback(this.rpcUrls.map(url => http(url, { batch: false }))),
-      chain: chain,
-    });
+    this.publicClient = createPublicClient({ transport: createAnvilTransport(this.rpcUrls), chain: chain });
+  }
+
+  /** Resolved on every use, so an instance created before `startAnvil` registered its queue still finds it. */
+  private get queue(): AnvilQueue {
+    return getAnvilQueue(this.rpcUrls);
   }
 
   public rpcCall(method: string, params: any[]) {
@@ -188,26 +183,25 @@ export class EthCheatCodes {
   }
 
   /**
-   * Get interval mining if set.
-   * @param seconds - The interval to use between blocks
+   * Get interval mining if set. On an anvil started with client-side mining, returns the client-side miner's interval.
    */
   public getIntervalMining(): Promise<number | null> {
-    try {
-      return this.doRpcCall('anvil_getIntervalMining', []);
-    } catch (err) {
-      throw new Error(`Error getting interval mining: ${err}`);
+    if (this.queue.clientSideMining) {
+      return Promise.resolve(this.queue.getMiningInterval() ?? null);
     }
+    return this.getNativeIntervalMining();
   }
 
   /**
-   * Enable interval mining at the given interval (block time)
+   * Enable interval mining at the given interval (block time), or disable it with 0. On an anvil started with
+   * client-side mining, starts or stops the client-side miner instead of anvil's own timer.
    * @param seconds - The interval to use between blocks
    */
   public async setIntervalMining(seconds: number, opts: { silent?: boolean } = {}): Promise<void> {
-    try {
-      await this.rpcCall('anvil_setIntervalMining', [seconds]);
-    } catch (err) {
-      throw new Error(`Error setting interval mining: ${err}`);
+    if (this.queue.clientSideMining) {
+      await this.queue.setMiningInterval(seconds);
+    } else {
+      await this.setNativeIntervalMining(seconds);
     }
     if (!opts.silent) {
       this.logger.warn(`Set L1 interval mining to ${seconds} seconds`);
@@ -217,25 +211,44 @@ export class EthCheatCodes {
   /**
    * Starts interval mining from a freshly mined block and syncs the date provider to the block timestamp.
    */
-  public async startIntervalMiningWithFreshBlock(seconds: number): Promise<void> {
+  public startIntervalMiningWithFreshBlock(seconds: number): Promise<void> {
     if (seconds <= 0) {
       throw new Error(`Interval mining requires a positive interval, got ${seconds}`);
     }
 
-    await this.setAutomine(false);
-    await this.setIntervalMining(0, { silent: true });
-    await this.evmMine();
-    await this.syncDateProvider();
-    await this.setIntervalMining(seconds);
-    this.logger.warn(`Started L1 interval mining at ${seconds} seconds from a fresh block`);
+    return this.queue.run(async () => {
+      await this.setAutomine(false);
+      await this.setIntervalMining(0, { silent: true });
+      await this.evmMine();
+      await this.syncDateProvider();
+      await this.setIntervalMining(seconds);
+      this.logger.warn(`Started L1 interval mining at ${seconds} seconds from a fresh block`);
+    });
+  }
+
+  /** Anvil's own interval mining, which stays off on an anvil started with client-side mining. */
+  private getNativeIntervalMining(): Promise<number | null> {
+    return this.doRpcCall('anvil_getIntervalMining', []);
+  }
+
+  private async setNativeIntervalMining(seconds: number): Promise<void> {
+    try {
+      await this.rpcCall('anvil_setIntervalMining', [seconds]);
+    } catch (err) {
+      throw new Error(`Error setting interval mining: ${err}`);
+    }
   }
 
   /**
-   * Set the automine status of the underlying anvil chain
+   * Set the automine status of the underlying anvil chain. Enabling automine replaces interval mining, as it does in
+   * anvil itself, so it also stops a client-side miner.
    * @param automine - The automine status to set
    */
   public async setAutomine(automine: boolean, opts: { silent?: boolean } = {}): Promise<void> {
     try {
+      if (automine && this.queue.clientSideMining) {
+        await this.queue.setMiningInterval(0);
+      }
       await this.rpcCall('anvil_setAutomine', [automine]);
     } catch (err) {
       throw new Error(`Error setting automine: ${err}`);
@@ -275,42 +288,45 @@ export class EthCheatCodes {
 
   /**
    * Set the next block timestamp and mines the block.
-   * Optionally resets interval mining so the next block is mined in `blockInterval` seconds from now.
+   * Optionally resets interval mining so the next block is mined in `blockInterval` seconds from now. A client-side
+   * miner always schedules its next block one interval after the warped one, so the option changes nothing there.
    * Always updates the injected date provider to follow L1 time.
    * @param timestamp - The timestamp to set the next block to
    */
-  public async warp(
+  public warp(
     timestamp: number | bigint,
     opts: { silent?: boolean; resetBlockInterval?: boolean } = {},
   ): Promise<void> {
-    let blockInterval: number | null = null;
-    try {
-      // Load current block interval and disable it
-      if (opts.resetBlockInterval) {
-        blockInterval = await this.getIntervalMining();
-        if (blockInterval !== null) {
-          await this.setIntervalMining(0, { silent: true });
+    return this.queue.run(async () => {
+      let blockInterval: number | null = null;
+      try {
+        // Load current block interval and disable it
+        if (opts.resetBlockInterval) {
+          blockInterval = await this.getNativeIntervalMining();
+          if (blockInterval !== null) {
+            await this.setNativeIntervalMining(0);
+          }
+        }
+        // Set the timestamp of the next block to be mined
+        await this.rpcCall('evm_setNextBlockTimestamp', [Number(timestamp)]);
+        // And mine a block so the timestamp goes into effect now
+        await this.doMine();
+        // Update the injected date provider so it follows L1 time
+        if ('setTime' in this.dateProvider) {
+          this.dateProvider.setTime(Number(timestamp) * 1000);
+        }
+      } catch (err) {
+        throw new Error(`Error warping: ${err}`);
+      } finally {
+        // Restore interval mining so the next block is mined in `blockInterval` seconds from this one
+        if (opts.resetBlockInterval && blockInterval !== null && blockInterval > 0) {
+          await this.setNativeIntervalMining(blockInterval);
         }
       }
-      // Set the timestamp of the next block to be mined
-      await this.rpcCall('evm_setNextBlockTimestamp', [Number(timestamp)]);
-      // And mine a block so the timestamp goes into effect now
-      await this.doMine();
-      // Update the injected date provider so it follows L1 time
-      if ('setTime' in this.dateProvider) {
-        this.dateProvider.setTime(Number(timestamp) * 1000);
+      if (!opts.silent) {
+        this.logger.warn(`Warped L1 timestamp to ${timestamp}`);
       }
-    } catch (err) {
-      throw new Error(`Error warping: ${err}`);
-    } finally {
-      // Restore interval mining so the next block is mined in `blockInterval` seconds from this one
-      if (opts.resetBlockInterval && blockInterval !== null && blockInterval > 0) {
-        await this.setIntervalMining(blockInterval, { silent: true });
-      }
-    }
-    if (!opts.silent) {
-      this.logger.warn(`Warped L1 timestamp to ${timestamp}`);
-    }
+    });
   }
 
   /**
@@ -576,37 +592,46 @@ export class EthCheatCodes {
     await this.doRpcCall('anvil_setBlockGasLimit', [toHex(gasLimit)]);
   }
 
-  public async execWithPausedAnvil<T>(fn: () => Promise<T>): Promise<T> {
-    const [blockInterval, wasAutoMining] = await Promise.all([this.getIntervalMining(), this.isAutoMining()]);
-    try {
-      if (blockInterval !== null) {
-        await this.setIntervalMining(0, { silent: true });
-      }
-
-      if (wasAutoMining) {
-        await this.setAutomine(false, { silent: true });
-      }
-
-      return await fn();
-    } finally {
+  /**
+   * Runs `fn` with no block mined until it settles: it holds this anvil's request queue, with automine and anvil's
+   * own interval mining off. On an anvil started with client-side mining, holding the queue is what keeps the miner
+   * out, and the block that fell due meanwhile is mined as soon as `fn` settles, on its original schedule. Anvil's own
+   * interval timer instead restarts from zero when re-enabled, so every later block is mined late by however far into
+   * the interval the pause began plus the length of the pause.
+   */
+  public execWithPausedAnvil<T>(fn: () => Promise<T>): Promise<T> {
+    return this.queue.run(async () => {
+      const [blockInterval, wasAutoMining] = await Promise.all([this.getNativeIntervalMining(), this.isAutoMining()]);
       try {
-        // restore automine if necessary
-        if (wasAutoMining) {
-          await this.setAutomine(true, { silent: true });
-        }
-      } catch (err) {
-        this.logger.warn(`Failed to reenable automining: ${err}`);
-      }
-
-      try {
-        // restore automine if necessary
         if (blockInterval !== null) {
-          await this.setIntervalMining(blockInterval, { silent: true });
+          await this.setNativeIntervalMining(0);
         }
-      } catch (err) {
-        this.logger.warn(`Failed to reenable interval mining: ${err}`);
+
+        if (wasAutoMining) {
+          await this.setAutomine(false, { silent: true });
+        }
+
+        return await fn();
+      } finally {
+        try {
+          // restore automine if necessary
+          if (wasAutoMining) {
+            await this.setAutomine(true, { silent: true });
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to reenable automining: ${err}`);
+        }
+
+        try {
+          // restore automine if necessary
+          if (blockInterval !== null) {
+            await this.setNativeIntervalMining(blockInterval);
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to reenable interval mining: ${err}`);
+        }
       }
-    }
+    });
   }
 
   public async syncDateProvider() {
