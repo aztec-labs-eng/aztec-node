@@ -7,6 +7,7 @@ import {
 import { BlockNumber, type EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { AbortError } from '@aztec-labs/foundation/error';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import type { LoggerBindings } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { SerialQueue } from '@aztec-labs/foundation/queue';
@@ -41,7 +42,6 @@ import {
   trackSpan,
   wrapCallbackInSpan,
 } from '@aztec-labs/telemetry-client';
-import { inspect } from 'util';
 
 import {
   getFrontierSiblingPath,

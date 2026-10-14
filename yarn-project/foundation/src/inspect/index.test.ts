@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-restricted-imports -- compares against the output of Node.js itself
 import { inspect as nodeInspect } from 'node:util';
 
 import { inspect } from './index.js';

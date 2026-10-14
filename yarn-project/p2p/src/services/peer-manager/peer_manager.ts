@@ -3,6 +3,7 @@ import { compactArray } from '@aztec-labs/foundation/collection';
 import { makeEthSignDigest, tryRecoverAddress } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -14,7 +15,6 @@ import { peerIdFromString } from '@libp2p/peer-id';
 import type { Multiaddr } from '@multiformats/multiaddr';
 import { ENR } from '@nethermindeth/enr';
 import { Buffer } from 'buffer';
-import { inspect } from 'util';
 
 import type { P2PConfig } from '../../config.js';
 import { PeerEvent } from '../../types/index.js';

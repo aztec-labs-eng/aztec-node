@@ -3,6 +3,7 @@ import { type FeePaymentMethod, PublicFeePaymentMethod } from '@aztec-labs/aztec
 import type { AztecNode } from '@aztec-labs/aztec.js/node';
 import type { Wallet } from '@aztec-labs/aztec.js/wallet';
 import { FIXED_AVM_STARTUP_L2_GAS } from '@aztec-labs/constants';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import type { Logger } from '@aztec-labs/foundation/log';
 import type { FPCContract } from '@aztec-labs/noir-contracts.js/FPC';
 import { TokenContract as BananaCoin } from '@aztec-labs/noir-contracts.js/Token';
@@ -19,7 +20,6 @@ import {
 } from '@aztec-labs/stdlib/gas';
 import { getGasLimits } from '@aztec-labs/wallet-sdk/base-wallet';
 import { jest } from '@jest/globals';
-import { inspect } from 'util';
 
 import { PIPELINING_SETUP_OPTS, getPaddedMaxFeesPerGas } from '../../fixtures/fixtures.js';
 import { waitForSequencerState } from '../../fixtures/wait_helpers.js';

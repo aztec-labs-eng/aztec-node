@@ -12,6 +12,7 @@ import { CheckpointNumber, EpochNumber } from '@aztec-labs/foundation/branded-ty
 import { areArraysEqual } from '@aztec-labs/foundation/collection';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type Logger, type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { PublisherConfig, TxSenderConfig } from '@aztec-labs/sequencer-client';
@@ -19,7 +20,6 @@ import type { Proof } from '@aztec-labs/stdlib/proofs';
 import type { CheckpointHeader, RootRollupPublicInputs } from '@aztec-labs/stdlib/rollup';
 import type { L1PublishProofStats } from '@aztec-labs/stdlib/stats';
 import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-client';
-import { inspect } from 'util';
 import { type Hex, type TransactionReceipt, encodeFunctionData, formatEther, formatGwei } from 'viem';
 
 import { type EstimatedSubmitProofStats, ProverNodePublisherMetrics } from './metrics.js';

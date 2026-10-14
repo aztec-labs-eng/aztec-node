@@ -1,8 +1,8 @@
 import { Buffer } from 'buffer';
 import { build as buildPrettyStream } from 'pino-pretty';
 import { Writable } from 'stream';
-import { inspect } from 'util';
 
+import { inspect } from '../inspect/index.js';
 import {
   createLogger,
   getActorColor,
