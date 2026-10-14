@@ -67,7 +67,7 @@ export class ProvingAgent {
     await this.runningPromise.stop();
   }
 
-  /** Finishes and reports already claimed work, keeping its lease alive, before stopping. */
+  /** Finishes and reports already claimed work, keeping its lease alive and treating shutdown failures as retryable. */
   public drain(): Promise<void> {
     if (this.drainPromise) {
       return this.drainPromise;
@@ -230,12 +230,15 @@ export class ProvingAgent {
       // no-op
       this.log.warn(`Job id=${jobId} was aborted. Not reporting result back to broker`, result);
     } else if (result instanceof Error) {
-      const retry = result.name === ProvingError.NAME ? (result as ProvingError).retry : false;
+      const error = this.drained
+        ? new ProvingError(`Agent shutting down (possible preemption): ${result.message}`, result, true)
+        : result;
+      const retry = error.name === ProvingError.NAME ? (error as ProvingError).retry : false;
       this.log.error(
-        `Job id=${jobId} type=${ProvingRequestType[type]} failed err=${result.message} retry=${retry}`,
-        result,
+        `Job id=${jobId} type=${ProvingRequestType[type]} failed err=${error.message} retry=${retry}`,
+        error,
       );
-      maybeJob = await this.broker.reportProvingJobError(jobId, result.message, retry, this.getJobFilter());
+      maybeJob = await this.broker.reportProvingJobError(jobId, error.message, retry, this.getJobFilter());
     } else {
       const outputUri = await this.proofStore.saveProofOutput(jobId, type, result);
       this.log.info(`Job id=${jobId} type=${ProvingRequestType[type]} completed outputUri=${truncate(outputUri)}`);
