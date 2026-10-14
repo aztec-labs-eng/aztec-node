@@ -15,11 +15,14 @@ import {
   sendL1ToL2MessageBatch,
 } from '@aztec-labs/bot';
 import { RecordingTelemetryClient } from '@aztec-labs/bot/testing';
+import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { getSlotAtTimestamp, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { buildProposerTimetable } from '@aztec-labs/stdlib/timetable';
 import { Attributes, Metrics } from '@aztec-labs/telemetry-client';
 import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 import { jest } from '@jest/globals';
@@ -136,6 +139,94 @@ describe('single-node/cross-chain/inbox_bot', () => {
       timeoutSeconds,
       2,
     );
+
+  /**
+   * The first slot whose checkpoint L1 obliges to consume an Inbox bucket opened at `l1Timestamp`. Mirrors the
+   * rollup's `TimeLib.getInboxCutoffTimestamp`: a bucket is mandatory for slot S once it is at or before one L1 slot
+   * before slot S-1 starts, which is also when the proposer for slot S opens its build frame.
+   */
+  const firstSlotObligedToConsume = (l1Timestamp: bigint) => {
+    const inboxCutoff = (slot: SlotNumber) =>
+      getTimestampForSlot(SlotNumber.add(slot, -1), t.constants) - BigInt(t.constants.ethereumSlotDuration);
+    let slot = SlotNumber.add(getSlotAtTimestamp(l1Timestamp, t.constants), 1);
+    while (inboxCutoff(slot) < l1Timestamp) {
+      slot = SlotNumber.add(slot, 1);
+    }
+    return slot;
+  };
+
+  /** The cumulative Inbox message count the L2 chain has consumed through `blockNumber`. */
+  const consumedThrough = async (blockNumber: BlockNumber) =>
+    BigInt((await aztecNode.getBlock(blockNumber))!.header.state.l1ToL2MessageTree.nextAvailableLeafIndex);
+
+  /**
+   * Waits until a batch broadcast right away lands where the checkpoint L1 first obliges to consume it can take all
+   * of it, and returns the L1 timestamp the batch will carry with the wall-clock time the window opened. A batch one
+   * message over a bucket spans two buckets and a block consumes at most one bucket's worth, so that checkpoint needs
+   * both of its blocks, sub-slot 0 included. Two things can cost it sub-slot 0:
+   * - A late start. The proposer for slot S builds during slot S-1 and passes its sync gate at the build-frame start
+   *   only if the checkpoint for slot S-2 is already on L1. Otherwise it waits for the L1 block at the frame start to
+   *   be synced, which can be too late for sub-slot 0. The previous case pauses the sequencer and leaves such gaps, so
+   *   the S-2 checkpoint must exist. By the time the window is checked the local sequencer has already proposed it,
+   *   and a proposed checkpoint normally lands in the first L1 block of slot S-2, well before the frame start.
+   * - A batch its first block does not see. That block picks its messages when the build frame opens, so the batch
+   *   has to be mined and synced before then. It also has to be mined after the proposer of the slot before picked
+   *   the messages for its last block, or that proposer takes the first bucket on its own.
+   * The next L1 block's mining time is predicted from when the latest one was first seen, so the L1 tip is polled
+   * finely and a block already mined at the first poll is not used. The prediction only holds if nothing pauses L1
+   * mining before that block, so blocks around an epoch boundary, where the epoch settler marks the epoch proven, are
+   * passed over.
+   */
+  const waitForSaturationSendWindow = async () => {
+    const { slotDuration, ethereumSlotDuration, epochDuration } = t.constants;
+    const timetable = buildProposerTimetable(t.aztecNodeConfig, t.constants);
+    const lastSubslot = timetable.getMaxBlocksPerCheckpoint() - 1;
+    /** Seconds kept clear of the previous proposer's last pick and of the archiver syncing the batch in time. */
+    const margin = 2;
+    let latestSeen: bigint | undefined;
+    return await retryUntil(
+      async () => {
+        const latest = await t.harnessL1Client.getBlock();
+        const seenAt = t.context.dateProvider.now() / 1000;
+        const seenAtWallClock = Date.now();
+        const isNewBlock = latestSeen !== undefined && latest.number > latestSeen;
+        latestSeen = latest.number;
+        if (!isNewBlock) {
+          return undefined;
+        }
+
+        const slotInEpoch = getSlotAtTimestamp(latest.timestamp, t.constants) % epochDuration;
+        if (slotInEpoch === 0 || slotInEpoch === epochDuration - 1) {
+          return undefined;
+        }
+
+        const batchTimestamp = latest.timestamp + BigInt(ethereumSlotDuration);
+        const batchMinedAt = seenAt + ethereumSlotDuration;
+        const obligedSlot = firstSlotObligedToConsume(batchTimestamp);
+        const previousLastPick = timetable.getBlockBuildDeadline(SlotNumber.add(obligedSlot, -1), lastSubslot - 1);
+        const obligedFrameStart = timetable.getBuildFrameStart(obligedSlot);
+        if (batchMinedAt < previousLastPick + margin || batchMinedAt > obligedFrameStart - margin) {
+          return undefined;
+        }
+
+        // Proposed or already on L1: `getCheckpoint` serves both.
+        if (!(await aztecNode.getCheckpoint({ slot: SlotNumber.add(obligedSlot, -2) }))) {
+          return undefined;
+        }
+        log.warn(`Sending the saturation batch for obliged slot ${obligedSlot}`, {
+          batchTimestamp,
+          batchMinedAt,
+          previousLastPick,
+          obligedFrameStart,
+          l1Lag: seenAt - Number(latest.timestamp),
+        });
+        return { batchTimestamp, openedAt: seenAtWallClock };
+      },
+      'send window for a saturation batch its obliged checkpoint can consume in full',
+      slotDuration * 8,
+      0.1,
+    );
+  };
 
   // A normal mixed batch produced and followed end to end: both domains consume their messages, the consuming
   // transactions carry the nullifiers the bot expects, the node's index matches the Inbox event, and the batch's
@@ -263,8 +354,9 @@ describe('single-node/cross-chain/inbox_bot', () => {
     // first production step runs the saturation batch instead of waiting a day for it.
     await store.inbox.setSchedule({ enabled: true, nextDueAt: 0, runInFlight: false, consecutiveFailures: 0 });
 
-    await bot.start();
     try {
+      const { batchTimestamp, openedAt } = await waitForSaturationSendWindow();
+      await bot.start();
       const batchId = await waitForBatch(store);
       const batch = await retryUntil(
         async () => {
@@ -277,6 +369,14 @@ describe('single-node/cross-chain/inbox_bot', () => {
       );
       expect(batch.scenario).toEqual('saturation');
       expect(batch.messageCount).toEqual(MAX_INBOX_MESSAGES_PER_BATCH);
+      // The batch made the L1 block the send window was chosen for. The send has under an L1 slot to get there, so the
+      // delay before it started is logged; the bot's own `Broadcast Inbox batch` line marks when it reached L1, which
+      // together tell a slow send apart from a wrong mining prediction.
+      log.warn(`Saturation batch send started ${batch.submittedAt! - openedAt}ms after its window opened`, {
+        plannedL1Timestamp: batchTimestamp,
+        l1BlockTimestamp: batch.l1BlockTimestamp,
+      });
+      expect(BigInt(batch.l1BlockTimestamp!)).toEqual(batchTimestamp);
 
       const messages = await store.inbox.getBatchMessages(batchId);
       const indices = messages.map(message => BigInt(message.globalLeafIndex!));
@@ -308,6 +408,27 @@ describe('single-node/cross-chain/inbox_bot', () => {
 
       const resolved = await waitForBatchResolved(store, batchId, 900);
       expect(resolved.filter(message => message.state === 'completed').length).toEqual(MAX_INBOX_MESSAGES_PER_BATCH);
+
+      // The checkpoint L1 first obliged to consume the batch took all of it: the first bucket in the block it built
+      // in sub-slot 0 and the rolled-over bucket in its final block. Had it lost sub-slot 0, its single block could
+      // not have consumed both buckets, so that slot would have no checkpoint and a later one would hold the batch.
+      const obligedSlot = firstSlotObligedToConsume(BigInt(batch.l1BlockTimestamp!));
+      await retryUntil(
+        async () => ((await aztecNode.getCheckpoint('checkpointed'))?.header.slotNumber ?? 0) >= obligedSlot,
+        `checkpointed tip reaches slot ${obligedSlot}`,
+        t.constants.slotDuration * 4,
+        1,
+      );
+      const obligedCheckpoint = await aztecNode.getCheckpoint(
+        { slot: obligedSlot },
+        { includeBlocks: true, includeL1PublishInfo: true },
+      );
+      expect(obligedCheckpoint).toBeDefined();
+      expect(await consumedThrough(BlockNumber(obligedCheckpoint!.startBlock - 1))).toBeLessThanOrEqual(indices[0]);
+      expect(
+        obligedCheckpoint!.blocks.map(block => BigInt(block.header.state.l1ToL2MessageTree.nextAvailableLeafIndex)),
+      ).toEqual(totals.map(bucket => bucket.totalMsgCount));
+
       expect(checks(telemetry, 'consumption_nullifier', 'failed')).toEqual(0);
       expect(failures(telemetry)).toEqual(0);
       log.warn(`Saturation batch consumed`, {
