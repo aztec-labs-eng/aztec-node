@@ -1,3 +1,5 @@
+import { tryJsonStringify } from '../json-rpc/convert.js';
+
 /** The key of the method through which a class controls how its instances are represented. */
 export const custom = Symbol.for('nodejs.util.inspect.custom');
 
@@ -19,7 +21,8 @@ function describeError(error: Error, seen: WeakSet<Error> = new WeakSet()): stri
 /**
  * Returns a string representation of a value without relying on Node.js.
  *
- * Honors a class's own `[custom]` method. Any other object is represented as JSON.
+ * Honors a class's own `[custom]` method. Any other object is represented as JSON, with buffers as base64 and maps and
+ * sets as arrays.
  */
 export function inspectWithoutNode(value: unknown): string {
   if (typeof value === 'string') {
@@ -37,11 +40,6 @@ export function inspectWithoutNode(value: unknown): string {
   if (value instanceof Error) {
     return describeError(value);
   }
-  try {
-    const json = JSON.stringify(value, (_key, nested) => (typeof nested === 'bigint' ? `${nested}n` : nested));
-    return json ?? Object.prototype.toString.call(value);
-  } catch {
-    // Values that JSON cannot represent, such as ones with circular references.
-    return Object.prototype.toString.call(value);
-  }
+  // Undefined for values that JSON cannot represent, such as ones with circular references.
+  return tryJsonStringify(value) ?? Object.prototype.toString.call(value);
 }
