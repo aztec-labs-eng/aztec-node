@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
