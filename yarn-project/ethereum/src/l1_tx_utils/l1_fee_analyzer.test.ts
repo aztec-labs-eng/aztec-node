@@ -1,6 +1,7 @@
 import { Blob } from '@aztec-labs/blob-lib';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type Hex, parseGwei } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
@@ -54,6 +55,16 @@ describe('L1FeeAnalyzer', () => {
     await cheatCodes.setIntervalMining(0);
     await anvil.stop().catch(err => createLogger('cleanup').error(err));
   }, 10000);
+
+  /**
+   * Anvil mines a block every second from the moment it started, and block timestamps are whole seconds, so a snapshot
+   * taken late in the interval reads as "before" a block that is timestamped earlier than it. Starting an analysis
+   * right after a block lands keeps timeBeforeBlockMs positive whatever anvil's mining phase.
+   */
+  const waitForNextL1Block = async () => {
+    const start = await l1Client.getBlockNumber();
+    await retryUntil(async () => (await l1Client.getBlockNumber()) > start, 'next L1 block', 5, 0.02);
+  };
 
   describe('capturePendingSnapshot', () => {
     it('captures empty pending block snapshot', async () => {
@@ -197,6 +208,7 @@ describe('L1FeeAnalyzer', () => {
         },
       ];
 
+      await waitForNextL1Block();
       const analysisId = await analyzer.startAnalysis(l2SlotNumber, gasLimit, requests);
 
       expect(analysisId).toMatch(/^fee-analysis-/);
@@ -299,8 +311,9 @@ describe('L1FeeAnalyzer', () => {
 
   describe('analysis statistics', () => {
     it('tracks completed analyses and provides statistics', async () => {
-      // Start multiple analyses
+      // Start one analysis per block
       for (let i = 0; i < 3; i++) {
+        await waitForNextL1Block();
         await analyzer.startAnalysis(SlotNumber(i), 21000n, [
           {
             to: '0x1234567890123456789012345678901234567890',
@@ -308,8 +321,6 @@ describe('L1FeeAnalyzer', () => {
             value: 0n,
           },
         ]);
-        // Wait a bit between analyses
-        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       // Wait for all analyses to complete
