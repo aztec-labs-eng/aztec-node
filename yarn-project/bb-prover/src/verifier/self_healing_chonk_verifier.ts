@@ -1,5 +1,5 @@
 import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
-import { LruMap } from '@aztec-labs/foundation/collection';
+import { LruSet } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { InterruptibleSleep } from '@aztec-labs/foundation/sleep';
@@ -56,7 +56,7 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
   /** Resolved once no other proof is in flight, for a proof waiting to be checked on its own. */
   private sharedDrained: PromiseWithResolvers<void> | undefined;
   /** Proofs found to crash bb, by the hash of their tx, so they are answered without sending them to bb again. */
-  private readonly crashedProofs = new LruMap<string, true>(SelfHealingChonkVerifier.CRASHED_PROOFS_REMEMBERED);
+  private readonly crashedProofs = new LruSet<string>(SelfHealingChonkVerifier.CRASHED_PROOFS_REMEMBERED);
   /** Whether bb has given a verdict on any proof since a proof was last blamed for crashing it. */
   private verdictSinceLastBlame = false;
   /** Resolved when bb next gives a verdict, or the verifier stops. */
@@ -107,7 +107,7 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
       if (this.verdictSinceLastBlame) {
         this.logger.warn('Proof took the Chonk verifier down when checked on its own', { label: this.label, txHash });
         this.verdictSinceLastBlame = false;
-        this.crashedProofs.set(crashKey(tx), true);
+        this.crashedProofs.add(crashKey(tx));
         return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
       }
       this.logger.warn(
