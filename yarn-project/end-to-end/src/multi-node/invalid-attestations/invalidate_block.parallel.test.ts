@@ -8,7 +8,7 @@ import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ExtendedViemWalletClient, ViemPublicClient, ViemPublicDebugClient } from '@aztec-labs/ethereum/types';
 import { range } from '@aztec-labs/foundation/array';
 import { asyncMap } from '@aztec-labs/foundation/async-map';
-import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times, timesAsync } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -385,8 +385,18 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     let badProposers: EthAddress[] = [];
     let candidate = Number(test.epochCache.getEpochAndSlotNow().slot) + 2;
     const maxBadSlotSearchAttempts = 100;
+    let randaoCheckpointedEpoch: EpochNumber | undefined;
     for (let attempt = 0; attempt < maxBadSlotSearchAttempts && warpSlot === undefined; attempt++) {
       try {
+        // L1 lets us query the next epoch's proposers as soon as the current epoch starts, but its seed is the
+        // randao checkpointed by the first proposal of the current epoch. Checkpoint it now, before the sequencers
+        // start, or the first good checkpoint reshuffles the proposers of the next epoch after we picked them.
+        const { epoch: currentEpoch } = test.epochCache.getEpochAndSlotNow();
+        if (currentEpoch !== randaoCheckpointedEpoch) {
+          await test.context.cheatCodes.rollup.setupEpoch();
+          randaoCheckpointedEpoch = currentEpoch;
+        }
+
         const candidateWarpSlot = SlotNumber(candidate);
         const preBadTargetSlots = times(preBadSlotCount, i => SlotNumber.add(candidateWarpSlot, i + 1));
         const candidateSlot1 = SlotNumber.add(candidateWarpSlot, preBadSlotCount + 1);
@@ -481,8 +491,15 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const secondCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
     const expectedFirstSlot = badSlot1;
     const expectedSecondSlot = badSlot2;
+    let lastCheckpointNumber = 0;
     test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
       logger.warn(`Checkpoint ${checkpointNumber} at slot ${l2SlotNumber} has been mined`);
+      // An invalidation rolls the tip back and is reported as a checkpoint event at the current slot, which would
+      // otherwise resolve a bad-slot promise with an older, valid checkpoint.
+      if (checkpointNumber <= lastCheckpointNumber) {
+        return;
+      }
+      lastCheckpointNumber = checkpointNumber;
       if (l2SlotNumber === expectedFirstSlot) {
         firstCheckpointPromise.resolve(checkpointNumber);
       }
