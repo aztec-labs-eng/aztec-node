@@ -4,6 +4,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type ZodFor, hexSchemaFor } from '@aztec-labs/foundation/schemas';
 import { BufferReader, FieldReader } from '@aztec-labs/foundation/serialize';
+import { Buffer } from 'buffer';
 
 import type { ABIParameter } from './abi.js';
 import { decodeFunctionSignature } from './function_signature_decoder.js';

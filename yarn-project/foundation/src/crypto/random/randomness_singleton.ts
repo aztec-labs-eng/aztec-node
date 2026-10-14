@@ -1,3 +1,6 @@
+import { Buffer } from 'buffer';
+
+import { getEnv } from '../../config/env.js';
 import { type Logger, type LoggerBindings, createLogger } from '../../log/pino-logger.js';
 
 /**
@@ -29,7 +32,8 @@ export class RandomnessSingleton {
 
   public static getInstance(bindings?: LoggerBindings): RandomnessSingleton {
     if (!RandomnessSingleton.instance) {
-      const seed = process.env.SEED ? Number(process.env.SEED) : undefined;
+      const { SEED } = getEnv();
+      const seed = SEED ? Number(SEED) : undefined;
       RandomnessSingleton.instance = new RandomnessSingleton(seed, bindings);
     }
 

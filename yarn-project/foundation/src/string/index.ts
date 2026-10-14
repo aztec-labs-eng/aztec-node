@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 /** Parameterized hex string type for specific byte lengths */
 export type Hex<TByteLength extends number> = `0x${string}` & { readonly _length: TByteLength };
 

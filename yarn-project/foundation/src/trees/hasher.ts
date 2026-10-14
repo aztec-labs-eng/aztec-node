@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { poseidon2HashWithSeparator } from '../crypto/poseidon/index.js';
 import { sha256Trunc } from '../crypto/sha256/index.js';
 

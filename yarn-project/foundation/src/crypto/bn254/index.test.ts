@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { Fq, Fr } from '../../curves/bn254/field.js';
 import { Bn254G1Point } from '../../curves/bn254/point.js';
 import { deriveBlsKeyFromMnemonic } from '../bls/index.js';

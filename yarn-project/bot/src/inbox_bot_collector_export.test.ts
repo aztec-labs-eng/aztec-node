@@ -1,4 +1,5 @@
 import { type TelemetryClient, type TelemetryClientConfig, initTelemetryClient } from '@aztec-labs/telemetry-client';
+import { Buffer } from 'buffer';
 import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 

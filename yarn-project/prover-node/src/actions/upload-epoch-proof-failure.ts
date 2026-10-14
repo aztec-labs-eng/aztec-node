@@ -10,6 +10,7 @@ import type { WorldStateSynchronizer } from '@aztec-labs/stdlib/interfaces/serve
 import type { DataStoreConfig } from '@aztec-labs/stdlib/kv-store';
 import { type UploadSnapshotMetadata, getBasePath, uploadSnapshotData } from '@aztec-labs/stdlib/snapshots';
 import { WORLD_STATE_DB_VERSION } from '@aztec-labs/world-state';
+import { Buffer } from 'buffer';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';

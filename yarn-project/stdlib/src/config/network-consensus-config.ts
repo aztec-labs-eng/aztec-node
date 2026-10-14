@@ -1,5 +1,6 @@
 import { type L1ContractsConfig, l1ContractsConfigMappings, validateSlotDurations } from '@aztec-labs/ethereum/config';
 import { type EnvVar, pickConfigMappings } from '@aztec-labs/foundation/config';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 
 import { MAX_ATTESTABLE_BLOCKS_PER_CHECKPOINT } from '../deserialization/index.js';
 import type { SequencerConfig } from '../interfaces/configs.js';
@@ -260,7 +261,7 @@ export function validateNetworkConsensusConfig(config: NetworkConsensusConfig): 
  */
 export function checkConsensusEnvOverrides(
   networkConfig: Record<string, string | number | boolean>,
-  env: { [key: string]: string | undefined } = process.env,
+  env: { [key: string]: string | undefined } = getEnv(),
   log?: (msg: string) => void,
 ): Record<string, string> {
   const allowOverride = allowsNetworkConfigOverride(env);
@@ -357,7 +358,7 @@ function getProposerTxLimitConflict(
 }
 
 /** Whether the env opts into overriding network-wide consensus values (`ALLOW_OVERRIDING_NETWORK_CONFIG`). */
-export function allowsNetworkConfigOverride(env: { [key: string]: string | undefined } = process.env): boolean {
+export function allowsNetworkConfigOverride(env: { [key: string]: string | undefined } = getEnv()): boolean {
   const value = env.ALLOW_OVERRIDING_NETWORK_CONFIG;
   return value === '1' || value?.toLowerCase() === 'true';
 }

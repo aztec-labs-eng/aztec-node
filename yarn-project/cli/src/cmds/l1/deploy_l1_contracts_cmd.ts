@@ -7,6 +7,7 @@ import { SecretValue } from '@aztec-labs/foundation/config';
 import type { LogFn, Logger } from '@aztec-labs/foundation/log';
 import { protocolContractsHash } from '@aztec-labs/protocol-contracts';
 import { getGenesisValues } from '@aztec-labs/world-state/testing';
+import { Buffer } from 'buffer';
 import { mnemonicToAccount } from 'viem/accounts';
 
 import { addLeadingHex } from '../../utils/aztec.js';

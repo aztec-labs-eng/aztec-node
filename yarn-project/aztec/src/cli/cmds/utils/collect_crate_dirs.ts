@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import TOML from '@iarna/toml';
 import { existsSync } from 'fs';
 import { mkdir, readFile, stat } from 'fs/promises';
@@ -93,7 +94,7 @@ export function nargoGitDepPath(gitUrl: string, tag: string): string {
   const url = new URL(gitUrl);
   const domain = url.hostname;
   const repoPath = url.pathname.replace(/^\//, '');
-  return join(process.env.HOME ?? homedir(), 'nargo', domain, repoPath, tag);
+  return join(getEnv().HOME ?? homedir(), 'nargo', domain, repoPath, tag);
 }
 
 /**

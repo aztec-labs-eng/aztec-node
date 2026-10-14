@@ -1,5 +1,6 @@
 import { prettyPrintJSON } from '@aztec-labs/cli/utils';
 import { asyncPool } from '@aztec-labs/foundation/async-pool';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { deriveBlsPrivateKey } from '@aztec-labs/foundation/crypto/bls';
 import { createBn254Keystore } from '@aztec-labs/foundation/crypto/bls/bn254_keystore';
 import { computeBn254G1PublicKeyCompressed } from '@aztec-labs/foundation/crypto/bn254';
@@ -8,6 +9,7 @@ import type { LogFn } from '@aztec-labs/foundation/log';
 import type { EthAccount, EthPrivateKey, ValidatorKeyStore } from '@aztec-labs/node-keystore/types';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Wallet } from '@ethersproject/wallet';
+import { Buffer } from 'buffer';
 import { constants as fsConstants, mkdirSync } from 'fs';
 import { access, writeFile } from 'fs/promises';
 import { availableParallelism, homedir } from 'os';
@@ -59,7 +61,7 @@ function encryptEthJsonV3InWorker(privateKeyHex: string, password: string): Prom
 }
 
 async function encryptEthJsonV3(privateKeyHex: string, password: string): Promise<string> {
-  if (process.env.JEST_WORKER_ID !== undefined) {
+  if (getEnv().JEST_WORKER_ID !== undefined) {
     return await new Wallet(privateKeyHex).encrypt(password);
   }
   return await encryptEthJsonV3InWorker(privateKeyHex, password);
@@ -84,7 +86,7 @@ export type BuildValidatorsInput = {
 export function withValidatorIndex(path: string, accountIndex: number = 0, addressIndex: number = 0) {
   // NOTE: The legacy BLS CLI is to allow users who generated keys in 2.1.4 to be able to use the same command
   // to re-generate their keys. In 2.1.5 we switched how we append addresses to the path so this is to maintain backwards compatibility.
-  const useLegacyBlsCli = ['true', '1', 'yes', 'y'].includes(process.env.LEGACY_BLS_CLI ?? '');
+  const useLegacyBlsCli = ['true', '1', 'yes', 'y'].includes(getEnv().LEGACY_BLS_CLI ?? '');
 
   const defaultBlsPathParts = defaultBlsPath.split('/');
 

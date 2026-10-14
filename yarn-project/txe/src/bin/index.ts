@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --no-warnings
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { startHttpRpcServer } from '@aztec-labs/foundation/json-rpc/server';
 import { createLogger } from '@aztec-labs/foundation/log';
 
@@ -11,13 +12,14 @@ import { createTXERpcServer } from '../rpc_server.js';
 // CAVEAT: HARDWARE_CONCURRENCY is process-global — bb prove/verify, the LMDB reader pool, and
 // the world-state native thread pool all read it. Safe at 2 today because TXE never proves or
 // verifies and only performs light tree updates; raise it if that ever changes.
+// eslint-disable-next-line no-restricted-properties -- sets a variable of the Node.js process
 process.env.HARDWARE_CONCURRENCY ??= '2';
 
 /**
  * Create and start a new TXE HTTP Server
  */
 async function main() {
-  const { TXE_PORT = 8080 } = process.env;
+  const { TXE_PORT = 8080 } = getEnv();
 
   process.on('SIGTERM', () => {
     logger.info('Received SIGTERM.');

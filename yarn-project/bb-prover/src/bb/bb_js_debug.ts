@@ -1,6 +1,7 @@
 import type { AvmStat } from '@aztec-foundation/bb.js';
 
 import type { Logger } from '@aztec-labs/foundation/log';
+import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { gzipSync } from 'zlib';

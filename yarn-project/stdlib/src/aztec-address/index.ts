@@ -1,10 +1,11 @@
 import { NULL_MSG_SENDER_CONTRACT_ADDRESS } from '@aztec-labs/constants';
 import { Fr, fromBuffer } from '@aztec-labs/foundation/curves/bn254';
 import { Point } from '@aztec-labs/foundation/curves/grumpkin';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { type ZodFor, bufferSchemaFor, hexSchemaFor } from '@aztec-labs/foundation/schemas';
 import { type BufferReader, type BufferSink, FieldReader } from '@aztec-labs/foundation/serialize';
 import { hexToBuffer } from '@aztec-labs/foundation/string';
-import { inspect } from 'util';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 /**

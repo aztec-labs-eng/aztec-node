@@ -2,11 +2,12 @@ import { type Color, createColors, isColorSupported } from 'colorette';
 import isNode from 'detect-node';
 import { pino, symbols } from 'pino';
 import type { Writable } from 'stream';
-import { inspect } from 'util';
 
 import { compactArray } from '../collection/array.js';
+import { getEnv } from '../config/env.js';
 import type { EnvVar } from '../config/index.js';
 import { parseBooleanEnv } from '../config/parse-env.js';
+import { inspect } from '../inspect/index.js';
 import { AWSCloudLoggerConfig } from './aws-logger-config.js';
 import { convertBigintsToStrings } from './bigint-utils.js';
 import { GoogleCloudLoggerConfig } from './gcloud-logger-config.js';
@@ -129,15 +130,15 @@ function isLevelEnabled(logger: pino.Logger<'verbose', boolean>, level: LogLevel
 }
 
 // Load log levels from environment variables.
-const defaultLogLevel = process.env.NODE_ENV === 'test' ? 'silent' : 'info';
-export const [logLevel, logFilters] = parseLogLevelEnvVar(process.env.LOG_LEVEL, defaultLogLevel);
+const defaultLogLevel = getEnv().NODE_ENV === 'test' ? 'silent' : 'info';
+export const [logLevel, logFilters] = parseLogLevelEnvVar(getEnv().LOG_LEVEL, defaultLogLevel);
 
 // Define custom logging levels for pino.
 const customLevels = { verbose: 25 };
 
 // Global pino options, tweaked for the active cloud logging backend.
-const useGcloudLogging = parseBooleanEnv(process.env['USE_GCLOUD_LOGGING' satisfies EnvVar]);
-const useAwsLogging = parseBooleanEnv(process.env['USE_AWS_LOGGING' satisfies EnvVar]);
+const useGcloudLogging = parseBooleanEnv(getEnv()['USE_GCLOUD_LOGGING' satisfies EnvVar]);
+const useAwsLogging = parseBooleanEnv(getEnv()['USE_AWS_LOGGING' satisfies EnvVar]);
 const loggingConfig = useGcloudLogging
   ? GoogleCloudLoggerConfig
   : useAwsLogging
@@ -190,14 +191,14 @@ export const levels = {
 };
 
 // Transport options for pretty logging to stderr via pino-pretty.
-const colorEnv = process.env['FORCE_COLOR' satisfies EnvVar];
+const colorEnv = getEnv()['FORCE_COLOR' satisfies EnvVar];
 const useColor = colorEnv === undefined ? isColorSupported : parseBooleanEnv(colorEnv);
 const { bold, reset, cyan, magenta, yellow, blue, green, magentaBright, yellowBright, blueBright, greenBright } =
   createColors({ useColor });
 
 // Per-actor coloring: each unique actor gets a different color for easier visual distinction.
 // Disabled when LOG_NO_COLOR_PER_ACTOR is set to a truthy value.
-const useColorPerActor = useColor && !parseBooleanEnv(process.env['LOG_NO_COLOR_PER_ACTOR' satisfies EnvVar]);
+const useColorPerActor = useColor && !parseBooleanEnv(getEnv()['LOG_NO_COLOR_PER_ACTOR' satisfies EnvVar]);
 const actorColors: Color[] = [yellow, magenta, blue, green, magentaBright, yellowBright, blueBright, greenBright];
 const actorColorMap = new Map<string, Color>();
 let nextColorIndex = 0;
@@ -255,7 +256,7 @@ const pinoPrettyBaseOpts = {
   customLevels: 'fatal:60,error:50,warn:40,info:30,verbose:25,debug:20,trace:10',
   customColors: 'fatal:bgRed,error:red,warn:yellow,info:green,verbose:magenta,debug:blue,trace:gray',
   minimumLevel: 'trace' as const,
-  singleLine: !parseBooleanEnv(process.env['LOG_MULTILINE' satisfies EnvVar]),
+  singleLine: !parseBooleanEnv(getEnv()['LOG_MULTILINE' satisfies EnvVar]),
 };
 
 /**
@@ -292,7 +293,7 @@ const stdioTransport: pino.TransportTargetOptions = {
 // would mean that all child loggers created before the telemetry-client is initialized would not have
 // this transport configured. Note that the target is defined as the export in the telemetry-client,
 // since pino will load this transport separately on a worker thread, to minimize disruption to the main loop.
-const otlpEndpoint = process.env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT' satisfies EnvVar];
+const otlpEndpoint = getEnv()['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT' satisfies EnvVar];
 const otlpEnabled = !!otlpEndpoint && !useGcloudLogging;
 const otelOpts = { levels };
 const otelTransport: pino.TransportTargetOptions = {
@@ -307,7 +308,7 @@ function makeLogger() {
   }
   // If running in a child process then cancel this if statement section by uncommenting below
   // else if (false) {
-  else if (process.env.JEST_WORKER_ID) {
+  else if (getEnv().JEST_WORKER_ID) {
     // We are on jest, so we need sync logging and stream to stderr.
     // We expect jest/setup.mjs to kick in later and replace set up a pretty logger,
     // but if for some reason it doesn't, at least we're covered with a default logger.
@@ -316,7 +317,7 @@ function makeLogger() {
     // Regular nodejs with transports on worker thread, using pino-pretty for console logging if LOG_JSON
     // is not set, and an optional OTLP transport if the OTLP endpoint is set.
     const targets: pino.TransportSingleOptions[] = compactArray([
-      parseBooleanEnv(process.env.LOG_JSON) ? stdioTransport : prettyTransport,
+      parseBooleanEnv(getEnv().LOG_JSON) ? stdioTransport : prettyTransport,
       otlpEnabled ? otelTransport : undefined,
     ]);
     return pino(pinoOpts, pino.transport({ targets, levels: levels.values }));

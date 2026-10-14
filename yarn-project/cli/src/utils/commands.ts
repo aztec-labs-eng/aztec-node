@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { GrumpkinScalar } from '@aztec-labs/foundation/curves/grumpkin';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -8,6 +9,7 @@ import { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { PublicKeys } from '@aztec-labs/stdlib/keys';
 import { LogCursor, Tag } from '@aztec-labs/stdlib/logs';
 import { TxHash } from '@aztec-labs/stdlib/tx/tx-hash';
+import { Buffer } from 'buffer';
 import { type Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { lookup } from 'dns/promises';
 import { rename, writeFile } from 'fs/promises';
@@ -24,7 +26,7 @@ export const getLocalhost = () =>
     .catch(() => 'localhost');
 
 export const LOCALHOST = await getLocalhost();
-export const { ETHEREUM_HOSTS = `http://${LOCALHOST}:8545`, PRIVATE_KEY, MNEMONIC, API_KEY, CLI_VERSION } = process.env;
+export const { ETHEREUM_HOSTS = `http://${LOCALHOST}:8545`, PRIVATE_KEY, MNEMONIC, API_KEY, CLI_VERSION } = getEnv();
 
 export function addOptions(program: Command, options: Option[]) {
   options.forEach(option => program.addOption(option));

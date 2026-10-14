@@ -1,7 +1,7 @@
 import { TREE_SNAPSHOTS_LENGTH } from '@aztec-labs/constants';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, BufferSink, FieldReader, serializeToSink } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { AppendOnlyTreeSnapshot } from '../trees/append_only_tree_snapshot.js';

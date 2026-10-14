@@ -2,6 +2,7 @@ import { CircuitKind } from '@aztec-foundation/bb.js';
 
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type ZodFor, optional, schemas } from '@aztec-labs/foundation/schemas';
+import { Buffer } from 'buffer';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

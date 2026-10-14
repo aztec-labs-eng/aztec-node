@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { type AsyncHasher, type Hasher, shaMerkleHash } from './hasher.js';
 import { SiblingPath } from './sibling_path.js';
 import { type TreeNodeLocation, UnbalancedTreeStore } from './unbalanced_tree_store.js';

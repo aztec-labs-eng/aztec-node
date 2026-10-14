@@ -29,6 +29,7 @@ import { type TelemetryClient, getTelemetryClient } from '@aztec-labs/telemetry-
 import type { Message, PeerId } from '@libp2p/interface';
 import { TopicValidatorResult } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';
+import { Buffer } from 'buffer';
 
 import type { P2PClient } from '../client/index.js';
 import type { P2PConfig } from '../config.js';

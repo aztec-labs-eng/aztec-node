@@ -3,6 +3,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { MAX_TX_SIZE_KB, TopicType, getTopicFromString } from '@aztec-labs/stdlib/p2p';
 import type { DataTransform } from '@chainsafe/libp2p-gossipsub/types';
 import type { Message } from '@libp2p/interface';
+import { Buffer } from 'buffer';
 import { webcrypto } from 'node:crypto';
 import { compressSync, uncompressSync } from 'snappy';
 

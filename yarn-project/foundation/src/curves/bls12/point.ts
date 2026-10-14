@@ -1,10 +1,11 @@
 import type { ProjPointType } from '@noble/curves/abstract/weierstrass';
 /* eslint-disable camelcase */
 import { bls12_381 } from '@noble/curves/bls12-381';
-import { inspect } from 'util';
+import { Buffer } from 'buffer';
 
 import { toBufferBE } from '../../bigint-buffer/index.js';
 import { randomBoolean } from '../../crypto/random/index.js';
+import { inspect } from '../../inspect/index.js';
 import { hexSchemaFor } from '../../schemas/utils.js';
 import { BufferReader, serializeToBuffer } from '../../serialize/index.js';
 import { bufferToHex, hexToBuffer } from '../../string/index.js';

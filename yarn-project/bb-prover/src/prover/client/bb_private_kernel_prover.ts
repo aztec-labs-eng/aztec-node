@@ -2,6 +2,7 @@ import { AztecClientBackend, type BackendOptions, Barretenberg } from '@aztec-fo
 import { serializeWitness } from '@aztec-foundation/noir-noirc_abi';
 import type { Abi, WitnessMap } from '@aztec-foundation/noir-types';
 
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type LogLevel, type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { Timer } from '@aztec-labs/foundation/timer';
 import {
@@ -68,6 +69,7 @@ import type {
 import type { NoirCompiledCircuitWithName } from '@aztec-labs/stdlib/noir';
 import { ChonkProofWithPublicInputs } from '@aztec-labs/stdlib/proofs';
 import type { CircuitSimulationStats, CircuitWitnessGenerationStats } from '@aztec-labs/stdlib/stats';
+import { Buffer } from 'buffer';
 import { ungzip } from 'pako';
 
 export type BBPrivateKernelProverOptions = Omit<BackendOptions, 'logger'> & { logger?: Logger };
@@ -526,7 +528,7 @@ export abstract class BBPrivateKernelProver implements PrivateKernelProver {
     // Note we do not pass the vk to the backend. This is unneeded for gate counts.
     const barretenberg = await Barretenberg.initSingleton({
       ...this.options,
-      logger: this.options.logger?.[(process.env.LOG_LEVEL as LogLevel) || 'verbose'],
+      logger: this.options.logger?.[(getEnv().LOG_LEVEL as LogLevel) || 'verbose'],
     });
     const backend = new AztecClientBackend([ungzip(_bytecode)], barretenberg, [_circuitName], [_circuitKind]);
     const gateCount = await backend.gates();

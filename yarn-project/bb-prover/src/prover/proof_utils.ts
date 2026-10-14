@@ -12,6 +12,7 @@ import type { Logger } from '@aztec-labs/foundation/log';
 import { ChonkProofWithPublicInputs, Proof, RecursiveProof } from '@aztec-labs/stdlib/proofs';
 import type { VerificationKeyData } from '@aztec-labs/stdlib/vks';
 import assert from 'assert';
+import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 

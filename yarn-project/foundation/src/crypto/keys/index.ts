@@ -1,5 +1,7 @@
 import { BarretenbergSync, CircuitKind } from '@aztec-foundation/bb.js';
 
+import { Buffer } from 'buffer';
+
 import { Fr } from '../../curves/bn254/field.js';
 
 export async function vkAsFields(input: Buffer, kind: CircuitKind): Promise<Fr[]> {

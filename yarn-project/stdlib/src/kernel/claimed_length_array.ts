@@ -1,4 +1,5 @@
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import {
   BufferReader,
   FieldReader,
@@ -7,7 +8,6 @@ import {
   serializeToBuffer,
   serializeToFields,
 } from '@aztec-labs/foundation/serialize';
-import { inspect } from 'util';
 
 export class ClaimedLengthArray<T extends Serializable, N extends number> {
   constructor(

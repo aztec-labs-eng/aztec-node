@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { MerkleTree } from './merkle_tree.js';
 
 type MerkleHashFn = (left: Buffer, right: Buffer) => Promise<Buffer<ArrayBuffer>>;

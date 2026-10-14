@@ -30,6 +30,7 @@ import {
   TxContext,
   TxSimulationResult,
 } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 
 /**
  * Splits an execution payload into a leading prefix of public static calls

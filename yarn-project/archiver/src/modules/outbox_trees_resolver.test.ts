@@ -12,6 +12,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { type L2ToL1MembershipWitness, computeEpochOutHash } from '@aztec-labs/stdlib/messaging';
 import { TxHash } from '@aztec-labs/stdlib/tx';
+import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
 import { type OutboxTreesArchiverView, OutboxTreesResolver } from './outbox_trees_resolver.js';

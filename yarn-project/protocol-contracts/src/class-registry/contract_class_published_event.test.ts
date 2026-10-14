@@ -7,6 +7,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { setupCustomSnapshotSerializers } from '@aztec-labs/foundation/testing';
 import { bufferAsFields } from '@aztec-labs/stdlib/abi';
 import { ContractClassLog, ContractClassLogFields } from '@aztec-labs/stdlib/logs';
+import { Buffer } from 'buffer';
 
 import { ProtocolContractAddress } from '../protocol_contract_data.js';
 import { getSampleContractClassPublishedEventPayload } from '../tests/fixtures.js';

@@ -10,6 +10,7 @@ import { createSecp256k1PeerId } from '@libp2p/peer-id-factory';
 import { multiaddr } from '@multiformats/multiaddr';
 import type { IDiscv5CreateOptions } from '@nethermindeth/discv5';
 import { ENR, SignableENR } from '@nethermindeth/enr';
+import { Buffer } from 'buffer';
 
 import { BootstrapNode } from '../../bootstrap/bootstrap.js';
 import { type BootnodeConfig, DEFAULT_PUBLIC_IP_SERVICES, type P2PConfig, getP2PDefaultConfig } from '../../config.js';

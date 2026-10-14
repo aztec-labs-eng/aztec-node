@@ -1,6 +1,7 @@
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
+import { Buffer } from 'buffer';
 import { hashMessage, recoverAddress as viemRecoverAddress, recoverPublicKey as viemRecoverPublicKey } from 'viem';
 import { type PrivateKeyAccount, generatePrivateKey, privateKeyToAccount, publicKeyToAddress } from 'viem/accounts';
 

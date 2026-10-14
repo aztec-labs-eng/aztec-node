@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 import { EthAddress } from './index.js';
 
 describe('address', () => {

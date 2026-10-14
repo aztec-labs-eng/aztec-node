@@ -3,6 +3,7 @@ import { padArrayEnd } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import type { PartialBy } from '@aztec-labs/foundation/types';
+import { Buffer } from 'buffer';
 
 import { getEpochForOffense } from './helpers.js';
 import type { Offense, ValidatorSlashVote } from './types.js';

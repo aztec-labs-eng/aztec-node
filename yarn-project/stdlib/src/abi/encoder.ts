@@ -1,4 +1,5 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { Buffer } from 'buffer';
 
 import type { AbiType, FunctionAbi } from './abi.js';
 import {

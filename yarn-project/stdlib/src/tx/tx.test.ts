@@ -9,6 +9,7 @@ import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
+import { Buffer } from 'buffer';
 
 import { AztecAddress } from '../aztec-address/index.js';
 import { LogHash, ScopedLogHash } from '../kernel/log_hash.js';

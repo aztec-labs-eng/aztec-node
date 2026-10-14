@@ -1,4 +1,5 @@
 import type { AztecAsyncArray, AztecAsyncMap, AztecAsyncSingleton, Key } from '@aztec-labs/kv-store';
+import { Buffer } from 'buffer';
 
 /**
  * This file contains helpers that produce stable, snapshot-friendly text representations of our kv-stores'

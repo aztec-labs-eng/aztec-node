@@ -1,6 +1,7 @@
 import { randomBytes } from '@aztec-labs/foundation/crypto/random';
 import { sha256Hash } from '@aztec-labs/foundation/json-rpc/server';
 import type { Logger } from '@aztec-labs/foundation/log';
+import { Buffer } from 'buffer';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 

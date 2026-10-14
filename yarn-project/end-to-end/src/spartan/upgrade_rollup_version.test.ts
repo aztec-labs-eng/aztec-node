@@ -10,6 +10,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import fs from 'fs';
 import omit from 'lodash.omit';
 import path from 'path';

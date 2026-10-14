@@ -1,8 +1,8 @@
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { BufferReader, serializeToBuffer } from '@aztec-labs/foundation/serialize';
 import { bufferToHex, hexToBuffer } from '@aztec-labs/foundation/string';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { FunctionSelector } from '../abi/function_selector.js';

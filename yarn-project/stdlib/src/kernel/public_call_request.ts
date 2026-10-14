@@ -1,5 +1,6 @@
 import { COUNTED_PUBLIC_CALL_REQUEST_LENGTH, PUBLIC_CALL_REQUEST_LENGTH } from '@aztec-labs/constants';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { inspect } from '@aztec-labs/foundation/inspect';
 import { schemas } from '@aztec-labs/foundation/schemas';
 import {
   BufferReader,
@@ -9,7 +10,6 @@ import {
   serializeToSink,
 } from '@aztec-labs/foundation/serialize';
 import type { FieldsOf } from '@aztec-labs/foundation/types';
-import { inspect } from 'util';
 import { z } from 'zod';
 
 import { AztecAddress } from '../aztec-address/index.js';

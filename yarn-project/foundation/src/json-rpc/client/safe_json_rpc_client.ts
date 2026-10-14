@@ -1,5 +1,4 @@
-import { format } from 'util';
-
+import { inspect } from '../../inspect/index.js';
 import { type Logger, createLogger } from '../../log/pino-logger.js';
 import { type PromiseWithResolvers, promiseWithResolvers } from '../../promise/utils.js';
 import { type ApiSchema, type ApiSchemaFor, getSchemaReturnType, schemaHasMethod } from '../../schemas/api.js';
@@ -226,9 +225,9 @@ export function createSafeJsonRpcClient<T extends object>(
       sendBatchTimeoutHandle = setTimeout(sendBatch, batchWindowMS);
     }
 
-    log.debug(format(`request`, method, params));
+    log.debug(`request ${method} ${inspect(params)}`);
     const response = await deferred.promise;
-    log.debug(format(`result`, method, response));
+    log.debug(`result ${method} ${inspect(response)}`);
 
     if ('error' in response) {
       throw new Error(response.error.message, { cause: response.error });

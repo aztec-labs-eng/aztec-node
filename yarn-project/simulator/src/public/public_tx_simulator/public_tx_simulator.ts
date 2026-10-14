@@ -11,6 +11,7 @@ import { SimulationError } from '@aztec-labs/stdlib/errors';
 import type { GlobalVariables, Tx } from '@aztec-labs/stdlib/tx';
 import { WorldStateRevision } from '@aztec-labs/stdlib/world-state';
 import { type TelemetryClient, type Tracer, getTelemetryClient } from '@aztec-labs/telemetry-client';
+import { Buffer } from 'buffer';
 
 import type { AvmContractsDBContext, AvmSimulator } from '../avm_simulator.js';
 import { ExecutorMetrics } from '../executor_metrics.js';

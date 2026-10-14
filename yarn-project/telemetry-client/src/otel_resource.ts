@@ -1,3 +1,4 @@
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import {
   type DetectorSync,
   type IResource,
@@ -61,9 +62,9 @@ const aztecNetworkDetectorSync: DetectorSync = {
       [ATTR_SERVICE_NAME]: role ? `aztec-${role}` : undefined,
       [ATTR_SERVICE_VERSION]: getAztecVersion(),
       [AZTEC_NODE_ROLE]: role,
-      [AZTEC_ROLLUP_VERSION]: process.env.ROLLUP_VERSION ?? 'canonical',
-      [AZTEC_ROLLUP_ADDRESS]: process.env.ROLLUP_CONTRACT_ADDRESS,
-      [AZTEC_REGISTRY_ADDRESS]: process.env.REGISTRY_CONTRACT_ADDRESS,
+      [AZTEC_ROLLUP_VERSION]: getEnv().ROLLUP_VERSION ?? 'canonical',
+      [AZTEC_ROLLUP_ADDRESS]: getEnv().ROLLUP_CONTRACT_ADDRESS,
+      [AZTEC_REGISTRY_ADDRESS]: getEnv().REGISTRY_CONTRACT_ADDRESS,
     };
 
     return new Resource(aztecAttributes);

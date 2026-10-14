@@ -1,5 +1,6 @@
 import { toArray } from '@aztec-labs/foundation/iterable';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { Buffer } from 'buffer';
 import { vi } from 'vitest';
 
 import {

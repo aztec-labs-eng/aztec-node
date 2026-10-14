@@ -10,6 +10,7 @@ import type { Signature } from '@aztec-labs/foundation/eth-signature';
 import { makeBackoff, retry } from '@aztec-labs/foundation/retry';
 import type { AztecAddress } from '@aztec-labs/stdlib/aztec-address';
 import { Wallet } from '@ethersproject/wallet';
+import { Buffer } from 'buffer';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { extname, join } from 'path';
 import type { TypedDataDefinition } from 'viem';

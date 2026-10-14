@@ -2,6 +2,7 @@
  * Fetches an account proof from the Ethereum mainnet and saves it as account_proof.json.
  * This script is not using any Aztec library code, so it's easily portable.
  */
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import fs from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -10,9 +11,9 @@ import { mainnet } from 'viem/chains';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const RPC_URL = process.env.RPC_URL;
-const ADDRESS = (process.env.ADDRESS || '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045') as `0x${string}`;
-const BLOCK_TAG = process.env.BLOCK_NUMBER ? BigInt(process.env.BLOCK_NUMBER) : 'latest';
+const { RPC_URL, BLOCK_NUMBER } = getEnv();
+const ADDRESS = (getEnv().ADDRESS || '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045') as `0x${string}`;
+const BLOCK_TAG = BLOCK_NUMBER ? BigInt(BLOCK_NUMBER) : 'latest';
 const MAX_ACCOUNT_PATH = 15;
 
 function padTo(arr: number[], len: number) {

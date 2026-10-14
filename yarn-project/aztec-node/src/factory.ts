@@ -10,6 +10,7 @@ import { InboxContract, RegistryContract, RollupContract } from '@aztec-labs/eth
 import { pickL1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { compactArray } from '@aztec-labs/foundation/collection';
+import { getEnv } from '@aztec-labs/foundation/config/env';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { type KeyStore, KeystoreManager, loadKeystores, mergeKeystores } from '@aztec-labs/node-keystore';
@@ -153,7 +154,7 @@ export async function createAztecNodeService(
     if (keyStoreManager === undefined) {
       throw new Error('Failed to create key store, a requirement for running a validator');
     }
-    if (!keyStoreProvided && process.env.NODE_ENV !== 'test') {
+    if (!keyStoreProvided && getEnv().NODE_ENV !== 'test') {
       log.warn("Keystore created from env: it's recommended to use a file-based key store for production");
     }
     ValidatorClient.validateKeyStoreConfiguration(keyStoreManager, log);

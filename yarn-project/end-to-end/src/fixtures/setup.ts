@@ -69,6 +69,7 @@ import {
 import { BenchmarkTelemetryClient } from '@aztec-labs/telemetry-client/bench';
 import { createFundedInitializerlessAccounts } from '@aztec-labs/wallets/testing';
 import { getGenesisValues } from '@aztec-labs/world-state/testing';
+import { Buffer } from 'buffer';
 import fs from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';

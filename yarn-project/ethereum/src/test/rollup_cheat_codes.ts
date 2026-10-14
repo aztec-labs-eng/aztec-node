@@ -8,6 +8,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { DateProvider } from '@aztec-labs/foundation/timer';
+import { Buffer } from 'buffer';
 import {
   type GetContractReturnType,
   type Hex,

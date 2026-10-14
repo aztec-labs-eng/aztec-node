@@ -11,6 +11,7 @@ import { createLogger } from '@aztec-labs/foundation/log';
 import { bufferToHex } from '@aztec-labs/foundation/string';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { type Hex, type TypedDataDefinition, encodeFunctionData, hashTypedData } from 'viem';
 import { type PrivateKeyAccount, privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
