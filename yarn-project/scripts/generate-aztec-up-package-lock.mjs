@@ -1,3 +1,21 @@
+/**
+ * Generates the npm manifest and lock that aztec-up installs a release from, and writes them to
+ * <output-directory>/packages.tar.gz.
+ *
+ * npm must point at a registry that holds every public workspace at <version>, as published by ci3/deploy_npm, and that
+ * proxies everything else to npmjs. aztec-up/bootstrap.sh runs a local verdaccio for this, so a release has its lock
+ * before anything reaches npmjs. The published manifests already carry ci3/release_prep_package_json's rewrites, so
+ * first-party versions come from them rather than from rules repeated here.
+ *
+ * Third-party versions are limited to the ones yarn-project/yarn.lock resolves: npm reads them as a Yarn Classic lock
+ * hint, and any version outside that set fails the generation. Peer dependencies npm would not install are added to the
+ * root manifest until none are missing.
+ *
+ * The written lock points every tarball at registry.npmjs.org, which npm by default replaces with the configured
+ * registry. It omits the integrity of the release's own packages: their npmjs tarballs do not exist when the lock is
+ * made, npm never lets a published version change, and `npm ci` installs a registry entry without integrity while still
+ * checking every other entry.
+ */
 import yaml from 'js-yaml';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -15,6 +33,9 @@ assert(
 const manifest = JSON.parse(await readFile(join(source, 'package.json')));
 const yarnLock = yaml.load(await readFile(join(source, 'yarn.lock'), 'utf8'));
 const registry = (process.env.npm_config_registry ?? 'https://registry.npmjs.org').replace(/\/$/, '');
+const publicRegistry = 'https://registry.npmjs.org';
+// The scopes ci3/release_prep_package_json rewrites.
+const firstPartyScopes = ['@aztec/', '@aztec-labs/', '@aztec-foundation/'];
 const approved = new Map();
 const workspaces = new Set();
 let classicLock = '# yarn lockfile v1\n\n';
@@ -48,19 +69,17 @@ function approvedVersion(name, range) {
   return versions[0];
 }
 
+function peerVersion(name, range) {
+  const pinned = manifest.resolutions?.[name];
+  if (!firstPartyScopes.some(scope => name.startsWith(scope))) return pinned ?? approvedVersion(name, range);
+  // Our published manifests already apply the root resolutions; a peer declared by another publisher gets the same pin.
+  return pinned && semver.valid(pinned) ? pinned : range;
+}
+
 const dependencies = {
   '@aztec-labs/aztec': version,
   '@aztec-labs/cli-wallet': version,
 };
-for (const entry of Object.values(yarnLock)) {
-  if (!entry.resolution?.includes('@workspace:')) continue;
-  for (const [name, range] of Object.entries(entry.peerDependencies ?? {})) {
-    if (entry.peerDependenciesMeta?.[name]?.optional || dependencies[name]) continue;
-    dependencies[name] = workspaces.has(name)
-      ? version
-      : (manifest.resolutions?.[name] ?? approvedVersion(name, range));
-  }
-}
 const overrides = Object.fromEntries(
   Object.entries(manifest.resolutions ?? {}).filter(
     ([name, range]) => !name.includes('@npm:') && !range.startsWith('patch:'),
@@ -112,9 +131,7 @@ try {
     for (const entry of Object.values(generated.packages)) {
       for (const [name, range] of Object.entries(entry.peerDependencies ?? {})) {
         if (entry.peerDependenciesMeta?.[name]?.optional || dependencies[name]) continue;
-        dependencies[name] = workspaces.has(name)
-          ? version
-          : (manifest.resolutions?.[name] ?? approvedVersion(name, range));
+        dependencies[name] = peerVersion(name, range);
         changed = true;
       }
     }
@@ -155,7 +172,13 @@ try {
     if (!path || !entry.version) continue;
     const installedName = path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length);
     assert(entry.resolved && entry.integrity, `Missing tarball or integrity for ${path}`);
-    if (workspaces.has(installedName) && entry.version === version) continue;
+    if (entry.resolved.startsWith(`${registry}/`)) {
+      entry.resolved = publicRegistry + entry.resolved.slice(registry.length);
+    }
+    if (workspaces.has(installedName) && entry.version === version) {
+      delete entry.integrity;
+      continue;
+    }
     const match = new URL(entry.resolved).pathname.match(/^\/(.+)\/-\//);
     assert(match, `Unexpected tarball URL for ${path}: ${entry.resolved}`);
     const packageName = decodeURIComponent(match[1]);
@@ -164,7 +187,9 @@ try {
       `Unapproved release dependency: ${packageName}@${entry.version}. Update the monorepo lock first.`,
     );
   }
+  await writeFile(lockPath, JSON.stringify(generated, null, 2) + '\n');
 
+  // Installs the lock as users will: npm swaps registry.npmjs.org for the configured registry.
   await rm(seedPath);
   const before = await readFile(lockPath);
   npm('ci', '--ignore-scripts', '--legacy-peer-deps=false', '--no-audit', '--no-fund');

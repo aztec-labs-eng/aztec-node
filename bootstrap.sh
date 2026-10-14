@@ -539,7 +539,7 @@ function release {
     )
   fi
 
-  # The installer lock is generated after npm publishes, so prove it can be generated before them.
+  # Generates the installer lock that aztec-up's release uploads, before any project publishes.
   if [[ " ${projects[*]} " == *" aztec-up "* ]]; then
     aztec-up/bootstrap.sh release_preflight
   fi
