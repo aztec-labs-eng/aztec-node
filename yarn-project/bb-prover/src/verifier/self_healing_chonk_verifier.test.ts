@@ -208,11 +208,10 @@ describe('SelfHealingChonkVerifier', () => {
     poison(tx);
 
     const copies = Promise.all([verifier.verifyProof(tx), verifier.verifyProof(tx)]);
-    await sleep(100);
 
+    await expect(copies).resolves.toMatchObject([{ valid: false }, { valid: false }]);
     // One replacement checks the first copy on its own and dies on it; the second copy never reaches bb.
     expect(created).toHaveLength(1);
-    await expect(copies).resolves.toMatchObject([{ valid: false }, { valid: false }]);
   });
 
   it('does not blame a proof for a replacement that failed before the proof reached it', async () => {

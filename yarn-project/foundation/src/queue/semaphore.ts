@@ -32,7 +32,7 @@ export class Semaphore {
   /**
    * Takes a token if one is free, without waiting. A token is never free while acquire() calls are waiting for one, so
    * this never takes one ahead of them.
-   * @returns Whether a token was taken.
+   * @returns Whether the caller may proceed: a token was taken, or the semaphore is cancelled.
    */
   public tryAcquire(): boolean {
     return this.cancelled || this.queue.getImmediate() !== undefined;
