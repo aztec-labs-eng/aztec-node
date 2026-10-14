@@ -1,10 +1,12 @@
 /**
  * Generates the npm manifest and lock that aztec-up installs a release from, and writes them to
- * <output-directory>/packages.tar.gz.
+ * <output-directory>/packages.tar.gz. The archive also records the dependency-input hash so the
+ * release can reject a stale build artifact before rewriting its first-party version.
  *
  * npm must point at a registry that holds every public workspace at <version>, as published by ci3/deploy_npm, and that
- * proxies everything else to npmjs. aztec-up/bootstrap.sh runs a local verdaccio for this, so a release has its lock
- * before anything reaches npmjs. The published manifests already carry ci3/release_prep_package_json's rewrites, so
+ * proxies everything else to npmjs. aztec-up/bootstrap.sh runs this during the build at version 0.0.1;
+ * release preflight rewrites that checked lock to the release version without resolving again. The published
+ * manifests already carry ci3/release_prep_package_json's rewrites, so
  * first-party versions come from them rather than from rules repeated here.
  *
  * Third-party versions are limited to the ones yarn-project/yarn.lock resolves: npm reads them as a Yarn Classic lock
@@ -24,10 +26,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import semver from 'semver';
 
-const [source, version, output] = process.argv.slice(2);
+import { publishedWorkspaces } from './aztec-up-workspaces.mjs';
+
+const [source, version, output, inputsHash] = process.argv.slice(2);
 assert(
-  source && version && output,
-  'Usage: generate-aztec-up-package-lock.mjs <yarn-project> <version> <output-directory>',
+  source && version && output && inputsHash,
+  'Usage: generate-aztec-up-package-lock.mjs <yarn-project> <version> <output-directory> <inputs-hash>',
 );
 
 const manifest = JSON.parse(await readFile(join(source, 'package.json')));
@@ -37,15 +41,12 @@ const publicRegistry = 'https://registry.npmjs.org';
 // The scopes ci3/release_prep_package_json rewrites.
 const firstPartyScopes = ['@aztec/', '@aztec-labs/', '@aztec-foundation/'];
 const approved = new Map();
-const workspaces = new Set();
+const workspaces = publishedWorkspaces(source, yarnLock);
 let classicLock = '# yarn lockfile v1\n\n';
 
 for (const [descriptors, entry] of Object.entries(yarnLock)) {
   if (!entry.resolution) continue;
-  if (entry.resolution.includes('@workspace:')) {
-    workspaces.add(entry.resolution.split('@workspace:')[0]);
-    continue;
-  }
+  if (entry.resolution.includes('@workspace:')) continue;
   const protocol = entry.resolution.includes('@npm:') ? '@npm:' : '@patch:';
   const name = entry.resolution.split(protocol)[0];
   if (!approved.has(name)) approved.set(name, new Set());
@@ -72,8 +73,10 @@ function approvedVersion(name, range) {
 function peerVersion(name, range) {
   const pinned = manifest.resolutions?.[name];
   if (!firstPartyScopes.some(scope => name.startsWith(scope))) return pinned ?? approvedVersion(name, range);
-  // Our published manifests already apply the root resolutions; a peer declared by another publisher gets the same pin.
-  return pinned && semver.valid(pinned) ? pinned : range;
+  // Our published manifests already apply the root resolutions; a peer declared by another publisher gets the same
+  // result as in ci3/release_prep_package_json: a resolutions entry wins over the declared range.
+  if (!pinned) return range;
+  return /^(workspace|portal|file):/.test(pinned) ? version : pinned;
 }
 
 const dependencies = {
@@ -199,6 +202,7 @@ try {
     stdio: ['ignore', 'ignore', 'inherit'],
   });
   await mkdir(output, { recursive: true });
+  await writeFile(join(directory, 'lock-inputs-hash'), inputsHash + '\n');
   execFileSync('tar', [
     '-czf',
     resolve(output, 'packages.tar.gz'),
@@ -206,6 +210,7 @@ try {
     directory,
     'package.json',
     'package-lock.json',
+    'lock-inputs-hash',
   ]);
 } finally {
   await rm(directory, { recursive: true, force: true });

@@ -248,7 +248,6 @@ Dependency versions may differ from the approved release.
 Before opting out, we recommend a seven-day minimum release age with an npm version that supports it.
 Add these settings to your user .npmrc to exempt Aztec packages while delaying third-party releases:
   min-release-age=7
-  min-release-age-exclude[]=@aztec/*
   min-release-age-exclude[]=@aztec-labs/*
   min-release-age-exclude[]=@aztec-foundation/*
 EOF

@@ -20,13 +20,16 @@ function versions {
 # Where release_preflight leaves the installer lock for release to upload.
 release_lock=release-lock/packages.tar.gz
 
-# Hash of the inputs that decide the installer's dependency tree. yarn.lock records the workspace
-# manifests' dependency fields; the root resolutions become the lock's overrides. The registry seed
-# and the CI lock share it, so a cached lock is only reused with a seed holding its tarballs.
+# Hash of the inputs that decide the installer's dependency tree. The root resolutions become the
+# lock's overrides. yarn.lock merges a workspace's dependencies and devDependencies into one list,
+# so moving a package between them does not change it; the workspace manifests' runtime fields and
+# private flag are hashed separately. The registry seed and the CI lock share this hash, so a cached
+# lock is only reused with a seed holding its tarballs.
 function deps_hash {
   hash_str \
-    "$(cache_content_hash ^yarn-project/yarn.lock ^yarn-project/scripts/generate-aztec-up-package-lock.mjs ^ci3/release_prep_package_json)" \
-    "$(jq -c '.resolutions // {}' $root/yarn-project/package.json)"
+    "$(cache_content_hash ^yarn-project/yarn.lock ^yarn-project/scripts/generate-aztec-up-package-lock.mjs ^yarn-project/scripts/aztec-up-workspaces.mjs ^ci3/release_prep_package_json)" \
+    "$(jq -c '.resolutions // {}' $root/yarn-project/package.json)" \
+    "$(jq -c '{name, private, dependencies, peerDependencies, optionalDependencies}' $root/yarn-project/*/package.json)"
 }
 
 # Cache key of the proxied-npmjs registry seed, which start_local_registry downloads and build uploads.
@@ -189,7 +192,7 @@ function build {
       echo "Reusing the installer lock generated for these dependencies."
     else
       echo "Generating and fetching the locked installer dependencies..."
-      retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" bin/0.0.1"
+      retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" bin/0.0.1 \"$(deps_hash)\""
     fi
 
     local t=$SECONDS
@@ -230,24 +233,19 @@ function test {
   test_cmds | filter_test_cmds | parallelize
 }
 
-# Generates the release's installer lock against a local registry holding the release version, so it
-# exists, or the release fails, before anything is published. release uploads it. Runs under DRY_RUN
-# too, since it only publishes locally.
+# Rewrites the lock built and checked during CI to the release version without resolving packages.
+# The archive carries its dependency-input hash so a direct release rejects an older build.
 function release_preflight {
   echo_header "aztec-up release preflight"
   local version=${REF_NAME#v}
-  start_local_registry
-  # This publishes the real release version, so a misrouted publish would be a real release.
-  local key
-  for key in registry @aztec-labs:registry; do
-    if [[ "$(npm config get "$key")" != http://localhost:4873* ]]; then
-      echo_stderr "Preflight would publish $key to $(npm config get "$key"), not the local registry."
-      exit 1
-    fi
-  done
-  publish_local "$version"
-  rm -rf "$(dirname $release_lock)"
-  retry "node \"$root/yarn-project/scripts/generate-aztec-up-package-lock.mjs\" \"$root/yarn-project\" \"$version\" \"$(dirname $release_lock)\""
+  local build_lock=bin/0.0.1/packages.tar.gz
+  if [ ! -f "$build_lock" ]; then
+    echo_stderr "No installer build lock at aztec-up/$build_lock. Build aztec-up first."
+    exit 1
+  fi
+  rm -rf "$(dirname "$release_lock")"
+  node "$root/yarn-project/scripts/aztec-up-release-lock.mjs" \
+    "$root/yarn-project" "$build_lock" "$version" "$(deps_hash)" "$(dirname "$release_lock")"
 }
 
 function release {
