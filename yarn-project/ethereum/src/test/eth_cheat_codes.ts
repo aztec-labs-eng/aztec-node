@@ -33,9 +33,14 @@ class AnvilMiningState {
   public readonly lock = new Semaphore(1);
   /** Number of `execWithPausedAnvil` calls in flight, nested or concurrent. */
   public pauseDepth = 0;
-  /** Mining mode captured by the outermost pause, restored when the last pause ends. */
-  public saved?: { interval: number | null; automine: boolean };
+  /**
+   * Mining mode captured by the outermost pause, restored when the last pause ends. `nextTimestampSet` records that a
+   * caller chose the next block's timestamp during the pause, which a resume on the grid would overwrite.
+   */
+  public saved?: { interval: number | null; automine: boolean; nextTimestampSet?: boolean };
   public pendingResume?: PendingResume;
+  /** Set once the anvil is stopped, so a resume being scheduled at that moment does not arm a new timer. */
+  public disposed = false;
 
   /** Stops a pending resume and returns the interval it would have restored. */
   public takePendingResume(): number | undefined {
@@ -58,6 +63,7 @@ const anvilMiningStates = new Map<string, AnvilMiningState>();
 export function forgetAnvilMiningState(rpcUrl: string): void {
   for (const [key, state] of anvilMiningStates) {
     if (key.split(',').includes(rpcUrl)) {
+      state.disposed = true;
       state.takePendingResume();
       anvilMiningStates.delete(key);
     }
@@ -350,8 +356,8 @@ export class EthCheatCodes {
   }
 
   /**
-   * Set the next block timestamp. A pending resume left by {@link execWithPausedAnvil} would overwrite it, so interval
-   * mining is restarted straight away instead.
+   * Set the next block timestamp. A resume on the block grid after {@link execWithPausedAnvil} would overwrite it, so
+   * interval mining is instead restarted straight away, now if a resume is pending or when the current pause ends.
    * @param timestamp - The timestamp to set the next block to
    */
   public async setNextBlockTimestamp(timestamp: number | Date): Promise<void> {
@@ -360,6 +366,9 @@ export class EthCheatCodes {
       const pendingInterval = state.takePendingResume();
       if (pendingInterval !== undefined) {
         await this.doSetIntervalMining(pendingInterval);
+      }
+      if (state.saved) {
+        state.saved.nextTimestampSet = true;
       }
       try {
         await this.rpcCall('evm_setNextBlockTimestamp', [
@@ -756,7 +765,11 @@ export class EthCheatCodes {
     }
     if (saved?.interval) {
       try {
-        await this.scheduleResume(state, saved.interval);
+        if (saved.nextTimestampSet) {
+          await this.doSetIntervalMining(saved.interval);
+        } else {
+          await this.scheduleResume(state, saved.interval);
+        }
       } catch (err) {
         this.logger.warn(`Failed to schedule interval mining on the block grid, restarting it now: ${err}`);
         try {
@@ -780,6 +793,9 @@ export class EthCheatCodes {
    */
   private async scheduleResume(state: AnvilMiningState, interval: number): Promise<void> {
     const latest = await this.lastBlockTimestamp();
+    if (state.disposed) {
+      return;
+    }
     const nowMs = this.dateProvider.now();
     const ticks = Math.max(1, Math.ceil((nowMs - OVERDUE_TICK_GRACE_MS - latest * 1000) / (interval * 1000)));
     const tick = latest + ticks * interval;
@@ -805,8 +821,11 @@ export class EthCheatCodes {
         }
         state.pendingResume = undefined;
         try {
-          if ((await this.lastBlockTimestamp()) !== latest) {
-            // Blocks were mined or rolled back while mining was off, so the grid may have moved.
+          const chainMoved = (await this.lastBlockTimestamp()) !== latest;
+          const firedMs = this.dateProvider.now();
+          if (chainMoved || firedMs - tick * 1000 > OVERDUE_TICK_GRACE_MS) {
+            // Blocks were mined or rolled back while mining was off, so the grid may have moved; or the timer ran
+            // late (a busy event loop, a wait on the lock), and mining the old tick now would put L1 behind again.
             await this.scheduleResume(state, resume.interval);
             return;
           }
