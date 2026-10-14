@@ -1,7 +1,8 @@
 import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { LruSet } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { type PromiseWithResolvers, promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { ReadWriteLock } from '@aztec-labs/foundation/queue';
 import { InterruptibleSleep } from '@aztec-labs/foundation/sleep';
 import { Timer } from '@aztec-labs/foundation/timer';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
@@ -24,9 +25,10 @@ export interface FailingChonkVerifier extends ClientProtocolCircuitVerifier {
  * The verifier holds a session on one bb process (verification keys, worker pool, result FIFO), and a bb death leaves
  * it failed for good. Everything that session holds comes from configuration, so a fresh verifier restores it exactly.
  *
- * A bb death fails every proof in flight. Each of those is then checked again on its own, with no other proof in
- * flight, so a death then is down to that proof: it is invalid, and remembered, so it doesn't crash bb again when it
- * is sent again. A bb that dies on every proof looks the same from here, so a proof is only blamed once bb has given a
+ * A bb death fails every proof in flight at once, without saying which of them caused it. So each of those is checked
+ * again on its own, with no other proof in flight (see {@link verifyProof}), and a death then is down to that proof: it
+ * is invalid, and remembered, so it doesn't crash bb again when it is sent again. A bb that dies on every proof looks
+ * the same from here, so a proof is only blamed once bb has given a
  * verdict on some other proof since it last blamed one, and waits for one until then. A bb that never works therefore
  * blames nothing (and verifies nothing, which the verification metrics show), rather than giving anyone who can crash
  * it a way to shut the node down.
@@ -48,13 +50,11 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
   private stopped = false;
   /** Wakes verifications waiting for the next replacement when the verifier stops. */
   private readonly sleeper = new InterruptibleSleep();
-  /** Serialises proofs checked on their own. */
-  private aloneLane: Promise<void> = Promise.resolve();
-  /** Set while a proof is checked on its own, which holds back other proofs until it is done. */
-  private exclusive: Promise<void> | undefined;
-  private sharedInFlight = 0;
-  /** Resolved once no other proof is in flight, for a proof waiting to be checked on its own. */
-  private sharedDrained: PromiseWithResolvers<void> | undefined;
+  /**
+   * Every check holds this lock: shared normally, so bb batches proofs together, and exclusive for a proof checked on
+   * its own after a bb death, so that no other proof is in flight with it.
+   */
+  private readonly checkLock = new ReadWriteLock();
   /** Proofs found to crash bb, by the hash of their tx, so they are answered without sending them to bb again. */
   private readonly crashedProofs = new LruSet<string>(SelfHealingChonkVerifier.CRASHED_PROOFS_REMEMBERED);
   /** Whether bb has given a verdict on any proof since a proof was last blamed for crashing it. */
@@ -79,6 +79,15 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
     return new SelfHealingChonkVerifier(create, await create(), label);
   }
 
+  /**
+   * Verifies a tx's Chonk proof. Answers valid or invalid, and rejects only once stopped or on an error other than bb
+   * dying:
+   * 1. The proof is checked alongside any others, so bb batches it with them.
+   * 2. If bb dies with it in flight, it is checked again on its own: proofs already in flight finish first, new ones
+   *    wait until it is done, and proofs checked on their own go one at a time, in order.
+   * 3. If bb dies on it again, it is blamed and answered invalid, provided bb has given a verdict on some other proof
+   *    since it last blamed one. Otherwise it waits for such a verdict and goes back to step 2.
+   */
   public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const timer = new Timer();
     // A tx with no proof is invalid without asking bb, and must not count as bb giving a verdict.
@@ -89,7 +98,7 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
       return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
     }
     try {
-      return await this.alongsideOthers(() => this.verifyOnLiveVerifier(tx));
+      return await this.checkLock.runShared(() => this.verifyOnLiveVerifier(tx));
     } catch (err) {
       if (!(err instanceof VerifierDiedError)) {
         throw err;
@@ -97,7 +106,7 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
     }
     for (;;) {
       try {
-        return await this.onItsOwn(() => this.verifyOnLiveVerifier(tx));
+        return await this.checkLock.runExclusive(() => this.verifyOnLiveVerifier(tx));
       } catch (err) {
         if (!(err instanceof VerifierDiedError)) {
           throw err;
@@ -142,46 +151,6 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
         throw new VerifierDiedError('Chonk verifier went down with the proof in flight', { cause: err });
       }
       throw err;
-    }
-  }
-
-  /** Runs `fn` once no proof is being checked on its own. */
-  private async alongsideOthers<T>(fn: () => Promise<T>): Promise<T> {
-    while (this.exclusive) {
-      await this.exclusive;
-    }
-    this.sharedInFlight++;
-    try {
-      return await fn();
-    } finally {
-      if (--this.sharedInFlight === 0) {
-        this.sharedDrained?.resolve();
-      }
-    }
-  }
-
-  /** Runs `fn` with no other proof in flight: after every proof checked on its own before it, and every other one. */
-  private async onItsOwn<T>(fn: () => Promise<T>): Promise<T> {
-    const previous = this.aloneLane;
-    let release!: () => void;
-    this.aloneLane = new Promise(resolve => (release = resolve));
-    try {
-      await previous;
-      const done = promiseWithResolvers<void>();
-      this.exclusive = done.promise;
-      try {
-        if (this.sharedInFlight > 0) {
-          this.sharedDrained = promiseWithResolvers<void>();
-          await this.sharedDrained.promise;
-          this.sharedDrained = undefined;
-        }
-        return await fn();
-      } finally {
-        this.exclusive = undefined;
-        done.resolve();
-      }
-    } finally {
-      release();
     }
   }
 
