@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
-source $root/yarn-project/scripts/l1_fork_test_cmds.sh
+source $root/yarn-project/scripts/echo_test_cmd.sh
 
 # Used for build.
 function hash {
@@ -435,10 +435,10 @@ function test_cmds {
     fi
 
     local run_cmd="${cmd_env} yarn-project/scripts/run_test.sh $test"
-    echo_l1_fork_test_cmds unit "$prefix" "$name" "$test" "${run_cmd# }"
+    echo_test_cmd unit "$prefix" "$name" "$test" "${run_cmd# }"
   done
 
-  echo "$(cache_content_hash '^yarn-project/scripts/l1_fork_test_cmds') yarn-project/scripts/l1_fork_test_cmds.test.sh"
+  echo "$(cache_content_hash '^yarn-project/scripts/echo_test_cmd') yarn-project/scripts/echo_test_cmd.test.sh"
 
   # kv-store: per-file fan-out (mocha for node tests, vitest for browser tests).
   kv-store/bootstrap.sh test_cmds

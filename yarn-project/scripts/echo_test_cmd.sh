@@ -1,13 +1,16 @@
-# Sourced by the yarn-project, aztec and end-to-end bootstraps to emit a test command together with its copy on an
-# Amsterdam L1. Tests: yarn-project/scripts/l1_fork_test_cmds.test.sh
+# Sourced by the yarn-project, aztec and end-to-end bootstraps to echo each test command, together with any variants
+# of it the test calls for. The only variant so far is a copy on an Amsterdam L1. Tests:
+# yarn-project/scripts/echo_test_cmd.test.sh
 #
-# Usage: echo_l1_fork_test_cmds <unit|e2e> <prefix> <name> <test_path> <cmd>
+# Usage: echo_test_cmd <unit|e2e> <prefix> <name> <test_path> <cmd>
 #   prefix     the hash and its :K=V flags, without NAME.
 #   name       the line's NAME, or empty for none.
 #   test_path  the test file, or a directory of tests, as read from the cwd. It is only grepped for markers.
 #   cmd        the command, echoed as given.
 #
-# Echoes "<prefix>[:NAME=<name>] <cmd>". When the test should also run on Amsterdam, it then echoes
+# Echoes "<prefix>[:NAME=<name>] <cmd>", then any variants.
+#
+# Amsterdam copy: when the test should also run on Amsterdam, the helper echoes
 # "<prefix>:NAME=<name, or test_path when empty>_amsterdam ANVIL_HARDFORK=amsterdam <cmd>". startAnvil reads
 # ANVIL_HARDFORK, and the suffixed NAME gives the copy its own docker container name. ANVIL_HARDFORK goes in the
 # command rather than the :K=V prefix because ci3 prints results, keeps test history and posts GitHub statuses under
@@ -39,7 +42,7 @@ function l1_fork_test_wants_amsterdam {
   [ "$mode" = e2e ] || l1_fork_test_has_marker describeWithAnvil "$test_path"
 }
 
-function echo_l1_fork_test_cmds {
+function echo_test_cmd {
   local mode=$1 prefix=$2 name=$3 test_path=$4 cmd=$5
   echo "$prefix${name:+:NAME=$name} $cmd"
   if l1_fork_test_wants_amsterdam "$mode" "$test_path"; then

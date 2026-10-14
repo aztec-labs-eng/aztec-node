@@ -42,7 +42,7 @@ function taggedDescribe(): TaggedDescribe {
 
 /**
  * Jest's `describe`, marking the test file to also run on every other L1 hardfork on every CI run. It has no runtime
- * effect beyond `describe`: it exists so CI's test command generation (`yarn-project/scripts/l1_fork_test_cmds.sh`)
+ * effect beyond `describe`: it exists so CI's test command generation (`yarn-project/scripts/echo_test_cmd.sh`)
  * can grep for it and emit one extra command per fork with `ANVIL_HARDFORK` set. So it must appear in the test file
  * itself, uncommented, not in a shared helper. A file marked with it needs no `describeWithAnvil`.
  */
@@ -51,7 +51,7 @@ export const describeAcrossL1Forks: TaggedDescribe = taggedDescribe();
 /**
  * Jest's `describe`, marking a test file that starts anvil so that the full CI sweep (`CI_FULL=1` or
  * `HARDFORK_SWEEP=1`) also runs it on every other L1 hardfork. It has no runtime effect beyond `describe`: it exists
- * so CI's test command generation (`yarn-project/scripts/l1_fork_test_cmds.sh`) can grep for it, so it must appear in
+ * so CI's test command generation (`yarn-project/scripts/echo_test_cmd.sh`) can grep for it, so it must appear in
  * the test file itself, uncommented. End-to-end tests need no marker: the sweep covers every simple e2e test.
  */
 export const describeWithAnvil: TaggedDescribe = taggedDescribe();

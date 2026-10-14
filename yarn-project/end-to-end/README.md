@@ -228,9 +228,9 @@ In CI, a test file whose top-level `describe` is `describeAcrossL1Forks` (from `
 runs on Amsterdam on every run, as a second command with `ANVIL_HARDFORK=amsterdam` and `_amsterdam` appended to its
 `NAME`. Full CI does the same for every simple test, except those under `single-node/l1-hardfork/`, which switch
 forks themselves, and for every unit or integration test outside this package whose top-level `describe` is
-`describeWithAnvil`. `test_cmds` emits each command through `echo_l1_fork_test_cmds` from
-`../scripts/l1_fork_test_cmds.sh`, and `./bootstrap.sh test_amsterdam` runs just the Amsterdam copies of the whole
-suite. Inside a test, `isAmsterdamTestRun()` tells which fork the run asked for.
+`describeWithAnvil`. `test_cmds` emits each command through `echo_test_cmd` from `../scripts/echo_test_cmd.sh`,
+and `./bootstrap.sh test_amsterdam` runs just the Amsterdam copies of the whole suite. Inside a test,
+`isAmsterdamTestRun()` tells which fork the run asked for.
 
 ### Running tests against legacy contract artifacts
 

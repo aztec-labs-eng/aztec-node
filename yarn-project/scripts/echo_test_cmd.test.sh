@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Tests for l1_fork_test_cmds.sh. Run: yarn-project/scripts/l1_fork_test_cmds.test.sh
+# Tests for echo_test_cmd.sh. Run: yarn-project/scripts/echo_test_cmd.test.sh
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "$script_dir/l1_fork_test_cmds.sh"
+source "$script_dir/echo_test_cmd.sh"
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
 cd "$root"
@@ -11,12 +11,12 @@ cd "$root"
 passed=0
 failed=0
 
-# Usage: check <description> <expected lines> <echo_l1_fork_test_cmds args...>, with CI_FULL, HARDFORK_SWEEP and
+# Usage: check <description> <expected lines> <echo_test_cmd args...>, with CI_FULL, HARDFORK_SWEEP and
 # DUMP_AVM_INPUTS_TO_DIR from the env.
 function check {
   local description=$1 expected=$2 actual
   shift 2
-  actual=$(echo_l1_fork_test_cmds "$@")
+  actual=$(echo_test_cmd "$@")
   if [ "$actual" == "$expected" ]; then
     echo "  ok: $description"
     ((++passed))

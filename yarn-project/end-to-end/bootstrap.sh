@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
-source $root/yarn-project/scripts/l1_fork_test_cmds.sh
+source $root/yarn-project/scripts/echo_test_cmd.sh
 
 hash=$(../bootstrap.sh hash)
 bench_fixtures_dir=chonk-pinned-flows
@@ -49,27 +49,27 @@ function test_cmds {
     for test in src/single-node/prover/server/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo_l1_fork_test_cmds e2e "$(dep_hash "$test")$flags:TIMEOUT=20m:CPUS=16:MEM=96g" "${name}_real" "$test" \
+      echo_test_cmd e2e "$(dep_hash "$test")$flags:TIMEOUT=20m:CPUS=16:MEM=96g" "${name}_real" "$test" \
         "$run_test_script simple ${test#src/}"
     done
     for test in src/single-node/prover/client/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo_l1_fork_test_cmds e2e "$(dep_hash "$test")$flags:TIMEOUT=10m:CPUS=2:MEM=4g" "${name}_real" "$test" \
+      echo_test_cmd e2e "$(dep_hash "$test")$flags:TIMEOUT=10m:CPUS=2:MEM=4g" "${name}_real" "$test" \
         "$run_test_script simple ${test#src/}"
     done
   else
     for test in src/single-node/prover/**/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo_l1_fork_test_cmds e2e "$(dep_hash "$test")$flags" "${name}_fake" "$test" \
+      echo_test_cmd e2e "$(dep_hash "$test")$flags" "${name}_fake" "$test" \
         "FAKE_PROOFS=1 $run_test_script simple ${test#src/}"
     done
   fi
 
   # Long-running avm_simulator
   local avm_simulator=src/automine/simulation/avm_simulator.test.ts
-  echo_l1_fork_test_cmds e2e "$(dep_hash $avm_simulator)$flags:TIMEOUT=30m" automine/simulation/avm_simulator $avm_simulator \
+  echo_test_cmd e2e "$(dep_hash $avm_simulator)$flags:TIMEOUT=30m" automine/simulation/avm_simulator $avm_simulator \
     "$(set_dump_avm e2e_avm_simulator) $run_test_script simple $avm_simulator"
 
   # Lives under src/composed but runs as a simple test: the mainnet fork it needs comes from the
@@ -82,7 +82,7 @@ function test_cmds {
   # container, which is not worth paying on every PR.
   if [ "$CI_FULL" -eq 1 ]; then
     local uniswap=src/composed/uniswap_trade_on_l1_from_l2.test.ts
-    echo_l1_fork_test_cmds e2e "$(dep_hash $uniswap)$flags" composed/uniswap_trade_on_l1_from_l2 $uniswap \
+    echo_test_cmd e2e "$(dep_hash $uniswap)$flags" composed/uniswap_trade_on_l1_from_l2 $uniswap \
       "$run_test_script simple $uniswap"
   fi
 
@@ -153,12 +153,12 @@ function test_cmds {
         # parentheses, etc.) must be collapsed to an underscore or `docker run --name` rejects it.
         local safe_test_name=$(echo "$test_name" | sed 's/[^a-zA-Z0-9_.-]/_/g')
         local full_name="${name}_${safe_test_name}"
-        echo_l1_fork_test_cmds e2e "$test_prefix" "$full_name" "$test" \
+        echo_test_cmd e2e "$test_prefix" "$full_name" "$test" \
           "$(set_dump_avm $full_name) $run_test_script simple $test \"$test_name\""
       done < <(extract_test_names "$test")
     else
       # Regular test file - run the whole file
-      echo_l1_fork_test_cmds e2e "$test_prefix" "$name" "$test" "$(set_dump_avm $name) $run_test_script simple $test"
+      echo_test_cmd e2e "$test_prefix" "$name" "$test" "$(set_dump_avm $name) $run_test_script simple $test"
     fi
   done
 
