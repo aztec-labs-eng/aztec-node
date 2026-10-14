@@ -161,18 +161,18 @@ describe('single-node/cross-chain/inbox_bot', () => {
 
   /**
    * Waits until a batch broadcast right away lands where the checkpoint L1 first obliges to consume it can take all
-   * of it, and returns the L1 timestamp the batch will carry. A batch one message over a bucket spans two buckets and
-   * a block consumes at most one bucket's worth, so that checkpoint needs both of its blocks, sub-slot 0 included.
-   * Two things can cost it sub-slot 0:
-   * - A late start. The sequencer starts building at the build-frame start only if the checkpoint two slots back is
-   *   already on L1. Otherwise it waits for the L1 block at the frame start, which is mined seconds after its
-   *   timestamp here: every `markAsProven` (the epoch settler's and the previous case's) pauses and resumes L1
-   *   interval mining, restarting its timer while block timestamps keep their fixed step, so the delay adds up. A
-   *   paused sequencer leaves exactly such a gap, so the two checkpoints that keep every proposer up to that slot on
-   *   time must already be on L1.
+   * of it, and returns the L1 timestamp the batch will carry with the wall-clock time the window opened. A batch one
+   * message over a bucket spans two buckets and a block consumes at most one bucket's worth, so that checkpoint needs
+   * both of its blocks, sub-slot 0 included. Two things can cost it sub-slot 0:
+   * - A late start. The proposer for slot S builds during slot S-1 and passes its sync gate at the build-frame start
+   *   only if the checkpoint for slot S-2 is already on L1. Otherwise it waits for the L1 block at the frame start to
+   *   be synced, which can be too late for sub-slot 0. The previous case pauses the sequencer and leaves such gaps, so
+   *   the S-2 checkpoint must exist. By the time the window is checked the local sequencer has already proposed it,
+   *   and it lands on L1 in the first block of slot S-2, well before the frame start.
    * - A batch its first block does not see. That block picks its messages when the build frame opens, so the batch
    *   has to be mined and synced before then. It also has to be mined after the proposer of the slot before picked
-   *   the messages for its last block, or that proposer takes the first bucket on its own.
+   *   the messages for its last block, or that proposer takes the first bucket on its own. Even a late proposer for
+   *   S-1 picks no later than its last sub-slot's deadline less the minimum block duration, which the margin covers.
    * The next L1 block's mining time is predicted from when the latest one was first seen, so the L1 tip is polled
    * finely and a block already mined at the first poll is not used. The prediction only holds if nothing pauses L1
    * mining before that block, so blocks around an epoch boundary, where the epoch settler marks the epoch proven, are
@@ -209,12 +209,8 @@ describe('single-node/cross-chain/inbox_bot', () => {
           return undefined;
         }
 
-        // `getCheckpoint` also serves proposed checkpoints, so only those at or below the checkpointed tip count.
-        const checkpointedTip = await aztecNode.getCheckpointNumber();
-        const onTimeCheckpoints = await Promise.all(
-          [3, 4].map(slotsBack => aztecNode.getCheckpoint({ slot: SlotNumber.add(obligedSlot, -slotsBack) })),
-        );
-        if (onTimeCheckpoints.some(checkpoint => checkpoint === undefined || checkpoint.number > checkpointedTip)) {
+        // Proposed or already on L1: `getCheckpoint` serves both.
+        if (!(await aztecNode.getCheckpoint({ slot: SlotNumber.add(obligedSlot, -2) }))) {
           return undefined;
         }
         log.warn(`Sending the saturation batch for obliged slot ${obligedSlot}`, {
@@ -224,7 +220,7 @@ describe('single-node/cross-chain/inbox_bot', () => {
           obligedFrameStart,
           l1Lag: seenAt - Number(latest.timestamp),
         });
-        return batchTimestamp;
+        return { batchTimestamp, openedAt: Date.now() };
       },
       'send window for a saturation batch its obliged checkpoint can consume in full',
       slotDuration * 8,
@@ -357,7 +353,7 @@ describe('single-node/cross-chain/inbox_bot', () => {
     await store.inbox.setSchedule({ enabled: true, nextDueAt: 0, runInFlight: false, consecutiveFailures: 0 });
 
     try {
-      const batchTimestamp = await waitForSaturationSendWindow();
+      const { batchTimestamp, openedAt } = await waitForSaturationSendWindow();
       await bot.start();
       const batchId = await waitForBatch(store);
       const batch = await retryUntil(
@@ -371,7 +367,12 @@ describe('single-node/cross-chain/inbox_bot', () => {
       );
       expect(batch.scenario).toEqual('saturation');
       expect(batch.messageCount).toEqual(MAX_INBOX_MESSAGES_PER_BATCH);
-      // The batch made the L1 block the send window was chosen for.
+      // The batch made the L1 block the send window was chosen for. The broadcast has under an L1 slot to get there,
+      // so the latency is logged to tell a slow send apart from a wrong mining prediction.
+      log.warn(`Saturation batch broadcast ${batch.submittedAt! - openedAt}ms after its send window opened`, {
+        plannedL1Timestamp: batchTimestamp,
+        l1BlockTimestamp: batch.l1BlockTimestamp,
+      });
       expect(BigInt(batch.l1BlockTimestamp!)).toEqual(batchTimestamp);
 
       const messages = await store.inbox.getBatchMessages(batchId);
