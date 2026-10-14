@@ -2,6 +2,7 @@ import { NewGovernanceProposerPayloadAbi, NewGovernanceProposerPayloadBytecode }
 
 import { deployL1Contract } from '@aztec-labs/ethereum/deploy-l1-contract';
 import { L1TxUtils, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
+import { runOnAllL1Forks } from '@aztec-labs/ethereum/test';
 import { sleep } from '@aztec-labs/foundation/sleep';
 import { getAddress } from 'viem';
 
@@ -11,6 +12,8 @@ import {
   buildMockGossipValidators,
 } from '../multi_node_test_context.js';
 import { GOVERNANCE_TIMING, createGovernanceTestDriver, driveGovernanceRound, jest } from './setup.js';
+
+runOnAllL1Forks();
 
 // Don't set this to a higher value than 9 because each node will use a different L1 publisher account and anvil seeds
 const NUM_VALIDATORS = 4;

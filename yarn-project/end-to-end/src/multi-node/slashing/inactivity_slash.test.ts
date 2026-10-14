@@ -1,9 +1,12 @@
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
+import { runOnAllL1Forks } from '@aztec-labs/ethereum/test';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 
 import { InactivityTest } from './inactivity_setup.js';
+
+runOnAllL1Forks();
 
 jest.setTimeout(1000 * 60 * 10);
 

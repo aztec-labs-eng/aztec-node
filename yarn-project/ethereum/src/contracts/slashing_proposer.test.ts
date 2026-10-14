@@ -18,9 +18,12 @@ import { foundry } from 'viem/chains';
 import { createExtendedL1Client } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsArgs, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
+import { runOnAllL1Forks } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { RollupContract, decodeSlashConsensusVotes } from './index.js';
 import { SlashingProposerContract } from './slashing_proposer.js';
+
+runOnAllL1Forks();
 
 describe('SlashingProposer', () => {
   let anvil: Anvil;

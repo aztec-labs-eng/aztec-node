@@ -4,6 +4,7 @@ import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { EthCheatCodes } from '@aztec-labs/aztec/testing';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { runOnAllL1Forks } from '@aztec-labs/ethereum/test';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { RunningPromise } from '@aztec-labs/foundation/running-promise';
@@ -19,6 +20,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 import { PIPELINING_SETUP_OPTS } from '../../fixtures/fixtures.js';
 import { getPrivateKeyFromIndex, setup } from '../../fixtures/utils.js';
+
+runOnAllL1Forks();
 
 // Key indices from the test MNEMONIC (all pre-funded by Anvil):
 // 0 = L1 contract deployer (not in keystore)

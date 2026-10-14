@@ -1,8 +1,11 @@
 import { getInitialTestAccountsData } from '@aztec-labs/accounts/testing';
+import { runOnAllL1Forks } from '@aztec-labs/ethereum/test';
 import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { EmbeddedWallet } from '@aztec-labs/wallets/embedded';
 
 import { TEST_FEE_PADDING, setupLocalNetwork } from './local-network.js';
+
+runOnAllL1Forks();
 
 describe('setupLocalNetwork', () => {
   it('serves a live node on a random L1 port and tears down cleanly', async () => {

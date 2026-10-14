@@ -2,7 +2,7 @@ import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
-import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import { EthCheatCodes, RollupCheatCodes, runOnAllL1Forks, startAnvil } from '@aztec-labs/ethereum/test';
 import type { Anvil } from '@aztec-labs/ethereum/test';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
@@ -15,6 +15,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
 import { EpochCache } from './epoch_cache.js';
+
+runOnAllL1Forks();
 
 const NUM_VALIDATORS = 4;
 

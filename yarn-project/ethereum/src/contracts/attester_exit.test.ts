@@ -15,8 +15,10 @@ import { createExtendedL1Client, getPublicClient } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { createL1TxUtils } from '../l1_tx_utils/index.js';
-import { type Anvil, EthCheatCodes, startAnvil } from '../test/index.js';
+import { type Anvil, EthCheatCodes, runOnAllL1Forks, startAnvil } from '../test/index.js';
 import { AttesterStatus, RollupContract } from './index.js';
+
+runOnAllL1Forks();
 
 const mnemonic = 'test test test test test test test test test test test junk';
 const attesters = [0, 3, 4].map(addressIndex => mnemonicToAccount(mnemonic, { addressIndex }));

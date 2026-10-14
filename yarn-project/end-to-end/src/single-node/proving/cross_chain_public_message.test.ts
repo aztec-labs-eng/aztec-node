@@ -3,6 +3,7 @@ import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { Logger } from '@aztec-labs/aztec.js/log';
 import { waitForL1ToL2MessageReady } from '@aztec-labs/aztec.js/messaging';
 import { TxExecutionResult } from '@aztec-labs/aztec.js/tx';
+import { runOnAllL1Forks } from '@aztec-labs/ethereum/test';
 import { EpochNumber } from '@aztec-labs/foundation/branded-types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { TestContract } from '@aztec-labs/noir-test-contracts.js/Test';
@@ -14,6 +15,8 @@ import type { EndToEndContext } from '../../fixtures/utils.js';
 import { waitForProvenBlock } from '../../fixtures/wait_helpers.js';
 import { setupWithProver } from '../setup.js';
 import { SingleNodeTestContext } from '../single_node_test_context.js';
+
+runOnAllL1Forks();
 
 jest.setTimeout(1000 * 60 * 10);
 

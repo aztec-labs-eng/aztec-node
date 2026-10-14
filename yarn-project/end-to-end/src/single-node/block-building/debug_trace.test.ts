@@ -3,6 +3,7 @@ import { createExtendedL1Client } from '@aztec-labs/ethereum/client';
 import { FORWARDER_ABI, deployForwarderProxy } from '@aztec-labs/ethereum/forwarder-proxy';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import type { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { runOnAllL1Forks } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import type { Logger } from '@aztec-labs/foundation/log';
@@ -17,6 +18,8 @@ import { getPrivateKeyFromIndex } from '../../fixtures/utils.js';
 import { waitForBlockNumber } from '../../fixtures/wait_helpers.js';
 import { NO_REORG_SUBMISSION_EPOCHS, setupBlockProducer } from '../setup.js';
 import type { SingleNodeTestContext } from '../single_node_test_context.js';
+
+runOnAllL1Forks();
 
 // Tests that the sequencer can successfully process blocks when L1 block proposals are forwarded
 // via a proxy contract (Forwarder). Also tests that a corrupted first propose call (failing with

@@ -33,7 +33,7 @@ import {
 } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import type { L1ContractAddresses } from '@aztec-labs/ethereum/l1-contract-addresses';
 import { TxUtilsState, createL1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
-import { EthCheatCodesWithState, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import { EthCheatCodesWithState, RollupCheatCodes, runOnAllL1Forks, startAnvil } from '@aztec-labs/ethereum/test';
 import type { Anvil } from '@aztec-labs/ethereum/test';
 import type { ExtendedViemWalletClient } from '@aztec-labs/ethereum/types';
 import { range } from '@aztec-labs/foundation/array';
@@ -116,6 +116,8 @@ import { sendL1ToL2Message } from './l1_to_l2_messaging.js';
 import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
 import { type SendRequestsResult, SequencerPublisher } from './sequencer-publisher.js';
 import { writeJson } from './write_json.js';
+
+runOnAllL1Forks();
 
 // To update the test data, run "export AZTEC_GENERATE_TEST_DATA=1" in shell and run the tests again
 // If you have issues with RPC_URL, it is likely that you need to set the RPC_URL in the shell as well
