@@ -5,12 +5,13 @@ import { foundry } from 'viem/chains';
 import { createExtendedL1Client } from '../client.js';
 import type { ExtendedViemWalletClient } from '../types.js';
 import { warmBlobKzg } from './blob_kzg_warmup.js';
+import { describeWithAnvil } from './l1_hardfork.js';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
 
 const MNEMONIC = 'test test test test test test test test test test test junk';
 
-describe('warmBlobKzg', () => {
+describeWithAnvil('warmBlobKzg', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let client: ExtendedViemWalletClient;

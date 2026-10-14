@@ -11,6 +11,7 @@ import { foundry } from 'viem/chains';
 import { createExtendedL1Client } from '../client.js';
 import { FORWARDER_ABI, FORWARDER_BYTECODE } from '../forwarder_proxy.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient } from '../types.js';
@@ -21,7 +22,7 @@ const MNEMONIC = 'test test test test test test test test test test test junk';
 const WEI_CONST = 1_000_000_000n;
 const logger = createLogger('ethereum:test:forwarder_l1_tx_utils');
 
-describe('ForwarderL1TxUtils', () => {
+describeWithAnvil('ForwarderL1TxUtils', () => {
   const initialBaseFee = WEI_CONST; // 1 gwei
 
   let l1Client: ExtendedViemWalletClient;

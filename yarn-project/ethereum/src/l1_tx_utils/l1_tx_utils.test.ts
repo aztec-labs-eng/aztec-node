@@ -30,7 +30,7 @@ import { foundry } from 'viem/chains';
 
 import { L1RpcError, createExtendedL1Client, getPublicClient } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
-import { runOnAllL1Forks } from '../test/l1_hardfork.js';
+import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';
@@ -52,8 +52,6 @@ import {
 import { L1TxUtils } from './l1_tx_utils.js';
 import { createViemSigner } from './signer.js';
 
-runOnAllL1Forks();
-
 const MNEMONIC = 'test test test test test test test test test test test junk';
 const WEI_CONST = 1_000_000_000n;
 const logger = createLogger('ethereum:test:l1_tx_utils');
@@ -68,7 +66,7 @@ export type PendingTransaction = {
   maxPriorityFeePerGas: bigint;
 };
 
-describe('L1TxUtils', () => {
+describeAcrossL1Forks('L1TxUtils', () => {
   const initialBaseFee = WEI_CONST; // 1 gwei
 
   let l1Client: ExtendedViemWalletClient;

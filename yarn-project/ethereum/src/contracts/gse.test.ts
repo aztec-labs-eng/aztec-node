@@ -5,11 +5,12 @@ import { foundry } from 'viem/chains';
 
 import { DefaultL1ContractsConfig } from '../config.js';
 import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ViemClient } from '../types.js';
 
-describe('Governance', () => {
+describeWithAnvil('Governance', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let publicClient: ViemClient;

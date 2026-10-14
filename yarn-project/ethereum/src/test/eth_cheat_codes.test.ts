@@ -15,16 +15,14 @@ import { createExtendedL1Client } from '../client.js';
 import { deployL1Contract } from '../deploy_l1_contract.js';
 import type { ExtendedViemWalletClient } from '../types.js';
 import { EthCheatCodes } from './eth_cheat_codes.js';
-import { runOnAllL1Forks } from './l1_hardfork.js';
+import { describeAcrossL1Forks } from './l1_hardfork.js';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
-
-runOnAllL1Forks();
 
 const MNEMONIC = 'test test test test test test test test test test test junk';
 const ANVIL_RPC_URL = process.env.ANVIL_RPC_URL;
 
-describe('EthCheatCodes', () => {
+describeAcrossL1Forks('EthCheatCodes', () => {
   let l1Client: ExtendedViemWalletClient;
   let anvil: Anvil | undefined;
   let rpcUrl: string;

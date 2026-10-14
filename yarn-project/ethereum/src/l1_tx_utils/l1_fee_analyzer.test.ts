@@ -9,6 +9,7 @@ import { foundry } from 'viem/chains';
 
 import { createExtendedL1Client } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient } from '../types.js';
@@ -20,7 +21,7 @@ import type { L1BlobInputs, L1TxRequest } from './types.js';
 const MNEMONIC = 'test test test test test test test test test test test junk';
 const logger = createLogger('ethereum:test:l1-fee-analyzer');
 
-describe('L1FeeAnalyzer', () => {
+describeWithAnvil('L1FeeAnalyzer', () => {
   const initialBaseFee = WEI_CONST; // 1 gwei
 
   let l1Client: ExtendedViemWalletClient;

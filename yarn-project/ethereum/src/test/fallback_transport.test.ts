@@ -22,6 +22,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 
+import { describeWithAnvil } from './l1_hardfork.js';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil } from './start_anvil.js';
 
@@ -34,7 +35,7 @@ export type ExtendedWalletClient = Client<
   PublicActions<FallbackTransport<readonly CustomTransport[]>, Chain> & WalletActions<Chain, Account>
 >;
 
-describe('fallback_transport', () => {
+describeWithAnvil('fallback_transport', () => {
   let rpcUrl1: string;
   let rpcUrl2: string;
   let account: PrivateKeyAccount;

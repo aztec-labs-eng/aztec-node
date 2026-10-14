@@ -36,8 +36,8 @@ import { MAX_L1_TX_LIMIT, TxUtilsState, createL1TxUtils, isAmsterdamBlock } from
 import {
   EthCheatCodesWithState,
   RollupCheatCodes,
+  describeAcrossL1Forks,
   isAmsterdamTestRun,
-  runOnAllL1Forks,
   startAnvil,
 } from '@aztec-labs/ethereum/test';
 import type { Anvil } from '@aztec-labs/ethereum/test';
@@ -123,8 +123,6 @@ import { SequencerPublisherMetrics } from './sequencer-publisher-metrics.js';
 import { type RequestWithExpiry, type SendRequestsResult, SequencerPublisher } from './sequencer-publisher.js';
 import { writeJson } from './write_json.js';
 
-runOnAllL1Forks();
-
 // To update the test data, run "export AZTEC_GENERATE_TEST_DATA=1" in shell and run the tests again
 // If you have issues with RPC_URL, it is likely that you need to set the RPC_URL in the shell as well
 // If running ANVIL locally, you can use ETHEREUM_HOSTS="http://0.0.0.0:8545"
@@ -152,7 +150,7 @@ jest.setTimeout(1000000);
 // real NativeWorldStateService + ServerWorldStateSynchronizer, and creates a SequencerPublisher
 // directly — no AztecNodeService, no PXE. EthCheatCodesWithState drives time. Each describe block
 // has its own beforeEach calling the local setup() function.
-describe('L1Publisher integration', () => {
+describeAcrossL1Forks('L1Publisher integration', () => {
   let l1Client: ExtendedViemWalletClient;
   let l1ContractAddresses: L1ContractAddresses;
   let deployerAccount: PrivateKeyAccount;

@@ -1,18 +1,16 @@
 import type { EthAddress } from '@aztec-labs/aztec.js/addresses';
-import { runOnAllL1Forks } from '@aztec-labs/ethereum/test';
+import { describeAcrossL1Forks } from '@aztec-labs/ethereum/test';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { jest } from '@jest/globals';
 import 'jest-extended';
 
 import { InactivityTest } from './inactivity_setup.js';
 
-runOnAllL1Forks();
-
 jest.setTimeout(1000 * 60 * 10);
 
 // Inactivity slashing on the shared `InactivityTest` fixture (mock-gossip bus, 6 nodes, fake prover,
 // epoch=2, proofSubEpochs=1024, sentinelEnabled).
-describe('multi-node/slashing/inactivity_slash', () => {
+describeAcrossL1Forks('multi-node/slashing/inactivity_slash', () => {
   let test: InactivityTest;
 
   beforeAll(async () => {

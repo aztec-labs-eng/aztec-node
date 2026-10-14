@@ -26,14 +26,32 @@ export function isAmsterdamTestRun(): boolean {
   return getL1Hardfork() === 'amsterdam';
 }
 
-/**
- * Marks the calling test file to run against every L1 hardfork on every CI run, rather than only on the full CI
- * sweep. It has no effect at runtime: CI's test command generation greps test files for a top-level call to this
- * function and emits one extra command per fork, with `ANVIL_HARDFORK` set. So the call must sit in the test file
- * itself, uncommented, not in a shared helper.
- *
- * @returns The fork this run's anvils start on, as {@link getL1Hardfork}.
- */
-export function runOnAllL1Forks(): L1Hardfork | undefined {
-  return getL1Hardfork();
+type DescribeBlock = (name: string, fn: () => void) => void;
+
+/** A `describe` that also tags its test file for CI test-command generation. */
+export type TaggedDescribe = DescribeBlock & { skip: DescribeBlock; only: DescribeBlock };
+
+function taggedDescribe(): TaggedDescribe {
+  // Jest's global `describe` is read at call time, so importing this module outside Jest stays safe.
+  const tagged: TaggedDescribe = (name, fn) => describe(name, fn);
+  tagged.skip = (name, fn) => describe.skip(name, fn);
+  // eslint-disable-next-line no-only-tests/no-only-tests
+  tagged.only = (name, fn) => describe.only(name, fn);
+  return tagged;
 }
+
+/**
+ * Jest's `describe`, marking the test file to also run on every other L1 hardfork on every CI run. It has no runtime
+ * effect beyond `describe`: it exists so CI's test command generation (`yarn-project/scripts/l1_fork_test_cmds.sh`)
+ * can grep for it and emit one extra command per fork with `ANVIL_HARDFORK` set. So it must appear in the test file
+ * itself, uncommented, not in a shared helper. A file marked with it needs no `describeWithAnvil`.
+ */
+export const describeAcrossL1Forks: TaggedDescribe = taggedDescribe();
+
+/**
+ * Jest's `describe`, marking a test file that starts anvil so that the full CI sweep (`CI_FULL=1` or
+ * `HARDFORK_SWEEP=1`) also runs it on every other L1 hardfork. It has no runtime effect beyond `describe`: it exists
+ * so CI's test command generation (`yarn-project/scripts/l1_fork_test_cmds.sh`) can grep for it, so it must appear in
+ * the test file itself, uncommented. End-to-end tests need no marker: the sweep covers every simple e2e test.
+ */
+export const describeWithAnvil: TaggedDescribe = taggedDescribe();

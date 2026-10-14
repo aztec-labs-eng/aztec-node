@@ -14,12 +14,13 @@ import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsReturnType, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { deployL1Contract } from '../deploy_l1_contract.js';
 import { L1TxUtils, createL1TxUtils } from '../l1_tx_utils/index.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient } from '../types.js';
 import { MULTI_CALL_3_ADDRESS, Multicall3, deployMulticall3 } from './multicall.js';
 
-describe('Multicall3', () => {
+describeWithAnvil('Multicall3', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let privateKey: PrivateKeyAccount;
