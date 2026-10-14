@@ -1,15 +1,18 @@
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { jest } from '@jest/globals';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { type AddressInfo, createServer } from 'node:net';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { createPublicClient, http, parseAbiItem } from 'viem';
+import { type Hex, createPublicClient, http, parseAbiItem } from 'viem';
 
+import { getPublicClient } from '../client.js';
 import { resolveFoundryBinary } from '../foundry_binary.js';
 import { AMSTERDAM_MAX_L1_TX_LIMIT, isAmsterdamBlock } from '../l1_tx_utils/index.js';
+import { dumpAnvilStateWithHistory } from './anvil_hardfork.js';
+import { EthCheatCodes } from './eth_cheat_codes.js';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil, syncDateProviderFromAnvilOutput } from './start_anvil.js';
 
@@ -422,4 +425,50 @@ describe('startAnvil hardfork', () => {
     const block = await startAndMine();
     expect(block.gasLimit).toBeGreaterThanOrEqual(AMSTERDAM_MAX_L1_TX_LIMIT);
   });
+});
+
+describe('startAnvil from a dumped state', () => {
+  let anvil: Anvil | undefined;
+  let stateDir: string;
+
+  beforeEach(() => {
+    stateDir = mkdtempSync(join(tmpdir(), 'anvil-load-state-'));
+  });
+
+  afterEach(async () => {
+    await anvil?.stop();
+    rmSync(stateDir, { recursive: true, force: true });
+  });
+
+  it('continues the chain with its history on another hardfork and the same port', async () => {
+    const first = await startAnvil({ port: 0, hardfork: 'osaka', pruneHistory: 32 });
+    anvil = first.anvil;
+    const cheat = new EthCheatCodes([first.rpcUrl], new DateProvider());
+    const client = getPublicClient({ l1RpcUrls: [first.rpcUrl], l1ChainId: 31337 });
+    const [sender]: Hex[] = await cheat.rpcCall('eth_accounts', []);
+
+    await cheat.mine(3);
+    const tip = await client.getBlock({ blockTag: 'latest' });
+    const balanceBeforeTip = await client.getBalance({ address: sender, blockNumber: tip.number - 1n });
+    expect(isAmsterdamBlock(tip)).toBe(false);
+
+    const statePath = join(stateDir, 'state.json');
+    await dumpAnvilStateWithHistory(client, statePath);
+    await anvil.stop();
+    const second = await startAnvil({ port: first.anvil.port, hardfork: 'amsterdam', loadState: statePath });
+    anvil = second.anvil;
+
+    expect(second.rpcUrl).toEqual(first.rpcUrl);
+    expect(await client.getBlock({ blockTag: 'latest' })).toMatchObject({
+      number: tip.number,
+      hash: tip.hash,
+      timestamp: tip.timestamp,
+    });
+    expect(await client.getBalance({ address: sender, blockNumber: tip.number - 1n })).toEqual(balanceBeforeTip);
+
+    await cheat.mine(1);
+    const next = await client.getBlock({ blockTag: 'latest' });
+    expect(next).toMatchObject({ number: tip.number + 1n, parentHash: tip.hash });
+    expect(isAmsterdamBlock(next)).toBe(true);
+  }, 60_000);
 });
