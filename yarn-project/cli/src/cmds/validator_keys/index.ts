@@ -16,7 +16,7 @@ function blsKeyDerivationV6Option() {
 function blsKeyDerivationMaxGasOption() {
   return new Option(
     '--bls-key-derivation-max-gas <gas>',
-    `Stricter budget for the estimated proof-of-possession verification gas of each BLS key. The L1 limit (GSE proofOfPossessionGasLimit) is 250,000 gas today and governance may raise it; the default budget is ${BLS_KEY_DERIVATION_V6.budget}, that cap minus a 10% margin. Must be between ${minimumProofOfPossessionGas(BLS_KEY_DERIVATION_V6.gasModel)} and ${BLS_KEY_DERIVATION_V6.budget}. Without --bls-key-derivation-v6, an over-budget key is an error. Pass the same value again to regenerate the same keys.`,
+    `Stricter budget for the estimated proof-of-possession verification gas of each BLS key. The L1 limit (GSE proofOfPossessionGasLimit) is 300,000 gas from the v6 upgrade, and governance may change it; the default budget is ${BLS_KEY_DERIVATION_V6.budget}, that cap minus a 10% margin. Must be between ${minimumProofOfPossessionGas(BLS_KEY_DERIVATION_V6.gasModel)} and ${BLS_KEY_DERIVATION_V6.budget}. Without --bls-key-derivation-v6, an over-budget key is an error. Pass the same value again to regenerate the same keys.`,
   ).argParser(value => parseOptionalInteger(value));
 }
 

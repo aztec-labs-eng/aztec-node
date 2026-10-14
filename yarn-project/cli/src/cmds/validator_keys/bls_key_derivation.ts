@@ -15,10 +15,11 @@ export type BlsKeyDerivationVersion = {
 
 /**
  * BLS key derivation v6. The gas model is a frozen copy of `AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL` from
- * `@aztec-labs/ethereum/bn254`. The budget is the 250,000 gas default `proofOfPossessionGasLimit` minus a 10% margin.
+ * `@aztec-labs/ethereum/bn254`. The budget is the 300,000 gas `proofOfPossessionGasLimit` that the v6 upgrade
+ * payload sets on the GSE, minus a 10% margin.
  *
  * With per-attempt probabilities 0.189030554816 of reaching the square root and 0.094515277408 of succeeding, about
- * 3.2925e-4 of keys (1 in 3,037) estimate over the budget, so they move to a later candidate under v6.
+ * 5.8243e-6 of keys (1 in 171,694) estimate over the budget, so they move to a later candidate under v6.
  *
  * Frozen once a CLI release ships it: changing any value changes which BLS key `--bls-key-derivation-v6` selects for
  * the same mnemonic and indices, so operators could no longer regenerate their keys. Add a new version instead.
@@ -32,7 +33,7 @@ export const BLS_KEY_DERIVATION_V6: BlsKeyDerivationVersion = {
     memoryNumerator: 95_975,
     memoryDenominator: 1_000_000,
   },
-  budget: 225_000,
+  budget: 270_000,
 };
 
 /** Version checked when no derivation flag is given. A future version gets its own flag next to `--bls-key-derivation-v6`. */

@@ -372,9 +372,8 @@ This regenerates the same validators if you've used this mnemonic before, or cre
 When a validator registers, L1 checks the proof of possession of its BLS key within a fixed gas cap. The cost of that
 check depends on the key, and for a small fraction of keys it could exceed the cap, so those keys could never register.
 `aztec validator-keys new`, `aztec validator-keys add` and `aztec generate-bls-keypair` estimate that cost for every BLS
-key they derive, locally and without RPC calls. The GSE's `proofOfPossessionGasLimit` is 250,000 gas today (governance
-may raise it), and the default budget is 225,000 gas, that cap minus a 10% margin. About 1 key in 3,000 estimates over
-the budget:
+key they derive, locally and without RPC calls. The v6 upgrade sets the GSE's `proofOfPossessionGasLimit` to 300,000 gas,
+and the default budget is 270,000 gas, that cap minus a 10% margin. About 1 key in 170,000 estimates over the budget:
 
 - **No flag**: the command keeps the key at the usual derivation path. If its check could exceed the gas cap, the command
   stops with an error before writing anything and suggests one of the flags below. If the command generated the
@@ -383,14 +382,14 @@ the budget:
   the same mnemonic at `<path>/1`, `<path>/2`, and so on, until one fits. Keys that already fit are unchanged, and the
   ETH attester and publisher keys never change.
 - **`--bls-key-derivation-max-gas <gas>`**: a stricter budget of your choice, between 137,790 (the lowest estimate any key
-  can have) and 225,000. With `--bls-key-derivation-v6`, candidates are tried until one fits this budget; without it, a key
+  can have) and 270,000. With `--bls-key-derivation-v6`, candidates are tried until one fits this budget; without it, a key
   over the budget is an error.
 - **`--skip-bls-key-gas-check`**: the command keeps the key at the usual path without checking it. Use this to
   regenerate a key created by an earlier CLI version, for example one that is already registered. You cannot combine it
   with `--bls-key-derivation-v6` or `--bls-key-derivation-max-gas`.
 
 When a key comes from a candidate other than 0, the summary shows its full derivation path, for example
-`bls derivation path: m/12381/3600/0/0/712/1 (candidate 1)`, followed by the max gas when
+`bls derivation path: m/12381/3600/0/0/384795/1 (candidate 1)`, followed by the max gas when
 `--bls-key-derivation-max-gas` was set. With `--json`, the output lists these keys under `blsKeyCandidates`. Encrypted BLS keystore files record each key's derivation path in their `path` field.
 
 :::warning Regenerating keys

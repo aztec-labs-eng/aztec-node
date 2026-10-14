@@ -26,10 +26,10 @@ import { buildValidatorEntries, computeBlsPublicKeyCompressed, logValidatorSumma
 
 const TEST_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
-// With TEST_MNEMONIC, the BLS key at m/12381/3600/0/0/712 needs 98 hashToPoint attempts and 11 square roots
-// (estimated 234,466 gas, over the v6 budget); the one at m/12381/3600/0/0/712/1 needs 9 and 3 (151,077 gas).
-const OVER_BUDGET_ADDRESS_INDEX = 712;
-const OVER_BUDGET_PATH = 'm/12381/3600/0/0/712';
+// With TEST_MNEMONIC, the BLS key at m/12381/3600/0/0/384795 needs 98 hashToPoint attempts and 19 square roots
+// (estimated 271,106 gas, over the v6 budget); the one at m/12381/3600/0/0/384795/1 needs 3 and 1 (138,820 gas).
+const OVER_BUDGET_ADDRESS_INDEX = 384795;
+const OVER_BUDGET_PATH = 'm/12381/3600/0/0/384795';
 
 // The key at m/12381/3600/0/0/1769 needs 65 attempts but only 6 square roots (194,055 gas), so it fits.
 const MANY_ATTEMPTS_ADDRESS_INDEX = 1769;
@@ -37,8 +37,8 @@ const MANY_ATTEMPTS_ADDRESS_INDEX = 1769;
 // Public keys the CLI derived from TEST_MNEMONIC before derivation versions existed.
 const PUBKEY_0_0_0 = '0x99b85154eae381ef1a1e4d220087bf487c009c73c26621ad46dfe6d589fa946b';
 const PUBKEY_0_0_1 = '0x902745c577bdb58e2f5e292129bfa529477d488eef3813ead0688d452d5e0862';
-const PUBKEY_0_0_712 = '0x27e1fd07eb9ec38a5ac4d164bdb8e64a93c8913aaab3deeadea2698a7d4c306c';
-const PUBKEY_0_0_712_1 = '0x8d22b1b8d3590dd85795c8005438d2054141a5bb9b1d2d859b6cc2660159fb6d';
+const PUBKEY_OVER_BUDGET = '0x1915ab7cc335d839a4c974752227a5d9f6854c9e446617c08666d81c03913236';
+const PUBKEY_OVER_BUDGET_1 = '0xabcb7faa8c1e5c588506368c9a35014e35b9709e3e6eb00dd5195b640b9bfe34';
 
 // Lowest estimate any key can have: one attempt that reaches the square root and succeeds.
 const MIN_ESTIMATE = 132_694 + 515 + 4_580 + 1;
@@ -87,7 +87,7 @@ describe('BLS key derivation version', () => {
     });
 
   describe('v6', () => {
-    it('freezes the amsterdam gas model and a 10% margin under the 250k cap', () => {
+    it('freezes the amsterdam gas model and a 10% margin under the 300k cap', () => {
       // v6 must keep selecting the same keys: if the measured model changes, add a new derivation version instead.
       expect(BLS_KEY_DERIVATION_V6.gasModel).toEqual(AMSTERDAM_PROOF_OF_POSSESSION_GAS_MODEL);
       expect(BLS_KEY_DERIVATION_V6.gasModel).toEqual({
@@ -97,12 +97,12 @@ describe('BLS key derivation version', () => {
         memoryNumerator: 95_975,
         memoryDenominator: 1_000_000,
       });
-      expect(BLS_KEY_DERIVATION_V6.budget).toBe(250_000 * 0.9);
+      expect(BLS_KEY_DERIVATION_V6.budget).toBe(300_000 * 0.9);
     });
 
-    it('puts sk = 57193 over the budget', () => {
-      // 95 attempts and 18 square roots.
-      expect(estimate(`0x${(57193).toString(16).padStart(64, '0')}`)).toBeGreaterThan(BLS_KEY_DERIVATION_V6.budget);
+    it('puts sk = 693083 over the budget', () => {
+      // 97 attempts and 23 square roots; its measured min stipend is 288,787 gas.
+      expect(estimate(`0x${(693083).toString(16).padStart(64, '0')}`)).toBeGreaterThan(BLS_KEY_DERIVATION_V6.budget);
     });
   });
 
@@ -142,8 +142,8 @@ describe('BLS key derivation version', () => {
     });
 
     it('rejects a max gas above the v6 budget', () => {
-      expect(() => resolveBlsKeyDerivationPolicy({ blsKeyDerivationMaxGas: 225_001 })).toThrow(
-        /can only lower the budget: 225001 is above the 225000 gas budget of BLS key derivation v6/,
+      expect(() => resolveBlsKeyDerivationPolicy({ blsKeyDerivationMaxGas: 270_001 })).toThrow(
+        /can only lower the budget: 270001 is above the 270000 gas budget of BLS key derivation v6/,
       );
     });
 
@@ -173,7 +173,7 @@ describe('BLS key derivation version', () => {
           perValidatorPath: OVER_BUDGET_PATH,
           maxCandidates: 1,
         }),
-      ).toThrow(/No BLS key within the 225000 gas budget found for .*712 after 1 candidates/);
+      ).toThrow(/No BLS key within the 270000 gas budget found for .*384795 after 1 candidates/);
     });
 
     it('derives retry candidates from IKM as well', () => {
@@ -220,7 +220,7 @@ describe('BLS key derivation version', () => {
         (err: Error) => err,
       );
       expect(error?.message).toMatch(
-        /m\/12381\/3600\/0\/0\/712 is estimated at 234466 gas, above the 225000 budget of BLS key derivation v6/,
+        /m\/12381\/3600\/0\/0\/384795 is estimated at 271106 gas, above the 270000 budget of BLS key derivation v6/,
       );
       expect(error?.message).toMatch(/--bls-key-derivation-v6 .*--skip-bls-key-gas-check/);
       expect(error?.message).not.toMatch(/generated its mnemonic/);
@@ -240,7 +240,7 @@ describe('BLS key derivation version', () => {
     it.each([{ skipBlsKeyGasCheck: true }])('keeps an over-budget candidate 0 with %j', async options => {
       const { summaries } = await build(options);
       expect(summaries[0]).toMatchObject({
-        attesterBls: PUBKEY_0_0_712,
+        attesterBls: PUBKEY_OVER_BUDGET,
         blsPath: OVER_BUDGET_PATH,
         blsCandidate: 0,
       });
@@ -252,7 +252,7 @@ describe('BLS key derivation version', () => {
       const v6 = await build({ blsKeyDerivationV6: true }, options);
 
       expect(v6.summaries[0]).toMatchObject({
-        attesterBls: PUBKEY_0_0_712_1,
+        attesterBls: PUBKEY_OVER_BUDGET_1,
         blsPath: `${OVER_BUDGET_PATH}/1`,
         blsCandidate: 1,
       });
@@ -265,14 +265,14 @@ describe('BLS key derivation version', () => {
     });
 
     it('retries until a candidate fits --bls-key-derivation-max-gas under v6', async () => {
-      // Candidates 1 and 2 estimate 151,077 and 166,971 gas; candidate 3 estimates 147,014.
-      const { validators, summaries } = await build({ blsKeyDerivationV6: true, blsKeyDerivationMaxGas: 150_000 });
-      expect(summaries[0]).toMatchObject({ blsPath: `${OVER_BUDGET_PATH}/3`, blsCandidate: 3, blsMaxGas: 150_000 });
-      expect(estimate(blsOf(validators[0]))).toBeLessThanOrEqual(150_000);
+      // Candidates 1 to 9 estimate at least 138,820 gas; candidate 10 estimates 138,305.
+      const { validators, summaries } = await build({ blsKeyDerivationV6: true, blsKeyDerivationMaxGas: 138_500 });
+      expect(summaries[0]).toMatchObject({ blsPath: `${OVER_BUDGET_PATH}/10`, blsCandidate: 10, blsMaxGas: 138_500 });
+      expect(estimate(blsOf(validators[0]))).toBeLessThanOrEqual(138_500);
 
       // An explicit max gas is recorded whenever a retry candidate was selected; without one, nothing is recorded.
-      const { summaries: loose } = await build({ blsKeyDerivationV6: true, blsKeyDerivationMaxGas: 225_000 });
-      expect(loose[0]).toMatchObject({ blsCandidate: 1, blsMaxGas: 225_000 });
+      const { summaries: loose } = await build({ blsKeyDerivationV6: true, blsKeyDerivationMaxGas: 270_000 });
+      expect(loose[0]).toMatchObject({ blsCandidate: 1, blsMaxGas: 270_000 });
       const { summaries: unset } = await build({ blsKeyDerivationV6: true });
       expect(unset[0].blsMaxGas).toBeUndefined();
     });
@@ -332,10 +332,10 @@ describe('BLS key derivation version', () => {
     });
 
     it('prints the max gas that selected a retry candidate', async () => {
-      const { summaries } = await build({ blsKeyDerivationV6: true, blsKeyDerivationMaxGas: 150_000 });
+      const { summaries } = await build({ blsKeyDerivationV6: true, blsKeyDerivationMaxGas: 138_500 });
       const logs: string[] = [];
       logValidatorSummaries(s => logs.push(s), summaries);
-      expect(logs.join('\n')).toContain(`bls derivation path: ${OVER_BUDGET_PATH}/3 (candidate 3, max gas 150000)`);
+      expect(logs.join('\n')).toContain(`bls derivation path: ${OVER_BUDGET_PATH}/10 (candidate 10, max gas 138500)`);
     });
   });
 
@@ -376,10 +376,12 @@ describe('BLS key derivation version', () => {
         pubkey: loadBn254Keystore(file).pubkey,
       }));
       expect(recorded).toEqual([
-        { path: 'm/12381/3600/0/0/711', pubkey: expect.any(String) },
-        { path: `${OVER_BUDGET_PATH}/1`, pubkey: PUBKEY_0_0_712_1 },
+        { path: 'm/12381/3600/0/0/384794', pubkey: expect.any(String) },
+        { path: `${OVER_BUDGET_PATH}/1`, pubkey: PUBKEY_OVER_BUDGET_1 },
       ]);
-      expect(await computeBlsPublicKeyCompressed(decryptBn254Keystore(blsFiles[1], password))).toBe(PUBKEY_0_0_712_1);
+      expect(await computeBlsPublicKeyCompressed(decryptBn254Keystore(blsFiles[1], password))).toBe(
+        PUBKEY_OVER_BUDGET_1,
+      );
     });
 
     it('reports retry candidates in JSON output', async () => {
@@ -398,7 +400,7 @@ describe('BLS key derivation version', () => {
       );
       const output = JSON.parse(logs[0]);
       expect(output.blsKeyCandidates).toEqual([
-        { attesterEth: expect.any(String), bls: PUBKEY_0_0_712_1, path: `${OVER_BUDGET_PATH}/1`, candidate: 1 },
+        { attesterEth: expect.any(String), bls: PUBKEY_OVER_BUDGET_1, path: `${OVER_BUDGET_PATH}/1`, candidate: 1 },
       ]);
       expect(JSON.parse(readFileSync(join(tmp, 'json-v6.json'), 'utf-8'))).not.toHaveProperty('blsKeyCandidates');
     });
@@ -413,7 +415,7 @@ describe('BLS key derivation version', () => {
           addressIndex: OVER_BUDGET_ADDRESS_INDEX,
           feeRecipient,
           blsKeyDerivationV6: true,
-          blsKeyDerivationMaxGas: 150_000,
+          blsKeyDerivationMaxGas: 138_500,
           json: true,
         },
         s => logs.push(s),
@@ -422,9 +424,9 @@ describe('BLS key derivation version', () => {
         {
           attesterEth: expect.any(String),
           bls: expect.any(String),
-          path: `${OVER_BUDGET_PATH}/3`,
-          candidate: 3,
-          maxGas: 150_000,
+          path: `${OVER_BUDGET_PATH}/10`,
+          candidate: 10,
+          maxGas: 138_500,
         },
       ]);
     });
@@ -478,13 +480,13 @@ describe('BLS key derivation version', () => {
       expect(JSON.parse(logs[0])).toMatchObject({
         path: `${OVER_BUDGET_PATH}/1`,
         candidate: 1,
-        publicKey: PUBKEY_0_0_712_1,
+        publicKey: PUBKEY_OVER_BUDGET_1,
       });
 
       const unchecked: string[] = [];
       await generateBlsKeypair({ mnemonic: TEST_MNEMONIC, blsPath, skipBlsKeyGasCheck: true }, s => unchecked.push(s));
       const result = JSON.parse(unchecked[0]);
-      expect(result).toMatchObject({ path: OVER_BUDGET_PATH, publicKey: PUBKEY_0_0_712 });
+      expect(result).toMatchObject({ path: OVER_BUDGET_PATH, publicKey: PUBKEY_OVER_BUDGET });
       expect(result).not.toHaveProperty('candidate');
     });
   });
