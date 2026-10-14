@@ -13,8 +13,8 @@
 #
 # Never copied: lines already setting ANVIL_HARDFORK (the test picks its fork), lines setting
 # CONTRACT_ARTIFACTS_VERSION (compat runs replay L2 artifacts and add no L1 coverage), tests under
-# single-node/l1-hardfork/ (they switch forks themselves) and ethereum/src/test/start_anvil.test.ts (it swaps in fake
-# anvil binaries). Nothing is copied while DUMP_AVM_INPUTS_TO_DIR is set, as both runs would dump to one directory.
+# single-node/l1-hardfork/ and ethereum/src/test/anvil_hardfork.test.ts (they switch forks themselves) and
+# ethereum/src/test/start_anvil.test.ts (it swaps in fake anvil binaries). Nothing is copied while DUMP_AVM_INPUTS_TO_DIR is set, as both runs would dump to one directory.
 #
 # Test paths resolve against the component that emitted the lines: yarn-project for unit, yarn-project/end-to-end for
 # e2e, where a path may also be relative to jest's rootDir (src/), as the prover test lines are.
@@ -61,7 +61,9 @@ function resolve_test_file {
 
 function is_excluded {
   case "$1" in
-    */single-node/l1-hardfork/* | */ethereum/src/test/start_anvil.test.ts) return 0 ;;
+    */single-node/l1-hardfork/* | */ethereum/src/test/anvil_hardfork.test.ts | */ethereum/src/test/start_anvil.test.ts)
+      return 0
+      ;;
     *) return 1 ;;
   esac
 }

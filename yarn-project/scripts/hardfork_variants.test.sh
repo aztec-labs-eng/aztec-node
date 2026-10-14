@@ -38,6 +38,7 @@ fixture unit/ethereum/src/pure.test.ts 'expect(1).toBe(1);'
 fixture unit/ethereum/src/commented.test.ts $'// runOnAllL1Forks();\n * runOnAllL1Forks()\nconst { rpcUrl } = await startAnvil();'
 fixture unit/ethereum/src/spaced.test.ts 'runOnAllL1Forks ();'
 fixture unit/ethereum/src/test/start_anvil.test.ts $'runOnAllL1Forks();\nstartAnvil();'
+fixture unit/ethereum/src/test/anvil_hardfork.test.ts $'runOnAllL1Forks();\nstartAnvil();'
 fixture unit/aztec/src/testing/local-network.test.ts "$tagged"
 fixture e2e/src/single-node/tagged.test.ts "$tagged"
 fixture e2e/src/single-node/plain.test.ts 'await setup();'
@@ -100,9 +101,11 @@ h1 CONTRACT_ARTIFACTS_VERSION=4.0.0 $run_unit ethereum/src/tagged.test.ts" \
 "h1 ANVIL_HARDFORK=osaka $run_unit ethereum/src/tagged.test.ts
 h1 CONTRACT_ARTIFACTS_VERSION=4.0.0 $run_unit ethereum/src/tagged.test.ts"
 
-check "start_anvil.test.ts is never copied" unit \
-"h1 $run_unit ethereum/src/test/start_anvil.test.ts" \
-"h1 $run_unit ethereum/src/test/start_anvil.test.ts"
+check "tests that control their own anvil fork are never copied" unit \
+"h1 $run_unit ethereum/src/test/start_anvil.test.ts
+h1 $run_unit ethereum/src/test/anvil_hardfork.test.ts" \
+"h1 $run_unit ethereum/src/test/start_anvil.test.ts
+h1 $run_unit ethereum/src/test/anvil_hardfork.test.ts"
 
 echo "unit mode, sweep"
 for sweep_var in CI_FULL HARDFORK_SWEEP; do
