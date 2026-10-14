@@ -434,6 +434,22 @@ describeAcrossL1Forks('EthCheatCodes', () => {
         expect((await waitForBlockAfter(first.number)).timestamp).toBe(target);
       });
 
+      it('resumes on the grid when a timestamp set inside a pause was used by a block mined there', async () => {
+        await sleep(1000);
+        const mid = await cheatCodes.execWithPausedAnvil(async () => {
+          await cheatCodes.setNextBlockTimestamp(first.timestamp + 1);
+          await cheatCodes.evmMine();
+          const mined = await waitForBlockAfter(first.number);
+          await sleep(800);
+          return mined;
+        });
+        expect(mid.timestamp).toBe(first.timestamp + 1);
+
+        const next = await waitForBlockAfter(mid.number);
+        expectOnGrid(next, mid);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
       it('lets setIntervalMining cancel a pending resume', async () => {
         await sleep(1000);
         await cheatCodes.execWithPausedAnvil(() => sleep(100));

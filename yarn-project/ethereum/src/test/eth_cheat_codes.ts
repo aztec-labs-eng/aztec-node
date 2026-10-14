@@ -33,10 +33,10 @@ const anvilMining: {
   /** Serializes changes to anvil's mining mode against the pending resume. Never held while a caller's code runs. */
   lock: Semaphore;
   /**
-   * Mining mode captured by the pause in progress, restored when it ends. `nextTimestampSet` records that a caller
-   * chose the next block's timestamp during the pause, which a resume on the grid would overwrite.
+   * Mining mode captured by the pause in progress, restored when it ends. `nextTimestamp` is the next block's timestamp
+   * a caller chose during the pause, which a resume on the grid would overwrite if no block has used it yet.
    */
-  paused?: { interval: number | null; automine: boolean; nextTimestampSet?: boolean };
+  paused?: { interval: number | null; automine: boolean; nextTimestamp?: number };
   pendingResume?: PendingResume;
   /** Bumped on reset, so a resume being scheduled across a reset does not arm a timer for the next anvil. */
   generation: number;
@@ -339,22 +339,22 @@ export class EthCheatCodes {
 
   /**
    * Set the next block timestamp. A resume on the block grid after {@link execWithPausedAnvil} would overwrite it, so
-   * interval mining is instead restarted straight away, now if a resume is pending or when the current pause ends.
+   * interval mining is instead restarted straight away: now if a resume is pending, or when the current pause ends if
+   * no block mined during the pause has used the timestamp.
    * @param timestamp - The timestamp to set the next block to
    */
   public async setNextBlockTimestamp(timestamp: number | Date): Promise<void> {
+    const seconds = timestamp instanceof Date ? Math.floor(timestamp.getTime() / 1000) : timestamp;
     await this.withMiningLock(async () => {
       const pendingInterval = takePendingResume();
       if (pendingInterval !== undefined) {
         await this.doSetIntervalMining(pendingInterval);
       }
       if (anvilMining.paused) {
-        anvilMining.paused.nextTimestampSet = true;
+        anvilMining.paused.nextTimestamp = seconds;
       }
       try {
-        await this.rpcCall('evm_setNextBlockTimestamp', [
-          timestamp instanceof Date ? Math.floor(timestamp.getTime() / 1000) : timestamp,
-        ]);
+        await this.rpcCall('evm_setNextBlockTimestamp', [seconds]);
       } catch (err: any) {
         throw new Error(`Error setting next block timestamp: ${err.message}`);
       }
@@ -742,11 +742,7 @@ export class EthCheatCodes {
     }
     if (saved?.interval) {
       try {
-        if (saved.nextTimestampSet) {
-          await this.doSetIntervalMining(saved.interval);
-        } else {
-          await this.scheduleResume(saved.interval);
-        }
+        await this.scheduleResume(saved.interval, saved.nextTimestamp);
       } catch (err) {
         this.logger.warn(`Failed to schedule interval mining on the block grid, restarting it now: ${err}`);
         try {
@@ -768,11 +764,18 @@ export class EthCheatCodes {
    * A tick the pause ran past by up to {@link OVERDUE_TICK_GRACE_MS} is mined straight away; one missed by more is
    * skipped, so the lag stays bounded, at the cost of a gap in the chain like a missed L1 slot. Must be called holding
    * the mining lock.
+   *
+   * @param nextTimestamp - A next-block timestamp a caller set during the pause. Unless a block has already used it, it
+   * is kept: interval mining restarts straight away instead, so the resume does not overwrite it.
    */
-  private async scheduleResume(interval: number): Promise<void> {
+  private async scheduleResume(interval: number, nextTimestamp?: number): Promise<void> {
     const generation = anvilMining.generation;
     const latest = await this.lastBlockTimestamp();
     if (anvilMining.generation !== generation) {
+      return;
+    }
+    if (nextTimestamp !== undefined && latest < nextTimestamp) {
+      await this.doSetIntervalMining(interval);
       return;
     }
     const nowMs = this.dateProvider.now();
