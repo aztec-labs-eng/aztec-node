@@ -70,6 +70,12 @@ If a file contains changes you did not make (e.g. formatting diffs, new imports,
 Tests should validate behavior, not mock call-count. Prefer `expect(result).toEqual(...)` over `expect(spy).toHaveBeenCalledWith(...)` unless call-count is literally the behavior under test. Mock-counting tests pin the implementation and make every unrelated refactor look like a regression.
 </test_behavior_not_mocks>
 
+<test_behavior_not_constants>
+Tests should survive implementation changes that preserve behavior. Tests should change much less often than the code they test. If test code churn approaches implementation churn, reassess whether the test is useful.
+
+Do not write tests whose expected values merely repeat hard-coded flags, constants, or configuration from the implementation. Test the observable behavior those values control. Assert exact values only when they are independently required by the intended behavior or an external contract. If changing an implementation value requires changing the corresponding assertion without any behavior becoming incorrect, the test provides no useful protection.
+</test_behavior_not_constants>
+
 <reuse_before_writing>
 Before writing a new helper, utility, or component, search for an existing one with Grep or Glob. Reuse or refactor to a shared module; do not introduce a parallel implementation.
 </reuse_before_writing>
