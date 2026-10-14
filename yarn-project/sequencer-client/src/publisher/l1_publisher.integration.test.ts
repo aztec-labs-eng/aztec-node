@@ -144,6 +144,19 @@ const numberOfConsecutiveBlocks = 3;
 
 jest.setTimeout(1000000);
 
+/**
+ * Asserts a sent tx's gas limit stays within the affordability gas constant, except on Amsterdam anvil. Anvil 1.8.5
+ * prices storage writes under `--hardfork amsterdam` with the Amsterdam repricing in `eth_simulateV1` only, while
+ * `eth_estimateGas` and execution charge the pre-fork cost, so the limit the bundle simulator derives is several
+ * times the gas the receipt reports (ten fresh SSTOREs simulate at 1.1M gas and mine at 242k). The gas used
+ * assertions still apply on both forks.
+ */
+function expectGasLimitWithin(gasLimit: bigint, max: bigint) {
+  if (!isAmsterdamTestRun()) {
+    expect(gasLimit).toBeLessThanOrEqual(max);
+  }
+}
+
 // Low-level integration tests for SequencerPublisher: building checkpoints, publishing with and
 // without attestations, handling L1 tx cancellation/speedup, and invalidating bad checkpoints.
 // Custom wiring: starts its own anvil directly via startAnvil(), deploys L1 contracts, builds a
@@ -735,7 +748,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
         const receipt = await l1Client.getTransactionReceipt({ hash: logs[i].transactionHash! });
         logger.info(`Propose gas for checkpoint ${i + 1}`, { gasUsed: receipt.gasUsed, gasLimit: ethTx.gas, numTxs });
         expect(receipt.gasUsed).toBeLessThanOrEqual(PROPOSE_GAS);
-        expect(ethTx.gas).toBeLessThanOrEqual(PROPOSE_GAS);
+        expectGasLimitWithin(ethTx.gas, PROPOSE_GAS);
         const expectedRollupData = encodeFunctionData({
           abi: RollupAbi,
           functionName: 'propose',
@@ -826,7 +839,7 @@ describeAcrossL1Forks('L1Publisher integration', () => {
       const { gas: gasLimit } = await l1Client.getTransaction({ hash: transactionHash });
       logger.info(`Bundle gas`, { gasUsed, gasLimit, max });
       expect(gasUsed).toBeLessThanOrEqual(max);
-      expect(gasLimit).toBeLessThanOrEqual(max);
+      expectGasLimitWithin(gasLimit, max);
     };
 
     it('publishes a block with attestations', async () => {
