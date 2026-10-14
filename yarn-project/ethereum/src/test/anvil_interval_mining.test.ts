@@ -103,6 +103,35 @@ describe('anvil interval mining', () => {
     await expectBlocksOnGrid(deferred, 2);
   });
 
+  it('catches up with the grid after a lock held for several intervals', async () => {
+    const start = await observer.getBlock({ blockTag: 'latest' });
+    const cycleStart = await nextBlock(start.number);
+    await cheatCodes.execWithPausedAnvil(() => sleep(INTERVAL * 2500));
+
+    // Blocks stay stamped one interval apart while the miner works off the lag, two blocks per interval at most.
+    let prev = { number: cycleStart.number, timestamp: cycleStart.timestamp };
+    let lagMs = Infinity;
+    for (let i = 0; i < 8 && lagMs >= MAX_LAG_MS; i++) {
+      const block = await nextBlock(prev.number);
+      expect(block.timestamp).toEqual(prev.timestamp + INTERVAL);
+      lagMs = block.seenAt - block.timestamp * 1000;
+      prev = block;
+    }
+    expect(lagMs).toBeLessThan(MAX_LAG_MS);
+    await expectBlocksOnGrid(prev, 2);
+  });
+
+  it('mines nothing once interval mining is turned off', async () => {
+    const start = await observer.getBlock({ blockTag: 'latest' });
+    await nextBlock(start.number);
+    await cheatCodes.setIntervalMining(0);
+    const stoppedAt = await observer.getBlockNumber({ cacheTime: 0 });
+
+    await sleep(INTERVAL * 2500);
+    expect(await observer.getBlockNumber({ cacheTime: 0 })).toEqual(stoppedAt);
+    expect(await cheatCodes.getIntervalMining()).toBeNull();
+  });
+
   it('serializes requests from separate cheat code instances behind a held lock', async () => {
     const other = new EthCheatCodes([rpcUrl], dateProvider);
     const account = EthAddress.random();

@@ -20,13 +20,16 @@ import { type FallbackTransport, type HttpTransport, fallback, http } from 'viem
  */
 export class AnvilQueue {
   private readonly queue = new SerialQueue();
-  private readonly held = new AsyncLocalStorage<true>();
+  /** Marks the async context of the job holding the queue. The hold ends when the job settles, even for stragglers. */
+  private readonly held = new AsyncLocalStorage<{ active: boolean }>();
   private readonly request: (method: string, params: unknown[]) => Promise<any>;
   private closed = false;
 
   private miningInterval: number | undefined;
   private minerTimer: NodeJS.Timeout | undefined;
-  /** Wall-clock time of the last mine, or of the miner (re)start. Spaces out blocks when the grid is out of reach. */
+  /** Bumped on every miner start, stop and close, so a tick scheduled under an earlier setting does nothing. */
+  private minerGeneration = 0;
+  /** Wall-clock time of the last mine, or of the miner start. */
   private lastMineWallMs = 0;
 
   constructor(
@@ -47,10 +50,17 @@ export class AnvilQueue {
    * settles. Requests `fn` sends while it holds the queue run in place rather than queueing behind it.
    */
   public run<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.held.getStore()) {
+    if (this.held.getStore()?.active) {
       return fn();
     }
-    return this.queue.put(() => this.held.run(true, fn));
+    return this.queue.put(async () => {
+      const hold = { active: true };
+      try {
+        return await this.held.run(hold, fn);
+      } finally {
+        hold.active = false;
+      }
+    });
   }
 
   /** The client-side mining interval in seconds, or undefined when the client-side miner is stopped. */
@@ -61,32 +71,34 @@ export class AnvilQueue {
   /**
    * Starts the client-side miner at the given interval in seconds, or stops it when `seconds` is 0. Also sets anvil's
    * block timestamp interval, so the next block is always stamped one interval after its parent unless a cheat op
-   * set an explicit next timestamp.
+   * set an explicit next timestamp. Runs as a queued job, so no tick is midway when the setting changes.
    */
-  public async setMiningInterval(seconds: number): Promise<void> {
+  public setMiningInterval(seconds: number): Promise<void> {
     if (!this.clientSideMining) {
-      throw new Error(`Anvil at ${this.rpcUrl} was not started with client-side mining`);
+      return Promise.reject(new Error(`Anvil at ${this.rpcUrl} was not started with client-side mining`));
     }
-    this.clearMinerTimer();
-    if (seconds <= 0) {
-      this.miningInterval = undefined;
-      return;
-    }
-    await this.run(() => this.request('anvil_setBlockTimestampInterval', [seconds]));
-    this.miningInterval = seconds;
-    this.lastMineWallMs = Date.now();
-    this.scheduleTick(0);
+    return this.run(async () => {
+      this.stopMiner();
+      if (seconds <= 0) {
+        return;
+      }
+      await this.request('anvil_setBlockTimestampInterval', [seconds]);
+      this.miningInterval = seconds;
+      this.lastMineWallMs = Date.now();
+      this.scheduleTick(0);
+    });
   }
 
   /** Stops the miner and lets every queued request settle. Later requests are rejected. */
   public async close(): Promise<void> {
     this.closed = true;
-    this.miningInterval = undefined;
-    this.clearMinerTimer();
+    this.stopMiner();
     await this.queue.end();
   }
 
-  private clearMinerTimer() {
+  private stopMiner() {
+    this.minerGeneration++;
+    this.miningInterval = undefined;
     if (this.minerTimer !== undefined) {
       clearTimeout(this.minerTimer);
       this.minerTimer = undefined;
@@ -97,15 +109,15 @@ export class AnvilQueue {
     if (this.closed || this.miningInterval === undefined) {
       return;
     }
-    this.clearMinerTimer();
+    const generation = this.minerGeneration;
     // Ticks are scheduled from inside a queued job; the timer must not inherit that job's hold on the queue, or the
     // next tick would bypass the queue instead of waiting for whatever cheat op holds it.
     this.minerTimer = this.held.exit(() =>
       setTimeout(
         () => {
           this.minerTimer = undefined;
-          this.run(() => this.tick()).catch(err => {
-            if (!this.closed) {
+          this.run(() => this.tick(generation)).catch(err => {
+            if (!this.closed && generation === this.minerGeneration) {
               this.log.warn(`Client-side L1 mining tick failed`, { err, rpcUrl: this.rpcUrl });
               this.scheduleTick(1000);
             }
@@ -119,42 +131,39 @@ export class AnvilQueue {
 
   /**
    * Mines the pending block once the node clock reaches its timestamp. The pending timestamp is one interval after
-   * the tip unless a cheat op set it explicitly, so this follows warps, explicit timestamps and reorgs alike. A
-   * block falling due late (a cheat op held the queue) is mined at once to get back on the grid. When the grid is
-   * more than an interval behind the node clock (a deep rollback rewound the tip), there is no catching up without a
-   * burst of blocks, so the miner keeps anvil's own cadence of one block per interval instead.
+   * the tip unless a cheat op set it explicitly, so this follows warps, explicit timestamps and reorgs alike. A block
+   * that fell due while a cheat op held the queue is mined as soon as the op settles. When the grid is further behind
+   * (a long hold, or a rollback that rewound the tip), the miner catches up at two blocks per interval rather than in
+   * a burst. It re-reads the pending block at least once per interval, so a timestamp or clock change made by a cheat
+   * op never leaves it sleeping past the new due time.
    */
-  private async tick(): Promise<void> {
+  private async tick(generation: number): Promise<void> {
     const interval = this.miningInterval;
-    if (this.closed || interval === undefined) {
+    if (this.closed || interval === undefined || generation !== this.minerGeneration) {
       return;
     }
     const intervalMs = interval * 1000;
     const pending = await this.request('eth_getBlockByNumber', ['pending', false]);
     const timestamp = parseInt(pending.timestamp, 16);
-    const nowWallMs = Date.now();
 
-    let delayMs = timestamp * 1000 - this.dateProvider.now();
-    if (delayMs < -intervalMs) {
-      delayMs = this.lastMineWallMs + intervalMs - nowWallMs;
-    }
-    // Never mine faster than twice per interval, whatever the timestamps say.
-    delayMs = Math.max(delayMs, this.lastMineWallMs + intervalMs / 2 - nowWallMs);
+    const dueInMs = timestamp * 1000 - this.dateProvider.now();
+    const spacingInMs = this.lastMineWallMs + intervalMs / 2 - Date.now();
+    const delayMs = Math.max(dueInMs, spacingInMs);
     if (delayMs > 0) {
-      this.scheduleTick(delayMs);
+      this.scheduleTick(Math.min(delayMs, intervalMs));
       return;
     }
 
     await this.request('evm_mine', [timestamp]);
     this.lastMineWallMs = Date.now();
     this.log.trace(`Mined L1 block at ${timestamp}`, { timestamp, interval });
-    this.scheduleTick((timestamp + interval) * 1000 - this.dateProvider.now());
+    this.scheduleTick(Math.min((timestamp + interval) * 1000 - this.dateProvider.now(), intervalMs));
   }
 }
 
 const queues = new Map<string, AnvilQueue>();
 
-const queueKey = (rpcUrl: string) => rpcUrl.replace(/\/+$/, '');
+const queueKey = (rpcUrl: string) => rpcUrl.replace(/\/+$/, '').replace('://localhost', '://127.0.0.1');
 
 /** Returns the queue for the anvil at `rpcUrls[0]`, creating one without client-side mining if none is registered. */
 export function getAnvilQueue(rpcUrls: string[]): AnvilQueue {
@@ -178,12 +187,13 @@ export function registerAnvilQueue(
   return queue;
 }
 
-/** Closes and forgets the queue registered for `rpcUrl`, if it is still the given one. */
+/** Closes and forgets the given queue, unless a newer one has replaced it in the registry. */
 export async function unregisterAnvilQueue(queue: AnvilQueue): Promise<void> {
+  // Close before forgetting it, so a request sent while the queue drains is not admitted through a fresh queue.
+  await queue.close();
   if (queues.get(queue.rpcUrl) === queue) {
     queues.delete(queue.rpcUrl);
   }
-  await queue.close();
 }
 
 /** A viem transport whose every request goes through the {@link AnvilQueue} of the anvil at `rpcUrls[0]`. */

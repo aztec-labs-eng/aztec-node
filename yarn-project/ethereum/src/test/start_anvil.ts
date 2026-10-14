@@ -224,19 +224,23 @@ export async function startAnvil(
   const rpcUrl = `http://127.0.0.1:${port}`;
   let status: 'listening' | 'idle' = 'listening';
 
-  anvil.once('close', () => {
-    status = 'idle';
-  });
-
   const clientMiningInterval = opts.clientSideMining && opts.l1BlockTime ? opts.l1BlockTime : undefined;
   const queue = registerAnvilQueue(rpcUrl, {
     clientSideMining: clientMiningInterval !== undefined,
     dateProvider: opts.dateProvider,
   });
+  let queueClosed: Promise<void> | undefined;
+  const closeQueue = () => (queueClosed ??= unregisterAnvilQueue(queue));
+
+  anvil.once('close', () => {
+    status = 'idle';
+    // An anvil that died on its own would otherwise leave the client-side miner retrying against a closed port.
+    void closeQueue();
+  });
 
   const shutdown = async () => {
     try {
-      await unregisterAnvilQueue(queue);
+      await closeQueue();
     } finally {
       await killChild(anvil);
     }
@@ -244,6 +248,7 @@ export async function startAnvil(
   let stopping: Promise<void> | undefined;
   const stop = async () => {
     if (status === 'idle') {
+      await closeQueue();
       return;
     }
     await (stopping ??= shutdown());
