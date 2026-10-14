@@ -43,7 +43,8 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
   private current: Promise<FailingChonkVerifier>;
   /** The verifier in use, which stop() stops; unset while its replacement is being created. */
   private started: FailingChonkVerifier | undefined;
-  private lastReplacedAt = 0;
+  /** When the verifier was last replaced, as a `Date.now()` timestamp in ms; 0 if it never has been. */
+  private lastReplacedAtMs = 0;
   private stopped = false;
   /** Wakes verifications waiting for the next replacement when the verifier stops. */
   private readonly sleeper = new InterruptibleSleep();
@@ -195,12 +196,12 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
     }
     // Only the first caller to find this verifier failed replaces it; the rest share the replacement.
     if (this.current === current) {
-      const wait = this.lastReplacedAt + this.replaceIntervalMs - Date.now();
+      const wait = this.lastReplacedAtMs + this.replaceIntervalMs - Date.now();
       if (wait > 0) {
         await this.sleeper.sleep(wait);
         return await this.liveVerifier();
       }
-      this.lastReplacedAt = Date.now();
+      this.lastReplacedAtMs = Date.now();
       this.logger.warn('Replacing the failed Chonk verifier', { label: this.label });
       this.started = undefined;
       void this.retire(verifier);
