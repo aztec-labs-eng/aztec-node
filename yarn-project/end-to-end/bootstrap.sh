@@ -38,7 +38,7 @@ function set_dump_avm {
   [ -n "${DUMP_AVM_INPUTS_TO_DIR:-}" ] && echo "DUMP_AVM_INPUTS_TO_DIR=${DUMP_AVM_INPUTS_TO_DIR}/$1"
 }
 
-function test_cmds {
+function base_test_cmds {
   local run_test_script="yarn-project/end-to-end/scripts/run_test.sh"
   load_dep_hashes
   local flags=":ISOLATE=1:TIMEOUT=20m"
@@ -200,9 +200,20 @@ function test_cmds {
   compat_test_cmds
 }
 
+# Adds an Amsterdam-L1 copy of the tests that run against every L1 fork (see scripts/hardfork_variants.sh).
+function test_cmds {
+  base_test_cmds | ../scripts/hardfork_variants.sh e2e
+}
+
 function test {
   echo_header "e2e tests"
   test_cmds | filter_test_cmds | parallelize
+}
+
+# Runs every anvil-backed e2e test against an Amsterdam L1, as the full CI sweep does, without the default-fork runs.
+function test_amsterdam {
+  echo_header "e2e tests on Amsterdam"
+  HARDFORK_SWEEP=1 test_cmds | grep ANVIL_HARDFORK=amsterdam | filter_test_cmds | parallelize
 }
 
 function bench_cmds {

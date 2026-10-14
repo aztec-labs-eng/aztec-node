@@ -13,7 +13,8 @@ function hash {
 
 # Base folded into every dependency hash: everything an entry can depend on that the
 # dependency closures (scripts/dep-closures.mjs) don't cover — yarn.lock, .swcrc, jest
-# configs, scripts, fixtures — plus the toolchain hash. Unlike the build hash, noir-contracts
+# configs, scripts, fixtures — plus the toolchain hash and the build image Dockerfile, which pins
+# the anvil that tests run their L1 on. Unlike the build hash, noir-contracts
 # is NOT folded in: the generated contract TS and artifact JSONs are closure members and are
 # content-hashed per entry (see compute_package_dep_hashes), so a contract change only
 # invalidates the tests whose closures reach it. Everything under yarn-project is in by
@@ -27,6 +28,7 @@ function hash {
 function hash_deps_base {
   hash_str \
     $(../labs-aztec-toolchain/bootstrap.sh hash) \
+    $(cache_content_hash '^build-images/src/Dockerfile$') \
     $(cache_content_hash '^yarn-project/' \
         '!^yarn-project/.*\.(ts|md|tf|svg|png)$' \
         '!^yarn-project/[^/]+/package\.json$')
@@ -430,13 +432,15 @@ function test_cmds {
     fi
 
     echo "${prefix}${cmd_env} yarn-project/scripts/run_test.sh $test"
-  done
+  done | scripts/hardfork_variants.sh unit
+
+  echo "$(cache_content_hash '^yarn-project/scripts/hardfork_variants') yarn-project/scripts/hardfork_variants.test.sh"
 
   # kv-store: per-file fan-out (mocha for node tests, vitest for browser tests).
   kv-store/bootstrap.sh test_cmds
 
   # Aztec CLI tests
-  aztec/bootstrap.sh test_cmds
+  aztec/bootstrap.sh test_cmds | scripts/hardfork_variants.sh unit
 
   if [[ "${TARGET_BRANCH:-}" =~ ^(v[0-9]+(-next)?|backport-to-v[0-9]+-(staging|next))$ ]]; then
     for test in aztec/src/testnet_compatibility.test.ts aztec/src/mainnet_compatibility.test.ts; do
