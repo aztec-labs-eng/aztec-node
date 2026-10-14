@@ -296,15 +296,14 @@ export class RollupCheatCodes {
     );
   }
 
-  public insertOutbox(epoch: EpochNumber, numCheckpointsInEpoch: number, outHash: bigint) {
-    return this.ethCheatCodes.execWithPausedAnvil(async () => {
-      const outboxAddress = await this.rollup.read.getOutbox();
-      const epochRootSlot = OutboxContract.getEpochRootStorageSlot(epoch, numCheckpointsInEpoch);
-      await this.ethCheatCodes.store(EthAddress.fromString(outboxAddress), epochRootSlot, outHash);
-      this.logger.warn(
-        `Advanced outbox to epoch ${epoch} numCheckpointsInEpoch ${numCheckpointsInEpoch} with out hash ${outHash}`,
-      );
-    });
+  public async insertOutbox(epoch: EpochNumber, numCheckpointsInEpoch: number, outHash: bigint) {
+    // A single blind write, so unlike markAsProven it needs no pause to stay atomic against blocks being mined.
+    const outboxAddress = await this.rollup.read.getOutbox();
+    const epochRootSlot = OutboxContract.getEpochRootStorageSlot(epoch, numCheckpointsInEpoch);
+    await this.ethCheatCodes.store(EthAddress.fromString(outboxAddress), epochRootSlot, outHash);
+    this.logger.warn(
+      `Advanced outbox to epoch ${epoch} numCheckpointsInEpoch ${numCheckpointsInEpoch} with out hash ${outHash}`,
+    );
   }
 
   /**
