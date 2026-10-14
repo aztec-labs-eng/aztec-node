@@ -1,5 +1,6 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { Packr } from 'msgpackr';
 import * as fs from 'node:fs';
 

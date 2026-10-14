@@ -2,6 +2,7 @@ import { BatchChonkVerifier } from '@aztec-labs/bb-prover';
 import { toBigIntBE, toBufferBE } from '@aztec-labs/foundation/bigint-buffer';
 import { Fq } from '@aztec-labs/foundation/curves/bn254';
 import type { IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
+import { Buffer } from 'buffer';
 
 /** Corrupt flat proof fields by flipping bytes in an early field element. */
 export function corruptProofFields(fields: Uint8Array[]): Uint8Array[] {
