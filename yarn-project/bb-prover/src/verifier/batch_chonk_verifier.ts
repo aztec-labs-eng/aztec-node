@@ -23,10 +23,10 @@ import { IVCVerifierMetrics } from './queued_chonk_verifier.js';
 const execFileAsync = promisify(execFile);
 const STOP_DRAIN_TIMEOUT_MS = 5_000;
 /**
- * Most proofs in flight at once. bb's batch verifier rejects a proof once 1024 are waiting (its `MAX_QUEUE_SIZE`) and
- * reports it as FAILED, indistinguishable from a proof it checked and rejected. Proofs in flight here include every
- * one bb has queued, so capping them at that size keeps bb's queue from overflowing; a proof past the cap waits for
- * room.
+ * Most proofs in flight at once. bb itself (its C++ batch verifier) rejects any proof enqueued once 1024 are already
+ * waiting (its `MAX_QUEUE_SIZE`), and reports it as FAILED: the same result as a proof it checked and found invalid.
+ * This cap prevents that. Proofs in flight here include every proof bb has queued, so capping them at bb's limit means
+ * bb's queue never fills. A proof enqueued past the cap waits here, and goes to bb once one in flight gets its result.
  */
 export const MAX_PROOFS_IN_FLIGHT = 1024;
 
