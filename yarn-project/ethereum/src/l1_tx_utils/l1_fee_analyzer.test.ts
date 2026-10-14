@@ -1,5 +1,6 @@
 import { Blob } from '@aztec-labs/blob-lib';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { mean } from '@aztec-labs/foundation/collection';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
@@ -246,7 +247,12 @@ describeWithAnvil('L1FeeAnalyzer', () => {
       expect(completedAnalysis?.minedBlock?.blockNumber).toBeGreaterThan(
         completedAnalysis?.pendingSnapshot.latestBlockNumber || 0n,
       );
-      expect(completedAnalysis?.analysis?.timeBeforeBlockMs).toBeGreaterThan(0);
+      const { minedBlock, pendingSnapshot } = completedAnalysis!;
+      expect(completedAnalysis?.analysis?.timeBeforeBlockMs).toBe(
+        Number(minedBlock!.blockTimestamp) * 1000 - pendingSnapshot.timestamp,
+      );
+      // Block timestamps are whole seconds, so a block mined after the snapshot may still carry the snapshot's second.
+      expect(completedAnalysis?.analysis?.timeBeforeBlockMs).toBeGreaterThan(-1000);
       // Check that we have strategy results instead
       expect(completedAnalysis?.computedPrices.strategyResults).toBeDefined();
       expect(completedAnalysis?.computedPrices.strategyResults!.length).toBeGreaterThan(0);
@@ -337,7 +343,9 @@ describeWithAnvil('L1FeeAnalyzer', () => {
 
       const stats = analyzer.getAnalysisStats();
       expect(stats.totalAnalyses).toBe(3);
-      expect(stats.avgTimeBeforeBlockMs).toBeGreaterThan(0);
+      expect(stats.avgTimeBeforeBlockMs).toBeCloseTo(mean(completedAnalyses.map(a => a.analysis!.timeBeforeBlockMs))!);
+      // Block timestamps are whole seconds, so a block mined after the snapshot may still carry the snapshot's second.
+      expect(stats.avgTimeBeforeBlockMs).toBeGreaterThan(-1000);
       expect(stats.avgBlobsInBlock).toBeGreaterThanOrEqual(0);
       expect(stats.blocksBlobsFull).toBeGreaterThanOrEqual(0);
     }, 15000);
