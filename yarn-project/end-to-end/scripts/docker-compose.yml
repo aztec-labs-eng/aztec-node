@@ -4,7 +4,7 @@ services:
     cpus: 1
     cpuset: ${CPU_LIST:-}
     mem_limit: 2G
-    entrypoint: 'anvil --silent -p 8545 --host 0.0.0.0 --chain-id 31337'
+    entrypoint: 'anvil --silent -p 8545 --host 0.0.0.0 --chain-id 31337 ${ANVIL_HARDFORK:+--hardfork ${ANVIL_HARDFORK:-}}'
 
   local-network:
     image: aztecprotocol/build:3.1
@@ -56,6 +56,7 @@ services:
       L1_CHAIN_ID: 31337
       FORCE_COLOR: ${FORCE_COLOR:-1}
       AZTEC_NODE_URL: http://local-network:8080
+      ANVIL_HARDFORK: ${ANVIL_HARDFORK:-}
       # Allow git usage despite different ownership. Relevant for script tests.
       GIT_CONFIG_GLOBAL: /root/aztec-node/build-images/src/home/.gitconfig
       # For debugging scripts that were passed as TEST.

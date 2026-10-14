@@ -12,6 +12,12 @@ type=$1
 test=$2
 test_name=${3:-}
 
+# Both forks of a compose test can run on one host at once, so the fork joins the compose project name. It is
+# appended here rather than set in the test command, so it keeps the postfix run_test_cmd adds on a flake retry.
+if [ -n "${ANVIL_HARDFORK:-}" ]; then
+  export NAME_POSTFIX="${NAME_POSTFIX:-}_${ANVIL_HARDFORK}"
+fi
+
 case "$type" in
   "simple")
     exec ./test_simple.sh "$test" "$test_name"
