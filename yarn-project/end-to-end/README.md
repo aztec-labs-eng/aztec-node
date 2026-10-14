@@ -145,7 +145,7 @@ CI splits each `it` in a `.parallel.test.ts` file into its own docker job, runni
 `end-to-end/bootstrap.sh` enumerates tests in two arrays, and a test must resolve through the relevant one
 or it **won't run in CI**:
 
-- `test_cmds` — the standard run. Covers each category with a recursive glob (e.g.
+- `base_test_cmds` — the standard run (`test_cmds` adds the Amsterdam copies on top). Covers each category with a recursive glob (e.g.
   `src/automine/!(simulation)/**/*.test.ts`, `src/multi-node/**/*.test.ts`), so a new file or sub-folder
   inside an existing category is picked up automatically; only a new top-level category needs its own glob
   line. Tests with bespoke handling sit outside the globs: the `single-node/prover/` lanes at the top of
@@ -157,7 +157,7 @@ or it **won't run in CI**:
 
 Bespoke handling to be aware of:
 
-- **`avm_simulator`** (`automine/simulation/avm_simulator.test.ts`) has a dedicated line in `test_cmds`
+- **`avm_simulator`** (`automine/simulation/avm_simulator.test.ts`) has a dedicated line in `base_test_cmds`
   that dumps AVM circuit inputs when `DUMP_AVM_INPUTS_TO_DIR` is set, and is therefore
   excluded from the generic `simulation/` glob there (`!(avm_simulator)`). In `compat_test_cmds` it runs
   as a regular test (no dump line), so it is **not** excluded there.
@@ -165,7 +165,7 @@ Bespoke handling to be aware of:
 
 After editing the arrays, confirm every `*.test.ts` resolves through exactly one line (no duplicate, no
 omission — anything excluded via `!(...)` must be matched by its dedicated line). Per-test bash `TIMEOUT`
-overrides live in the `case` block in `test_cmds` and must stay in sync with the test's `jest.setTimeout`.
+overrides live in the `case` block in `base_test_cmds` and must stay in sync with the test's `jest.setTimeout`.
 
 ### Flaky tests — `.test_patterns.yml`
 
@@ -214,6 +214,21 @@ These run in their own package's test lane (both packages already run anvil-back
   behavior.
 - `test-wallet/`, `bench/`, `spartan/`, `quality_of_service/`, `forward-compatibility/` — helpers,
   benchmarks, and network/ops tests outside the topology categories.
+
+### Running tests against an Amsterdam L1
+
+Anvil starts on Osaka unless `ANVIL_HARDFORK` names another fork (`osaka` or `amsterdam`). The variable reaches
+every anvil a test starts through `startAnvil`, including the one `setup()` spawns:
+
+```bash
+ANVIL_HARDFORK=amsterdam yarn test:e2e src/single-node/block-building/debug_trace.test.ts
+```
+
+In CI, a test file that calls `runOnAllL1Forks()` (from `@aztec-labs/ethereum/test`) at top level also runs on
+Amsterdam on every run, as a second command with `ANVIL_HARDFORK=amsterdam` and `_amsterdam` appended to its
+`NAME`. Full CI does the same for every simple test. `test_cmds` adds these copies through
+`../scripts/hardfork_variants.sh`, and `./bootstrap.sh test_amsterdam` runs just the Amsterdam copies of the whole
+suite. Inside a test, `isAmsterdamTestRun()` tells which fork the run asked for.
 
 ### Running tests against legacy contract artifacts
 

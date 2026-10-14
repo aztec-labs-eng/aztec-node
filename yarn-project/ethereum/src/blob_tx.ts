@@ -20,10 +20,8 @@ import {
 
 /**
  * Chains whose execution layer runs Fusaka, which only accepts blob txs in the EIP-7594 network wrapper
- * (wrapper version 1, with cell proofs). Other chains (e.g. anvil) keep the EIP-4844 wrapper.
- *
- * TODO: anvil 1.4.1 fails to decode the EIP-7594 wrapper, while anvil 1.8.5 accepts both wrappers on every hardfork.
- * Once we update foundry to 1.8.5, anvil can use the EIP-7594 wrapper and stop needing the EIP-4844 one.
+ * (wrapper version 1, with cell proofs). Other chains (e.g. anvil) keep the EIP-4844 wrapper. Since foundry 1.8.5, anvil
+ * accepts both wrappers on every hardfork, so it gets the EIP-4844 wrapper only because chains are opted in by id here.
  */
 const EIP7594_CHAIN_IDS = new Set([
   1, // mainnet

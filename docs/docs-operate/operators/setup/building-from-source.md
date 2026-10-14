@@ -79,7 +79,7 @@ The tag `aztec-build-local:3.1` avoids conflicts with the official Docker Hub im
 - Installs Clang 16, 18, and 20 from LLVM
 - Installs Rust 1.85.0 using the Rust toolchain installer with wasm32 targets
 - Downloads and installs WASI SDK 27 from GitHub releases
-- Builds Foundry v1.4.1 from source
+- Installs Foundry v1.8.5 with foundryup
 - Installs CMake, Ninja, and other build essentials
 
 :::note
@@ -97,7 +97,7 @@ docker run -it --rm aztec-build-local:3.1 /bin/bash
 node --version        # Should show v24.12.0
 rustc --version       # Should show Rust 1.85.0
 clang-20 --version    # Should show clang 20.x
-forge --version       # Should show v1.4.1
+forge --version       # Should show v1.8.5
 cmake --version       # Should show cmake 3.24+
 ```
 
