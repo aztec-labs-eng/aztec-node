@@ -3,7 +3,7 @@ import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { Semaphore, SerialQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
@@ -76,8 +76,8 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   private stopped = false;
   private fatalError: Error | undefined;
   private pendingDrainedResolvers = new Set<() => void>();
-  /** Proofs waiting for room under {@link MAX_PROOFS_IN_FLIGHT}, oldest first. */
-  private roomWaiters: (() => void)[] = [];
+  /** One token per entry in `pendingRequests`, so a proof past {@link MAX_PROOFS_IN_FLIGHT} waits here for room. */
+  private readonly inFlightSlots = new Semaphore(MAX_PROOFS_IN_FLIGHT);
 
   private constructor(
     private config: Pick<BBConfig, 'bbChonkVerifyConcurrency'> & Partial<Pick<BBConfig, 'bbBinaryPath'>>,
@@ -163,6 +163,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
    * fields fails to deserialize, and bb writes that result before acknowledging the request.
    */
   private async openResultStream(): Promise<void> {
+    await this.inFlightSlots.acquire();
     const requestId = this.nextRequestId++;
     const result = new Promise<IVCProofVerificationResult>((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve, reject, totalTimer: new Timer(), probe: true });
@@ -201,14 +202,12 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
 
   /** Enqueue raw proof fields for verification, once there is room. Used directly by tests with custom VKs. */
   public async enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
-    while (!this.stopped && !this.fatalError && this.pendingRequests.size >= MAX_PROOFS_IN_FLIGHT) {
-      await new Promise<void>(resolve => this.roomWaiters.push(resolve));
-    }
+    await this.inFlightSlots.acquire();
     if (this.stopped) {
-      return Promise.reject(new Error('BatchChonkVerifier stopped'));
+      throw new Error('BatchChonkVerifier stopped');
     }
     if (this.fatalError) {
-      return Promise.reject(this.fatalError);
+      throw this.fatalError;
     }
 
     const totalTimer = new Timer();
@@ -249,7 +248,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   public async stop(): Promise<void> {
     this.logger.info('Stopping BatchChonkVerifier');
     this.stopped = true;
-    this.wakeRoomWaiters();
+    this.inFlightSlots.cancel();
 
     try {
       // Stop accepting new proofs and flush the send queue. Bound it so an unresponsive
@@ -339,6 +338,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       return;
     }
     this.pendingRequests.delete(result.request_id);
+    this.inFlightSlots.release();
     if (pending.probe) {
       pending.resolve({ valid: result.status === 0, durationMs: 0, totalDurationMs: 0 });
       return;
@@ -387,6 +387,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     for (const [id, pending] of Array.from(this.pendingRequests)) {
       pending.reject(error);
       this.pendingRequests.delete(id);
+      this.inFlightSlots.release();
     }
     this.notifyPendingDrained();
   }
@@ -395,6 +396,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     if (!this.fatalError) {
       this.fatalError = error;
     }
+    this.inFlightSlots.cancel();
     this.rejectPendingRequests(error);
   }
 
@@ -424,17 +426,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     });
   }
 
-  /** Wakes as many proofs waiting for room as there is room for, or all of them once the verifier is done. */
-  private wakeRoomWaiters(): void {
-    const done = this.stopped || this.fatalError !== undefined;
-    const room = done ? this.roomWaiters.length : MAX_PROOFS_IN_FLIGHT - this.pendingRequests.size;
-    for (const wake of this.roomWaiters.splice(0, Math.max(0, room))) {
-      wake();
-    }
-  }
-
   private notifyPendingDrained(): void {
-    this.wakeRoomWaiters();
     if (this.pendingRequests.size > 0) {
       return;
     }
