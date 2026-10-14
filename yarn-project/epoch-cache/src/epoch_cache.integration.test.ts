@@ -2,7 +2,7 @@ import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
-import { EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import { EthCheatCodes, RollupCheatCodes, describeAcrossL1Forks, startAnvil } from '@aztec-labs/ethereum/test';
 import type { Anvil } from '@aztec-labs/ethereum/test';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { SecretValue } from '@aztec-labs/foundation/config';
@@ -24,7 +24,7 @@ const NUM_VALIDATORS = 4;
  * These tests deploy L1 contracts with validators, then exercise the epoch cache's
  * caching, TTL, finalization, and reorg-resilience behaviour.
  */
-describe('EpochCache integration', () => {
+describeAcrossL1Forks('EpochCache integration', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let dateProvider: TestDateProvider;

@@ -68,7 +68,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
           role-session-name: ci3-${{ github.run_id }}
-          role-duration-seconds: 7200 # 2h – covers max AWS_SHUTDOWN_TIME (90 min ARM) + 30 min buffer
+          role-duration-seconds: 9000 # 2.5h – covers max AWS_SHUTDOWN_TIME (120 min full) + 30 min buffer
 
       - name: Determine CI Mode
         env:

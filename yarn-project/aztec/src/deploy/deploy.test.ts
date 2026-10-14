@@ -2,6 +2,7 @@ import { getSchnorrInitializerlessAccountContractAddress } from '@aztec-labs/acc
 import { getContractInstanceFromInstantiationParams } from '@aztec-labs/aztec.js/contracts';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import { FeeJuiceContract } from '@aztec-labs/aztec.js/protocol';
+import { describeWithAnvil } from '@aztec-labs/ethereum/test';
 import { TokenContract } from '@aztec-labs/noir-contracts.js/Token';
 import { deriveMasterMessageSigningSecretKey } from '@aztec-labs/stdlib/keys';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -19,7 +20,7 @@ import {
   runDeployment,
 } from './index.js';
 
-describe('runDeployment', () => {
+describeWithAnvil('runDeployment', () => {
   it('publishes a contract, runs an action, and is idempotent on re-run', async () => {
     // Admin account: the runner derives its Schnorr initializerless address from (secret, salt),
     // signing with deriveMasterMessageSigningSecretKey(secret). Pre-derive that same address here

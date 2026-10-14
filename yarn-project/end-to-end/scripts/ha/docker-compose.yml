@@ -51,6 +51,7 @@ services:
       DATABASE_URL: postgresql://aztec:aztec@postgres:5432/aztec_ha_test
       WEB3_SIGNER_URL: http://web3signer:9000
       WEB3_SIGNER_TEST_KEYSTORE_DIR: /keys
+      ANVIL_HARDFORK: ${ANVIL_HARDFORK:-}
       FORCE_COLOR: ${FORCE_COLOR:-1}
       # Allow git usage despite different ownership
       GIT_CONFIG_GLOBAL: /root/aztec-node/build-images/src/home/.gitconfig

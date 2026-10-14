@@ -7,7 +7,13 @@ import {
   TempCheckpointLogField,
 } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
-import { type Anvil, EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import {
+  type Anvil,
+  EthCheatCodes,
+  RollupCheatCodes,
+  describeAcrossL1Forks,
+  startAnvil,
+} from '@aztec-labs/ethereum/test';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -19,7 +25,7 @@ import { foundry } from 'viem/chains';
 
 import { FeePredictor } from './fee_predictor.js';
 
-describe('FeePredictor', () => {
+describeAcrossL1Forks('FeePredictor', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let publicClient: ViemClient;

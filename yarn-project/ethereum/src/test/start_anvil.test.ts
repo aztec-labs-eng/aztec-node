@@ -9,6 +9,7 @@ import { join } from 'path';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
+import { AMSTERDAM_MAX_L1_TX_LIMIT, isAmsterdamBlock } from '../l1_tx_utils/index.js';
 import type { Anvil } from './start_anvil.js';
 import { startAnvil, syncDateProviderFromAnvilOutput } from './start_anvil.js';
 
@@ -365,5 +366,60 @@ describe('start_anvil', () => {
 
     const futureTimeMs = futureTimestamp * 1000;
     expect(Math.abs(dateProvider.now() - futureTimeMs)).toBeLessThan(2000);
+  });
+});
+
+describe('startAnvil hardfork', () => {
+  let anvil: Anvil | undefined;
+  let prevHardfork: string | undefined;
+
+  beforeEach(() => {
+    prevHardfork = process.env.ANVIL_HARDFORK;
+  });
+
+  afterEach(async () => {
+    await anvil?.stop();
+    anvil = undefined;
+    if (prevHardfork === undefined) {
+      delete process.env.ANVIL_HARDFORK;
+    } else {
+      process.env.ANVIL_HARDFORK = prevHardfork;
+    }
+  });
+
+  /** Starts anvil and returns the first block it mines, since genesis carries no fork-specific header fields. */
+  const startAndMine = async (opts: Parameters<typeof startAnvil>[0] = {}) => {
+    const res = await startAnvil({ port: 0, ...opts });
+    anvil = res.anvil;
+    const publicClient = createPublicClient({ transport: http(res.rpcUrl, { batch: false }) });
+    await publicClient.request({ method: 'evm_mine', params: [] } as any);
+    return publicClient.getBlock({ blockTag: 'latest' });
+  };
+
+  it('starts on the fork named by $ANVIL_HARDFORK', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdam';
+    expect(isAmsterdamBlock(await startAndMine())).toBe(true);
+  });
+
+  it('starts on a pre-Amsterdam fork when $ANVIL_HARDFORK is unset', async () => {
+    delete process.env.ANVIL_HARDFORK;
+    expect(isAmsterdamBlock(await startAndMine())).toBe(false);
+  });
+
+  it('prefers an explicit hardfork over $ANVIL_HARDFORK', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdam';
+    expect(isAmsterdamBlock(await startAndMine({ hardfork: 'osaka' }))).toBe(false);
+  });
+
+  it('rejects an unknown $ANVIL_HARDFORK before spawning anvil', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdm';
+    // Well under the spawn retry backoff, so a rejection here cannot have come from failed spawns.
+    await expect(startAnvil({ port: 0 })).rejects.toThrow(/Unknown ANVIL_HARDFORK 'amsterdm'/);
+  }, 5_000);
+
+  it('fits a tx at the Amsterdam gas cap in a block', async () => {
+    process.env.ANVIL_HARDFORK = 'amsterdam';
+    const block = await startAndMine();
+    expect(block.gasLimit).toBeGreaterThanOrEqual(AMSTERDAM_MAX_L1_TX_LIMIT);
   });
 });

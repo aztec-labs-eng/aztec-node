@@ -1,6 +1,7 @@
 import { Blob } from '@aztec-labs/blob-lib';
 import { SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { retryUntil } from '@aztec-labs/foundation/retry';
 import { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import { Buffer } from 'buffer';
 import { type Hex, parseGwei } from 'viem';
@@ -9,6 +10,7 @@ import { foundry } from 'viem/chains';
 
 import { createExtendedL1Client } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient } from '../types.js';
@@ -20,7 +22,7 @@ import type { L1BlobInputs, L1TxRequest } from './types.js';
 const MNEMONIC = 'test test test test test test test test test test test junk';
 const logger = createLogger('ethereum:test:l1-fee-analyzer');
 
-describe('L1FeeAnalyzer', () => {
+describeWithAnvil('L1FeeAnalyzer', () => {
   const initialBaseFee = WEI_CONST; // 1 gwei
 
   let l1Client: ExtendedViemWalletClient;
@@ -48,6 +50,14 @@ describe('L1FeeAnalyzer', () => {
     await cheatCodes.setNextBlockBaseFeePerGas(initialBaseFee);
     await cheatCodes.evmMine();
 
+    // Anvil mines on the phase of the second at which interval mining was armed and stamps blocks with whole seconds.
+    // Armed late in a second, the block after a snapshot carries a timestamp earlier than the snapshot, and
+    // timeBeforeBlockMs goes negative. Re-arming at the top of a second keeps block timestamps within a few ms of
+    // their mining time.
+    await cheatCodes.setIntervalMining(0, { silent: true });
+    await retryUntil(() => Date.now() % 1000 < 50, 'top of a second', 2, 0.005);
+    await cheatCodes.setIntervalMining(1, { silent: true });
+
     analyzer = new L1FeeAnalyzer(l1Client, new DateProvider(), logger);
   });
 
@@ -55,6 +65,12 @@ describe('L1FeeAnalyzer', () => {
     await cheatCodes.setIntervalMining(0);
     await anvil.stop().catch(err => createLogger('cleanup').error(err));
   }, 10000);
+
+  /** Starting an analysis right after a block lands gives it the whole mining interval before the next block. */
+  const waitForNextL1Block = async () => {
+    const start = await l1Client.getBlockNumber();
+    await retryUntil(async () => (await l1Client.getBlockNumber()) > start, 'next L1 block', 5, 0.02);
+  };
 
   describe('capturePendingSnapshot', () => {
     it('captures empty pending block snapshot', async () => {
@@ -198,6 +214,7 @@ describe('L1FeeAnalyzer', () => {
         },
       ];
 
+      await waitForNextL1Block();
       const analysisId = await analyzer.startAnalysis(l2SlotNumber, gasLimit, requests);
 
       expect(analysisId).toMatch(/^fee-analysis-/);
@@ -300,8 +317,9 @@ describe('L1FeeAnalyzer', () => {
 
   describe('analysis statistics', () => {
     it('tracks completed analyses and provides statistics', async () => {
-      // Start multiple analyses
+      // Start one analysis per block
       for (let i = 0; i < 3; i++) {
+        await waitForNextL1Block();
         await analyzer.startAnalysis(SlotNumber(i), 21000n, [
           {
             to: '0x1234567890123456789012345678901234567890',
@@ -309,8 +327,6 @@ describe('L1FeeAnalyzer', () => {
             value: 0n,
           },
         ]);
-        // Wait a bit between analyses
-        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       // Wait for all analyses to complete

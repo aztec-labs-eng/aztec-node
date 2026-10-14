@@ -4,6 +4,7 @@ import type { Logger } from '@aztec-labs/aztec.js/log';
 import type { EthCheatCodes } from '@aztec-labs/aztec/testing';
 import type { L1TxUtils } from '@aztec-labs/ethereum/l1-tx-utils';
 import { PublisherManager } from '@aztec-labs/ethereum/publisher-manager';
+import { describeAcrossL1Forks } from '@aztec-labs/ethereum/test';
 import { SecretValue } from '@aztec-labs/foundation/config';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import type { RunningPromise } from '@aztec-labs/foundation/running-promise';
@@ -56,7 +57,7 @@ class TestPublisherManager extends PublisherManager {
 // Tests the PublisherManager's automatic L1 ETH top-up logic when a keystore carries two publishers and a
 // dedicated funding account. Uses PIPELINING_SETUP_OPTS (prod sequencer, ethSlot=4s, aztecSlot=12s) with
 // a pre-written keystore JSON and ethCheatCodes to drain and monitor publisher balances.
-describe('single-node/sequencer/publisher_funding_multi', () => {
+describeAcrossL1Forks('single-node/sequencer/publisher_funding_multi', () => {
   jest.setTimeout(5 * 60 * 1000);
 
   let logger: Logger;

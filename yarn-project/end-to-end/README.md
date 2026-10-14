@@ -215,6 +215,23 @@ These run in their own package's test lane (both packages already run anvil-back
 - `test-wallet/`, `bench/`, `spartan/`, `quality_of_service/`, `forward-compatibility/` — helpers,
   benchmarks, and network/ops tests outside the topology categories.
 
+### Running tests against an Amsterdam L1
+
+Anvil starts on Osaka unless `ANVIL_HARDFORK` names another fork (`osaka` or `amsterdam`). The variable reaches
+every anvil a test starts through `startAnvil`, including the one `setup()` spawns:
+
+```bash
+ANVIL_HARDFORK=amsterdam yarn test:e2e src/single-node/block-building/debug_trace.test.ts
+```
+
+In CI, a test file whose top-level `describe` is `describeAcrossL1Forks` (from `@aztec-labs/ethereum/test`) also
+runs on Amsterdam on every run, as a second command with `ANVIL_HARDFORK=amsterdam` and `_amsterdam` appended to its
+`NAME`. Full CI does the same for every simple test, except those under `single-node/l1-hardfork/`, which switch
+forks themselves, and for every unit or integration test outside this package whose top-level `describe` is
+`describeWithAnvil`. `test_cmds` emits each command through `echo_test_cmd` from `../scripts/echo_test_cmd.sh`,
+and `./bootstrap.sh test_amsterdam` runs just the Amsterdam copies of the whole suite. Inside a test,
+`isAmsterdamTestRun()` tells which fork the run asked for.
+
 ### Running tests against legacy contract artifacts
 
 To verify that contracts deployed from a previous release still work against the current stack, set

@@ -4,7 +4,7 @@ import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import { type FeeHeader, RollupContract } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
-import { type Anvil, EthCheatCodes, RollupCheatCodes, startAnvil } from '@aztec-labs/ethereum/test';
+import { type Anvil, EthCheatCodes, RollupCheatCodes, describeWithAnvil, startAnvil } from '@aztec-labs/ethereum/test';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
@@ -49,7 +49,7 @@ import { AztecNodeService } from './server.js';
  * before slot `C` (`HIGH`) is far above the fee from slot `C` on (`LOW`), and the L1 pending checkpoint is
  * planted at slot `C - 1`, which anchors the wallet quote to slot `C`.
  */
-describe('fee quote vs public simulation', () => {
+describeWithAnvil('fee quote vs public simulation', () => {
   const HIGH_L1_BASE_FEE = 1_000_000_000_000n; // 1000 gwei
   const LOW_L1_BASE_FEE = 1_000_000_000n; // 1 gwei
   const PENDING_CHECKPOINT = CheckpointNumber(1);

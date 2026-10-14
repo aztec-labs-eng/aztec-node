@@ -13,7 +13,7 @@ services:
     cpus: 1
     cpuset: ${CPU_LIST:-}
     mem_limit: 2G
-    entrypoint: 'anvil --silent -p 8545 --host 0.0.0.0 --chain-id 31337'
+    entrypoint: 'anvil --silent -p 8545 --host 0.0.0.0 --chain-id 31337 ${ANVIL_HARDFORK:+--hardfork ${ANVIL_HARDFORK:-}}'
 
   old-stack:
     image: aztecprotocol/end-to-end:${OLD_STACK_VERSION:?set OLD_STACK_VERSION}

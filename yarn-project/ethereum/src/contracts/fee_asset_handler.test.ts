@@ -11,12 +11,13 @@ import { createExtendedL1Client } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { L1TxUtils, createL1TxUtils } from '../l1_tx_utils/index.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient } from '../types.js';
 import { FeeAssetHandlerContract } from './fee_asset_handler.js';
 
-describe('FeeAssetHandler', () => {
+describeWithAnvil('FeeAssetHandler', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let privateKey: PrivateKeyAccount;

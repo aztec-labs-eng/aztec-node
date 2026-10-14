@@ -31,6 +31,7 @@ import { foundry } from 'viem/chains';
 
 import { L1RpcError, createExtendedL1Client, getPublicClient } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeAcrossL1Forks } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient, ViemClient } from '../types.js';
@@ -66,7 +67,7 @@ export type PendingTransaction = {
   maxPriorityFeePerGas: bigint;
 };
 
-describe('L1TxUtils', () => {
+describeAcrossL1Forks('L1TxUtils', () => {
   const initialBaseFee = WEI_CONST; // 1 gwei
 
   let l1Client: ExtendedViemWalletClient;

@@ -16,6 +16,7 @@ import { DefaultL1ContractsConfig } from '../config.js';
 import { type DeployAztecL1ContractsReturnType, deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { ReadOnlyL1TxUtils } from '../l1_tx_utils/index.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import { RollupCheatCodes } from '../test/rollup_cheat_codes.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
@@ -235,7 +236,7 @@ describe('computeChildFeeHeader', () => {
   });
 });
 
-describe('Rollup', () => {
+describeWithAnvil('Rollup', () => {
   let anvil: Anvil;
   let rpcUrl: string;
   let publicClient: ViemClient;

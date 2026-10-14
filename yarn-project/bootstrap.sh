@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
+source $root/yarn-project/scripts/echo_test_cmd.sh
 
 # Used for build.
 function hash {
@@ -13,7 +14,8 @@ function hash {
 
 # Base folded into every dependency hash: everything an entry can depend on that the
 # dependency closures (scripts/dep-closures.mjs) don't cover — yarn.lock, .swcrc, jest
-# configs, scripts, fixtures — plus the toolchain hash. Unlike the build hash, noir-contracts
+# configs, scripts, fixtures — plus the toolchain hash and the build image Dockerfile, which pins
+# the anvil that tests run their L1 on. Unlike the build hash, noir-contracts
 # is NOT folded in: the generated contract TS and artifact JSONs are closure members and are
 # content-hashed per entry (see compute_package_dep_hashes), so a contract change only
 # invalidates the tests whose closures reach it. Everything under yarn-project is in by
@@ -27,6 +29,7 @@ function hash {
 function hash_deps_base {
   hash_str \
     $(../labs-aztec-toolchain/bootstrap.sh hash) \
+    $(cache_content_hash '^build-images/src/Dockerfile$') \
     $(cache_content_hash '^yarn-project/' \
         '!^yarn-project/.*\.(ts|md|tf|svg|png)$' \
         '!^yarn-project/[^/]+/package\.json$')
@@ -390,11 +393,13 @@ function test_cmds {
     [[ "$test" =~ \.bench\.test\.ts$ ]] && continue
 
     local prefix=$(dep_hash "$test")
+    local name=""
     local cmd_env=""
 
     # These need isolation due to network stack usage (p2p, anvil, etc).
     if [[ "$test" =~ ^(prover-node|p2p|ethereum|aztec|prover-client/src/test|stdlib/src/l1-contracts|ivc-integration/src/chonk_browser|blob-client/src/server) ]]; then
-      prefix+=":ISOLATE=1:NAME=$test"
+      prefix+=":ISOLATE=1"
+      name=$test
     fi
 
     if [[ "$test" =~ ^ivc-integration/src/chonk_browser ]]; then
@@ -429,8 +434,11 @@ function test_cmds {
       fi
     fi
 
-    echo "${prefix}${cmd_env} yarn-project/scripts/run_test.sh $test"
+    local run_cmd="${cmd_env} yarn-project/scripts/run_test.sh $test"
+    echo_test_cmd unit "$prefix" "$name" "$test" "${run_cmd# }"
   done
+
+  echo "$(cache_content_hash '^yarn-project/scripts/echo_test_cmd') yarn-project/scripts/echo_test_cmd.test.sh"
 
   # kv-store: per-file fan-out (mocha for node tests, vitest for browser tests).
   kv-store/bootstrap.sh test_cmds

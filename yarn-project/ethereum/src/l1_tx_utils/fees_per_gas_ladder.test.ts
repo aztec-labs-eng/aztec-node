@@ -9,6 +9,7 @@ import { foundry } from 'viem/chains';
 
 import { createExtendedL1Client } from '../client.js';
 import { EthCheatCodes } from '../test/eth_cheat_codes.js';
+import { describeWithAnvil } from '../test/l1_hardfork.js';
 import type { Anvil } from '../test/start_anvil.js';
 import { startAnvil } from '../test/start_anvil.js';
 import type { ExtendedViemWalletClient } from '../types.js';
@@ -49,7 +50,7 @@ async function runUntilTimeout(gasUtils: L1TxUtils, cheatCodes: EthCheatCodes): 
   return promise;
 }
 
-describe('L1TxUtils fees-per-gas ladder capture (integration)', () => {
+describeWithAnvil('L1TxUtils fees-per-gas ladder capture (integration)', () => {
   const initialBaseFee = WEI_CONST; // 1 gwei
   let l1Client: ExtendedViemWalletClient;
   let anvil: Anvil;

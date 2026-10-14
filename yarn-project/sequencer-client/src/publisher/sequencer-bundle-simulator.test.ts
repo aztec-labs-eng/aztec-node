@@ -210,6 +210,60 @@ describe('SequencerBundleSimulator gas limit', () => {
     expect(result).toEqual(expect.objectContaining({ kind: 'success', gasLimit: AMSTERDAM_MAX_L1_TX_LIMIT }));
   });
 
+  describe.each([
+    { fork: 'before Amsterdam', amsterdam: false, cap: MAX_L1_TX_LIMIT },
+    { fork: 'once Amsterdam is active', amsterdam: true, cap: AMSTERDAM_MAX_L1_TX_LIMIT },
+  ])('against the gas cap $fork', ({ amsterdam, cap }) => {
+    beforeEach(() => {
+      amsterdamActive = amsterdam;
+    });
+
+    it('sizes a bundle that needs most of the cap from its simulation', async () => {
+      const gasNeeded = (cap * 3n) / 4n;
+      mockSimulateNeedingGas(gasNeeded);
+
+      const result = await simulator.simulate([makeRequest('execute-slash')], targetSlot);
+
+      expect(result).toEqual(expect.objectContaining({ kind: 'success' }));
+      const { gasLimit } = result as Extract<typeof result, { kind: 'success' }>;
+      expect(gasLimit).toBeGreaterThan(gasNeeded);
+      expect(gasLimit).toBeLessThan(cap);
+    });
+
+    it('drops a bundle that needs more than the cap', async () => {
+      mockSimulateNeedingGas(cap + 1n);
+
+      const result = await simulator.simulate([makeRequest('execute-slash')], targetSlot);
+
+      expect(result).toEqual(expect.objectContaining({ kind: 'aborted', reason: 'all-reverted' }));
+    });
+
+    it('falls back when the node cannot simulate', async () => {
+      const requests = [makeRequest('propose'), makeRequest('execute-slash')];
+      l1TxUtils.simulate.mockResolvedValue({ gasUsed: cap, result: '0x' });
+
+      const result = await simulator.simulate(requests, targetSlot);
+
+      expect(result).toEqual({ kind: 'fallback', requests, droppedRequests: [] });
+    });
+
+    it('falls back with the survivors when an entry over the cap is dropped and re-simulating fails', async () => {
+      const propose = makeRequest('propose');
+      const heavy = makeRequest('execute-slash');
+      l1TxUtils.simulate
+        .mockResolvedValueOnce({ gasUsed: cap, maxUsedGas: cap, result: aggregate3Result([true, false]) })
+        .mockResolvedValueOnce({ gasUsed: cap, result: '0x' });
+
+      const result = await simulator.simulate([propose, heavy], targetSlot);
+
+      expect(result).toEqual({
+        kind: 'fallback',
+        requests: [propose],
+        droppedRequests: [expect.objectContaining({ request: heavy })],
+      });
+    });
+  });
+
   it('falls back when the node does not support eth_simulateV1', async () => {
     const requests = [makeRequest('propose')];
     l1TxUtils.simulate.mockResolvedValue({ gasUsed: MAX_L1_TX_LIMIT, result: '0x' });

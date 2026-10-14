@@ -99,6 +99,7 @@ for attempt in $(seq 1 $max_attempts); do
     -e TMPFS_SIZE \
     -e USE_HOME_TMP \
     -e AVM \
+    -e ANVIL_HARDFORK \
     -e ELU_MONITOR_FILE \
     -e TEST_TIMING_FILE \
     -e RUN_ID \

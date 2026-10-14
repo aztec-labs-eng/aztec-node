@@ -45,6 +45,17 @@ const require = createRequire(import.meta.url);
 
 const JSON_DEPLOY_RESULT_PREFIX = 'JSON DEPLOY RESULT:';
 
+/**
+ * Extends a broadcast deadline for a `--slow` broadcast, which waits for each transaction's receipt before sending the
+ * next, so on a chain that mines on an interval it needs at least one block per transaction.
+ */
+export function getSlowBroadcastTimeout(timeout: number | undefined, txCount: number): number | undefined {
+  return timeout === undefined ? undefined : timeout + txCount * SLOW_BROADCAST_ALLOWANCE_PER_TX_MS;
+}
+
+/** One mainnet slot per transaction, which also covers the slowest anvil block intervals the tests use. */
+const SLOW_BROADCAST_ALLOWANCE_PER_TX_MS = 12_000;
+
 /** Returns the broadcast deadline, with an optional environment override in milliseconds. */
 export function getForgeBroadcastTimeout(
   chainId: number,
@@ -249,7 +260,19 @@ async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
       const gas = BigInt(tx.transaction.gas);
       tx.transaction.gas = `0x${(gas < maxTxGas ? gas : maxTxGas).toString(16)}`;
     }
+    // Forge 1.8 resumes from a recovery snapshot under cache/ (fingerprinted, so it cannot be edited) instead of from the
+    // broadcast file, and would send the unclamped limits, some larger than a block. Dropping the snapshot and the
+    // generation the exported files point at makes it resume from the edited broadcast file, as older forge versions did.
+    delete sequence.recovery_generation;
     writeFileSync(sequencePath, JSON.stringify(sequence, null, 2));
+    const cacheDir = join(l1ContractsPath, 'cache', basename(script), String(chainId), 'dry-run');
+    const sensitivePath = join(cacheDir, 'run-latest.json');
+    if (existsSync(sensitivePath)) {
+      const sensitive = JSON.parse(readFileSync(sensitivePath, 'utf-8'));
+      delete sensitive.recovery_generation;
+      writeFileSync(sensitivePath, JSON.stringify(sensitive, null, 2));
+    }
+    rmSync(join(cacheDir, 'run-latest.json.recovery.json'), { force: true });
 
     logger.info(`Broadcasting ${sequence.transactions.length} transactions from ${script}`, { maxTxGas });
     // --slow waits for each receipt before sending the next tx, so the sender only needs balance for one gas limit at a
@@ -259,7 +282,7 @@ async function runForgeScriptBroadcast<T extends { rollupAddress: Hex }>(
       [...baseArgs, ...broadcastArgs, '--resume', '--slow', ...verifyArgs],
       env,
       l1ContractsPath,
-      timeout,
+      getSlowBroadcastTimeout(timeout, sequence.transactions.length),
     );
   }
 

@@ -11,12 +11,13 @@ import { createExtendedL1Client, makeL1HttpTransport } from '../client.js';
 import { watchContractEvent } from '../contracts/watch_event.js';
 import { deployL1Contract } from '../deploy_l1_contract.js';
 import type { ExtendedViemWalletClient } from '../types.js';
+import { describeWithAnvil } from './l1_hardfork.js';
 import { type RecordingRpcServer, startRecordingRpcServer } from './recording_rpc_server.js';
 import { type Anvil, startAnvil } from './start_anvil.js';
 
 const POLLING_INTERVAL_MS = 100;
 
-describe('watchContractEvent against anvil', () => {
+describeWithAnvil('watchContractEvent against anvil', () => {
   const logger = createLogger('ethereum:test:watch_contract_event');
 
   let anvil: Anvil | undefined;

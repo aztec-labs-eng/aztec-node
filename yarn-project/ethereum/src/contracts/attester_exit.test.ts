@@ -15,7 +15,7 @@ import { createExtendedL1Client, getPublicClient } from '../client.js';
 import { DefaultL1ContractsConfig } from '../config.js';
 import { deployAztecL1Contracts } from '../deploy_aztec_l1_contracts.js';
 import { createL1TxUtils } from '../l1_tx_utils/index.js';
-import { type Anvil, EthCheatCodes, startAnvil } from '../test/index.js';
+import { type Anvil, EthCheatCodes, describeAcrossL1Forks, startAnvil } from '../test/index.js';
 import { AttesterStatus, RollupContract } from './index.js';
 
 const mnemonic = 'test test test test test test test test test test test junk';
@@ -27,7 +27,7 @@ const deployer = mnemonicToAccount(mnemonic, { addressIndex: 5 });
 const deployerPrivateKey = toHex(deployer.getHdKey().privateKey!);
 const logger = createLogger('ethereum:test:attester-exit');
 
-describe('attester exit client integration', () => {
+describeAcrossL1Forks('attester exit client integration', () => {
   let anvil: Anvil;
 
   afterEach(async () => {
