@@ -162,7 +162,7 @@ const GossipValidationFailureByHarshness = [IgnoreWithoutPenalty, ...PeerErrorSe
 
 type ValidationOutcome<F extends GossipValidationFailure> =
   | { allPassed: true }
-  | { allPassed: false; failure: ValidationResult<F> };
+  | { allPassed: false; failure: ValidationResult<F>; failures: { name: string; severity: F }[] };
 
 // REFACTOR: Unify with the type above
 type ReceivedMessageValidationResult<T, M = undefined> =
@@ -1157,8 +1157,26 @@ export class LibP2PService extends WithTracer implements P2PService {
       // Stage 1: fast validators (metadata, data, timestamps, double-spend, gas, phases, block header)
       const firstStageOutcome = await timed('fast_validation', () => this.runValidations(tx, firstStageValidators));
       if (!firstStageOutcome.allPassed) {
-        const { name } = firstStageOutcome.failure;
-        let { severity } = firstStageOutcome.failure;
+        // A tx that expired within the last slot is receiver-local drift: the next-slot timestamp jumps a
+        // full slot at each boundary, so a relayer a slot behind may have seen it as valid. Drop that failure
+        // before choosing the harshest one, so it neither penalizes the relayer nor masks another failure of
+        // equal severity. A tx expired by more than a slot keeps its failure and is rejected.
+        const slotDuration = BigInt(this.epochCache.getL1Constants().slotDuration);
+        const isRecentTimestampDrift = (failureName: string) =>
+          failureName === 'timestampValidator' && tx.data.expirationTimestamp + slotDuration >= nextSlotTimestamp;
+        const effectiveFailures = firstStageOutcome.failures.filter(f => !isRecentTimestampDrift(f.name));
+
+        if (effectiveFailures.length === 0) {
+          this.logger.verbose(
+            `Ignoring gossiped tx ${tx.getTxHash().toString()}: timestamp expired within the last slot`,
+            { source: source.toString() },
+          );
+          return { result: TopicValidatorResult.Ignore, obj: tx };
+        }
+
+        const failed = maxBy(effectiveFailures, f => GossipValidationFailureByHarshness.indexOf(f.severity))!;
+        const name = failed.name;
+        let severity = failed.severity;
 
         // The tx failed a check that only holds against this node's own view (it pays less than the fee we
         // resolved for the next block). Drop it without propagating, but leave the sender's score alone.
@@ -1168,19 +1186,6 @@ export class LibP2PService extends WithTracer implements P2PService {
             source: source.toString(),
           });
           return { result: TopicValidatorResult.Ignore, obj: tx };
-        }
-
-        // The next-slot timestamp jumps a full slot at each boundary, so a tx expired within the last slot
-        // may have been valid when the relayer sent it: ignore it, no penalty. Older than that, reject.
-        if (name === 'timestampValidator') {
-          const slotDuration = BigInt(this.epochCache.getL1Constants().slotDuration);
-          if (tx.data.expirationTimestamp + slotDuration >= nextSlotTimestamp) {
-            this.logger.verbose(
-              `Ignoring gossiped tx ${tx.getTxHash().toString()}: timestamp expired within the last slot`,
-              { source: source.toString() },
-            );
-            return { result: TopicValidatorResult.Ignore, obj: tx };
-          }
         }
 
         // Double spend validator has a special case handler. We perform more detailed examination
@@ -2052,6 +2057,9 @@ export class LibP2PService extends WithTracer implements P2PService {
           name: failed.name,
           severity: failed.severity,
         },
+        // All failures, so a caller can forgive one (receiver-local drift) without losing the penalty a
+        // co-occurring failure of equal severity would otherwise carry.
+        failures: failures.map(f => ({ name: f.name, severity: f.severity })),
       };
     } else {
       return {

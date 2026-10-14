@@ -555,6 +555,23 @@ describe('LibP2PService', () => {
         expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.HighToleranceError);
         expect(txPool.addPendingTxs).not.toHaveBeenCalled();
       });
+
+      it('still penalizes when a within-slot-expired tx also fails another check at the same severity', async () => {
+        // The timestamp drift alone would be ignored; a co-occurring header failure of equal severity must not be masked.
+        txService.firstStageValidatorsOverride = {
+          ...createGossipTimestampValidator(),
+          blockHeaderValidator: {
+            validator: { validateTx: () => Promise.resolve({ result: 'invalid', reason: ['unknown anchor block'] }) },
+            severity: PeerErrorSeverity.HighToleranceError,
+          },
+        };
+        const tx = await mockTxExpiringAt(receiverTimestamp - 1n);
+
+        await txService.handleGossipedTx(tx.toBuffer(), 'test-msg-id', txPeerId);
+
+        expect(txReportSpy).toHaveBeenCalledWith('test-msg-id', MOCK_PEER_ID, TopicValidatorResult.Reject);
+        expect(txPeerManager.penalizePeer).toHaveBeenCalledWith(txPeerId, PeerErrorSeverity.HighToleranceError);
+      });
     });
   });
 
