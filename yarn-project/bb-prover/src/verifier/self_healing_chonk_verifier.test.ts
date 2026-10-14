@@ -201,6 +201,35 @@ describe('SelfHealingChonkVerifier', () => {
     expect(created).toHaveLength(replacements);
   });
 
+  it('answers a copy of a proof from the crash memo when the proof is blamed while the copy waits', async () => {
+    const verifier = newVerifier(create);
+    await verdictOnAnotherProof(verifier, 1);
+    first.delayMs = 20;
+    poison(tx);
+
+    const copies = Promise.all([verifier.verifyProof(tx), verifier.verifyProof(tx)]);
+    await sleep(100);
+
+    // One replacement checks the first copy on its own and dies on it; the second copy never reaches bb.
+    expect(created).toHaveLength(1);
+    await expect(copies).resolves.toMatchObject([{ valid: false }, { valid: false }]);
+  });
+
+  it('does not blame a proof for a replacement that failed before the proof reached it', async () => {
+    let replacements = 0;
+    const verifier = newVerifier(() =>
+      create().then(v => {
+        v.failed = replacements++ === 0;
+        return v;
+      }),
+    );
+    await verdictOnAnotherProof(verifier, 1);
+    first.dieOnNextVerification = true;
+
+    await expect(verifier.verifyProof(tx)).resolves.toMatchObject({ valid: true });
+    expect(created).toHaveLength(2);
+  });
+
   it('blames no proof until bb has given a verdict on another since it last blamed one', async () => {
     const verifier = newVerifier(create);
     poison(tx);

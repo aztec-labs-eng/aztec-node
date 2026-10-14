@@ -26,7 +26,8 @@ const STOP_DRAIN_TIMEOUT_MS = 5_000;
  * Most proofs in flight at once. bb itself (its C++ batch verifier) rejects any proof enqueued once 1024 are already
  * waiting (its `MAX_QUEUE_SIZE`), and reports it as FAILED: the same result as a proof it checked and found invalid.
  * This cap prevents that. Proofs in flight here include every proof bb has queued, so capping them at bb's limit means
- * bb's queue never fills. A proof enqueued past the cap waits here, and goes to bb once one in flight gets its result.
+ * bb's queue never overflows. A proof enqueued past the cap waits here, and goes to bb once one in flight gets its
+ * result.
  */
 export const MAX_PROOFS_IN_FLIGHT = 1024;
 
@@ -76,7 +77,10 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   private stopped = false;
   private fatalError: Error | undefined;
   private pendingDrainedResolvers = new Set<() => void>();
-  /** One token per entry in `pendingRequests`, so a proof past {@link MAX_PROOFS_IN_FLIGHT} waits here for room. */
+  /**
+   * Holds a token for each entry in `pendingRequests`, so a proof past {@link MAX_PROOFS_IN_FLIGHT} waits here for
+   * room. stop() and a failure cancel it, which lets every waiting proof through to be turned away.
+   */
   private readonly inFlightSlots = new Semaphore(MAX_PROOFS_IN_FLIGHT);
 
   private constructor(
@@ -202,7 +206,10 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
 
   /** Enqueue raw proof fields for verification, once there is room. Used directly by tests with custom VKs. */
   public async enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
-    await this.inFlightSlots.acquire();
+    // A free slot is taken without yielding, so a proof enqueued before stop() is sent before stop() ends the sends.
+    if (!this.inFlightSlots.tryAcquire()) {
+      await this.inFlightSlots.acquire();
+    }
     if (this.stopped) {
       throw new Error('BatchChonkVerifier stopped');
     }

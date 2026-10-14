@@ -36,6 +36,17 @@ describe('Semaphore', () => {
     expect(await isSettled(later)).toBe(false);
   });
 
+  it('takes a free token at once with tryAcquire, but never one ahead of blocked calls', async () => {
+    const semaphore = new Semaphore(1);
+    expect(semaphore.tryAcquire()).toBe(true);
+    expect(semaphore.tryAcquire()).toBe(false);
+    const waiting = semaphore.acquire();
+
+    semaphore.release();
+    expect(semaphore.tryAcquire()).toBe(false);
+    expect(await isSettled(waiting)).toBe(true);
+  });
+
   it('lets pending and later acquire calls through once cancelled', async () => {
     const semaphore = new Semaphore(1);
     await semaphore.acquire();
@@ -45,5 +56,6 @@ describe('Semaphore', () => {
 
     expect(await isSettled(waiting)).toBe(true);
     expect(await isSettled(semaphore.acquire())).toBe(true);
+    expect(semaphore.tryAcquire()).toBe(true);
   });
 });

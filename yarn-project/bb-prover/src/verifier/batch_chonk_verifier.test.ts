@@ -75,7 +75,9 @@ type BatchChonkVerifier = Awaited<ReturnType<typeof BatchChonkVerifier.newForTes
 
 /** The slice of bb.js's Barretenberg the verifier uses while proofs are queued. */
 interface FakeBb {
-  chonkBatchVerifierQueue: (req: unknown) => Promise<unknown>;
+  chonkBatchVerifierQueue: (req: { requestId: number }) => Promise<unknown>;
+  chonkBatchVerifierStop?: () => Promise<unknown>;
+  destroy?: () => Promise<void>;
 }
 
 /** A BatchChonkVerifier over a fake bb, without a bb process or result stream. */
@@ -139,6 +141,22 @@ describe('BatchChonkVerifier', () => {
     await expect(waiting).resolves.toMatchObject({ valid: true });
     rejectAllInFlight(verifier);
     await Promise.all(inFlight);
+  });
+
+  it('sends proofs enqueued just before stop() to bb, and answers them, rather than turning them away', async () => {
+    const queued: number[] = [];
+    const verifier: BatchChonkVerifier = verifierOver({
+      chonkBatchVerifierQueue: ({ requestId }) => (queued.push(requestId), Promise.resolve({})),
+      // Like bb, stopping flushes a verdict on every proof it has queued.
+      chonkBatchVerifierStop: () => (queued.forEach(id => deliverVerdict(verifier, id)), Promise.resolve({})),
+      destroy: () => Promise.resolve(),
+    });
+    const verifications = Array.from({ length: 4 }, () => verifier.enqueueProof(0, proofFields));
+
+    await verifier.stop();
+
+    const results = await Promise.all(verifications);
+    expect(results.map(r => r.valid)).toEqual([true, true, true, true]);
   });
 
   it('rejects a proof waiting for room when the verifier fails', async () => {

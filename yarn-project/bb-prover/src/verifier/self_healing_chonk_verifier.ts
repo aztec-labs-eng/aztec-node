@@ -28,10 +28,9 @@ export interface FailingChonkVerifier extends ClientProtocolCircuitVerifier {
  * A bb death fails every proof in flight at once, without saying which of them caused it. So each of those is checked
  * again on its own, with no other proof in flight (see {@link verifyProof}), and a death then is down to that proof: it
  * is invalid, and remembered, so it doesn't crash bb again when it is sent again. A bb that dies on every proof looks
- * the same from here, so a proof is only blamed once bb has given a
- * verdict on some other proof since it last blamed one, and waits for one until then. A bb that never works therefore
- * blames nothing (and verifies nothing, which the verification metrics show), rather than giving anyone who can crash
- * it a way to shut the node down.
+ * the same from here, so a proof is only blamed once bb has given a verdict on some other proof since it last blamed
+ * one, and waits for one until then. A bb that never works therefore blames nothing (and verifies nothing, which the
+ * verification metrics show), rather than giving anyone who can crash it a way to shut the node down.
  *
  * A bb that cannot be started at all is nothing the node can work around, so it exits for its orchestrator to restart
  * it. Replacements are made at most once a `replaceIntervalMs`.
@@ -84,7 +83,7 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
    * dying:
    * 1. The proof is checked alongside any others, so bb batches it with them.
    * 2. If bb dies with it in flight, it is checked again on its own: proofs already in flight finish first, new ones
-   *    wait until it is done, and proofs checked on their own go one at a time, in order.
+   *    wait once its turn starts, and proofs checked on their own go one at a time, in order.
    * 3. If bb dies on it again, it is blamed and answered invalid, provided bb has given a verdict on some other proof
    *    since it last blamed one. Otherwise it waits for such a verdict and goes back to step 2.
    */
@@ -94,10 +93,7 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
     if (tx.chonkProof.fields.length !== CHONK_PROOF_LENGTH) {
       return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
     }
-    let key: string | undefined;
-    const getKey = () => (key ??= crashKey(tx));
-    // The key serializes the whole tx, so it is only computed once some proof has crashed bb.
-    if (this.crashedProofs.size > 0 && this.crashedProofs.has(getKey())) {
+    if (this.crashedBefore(tx)) {
       return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
     }
     const result = await this.checkLock.runShared(() => this.verifyOnLiveVerifier(tx));
@@ -105,23 +101,13 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
       return result;
     }
     for (;;) {
-      const result = await this.checkLock.runExclusive(() => this.verifyOnLiveVerifier(tx));
+      const result = await this.checkLock.runExclusive(() => this.verifyOnItsOwn(tx, timer));
       if (result) {
         return result;
       }
-      const txHash = tx.getTxHash().toString();
-      if (this.verdictSinceLastBlame) {
-        this.logger.warn('Proof took the Chonk verifier down when checked on its own', { label: this.label, txHash });
-        this.verdictSinceLastBlame = false;
-        this.crashedProofs.add(getKey());
-        return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
-      }
       this.logger.warn(
         'Chonk verifier went down on a proof checked on its own, but has given no verdict since it last did',
-        {
-          label: this.label,
-          txHash,
-        },
+        { label: this.label, txHash: tx.getTxHash().toString() },
       );
       await this.nextVerdict.promise;
     }
@@ -132,6 +118,33 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
     this.sleeper.interrupt();
     this.nextVerdict.resolve();
     await this.started?.stop();
+  }
+
+  /**
+   * Checks a proof with no other proof in flight, and blames it if bb dies on it. Both happen within its exclusive
+   * turn, so a copy of the same tx checked next is answered from `crashedProofs` rather than crashing bb again. Returns
+   * undefined if bb died but has given no verdict since it last blamed a proof, so nothing can be blamed yet.
+   */
+  private async verifyOnItsOwn(tx: Tx, timer: Timer): Promise<IVCProofVerificationResult | undefined> {
+    if (this.crashedBefore(tx)) {
+      return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
+    }
+    const result = await this.verifyOnLiveVerifier(tx);
+    if (result || !this.verdictSinceLastBlame) {
+      return result;
+    }
+    this.logger.warn('Proof took the Chonk verifier down when checked on its own', {
+      label: this.label,
+      txHash: tx.getTxHash().toString(),
+    });
+    this.verdictSinceLastBlame = false;
+    this.crashedProofs.add(crashKey(tx));
+    return { valid: false, durationMs: 0, totalDurationMs: timer.ms() };
+  }
+
+  /** Whether a copy of this tx has crashed bb. Skips the hash, which serializes the whole tx, until some proof has. */
+  private crashedBefore(tx: Tx): boolean {
+    return this.crashedProofs.size > 0 && this.crashedProofs.has(crashKey(tx));
   }
 
   /**
@@ -164,20 +177,21 @@ export class SelfHealingChonkVerifier implements ClientProtocolCircuitVerifier {
       if (!verifier.isFailed()) {
         return verifier;
       }
-      // Only the first caller to find this verifier failed replaces it; the rest share the replacement.
-      if (this.current === current) {
-        const waitMs = this.lastReplacedAtMs + this.replaceIntervalMs - Date.now();
-        if (waitMs > 0) {
-          await this.sleeper.sleep(waitMs);
-          continue;
-        }
-        this.lastReplacedAtMs = Date.now();
-        this.logger.warn('Replacing the failed Chonk verifier', { label: this.label });
-        this.started = undefined;
-        void this.retire(verifier);
-        this.current = this.startReplacement();
+      // Only the first caller to find this verifier failed replaces it; the rest share the replacement. Either way the
+      // loop checks the replacement too, since it may have failed before the proof gets to it.
+      if (this.current !== current) {
+        continue;
       }
-      return await this.current;
+      const waitMs = this.lastReplacedAtMs + this.replaceIntervalMs - Date.now();
+      if (waitMs > 0) {
+        await this.sleeper.sleep(waitMs);
+        continue;
+      }
+      this.lastReplacedAtMs = Date.now();
+      this.logger.warn('Replacing the failed Chonk verifier', { label: this.label });
+      this.started = undefined;
+      void this.retire(verifier);
+      this.current = this.startReplacement();
     }
   }
 
