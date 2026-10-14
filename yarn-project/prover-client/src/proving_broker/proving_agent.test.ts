@@ -313,6 +313,7 @@ describe('ProvingAgent', () => {
     let signal: AbortSignal | undefined;
     const heartbeats: number[] = [];
     let reportAllowsNewJobs: boolean | undefined;
+    let reportedError: { message: string; retry: boolean } | undefined;
     jest.spyOn(prover, 'getInboxParityProof').mockImplementationOnce((_, abortSignal) => {
       signal = abortSignal;
       return proof.promise;
@@ -329,7 +330,8 @@ describe('ProvingAgent', () => {
       reportAllowsNewJobs = filter?.allowNewJobs;
       return reported.promise;
     });
-    jobSource.reportProvingJobError.mockImplementation((_id, _err, _retry, filter) => {
+    jobSource.reportProvingJobError.mockImplementation((_id, message, retry, filter) => {
+      reportedError = { message, retry: retry ?? false };
       reportAllowsNewJobs = filter?.allowNewJobs;
       return reported.promise;
     });
@@ -360,6 +362,9 @@ describe('ProvingAgent', () => {
     await Promise.all([draining, alsoDraining]);
     expect(agent.getStatus()).toEqual({ status: 'stopped' });
     expect(signal?.aborted).toBe(false);
+    expect(reportedError).toEqual(
+      outcome === 'error' ? { message: expect.stringContaining('proof failed'), retry: true } : undefined,
+    );
   });
 
   it('finishes a job returned by a claim already in flight when draining starts', async () => {
