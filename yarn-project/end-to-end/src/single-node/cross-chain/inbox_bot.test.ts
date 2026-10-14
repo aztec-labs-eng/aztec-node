@@ -253,7 +253,7 @@ describe('single-node/cross-chain/inbox_bot', () => {
   // never from an assumption that the batch started at a bucket boundary.
   // TODO: re-enable once the saturation checkpoint reliably lands within the test timeout; it times out
   // intermittently in CI.
-  it.skip('sends a full-bucket saturation batch that rolls the bucket over and consumes every message', async () => {
+  it('sends a full-bucket saturation batch that rolls the bucket over and consumes every message', async () => {
     const { bot, store, telemetry } = await createBot({
       inboxConsumeMode: 'public',
       inboxSaturationIntervalSeconds: 86_400,
