@@ -3,6 +3,7 @@ import { keccak256 } from '@aztec-labs/foundation/crypto/keccak';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { jsonStringify } from '@aztec-labs/foundation/json-rpc';
 import { createLogger } from '@aztec-labs/foundation/log';
+import { Semaphore } from '@aztec-labs/foundation/queue';
 import { pluralize } from '@aztec-labs/foundation/string';
 import type { DateProvider, TestDateProvider } from '@aztec-labs/foundation/timer';
 import {
@@ -18,6 +19,56 @@ import {
 import { foundry } from 'viem/chains';
 
 import type { ViemPublicClient } from '../types.js';
+
+/** Interval mining that a finished pause hands back to anvil on the next tick of the block grid. */
+type PendingResume = { interval: number; timer: ReturnType<typeof setTimeout> };
+
+/**
+ * Mining-mode state for one anvil node, shared by every {@link EthCheatCodes} instance that targets it. E2e setups
+ * build several instances over the same anvil (the fixture's, `CheatCodes.eth`, each `RollupCheatCodes`), and a pause
+ * or a pending resume owned by one of them must be visible to the others.
+ */
+class AnvilMiningState {
+  /** Serializes every change to anvil's mining mode. Never held while a caller's code runs. */
+  public readonly lock = new Semaphore(1);
+  /** Number of `execWithPausedAnvil` calls in flight, nested or concurrent. */
+  public pauseDepth = 0;
+  /** Mining mode captured by the outermost pause, restored when the last pause ends. */
+  public saved?: { interval: number | null; automine: boolean };
+  public pendingResume?: PendingResume;
+
+  /** Stops a pending resume and returns the interval it would have restored. */
+  public takePendingResume(): number | undefined {
+    const pending = this.pendingResume;
+    if (!pending) {
+      return undefined;
+    }
+    clearTimeout(pending.timer);
+    this.pendingResume = undefined;
+    return pending.interval;
+  }
+}
+
+const anvilMiningStates = new Map<string, AnvilMiningState>();
+
+/**
+ * Drops the shared mining state of the anvil at `rpcUrl`, cancelling any pending interval-mining resume. Called when
+ * that anvil is stopped, so no timer outlives it and a later anvil on the same port starts clean.
+ */
+export function forgetAnvilMiningState(rpcUrl: string): void {
+  for (const [key, state] of anvilMiningStates) {
+    if (key.split(',').includes(rpcUrl)) {
+      state.takePendingResume();
+      anvilMiningStates.delete(key);
+    }
+  }
+}
+
+/**
+ * A pause that ends at most this long after a grid tick still mines that tick's block straight away, rather than
+ * leaving a gap in the chain and waiting for the next tick.
+ */
+const OVERDUE_TICK_GRACE_MS = 200;
 
 /**
  * A class that provides utility functions for interacting with ethereum (L1).
@@ -46,6 +97,17 @@ export class EthCheatCodes {
       transport: fallback(this.rpcUrls.map(url => http(url, { batch: false }))),
       chain: chain,
     });
+  }
+
+  /** Mining-mode state shared with every other instance that targets the same anvil. */
+  private get miningState(): AnvilMiningState {
+    const key = this.rpcUrls.join(',');
+    let state = anvilMiningStates.get(key);
+    if (!state) {
+      state = new AnvilMiningState();
+      anvilMiningStates.set(key, state);
+    }
+    return state;
   }
 
   public rpcCall(method: string, params: any[]) {
@@ -118,7 +180,7 @@ export class EthCheatCodes {
    * @param numberOfBlocks - The number of blocks to mine
    */
   public async mine(numberOfBlocks: number | bigint = 1): Promise<void> {
-    await this.doMine(Number(numberOfBlocks));
+    await this.withMiningLock(this.miningState, () => this.doMine(Number(numberOfBlocks)));
     this.logger.warn(`Mined ${numberOfBlocks} L1 blocks`);
   }
 
@@ -134,9 +196,13 @@ export class EthCheatCodes {
    * Mines a single block with evm_mine
    */
   public async evmMine(): Promise<void> {
+    await this.withMiningLock(this.miningState, () => this.doEvmMine());
+    this.logger.warn(`Mined 1 L1 block with evm_mine`);
+  }
+
+  private async doEvmMine(): Promise<void> {
     try {
       await this.doRpcCall('evm_mine', []);
-      this.logger.warn(`Mined 1 L1 block with evm_mine`);
     } catch (err) {
       throw new Error(`Error mining: ${err}`);
     }
@@ -188,29 +254,46 @@ export class EthCheatCodes {
   }
 
   /**
-   * Get interval mining if set.
-   * @param seconds - The interval to use between blocks
+   * Get interval mining if set. A pending resume left by {@link execWithPausedAnvil} counts as set, although anvil
+   * itself reports interval mining as off until the resume fires.
    */
-  public getIntervalMining(): Promise<number | null> {
+  public async getIntervalMining(): Promise<number | null> {
+    const state = this.miningState;
+    return await this.withMiningLock(
+      state,
+      async () => state.pendingResume?.interval ?? (await this.doGetIntervalMining()),
+    );
+  }
+
+  private async doGetIntervalMining(): Promise<number | null> {
     try {
-      return this.doRpcCall('anvil_getIntervalMining', []);
+      return await this.doRpcCall('anvil_getIntervalMining', []);
     } catch (err) {
       throw new Error(`Error getting interval mining: ${err}`);
     }
   }
 
   /**
-   * Enable interval mining at the given interval (block time)
+   * Enable interval mining at the given interval (block time). Replaces any pending resume left by
+   * {@link execWithPausedAnvil}.
    * @param seconds - The interval to use between blocks
    */
   public async setIntervalMining(seconds: number, opts: { silent?: boolean } = {}): Promise<void> {
+    const state = this.miningState;
+    await this.withMiningLock(state, async () => {
+      state.takePendingResume();
+      await this.doSetIntervalMining(seconds);
+    });
+    if (!opts.silent) {
+      this.logger.warn(`Set L1 interval mining to ${seconds} seconds`);
+    }
+  }
+
+  private async doSetIntervalMining(seconds: number): Promise<void> {
     try {
       await this.rpcCall('anvil_setIntervalMining', [seconds]);
     } catch (err) {
       throw new Error(`Error setting interval mining: ${err}`);
-    }
-    if (!opts.silent) {
-      this.logger.warn(`Set L1 interval mining to ${seconds} seconds`);
     }
   }
 
@@ -222,11 +305,15 @@ export class EthCheatCodes {
       throw new Error(`Interval mining requires a positive interval, got ${seconds}`);
     }
 
-    await this.setAutomine(false);
-    await this.setIntervalMining(0, { silent: true });
-    await this.evmMine();
-    await this.syncDateProvider();
-    await this.setIntervalMining(seconds);
+    const state = this.miningState;
+    await this.withMiningLock(state, async () => {
+      state.takePendingResume();
+      await this.doSetAutomine(false);
+      await this.doSetIntervalMining(0);
+      await this.doEvmMine();
+      await this.syncDateProvider();
+      await this.doSetIntervalMining(seconds);
+    });
     this.logger.warn(`Started L1 interval mining at ${seconds} seconds from a fresh block`);
   }
 
@@ -235,13 +322,17 @@ export class EthCheatCodes {
    * @param automine - The automine status to set
    */
   public async setAutomine(automine: boolean, opts: { silent?: boolean } = {}): Promise<void> {
+    await this.withMiningLock(this.miningState, () => this.doSetAutomine(automine));
+    if (!opts.silent) {
+      this.logger.warn(`Set L1 automine to ${automine}`);
+    }
+  }
+
+  private async doSetAutomine(automine: boolean): Promise<void> {
     try {
       await this.rpcCall('anvil_setAutomine', [automine]);
     } catch (err) {
       throw new Error(`Error setting automine: ${err}`);
-    }
-    if (!opts.silent) {
-      this.logger.warn(`Set L1 automine to ${automine}`);
     }
   }
 
@@ -259,17 +350,25 @@ export class EthCheatCodes {
   }
 
   /**
-   * Set the next block timestamp
+   * Set the next block timestamp. A pending resume left by {@link execWithPausedAnvil} would overwrite it, so interval
+   * mining is restarted straight away instead.
    * @param timestamp - The timestamp to set the next block to
    */
   public async setNextBlockTimestamp(timestamp: number | Date): Promise<void> {
-    try {
-      await this.rpcCall('evm_setNextBlockTimestamp', [
-        timestamp instanceof Date ? Math.floor(timestamp.getTime() / 1000) : timestamp,
-      ]);
-    } catch (err: any) {
-      throw new Error(`Error setting next block timestamp: ${err.message}`);
-    }
+    const state = this.miningState;
+    await this.withMiningLock(state, async () => {
+      const pendingInterval = state.takePendingResume();
+      if (pendingInterval !== undefined) {
+        await this.doSetIntervalMining(pendingInterval);
+      }
+      try {
+        await this.rpcCall('evm_setNextBlockTimestamp', [
+          timestamp instanceof Date ? Math.floor(timestamp.getTime() / 1000) : timestamp,
+        ]);
+      } catch (err: any) {
+        throw new Error(`Error setting next block timestamp: ${err.message}`);
+      }
+    });
     this.logger.warn(`Set L1 next block timestamp to ${timestamp}`);
   }
 
@@ -283,31 +382,35 @@ export class EthCheatCodes {
     timestamp: number | bigint,
     opts: { silent?: boolean; resetBlockInterval?: boolean } = {},
   ): Promise<void> {
-    let blockInterval: number | null = null;
-    try {
-      // Load current block interval and disable it
-      if (opts.resetBlockInterval) {
-        blockInterval = await this.getIntervalMining();
-        if (blockInterval !== null) {
-          await this.setIntervalMining(0, { silent: true });
+    const state = this.miningState;
+    await this.withMiningLock(state, async () => {
+      let blockInterval: number | null = null;
+      try {
+        // Load current block interval and disable it. A pending resume would put mining back on the grid from
+        // before the warp, so take it over: the warp re-phases the grid onto its own timestamp.
+        if (opts.resetBlockInterval) {
+          blockInterval = state.takePendingResume() ?? (await this.doGetIntervalMining());
+          if (blockInterval !== null) {
+            await this.doSetIntervalMining(0);
+          }
+        }
+        // Set the timestamp of the next block to be mined
+        await this.rpcCall('evm_setNextBlockTimestamp', [Number(timestamp)]);
+        // And mine a block so the timestamp goes into effect now
+        await this.doMine();
+        // Update the injected date provider so it follows L1 time
+        if ('setTime' in this.dateProvider) {
+          this.dateProvider.setTime(Number(timestamp) * 1000);
+        }
+      } catch (err) {
+        throw new Error(`Error warping: ${err}`);
+      } finally {
+        // Restore interval mining so the next block is mined in `blockInterval` seconds from this one
+        if (opts.resetBlockInterval && blockInterval !== null && blockInterval > 0) {
+          await this.doSetIntervalMining(blockInterval);
         }
       }
-      // Set the timestamp of the next block to be mined
-      await this.rpcCall('evm_setNextBlockTimestamp', [Number(timestamp)]);
-      // And mine a block so the timestamp goes into effect now
-      await this.doMine();
-      // Update the injected date provider so it follows L1 time
-      if ('setTime' in this.dateProvider) {
-        this.dateProvider.setTime(Number(timestamp) * 1000);
-      }
-    } catch (err) {
-      throw new Error(`Error warping: ${err}`);
-    } finally {
-      // Restore interval mining so the next block is mined in `blockInterval` seconds from this one
-      if (opts.resetBlockInterval && blockInterval !== null && blockInterval > 0) {
-        await this.setIntervalMining(blockInterval, { silent: true });
-      }
-    }
+    });
     if (!opts.silent) {
       this.logger.warn(`Warped L1 timestamp to ${timestamp}`);
     }
@@ -483,17 +586,19 @@ export class EthCheatCodes {
   ): Promise<void> {
     this.logger.verbose(`Preparing L1 reorg with depth ${depth}`);
     try {
-      await this.rpcCall('anvil_reorg', [
-        depth,
-        newBlocks.flatMap((txs, index) =>
-          txs.map(tx => [
-            typeof tx === 'string'
-              ? tx
-              : { value: 0, ...tx, ...(tx.gas === undefined ? {} : { gas: numberToHex(tx.gas) }) },
-            index,
-          ]),
-        ),
-      ]);
+      await this.withMiningLock(this.miningState, () =>
+        this.rpcCall('anvil_reorg', [
+          depth,
+          newBlocks.flatMap((txs, index) =>
+            txs.map(tx => [
+              typeof tx === 'string'
+                ? tx
+                : { value: 0, ...tx, ...(tx.gas === undefined ? {} : { gas: numberToHex(tx.gas) }) },
+              index,
+            ]),
+          ),
+        ]),
+      );
     } catch (err) {
       throw new Error(`Error reorging: ${err}`);
     }
@@ -576,36 +681,38 @@ export class EthCheatCodes {
     await this.doRpcCall('anvil_setBlockGasLimit', [toHex(gasLimit)]);
   }
 
+  /**
+   * Runs `fn` with automine and interval mining off, so no block is mined while it runs. Pauses nest and may overlap,
+   * across every instance pointed at the same anvil: mining comes back once the last of them ends.
+   *
+   * Automine comes back straight away. Interval mining comes back in the background, on the grid the chain was
+   * already on (see {@link scheduleResume}), so the caller never waits for an L1 tick.
+   */
   public async execWithPausedAnvil<T>(fn: () => Promise<T>): Promise<T> {
-    const [blockInterval, wasAutoMining] = await Promise.all([this.getIntervalMining(), this.isAutoMining()]);
+    const state = this.miningState;
+    await this.withMiningLock(state, async () => {
+      state.pauseDepth++;
+      if (state.pauseDepth > 1) {
+        return;
+      }
+      try {
+        await this.pauseMining(state);
+      } catch (err) {
+        state.pauseDepth--;
+        await this.restoreMining(state);
+        throw err;
+      }
+    });
+
     try {
-      if (blockInterval !== null) {
-        await this.setIntervalMining(0, { silent: true });
-      }
-
-      if (wasAutoMining) {
-        await this.setAutomine(false, { silent: true });
-      }
-
       return await fn();
     } finally {
-      try {
-        // restore automine if necessary
-        if (wasAutoMining) {
-          await this.setAutomine(true, { silent: true });
+      await this.withMiningLock(state, async () => {
+        state.pauseDepth--;
+        if (state.pauseDepth === 0) {
+          await this.restoreMining(state);
         }
-      } catch (err) {
-        this.logger.warn(`Failed to reenable automining: ${err}`);
-      }
-
-      try {
-        // restore automine if necessary
-        if (blockInterval !== null) {
-          await this.setIntervalMining(blockInterval, { silent: true });
-        }
-      } catch (err) {
-        this.logger.warn(`Failed to reenable interval mining: ${err}`);
-      }
+      });
     }
   }
 
@@ -613,6 +720,108 @@ export class EthCheatCodes {
     const timestamp = await this.lastBlockTimestamp();
     if ('setTime' in this.dateProvider) {
       this.dateProvider.setTime(timestamp * 1000);
+    }
+  }
+
+  private async withMiningLock<T>(state: AnvilMiningState, fn: () => Promise<T>): Promise<T> {
+    await state.lock.acquire();
+    try {
+      return await fn();
+    } finally {
+      state.lock.release();
+    }
+  }
+
+  private async pauseMining(state: AnvilMiningState): Promise<void> {
+    // A resume still pending from an earlier pause is taken over: anvil reports interval mining as off meanwhile.
+    const interval = state.takePendingResume() ?? (await this.doGetIntervalMining());
+    state.saved = { interval, automine: await this.isAutoMining() };
+    if (interval !== null) {
+      await this.doSetIntervalMining(0);
+    }
+    if (state.saved.automine) {
+      await this.doSetAutomine(false);
+    }
+  }
+
+  private async restoreMining(state: AnvilMiningState): Promise<void> {
+    const saved = state.saved;
+    state.saved = undefined;
+    if (saved?.automine) {
+      try {
+        await this.doSetAutomine(true);
+      } catch (err) {
+        this.logger.warn(`Failed to reenable automining: ${err}`);
+      }
+    }
+    if (saved?.interval) {
+      try {
+        await this.scheduleResume(state, saved.interval);
+      } catch (err) {
+        this.logger.warn(`Failed to schedule interval mining on the block grid, restarting it now: ${err}`);
+        try {
+          await this.doSetIntervalMining(saved.interval);
+        } catch (err) {
+          this.logger.warn(`Failed to reenable interval mining: ${err}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Re-enables interval mining so the next block lands on the grid the chain is already on: the first
+   * `latest + k * interval` tick the node clock has not yet passed. Anvil restarts its countdown from zero on
+   * `anvil_setIntervalMining`, so re-enabling it right after a pause would mine the next block late while still
+   * stamping it `latest + interval`, leaving L1 time behind the node clock for good. Instead mining stays off until
+   * that tick, when a background timer mines the tick's block and restarts the countdown from it.
+   *
+   * Ticks a long pause ran past are skipped rather than mined late, so a block stamped T is still mined when the node
+   * clock reads T, at the cost of a gap in the chain like a missed L1 slot. Must be called holding the mining lock.
+   */
+  private async scheduleResume(state: AnvilMiningState, interval: number): Promise<void> {
+    const latest = await this.lastBlockTimestamp();
+    const nowMs = this.dateProvider.now();
+    const ticks = Math.max(1, Math.ceil((nowMs - OVERDUE_TICK_GRACE_MS - latest * 1000) / (interval * 1000)));
+    const tick = latest + ticks * interval;
+    const delayMs = tick * 1000 - nowMs;
+    if (delayMs > interval * 1000) {
+      // The chain is ahead of the node clock (say, a warp the date provider could not follow), so no tick is due
+      // within an interval: restart the countdown now, as anvil would.
+      await this.doSetIntervalMining(interval);
+      return;
+    }
+    const resume: PendingResume = {
+      interval,
+      timer: setTimeout(() => void this.resumeOnGrid(state, resume, latest, tick), Math.max(0, delayMs)),
+    };
+    state.pendingResume = resume;
+  }
+
+  private async resumeOnGrid(state: AnvilMiningState, resume: PendingResume, latest: number, tick: number) {
+    try {
+      await this.withMiningLock(state, async () => {
+        if (state.pendingResume !== resume) {
+          return;
+        }
+        state.pendingResume = undefined;
+        try {
+          if ((await this.lastBlockTimestamp()) !== latest) {
+            // Blocks were mined or rolled back while mining was off, so the grid may have moved.
+            await this.scheduleResume(state, resume.interval);
+            return;
+          }
+          await this.doRpcCall('evm_setNextBlockTimestamp', [tick]);
+          await this.doEvmMine();
+        } catch (err) {
+          this.logger.warn(`Failed to mine the L1 block due at ${tick}, restarting interval mining off the grid`, {
+            err: String(err),
+            tick,
+          });
+        }
+        await this.doSetIntervalMining(resume.interval);
+      });
+    } catch (err) {
+      this.logger.error(`Failed to resume L1 interval mining`, err, { interval: resume.interval, tick });
     }
   }
 }
