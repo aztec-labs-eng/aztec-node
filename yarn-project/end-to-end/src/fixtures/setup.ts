@@ -230,6 +230,10 @@ export type SetupOptions<TDeployExtraL1ContractsReturnType = unknown> = {
    * Anvil reports `finalized = latest - slotsInAnEpoch * 2`.
    */
   anvilSlotsInAnEpoch?: number;
+  /** Hardfork to start anvil on (e.g. 'osaka'). */
+  anvilHardfork?: string;
+  /** Number of historical states anvil keeps, which bounds the size of a state dump with history. */
+  anvilPruneHistory?: number;
   /** Key to use for publishing L1 contracts */
   l1PublisherKey?: SecretValue<`0x${string}`>;
   /** ZkPassport configuration (domain, scope, mock verifier) */
@@ -260,7 +264,7 @@ export type SetupOptions<TDeployExtraL1ContractsReturnType = unknown> = {
 
 /** Context for an end-to-end test as returned by the `setup` function */
 export type EndToEndContext<TDeployExtraL1ContractsReturnType = unknown> = {
-  /** The Anvil instance (only set if anvil was started locally). */
+  /** The Anvil instance (only set if anvil was started locally). Teardown stops the one set here when it runs. */
   anvil: Anvil | undefined;
   /** The Aztec Node service or client a connected to it. */
   aztecNode: AztecNode & AztecNodeDebug;
@@ -420,6 +424,8 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
           accounts: opts.anvilAccounts,
           port: opts.anvilPort ?? (process.env.ANVIL_PORT ? parseInt(process.env.ANVIL_PORT) : undefined),
           slotsInAnEpoch: opts.anvilSlotsInAnEpoch,
+          hardfork: opts.anvilHardfork,
+          pruneHistory: opts.anvilPruneHistory,
           dateProvider,
         }),
       );
@@ -765,7 +771,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
             await bbConfig.cleanup();
           }
 
-          await tryStop(anvil, logger);
+          await tryStop(context.anvil, logger);
 
           await tryRmDir(directoryToCleanup, logger);
         } catch (err) {
@@ -779,7 +785,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
         }
       });
 
-    return {
+    const context: EndToEndContext<TDeployExtraL1ContractsReturnType> = {
       anvil,
       aztecNode: aztecNodeService,
       aztecNodeService,
@@ -807,6 +813,7 @@ async function setupInner<TDeployExtraL1ContractsReturnType = unknown>(
       bbConfig,
       directoryToCleanup,
     };
+    return context;
   } catch (err) {
     await anvil?.stop();
     throw err;
