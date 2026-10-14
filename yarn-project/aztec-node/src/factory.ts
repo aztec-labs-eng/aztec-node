@@ -1,5 +1,5 @@
 import { createArchiver } from '@aztec-labs/archiver';
-import { BBCircuitVerifier, BatchChonkVerifier, QueuedIVCVerifier } from '@aztec-labs/bb-prover';
+import { BBCircuitVerifier, QueuedIVCVerifier, SelfHealingChonkVerifier } from '@aztec-labs/bb-prover';
 import { TestCircuitVerifier } from '@aztec-labs/bb-prover/test';
 import { createBlobClientWithFileStores } from '@aztec-labs/blob-client/client';
 import { Blob, getKzg } from '@aztec-labs/blob-lib';
@@ -247,7 +247,7 @@ export async function createAztecNodeService(
     let peerProofVerifier: ClientProtocolCircuitVerifier;
     let rpcProofVerifier: ClientProtocolCircuitVerifier;
     if (useRealVerifiers) {
-      peerProofVerifier = await BatchChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer');
+      peerProofVerifier = await SelfHealingChonkVerifier.new(config, config.bbChonkVerifyMaxBatch, 'peer');
       const rpcVerifier = await BBCircuitVerifier.new(config);
       rpcProofVerifier = new QueuedIVCVerifier(rpcVerifier, config.numConcurrentIVCVerifiers);
     } else {

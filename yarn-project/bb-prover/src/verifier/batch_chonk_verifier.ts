@@ -1,8 +1,9 @@
 import { BackendType, Barretenberg } from '@aztec-foundation/bb.js';
 
+import { CHONK_PROOF_LENGTH } from '@aztec-labs/constants';
 import { FifoFrameReader } from '@aztec-labs/foundation/fifo';
 import { createLogger } from '@aztec-labs/foundation/log';
-import { SerialQueue } from '@aztec-labs/foundation/queue';
+import { Semaphore, SerialQueue } from '@aztec-labs/foundation/queue';
 import { Timer } from '@aztec-labs/foundation/timer';
 import { ProtocolCircuitVks } from '@aztec-labs/noir-protocol-circuits-types/server/vks';
 import type { ClientProtocolCircuitVerifier, IVCProofVerificationResult } from '@aztec-labs/stdlib/interfaces/server';
@@ -20,8 +21,15 @@ import type { BBConfig } from '../config.js';
 import { IVCVerifierMetrics } from './queued_chonk_verifier.js';
 
 const execFileAsync = promisify(execFile);
-const RESULT_TIMEOUT_MS = 5 * 60 * 1000;
 const STOP_DRAIN_TIMEOUT_MS = 5_000;
+/**
+ * Most proofs in flight at once. bb itself (its C++ batch verifier) rejects any proof enqueued once 1024 are already
+ * waiting (its `MAX_QUEUE_SIZE`), and reports it as FAILED: the same result as a proof it checked and found invalid.
+ * This cap prevents that. Proofs in flight here include every proof bb has queued, so capping them at bb's limit means
+ * bb's queue never overflows. A proof enqueued past the cap waits here, and goes to bb once one in flight gets its
+ * result.
+ */
+export const MAX_PROOFS_IN_FLIGHT = 1024;
 
 /** Result from the FIFO, matching the C++ VerifyResult struct. */
 interface FifoVerifyResult {
@@ -38,7 +46,8 @@ interface PendingRequest {
   resolve: (result: IVCProofVerificationResult) => void;
   reject: (error: Error) => void;
   totalTimer: Timer;
-  timeout: ReturnType<typeof setTimeout>;
+  /** The startup request that makes bb open the result stream; not a proof anyone asked about. */
+  probe?: boolean;
 }
 
 /**
@@ -68,6 +77,11 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   private stopped = false;
   private fatalError: Error | undefined;
   private pendingDrainedResolvers = new Set<() => void>();
+  /**
+   * Holds a token for each entry in `pendingRequests`, so a proof past {@link MAX_PROOFS_IN_FLIGHT} waits here for
+   * room. stop() and a failure cancel it, which lets every waiting proof through to be turned away.
+   */
+  private readonly inFlightSlots = new Semaphore(MAX_PROOFS_IN_FLIGHT);
 
   private constructor(
     private config: Pick<BBConfig, 'bbChonkVerifyConcurrency'> & Partial<Pick<BBConfig, 'bbBinaryPath'>>,
@@ -136,6 +150,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
         batchSize: this.batchSize,
         fifoPath: this.fifoPath,
       });
+      await this.openResultStream();
     } catch (err) {
       this.fifoReader.stop();
       this.deregisterExitCleanup();
@@ -146,9 +161,34 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     this.logger.info('BatchChonkVerifier started', { fifoPath: this.fifoPath });
   }
 
-  public verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
+  /**
+   * Makes bb open the result stream now. bb opens it only to write its first result, and the stream ending is how a bb
+   * death reaches proofs already queued, so until then such a death would leave them waiting forever. A proof with no
+   * fields fails to deserialize, and bb writes that result before acknowledging the request.
+   */
+  private async openResultStream(): Promise<void> {
+    await this.inFlightSlots.acquire();
+    const requestId = this.nextRequestId++;
+    const result = new Promise<IVCProofVerificationResult>((resolve, reject) => {
+      this.pendingRequests.set(requestId, { resolve, reject, totalTimer: new Timer(), probe: true });
+    });
+    // Awaited together so a failure of the stream before bb acknowledges the request is still handled.
+    await Promise.all([this.bb.chonkBatchVerifierQueue({ requestId, vkIndex: 0, proofFields: [] }), result]);
+  }
+
+  /**
+   * Verifies a tx's Chonk proof. Returns `valid: false` only for a malformed proof or one bb checked and rejected; rejects
+   * whenever the proof could not be checked, such as when bb died with it in flight (see {@link isFailed}).
+   */
+  public async verifyProof(tx: Tx): Promise<IVCProofVerificationResult> {
     const totalTimer = new Timer();
-    return (async () => {
+    const txHash = tx.getTxHash().toString();
+    // The empty placeholder can't be handed to bb at all; bb rejects any other malformed proof itself.
+    if (tx.chonkProof.fields.length !== CHONK_PROOF_LENGTH) {
+      this.logger.warn(`Rejecting malformed Chonk proof`, { txHash, length: tx.chonkProof.fields.length });
+      return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
+    }
+    try {
       const circuit = tx.data.forPublic ? 'HidingKernelToPublic' : 'HidingKernelToRollup';
       const vkIndex = this.vkIndexMap.get(circuit);
       if (vkIndex === undefined) {
@@ -157,39 +197,31 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       const proofWithPubInputs = tx.chonkProof.attachPublicInputs(tx.data.publicInputs().toFields());
       const proofFields = proofWithPubInputs.fieldsWithPublicInputs.map(f => f.toBuffer());
       return await this.enqueueProof(vkIndex, proofFields);
-    })().catch(err => {
-      this.logger.warn(`Failed to verify Chonk proof for tx ${tx.getTxHash().toString()}: ${String(err)}`);
-      return { valid: false, durationMs: 0, totalDurationMs: totalTimer.ms() };
-    });
+    } catch (err) {
+      // A verdict only ever arrives through handleResult, so bb gave no answer on this proof.
+      this.logger.warn(`Could not verify Chonk proof`, { txHash, err });
+      throw err;
+    }
   }
 
-  /** Enqueue raw proof fields for verification. Used directly by tests with custom VKs. */
-  public enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
+  /** Enqueue raw proof fields for verification, once there is room. Used directly by tests with custom VKs. */
+  public async enqueueProof(vkIndex: number, proofFields: Uint8Array[]): Promise<IVCProofVerificationResult> {
+    // A free slot is taken without yielding, so a proof enqueued before stop() is sent before stop() ends the sends.
+    if (!this.inFlightSlots.tryAcquire()) {
+      await this.inFlightSlots.acquire();
+    }
     if (this.stopped) {
-      return Promise.reject(new Error('BatchChonkVerifier stopped'));
+      throw new Error('BatchChonkVerifier stopped');
     }
     if (this.fatalError) {
-      return Promise.reject(this.fatalError);
+      throw this.fatalError;
     }
 
     const totalTimer = new Timer();
     const requestId = this.nextRequestId++;
 
     const resultPromise = new Promise<IVCProofVerificationResult>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        const pending = this.pendingRequests.get(requestId);
-        if (!pending) {
-          return;
-        }
-        this.pendingRequests.delete(requestId);
-        pending.reject(new Error(`BatchChonkVerifier result timed out for request_id=${requestId}`));
-        this.notifyPendingDrained();
-      }, RESULT_TIMEOUT_MS);
-      // A pending result timer must never keep the host process alive on its own (e.g. an
-      // orphaned request at process exit); the FIFO reader keeps the loop alive while results
-      // are genuinely awaited.
-      timeout.unref();
-      this.pendingRequests.set(requestId, { resolve, reject, totalTimer, timeout });
+      this.pendingRequests.set(requestId, { resolve, reject, totalTimer });
     });
 
     void this.sendQueue
@@ -204,21 +236,26 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
         });
       })
       .catch(err => {
-        const pending = this.pendingRequests.get(requestId);
-        if (pending) {
-          this.pendingRequests.delete(requestId);
-          clearTimeout(pending.timeout);
-          pending.reject(err instanceof Error ? err : new Error(String(err)));
-          this.notifyPendingDrained();
-        }
+        // bb not taking the proof (bb.js reports the process gone before the result stream ends, or bb errors) leaves
+        // its queue in an unknown state, so the verifier fails and is replaced.
+        this.failVerifier(err instanceof Error ? err : new Error(String(err)));
       });
 
-    return resultPromise;
+    return await resultPromise;
+  }
+
+  /**
+   * Whether the verifier has failed for good: its bb process or result stream broke, so every proof in flight was
+   * rejected unchecked, as is every proof enqueued from now on. A failed verifier never recovers; replace it.
+   */
+  public isFailed(): boolean {
+    return this.fatalError !== undefined;
   }
 
   public async stop(): Promise<void> {
     this.logger.info('Stopping BatchChonkVerifier');
     this.stopped = true;
+    this.inFlightSlots.cancel();
 
     try {
       // Stop accepting new proofs and flush the send queue. Bound it so an unresponsive
@@ -308,12 +345,20 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
       return;
     }
     this.pendingRequests.delete(result.request_id);
-    clearTimeout(pending.timeout);
+    this.inFlightSlots.release();
+    if (pending.probe) {
+      pending.resolve({ valid: result.status === 0, durationMs: 0, totalDurationMs: 0 });
+      return;
+    }
 
     const valid = result.status === 0; // VerifyStatus::OK
     const durationMs = result.time_in_verify_ms;
     const totalDurationMs = pending.totalTimer.ms();
 
+    // Every FAILED result is a verdict on the proof, whatever its message. bb reports a malformed proof (an off-curve
+    // or non-canonical commitment) as an exception it caught, worded like a failure of its own, so treating those as
+    // anything else would let anyone swap a garbage proof into a real tx without penalty. A bb death surfaces through
+    // the result stream failing instead.
     const ivcResult: IVCProofVerificationResult = { valid, durationMs, totalDurationMs };
     this.metrics.recordIVCVerification(ivcResult);
 
@@ -348,8 +393,8 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
   private rejectPendingRequests(error: Error): void {
     for (const [id, pending] of Array.from(this.pendingRequests)) {
       pending.reject(error);
-      clearTimeout(pending.timeout);
       this.pendingRequests.delete(id);
+      this.inFlightSlots.release();
     }
     this.notifyPendingDrained();
   }
@@ -358,6 +403,7 @@ export class BatchChonkVerifier implements ClientProtocolCircuitVerifier {
     if (!this.fatalError) {
       this.fatalError = error;
     }
+    this.inFlightSlots.cancel();
     this.rejectPendingRequests(error);
   }
 
