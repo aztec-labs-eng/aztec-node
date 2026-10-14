@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
+source $root/yarn-project/scripts/l1_fork_test_cmds.sh
 
 hash=$(../bootstrap.sh hash)
 bench_fixtures_dir=chonk-pinned-flows
@@ -38,7 +39,7 @@ function set_dump_avm {
   [ -n "${DUMP_AVM_INPUTS_TO_DIR:-}" ] && echo "DUMP_AVM_INPUTS_TO_DIR=${DUMP_AVM_INPUTS_TO_DIR}/$1"
 }
 
-function base_test_cmds {
+function test_cmds {
   local run_test_script="yarn-project/end-to-end/scripts/run_test.sh"
   load_dep_hashes
   local flags=":ISOLATE=1:TIMEOUT=20m"
@@ -48,23 +49,28 @@ function base_test_cmds {
     for test in src/single-node/prover/server/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo "$(dep_hash "$test")$flags:TIMEOUT=20m:CPUS=16:MEM=96g:NAME=${name}_real $run_test_script simple ${test#src/}"
+      echo_l1_fork_test_cmds e2e "$(dep_hash "$test")$flags:TIMEOUT=20m:CPUS=16:MEM=96g" "${name}_real" "$test" \
+        "$run_test_script simple ${test#src/}"
     done
     for test in src/single-node/prover/client/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo "$(dep_hash "$test")$flags:TIMEOUT=10m:CPUS=2:MEM=4g:NAME=${name}_real $run_test_script simple ${test#src/}"
+      echo_l1_fork_test_cmds e2e "$(dep_hash "$test")$flags:TIMEOUT=10m:CPUS=2:MEM=4g" "${name}_real" "$test" \
+        "$run_test_script simple ${test#src/}"
     done
   else
     for test in src/single-node/prover/**/*.test.ts; do
       local name=${test#src/}
       name=${name%.test.ts}
-      echo "$(dep_hash "$test")$flags:NAME=${name}_fake FAKE_PROOFS=1 $run_test_script simple ${test#src/}"
+      echo_l1_fork_test_cmds e2e "$(dep_hash "$test")$flags" "${name}_fake" "$test" \
+        "FAKE_PROOFS=1 $run_test_script simple ${test#src/}"
     done
   fi
 
   # Long-running avm_simulator
-  echo "$(dep_hash src/automine/simulation/avm_simulator.test.ts)$flags:TIMEOUT=30m:NAME=automine/simulation/avm_simulator $(set_dump_avm e2e_avm_simulator) $run_test_script simple src/automine/simulation/avm_simulator.test.ts"
+  local avm_simulator=src/automine/simulation/avm_simulator.test.ts
+  echo_l1_fork_test_cmds e2e "$(dep_hash $avm_simulator)$flags:TIMEOUT=30m" automine/simulation/avm_simulator $avm_simulator \
+    "$(set_dump_avm e2e_avm_simulator) $run_test_script simple $avm_simulator"
 
   # Lives under src/composed but runs as a simple test: the mainnet fork it needs comes from the
   # anvil state dump it loads, not from the compose fork service. It also needs the anvil that
@@ -75,7 +81,9 @@ function base_test_cmds {
   # CI_FULL only: the L1-side swap round-trip it uniquely covers costs ~8.5 minutes in its own
   # container, which is not worth paying on every PR.
   if [ "$CI_FULL" -eq 1 ]; then
-    echo "$(dep_hash src/composed/uniswap_trade_on_l1_from_l2.test.ts)$flags:NAME=composed/uniswap_trade_on_l1_from_l2 $run_test_script simple src/composed/uniswap_trade_on_l1_from_l2.test.ts"
+    local uniswap=src/composed/uniswap_trade_on_l1_from_l2.test.ts
+    echo_l1_fork_test_cmds e2e "$(dep_hash $uniswap)$flags" composed/uniswap_trade_on_l1_from_l2 $uniswap \
+      "$run_test_script simple $uniswap"
   fi
 
   local tests=(
@@ -145,11 +153,12 @@ function base_test_cmds {
         # parentheses, etc.) must be collapsed to an underscore or `docker run --name` rejects it.
         local safe_test_name=$(echo "$test_name" | sed 's/[^a-zA-Z0-9_.-]/_/g')
         local full_name="${name}_${safe_test_name}"
-        echo "$test_prefix:NAME=$full_name $(set_dump_avm $full_name) $run_test_script simple $test \"$test_name\""
+        echo_l1_fork_test_cmds e2e "$test_prefix" "$full_name" "$test" \
+          "$(set_dump_avm $full_name) $run_test_script simple $test \"$test_name\""
       done < <(extract_test_names "$test")
     else
       # Regular test file - run the whole file
-      echo "$test_prefix:NAME=$name $(set_dump_avm $name) $run_test_script simple $test"
+      echo_l1_fork_test_cmds e2e "$test_prefix" "$name" "$test" "$(set_dump_avm $name) $run_test_script simple $test"
     fi
   done
 
@@ -198,11 +207,6 @@ function base_test_cmds {
   done
 
   compat_test_cmds
-}
-
-# Adds an Amsterdam-L1 copy of the tests that run against every L1 fork (see scripts/hardfork_variants.sh).
-function test_cmds {
-  base_test_cmds | ../scripts/hardfork_variants.sh e2e
 }
 
 function test {

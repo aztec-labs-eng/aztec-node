@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
+source $root/yarn-project/scripts/l1_fork_test_cmds.sh
 
 # Used for build.
 function hash {
@@ -392,11 +393,13 @@ function test_cmds {
     [[ "$test" =~ \.bench\.test\.ts$ ]] && continue
 
     local prefix=$(dep_hash "$test")
+    local name=""
     local cmd_env=""
 
     # These need isolation due to network stack usage (p2p, anvil, etc).
     if [[ "$test" =~ ^(prover-node|p2p|ethereum|aztec|prover-client/src/test|stdlib/src/l1-contracts|ivc-integration/src/chonk_browser|blob-client/src/server) ]]; then
-      prefix+=":ISOLATE=1:NAME=$test"
+      prefix+=":ISOLATE=1"
+      name=$test
     fi
 
     if [[ "$test" =~ ^ivc-integration/src/chonk_browser ]]; then
@@ -431,16 +434,17 @@ function test_cmds {
       fi
     fi
 
-    echo "${prefix}${cmd_env} yarn-project/scripts/run_test.sh $test"
-  done | scripts/hardfork_variants.sh unit
+    local run_cmd="${cmd_env} yarn-project/scripts/run_test.sh $test"
+    echo_l1_fork_test_cmds unit "$prefix" "$name" "$test" "${run_cmd# }"
+  done
 
-  echo "$(cache_content_hash '^yarn-project/scripts/hardfork_variants') yarn-project/scripts/hardfork_variants.test.sh"
+  echo "$(cache_content_hash '^yarn-project/scripts/l1_fork_test_cmds') yarn-project/scripts/l1_fork_test_cmds.test.sh"
 
   # kv-store: per-file fan-out (mocha for node tests, vitest for browser tests).
   kv-store/bootstrap.sh test_cmds
 
   # Aztec CLI tests
-  aztec/bootstrap.sh test_cmds | scripts/hardfork_variants.sh unit
+  aztec/bootstrap.sh test_cmds
 
   if [[ "${TARGET_BRANCH:-}" =~ ^(v[0-9]+(-next)?|backport-to-v[0-9]+-(staging|next))$ ]]; then
     for test in aztec/src/testnet_compatibility.test.ts aztec/src/mainnet_compatibility.test.ts; do
