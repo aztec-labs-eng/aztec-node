@@ -116,6 +116,45 @@ export async function resolveCheckpointAttestationsFromCalldata(
 }
 
 /**
+ * Returns the proposer whose signature a checkpoint posted to L1 carries: the committee member at the slot's proposer
+ * index, provided the attestation at that index is a signature over the checkpoint's consensus payload that recovers
+ * to that member. Returns undefined when the epoch has no committee or an open escape hatch (the L1 proposer is then
+ * not the committee's), or when that signature is missing or recovers to anyone else.
+ *
+ * @param attestations - The checkpoint's attestations decoded for its epoch committee, indexed by committee position.
+ */
+export async function getCheckpointProposerFromAttestations(
+  checkpoint: Pick<CalldataCheckpointForAttestations, 'header' | 'archiveRoot' | 'feeAssetPriceModifier'>,
+  attestations: CommitteeAttestation[],
+  epochCache: EpochCache,
+  constants: Pick<L1RollupConstants, 'epochDuration'>,
+  signatureContext: CoordinationSignatureContext,
+): Promise<EthAddress | undefined> {
+  const slot = checkpoint.header.slotNumber;
+  const epoch: EpochNumber = getEpochAtSlot(slot, constants);
+  const { committee, seed, isEscapeHatchOpen } = await epochCache.getCommitteeForEpoch(epoch);
+  if (isEscapeHatchOpen || !committee || committee.length === 0) {
+    return undefined;
+  }
+
+  const proposerIndex = Number(epochCache.computeProposerIndex(slot, epoch, seed, BigInt(committee.length)));
+  const proposer: EthAddress | undefined = committee[proposerIndex];
+  const attestation: CommitteeAttestation | undefined = attestations[proposerIndex];
+  if (!proposer || !attestation) {
+    return undefined;
+  }
+
+  const payload = new ConsensusPayload(
+    checkpoint.header,
+    checkpoint.archiveRoot,
+    checkpoint.feeAssetPriceModifier,
+    signatureContext,
+  );
+  const [info] = getAttestationInfoFromPayload(payload, [attestation]);
+  return info.status === 'recovered-from-signature' && info.address.equals(proposer) ? proposer : undefined;
+}
+
+/**
  * Core attestation validation over a consensus payload, its attestations, and checkpoint metadata --
  * independent of whether the checkpoint's blocks have been decoded from blobs. Returns true if the
  * attestations are valid and sufficient, false otherwise.

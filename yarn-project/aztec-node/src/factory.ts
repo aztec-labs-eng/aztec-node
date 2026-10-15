@@ -476,7 +476,7 @@ export async function createAztecNodeService(
         watchers.push(attestedInvalidProposalWatcher);
       }
 
-      checkpointEquivocationWatcher = new CheckpointEquivocationWatcher(archiver, epochCache, config);
+      checkpointEquivocationWatcher = new CheckpointEquivocationWatcher(archiver, config);
       watchers.push(checkpointEquivocationWatcher);
 
       attestationsBlockWatcher = new AttestationsBlockWatcher(archiver, epochCache, config, log.getBindings());
