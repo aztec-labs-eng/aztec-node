@@ -397,6 +397,7 @@ describe('ValidatorClient', () => {
 
   describe('validateBlockProposal', () => {
     let proposal: ValidatedBlockProposal;
+    let proposalSigner: Secp256k1Signer;
     let blockNumber: BlockNumber;
     let sender: PeerId;
     let blockBuildResult: BuildBlockInCheckpointResult;
@@ -523,7 +524,10 @@ describe('ValidatorClient', () => {
     beforeEach(async () => {
       const blockHeader = makeBlockHeader(1, { blockNumber: BlockNumber(100), slotNumber: SlotNumber(100) });
       blockNumber = BlockNumber(blockHeader.globalVariables.blockNumber);
-      proposal = ValidatedBlockProposal(await makeBlockProposal({ blockHeader, inboxPrefixRef: genesisPrefixRef }));
+      proposalSigner = Secp256k1Signer.random();
+      proposal = ValidatedBlockProposal(
+        await makeBlockProposal({ signer: proposalSigner, blockHeader, inboxPrefixRef: genesisPrefixRef }),
+      );
       // The proposal targets slot 100, which under pipelining is built during the previous slot. Set the
       // wall clock to the start of that build slot (target_slot_start - S), matching how a pipelined
       // proposer is positioned when validating an inbound block proposal. With S - 2E = 0 in this config
@@ -723,6 +727,7 @@ describe('ValidatorClient', () => {
       validatorClient.getProposalHandler().register(p2pClient, true);
 
       const checkpointProposal = await makeCheckpointProposal({
+        signer: proposalSigner,
         checkpointHeader: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
         archiveRoot: Fr.random(),
         lastBlock: {
@@ -732,6 +737,7 @@ describe('ValidatorClient', () => {
         },
       });
       const equivocatedCheckpointProposal = await makeCheckpointProposal({
+        signer: proposalSigner,
         checkpointHeader: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
         archiveRoot: Fr.random(),
         lastBlock: {
@@ -750,6 +756,34 @@ describe('ValidatorClient', () => {
 
       expect(result).toMatchObject({ isValid: false, reason: 'checkpoint_proposal_equivocation' });
       expect(blockSource.addBlock).not.toHaveBeenCalled();
+    });
+
+    it('ignores retained checkpoint proposals from another signer when validating a block proposal', async () => {
+      validatorClient.updateConfig({ skipPushProposedBlocksToArchiver: false });
+      validatorClient.getProposalHandler().register(p2pClient, true);
+
+      // A previous view of the slot's proposer accepted two checkpoints from another signer. They say nothing about
+      // this proposal, whose signer has no retained checkpoint.
+      const otherSigner = Secp256k1Signer.random();
+      const otherCheckpointProposals = await Promise.all(
+        times(2, () =>
+          makeCheckpointProposal({
+            signer: otherSigner,
+            checkpointHeader: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
+            archiveRoot: Fr.random(),
+          }),
+        ),
+      );
+
+      p2pClient.getProposalsForSlot.mockResolvedValue({
+        blockProposals: [proposal],
+        checkpointProposals: otherCheckpointProposals.map(checkpoint => checkpoint.toCore()),
+      });
+
+      const result = await validatorClient.getProposalHandler().handleBlockProposal(proposal, sender, true);
+
+      expect(result).toMatchObject({ isValid: true });
+      expect(validatorClient.getProposalHandler().hasProposalEquivocation(proposal.slotNumber)).toBe(false);
     });
 
     it('uses the attestation deadline as the tx collection deadline for block proposals', async () => {
