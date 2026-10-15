@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { Buffer } from 'buffer';
 import { spawn } from 'node:child_process';
 import { type Server, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
