@@ -2,7 +2,7 @@
 source $(git rev-parse --show-toplevel)/ci3/source_bootstrap
 
 hash=$(hash_str \
-  $(cache_content_hash ^aztec-up/) \
+  $(cache_content_hash ^aztec-up/ ^ci3/release_prep_package_json) \
   $(../yarn-project/bootstrap.sh hash))
 
 # Bare aliases ("nightly", "latest") resolve to this major version.
@@ -223,6 +223,7 @@ function build {
 }
 
 function test_cmds {
+  echo "$hash node --test yarn-project/scripts/aztec-up-release-lock.test.mjs"
   for test in amm_flow bridge_and_claim basic_install counter_contract default_scaffold no_shadow_user_bins; do
     echo "$hash:TIMEOUT=15m aztec-up/scripts/run_test.sh $test"
   done

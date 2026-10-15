@@ -40,54 +40,64 @@ INSTALL_URI=file://$(git rev-parse --show-toplevel)/aztec-up/bin $(git rev-parse
 
 ## Locked npm dependencies
 
-Each release includes a `packages.tar.gz` containing a standalone `package.json` and
-`package-lock.json`. The installer extracts them into the version directory and runs `npm ci`.
-This fixes the complete npm dependency tree for that release, including transitive packages.
-A later publication within a dependency range cannot change an existing release's install.
+Each release ships a `packages.tar.gz` holding a standalone `package.json` and `package-lock.json`.
+The installer extracts both into the version directory and runs `npm ci`. The lock pins the whole
+npm dependency tree of that release, transitive packages included, so a package published later
+within some dependency range cannot change what an existing release installs.
+
+The lock covers npm packages only. Node, Noir, Foundry, and anything a package's install script
+downloads are outside it.
 
 ### Build
 
-The aztec-up build fake-publishes the public Yarn workspaces at version `0.0.1` to a local
-Verdaccio registry. Its npmjs proxy supplies third-party packages and the foundation pins.
-`yarn-project/scripts/generate-aztec-up-package-lock.mjs` resolves the two installer packages
-(`@aztec-labs/aztec` and `@aztec-labs/cli-wallet`) and their dependencies. It uses
-`yarn-project/yarn.lock` as an npm resolution hint, adds required peers, rejects package
-versions absent from that Yarn lock, and checks the result with `npm ci` and `npm ls`.
+The aztec-up build fake-publishes the public Yarn workspaces at version `0.0.1` to a local Verdaccio
+registry. Verdaccio proxies npmjs for third-party packages and the foundation pins.
 
-The build archive contains the manifest, npm lock, and a hash of the dependency inputs.
-It is embedded in the aztec-up test image. The cached registry seed and lock use the same
-dependency-input key; the seed supplies tarballs for the image's offline installer tests.
-On an image-cache hit, the build extracts the lock from that image.
+`yarn-project/scripts/generate-aztec-up-package-lock.mjs` then resolves the two installer packages,
+`@aztec-labs/aztec` and `@aztec-labs/cli-wallet`, against that registry. It:
+
+- uses `yarn-project/yarn.lock` as the npm resolution hint,
+- adds the peer dependencies npm would otherwise leave out,
+- rejects any package version that the Yarn lock does not contain,
+- checks the result with `npm ci` and `npm ls`.
+
+The resulting archive holds the manifest, the npm lock, and a hash of the inputs that decide the
+dependency tree. It is copied into the aztec-up test image, and on an image-cache hit the build
+reads it back out of that image. The cached Verdaccio seed and the cached lock share the same
+input hash, so a reused lock always comes with a seed that holds its tarballs. The test image's
+registry is offline and installs from that seed.
 
 ### Release
 
-`bootstrap.sh ci-release` builds before publishing. Before any project publishes, its release
-preflight turns the checked build lock into the target version using
-`yarn-project/scripts/aztec-up-release-lock.mjs`. It rejects an archive whose input hash
-does not match the current Yarn lock, generator, root resolutions, workspace dependency
-fields, and package rewrite rules. The transform changes the root version, each co-published `@aztec-labs/*` version
-and tarball URL, and references to those packages in their dependency fields. It leaves
-third-party versions, URLs, and integrity values unchanged. It performs no npm resolution,
-registry fetch, or package installation.
+`bootstrap.sh ci-release` builds before it publishes. Before any project publishes, the aztec-up
+release preflight runs `yarn-project/scripts/aztec-up-release-lock.mjs` on the build archive. The
+script:
 
-The aztec-up release then uploads the transformed two-file archive to
-`install.aztec.network/<version>/packages.tar.gz` before updating installer aliases.
-Only the co-published packages lack integrity values: their public tarballs do not exist
-when the build lock is made, and npm package versions cannot be overwritten. Every
-other locked tarball retains its integrity check.
+- rejects an archive whose input hash differs from the current Yarn lock, generator, root
+  resolutions, workspace dependency fields, or package rewrite rules,
+- sets the release version on the root, on every co-published `@aztec-labs/*` package, on their
+  tarball URLs, and on references to those packages in dependency fields,
+- leaves third-party versions, URLs, and integrity values untouched,
+- performs no npm resolution, registry fetch, or package installation.
+
+The aztec-up release then uploads the two-file archive to
+`install.aztec.network/<version>/packages.tar.gz` before it moves the installer aliases.
+
+Only the co-published packages carry no integrity value: their public tarballs do not exist when
+the build lock is made, and npm never lets a published version change. Every other tarball in the
+lock keeps its integrity check.
 
 ### Install
 
-The installer downloads the release archive and runs `npm ci`. npm selects native optional
-packages for the user's platform. The npm lock does not cover Node, Noir, Foundry, or
-downloads performed by package installation scripts.
+The installer downloads the release archive and runs `npm ci`. npm picks the native optional
+packages for the user's platform.
 
-To skip the release lock, explicitly select the original npm installation path:
+To install without the lock, select the plain npm path explicitly:
 
 ```sh
 AZTEC_UP_SKIP_PACKAGE_LOCK=1 aztec-up install <version>
 ```
 
-This also skips downloading the lock artifact. npm then resolves dependencies using its normal
-configuration, so versions can differ from those approved for the release. A failed locked install
-does not automatically enable the opt-out.
+This skips the archive download. npm resolves dependencies with its normal configuration, so the
+installed versions can differ from the ones approved for the release. A failed locked install does
+not switch to this path on its own.
