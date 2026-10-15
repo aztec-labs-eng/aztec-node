@@ -491,15 +491,17 @@ describe('multi-node/invalid-attestations/invalidate_block', () => {
     const secondCheckpointPromise = promiseWithResolvers<CheckpointNumber>();
     const expectedFirstSlot = badSlot1;
     const expectedSecondSlot = badSlot2;
-    let lastCheckpointNumber = 0;
+    let lastCheckpointNumber: number = test.monitor.checkpointNumber;
     test.monitor.on('checkpoint', ({ checkpointNumber, l2SlotNumber }) => {
       logger.warn(`Checkpoint ${checkpointNumber} at slot ${l2SlotNumber} has been mined`);
       // An invalidation rolls the tip back and is reported as a checkpoint event at the current slot, which would
-      // otherwise resolve a bad-slot promise with an older, valid checkpoint.
-      if (checkpointNumber <= lastCheckpointNumber) {
+      // otherwise resolve a bad-slot promise with an older, valid checkpoint. Compare against the previous tip rather
+      // than the highest seen, so a checkpoint re-proposed after a rollback still counts.
+      const isRollback = checkpointNumber <= lastCheckpointNumber;
+      lastCheckpointNumber = checkpointNumber;
+      if (isRollback) {
         return;
       }
-      lastCheckpointNumber = checkpointNumber;
       if (l2SlotNumber === expectedFirstSlot) {
         firstCheckpointPromise.resolve(checkpointNumber);
       }
