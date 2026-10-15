@@ -137,6 +137,18 @@ describe('single-node/cross-chain/inbox_bot', () => {
       2,
     );
 
+  /**
+   * Waits until the replay probe of `batchId` has a verdict. The probe runs on its own slower clock once every message
+   * of the batch has resolved, and marks the batch probed only after it has recorded the verdict.
+   */
+  const waitForReplayProbe = (store: BotStore, batchId: string) =>
+    retryUntil(
+      async () => (await store.inbox.getBatch(batchId))!.replayProbedAt !== undefined,
+      `inbox bot resolves the replay probe of batch ${batchId}`,
+      180,
+      2,
+    );
+
   // A normal mixed batch produced and followed end to end: both domains consume their messages, the consuming
   // transactions carry the nullifiers the bot expects, the node's index matches the Inbox event, and the batch's
   // cross-domain replay simulation is rejected once the spending nullifier is visible.
@@ -164,15 +176,7 @@ describe('single-node/cross-chain/inbox_bot', () => {
       expect(checks(telemetry, 'unknown_message', 'passed')).toEqual(1);
       expect(checks(telemetry, 'readiness_witness', 'passed')).toBeGreaterThanOrEqual(2);
 
-      // The replay probe runs on its own slower clock once every message of the batch has resolved, and marks the batch
-      // probed only after it has recorded its verdict.
-      await retryUntil(
-        async () => (await store.inbox.getBatch(batchId))!.replayProbedAt !== undefined,
-        'cross-domain replay probe resolved',
-        180,
-        2,
-      );
-
+      await waitForReplayProbe(store, batchId);
       expect(checks(telemetry, 'replay_rejection', 'passed')).toEqual(1);
       expect(await store.inbox.getBatchesPendingReplayProbe()).toEqual([]);
       expect(checks(telemetry, 'consumption_nullifier', 'failed')).toEqual(0);
@@ -266,12 +270,14 @@ describe('single-node/cross-chain/inbox_bot', () => {
     await bot.start();
     try {
       const batchId = await waitForBatch(store);
+      // The bot checks the bucket layout after it marks the batch mined, and marks the batch probed once it has
+      // recorded that check.
       const batch = await retryUntil(
         async () => {
           const record = await store.inbox.getBatch(batchId);
-          return record?.state === 'mined' ? record : undefined;
+          return record?.state === 'mined' && record.bucketProbedAt !== undefined ? record : undefined;
         },
-        'saturation batch mined on L1',
+        'saturation batch mined on L1 and its bucket layout checked',
         180,
         1,
       );
@@ -318,12 +324,7 @@ describe('single-node/cross-chain/inbox_bot', () => {
 
       // A run only closes once its replay probe has a verdict, and the probe starts on the consumption clock only
       // after every message has resolved, so it is still outstanding at this point.
-      await retryUntil(
-        async () => (await store.inbox.getBatch(batchId))!.replayProbedAt !== undefined,
-        'saturation batch replay probe resolved',
-        180,
-        2,
-      );
+      await waitForReplayProbe(store, batchId);
 
       // The run is closed out on the production clock, which this suite has set to an hour; drive one more step
       // rather than wait for it. The same step also produces an ordinary batch, which the test leaves behind.
