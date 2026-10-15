@@ -55,7 +55,7 @@ export const P2P_ATTESTATION_STORE_NAME = 'p2p-attestation';
 export const P2P_STORE_VERSION = 5;
 export const P2P_ARCHIVE_STORE_VERSION = 2;
 export const P2P_PEER_STORE_VERSION = 1;
-export const P2P_ATTESTATION_STORE_VERSION = 5;
+export const P2P_ATTESTATION_STORE_VERSION = 4;
 
 export async function createP2PClient(
   inputConfig: P2PConfig & DataStoreConfig & ChainConfig,

@@ -1500,9 +1500,10 @@ export class LibP2PService extends WithTracer implements P2PService {
         source: peerId.toString(),
       });
       return {
-        // isEquivocated is false here even when count > 1: a full cache is a receiver-local drop, not
-        // a fresh equivocation by this block. Genuine equivocation is already captured on the add
-        // (duplicateProposalCallback below). capFull tells the checkpoint path, whose terminal block
+        // isEquivocated is false here even when count > 1: a full cache is a receiver-local drop, and the
+        // duplicate callback fires only on an add (below). A dropped payload is not recorded, so every
+        // later drop from the same signer would report the same count; firing here could not be limited
+        // to once per signer and position. capFull tells the checkpoint path, whose terminal block
         // this may be, to ignore the whole checkpoint too, rather than store and re-broadcast it while
         // its terminal block was dropped.
         result: TopicValidatorResult.Ignore,

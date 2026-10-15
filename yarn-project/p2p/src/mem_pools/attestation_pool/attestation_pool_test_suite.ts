@@ -547,7 +547,8 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
       const result = await ap.tryAddCheckpointProposal(extraProposal);
       expect(result.added).toBe(false);
       expect(result.alreadyExists).toBe(false);
-      expect(result.count).toBe(MAX_CHECKPOINT_PROPOSALS_PER_SLOT);
+      // The dropped payload still counts toward its signer's total, alongside the retained ones.
+      expect(result.count).toBe(MAX_CHECKPOINT_PROPOSALS_PER_SLOT + 1);
     });
   });
 
@@ -603,6 +604,9 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
         expect(result2.added).toBe(true);
         expect(result2.alreadyExists).toBe(false);
         expect(result2.count).toBe(2);
+
+        // Re-receiving either payload still reports the signer's two payloads.
+        expect(await ap.tryAddBlockProposal(proposal1)).toEqual({ added: false, alreadyExists: true, count: 2 });
       });
 
       it('should not report equivocation for proposals from different signers at the same position', async () => {
@@ -617,6 +621,7 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
         const proposal2 = await mockBlockProposalWithIndex(signers[1], slotNumber, indexWithinCheckpoint);
         const result2 = await ap.tryAddBlockProposal(proposal2);
         expect(result2).toEqual({ added: true, alreadyExists: false, count: 1 });
+        expect(await ap.tryAddBlockProposal(proposal1)).toEqual({ added: false, alreadyExists: true, count: 1 });
 
         // Both are retained.
         const proposals = await ap.getProposalsForSlot(SlotNumber(slotNumber));
@@ -633,21 +638,23 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
         await ap.tryAddBlockProposal(await mockBlockProposalWithIndex(signers[0], slotNumber, indexWithinCheckpoint));
         await ap.tryAddBlockProposal(await mockBlockProposalWithIndex(signers[1], slotNumber, indexWithinCheckpoint));
 
-        // The cap is full, so a new payload from either signer is not retained nor recorded.
+        // The cap is full, so a new payload from any signer is not retained. Its count still reflects the signer's
+        // retained payload, so a dropped second payload from a signer reports exactly 2.
         const extra = await mockBlockProposalWithIndex(signers[0], slotNumber, indexWithinCheckpoint);
         const result = await ap.tryAddBlockProposal(extra);
-        expect(result).toEqual({ added: false, alreadyExists: false, count: 1 });
+        expect(result).toEqual({ added: false, alreadyExists: false, count: 2 });
         expect(await ap.hasBlockProposal(slotNumber, indexWithinCheckpoint, extra.getPayloadHash())).toBe(false);
+
+        const fromThirdSigner = await mockBlockProposalWithIndex(signers[2], slotNumber, indexWithinCheckpoint);
+        expect(await ap.tryAddBlockProposal(fromThirdSigner)).toEqual({ added: false, alreadyExists: false, count: 1 });
       });
 
-      it('should not add a block proposal whose signer cannot be recovered', async () => {
-        const proposal = await mockBlockProposalWithIndex(signers[0], 100, 0);
-        jest.spyOn(proposal, 'getSender').mockReturnValue(undefined);
+      it('should never count block proposals with an unrecoverable signer as equivocations', async () => {
+        const unsigned = await Promise.all([0, 1].map(() => mockBlockProposalWithIndex(signers[0], 100, 0)));
+        unsigned.forEach(proposal => jest.spyOn(proposal, 'getSender').mockReturnValue(undefined));
 
-        const result = await ap.tryAddBlockProposal(proposal);
-
-        expect(result).toEqual({ added: false, alreadyExists: false, count: 0 });
-        expect(await ap.hasBlockProposal(100, 0, proposal.getPayloadHash())).toBe(false);
+        expect(await ap.tryAddBlockProposal(unsigned[0])).toEqual({ added: true, alreadyExists: false, count: 1 });
+        expect(await ap.tryAddBlockProposal(unsigned[1])).toEqual({ added: true, alreadyExists: false, count: 1 });
       });
 
       it('should not detect duplicate for different positions in same slot', async () => {
@@ -695,12 +702,12 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
         const result2 = await ap.tryAddBlockProposal(proposal2);
         expect(result2.count).toBe(2);
 
-        // Third proposal for same position should be rejected (cap is 2)
+        // Third proposal for same position should be rejected (cap is 2), but still counts toward its signer's total
         const proposal3 = await mockBlockProposalWithIndex(signers[0], slotNumber, indexWithinCheckpoint);
         const result3 = await ap.tryAddBlockProposal(proposal3);
 
         expect(result3.added).toBe(false);
-        expect(result3.count).toBe(2);
+        expect(result3.count).toBe(3);
       });
 
       it('should return added=false when exceeding capacity', async () => {
@@ -720,7 +727,8 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
         const result = await ap.tryAddBlockProposal(extraProposal);
         expect(result.added).toBe(false);
         expect(result.alreadyExists).toBe(false);
-        expect(result.count).toBe(MAX_BLOCK_PROPOSALS_PER_POSITION);
+        // The dropped payload still counts toward its signer's total, alongside the retained ones.
+        expect(result.count).toBe(MAX_BLOCK_PROPOSALS_PER_POSITION + 1);
       });
 
       it('should clean up block position index when deleting old data', async () => {
@@ -909,21 +917,27 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
         await ap.tryAddCheckpointProposal(await mockCheckpointProposalCoreForPool(signers[0], slotNumber));
         await ap.tryAddCheckpointProposal(await mockCheckpointProposalCoreForPool(signers[1], slotNumber));
 
-        // The cap is full, so a new payload from either signer is not retained nor recorded.
+        // The cap is full, so a new payload from any signer is not retained. Its count still reflects the signer's
+        // retained payload, so a dropped second payload from a signer reports exactly 2.
         const extra = await mockCheckpointProposalCoreForPool(signers[0], slotNumber);
         const result = await ap.tryAddCheckpointProposal(extra);
-        expect(result).toEqual({ added: false, alreadyExists: false, count: 1 });
+        expect(result).toEqual({ added: false, alreadyExists: false, count: 2 });
         expect(await ap.hasCheckpointProposal(slotNumber, extra.getPayloadHash())).toBe(false);
+
+        const fromThirdSigner = await mockCheckpointProposalCoreForPool(signers[2], slotNumber);
+        expect(await ap.tryAddCheckpointProposal(fromThirdSigner)).toEqual({
+          added: false,
+          alreadyExists: false,
+          count: 1,
+        });
       });
 
-      it('should not add a checkpoint proposal whose signer cannot be recovered', async () => {
-        const proposal = await mockCheckpointProposalCoreForPool(signers[0], 100);
-        jest.spyOn(proposal, 'getSender').mockReturnValue(undefined);
+      it('should never count checkpoint proposals with an unrecoverable signer as equivocations', async () => {
+        const unsigned = await Promise.all([0, 1].map(() => mockCheckpointProposalCoreForPool(signers[0], 100)));
+        unsigned.forEach(proposal => jest.spyOn(proposal, 'getSender').mockReturnValue(undefined));
 
-        const result = await ap.tryAddCheckpointProposal(proposal);
-
-        expect(result).toEqual({ added: false, alreadyExists: false, count: 0 });
-        expect(await ap.hasCheckpointProposal(100, proposal.getPayloadHash())).toBe(false);
+        expect(await ap.tryAddCheckpointProposal(unsigned[0])).toEqual({ added: true, alreadyExists: false, count: 1 });
+        expect(await ap.tryAddCheckpointProposal(unsigned[1])).toEqual({ added: true, alreadyExists: false, count: 1 });
       });
 
       it('should not detect duplicate for different slots', async () => {
@@ -952,12 +966,12 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
         const result2 = await ap.tryAddCheckpointProposal(proposal2);
         expect(result2.count).toBe(2);
 
-        // Third proposal for same slot should be rejected (cap is 2)
+        // Third proposal for same slot should be rejected (cap is 2), but still counts toward its signer's total
         const proposal3 = await mockCheckpointProposalCoreForPool(signers[0], slotNumber);
         const result3 = await ap.tryAddCheckpointProposal(proposal3);
 
         expect(result3.added).toBe(false);
-        expect(result3.count).toBe(2);
+        expect(result3.count).toBe(3);
       });
 
       it('should not count attestations as proposals for duplicate detection', async () => {
