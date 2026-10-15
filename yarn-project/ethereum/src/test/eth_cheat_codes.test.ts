@@ -390,14 +390,38 @@ describeAcrossL1Forks('EthCheatCodes', () => {
 
       it('keeps a pending resume when another anvil in the process stops', async () => {
         const other = await startAnvil({ port: 0 });
-        const prev = await waitForBlockAfter(await cheatCodes.blockNumber());
-        await sleep(500);
-        await cheatCodes.execWithPausedAnvil(() => sleep(100));
-        await other.stop();
+        try {
+          const prev = await waitForBlockAfter(await cheatCodes.blockNumber());
+          await sleep(500);
+          await cheatCodes.execWithPausedAnvil(() => sleep(100));
+          await other.stop();
+          // The resume is still pending, so it is the stop above that it has to survive.
+          expect(await cheatCodes.rpcCall('anvil_getIntervalMining', [])).toBeNull();
 
-        const next = await waitForBlockAfter(prev.number);
-        expectOnGrid(next, prev);
-        expectOnGrid(await waitForBlockAfter(next.number), next);
+          const next = await waitForBlockAfter(prev.number);
+          expectOnGrid(next, prev);
+          expectOnGrid(await waitForBlockAfter(next.number), next);
+        } finally {
+          await other.stop();
+        }
+      });
+
+      it('cancels a pending resume when its own anvil stops', async () => {
+        if (!anvil) {
+          return;
+        }
+        await cheatCodes.execWithPausedAnvil(() => sleep(100));
+        const { port } = anvil;
+        await anvil.stop();
+
+        // A stale resume would mine on, or switch interval mining on for, whatever anvil next listens on the port.
+        ({ anvil, rpcUrl } = await startAnvil({ port }));
+        cheatCodes = new EthCheatCodes([rpcUrl], dateProvider);
+        expect(await cheatCodes.getIntervalMining()).toBeNull();
+        const blockNumber = await cheatCodes.blockNumber();
+        await sleep(interval * 1000 + 500);
+        expect(await cheatCodes.blockNumber()).toBe(blockNumber);
+        expect(await cheatCodes.getIntervalMining()).toBeNull();
       });
 
       it('mines a tick the pause just ran past straight away, stamped on the grid', async () => {
