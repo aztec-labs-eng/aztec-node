@@ -253,8 +253,10 @@ Add these settings to your user .npmrc to exempt Aztec packages while delaying t
 EOF
     return 1
   fi
-  tar -xzf "$archive" -C "$version_path"
+  local extracted=0
+  tar -xzf "$archive" -C "$version_path" && extracted=1
   rm -f "$archive"
+  [ "$extracted" -eq 1 ] || return 1
   npm ci --prefix "$version_path" --no-audit --no-fund
 }
 
