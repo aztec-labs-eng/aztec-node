@@ -388,6 +388,18 @@ describeAcrossL1Forks('EthCheatCodes', () => {
         expectOnGrid(await waitForBlockAfter(next.number), next);
       });
 
+      it('keeps a pending resume when another anvil in the process stops', async () => {
+        const other = await startAnvil({ port: 0 });
+        const prev = await waitForBlockAfter(await cheatCodes.blockNumber());
+        await sleep(500);
+        await cheatCodes.execWithPausedAnvil(() => sleep(100));
+        await other.stop();
+
+        const next = await waitForBlockAfter(prev.number);
+        expectOnGrid(next, prev);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
       it('mines a tick the pause just ran past straight away, stamped on the grid', async () => {
         await sleep(1000);
         await cheatCodes.execWithPausedAnvil(() => sleep(1500));

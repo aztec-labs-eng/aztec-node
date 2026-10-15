@@ -237,7 +237,7 @@ export async function startAnvil(
 
   anvil.once('close', () => {
     status = 'idle';
-    resetAnvilMiningState();
+    resetAnvilMiningState(port);
   });
 
   let stopping: Promise<void> | undefined;
@@ -245,7 +245,7 @@ export async function startAnvil(
     if (status === 'idle') {
       return;
     }
-    resetAnvilMiningState();
+    resetAnvilMiningState(port);
     await (stopping ??= killChild(anvil));
   };
 

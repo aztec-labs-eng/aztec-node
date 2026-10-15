@@ -27,11 +27,13 @@ type PendingResume = { interval: number; timer: ReturnType<typeof setTimeout> };
 /**
  * Mining state of the test anvil, shared by every {@link EthCheatCodes} instance in the process: e2e builds several over
  * one anvil (the fixture's, `CheatCodes.eth`, each `RollupCheatCodes`), and a pause or pending resume started by one
- * must be visible to the others. Assumes a single anvil per process.
+ * must be visible to the others. Assumes pauses target a single anvil per process, though others may run alongside it.
  */
 const anvilMining: {
   /** Serializes changes to anvil's mining mode against the pending resume. Never held while a caller's code runs. */
   lock: Semaphore;
+  /** RPC URLs of the anvil the latest pause targeted, which the pause state and any pending resume belong to. */
+  owner?: string[];
   /**
    * Mining mode captured by the pause in progress, restored when it ends. `nextTimestamp` is the next block's timestamp
    * a caller chose during the pause, which a resume on the grid would overwrite if no block has used it yet.
@@ -54,12 +56,17 @@ function takePendingResume(): number | undefined {
 }
 
 /**
- * Cancels any pending interval-mining resume and forgets the pause state. Called when the anvil is stopped, so no timer
- * outlives it and the next anvil starts clean.
+ * Cancels any pending interval-mining resume and forgets the pause state, if they belong to the anvil listening on
+ * `port`. Called when that anvil is stopped, so no timer outlives it and the next anvil starts clean. Stopping any other
+ * anvil, such as a throwaway one a test starts next to its main one, leaves the state alone.
  */
-export function resetAnvilMiningState(): void {
+export function resetAnvilMiningState(port: number): void {
+  if (!anvilMining.owner?.some(url => new URL(url).port === String(port))) {
+    return;
+  }
   takePendingResume();
   anvilMining.paused = undefined;
+  anvilMining.owner = undefined;
   anvilMining.generation++;
 }
 
@@ -717,6 +724,7 @@ export class EthCheatCodes {
     const interval = takePendingResume() ?? (await this.doGetIntervalMining());
     const paused = { interval, automine: await this.isAutoMining() };
     anvilMining.paused = paused;
+    anvilMining.owner = this.rpcUrls;
     try {
       if (interval !== null) {
         await this.doSetIntervalMining(0);
