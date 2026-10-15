@@ -10,7 +10,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
-import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
+import { getSlotRangeForEpoch, getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import type { Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -214,7 +214,6 @@ describeAcrossL1Forks('EpochCache integration', () => {
   });
 
   describe('seed stability', () => {
-    let epochDuration: number;
     let lagInEpochsForRandao: number;
 
     /** Moves the local clock one Ethereum slot past the latest L1 block, so cached markers and entries expire. */
@@ -230,13 +229,12 @@ describeAcrossL1Forks('EpochCache integration', () => {
       await rollupCheatCodes.advanceToEpoch(samplingEpoch);
       // The epoch whose seed samples the randao keyed at the start of the sampling epoch.
       const targetEpoch = EpochNumber(samplingEpoch + lagInEpochsForRandao);
-      const targetSlot = SlotNumber(targetEpoch * epochDuration);
+      const [targetSlot] = getSlotRangeForEpoch(targetEpoch, epochCache.getL1Constants());
       const targetTs = getTimestampForSlot(targetSlot, epochCache.getL1Constants());
       return { samplingEpoch, targetSlot, targetTs };
     };
 
     beforeAll(async () => {
-      epochDuration = await rollup.getEpochDuration();
       lagInEpochsForRandao = await rollup.getLagInEpochsForRandao();
       await cheatCodes.setIntervalMining(0);
       await cheatCodes.setAutomine(true);
