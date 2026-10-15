@@ -16,7 +16,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { TestDateProvider, Timer } from '@aztec-labs/foundation/timer';
 import { type FieldsOf, unfreeze } from '@aztec-labs/foundation/types';
-import type { P2P } from '@aztec-labs/p2p';
+import type { P2P, PeerId } from '@aztec-labs/p2p';
 import { BlockHash } from '@aztec-labs/stdlib/block';
 import type { BlockData, L2Block, L2BlockSink, L2BlockSource } from '@aztec-labs/stdlib/block';
 import {
@@ -34,7 +34,7 @@ import type {
 import type { InboxMessagePosition, L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
 import { InboxMessagePrefixRef, accumulateCheckpointOutHashes } from '@aztec-labs/stdlib/messaging';
 import { ValidatedBlockProposal, ValidatedCheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
-import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
+import { CheckpointHeader, computeBlockHeadersHash } from '@aztec-labs/stdlib/rollup';
 import {
   TEST_COORDINATION_SIGNATURE_CONTEXT,
   makeBlockProposal,
@@ -45,7 +45,11 @@ import {
 import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { GlobalVariables, TX_ERROR_INVALID_PROOF, TxHash } from '@aztec-labs/stdlib/tx';
-import { InvalidBlockProposalTxsError, ReExStateMismatchError } from '@aztec-labs/stdlib/validators';
+import {
+  InvalidBlockProposalTxsError,
+  ReExFailedTxsError,
+  ReExStateMismatchError,
+} from '@aztec-labs/stdlib/validators';
 import { describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
 
@@ -2041,6 +2045,114 @@ describe('ProposalHandler checkpoint validation', () => {
     });
   });
 
+  describe('block re-execution verdict as checkpoint-attester evidence', () => {
+    const prefixHash = new Fr(0xabc);
+    const signedRef = new InboxMessagePrefixRef(prefixHash);
+
+    async function rejectBlockThenValidateCommittingCheckpoint(moveLocalPrefix: boolean, thrownError?: Error) {
+      const blockHeader = makeBlockHeader(1, { slotNumber: SlotNumber(1) });
+      blockHeader.state.l1ToL2MessageTree.nextAvailableLeafIndex = TreeLeafIndex(2);
+      const blockArchive = Fr.random();
+      const blockProposal = ValidatedBlockProposal(
+        await makeBlockProposal({ blockHeader, archiveRoot: blockArchive, txHashes: [], inboxPrefixRef: signedRef }),
+      );
+      blockSource.getGenesisValues.mockResolvedValue({
+        genesisArchiveRoot: blockProposal.blockHeader.lastArchive.root,
+      });
+      // The checkpoint's last block is not local, so validation reaches the bound-to-rejected-block evidence path.
+      blockSource.getBlockData.mockResolvedValue(undefined);
+      dateProvider.setTime(1_000_000);
+
+      const consumedLeaves = [new Fr(1000), new Fr(1001)];
+      const mockLocalView = (hashAtTwo: Fr | undefined) => {
+        l1ToL2MessageSource.getMessagePosition.mockImplementation(count =>
+          Promise.resolve(
+            count === 0n ? position(0n, Fr.ZERO) : count === 2n && hashAtTwo ? position(2n, hashAtTwo) : undefined,
+          ),
+        );
+        l1ToL2MessageSource.getL1ToL2MessageRange.mockImplementation((start, end) =>
+          hashAtTwo && start === 0n && end === 2n
+            ? Promise.resolve({ messages: consumedLeaves, start: position(0n, Fr.ZERO), end: position(2n, hashAtTwo) })
+            : Promise.reject(new Error(`Inbox message range [${start}, ${end}) is not fully synced`)),
+        );
+      };
+      mockLocalView(prefixHash);
+
+      const txProvider = mock<ITxProvider>();
+      txProvider.getTxsForBlockProposal.mockResolvedValue({ txs: [], missingTxs: [] });
+
+      // The checkpoint signs exactly this block's header sequence and its archive, so it commits to the rejected block.
+      const checkpointHeader = makeCheckpointHeader(0, { slotNumber: SlotNumber(1) });
+      checkpointHeader.blockHeadersHash = await computeBlockHeadersHash([blockHeader]);
+      const checkpoint = await makeProposal({ checkpointHeader, archiveRoot: blockArchive });
+
+      const handler = new ProposalHandler(
+        checkpointsBuilder,
+        mock<WorldStateSynchronizer>(),
+        blockSource,
+        l1ToL2MessageSource,
+        inbox,
+        txProvider,
+        epochCache,
+        consensusTimetable,
+        config,
+        mock<BlobClientInterface>(),
+        new CheckpointReexecutionTracker(),
+        metrics,
+        dateProvider,
+      );
+
+      const p2p = mock<P2P>();
+      let checkpointHandler:
+        | ((proposal: ValidatedCheckpointProposalCore, sender: PeerId) => Promise<unknown>)
+        | undefined;
+      p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
+        checkpointHandler = h;
+      });
+      p2p.getProposalsForSlot.mockResolvedValue({ blockProposals: [blockProposal], checkpointProposals: [] });
+      handler.register(p2p, true);
+
+      jest.spyOn(handler, 'reexecuteTransactions').mockImplementation(() => {
+        // A reorg lands during re-execution only in the local-view case: the prefix at the signed count moves.
+        if (moveLocalPrefix) {
+          mockLocalView(new Fr(0xdead));
+        }
+        throw thrownError ?? new ReExStateMismatchError(blockArchive, Fr.random(), true, false);
+      });
+      const blockResult = await handler.handleBlockProposal(blockProposal, mock<PeerId>(), true);
+
+      await checkpointHandler!(checkpoint, mock<PeerId>());
+      return { blockResult, checkpoint, handler };
+    }
+
+    it('does not slash the committing checkpoint attesters when the block mismatch was a local-view disagreement', async () => {
+      const { blockResult, handler } = await rejectBlockThenValidateCommittingCheckpoint(true);
+
+      expect(blockResult).toMatchObject({ isValid: false, reason: 'inbox_prefix_mismatch' });
+      expect(handler.hasInvalidProposals(SlotNumber(1))).toBe(false);
+      expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
+    });
+
+    it('slashes the committing checkpoint attesters when the block mismatch is a genuine proposer offense', async () => {
+      const { blockResult, checkpoint, handler } = await rejectBlockThenValidateCommittingCheckpoint(false);
+
+      expect(blockResult).toMatchObject({ isValid: false, reason: 'state_mismatch' });
+      expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([checkpoint.getPayloadHash()]);
+    });
+
+    it('does not slash the committing checkpoint attesters when the block was rejected for failed txs', async () => {
+      // failed_txs is a tx-body defect outside the signed header and the checkpoint's signed payload, so a node that
+      // rejects a block for it must not slash a committing checkpoint's attesters (the A-2163 narrowing).
+      const { blockResult, handler } = await rejectBlockThenValidateCommittingCheckpoint(
+        false,
+        new ReExFailedTxsError(1),
+      );
+
+      expect(blockResult).toMatchObject({ isValid: false, reason: 'failed_txs' });
+      expect(handler.getInvalidCheckpointProposalHashes(SlotNumber(1))).toEqual([]);
+    });
+  });
+
   describe('handleBlockProposal duplicate txs', () => {
     it('rejects a proposal that lists the same tx hash twice, without attempting collection', async () => {
       const txHash = TxHash.random();
@@ -2223,7 +2335,9 @@ describe('ProposalHandler checkpoint validation', () => {
 
       const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
 
-      expect(result).toEqual({ isValid: false, blockNumber: BlockNumber(2), reason: 'invalid_proposal' });
+      // headerBoundVerdict is also present now (a non-first-block slot check binds a committing checkpoint), so
+      // assert the rejection shape rather than the exact object.
+      expect(result).toMatchObject({ isValid: false, blockNumber: BlockNumber(2), reason: 'invalid_proposal' });
       expect(reexecuteSpy).not.toHaveBeenCalled();
     });
 
@@ -2769,7 +2883,7 @@ describe('ProposalHandler checkpoint validation', () => {
         jest.spyOn(blockHandler, 'reexecuteTransactions').mockImplementation(() => {
           // The reorg lands during re-execution: the local prefix at the signed count no longer matches.
           mockLocalView(new Fr(0xdead));
-          throw new ReExStateMismatchError(Fr.random(), Fr.random());
+          throw new ReExStateMismatchError(Fr.random(), Fr.random(), true, false);
         });
 
         const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
@@ -2781,7 +2895,7 @@ describe('ProposalHandler checkpoint validation', () => {
         const { proposal, blockHandler } = await setupStreamingProposal(signedRef, { nowMs: 50_000 });
         mockLocalView(prefixHash);
         jest.spyOn(blockHandler, 'reexecuteTransactions').mockImplementation(() => {
-          throw new ReExStateMismatchError(Fr.random(), Fr.random());
+          throw new ReExStateMismatchError(Fr.random(), Fr.random(), true, false);
         });
 
         const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
