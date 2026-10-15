@@ -2527,10 +2527,49 @@ describe('ProposalHandler checkpoint validation', () => {
 
       const result = await blockHandler.handleBlockProposal(proposal, {} as any, true);
 
-      // headerBoundVerdict is also present now (a non-first-block slot check binds a committing checkpoint), so
-      // assert the rejection shape rather than the exact object.
-      expect(result).toMatchObject({ isValid: false, blockNumber: BlockNumber(2), reason: 'invalid_proposal' });
+      expect(result).toEqual({ isValid: false, blockNumber: BlockNumber(2), reason: 'invalid_proposal' });
       expect(reexecuteSpy).not.toHaveBeenCalled();
+    });
+
+    // The slot check that rejected the proposal was chosen by its index, which the checkpoint does not commit to: the
+    // same header is a valid first block of the next checkpoint at index 0. A proposer that re-signs a valid header
+    // under the wrong index must not turn that rejection into evidence against a valid checkpoint's attesters.
+    it('does not slash the attesters of a checkpoint committing to a header rejected only for its index', async () => {
+      const { proposal, blockHandler } = await setupNonFirstBlockProposal({ slotNumber: SlotNumber(2) });
+      const sameHeaderAtIndexZero = ValidatedBlockProposal(
+        await makeBlockProposal({
+          blockHeader: proposal.blockHeader,
+          indexWithinCheckpoint: IndexWithinCheckpoint(0),
+          archiveRoot: proposal.archive,
+          txHashes: [],
+          inboxPrefixRef: InboxMessagePrefixRef.empty(),
+        }),
+      );
+      const checkpointHeader = makeCheckpointHeader(0, { slotNumber: SlotNumber(2) });
+      checkpointHeader.blockHeadersHash = await computeBlockHeadersHash([proposal.blockHeader]);
+      const checkpoint = await makeProposal({ checkpointHeader, archiveRoot: proposal.archive });
+
+      const p2p = mock<P2P>();
+      let checkpointHandler:
+        | ((proposal: ValidatedCheckpointProposalCore, sender: PeerId) => Promise<unknown>)
+        | undefined;
+      p2p.registerAllNodesCheckpointProposalHandler.mockImplementation(h => {
+        checkpointHandler = h;
+      });
+      p2p.getProposalsForSlot.mockResolvedValue({
+        blockProposals: [proposal, sameHeaderAtIndexZero],
+        checkpointProposals: [],
+      });
+      blockHandler.register(p2p, true);
+
+      const blockResult = await blockHandler.handleBlockProposal(proposal, mock<PeerId>(), true);
+      expect(blockResult).toMatchObject({ isValid: false, reason: 'invalid_proposal' });
+
+      // The checkpoint's last block is not local, so validation reaches the bound-to-rejected-block evidence path.
+      dateProvider.setTime(1_000_000);
+      await checkpointHandler!(checkpoint, mock<PeerId>());
+
+      expect(blockHandler.getInvalidCheckpointProposalHashes(SlotNumber(2))).toEqual([]);
     });
 
     it.each(['chainId', 'version', 'timestamp', 'coinbase', 'feeRecipient', 'gasFees'] as const)(
