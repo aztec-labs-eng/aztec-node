@@ -670,6 +670,32 @@ describe('EpochCache', () => {
       expect(rollupContract.isEpochSetUp).toHaveBeenCalledTimes(2);
     });
 
+    it('holds an unstable marker for an Ethereum slot even when the L1 tip lags the local clock', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
+      jest.setSystemTime(Date.now() + 20_000);
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      const storageReadsAfterFirstCheck = rollupContract.isEpochSetUp.mock.calls.length;
+
+      jest.setSystemTime(Date.now() + 6_000);
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(rollupContract.isEpochSetUp.mock.calls.length).toBe(storageReadsAfterFirstCheck);
+    });
+
+    it('does not serve committee data read after its L1 block was reorged out mid-fetch', async () => {
+      mineL1Block(startOfEpoch(3) + 60n, { committee: finalCommittee, seed: 2n, setUp: true });
+      const queriedBlock = latestNumber;
+
+      // The block that ran setupEpoch is reorged out after the seed check, while the committee and seed are read.
+      rollupContract.getCommitteeAt.mockImplementationOnce((_ts, opts) => {
+        reorgL1Block(queriedBlock, { committee: provisionalCommittee, seed: 1n, setUp: false });
+        return Promise.resolve(blockAt(opts?.blockNumber).state.committee);
+      });
+
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(/reorged out/);
+      expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBeUndefined();
+      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+    });
+
     it('marks an entry finalized once the L1 block it was read at is finalized', async () => {
       const state: L1State = { committee: finalCommittee, seed: 2n, setUp: true };
       mineL1Block(startOfEpoch(4) + 48n, state);
