@@ -31,8 +31,9 @@ const ANVIL_PRUNE_HISTORY = 128;
 
 // Crosses the L1 fork from Osaka to Amsterdam mid-epoch on a live single sequencer plus fake-proof prover node. Anvil
 // cannot change hardfork at runtime, so the test restarts it on Amsterdam from a state dump with history, right before
-// the target slot. The sequencer may miss slots at the fork but must propose again within RECOVERY_SLOTS slots, the
-// epochs around the fork must be proven with no prune, and every L1 tx must stay within the gas cap of its fork.
+// the target slot. The sequencer may miss slots at the fork, and the node then prunes the blocks it already built for
+// them, but it must propose again within RECOVERY_SLOTS slots. The epochs around the fork must be proven with no epoch
+// prune, and every L1 tx must stay within the gas cap of its fork.
 describe('single-node/l1-hardfork/osaka_to_amsterdam', () => {
   let test: SingleNodeTestContext;
 
@@ -62,10 +63,12 @@ describe('single-node/l1-hardfork/osaka_to_amsterdam', () => {
     // during the restart: a submission that hits the outage is marked failed without a retry.
     await test.warpToEpochStart(1);
     const { failEvents } = test.watchSequencerEvents([context.sequencer!]);
-    const prunes: L2BlockSourceEvents[] = [];
-    for (const event of [L2BlockSourceEvents.L2PruneUnproven, L2BlockSourceEvents.L2PruneUncheckpointed] as const) {
-      archiver.events.on(event, () => prunes.push(event));
-    }
+    const unprovenPruneEpochs: EpochNumber[] = [];
+    const uncheckpointedPrunedSlots: SlotNumber[] = [];
+    archiver.events.on(L2BlockSourceEvents.L2PruneUnproven, ({ epochNumber }) => unprovenPruneEpochs.push(epochNumber));
+    archiver.events.on(L2BlockSourceEvents.L2PruneUncheckpointed, ({ blocks }) =>
+      uncheckpointedPrunedSlots.push(...blocks.map(block => block.slot)),
+    );
     await test.waitUntilEpochStarts(FORK_EPOCH);
     const epoch1Tip = (await monitor.run()).checkpointNumber;
 
@@ -85,9 +88,10 @@ describe('single-node/l1-hardfork/osaka_to_amsterdam', () => {
     const forkSlot = getSlotAtTimestamp(restarted.forkBlock.timestamp, constants);
     logger.warn(`Switched L1 from Osaka to Amsterdam at block ${restarted.forkBlock.number} in slot ${forkSlot}`);
     expect(await new AmsterdamForkDetector(l1Client).isActive()).toBe(true);
+    const lastRecoverySlot = SlotNumber(forkSlot + RECOVERY_SLOTS);
 
     // Sequencer failures are tolerated only while the node recovers from the outage.
-    await monitor.waitUntilL2Slot(SlotNumber(forkSlot + RECOVERY_SLOTS + 1));
+    await monitor.waitUntilL2Slot(SlotNumber(lastRecoverySlot + 1));
     const failuresAfterRecovery = failEvents.length;
 
     await test.waitUntilEpochStarts(FORK_EPOCH + 2);
@@ -102,11 +106,14 @@ describe('single-node/l1-hardfork/osaka_to_amsterdam', () => {
     expect(recoverySlot).toBeDefined();
     expect(recoverySlot! - forkSlot).toBeLessThanOrEqual(RECOVERY_SLOTS);
 
-    expect(prunes).toEqual([]);
+    expect(unprovenPruneEpochs).toEqual([]);
+    // The node prunes the blocks it built for a slot whose checkpoint does not land on L1, which the outage can cause
+    // from the target slot through the last recovery slot.
+    expect(uncheckpointedPrunedSlots.filter(slot => slot < targetSlot || slot > lastRecoverySlot)).toEqual([]);
     const jobs = await proverNode.getJobs();
     expect(jobs.filter(job => job.status === 'failed' || job.status === 'timed-out')).toEqual([]);
     test.assertNoFailuresFromSequencers(
-      failEvents.slice(failuresAfterRecovery).filter(e => !('slot' in e) || e.slot > forkSlot + RECOVERY_SLOTS),
+      failEvents.slice(failuresAfterRecovery).filter(e => !('slot' in e) || e.slot > lastRecoverySlot),
     );
 
     // Every L1 tx in the run comes from the node's publishers or the prover node.
