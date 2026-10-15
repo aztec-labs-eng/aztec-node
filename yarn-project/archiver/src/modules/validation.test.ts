@@ -25,7 +25,7 @@ import { makeSignedPublishedCheckpoint } from '../test/mock_structs.js';
 import {
   type CalldataCheckpointForAttestations,
   getAttestationInfoFromPublishedCheckpoint,
-  getCheckpointProposerFromAttestations,
+  getCheckpointProposer,
   resolveCheckpointAttestationsFromCalldata,
   validateAttestations,
 } from './validation.js';
@@ -498,77 +498,52 @@ describe('resolveCheckpointAttestationsFromCalldata', () => {
   });
 });
 
-describe('getCheckpointProposerFromAttestations', () => {
-  let epochCache: MockProxy<EpochCache>;
+describe('getCheckpointProposer', () => {
   let signers: Secp256k1Signer[];
   let committee: EthAddress[];
   let checkpoint: Checkpoint;
 
-  const constants = { epochDuration: 10 };
-  const proposerIndex = 2;
-
-  const setCommittee = (isEscapeHatchOpen = false) =>
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen,
-    });
-
-  const getProposer = (attestations: CommitteeAttestation[]) =>
-    getCheckpointProposerFromAttestations(
+  const getProposer = (attestationsAndSignersSigner: EthAddress | undefined, attestations: CommitteeAttestation[]) =>
+    getCheckpointProposer(
       {
         header: checkpoint.header,
         archiveRoot: checkpoint.archive.root,
         feeAssetPriceModifier: checkpoint.feeAssetPriceModifier,
+        attestationsAndSignersSigner,
       },
       attestations,
-      epochCache,
-      constants,
       TEST_COORDINATION_SIGNATURE_CONTEXT,
     );
 
   beforeEach(async () => {
-    epochCache = mock<EpochCache>();
     signers = times(5, () => Secp256k1Signer.random());
     committee = signers.map(signer => signer.address);
     checkpoint = await Checkpoint.random(CheckpointNumber(1), { slotNumber: SlotNumber(1) });
-    setCommittee();
-    epochCache.computeProposerIndex.mockReturnValue(BigInt(proposerIndex));
   });
 
-  it('returns the committee member at the proposer index when it signed the checkpoint', async () => {
+  it('returns the bundle signer when it also attested the checkpoint', () => {
     const { attestations } = makeSignedPublishedCheckpoint(checkpoint, signers, committee);
-    expect(await getProposer(attestations)).toEqual(committee[proposerIndex]);
+    expect(getProposer(committee[2], attestations)).toEqual(committee[2]);
   });
 
-  it('returns undefined when the escape hatch is open', async () => {
-    setCommittee(true);
+  it('returns undefined when the bundle signature did not recover', () => {
     const { attestations } = makeSignedPublishedCheckpoint(checkpoint, signers, committee);
-    expect(await getProposer(attestations)).toBeUndefined();
+    expect(getProposer(undefined, attestations)).toBeUndefined();
   });
 
-  it('returns undefined when the proposer did not sign the checkpoint', async () => {
-    const others = signers.filter((_, i) => i !== proposerIndex);
+  it('returns undefined when the bundle signer did not attest the checkpoint', () => {
+    const others = signers.filter((_, i) => i !== 2);
     const { attestations } = makeSignedPublishedCheckpoint(checkpoint, others, committee);
-    expect(await getProposer(attestations)).toBeUndefined();
+    expect(getProposer(committee[2], attestations)).toBeUndefined();
   });
 
-  it('returns undefined when the signature at the proposer index belongs to another member', async () => {
-    const { attestations } = makeSignedPublishedCheckpoint(checkpoint, signers, committee);
-    const swapped = [...attestations];
-    swapped[proposerIndex] = attestations[proposerIndex + 1];
-    expect(await getProposer(swapped)).toBeUndefined();
-  });
-
-  it('returns undefined when the proposer signed a different checkpoint', async () => {
+  it('returns undefined when the attestations are for a different checkpoint', async () => {
     const other = await Checkpoint.random(CheckpointNumber(1), { slotNumber: SlotNumber(1) });
     const { attestations } = makeSignedPublishedCheckpoint(other, signers, committee);
-    expect(await getProposer(attestations)).toBeUndefined();
+    expect(getProposer(committee[2], attestations)).toBeUndefined();
   });
 
-  it('returns undefined when the proposer index falls outside the attestations', async () => {
-    const { attestations } = makeSignedPublishedCheckpoint(checkpoint, signers, committee);
-    expect(await getProposer(attestations.slice(0, proposerIndex))).toBeUndefined();
+  it('returns undefined when no attestations were decoded', () => {
+    expect(getProposer(committee[2], [])).toBeUndefined();
   });
 });

@@ -37,7 +37,7 @@ import type { ArchiverDataStores } from '../store/data_stores.js';
 import type { ArchiverDataStoreUpdater } from './data_store_updater.js';
 import type { ArchiverInstrumentation } from './instrumentation.js';
 import { PendingChainValidationTracker } from './pending_chain_validation_tracker.js';
-import { getCheckpointProposerFromAttestations, resolveCheckpointAttestationsFromCalldata } from './validation.js';
+import { getCheckpointProposer, resolveCheckpointAttestationsFromCalldata } from './validation.js';
 
 /** A checkpoint observed in L1 calldata this iteration, whether ingested or rejected. */
 export type SeenCheckpoint = Pick<RejectedCheckpoint, 'checkpointNumber' | 'l1'>;
@@ -583,35 +583,25 @@ export class CheckpointIngestor {
    * only when one key signed both. Two checkpoints for one slot from different proposers are not equivocation: a
    * proposal made before the slot's proposer was final can be superseded by the real proposer's checkpoint on L1.
    */
-  private async reportEquivocationIfSameSigner(
+  private reportEquivocationIfSameSigner(
     proposed: ProposedCheckpointData,
     calldataCheckpoint: ResolvedCheckpointFromCalldata,
-  ): Promise<void> {
-    const logData = {
-      checkpointNumber: calldataCheckpoint.checkpointNumber,
-      slotNumber: calldataCheckpoint.header.slotNumber,
-      proposedSigner: proposed.signer?.toString(),
-    };
-    let l1Proposer: EthAddress | undefined;
-    try {
-      l1Proposer = await getCheckpointProposerFromAttestations(
-        calldataCheckpoint,
-        calldataCheckpoint.attestations,
-        this.deps.epochCache,
-        this.deps.l1Constants,
-        this.getSignatureContext(),
-      );
-    } catch (err) {
-      this.deps.log.warn(`Failed to resolve the L1 proposer of checkpoint ${calldataCheckpoint.checkpointNumber}`, {
-        ...logData,
-        err,
-      });
-    }
+  ): void {
+    const l1Proposer = getCheckpointProposer(
+      calldataCheckpoint,
+      calldataCheckpoint.attestations,
+      this.getSignatureContext(),
+    );
 
     if (!proposed.signer || !l1Proposer || !proposed.signer.equals(l1Proposer)) {
       this.deps.log.warn(
         `Not attributing equivocation for checkpoint ${calldataCheckpoint.checkpointNumber}: the local proposed copy and the L1 checkpoint have no common signer`,
-        { ...logData, l1Proposer: l1Proposer?.toString() },
+        {
+          checkpointNumber: calldataCheckpoint.checkpointNumber,
+          slotNumber: calldataCheckpoint.header.slotNumber,
+          proposedSigner: proposed.signer?.toString(),
+          l1Proposer: l1Proposer?.toString(),
+        },
       );
       return;
     }
@@ -668,7 +658,7 @@ export class CheckpointIngestor {
       // Only emit when the slots match — uncheckpointed entries are pruned above so this
       // should always hold, but guard defensively to avoid mis-attributing a slash.
       if (proposed.header.slotNumber === calldataCheckpoint.header.slotNumber) {
-        await this.reportEquivocationIfSameSigner(proposed, calldataCheckpoint);
+        this.reportEquivocationIfSameSigner(proposed, calldataCheckpoint);
       }
       // Return a divergence signal so the caller can evict pending >= this number
       return { kind: 'evict', fromCheckpointNumber: proposed.checkpointNumber };
