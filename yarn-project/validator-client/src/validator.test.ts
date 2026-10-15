@@ -642,13 +642,19 @@ describe('ValidatorClient', () => {
       expect(isValid).toBe(true);
     });
 
-    it('does not push a block proposal beyond a retained checkpoint terminal block to the archiver', async () => {
+    /**
+     * Retains a checkpoint (and its terminal block at index 0) signed by `checkpointSigner`, then handles a block at
+     * index 1 signed by `blockSigner` that builds on that terminal block.
+     */
+    const handleBlockAfterRetainedCheckpoint = async (
+      checkpointSigner: Secp256k1Signer,
+      blockSigner: Secp256k1Signer,
+    ) => {
       validatorClient.updateConfig({ skipPushProposedBlocksToArchiver: false });
       validatorClient.getProposalHandler().register(p2pClient, true);
 
-      const signer = Secp256k1Signer.random();
       const checkpointProposal = await makeCheckpointProposal({
-        signer,
+        signer: checkpointSigner,
         checkpointHeader: makeCheckpointHeader(1, { slotNumber: proposal.slotNumber }),
         archiveRoot: Fr.random(),
         lastBlock: {
@@ -673,28 +679,42 @@ describe('ValidatorClient', () => {
       });
       const laterBlock = ValidatedBlockProposal(
         await makeBlockProposal({
-          signer,
+          signer: blockSigner,
           blockHeader: laterBlockHeader,
           indexWithinCheckpoint: IndexWithinCheckpoint(1),
           archiveRoot: Fr.random(),
+          inboxPrefixRef: genesisPrefixRef,
         }),
       );
 
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(signer.address);
+      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(blockSigner.address);
       p2pClient.getProposalsForSlot.mockResolvedValue({
         blockProposals: [terminalBlock, laterBlock],
         checkpointProposals: [checkpointProposal.toCore()],
       });
 
       const terminalBlockData = {
-        header: terminalBlock.blockHeader,
+        // Same shape as parentBlockData: an empty Inbox consumption, so a block building on it passes streaming checks.
+        header: {
+          getBlockNumber: () => terminalBlock.blockNumber,
+          getSlot: () => terminalBlock.slotNumber,
+          globalVariables: terminalGlobals,
+          state: { l1ToL2MessageTree: { nextAvailableLeafIndex: 0 } },
+        },
         archive: new AppendOnlyTreeSnapshot(terminalBlock.archive, TreeLeafIndex(terminalBlock.blockNumber)),
         blockHash: BlockHash.random(),
         checkpointNumber: CheckpointNumber(1),
         indexWithinCheckpoint: terminalBlock.indexWithinCheckpoint,
       } as unknown as BlockData;
+      // By number, only the block before the checkpoint exists locally; the proposed block must not exist yet.
       blockSource.getBlockData.mockImplementation(query =>
-        Promise.resolve('number' in query ? undefined : terminalBlockData),
+        Promise.resolve(
+          'number' in query
+            ? query.number < terminalBlock.blockNumber
+              ? parentBlockData
+              : undefined
+            : terminalBlockData,
+        ),
       );
 
       const blockAddedIfProcessed = {
@@ -716,10 +736,23 @@ describe('ValidatorClient', () => {
         getTreeInfo: () => Promise.resolve({ root: laterBlock.blockHeader.lastArchive.root.toBuffer() }),
       } as never);
 
-      const result = await validatorClient.getProposalHandler().handleBlockProposal(laterBlock, sender, true);
+      return await validatorClient.getProposalHandler().handleBlockProposal(laterBlock, sender, true);
+    };
+
+    it('does not push a block proposal beyond a retained checkpoint terminal block to the archiver', async () => {
+      const signer = Secp256k1Signer.random();
+      const result = await handleBlockAfterRetainedCheckpoint(signer, signer);
 
       expect(result).toMatchObject({ isValid: false, reason: 'block_proposal_beyond_checkpoint' });
       expect(blockSource.addBlock).not.toHaveBeenCalled();
+    });
+
+    it('does not bound a block proposal by a retained checkpoint from another signer', async () => {
+      // The checkpoint was retained under a previous view of the slot's proposer.
+      const result = await handleBlockAfterRetainedCheckpoint(Secp256k1Signer.random(), Secp256k1Signer.random());
+
+      expect(result).toMatchObject({ isValid: true });
+      expect(blockSource.addBlock).toHaveBeenCalled();
     });
 
     it('does not push a block proposal to the archiver when retained checkpoint proposals equivocate', async () => {

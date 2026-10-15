@@ -1118,11 +1118,11 @@ export class ProposalHandler {
     const { blockProposals, checkpointProposals } = await this.p2pClient.getProposalsForSlot(blockProposal.slotNumber);
 
     // Only the same signer's retained proposals constrain this one: the node's view of a slot's proposer can change
-    // between two honest proposals, so another signer's checkpoint is neither an equivocation nor a terminal block.
+    // between two honest proposals, so another signer's checkpoint neither equivocates nor bounds this block.
     const signer = blockProposal.getSender();
-    const isFromSigner = (proposal: { getSender(): EthAddress | undefined }) =>
-      signer !== undefined && proposal.getSender()?.equals(signer) === true;
-    const signerCheckpointProposals = checkpointProposals.filter(isFromSigner);
+    const signerCheckpointProposals = checkpointProposals.filter(
+      checkpoint => signer !== undefined && checkpoint.getSender()?.equals(signer) === true,
+    );
 
     if (signerCheckpointProposals.length === 0) {
       return { isValid: true };
@@ -1130,9 +1130,7 @@ export class ProposalHandler {
       return { isValid: false, reason: 'checkpoint_proposal_equivocation' };
     } else {
       const checkpointProposal = signerCheckpointProposals[0];
-      const terminalBlock = blockProposals.find(
-        block => block.archive.equals(checkpointProposal.archive) && isFromSigner(block),
-      );
+      const terminalBlock = blockProposals.find(block => block.archive.equals(checkpointProposal.archive));
       return terminalBlock !== undefined && blockProposal.indexWithinCheckpoint > terminalBlock.indexWithinCheckpoint
         ? { isValid: false, reason: 'block_proposal_beyond_checkpoint' }
         : { isValid: true };
