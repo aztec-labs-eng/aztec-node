@@ -20,6 +20,7 @@ class TestEpochCache extends EpochCache {
       lastQueryL1BlockHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
       lastRefreshL1Timestamp: BigInt(Math.floor(Date.now() / 1000)) + 10000n,
       finalized: true,
+      seedSettled: true,
     });
   }
 
@@ -442,12 +443,13 @@ describe('EpochCache', () => {
       const epoch1Slot = SlotNumber(EPOCH_DURATION);
       const epoch1Ts = l1GenesisTime + BigInt(EPOCH_DURATION * SLOT_DURATION);
       const samplingTs = epoch1Ts - BigInt(2 * EPOCH_DURATION * SLOT_DURATION); // lag=2
+      const seedSettledTs = samplingTs + BigInt(EPOCH_DURATION * SLOT_DURATION);
       const nowSec = BigInt(Math.floor(Date.now() / 1000));
 
-      // First call: not finalized (finalized block behind sampling ts)
+      // First call: not finalized (finalized block behind the point where the seed settles)
       client.getBlock.mockImplementation((args: any) => {
         if (args?.blockTag === 'finalized') {
-          return Promise.resolve({ timestamp: samplingTs - 1n, number: 50n, hash: '0xf1' } as any);
+          return Promise.resolve({ timestamp: seedSettledTs - 1n, number: 50n, hash: '0xf1' } as any);
         }
         return Promise.resolve({ timestamp: nowSec, number: 100n, hash: '0xf2' } as any);
       });
@@ -465,13 +467,63 @@ describe('EpochCache', () => {
       // Second call: now finalized (finalized block caught up)
       client.getBlock.mockImplementation((args: any) => {
         if (args?.blockTag === 'finalized') {
-          return Promise.resolve({ timestamp: samplingTs + 1n, number: 90n, hash: '0xf3' } as any);
+          return Promise.resolve({ timestamp: seedSettledTs, number: 90n, hash: '0xf3' } as any);
         }
         return Promise.resolve({ timestamp: newNowSec, number: 110n, hash: '0xf4' } as any);
       });
 
       await epochCache.getCommittee(epoch1Slot);
       expect(epochCache.isFinalized(EpochNumber(1))).toBe(true);
+    });
+
+    it('re-fetches a committee queried before its randao seed settled even without a reorg', async () => {
+      // With lag=2, epoch 3's seed is sampled at the start of epoch 1 and settles once L1 reaches the start of epoch 2.
+      const epoch3Slot = SlotNumber(3 * EPOCH_DURATION);
+      const epochSeconds = EPOCH_DURATION * SLOT_DURATION;
+      const samplingTs = l1GenesisTime + BigInt(epochSeconds);
+      const settledTs = samplingTs + BigInt(epochSeconds);
+
+      const mockBlock = () => {
+        const nowSec = BigInt(Math.floor(Date.now() / 1000));
+        return (args: any) => {
+          if (args?.blockTag === 'finalized') {
+            return Promise.resolve({ timestamp: l1GenesisTime, number: 1n, hash: '0xfin' } as any);
+          }
+          return Promise.resolve({ timestamp: nowSec, number: args?.blockNumber ?? 100n, hash: '0xsame' } as any);
+        };
+      };
+
+      jest.setSystemTime(Number(samplingTs + 10n) * 1000);
+      client.getBlock.mockImplementation(mockBlock());
+      rollupContract.getCommitteeAt.mockResolvedValue(testCommittee);
+      rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(42n));
+
+      const provisional = await epochCache.getCommittee(epoch3Slot);
+      expect(provisional.committee).toEqual(testCommittee);
+
+      // L1 checkpoints the randao value for the sampling epoch, which changes the seed and committee in place.
+      const settledCommittee = [extraTestValidator, ...testCommittee];
+      rollupContract.getCommitteeAt.mockResolvedValue(settledCommittee);
+      rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(99n));
+      jest.setSystemTime(Number(samplingTs + 10n + BigInt(SLOT_DURATION)) * 1000);
+      client.getBlock.mockImplementation(mockBlock());
+
+      const refreshed = await epochCache.getCommittee(epoch3Slot);
+      expect(refreshed.committee).toEqual(settledCommittee);
+      expect(refreshed.seed).toBe(99n);
+
+      // The entry is still provisional, so the first refresh at the settling point is a full fetch.
+      const finalCommittee = [...testCommittee, extraTestValidator];
+      rollupContract.getCommitteeAt.mockResolvedValue(finalCommittee);
+      jest.setSystemTime(Number(settledTs) * 1000);
+      client.getBlock.mockImplementation(mockBlock());
+      expect((await epochCache.getCommittee(epoch3Slot)).committee).toEqual(finalCommittee);
+
+      // Once fetched past the settling point, a stale entry only checks for reorgs and keeps its data.
+      rollupContract.getCommitteeAt.mockResolvedValue(testCommittee);
+      jest.setSystemTime(Number(settledTs + BigInt(SLOT_DURATION)) * 1000);
+      client.getBlock.mockImplementation(mockBlock());
+      expect((await epochCache.getCommittee(epoch3Slot)).committee).toEqual(finalCommittee);
     });
 
     it('treats entries as not finalized when L1 has no finalized block yet', async () => {

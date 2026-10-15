@@ -55,6 +55,8 @@ type CachedEpochEntry = {
   lastRefreshL1Timestamp: bigint;
   /** Whether the epoch's sampling data falls within finalized L1 history. */
   finalized: boolean;
+  /** Whether the latest L1 block at query time was past the point where the epoch's sample seed can still change. */
+  seedSettled: boolean;
 };
 
 export interface EpochCacheInterface {
@@ -368,6 +370,34 @@ export class EpochCache implements EpochCacheInterface {
   }
 
   /**
+   * Returns the L1 timestamp from which the epoch's sample seed, and so its committee, can no longer change.
+   *
+   * L1 lets anyone query an epoch's committee once its sampling timestamp has passed, but the seed reads the randao
+   * checkpoint at or before that timestamp, and the checkpoint keyed at the sampling timestamp is only written by the
+   * first `setupEpoch` or `checkpointRandao` call (e.g. the first proposal) during the sampling epoch. Until then the
+   * committee is computed from an older randao value and changes, without any reorg, when that call lands. Any later
+   * checkpoint is keyed after the sampling epoch, so the seed is final once L1 reaches the end of the sampling epoch.
+   */
+  private getSeedSettledTimestamp(epoch: EpochNumber): bigint {
+    const { epochDuration, slotDuration } = this.l1constants;
+    return this.getSamplingTimestamp(epoch) + BigInt(epochDuration) * BigInt(slotDuration);
+  }
+
+  /** Whether committee data for the epoch can be cached for good, given the latest finalized L1 block. */
+  private isFinalizedAt(
+    epoch: EpochNumber,
+    committee: EthAddress[] | undefined,
+    finalizedBlock: { timestamp: bigint } | undefined,
+  ): boolean {
+    // Empty committees are never marked finalized so they always get re-queried after TTL.
+    // If L1 has no finalized block yet (devnet startup), entries stay unfinalized.
+    const hasCommittee = !!(committee && committee.length > 0);
+    return (
+      hasCommittee && finalizedBlock !== undefined && this.getSeedSettledTimestamp(epoch) <= finalizedBlock.timestamp
+    );
+  }
+
+  /**
    * Lightweight refresh for a stale non-finalized entry. Queries only the block hash at
    * the original block number and the finalized block timestamp — avoids the expensive
    * getCommitteeAt and getSampleSeedAt calls on the rollup contract.
@@ -375,8 +405,13 @@ export class EpochCache implements EpochCacheInterface {
    * If the block hash still matches (no L1 reorg), we keep the existing data and just
    * update the provenance timestamp. If the finalized block has caught up, we promote the
    * entry to finalized. If there was a reorg (hash mismatch), we fall back to a full fetch.
+   * Entries queried before the epoch's seed settled can change without a reorg, so they always get a full fetch.
    */
   private async refreshStaleEntry(stale: CachedEpochEntry, epoch: EpochNumber, ts: bigint): Promise<CachedEpochEntry> {
+    if (!stale.seedSettled) {
+      return this.fetchAndCache(epoch, ts);
+    }
+
     const [blockAtOriginal, l1FinalizedBlock, latestBlock] = await Promise.all([
       this.rollup.client.getBlock({ blockNumber: stale.lastQueryL1BlockNumber, includeTransactions: false }),
       getFinalizedL1Block(this.rollup.client),
@@ -385,11 +420,7 @@ export class EpochCache implements EpochCacheInterface {
 
     if (blockAtOriginal.hash === stale.lastQueryL1BlockHash) {
       // No reorg: the data is still valid. Check if we can now mark it as finalized.
-      const samplingTs = this.getSamplingTimestamp(epoch);
-      const finalized =
-        !!(stale.data.committee && stale.data.committee.length > 0) &&
-        l1FinalizedBlock !== undefined &&
-        samplingTs <= l1FinalizedBlock.timestamp;
+      const finalized = this.isFinalizedAt(epoch, stale.data.committee, l1FinalizedBlock);
 
       const refreshed: CachedEpochEntry = {
         ...stale,
@@ -442,10 +473,7 @@ export class EpochCache implements EpochCacheInterface {
       );
     }
 
-    // Empty committees are never marked finalized so they always get re-queried after TTL.
-    // If L1 has no finalized block yet (devnet startup), entries stay unfinalized.
-    const hasCommittee = !!(committee && committee.length > 0);
-    const finalized = hasCommittee && finalizedBlock !== undefined && samplingTs <= finalizedBlock.timestamp;
+    const finalized = this.isFinalizedAt(epoch, committee, finalizedBlock);
     const data: EpochCommitteeInfo = { committee, seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen };
     const entry: CachedEpochEntry = {
       data,
@@ -453,6 +481,7 @@ export class EpochCache implements EpochCacheInterface {
       lastQueryL1BlockHash: latestBlock.hash!,
       lastRefreshL1Timestamp: latestBlock.timestamp,
       finalized,
+      seedSettled: latestBlock.timestamp >= this.getSeedSettledTimestamp(epoch),
     };
 
     this.cache.set(epoch, entry);
