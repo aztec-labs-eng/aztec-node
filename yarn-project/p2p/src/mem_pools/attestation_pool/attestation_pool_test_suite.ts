@@ -2,7 +2,7 @@ import { IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/brande
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { Signature } from '@aztec-labs/foundation/eth-signature';
-import type { BlockProposal, CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
+import { BlockProposal, CheckpointProposal, type CheckpointProposalCore } from '@aztec-labs/stdlib/p2p';
 import { CheckpointAttestation } from '@aztec-labs/stdlib/p2p';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import {
@@ -11,7 +11,6 @@ import {
   makeCheckpointHeader,
   makeCheckpointProposal,
 } from '@aztec-labs/stdlib/testing';
-import { jest } from '@jest/globals';
 
 import {
   type AttestationPool,
@@ -650,11 +649,28 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
       });
 
       it('should never count block proposals with an unrecoverable signer as equivocations', async () => {
-        const unsigned = await Promise.all([0, 1].map(() => mockBlockProposalWithIndex(signers[0], 100, 0)));
-        unsigned.forEach(proposal => jest.spyOn(proposal, 'getSender').mockReturnValue(undefined));
+        const unsign = (p: BlockProposal) =>
+          new BlockProposal(
+            p.blockHeader,
+            p.indexWithinCheckpoint,
+            p.archiveRoot,
+            p.txHashes,
+            Signature.empty(),
+            p.signatureContext,
+            p.inboxPrefixRef,
+          );
 
-        expect(await ap.tryAddBlockProposal(unsigned[0])).toEqual({ added: true, alreadyExists: false, count: 1 });
-        expect(await ap.tryAddBlockProposal(unsigned[1])).toEqual({ added: true, alreadyExists: false, count: 1 });
+        // A retained proposal with an unrecoverable signer never matches a later signed one.
+        const retainedUnsigned = unsign(await mockBlockProposalWithIndex(signers[0], 100, 0));
+        expect(retainedUnsigned.getSender()).toBeUndefined();
+        expect(await ap.tryAddBlockProposal(retainedUnsigned)).toEqual({ added: true, alreadyExists: false, count: 1 });
+        const signed = await mockBlockProposalWithIndex(signers[0], 100, 0);
+        expect(await ap.tryAddBlockProposal(signed)).toEqual({ added: true, alreadyExists: false, count: 1 });
+
+        // An incoming proposal with an unrecoverable signer never matches a retained signed one.
+        await ap.tryAddBlockProposal(await mockBlockProposalWithIndex(signers[0], 100, 1));
+        const incomingUnsigned = unsign(await mockBlockProposalWithIndex(signers[0], 100, 1));
+        expect(await ap.tryAddBlockProposal(incomingUnsigned)).toEqual({ added: true, alreadyExists: false, count: 1 });
       });
 
       it('should not detect duplicate for different positions in same slot', async () => {
@@ -933,11 +949,34 @@ export function describeAttestationPool(getAttestationPool: () => AttestationPoo
       });
 
       it('should never count checkpoint proposals with an unrecoverable signer as equivocations', async () => {
-        const unsigned = await Promise.all([0, 1].map(() => mockCheckpointProposalCoreForPool(signers[0], 100)));
-        unsigned.forEach(proposal => jest.spyOn(proposal, 'getSender').mockReturnValue(undefined));
+        const unsign = (p: CheckpointProposalCore) =>
+          new CheckpointProposal(
+            p.checkpointHeader,
+            p.archive,
+            p.feeAssetPriceModifier,
+            Signature.empty(),
+            p.signatureContext,
+          );
 
-        expect(await ap.tryAddCheckpointProposal(unsigned[0])).toEqual({ added: true, alreadyExists: false, count: 1 });
-        expect(await ap.tryAddCheckpointProposal(unsigned[1])).toEqual({ added: true, alreadyExists: false, count: 1 });
+        // A retained proposal with an unrecoverable signer never matches a later signed one.
+        const retainedUnsigned = unsign(await mockCheckpointProposalCoreForPool(signers[0], 100));
+        expect(retainedUnsigned.getSender()).toBeUndefined();
+        expect(await ap.tryAddCheckpointProposal(retainedUnsigned)).toEqual({
+          added: true,
+          alreadyExists: false,
+          count: 1,
+        });
+        const signed = await mockCheckpointProposalCoreForPool(signers[0], 100);
+        expect(await ap.tryAddCheckpointProposal(signed)).toEqual({ added: true, alreadyExists: false, count: 1 });
+
+        // An incoming proposal with an unrecoverable signer never matches a retained signed one.
+        await ap.tryAddCheckpointProposal(await mockCheckpointProposalCoreForPool(signers[0], 200));
+        const incomingUnsigned = unsign(await mockCheckpointProposalCoreForPool(signers[0], 200));
+        expect(await ap.tryAddCheckpointProposal(incomingUnsigned)).toEqual({
+          added: true,
+          alreadyExists: false,
+          count: 1,
+        });
       });
 
       it('should not detect duplicate for different slots', async () => {
