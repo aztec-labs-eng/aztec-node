@@ -424,12 +424,15 @@ export class EpochCache implements EpochCacheInterface {
     ts: bigint,
     prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: { timestamp: bigint } | undefined },
   ): Promise<CachedEpochEntry> {
-    const [committee, seedBuffer, latestBlock, finalizedBlock, isEscapeHatchOpen] = await Promise.all([
-      this.rollup.getCommitteeAt(ts),
-      this.rollup.getSampleSeedAt(ts),
-      prefetched?.latestBlock ?? this.rollup.client.getBlock({ includeTransactions: false }),
+    // Pin the rollup reads to one L1 block so the entry's provenance matches the data it holds. The escape hatch flag
+    // is only partly pinned: the hatch address is resolved at the latest block, and any read error counts as closed.
+    const latestBlock = prefetched?.latestBlock ?? (await this.rollup.client.getBlock({ includeTransactions: false }));
+    const blockNumber = latestBlock.number;
+    const [committee, seedBuffer, finalizedBlock, isEscapeHatchOpen] = await Promise.all([
+      this.rollup.getCommitteeAt(ts, { blockNumber }),
+      this.rollup.getSampleSeedAt(ts, { blockNumber }),
       prefetched !== undefined ? prefetched.finalizedBlock : getFinalizedL1Block(this.rollup.client),
-      this.rollup.isEscapeHatchOpen(epoch),
+      this.rollup.isEscapeHatchOpen(epoch, { blockNumber }),
     ]);
 
     const samplingTs = this.getSamplingTimestamp(epoch);
