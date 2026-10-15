@@ -24,7 +24,7 @@ AUTH = {"Authorization": "Basic " + base64.b64encode(b"aztec:" + PASSWORD.encode
 
 
 class FakeS3:
-    """The five boto3 calls the API makes, on a dict. `failing` makes every call raise."""
+    """The three boto3 calls the API makes, on a dict. `failing` makes every call raise."""
 
     def __init__(self):
         self.objects, self.failing = {}, None
@@ -42,15 +42,6 @@ class FakeS3:
         if (Bucket, Key) not in self.objects:
             raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
         return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
-
-    def head_object(self, Bucket, Key):
-        self._check()
-        if (Bucket, Key) not in self.objects:
-            raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
-
-    def upload_fileobj(self, stream, Bucket, Key):
-        self._check()
-        self.objects[(Bucket, Key)] = stream.read()
 
     def get_paginator(self, name):
         s3 = self
@@ -197,19 +188,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.put("/runs/merge-train/avm/1700000000000333", json.dumps({**record, "timestamp": 1700000000000333}).encode()).status_code, 204)
         self.assertEqual(r.zcard("ci-run-merge-train/avm"), 1)
 
-    def test_artifacts(self):
-        self.assertEqual(self.put("/artifacts/foo-abc.tar.gz", b"bytes").status_code, 201)
-        self.assertEqual(self.s3.objects[("aztec-ci-artifacts", "build-cache/foo-abc.tar.gz")], b"bytes")
-        self.assertEqual(self.c.head("/artifacts/foo-abc.tar.gz", headers=AUTH).status_code, 200)
-        self.assertEqual(self.c.head("/artifacts/nope.tar.gz", headers=AUTH).status_code, 404)
-        resp = self.get("/artifacts/foo-abc.tar.gz")
-        self.assertEqual((resp.status_code, resp.headers["Location"]), (302, "https://aztec-ci-artifacts.s3.amazonaws.com/build-cache/foo-abc.tar.gz"))
-        self.assertEqual(self.put("/artifacts/x.tar.gz", b"x", headers={"Content-Encoding": "gzip"}).status_code, 415)
-
     def test_s3_failures_are_503_not_misses(self):
         self.s3.failing = ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")
         self.assertEqual(self.get("/logs/nope").status_code, 503)
-        self.assertEqual(self.c.head("/artifacts/nope.tar.gz", headers=AUTH).status_code, 503)
         self.assertEqual(self.put("/logs/x?final=1", b"x").status_code, 503)
 
     def test_redis_down_still_persists_final_logs_and_reads_s3(self):

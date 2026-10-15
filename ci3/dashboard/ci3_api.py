@@ -8,7 +8,6 @@ The ci3 server handles the following resources:
   kv         One value per key, optional ttl, batch read.
   lists      Named, newest-first lines, capped on write.
   runs       JSON records indexed by id within a named section, replaced by id, listed newest first.
-  artifacts  Files in the build cache bucket, content-addressed by name, read through its public URL.
 
   GET  /health                          "ci3-server"; no auth.
   PUT  /logs/<id>?ttl=&final=1          store (gzip body ok); final=1 also copies to S3.
@@ -22,9 +21,6 @@ The ci3 server handles the following resources:
   PUT  /runs/<section>/<id>             upsert a record.
   GET  /runs/<section>/<id>             the record.
   GET  /runs/<section>                  newest records, JSON array.
-  PUT  /artifacts/<name>?ttl=           upload.
-  GET  /artifacts/<name>                302 to the public URL.
-  HEAD /artifacts/<name>                200 or 404.
 
 Examples of how ci3 uses them:
 
@@ -39,16 +35,13 @@ Examples of how ci3 uses them:
              every failure and flake. The dashboard renders them at /list/<name>.
   runs       ci-run-<section>: the records the section pages render, written RUNNING when a build
              starts and PASSED/FAILED when it ends; the id is the run's CI_LOG_ID.
-  artifacts  <component>-<content hash>.tar.gz build outputs, bench-<tree>.tar.gz, npm-release-<tag>
-             .tar.gz, and the ci-success-* marker that lets a whole run be skipped.
 """
 import json
 import re
-import threading
 import zlib
 
 from botocore.exceptions import BotoCoreError, ClientError
-from flask import Response, abort, redirect, request
+from flask import Response, abort, request
 from redis.exceptions import RedisError
 
 from rk_core import r
@@ -66,10 +59,6 @@ RUNS_MAX = 1000
 MAX_BODY = 64 << 20  # as sent
 MAX_EXPANDED = 256 << 20  # after gzip
 RUN_FIELDS = ("status", "msg", "name", "author")
-CACHE_BUCKET = "aztec-ci-artifacts"
-CACHE_PREFIX = "build-cache"
-CACHE_PUBLIC_URL = "https://%s.s3.amazonaws.com/%s" % (CACHE_BUCKET, CACHE_PREFIX)
-uploads = threading.BoundedSemaphore(4)  # artifact uploads in flight, per worker
 
 
 def check_key(key):
@@ -145,7 +134,7 @@ def s3_missing(e):
     return e.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound")
 
 
-def register(app, protect, s3, logs_bucket, logs_prefix, password, cache_public_url=CACHE_PUBLIC_URL):
+def register(app, protect, s3, logs_bucket, logs_prefix, password):
     def route(rule, **kw):
         def deco(fn):
             def guarded(*a, **k):
@@ -304,35 +293,3 @@ def register(app, protect, s3, logs_bucket, logs_prefix, password, cache_public_
             return Response(found[0], mimetype="application/json") if found else Response("{}", status=404, mimetype="application/json")
         runs = [json.loads(raw) for raw in r.zrevrange(key, 0, RUNS_MAX - 1)]
         return Response(json.dumps(runs), mimetype="application/json")
-
-    # The build cache. Uploads stream to S3; reads go to the bucket's public endpoint.
-    def artifact_key(name):
-        return "%s/%s" % (CACHE_PREFIX, check_key(name))
-
-    @route("/artifacts/<path:name>", methods=["PUT"])
-    def ci3_artifact_put(name):
-        key = artifact_key(name)
-        if request.content_length is None:
-            abort(411, "Content-Length required")
-        if request.headers.get("Content-Encoding"):
-            abort(415, "artifacts are uploaded as they are")
-        if not uploads.acquire(blocking=False):
-            abort(503, "too many uploads in flight; retry")
-        try:
-            s3.upload_fileobj(request.stream, CACHE_BUCKET, key)
-        finally:
-            uploads.release()
-        return "", 201
-
-    @route("/artifacts/<path:name>", methods=["GET", "HEAD"])
-    def ci3_artifact_get(name):
-        key = artifact_key(name)
-        if request.method == "HEAD":
-            try:
-                s3.head_object(Bucket=CACHE_BUCKET, Key=key)
-                return "", 200
-            except ClientError as e:
-                if s3_missing(e):
-                    return "", 404
-                raise
-        return redirect("%s/%s" % (cache_public_url.rstrip("/"), check_key(name)), code=302)
