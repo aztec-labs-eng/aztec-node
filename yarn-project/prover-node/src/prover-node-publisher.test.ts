@@ -24,7 +24,7 @@ import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type Hex, type TransactionReceipt, decodeFunctionData, getAddress } from 'viem';
 
-import { ProverNodePublisher } from './prover-node-publisher.js';
+import { MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS, ProverNodePublisher } from './prover-node-publisher.js';
 
 /**
  * A packed attestations tuple for a committee of `committeeSize`, optionally with one of the bitmap's spare bits
@@ -542,6 +542,75 @@ describe('prover-node-publisher', () => {
     expect(submission.headers).toEqual(expectedHeaders.slice(prefixLength));
     expect(l1Utils.getFeesPerGas).toHaveBeenCalled();
     expect(l1Utils.sendAndMonitorTransaction).not.toHaveBeenCalled();
+  });
+
+  describe('when the proof tx reverts', () => {
+    // L1 state changes between our estimate and inclusion can raise the proof's gas cost, so the proof runs out of
+    // gas though the rollup accepts it with a fresh estimate.
+    const firstGasLimit = 1_000_000n;
+    const deadline = new Date(Date.now() + 60_000);
+
+    const mined = (status: 'success' | 'reverted', gasLimit: bigint = firstGasLimit) => ({
+      state: mock<L1TxState>({ gasLimit }),
+      receipt: mock<TransactionReceipt>({
+        status,
+        effectiveGasPrice: 1n,
+        gasUsed: gasLimit,
+        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      }),
+    });
+
+    beforeEach(() => {
+      l1Utils.getSenderAddress.mockReturnValue(EthAddress.random());
+      l1Utils.getTransactionStats.mockResolvedValue({
+        calldataGas: 1,
+        calldataSize: 1,
+        sender: EthAddress.random().toString(),
+        transactionHash: `0x${randomBytes(32).toString('hex')}`,
+      });
+    });
+
+    it('resends the same proof with a fresh, larger gas limit after running out of gas', async () => {
+      l1Utils.sendAndMonitorTransaction
+        .mockResolvedValueOnce(mined('reverted'))
+        .mockResolvedValueOnce(mined('success', 1_500_000n));
+      l1Utils.estimateGas.mockResolvedValue(1_500_000n);
+
+      await expect(publisher.submitEpochProof({ ...setupPublishData(65, 32, 33, 64), deadline })).resolves.toEqual(
+        'published',
+      );
+
+      const [[first], [retry, retryConfig]] = l1Utils.sendAndMonitorTransaction.mock.calls;
+      expect(retry).toEqual(first);
+      expect(retryConfig).toEqual({ gasLimit: 1_500_000n, txTimeoutAt: deadline });
+    });
+
+    it('does not resend a proof the rollup would reject again', async () => {
+      l1Utils.sendAndMonitorTransaction.mockResolvedValue(mined('reverted'));
+      l1Utils.estimateGas.mockRejectedValue(new Error('Rollup__InvalidPreviousArchive'));
+
+      await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).resolves.toEqual('failed');
+      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not resend when a fresh estimate fits within the reverted gas limit', async () => {
+      l1Utils.sendAndMonitorTransaction.mockResolvedValue(mined('reverted'));
+      l1Utils.estimateGas.mockResolvedValue(firstGasLimit);
+
+      await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).resolves.toEqual('failed');
+      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops resending after a bounded number of attempts', async () => {
+      l1Utils.sendAndMonitorTransaction.mockImplementation((_request, config) =>
+        Promise.resolve(mined('reverted', config?.gasLimit ?? firstGasLimit)),
+      );
+      let estimate = firstGasLimit;
+      l1Utils.estimateGas.mockImplementation(() => Promise.resolve((estimate += 100_000n)));
+
+      await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).resolves.toEqual('failed');
+      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS);
+    });
   });
 
   it('handles reverted txs correctly', async () => {
