@@ -164,14 +164,16 @@ describe('single-node/cross-chain/inbox_bot', () => {
       expect(checks(telemetry, 'unknown_message', 'passed')).toEqual(1);
       expect(checks(telemetry, 'readiness_witness', 'passed')).toBeGreaterThanOrEqual(2);
 
-      // The replay probe runs on its own slower clock once every message of the batch has resolved.
+      // The replay probe runs on its own slower clock once every message of the batch has resolved, and marks the batch
+      // probed only after it has recorded its verdict.
       await retryUntil(
-        () => Promise.resolve(checks(telemetry, 'replay_rejection', 'passed') === 1),
-        'cross-domain replay simulation rejected',
+        async () => (await store.inbox.getBatch(batchId))!.replayProbedAt !== undefined,
+        'cross-domain replay probe resolved',
         180,
         2,
       );
 
+      expect(checks(telemetry, 'replay_rejection', 'passed')).toEqual(1);
       expect(await store.inbox.getBatchesPendingReplayProbe()).toEqual([]);
       expect(checks(telemetry, 'consumption_nullifier', 'failed')).toEqual(0);
       expect(checks(telemetry, 'readiness_witness', 'failed')).toEqual(0);
