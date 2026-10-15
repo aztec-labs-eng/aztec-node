@@ -21,7 +21,7 @@ import type {
   WorldStateSynchronizer,
 } from '@aztec-labs/stdlib/interfaces/server';
 import type { L1ToL2MessageSource } from '@aztec-labs/stdlib/messaging';
-import type { CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
+import type { CheckpointProposal, CoordinationSignatureContext } from '@aztec-labs/stdlib/p2p';
 import type { ProposerTimetable } from '@aztec-labs/stdlib/timetable';
 import { type CheckpointGlobalVariables, GlobalVariables, type Tx } from '@aztec-labs/stdlib/tx';
 import { getTelemetryClient } from '@aztec-labs/telemetry-client';
@@ -497,7 +497,9 @@ describe('CheckpointProposalJob Timing Tests', () => {
     validatorClient = mock<ValidatorClient>();
     validatorClient.collectAttestations.mockImplementation(() => Promise.resolve([]));
     validatorClient.createBlockProposal.mockResolvedValue({} as any);
-    validatorClient.createCheckpointProposal.mockResolvedValue({} as any);
+    validatorClient.createCheckpointProposal.mockResolvedValue(
+      mock<CheckpointProposal>({ getSender: () => attestorAddress }),
+    );
     validatorClient.signAttestationsAndSigners.mockResolvedValue(mockedSig);
     validatorClient.getCoinbaseForAttestor.mockReturnValue(coinbase);
     validatorClient.getFeeRecipientForAttestor.mockReturnValue(globalVariables.feeRecipient);
