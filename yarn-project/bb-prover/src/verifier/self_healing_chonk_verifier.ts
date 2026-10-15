@@ -236,7 +236,7 @@ function crashKey(tx: Tx): string {
 function exitBecauseBbWontStart(err: unknown): never {
   createLogger('bb-prover:self_healing_chonk_verifier').fatal(
     'Could not start a bb process to replace the failed Chonk verifier; exiting',
-    { err },
+    err,
   );
   process.exit(1);
 }
