@@ -119,42 +119,36 @@ export async function resolveCheckpointAttestationsFromCalldata(
 }
 
 /**
- * Returns the proposer whose signature a checkpoint posted to L1 carries: the committee member at the slot's proposer
- * index, provided the attestation at that index is a signature over the checkpoint's consensus payload that recovers
- * to that member. Returns undefined when the epoch has no committee or an open escape hatch (the L1 proposer is then
- * not the committee's), or when that signature is missing or recovers to anyone else.
+ * Returns the proposer of a checkpoint posted to L1: whoever signed its attestations-and-signers bundle, provided the
+ * same key also signed an attestation over the checkpoint's consensus payload. Only a proposer signs the bundle, and L1
+ * rejects a bundle not signed by the slot's proposer outside an escape hatch; the attestation ties the bundle to this
+ * checkpoint, since a bundle L1 did not check could have been copied from another one. No committee view is involved,
+ * so a stale epoch cache cannot point this at an honest attester. Returns undefined when either signature is missing,
+ * which includes checkpoints whose attestations were not decoded (open escape hatch or no committee).
  *
- * @param attestations - The checkpoint's attestations decoded for its epoch committee, indexed by committee position.
+ * @param attestations - The checkpoint's attestations decoded for its epoch committee.
  */
-export async function getCheckpointProposerFromAttestations(
-  checkpoint: Pick<CalldataCheckpointForAttestations, 'header' | 'archiveRoot' | 'feeAssetPriceModifier'>,
+export function getCheckpointProposer(
+  checkpoint: Pick<CalldataCheckpointForAttestations, 'header' | 'archiveRoot' | 'feeAssetPriceModifier'> & {
+    attestationsAndSignersSigner: EthAddress | undefined;
+  },
   attestations: CommitteeAttestation[],
-  epochCache: EpochCache,
-  constants: Pick<L1RollupConstants, 'epochDuration'>,
   signatureContext: CoordinationSignatureContext,
-): Promise<EthAddress | undefined> {
-  const slot = checkpoint.header.slotNumber;
-  const epoch: EpochNumber = getEpochAtSlot(slot, constants);
-  const { committee, seed, isEscapeHatchOpen } = await epochCache.getCommitteeForEpoch(epoch);
-  if (isEscapeHatchOpen || !committee || committee.length === 0) {
+): EthAddress | undefined {
+  const bundleSigner = checkpoint.attestationsAndSignersSigner;
+  if (!bundleSigner) {
     return undefined;
   }
-
-  const proposerIndex = Number(epochCache.computeProposerIndex(slot, epoch, seed, BigInt(committee.length)));
-  const proposer: EthAddress | undefined = committee[proposerIndex];
-  const attestation: CommitteeAttestation | undefined = attestations[proposerIndex];
-  if (!proposer || !attestation) {
-    return undefined;
-  }
-
   const payload = new ConsensusPayload(
     checkpoint.header,
     checkpoint.archiveRoot,
     checkpoint.feeAssetPriceModifier,
     signatureContext,
   );
-  const [info] = getAttestationInfoFromPayload(payload, [attestation]);
-  return info.status === 'recovered-from-signature' && info.address.equals(proposer) ? proposer : undefined;
+  const attested = getAttestationInfoFromPayload(payload, attestations).some(
+    info => info.status === 'recovered-from-signature' && info.address.equals(bundleSigner),
+  );
+  return attested ? bundleSigner : undefined;
 }
 
 /**

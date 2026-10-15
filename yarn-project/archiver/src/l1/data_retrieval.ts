@@ -63,6 +63,11 @@ export type RetrievedCheckpoint = RetrievedCheckpointBase & {
 
 /** Checkpoint data retrieved from L1 calldata only, without blob data or decoded attestations. */
 export type RetrievedCheckpointFromCalldata = RetrievedCheckpointBase & {
+  /**
+   * Who signed the attestations-and-signers bundle of the `propose` call: the slot's proposer outside an escape hatch,
+   * arbitrary during one. Undefined if the signature does not recover.
+   */
+  attestationsAndSignersSigner: EthAddress | undefined;
   /** Versioned blob hashes from the checkpoint proposed event. */
   blobHashes: Buffer[];
   /** Parent beacon block root from the L1 block, used for blob fetching. */

@@ -2308,8 +2308,7 @@ describe('Archiver Sync', () => {
       const invalidSpy = jest.fn();
       archiver.events.on(L2BlockSourceEvents.InvalidAttestationsCheckpointDetected, invalidSpy);
 
-      // The proposer at index 0 signs correctly, but the other two attestations come from outside the committee.
-      epochCache.computeProposerIndex.mockReturnValue(0n);
+      // The proposer signs correctly, but the other two attestations come from outside the committee.
       const { checkpoint: cp2 } = await fake.addCheckpoint(CheckpointNumber(2), {
         l1BlockNumber: 5000n,
         numL1ToL2Messages: 0,
@@ -2509,14 +2508,13 @@ describe('Archiver Sync', () => {
       let equivocationSpy: jest.Mock;
 
       beforeEach(() => {
-        // signers[1] sits at the proposer index, so it is the proposer whose signature the L1 checkpoint carries.
-        epochCache.computeProposerIndex.mockReturnValue(1n);
         equivocationSpy = jest.fn();
         archiver.events.on(L2BlockSourceEvents.CheckpointEquivocationDetected, equivocationSpy);
       });
 
-      // Lands a valid checkpoint 2 on L1 and stores a local copy that differs from it only in the signed
-      // fee-asset-price modifier, as if `signer` had proposed a different checkpoint 2 for the same slot.
+      // Lands a valid checkpoint 2 on L1, proposed by signers[0] and attested by every signer, and stores a local copy
+      // that differs from it only in the signed fee-asset-price modifier, as if `signer` had proposed a different
+      // checkpoint 2 for the same slot.
       const syncDivergingCheckpointTwo = async (signer: EthAddress | undefined) => {
         const cp1 = await syncCheckpointOne();
         const { checkpoint: cp2 } = await addValidCheckpoint(2, 5000n, cp1);
@@ -2533,7 +2531,14 @@ describe('Archiver Sync', () => {
       };
 
       it('does not report equivocation when another proposer signed the local copy', async () => {
-        await syncDivergingCheckpointTwo(signers[0].address);
+        await syncDivergingCheckpointTwo(signers[1].address);
+        expect(equivocationSpy).not.toHaveBeenCalled();
+      }, 15_000);
+
+      it('does not blame an attester of the L1 checkpoint that a stale proposer index points at', async () => {
+        // A committee view whose seed selects signers[1], who signed the local copy and attested the L1 checkpoint.
+        epochCache.computeProposerIndex.mockReturnValue(1n);
+        await syncDivergingCheckpointTwo(signers[1].address);
         expect(equivocationSpy).not.toHaveBeenCalled();
       }, 15_000);
 
@@ -2543,7 +2548,7 @@ describe('Archiver Sync', () => {
       }, 15_000);
 
       it('reports equivocation against the proposer that signed both checkpoints', async () => {
-        const cp2 = await syncDivergingCheckpointTwo(signers[1].address);
+        const cp2 = await syncDivergingCheckpointTwo(signers[0].address);
         expect(equivocationSpy).toHaveBeenCalledTimes(1);
         expect(equivocationSpy).toHaveBeenCalledWith({
           type: L2BlockSourceEvents.CheckpointEquivocationDetected,
@@ -2551,7 +2556,7 @@ describe('Archiver Sync', () => {
           checkpointNumber: CheckpointNumber(2),
           l1ArchiveRoot: cp2.archive.root,
           proposedArchiveRoot: cp2.archive.root,
-          signer: signers[1].address,
+          signer: signers[0].address,
         });
       }, 15_000);
     });
@@ -4148,8 +4153,8 @@ describe('Archiver Sync', () => {
         committee: signers.map(signer => signer.address),
         seed: 0n,
       } as EpochCommitteeInfo);
-      epochCache.computeProposerIndex.mockReturnValue(2n);
-      const proposer = signers[2].address;
+      // The fake L1 has the first signer sign the attestations bundle, so it is the L1 checkpoint's proposer.
+      const proposer = signers[0].address;
 
       await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: 70n,
