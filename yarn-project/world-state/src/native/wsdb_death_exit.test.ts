@@ -1,9 +1,11 @@
 import { MockPrefilledArchiver } from '@aztec-labs/archiver/test';
 import { BlockNumber } from '@aztec-labs/foundation/branded-types';
+import { logger, registerLoggingStream } from '@aztec-labs/foundation/log';
 import { retryUntil } from '@aztec-labs/foundation/retry';
 import { MerkleTreeId } from '@aztec-labs/stdlib/trees';
 import { jest } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
+import { Writable } from 'node:stream';
 
 import { ServerWorldStateSynchronizer } from '../synchronizer/server_world_state_synchronizer.js';
 import { NativeWorldStateService } from './native_world_state.js';
@@ -32,6 +34,17 @@ function wsdbPid(ipcPath: string): number {
 describe('wsdb death', () => {
   let ws: NativeWorldStateService;
   let exit: jest.SpiedFunction<typeof process.exit>;
+  let originalLogLevel: typeof logger.level;
+
+  beforeAll(() => {
+    // Loggers take their level when created, so the fatal line is only captured if this runs before the world state.
+    originalLogLevel = logger.level;
+    logger.level = 'fatal';
+  });
+
+  afterAll(() => {
+    logger.level = originalLogLevel;
+  });
 
   beforeEach(async () => {
     ws = await NativeWorldStateService.tmp();
@@ -73,5 +86,30 @@ describe('wsdb death', () => {
     } finally {
       await synchronizer.stop().catch(() => {});
     }
+  });
+
+  it('logs the cause of the death as structured fields', async () => {
+    const entries: Record<string, unknown>[] = [];
+    registerLoggingStream(
+      new Writable({
+        write(chunk, _encoding, callback) {
+          entries.push(JSON.parse(chunk.toString()));
+          callback();
+        },
+      }),
+    );
+
+    process.kill(wsdbPid(ws.getIpcPath()), 'SIGKILL');
+    await expect(ws.getCommitted().getTreeInfo(MerkleTreeId.NOTE_HASH_TREE)).rejects.toEqual(new ProcessExit(1));
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        module: 'world-state:ipc-database',
+        level: 60,
+        signal: 'SIGKILL',
+        code: null,
+        logPath: expect.any(String),
+      }),
+    );
   });
 });

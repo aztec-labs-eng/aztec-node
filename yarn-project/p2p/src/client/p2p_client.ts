@@ -797,7 +797,7 @@ export class P2PClient extends WithTracer implements P2P {
         try {
           await this.p2pService.start();
         } catch (err) {
-          this.log.fatal(`Failed to start p2p service`, { err, syncedLatestBlock });
+          this.log.fatal(`Failed to start p2p service`, err, { syncedLatestBlock });
           this.syncResolvers.reject(err);
           return;
         }

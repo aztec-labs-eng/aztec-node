@@ -825,8 +825,7 @@ export class IpcWorldState implements NativeWorldStateInstance {
  * place that needs it; it moves to the IPC backend's `exitOnDeath` option once callers use the wsdb API directly.
  */
 function exitOnWsdbDeath(operation: WorldStateOperationName, error: IpcProcessExitedError, log: Logger): never {
-  log.fatal(`World state database process died during ${operation}; exiting`, {
-    error: error.message,
+  log.fatal(`World state database process died during ${operation}; exiting`, error, {
     code: error.code,
     signal: error.signal,
     logPath: error.logPath,
