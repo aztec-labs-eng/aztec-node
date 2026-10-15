@@ -165,6 +165,7 @@ export async function createLocalSignerWithProtection(
         ),
       schemaVersionMismatchPolicy: 'throw',
       versionFileReadFailurePolicy: 'throw',
+      rollupAddressChangePolicy: 'throw',
     },
   );
 

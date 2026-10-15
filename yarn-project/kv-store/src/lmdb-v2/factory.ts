@@ -2,6 +2,7 @@ import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type LoggerBindings, createLogger } from '@aztec-labs/foundation/log';
 import {
   DatabaseVersionManager,
+  type RollupAddressChangePolicy,
   type SchemaVersionMismatchPolicy,
   type VersionFileReadFailurePolicy,
 } from '@aztec-labs/stdlib/database-version/manager';
@@ -19,6 +20,7 @@ export type CreateStoreOptions = {
   onUpgrade?: (dataDir: string, currentVersion: number, latestVersion: number) => Promise<void>;
   schemaVersionMismatchPolicy?: SchemaVersionMismatchPolicy;
   versionFileReadFailurePolicy?: VersionFileReadFailurePolicy;
+  rollupAddressChangePolicy?: RollupAddressChangePolicy;
 };
 
 export async function createStore(
@@ -49,6 +51,7 @@ export async function createStore(
       onUpgrade: options.onUpgrade,
       schemaVersionMismatchPolicy: options.schemaVersionMismatchPolicy,
       versionFileReadFailurePolicy: options.versionFileReadFailurePolicy,
+      rollupAddressChangePolicy: options.rollupAddressChangePolicy,
     });
 
     log.info(

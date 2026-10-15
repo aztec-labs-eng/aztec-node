@@ -266,9 +266,10 @@ export class LmdbSlashingProtectionDatabase implements SlashingProtectionDatabas
   /**
    * Cleanup duties with outdated rollup address.
    *
-   * This is always a no-op for the LMDB implementation: the underlying store is created via
-   * DatabaseVersionManager (in factory.ts), which already resets the entire data directory at
-   * startup whenever the rollup address changes.
+   * A no-op: this store opts into rollupAddressChangePolicy 'throw' (factory.ts), so a resolved rollup-address
+   * change refuses to open rather than reaching here. Rows under a different rollup address are inert regardless -
+   * the address leads the duty key and every consensus signature is domain-separated by it, so they could never
+   * match a signature this node is about to make.
    */
   public cleanupOutdatedRollupDuties(_currentRollupAddress: EthAddress): Promise<number> {
     return Promise.resolve(0);
