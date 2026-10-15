@@ -1,8 +1,14 @@
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
-import { NoCommitteeError, RollupContract } from '@aztec-labs/ethereum/contracts';
+import {
+  CommitteeNotStableError,
+  NoCommitteeError,
+  RollupContract,
+  isEpochNotStableError,
+} from '@aztec-labs/ethereum/contracts';
 import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
+import type { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
@@ -44,8 +50,9 @@ export type SlotTag = 'now' | 'next' | SlotNumber;
 /** Minimal L1 block info used for cache provenance. */
 type L1BlockInfo = { number: bigint; hash: `0x${string}`; timestamp: bigint };
 
-/** Resolved cache entry with L1 provenance metadata. */
+/** Resolved cache entry for an epoch whose seed is fixed on L1, with L1 provenance metadata. */
 type CachedEpochEntry = {
+  kind: 'committee';
   data: EpochCommitteeInfo;
   /** L1 block number at which the committee data was originally queried. */
   lastQueryL1BlockNumber: bigint;
@@ -53,9 +60,20 @@ type CachedEpochEntry = {
   lastQueryL1BlockHash: `0x${string}`;
   /** Latest L1 block timestamp at the time of the most recent refresh (full fetch or lightweight check). */
   lastRefreshL1Timestamp: bigint;
-  /** Whether the epoch's sampling data falls within finalized L1 history. */
+  /** Whether the L1 block the entry was read at is finalized. */
   finalized: boolean;
 };
+
+/** Marker for an epoch whose seed could still change as of an L1 block. Re-checked against L1 once it expires. */
+type UnstableEpochEntry = {
+  kind: 'unstable';
+  /** L1 block at which the seed was found not to be fixed yet. */
+  l1BlockNumber: bigint;
+  /** Local time in seconds from which the marker no longer applies: one Ethereum slot after that block. */
+  expiresAt: bigint;
+};
+
+type EpochEntry = CachedEpochEntry | UnstableEpochEntry;
 
 export interface EpochCacheInterface {
   getCommittee(slot: SlotTag | undefined): Promise<EpochCommitteeInfo>;
@@ -95,7 +113,7 @@ export class EpochCache implements EpochCacheInterface {
    * Single map holding both resolved entries and in-flight promises.
    * A `Promise` value means a fetch is in progress; concurrent callers await it.
    */
-  protected cache: Map<EpochNumber, CachedEpochEntry | Promise<CachedEpochEntry>> = new Map();
+  protected cache: Map<EpochNumber, EpochEntry | Promise<EpochEntry>> = new Map();
   private allValidators: Set<string> = new Set();
   private lastValidatorRefresh = 0;
   private readonly log: Logger = createLogger('epoch-cache');
@@ -275,6 +293,9 @@ export class EpochCache implements EpochCacheInterface {
    * Returns cached data if the entry is finalized or still fresh (queried less than one
    * Ethereum slot ago). Stale non-finalized entries are re-queried, and concurrent callers
    * coalesce on the same in-flight promise so the L1 query happens only once.
+   *
+   * Throws {@link CommitteeNotStableError} while the epoch's sample seed can still change on L1. Callers should treat
+   * that as "not known yet": the same query succeeds once the seed is fixed.
    */
   public async getCommittee(slot: SlotTag = 'now'): Promise<EpochCommitteeInfo> {
     const { epoch, ts } = this.getEpochAndTimestamp(slot);
@@ -283,36 +304,32 @@ export class EpochCache implements EpochCacheInterface {
 
     // In-flight promise: another caller is already fetching this epoch — just await it.
     if (cached instanceof Promise) {
-      return (await cached).data;
+      return this.getCommitteeFromEntry(epoch, await cached);
     }
 
     // Resolved entry: return it if finalized or still fresh.
-    if (cached && (cached.finalized || !this.isStale(cached))) {
+    if (cached?.kind === 'committee' && (cached.finalized || !this.isStale(cached))) {
       return cached.data;
     }
 
-    // Stale non-finalized entry: do a lightweight refresh first (check block hash + finalized ts).
-    // Only fall back to a full re-fetch if the L1 block was reorged.
-    if (cached) {
-      const promise = this.refreshStaleEntry(cached, epoch, ts);
-      this.cache.set(epoch, promise);
-      try {
-        return (await promise).data;
-      } catch (err) {
-        this.cache.set(epoch, cached);
-        throw err;
-      }
+    // The seed was not fixed as of the last check, and that check is less than one Ethereum slot old.
+    if (cached?.kind === 'unstable' && !this.isExpired(cached)) {
+      return this.getCommitteeFromEntry(epoch, cached);
     }
 
-    // No entry at all: full fetch.
-    const promise = this.fetchAndCache(epoch, ts);
+    // Stale non-finalized entry: do a lightweight refresh first (check block hash + finalized block).
+    // Only fall back to a full re-fetch if the L1 block was reorged. Otherwise, do a full fetch.
+    const promise =
+      cached?.kind === 'committee' ? this.refreshStaleEntry(cached, epoch, ts) : this.fetchAndCache(epoch, ts);
     this.cache.set(epoch, promise);
-    try {
-      return (await promise).data;
-    } catch (err) {
-      this.cache.delete(epoch);
-      throw err;
+    return this.getCommitteeFromEntry(epoch, await promise);
+  }
+
+  private getCommitteeFromEntry(epoch: EpochNumber, entry: EpochEntry): EpochCommitteeInfo {
+    if (entry.kind === 'unstable') {
+      throw new CommitteeNotStableError(BigInt(epoch), entry.l1BlockNumber);
     }
+    return entry.data;
   }
 
   private getEpochAndTimestamp(slot: SlotTag = 'now'): { epoch: EpochNumber; ts: bigint } {
@@ -342,19 +359,23 @@ export class EpochCache implements EpochCacheInterface {
     return nowSeconds - entry.lastRefreshL1Timestamp >= BigInt(this.l1constants.ethereumSlotDuration);
   }
 
-  /** Whether a cached epoch entry has been marked as finalized. Returns undefined if not cached or still in-flight. */
+  private isExpired(entry: UnstableEpochEntry): boolean {
+    return BigInt(this.dateProvider.nowInSeconds()) >= entry.expiresAt;
+  }
+
+  /** Whether a cached epoch entry has been marked as finalized. Returns undefined if not cached, in-flight or unstable. */
   public isFinalized(epoch: EpochNumber): boolean | undefined {
     const entry = this.cache.get(epoch);
-    if (!entry || entry instanceof Promise) {
+    if (!entry || entry instanceof Promise || entry.kind !== 'committee') {
       return undefined;
     }
     return entry.finalized;
   }
 
-  /** Returns the latest L1 timestamp stored in the cached entry. Undefined if not cached or in-flight. */
+  /** Returns the latest L1 timestamp stored in the cached entry. Undefined if not cached, in-flight or unstable. */
   public getCachedLastRefreshL1Timestamp(epoch: EpochNumber): bigint | undefined {
     const entry = this.cache.get(epoch);
-    if (!entry || entry instanceof Promise) {
+    if (!entry || entry instanceof Promise || entry.kind !== 'committee') {
       return undefined;
     }
     return entry.lastRefreshL1Timestamp;
@@ -368,40 +389,77 @@ export class EpochCache implements EpochCacheInterface {
   }
 
   /**
+   * Whether the sample seed for `epoch` is fixed as of the given L1 block. The seed for epoch E hashes the randao
+   * that L1 checkpoints in epoch S = E - lagInEpochsForRandao, under the key start(S). It is fixed once that randao
+   * is written, or once S is over, since any later checkpoint is keyed at a later epoch's start.
+   */
+  private async isSeedFixed(epoch: EpochNumber, block: L1BlockInfo): Promise<boolean> {
+    const { targetCommitteeSize, lagInEpochsForRandao, epochDuration, slotDuration } = this.l1constants;
+
+    // The seed is irrelevant when the committee is empty and anyone may propose.
+    if (targetCommitteeSize === 0) {
+      return true;
+    }
+
+    // Epochs sampled before genesis read the zero randao that precedes the genesis checkpoint.
+    const samplingEpoch = BigInt(epoch) - BigInt(lagInEpochsForRandao);
+    if (samplingEpoch < 0n) {
+      return true;
+    }
+
+    const samplingEpochStart = this.getSamplingTimestamp(epoch);
+    const samplingEpochEnd = samplingEpochStart + BigInt(epochDuration) * BigInt(slotDuration);
+    if (block.timestamp >= samplingEpochEnd) {
+      return true;
+    }
+    if (block.timestamp < samplingEpochStart) {
+      return false;
+    }
+
+    // The v6 rollup's committee and seed views do not revert while the sampled epoch's randao can still change, so
+    // infer the randao write from storage: setupEpoch is the only writer of the sampled epoch's committee commitment,
+    // and it checkpoints that epoch's randao before storing the commitment. A bare checkpointRandao call goes
+    // undetected and falls back to the end-of-epoch rule above. This read can be dropped once every supported rollup
+    // reverts with ValidatorSelection__EpochNotStable instead (v7 onwards).
+    return await this.rollup.isEpochSetUp(EpochNumber.fromBigInt(samplingEpoch), { blockNumber: block.number });
+  }
+
+  /**
    * Lightweight refresh for a stale non-finalized entry. Queries only the block hash at
-   * the original block number and the finalized block timestamp — avoids the expensive
+   * the original block number and the finalized block — avoids the expensive
    * getCommitteeAt and getSampleSeedAt calls on the rollup contract.
    *
    * If the block hash still matches (no L1 reorg), we keep the existing data and just
    * update the provenance timestamp. If the finalized block has caught up, we promote the
-   * entry to finalized. If there was a reorg (hash mismatch), we fall back to a full fetch.
+   * entry to finalized. If there was a reorg (hash mismatch), we fall back to a full fetch,
+   * and drop the stale entry if that fetch fails.
    */
-  private async refreshStaleEntry(stale: CachedEpochEntry, epoch: EpochNumber, ts: bigint): Promise<CachedEpochEntry> {
-    const [blockAtOriginal, l1FinalizedBlock, latestBlock] = await Promise.all([
-      this.rollup.client.getBlock({ blockNumber: stale.lastQueryL1BlockNumber, includeTransactions: false }),
-      getFinalizedL1Block(this.rollup.client),
-      this.rollup.client.getBlock({ includeTransactions: false }),
-    ]);
+  private async refreshStaleEntry(stale: CachedEpochEntry, epoch: EpochNumber, ts: bigint): Promise<EpochEntry> {
+    let blockAtOriginal: L1BlockInfo, l1FinalizedBlock: L1BlockInfo | undefined, latestBlock: L1BlockInfo;
+    try {
+      [blockAtOriginal, l1FinalizedBlock, latestBlock] = await Promise.all([
+        this.rollup.client.getBlock({ blockNumber: stale.lastQueryL1BlockNumber, includeTransactions: false }),
+        getFinalizedL1Block(this.rollup.client),
+        this.rollup.client.getBlock({ includeTransactions: false }),
+      ]);
+    } catch (err) {
+      this.cache.set(epoch, stale);
+      throw err;
+    }
 
     if (blockAtOriginal.hash === stale.lastQueryL1BlockHash) {
       // No reorg: the data is still valid. Check if we can now mark it as finalized.
-      const samplingTs = this.getSamplingTimestamp(epoch);
-      const finalized =
-        !!(stale.data.committee && stale.data.committee.length > 0) &&
-        l1FinalizedBlock !== undefined &&
-        samplingTs <= l1FinalizedBlock.timestamp;
-
       const refreshed: CachedEpochEntry = {
         ...stale,
         lastRefreshL1Timestamp: latestBlock.timestamp,
-        finalized,
+        finalized: this.isEntryFinalized(stale.data.committee, stale.lastQueryL1BlockNumber, l1FinalizedBlock),
       };
       this.cache.set(epoch, refreshed);
       return refreshed;
     }
 
     // Reorg detected: block hash mismatch. Do a full re-fetch.
-    // Pass the already-fetched block timestamps to avoid redundant queries.
+    // Pass the already-fetched blocks to avoid redundant queries.
     this.log.warn(`L1 reorg detected for epoch ${epoch}: block ${stale.lastQueryL1BlockNumber} hash changed`, {
       epoch,
       expectedHash: stale.lastQueryL1BlockHash,
@@ -411,10 +469,9 @@ export class EpochCache implements EpochCacheInterface {
   }
 
   /**
-   * Fetches committee data from L1, determines finalization status, and stores in the cache.
-   *
-   * Uses `lagInEpochsForRandao` (the binding constraint, always <= lagInEpochsForValidatorSet)
-   * and computes the sampling timestamp from the epoch start to match the L1 contract's logic.
+   * Fetches committee data from L1, determines finalization status, and stores in the cache. If the epoch's seed can
+   * still change as of the latest L1 block, stores an unstable marker that expires one Ethereum slot later instead.
+   * Removes the epoch from the cache if the fetch fails.
    *
    * When called from refreshStaleEntry after a reorg, the latest and finalized blocks are
    * passed in to avoid redundant L1 queries.
@@ -422,46 +479,82 @@ export class EpochCache implements EpochCacheInterface {
   private async fetchAndCache(
     epoch: EpochNumber,
     ts: bigint,
-    prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: { timestamp: bigint } | undefined },
-  ): Promise<CachedEpochEntry> {
+    prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: L1BlockInfo | undefined },
+  ): Promise<EpochEntry> {
+    try {
+      const entry = await this.fetchEntry(epoch, ts, prefetched);
+      this.cache.set(epoch, entry);
+      this.purgeCache();
+      return entry;
+    } catch (err) {
+      this.cache.delete(epoch);
+      throw err;
+    }
+  }
+
+  private async fetchEntry(
+    epoch: EpochNumber,
+    ts: bigint,
+    prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: L1BlockInfo | undefined },
+  ): Promise<EpochEntry> {
     // Pin the rollup reads to one L1 block so the entry's provenance matches the data it holds. The escape hatch flag
     // is only partly pinned: the hatch address is resolved at the latest block, and any read error counts as closed.
     const latestBlock = prefetched?.latestBlock ?? (await this.rollup.client.getBlock({ includeTransactions: false }));
     const blockNumber = latestBlock.number;
-    const [committee, seedBuffer, finalizedBlock, isEscapeHatchOpen] = await Promise.all([
-      this.rollup.getCommitteeAt(ts, { blockNumber }),
-      this.rollup.getSampleSeedAt(ts, { blockNumber }),
-      prefetched !== undefined ? prefetched.finalizedBlock : getFinalizedL1Block(this.rollup.client),
-      this.rollup.isEscapeHatchOpen(epoch, { blockNumber }),
-    ]);
-
-    const samplingTs = this.getSamplingTimestamp(epoch);
-
-    if (samplingTs > latestBlock.timestamp) {
-      throw new Error(
-        `Cannot query committee for future epoch ${epoch}: ` +
-          `sampling timestamp ${samplingTs} is beyond latest L1 block at ${latestBlock.timestamp}. ` +
-          `Check your Ethereum node is synced.`,
-      );
-    }
-
-    // Empty committees are never marked finalized so they always get re-queried after TTL.
-    // If L1 has no finalized block yet (devnet startup), entries stay unfinalized.
-    const hasCommittee = !!(committee && committee.length > 0);
-    const finalized = hasCommittee && finalizedBlock !== undefined && samplingTs <= finalizedBlock.timestamp;
-    const data: EpochCommitteeInfo = { committee, seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen };
-    const entry: CachedEpochEntry = {
-      data,
-      lastQueryL1BlockNumber: latestBlock.number!,
-      lastQueryL1BlockHash: latestBlock.hash!,
-      lastRefreshL1Timestamp: latestBlock.timestamp,
-      finalized,
+    const unstable: UnstableEpochEntry = {
+      kind: 'unstable',
+      l1BlockNumber: blockNumber,
+      expiresAt: latestBlock.timestamp + BigInt(this.l1constants.ethereumSlotDuration),
     };
 
-    this.cache.set(epoch, entry);
-    this.purgeCache();
+    if (!(await this.isSeedFixed(epoch, latestBlock))) {
+      this.log.debug(`Committee for epoch ${epoch} is not stable yet as of L1 block ${blockNumber}`, {
+        epoch,
+        l1BlockNumber: blockNumber,
+        l1BlockTimestamp: latestBlock.timestamp,
+      });
+      return unstable;
+    }
 
+    let committee: EthAddress[] | undefined, seedBuffer: Buffer32, isEscapeHatchOpen: boolean;
+    let finalizedBlock: L1BlockInfo | undefined;
+    try {
+      [committee, seedBuffer, finalizedBlock, isEscapeHatchOpen] = await Promise.all([
+        this.rollup.getCommitteeAt(ts, { blockNumber }),
+        this.rollup.getSampleSeedAt(ts, { blockNumber }),
+        prefetched !== undefined ? prefetched.finalizedBlock : getFinalizedL1Block(this.rollup.client),
+        this.rollup.isEscapeHatchOpen(epoch, { blockNumber }),
+      ]);
+    } catch (err) {
+      if (isEpochNotStableError(err)) {
+        return unstable;
+      }
+      throw err;
+    }
+
+    const entry: CachedEpochEntry = {
+      kind: 'committee',
+      data: { committee, seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen },
+      lastQueryL1BlockNumber: blockNumber,
+      lastQueryL1BlockHash: latestBlock.hash,
+      lastRefreshL1Timestamp: latestBlock.timestamp,
+      finalized: this.isEntryFinalized(committee, blockNumber, finalizedBlock),
+    };
     return entry;
+  }
+
+  /**
+   * An entry is read only once its seed is fixed, so it can no longer change once the L1 block it was read at is
+   * finalized. Empty committees are never marked finalized so they always get re-queried after TTL. If L1 has no
+   * finalized block yet (devnet startup), entries stay unfinalized.
+   */
+  private isEntryFinalized(
+    committee: EthAddress[] | undefined,
+    queryL1BlockNumber: bigint,
+    finalizedBlock: L1BlockInfo | undefined,
+  ): boolean {
+    const hasCommittee = !!(committee && committee.length > 0);
+    return hasCommittee && finalizedBlock !== undefined && finalizedBlock.number >= queryL1BlockNumber;
   }
 
   /**
