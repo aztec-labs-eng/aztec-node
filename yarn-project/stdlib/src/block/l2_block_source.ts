@@ -629,8 +629,8 @@ export type InvalidCheckpointDetectedEvent = {
 };
 
 /**
- * Emitted when a local proposed checkpoint is found to disagree with the L1-confirmed
- * checkpoint at the same slot. The slot proposer signed both — equivocation.
+ * Emitted when a local proposed checkpoint is found to disagree with the L1-confirmed checkpoint at the same slot, and
+ * both were signed by the same proposer — equivocation.
  */
 export type CheckpointEquivocationDetectedEvent = {
   type: 'checkpointEquivocationDetected';
@@ -638,6 +638,8 @@ export type CheckpointEquivocationDetectedEvent = {
   checkpointNumber: CheckpointNumber;
   l1ArchiveRoot: Fr;
   proposedArchiveRoot: Fr;
+  /** The proposer whose key signed both the local proposed checkpoint and the L1 checkpoint. */
+  signer: EthAddress;
 };
 
 /**
