@@ -1,4 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { CommitteeNotStableError } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, type SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, maxBy, merge } from '@aztec-labs/foundation/collection';
 import { type Logger, createLibp2pComponentLogger, createLogger } from '@aztec-labs/foundation/log';
@@ -819,10 +820,22 @@ export class LibP2PService extends WithTracer implements P2PService {
    * empty committee every signer is accepted, so two distinct honest proposers for the same slot look
    * like equivocation; without an expected proposer there is no one to attribute the offense to.
    * Mirrors the guard in checkpoint_equivocation_watcher, which refuses to slash when the slot has no
-   * proposer.
+   * proposer. While the slot's committee is not stable on L1 there is no expected proposer yet either.
    */
   private async canAttributeDuplicateProposal(slot: SlotNumber): Promise<boolean> {
-    const expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slot);
+    let expectedProposer: EthAddress | undefined;
+    try {
+      expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slot);
+    } catch (err) {
+      if (err instanceof CommitteeNotStableError) {
+        this.logger.debug(`Not attributing duplicate proposal at slot ${slot}: committee not stable on L1 yet`, {
+          slot,
+          epoch: err.epoch,
+        });
+        return false;
+      }
+      throw err;
+    }
     if (expectedProposer === undefined) {
       this.logger.warn(`Not attributing duplicate proposal at slot ${slot}: no expected proposer (empty committee)`);
       return false;

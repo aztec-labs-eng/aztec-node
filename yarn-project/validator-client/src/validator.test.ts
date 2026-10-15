@@ -1,7 +1,7 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
 import type { EpochCache } from '@aztec-labs/epoch-cache';
-import { MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, MAX_FEE_ASSET_PRICE_MODIFIER_BPS } from '@aztec-labs/ethereum/contracts';
 import {
   BlockNumber,
   CheckpointNumber,
@@ -2174,6 +2174,13 @@ describe('ValidatorClient', () => {
       expect(haKeyStore.start).toHaveBeenCalledTimes(1);
       await validatorClient.stop();
       expect(haKeyStore.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts when the current committee is not stable on L1 yet', async () => {
+      epochCache.filterInCommittee.mockRejectedValue(new CommitteeNotStableError(1n, 100n));
+      epochCache.getCommittee.mockRejectedValue(new CommitteeNotStableError(1n, 100n));
+      await validatorClient.start();
+      await validatorClient.stop();
     });
   });
 
