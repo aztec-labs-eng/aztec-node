@@ -24,7 +24,7 @@ import { Buffer } from 'buffer';
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type Hex, type TransactionReceipt, decodeFunctionData, getAddress } from 'viem';
 
-import { MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS, ProverNodePublisher } from './prover-node-publisher.js';
+import { ProverNodePublisher } from './prover-node-publisher.js';
 
 /**
  * A packed attestations tuple for a committee of `committeeSize`, optionally with one of the bitmap's spare bits
@@ -609,7 +609,7 @@ describe('prover-node-publisher', () => {
       l1Utils.estimateGas.mockImplementation(() => Promise.resolve((estimate += 100_000n)));
 
       await expect(publisher.submitEpochProof(setupPublishData(65, 32, 33, 64))).resolves.toEqual('failed');
-      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS);
+      expect(l1Utils.sendAndMonitorTransaction).toHaveBeenCalledTimes(3);
     });
   });
 
