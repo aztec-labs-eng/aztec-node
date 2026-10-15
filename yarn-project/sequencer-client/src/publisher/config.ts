@@ -53,8 +53,6 @@ export type PublisherConfig = L1TxUtilsConfig &
     publisherAllowInvalidStates?: boolean;
     /** Whether to run in fisherman mode: builds blocks on every slot for validation without publishing to L1 */
     fishermanMode?: boolean;
-    /** Address of the forwarder contract to wrap all L1 transactions through (for testing purposes only) */
-    publisherForwarderAddress?: EthAddress;
     /** Store for failed L1 transaction inputs (test networks only). Format: gs://bucket/path */
     l1TxFailedStore?: string;
     /** Min ETH balance below which a publisher gets funded. Undefined = funding disabled. */
@@ -97,7 +95,6 @@ export type ProverPublisherConfig = L1TxUtilsConfig &
   BlobClientConfig & {
     fishermanMode?: boolean;
     proverPublisherAllowInvalidStates?: boolean;
-    proverPublisherForwarderAddress?: EthAddress;
     /** Min ETH balance below which a publisher gets funded. Undefined = funding disabled. */
     publisherFundingThreshold?: bigint;
     /** Amount of ETH to send when funding a publisher. Undefined = funding disabled. */
@@ -129,7 +126,6 @@ export function getPublisherConfigFromProverConfig(config: ProverPublisherConfig
   return {
     ...config,
     publisherAllowInvalidStates: config.proverPublisherAllowInvalidStates,
-    publisherForwarderAddress: config.proverPublisherForwarderAddress,
   };
 }
 
@@ -137,7 +133,6 @@ export function getPublisherConfigFromSequencerConfig(config: SequencerPublisher
   return {
     ...config,
     publisherAllowInvalidStates: config.sequencerPublisherAllowInvalidStates,
-    publisherForwarderAddress: config.sequencerPublisherForwarderAddress,
     l1TxFailedStore: config.l1TxFailedStore,
   };
 }
@@ -229,11 +224,6 @@ export const proverPublisherConfigMappings: ConfigMappingsType<ProverPublisherCo
     description:
       'Whether to run in fisherman mode: builds blocks on every slot for validation without publishing to L1',
     ...booleanConfigHelper(false),
-  },
-  proverPublisherForwarderAddress: {
-    env: `PROVER_PUBLISHER_FORWARDER_ADDRESS`,
-    description: 'Address of the forwarder contract to wrap all L1 transactions through (for testing purposes only)',
-    parseEnv: (val: string) => EthAddress.fromString(val),
   },
   ...publisherFundingConfigMappings,
 };

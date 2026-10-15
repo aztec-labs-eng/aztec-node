@@ -1,6 +1,5 @@
 import type { Archiver } from '@aztec-labs/archiver';
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
-import { Blob } from '@aztec-labs/blob-lib';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { createEthereumChain } from '@aztec-labs/ethereum/chain';
 import { makeL1HttpTransport } from '@aztec-labs/ethereum/client';
@@ -11,7 +10,7 @@ import { pick } from '@aztec-labs/foundation/collection';
 import { type Logger, createLogger } from '@aztec-labs/foundation/log';
 import { DateProvider } from '@aztec-labs/foundation/timer';
 import { KeystoreManager } from '@aztec-labs/node-keystore';
-import { createForwarderL1TxUtilsFromSigners, createL1TxUtilsFromSigners } from '@aztec-labs/node-lib/factories';
+import { createL1TxUtilsFromSigners } from '@aztec-labs/node-lib/factories';
 import { type ProverClientConfig, type ProverClientUserConfig, createProverClient } from '@aztec-labs/prover-client';
 import { createAndStartProvingBroker } from '@aztec-labs/prover-client/broker';
 import {
@@ -107,20 +106,12 @@ export async function createProverNode(
 
   const l1TxUtils = deps.l1TxUtils
     ? [deps.l1TxUtils]
-    : config.proverPublisherForwarderAddress
-      ? await createForwarderL1TxUtilsFromSigners(
-          publicClient,
-          proverSigners.signers,
-          config.proverPublisherForwarderAddress,
-          { ...config, scope: 'prover' },
-          { telemetry, logger: log.createChild('l1-tx-utils'), dateProvider, kzg: Blob.getViemKzgInstance() },
-        )
-      : await createL1TxUtilsFromSigners(
-          publicClient,
-          proverSigners.signers,
-          { ...config, scope: 'prover' },
-          { telemetry, logger: log.createChild('l1-tx-utils'), dateProvider },
-        );
+    : await createL1TxUtilsFromSigners(
+        publicClient,
+        proverSigners.signers,
+        { ...config, scope: 'prover' },
+        { telemetry, logger: log.createChild('l1-tx-utils'), dateProvider },
+      );
 
   // Create a funder L1TxUtils from the keystore funding account (if configured)
   const fundingSigner = keyStoreManager?.createFundingSigner();
