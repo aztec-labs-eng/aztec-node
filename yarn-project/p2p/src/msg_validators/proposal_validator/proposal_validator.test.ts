@@ -1,5 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, NoCommitteeError } from '@aztec-labs/ethereum/contracts';
 import { EpochNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { times } from '@aztec-labs/foundation/collection';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
@@ -232,6 +232,15 @@ describe('ProposalValidator', () => {
       epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new NoCommitteeError());
       const result = await validator.validate(proposal);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
+    });
+
+    it('ignores a proposal when its committee is not stable on L1 yet', async () => {
+      const proposal = await factory(currentSlot, Secp256k1Signer.random());
+
+      // The seed is not fixed yet, so the expected proposer is unknown: not the relaying peer's fault.
+      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new CommitteeNotStableError(1n, 100n));
+      const result = await validator.validate(proposal);
+      expect(result).toEqual({ result: 'ignore' });
     });
 
     it('ignores a proposal when the local proposer lookup fails for a non-committee reason', async () => {

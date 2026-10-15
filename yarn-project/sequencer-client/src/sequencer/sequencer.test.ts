@@ -1,6 +1,11 @@
 import { MAX_BLOCKS_PER_CHECKPOINT } from '@aztec-labs/constants';
 import { type EpochCache, type EpochCommitteeInfo, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
-import { type InboxContract, NoCommitteeError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import {
+  CommitteeNotStableError,
+  type InboxContract,
+  NoCommitteeError,
+  type RollupContract,
+} from '@aztec-labs/ethereum/contracts';
 import { NoAffordablePublisherError } from '@aztec-labs/ethereum/publisher-manager';
 import {
   BlockNumber,
@@ -693,6 +698,20 @@ describe('sequencer', () => {
       await sequencer.awaitLastProposalSubmission();
 
       expectPublisherProposeL2Block();
+    });
+
+    it('skips a target slot whose committee is not stable on L1 yet', async () => {
+      await setupSingleTxBlock();
+      // The escape hatch flag lives in the same epoch-cache entry, so reading it would throw as well.
+      epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new CommitteeNotStableError(1n, 100n));
+      epochCache.isEscapeHatchOpen.mockRejectedValue(new CommitteeNotStableError(1n, 100n));
+      const errorSpy = jest.spyOn(sequencer.getLogger(), 'error');
+
+      await sequencer.work();
+
+      expect(checkpointBuilder.buildBlockCalls).toHaveLength(0);
+      expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('does not build a block when targetSlot is in pauseProposingForSlots', async () => {
