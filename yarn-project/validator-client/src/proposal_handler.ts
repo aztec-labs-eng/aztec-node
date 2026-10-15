@@ -70,6 +70,7 @@ import {
   checkInboxEndpoint,
 } from './checkpoint_endpoint_check.js';
 import { warnCommitteeNotStable } from './committee_not_stable.js';
+import { type InvalidBlockVerdict, checkpointCommitsToRejectedBlock } from './invalid_checkpoint_evidence.js';
 import type { ValidatorMetrics } from './metrics.js';
 import {
   type StreamingBlockCheckReason,
@@ -123,6 +124,13 @@ export type BlockProposalValidationFailureResult = {
   reason: BlockProposalValidationFailureReason;
   blockNumber?: BlockNumber;
   reexecutionResult?: ReexecuteTransactionsResult;
+  // The mismatch shape for the two rejections whose header binding cannot be decided from the reason alone:
+  // state_mismatch carries the exact shape (headerMismatch binds by header membership; archiveMismatch binds only
+  // when the block is the committed sequence's last and its wrong archive is the signed one), and invalid_proposal
+  // carries it only for the slot checks (the index-label checks judge a value outside the header and leave it unset).
+  // Every other header-committing reason is bound by HEADER_BOUND_BLOCK_REASONS without a per-result flag. See
+  // recordVerdictIfBound and checkpointCommitsToRejectedBlock.
+  headerBoundVerdict?: { headerMismatch: boolean; archiveMismatch: boolean };
 };
 
 export type BlockProposalValidationResult = BlockProposalValidationSuccessResult | BlockProposalValidationFailureResult;
@@ -293,7 +301,14 @@ function isCheckpointValidationFailure<T extends object>(
 
 type CheckpointComputationResult =
   | { checkpointNumber: CheckpointNumber; reason?: undefined }
-  | { checkpointNumber?: undefined; reason: 'invalid_proposal' | 'global_variables_mismatch' };
+  | {
+      checkpointNumber?: undefined;
+      reason: 'invalid_proposal' | 'global_variables_mismatch';
+      // Whether the rejection invalidates something the signed header commits to (a slot or global-variables
+      // mismatch), so it may bind a committing checkpoint. False for the index-label checks, which judge a value
+      // outside the header and must never slash a checkpoint's attesters.
+      headerBound: boolean;
+    };
 
 /** A block proposal's log context, completed with its block and checkpoint numbers as validation resolves them. */
 type BlockProposalLogInfo = LogData & { blockNumber?: BlockNumber; checkpointNumber?: CheckpointNumber };
@@ -430,6 +445,24 @@ export const SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT: Record<BlockProposalVal
   ['unknown_error']: false,
 };
 
+/**
+ * Slashable block-proposal rejections that always invalidate the block the signed header commits to, so a checkpoint
+ * whose committed sequence contains that header is bound to it by header membership. Only rejections that follow from
+ * the signed header and its parent are listed: the embedded-tx-body reasons (invalid_embedded_txs, failed_txs,
+ * duplicate_txs) are excluded because those tx bodies sit outside both the header and the checkpoint's signed payload,
+ * so a node that rejects for one of them cannot prove the checkpoint invalid to its honest signers. state_mismatch and
+ * the invalid_proposal slot checks carry a per-result headerBoundVerdict instead of appearing here (state_mismatch can
+ * bind by the sequence's last block, not only by membership; invalid_proposal binds only for its slot checks). See
+ * recordVerdictIfBound.
+ */
+const HEADER_BOUND_BLOCK_REASONS: ReadonlySet<BlockProposalValidationFailureReason> = new Set([
+  'parent_block_wrong_slot',
+  'global_variables_mismatch',
+  'consumption_moves_backwards',
+  'bundle_over_block_cap',
+  'checkpoint_over_msg_cap',
+]);
+
 /** Checkpoint-proposal validation failures that constitute a slashable invalid-checkpoint offense. */
 export const SLASHABLE_CHECKPOINT_PROPOSAL_VALIDATION_RESULT: Record<
   CheckpointProposalValidationFailureReason,
@@ -548,6 +581,13 @@ export class ProposalHandler {
    * slot evicted).
    */
   private readonly invalidCheckpointProposalHashesBySlot = new Map<SlotNumber, Set<CheckpointProposalHash>>();
+
+  /**
+   * Per-proposal verdicts for block proposals this node rejected for a payload-committing reason, per slot. Read when
+   * a checkpoint bails at last_block_not_found, to decide whether it commits to one of those rejected blocks (see
+   * checkpointCommitsToRejectedBlock). Bounded like invalidCheckpointProposalHashesBySlot (oldest slot evicted).
+   */
+  private readonly invalidBlockVerdictsBySlot = new Map<SlotNumber, InvalidBlockVerdict[]>();
 
   constructor(
     private checkpointsBuilder: FullNodeCheckpointsBuilder,
@@ -689,6 +729,83 @@ export class ProposalHandler {
   /** Signed-payload hashes of invalid checkpoint proposals observed at the slot (InvalidProposalSlotSource). */
   public getInvalidCheckpointProposalHashes(slotNumber: SlotNumber): CheckpointProposalHash[] {
     return [...(this.invalidCheckpointProposalHashesBySlot.get(slotNumber) ?? [])];
+  }
+
+  /**
+   * Records a per-block verdict for a block proposal this node rejected for a reason that invalidates the block's
+   * signed header (a header mismatch), or whose claimed resulting archive did not match re-execution (an archive
+   * mismatch), so a checkpoint that commits to the block can later be bound to it. Bounded like the other per-slot
+   * stores (oldest slot evicted).
+   */
+  private recordInvalidBlockVerdict(slotNumber: SlotNumber, verdict: InvalidBlockVerdict): void {
+    let verdicts = this.invalidBlockVerdictsBySlot.get(slotNumber);
+    if (!verdicts) {
+      verdicts = [];
+      this.invalidBlockVerdictsBySlot.set(slotNumber, verdicts);
+      while (this.invalidBlockVerdictsBySlot.size > MAX_TRACKED_INVALID_PROPOSAL_SLOTS) {
+        const oldest = this.invalidBlockVerdictsBySlot.keys().next().value;
+        if (oldest === undefined) {
+          break;
+        }
+        this.invalidBlockVerdictsBySlot.delete(oldest);
+      }
+    }
+    verdicts.push(verdict);
+  }
+
+  /**
+   * Records a per-block verdict for a rejection that invalidates the block's signed header, so a checkpoint whose
+   * committed sequence contains that header can later be bound to it. Called once per proposal on the final result -
+   * after the parent-pruned demotion, which turns the reason non-slashable, so a demoted rejection records nothing.
+   * The shape comes from the result's own headerBoundVerdict (state_mismatch and the invalid_proposal slot checks)
+   * or, for the other header-committing reasons, from HEADER_BOUND_BLOCK_REASONS. A slashable reason that is neither
+   * (the invalid_proposal index checks, or an embedded-tx-body reason) records nothing.
+   */
+  private recordVerdictIfBound(proposal: BlockProposal, result: BlockProposalValidationResult): void {
+    if (result.isValid || !SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[result.reason]) {
+      return;
+    }
+    const shape =
+      result.headerBoundVerdict ??
+      (HEADER_BOUND_BLOCK_REASONS.has(result.reason) ? { headerMismatch: true, archiveMismatch: false } : undefined);
+    if (!shape) {
+      return;
+    }
+    this.recordInvalidBlockVerdict(proposal.slotNumber, {
+      blockHeader: proposal.blockHeader,
+      archiveRoot: proposal.archive,
+      ...shape,
+    });
+  }
+
+  /**
+   * When a checkpoint could not be validated because the block carrying its signed archive is not local
+   * (last_block_not_found), it may still commit to a block this node rejected. Records the invalid-checkpoint
+   * payload hash (so the watcher slashes its attesters) only when the rejection is provably bound to the signed
+   * payload; see checkpointCommitsToRejectedBlock. Missing evidence is never guilt, so an unbound or
+   * unreconstructable case records nothing.
+   */
+  private async recordInvalidCheckpointIfBoundToRejectedBlock(
+    proposal: CheckpointProposalCore,
+    proposalInfo: LogData,
+  ): Promise<void> {
+    const verdicts = this.invalidBlockVerdictsBySlot.get(proposal.slotNumber);
+    if (!verdicts || verdicts.length === 0 || !this.p2pClient) {
+      return;
+    }
+    const { blockProposals } = await this.p2pClient.getProposalsForSlot(proposal.slotNumber);
+    // A rejected block the checkpoint's signed payload names directly: its header is in the committed sequence, or
+    // its wrong archive is the signed archive. A rejection the payload does not commit to records nothing, so a few
+    // lazy attesters go unpunished for a corruption only a full rebuild could catch - and honest nodes cannot
+    // validate that checkpoint either, while the bad block's proposer is still slashed on the block path.
+    if (await checkpointCommitsToRejectedBlock(proposal, blockProposals, verdicts)) {
+      this.log.warn(`Checkpoint commits to a block this node rejected; recording invalid-checkpoint evidence`, {
+        ...proposalInfo,
+        slot: proposal.slotNumber,
+      });
+      this.markInvalidProposalSlot(proposal.slotNumber);
+      this.markInvalidCheckpointProposal(proposal.slotNumber, proposal.getPayloadHash());
+    }
   }
 
   /**
@@ -931,9 +1048,14 @@ export class ProposalHandler {
       proposalInfo,
     );
     // A genesis parent cannot be pruned.
-    return parentBlock !== 'genesis' && isSlashableBlockProposalResult(result)
-      ? await this.checkParentStillLocal(proposal, result, proposalInfo)
-      : result;
+    const finalResult =
+      parentBlock !== 'genesis' && isSlashableBlockProposalResult(result)
+        ? await this.checkParentStillLocal(proposal, result, proposalInfo)
+        : result;
+    // Record the checkpoint-attester verdict only on the final classification: checkParentStillLocal may demote a
+    // slashable rejection to the non-slashable parent_block_pruned_during_validation, which then records nothing.
+    this.recordVerdictIfBound(proposal, finalResult);
+    return finalResult;
   }
 
   /**
@@ -1055,7 +1177,17 @@ export class ProposalHandler {
     // Compute the checkpoint number for this block and validate checkpoint consistency
     const checkpointResult = this.computeCheckpointNumber(proposal, parentBlock, proposalInfo);
     if (checkpointResult.reason) {
-      return { isValid: false, blockNumber, reason: checkpointResult.reason };
+      return {
+        isValid: false,
+        blockNumber,
+        reason: checkpointResult.reason,
+        // invalid_proposal's slot checks judge the signed header and bind (headerBound); its index-label checks do
+        // not. global_variables_mismatch binds by reason (HEADER_BOUND_BLOCK_REASONS), so it needs no per-result flag.
+        headerBoundVerdict:
+          checkpointResult.reason === 'invalid_proposal' && checkpointResult.headerBound
+            ? { headerMismatch: true, archiveMismatch: false }
+            : undefined,
+      };
     }
     const checkpointNumber = checkpointResult.checkpointNumber;
     proposalInfo.checkpointNumber = checkpointNumber;
@@ -1087,7 +1219,14 @@ export class ProposalHandler {
     } catch (error) {
       this.log.error(`Error reexecuting txs while processing block proposal`, error, proposalInfo);
       const reason = await this.classifyReexecutionFailure(error, proposal, streamingMetadata, proposalInfo);
-      return { isValid: false, blockNumber, reason, reexecutionResult };
+      const failure: BlockProposalValidationFailureResult = { isValid: false, blockNumber, reason, reexecutionResult };
+      // A non-demoted state mismatch carries its exact shape (header and/or archive mismatch). The caller records on
+      // the final result, so a local-view demotion (inbox_prefix_*, not slashable) or a parent-pruned demotion leaves
+      // no attester evidence.
+      if (error instanceof ReExStateMismatchError && SLASHABLE_BLOCK_PROPOSAL_VALIDATION_RESULT[reason]) {
+        failure.headerBoundVerdict = { headerMismatch: error.headerMismatch, archiveMismatch: error.archiveMismatch };
+      }
+      return failure;
     }
 
     // If we succeeded, push this block into the archiver (unless disabled), carrying the proposal's signed Inbox
@@ -1321,7 +1460,8 @@ export class ProposalHandler {
       // First block is in checkpoint 1
       if (proposal.indexWithinCheckpoint !== 0) {
         this.log.warn(`First block proposal has non-zero indexWithinCheckpoint`, proposalInfo);
-        return { reason: 'invalid_proposal' };
+        // The index label is outside the signed header, so it must not bind a checkpoint's attesters.
+        return { reason: 'invalid_proposal', headerBound: false };
       }
       return { checkpointNumber: CheckpointNumber.INITIAL };
     }
@@ -1330,7 +1470,8 @@ export class ProposalHandler {
       // If this is the first block in a new checkpoint, increment the checkpoint number
       if (!(proposal.blockHeader.getSlot() > parentBlock.header.getSlot())) {
         this.log.warn(`Slot should be greater than parent block slot for first block in checkpoint`, proposalInfo);
-        return { reason: 'invalid_proposal' };
+        // The block's slot is part of the signed header, so this binds a committing checkpoint.
+        return { reason: 'invalid_proposal', headerBound: true };
       }
       return { checkpointNumber: CheckpointNumber(parentBlock.checkpointNumber + 1) };
     }
@@ -1338,11 +1479,13 @@ export class ProposalHandler {
     // Otherwise it should follow the previous block in the same checkpoint
     if (proposal.indexWithinCheckpoint !== parentBlock.indexWithinCheckpoint + 1) {
       this.log.warn(`Non-sequential indexWithinCheckpoint`, proposalInfo);
-      return { reason: 'invalid_proposal' };
+      // The index label is outside the signed header, so it must not bind a checkpoint's attesters.
+      return { reason: 'invalid_proposal', headerBound: false };
     }
     if (proposal.blockHeader.getSlot() !== parentBlock.header.getSlot()) {
       this.log.warn(`Slot should be equal to parent block slot for non-first block in checkpoint`, proposalInfo);
-      return { reason: 'invalid_proposal' };
+      // The block's slot is part of the signed header, so this binds a committing checkpoint.
+      return { reason: 'invalid_proposal', headerBound: true };
     }
 
     // For non-first blocks in a checkpoint, validate global variables match parent (except blockNumber)
@@ -1375,7 +1518,7 @@ export class ProposalHandler {
         proposalChainId: proposalGlobals.chainId.toString(),
         parentChainId: parentGlobals.chainId.toString(),
       });
-      return { reason: 'global_variables_mismatch' };
+      return { reason: 'global_variables_mismatch', headerBound: true };
     }
 
     if (!proposalGlobals.version.equals(parentGlobals.version)) {
@@ -1384,7 +1527,7 @@ export class ProposalHandler {
         proposalVersion: proposalGlobals.version.toString(),
         parentVersion: parentGlobals.version.toString(),
       });
-      return { reason: 'global_variables_mismatch' };
+      return { reason: 'global_variables_mismatch', headerBound: true };
     }
 
     if (proposalGlobals.timestamp !== parentGlobals.timestamp) {
@@ -1393,7 +1536,7 @@ export class ProposalHandler {
         proposalTimestamp: proposalGlobals.timestamp.toString(),
         parentTimestamp: parentGlobals.timestamp.toString(),
       });
-      return { reason: 'global_variables_mismatch' };
+      return { reason: 'global_variables_mismatch', headerBound: true };
     }
 
     if (!proposalGlobals.coinbase.equals(parentGlobals.coinbase)) {
@@ -1402,7 +1545,7 @@ export class ProposalHandler {
         proposalCoinbase: proposalGlobals.coinbase.toString(),
         parentCoinbase: parentGlobals.coinbase.toString(),
       });
-      return { reason: 'global_variables_mismatch' };
+      return { reason: 'global_variables_mismatch', headerBound: true };
     }
 
     if (!proposalGlobals.feeRecipient.equals(parentGlobals.feeRecipient)) {
@@ -1411,7 +1554,7 @@ export class ProposalHandler {
         proposalFeeRecipient: proposalGlobals.feeRecipient.toString(),
         parentFeeRecipient: parentGlobals.feeRecipient.toString(),
       });
-      return { reason: 'global_variables_mismatch' };
+      return { reason: 'global_variables_mismatch', headerBound: true };
     }
 
     if (!proposalGlobals.gasFees.equals(parentGlobals.gasFees)) {
@@ -1420,7 +1563,7 @@ export class ProposalHandler {
         proposalGasFees: proposalGlobals.gasFees.toInspect(),
         parentGasFees: parentGlobals.gasFees.toInspect(),
       });
-      return { reason: 'global_variables_mismatch' };
+      return { reason: 'global_variables_mismatch', headerBound: true };
     }
 
     return undefined;
@@ -1939,7 +2082,7 @@ export class ProposalHandler {
         actualHeader: proposal.blockHeader.toInspect(),
       });
       this.metrics?.recordFailedReexecution(proposal);
-      throw new ReExStateMismatchError(proposal.archive, block.archive.root);
+      throw new ReExStateMismatchError(proposal.archive, block.archive.root, !headerMatches, !archiveMatches);
     }
 
     const reexecutionTimeMs = timer.ms();
@@ -2387,6 +2530,7 @@ export class ProposalHandler {
     } catch (err) {
       if (err instanceof TimeoutError) {
         this.log.warn(`Timed out waiting for block with archive matching checkpoint proposal`, proposalInfo);
+        await this.recordInvalidCheckpointIfBoundToRejectedBlock(proposal, proposalInfo);
         return { isValid: false, reason: 'last_block_not_found' };
       }
       this.log.error(`Error fetching last block for checkpoint proposal`, err, proposalInfo);
