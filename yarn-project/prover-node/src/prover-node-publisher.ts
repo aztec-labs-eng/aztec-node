@@ -45,7 +45,7 @@ export type L1SubmitEpochProofArgs = {
 export type SubmitEpochProofResult = 'published' | 'already-submitted' | 'failed';
 
 /** Maximum number of times one epoch proof is sent to L1, counting resends after it ran out of gas. */
-export const MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS = 3;
+const MAX_SUBMIT_EPOCH_PROOF_ATTEMPTS = 3;
 
 export class ProverNodePublisher {
   private metrics: ProverNodePublisherMetrics;
