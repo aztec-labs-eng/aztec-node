@@ -1040,10 +1040,9 @@ describe('LibP2PService', () => {
     });
 
     it('does not attribute a duplicate proposal when the committee is empty (no expected proposer)', async () => {
-      // With an empty committee every signer is accepted, so two distinct honest proposers for the
-      // same slot/position look like equivocation. There is no expected proposer to attribute the
-      // offense to, so the duplicate callback must not fire (mirrors the checkpoint equivocation
-      // watcher, which refuses to slash when the slot has no proposer).
+      // With an empty committee every signer is accepted and there is no expected proposer to attribute
+      // the offense to, so the duplicate callback must not fire even for two payloads from one signer
+      // (mirrors the checkpoint equivocation watcher, which refuses to slash when the slot has no proposer).
       mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(undefined);
       const header = makeBlockHeader(1, { slotNumber: targetSlot });
       const indexWithinCheckpoint = IndexWithinCheckpoint(0);
@@ -1056,16 +1055,48 @@ describe('LibP2PService', () => {
       });
       await service.processBlockFromPeer(proposal1.toBuffer(), 'msg-1', mockPeerId);
 
-      const otherSigner = Secp256k1Signer.random();
       const proposal2 = await makeBlockProposal({
-        signer: otherSigner,
+        signer,
         blockHeader: header,
         indexWithinCheckpoint,
         archiveRoot: Fr.random(),
       });
       await service.processBlockFromPeer(proposal2.toBuffer(), 'msg-2', mockPeerId);
 
+      // The second payload is still treated as an equivocation (not processed), but nobody is blamed.
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(1);
       expect(duplicateProposalCallback).not.toHaveBeenCalled();
+    });
+
+    it('accepts and processes proposals from two signers at one position after a proposer change', async () => {
+      const header = makeBlockHeader(1, { slotNumber: targetSlot });
+      const indexWithinCheckpoint = IndexWithinCheckpoint(0);
+
+      const proposal1 = await makeBlockProposal({
+        signer,
+        blockHeader: header,
+        indexWithinCheckpoint,
+        archiveRoot: Fr.random(),
+      });
+      await service.processBlockFromPeer(proposal1.toBuffer(), 'msg-1', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Accept);
+
+      // The node's view of the slot's proposer changes (e.g. a provisional committee or an L1 reorg).
+      const newProposer = Secp256k1Signer.random();
+      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(newProposer.address);
+
+      const proposal2 = await makeBlockProposal({
+        signer: newProposer,
+        blockHeader: header,
+        indexWithinCheckpoint,
+        archiveRoot: Fr.random(),
+      });
+      await service.processBlockFromPeer(proposal2.toBuffer(), 'msg-2', mockPeerId);
+
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-2', MOCK_PEER_ID, TopicValidatorResult.Accept);
+      expect(duplicateProposalCallback).not.toHaveBeenCalled();
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(2);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
     });
 
     it('validation failure penalizes peer with correct severity', async () => {
@@ -1281,6 +1312,40 @@ describe('LibP2PService', () => {
         proposer: signer.address,
         type: 'checkpoint',
       });
+    });
+
+    it('accepts and processes checkpoints from two signers at one slot after a proposer change', async () => {
+      const blockHeader = makeBlockHeader(1, { slotNumber: targetSlot });
+      const lastBlock = { blockHeader, indexWithinCheckpoint: IndexWithinCheckpoint(0) };
+
+      const checkpoint1 = await makeCheckpointProposal({
+        signer,
+        checkpointHeader: makeCheckpointHeader(1, { slotNumber: targetSlot }),
+        archiveRoot: Fr.random(),
+        lastBlock,
+      });
+      await service.handleGossipedCheckpointProposal(checkpoint1.toBuffer(), 'msg-1', mockPeerId);
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-1', MOCK_PEER_ID, TopicValidatorResult.Accept);
+
+      // The node's view of the slot's proposer changes (e.g. a provisional committee or an L1 reorg).
+      const newProposer = Secp256k1Signer.random();
+      mockEpochCache.getProposerAttesterAddressInSlot.mockResolvedValue(newProposer.address);
+
+      const checkpoint2 = await makeCheckpointProposal({
+        signer: newProposer,
+        checkpointHeader: makeCheckpointHeader(1, { slotNumber: targetSlot }),
+        archiveRoot: Fr.random(),
+        lastBlock,
+      });
+      await service.handleGossipedCheckpointProposal(checkpoint2.toBuffer(), 'msg-2', mockPeerId);
+
+      expect(reportMessageValidationResultSpy).toHaveBeenCalledWith('msg-2', MOCK_PEER_ID, TopicValidatorResult.Accept);
+      expect(duplicateProposalCallback).not.toHaveBeenCalled();
+      // Both the embedded last block and the checkpoint from the new proposer are processed.
+      expect(blockReceivedCallback).toHaveBeenCalledTimes(2);
+      expect(allNodesCheckpointReceivedCallback).toHaveBeenCalledTimes(2);
+      expect(validatorCheckpointReceivedCallback).toHaveBeenCalledTimes(2);
+      expect(mockPeerManager.penalizePeer).not.toHaveBeenCalled();
     });
 
     it('checkpoint with lastBlock: processes both when valid', async () => {

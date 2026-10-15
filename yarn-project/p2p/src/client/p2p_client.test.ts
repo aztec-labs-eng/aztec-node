@@ -2,13 +2,14 @@ import { MockL2BlockSource } from '@aztec-labs/archiver/test';
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
 import { BlockNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { timesAsync } from '@aztec-labs/foundation/collection';
+import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import { retryFastUntil } from '@aztec-labs/foundation/retry';
 import type { AztecAsyncKVStore } from '@aztec-labs/kv-store';
 import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import { L2Block } from '@aztec-labs/stdlib/block';
 import { EmptyL1RollupConstants, type L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
-import { mockTx } from '@aztec-labs/stdlib/testing';
+import { makeBlockHeader, makeBlockProposal, mockTx } from '@aztec-labs/stdlib/testing';
 import { TxHash } from '@aztec-labs/stdlib/tx';
 import { expect, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -94,6 +95,30 @@ describe('P2P Client', () => {
       await client.stop();
     }
     await kvStore.close();
+  });
+
+  describe('broadcastProposal', () => {
+    const makeProposalAtPosition = (signer: Secp256k1Signer) =>
+      makeBlockProposal({ signer, blockHeader: makeBlockHeader(1, { slotNumber: SlotNumber(10) }) });
+
+    it('broadcasts our proposal when another signer already has a proposal at the same position', async () => {
+      // The node's view of the slot's proposer changed after it accepted the previous proposer's block.
+      await attestationPool.tryAddBlockProposal(await makeProposalAtPosition(Secp256k1Signer.random()));
+
+      const ownProposal = await makeProposalAtPosition(Secp256k1Signer.random());
+      await client.broadcastProposal(ownProposal);
+
+      expect(p2pService.propagate).toHaveBeenCalledWith(ownProposal);
+    });
+
+    it('refuses to broadcast a second distinct proposal from the same signer at the same position', async () => {
+      const signer = Secp256k1Signer.random();
+      await client.broadcastProposal(await makeProposalAtPosition(signer));
+
+      await expect(client.broadcastProposal(await makeProposalAtPosition(signer))).rejects.toThrow(
+        /duplicate block proposal/,
+      );
+    });
   });
 
   it('forwards p2p connectivity from the service', async () => {

@@ -806,7 +806,8 @@ export class LibP2PService extends WithTracer implements P2PService {
 
   /**
    * Registers a callback to be invoked when a duplicate proposal is detected.
-   * This callback is triggered on the first duplicate (when count goes from 1 to 2).
+   * This callback is triggered on the first duplicate from a signer at a position (when its count goes from 1 to 2).
+   * Proposals from different signers at the same position are not duplicates.
    */
   public registerDuplicateProposalCallback(
     callback: (info: { slot: SlotNumber; proposer: EthAddress; type: 'checkpoint' | 'block' }) => void,
@@ -816,10 +817,9 @@ export class LibP2PService extends WithTracer implements P2PService {
 
   /**
    * Whether a duplicate proposal at this slot can be attributed as an equivocation offense. With an
-   * empty committee every signer is accepted, so two distinct honest proposers for the same slot look
-   * like equivocation; without an expected proposer there is no one to attribute the offense to.
-   * Mirrors the guard in checkpoint_equivocation_watcher, which refuses to slash when the slot has no
-   * proposer.
+   * empty committee every signer is accepted and there is no expected proposer, so there is no one to
+   * attribute the offense to. Mirrors the guard in checkpoint_equivocation_watcher, which refuses to
+   * slash when the slot has no proposer.
    */
   private async canAttributeDuplicateProposal(slot: SlotNumber): Promise<boolean> {
     const expectedProposer = await this.epochCache.getProposerAttesterAddressInSlot(slot);

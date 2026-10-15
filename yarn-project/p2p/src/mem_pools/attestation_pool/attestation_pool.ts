@@ -18,10 +18,13 @@ export type TryAddResult = {
   added: boolean;
   /** Whether the exact signed payload (matched by payload hash) already existed in the pool. */
   alreadyExists: boolean;
-  /** Number of distinct signed-payload hashes seen for the position. Meaning varies by method:
-   *  - tryAddBlockProposal: distinct payload hashes at (slot, indexWithinCheckpoint)
-   *  - tryAddCheckpointProposal: distinct payload hashes at slot
-   *  - tryAddCheckpointAttestation: distinct payload hashes by this signer for this slot */
+  /** Number of distinct signed-payload hashes recorded for this item's signer at its position; 2 or more means the
+   *  signer equivocated. Payloads from other signers at the same position are not included in this count, since the
+   *  node's view of a slot's proposer can change between two honest proposals, but they do count toward the proposal
+   *  retention caps, so `added: false` can come from another signer's payloads. The position varies by method:
+   *  - tryAddBlockProposal: (slot, indexWithinCheckpoint)
+   *  - tryAddCheckpointProposal: slot
+   *  - tryAddCheckpointAttestation: slot */
   count: number;
 };
 
@@ -61,11 +64,14 @@ export type AttestationPoolApi = Pick<
  * Attestations and proposals observed via the p2p network are stored for requests
  * from the validator to produce a block, or to serve to other peers.
  *
- * Equivocation detection: distinct *signed payload hashes* arriving at the same
- * position are tracked in the matching index multimap so the equivocation count
- * reaches 2 even when archive collides on `feeAssetPriceModifier` variants.
- * Proposal bytes are retained per accepted payload hash, up to the same equivocation
- * caps, for slashing watchers that need signed P2P proposals.
+ * Equivocation detection: distinct *signed payload hashes* arriving at the same position from the same signer are
+ * tracked in a per-(position, signer) index, so the equivocation count reaches 2 even when archive collides on
+ * `feeAssetPriceModifier` variants. Proposals are tracked per signer because the node's view of a slot's proposer can
+ * change between two honest proposals. Proposal bytes are retained per accepted payload hash, up to a per-position
+ * cap shared by all signers, for slashing watchers that need signed P2P proposals. A payload dropped by that cap is not
+ * recorded for its signer either, so once two signers fill a position a later equivocation by either goes undetected.
+ * The payload hash covers the signed content but not the signature, so two signers sending identical content share
+ * one entry, recorded for whoever arrived first.
  */
 export class AttestationPool {
   private metrics: PoolInstrumentation<CheckpointAttestation>;
@@ -84,18 +90,27 @@ export class AttestationPool {
   // Stores every accepted distinct payload up to MAX_CHECKPOINT_PROPOSALS_PER_SLOT.
   private checkpointProposalsPerSlotAndHash: AztecAsyncMap<string, Buffer>;
 
-  // Distinct payload hashes seen per slot. Hash collision = duplicate.
-  // Hash count reaching 2 = equivocation.
+  // Distinct payload hashes seen per slot, from any signer. Hash collision = duplicate.
+  // Bounds retention to MAX_CHECKPOINT_PROPOSALS_PER_SLOT.
   // Key: slot number, Value: CheckpointProposalHash (`0x`-prefixed hex)
   private checkpointProposalHashesPerSlot: AztecAsyncMultiMap<number, CheckpointProposalHash>;
+
+  // Distinct payload hashes seen per (slot, signer). Hash count reaching 2 = equivocation.
+  // Key: `${paddedSlot}-${signerAddress}`, Value: CheckpointProposalHash (`0x`-prefixed hex)
+  private checkpointProposalHashesPerSlotAndSigner: AztecAsyncMultiMap<string, CheckpointProposalHash>;
 
   // Block proposals from `${paddedSlot}-${paddedIndex}-${payloadHash}` to serialized BlockProposal.
   // Stores every accepted distinct payload up to MAX_BLOCK_PROPOSALS_PER_POSITION.
   private blockProposalsPerSlotIndexAndHash: AztecAsyncMap<string, Buffer>;
 
-  // Distinct payload hashes seen per (slot, indexWithinCheckpoint).
+  // Distinct payload hashes seen per (slot, indexWithinCheckpoint), from any signer.
+  // Bounds retention to MAX_BLOCK_PROPOSALS_PER_POSITION.
   // Key: slot * (1 << INDEX_BITS) + indexWithinCheckpoint, Value: BlockProposalHash (`0x`-prefixed hex)
   private blockProposalHashesPerSlotAndIndex: AztecAsyncMultiMap<number, BlockProposalHash>;
+
+  // Distinct payload hashes seen per (slot, indexWithinCheckpoint, signer). Hash count reaching 2 = equivocation.
+  // Key: `${paddedSlot}-${paddedIndex}-${signerAddress}`, Value: BlockProposalHash (`0x`-prefixed hex)
+  private blockProposalHashesPerPositionAndSigner: AztecAsyncMultiMap<string, BlockProposalHash>;
 
   // Secondary index from archive root to all retained block proposal keys.
   private blockProposalKeysPerArchive: AztecAsyncMultiMap<string, string>;
@@ -108,6 +123,7 @@ export class AttestationPool {
     // Initialize block proposal storage
     this.blockProposalsPerSlotIndexAndHash = store.openMap('block_proposals_by_slot_index_and_hash');
     this.blockProposalHashesPerSlotAndIndex = store.openMultiMap('block_proposals_for_slot_and_index');
+    this.blockProposalHashesPerPositionAndSigner = store.openMultiMap('block_proposals_for_position_and_signer');
     this.blockProposalKeysPerArchive = store.openMultiMap('block_proposals_by_archive');
 
     // Initialize checkpoint attestations storage
@@ -117,6 +133,7 @@ export class AttestationPool {
     // Initialize checkpoint proposal storage
     this.checkpointProposalsPerSlotAndHash = store.openMap('checkpoint_proposals_by_slot_and_hash');
     this.checkpointProposalHashesPerSlot = store.openMultiMap('checkpoint_proposals_for_slot');
+    this.checkpointProposalHashesPerSlotAndSigner = store.openMultiMap('checkpoint_proposals_for_slot_and_signer');
 
     this.metrics = new PoolInstrumentation(telemetry, PoolName.ATTESTATION_POOL, this.poolStats);
   }
@@ -180,9 +197,14 @@ export class AttestationPool {
     return { start: `${this.slotPaddedKey(slot)}-`, end: `${this.slotPaddedKey(slot + 1)}-` };
   }
 
-  /** Key for the per-(slot, signer) attestation main store and equivocation index. */
+  /** Key for the per-(slot, signer) attestation store and attestation and checkpoint proposal equivocation indexes. */
   private getSlotSignerKey(slot: SlotNumber, signerAddress: string): string {
     return `${this.slotPaddedKey(slot)}-${signerAddress}`;
+  }
+
+  /** Key for the per-(slot, indexWithinCheckpoint, signer) block proposal equivocation index. */
+  private getBlockPositionSignerKey(slot: SlotNumber, indexWithinCheckpoint: number, signerAddress: string): string {
+    return `${this.slotPaddedKey(slot)}-${this.indexPaddedKey(indexWithinCheckpoint)}-${signerAddress}`;
   }
 
   /**
@@ -244,31 +266,50 @@ export class AttestationPool {
    *
    * - Detects duplicates by signed-payload hash (not archive); a re-broadcast of the
    *   exact same signed payload returns `alreadyExists: true`.
-   * - Distinct payload hashes at the same `(slot, indexWithinCheckpoint)` are tracked
-   *   in the equivocation index and retained up to the cap.
+   * - Distinct payload hashes at the same `(slot, indexWithinCheckpoint)` are retained up to the
+   *   per-position cap, whoever signed them.
+   * - `count` reports the distinct payload hashes from this proposal's signer at the position, so
+   *   only one signer with two payloads looks like an equivocation.
+   * - A proposal whose signer cannot be recovered is not added.
    *
    * @param blockProposal - The block proposal to add
    * @returns Result indicating whether the proposal was added and duplicate detection info
    */
   public async tryAddBlockProposal(blockProposal: BlockProposal): Promise<TryAddResult> {
+    const sender = blockProposal.getSender();
+    if (!sender) {
+      this.log.warn(`Not adding block proposal with unrecoverable signer for slot ${blockProposal.slotNumber}`, {
+        slotNumber: blockProposal.slotNumber,
+        indexWithinCheckpoint: blockProposal.indexWithinCheckpoint,
+        archive: blockProposal.archive.toString(),
+      });
+      return { added: false, alreadyExists: false, count: 0 };
+    }
+
     return await this.store.transactionAsync(async () => {
       const positionKey = this.getBlockPositionKey(blockProposal.slotNumber, blockProposal.indexWithinCheckpoint);
+      const signerKey = this.getBlockPositionSignerKey(
+        blockProposal.slotNumber,
+        blockProposal.indexWithinCheckpoint,
+        sender.toString(),
+      );
       const payloadHash = blockProposal.getPayloadHash();
+      const signerCount = await this.blockProposalHashesPerPositionAndSigner.getValueCountAsync(signerKey);
 
       // Hash already tracked => exact same signed payload was already received.
       if (await this.multimapHasValue(this.blockProposalHashesPerSlotAndIndex, positionKey, payloadHash)) {
-        const count = await this.blockProposalHashesPerSlotAndIndex.getValueCountAsync(positionKey);
-        return { added: false, alreadyExists: true, count };
+        return { added: false, alreadyExists: true, count: signerCount };
       }
 
-      // Cap reached for this position (no more new payload hashes accepted).
-      const count = await this.blockProposalHashesPerSlotAndIndex.getValueCountAsync(positionKey);
-      if (count >= MAX_BLOCK_PROPOSALS_PER_POSITION) {
-        return { added: false, alreadyExists: false, count };
+      // Cap reached for this position (no more new payload hashes accepted, from any signer).
+      const positionCount = await this.blockProposalHashesPerSlotAndIndex.getValueCountAsync(positionKey);
+      if (positionCount >= MAX_BLOCK_PROPOSALS_PER_POSITION) {
+        return { added: false, alreadyExists: false, count: signerCount };
       }
 
-      // Track the new payload hash for equivocation detection.
+      // Track the new payload hash for retention and for per-signer equivocation detection.
       await this.blockProposalHashesPerSlotAndIndex.set(positionKey, payloadHash);
+      await this.blockProposalHashesPerPositionAndSigner.set(signerKey, payloadHash);
       const proposalKey = this.getBlockProposalKey(
         blockProposal.slotNumber,
         blockProposal.indexWithinCheckpoint,
@@ -284,10 +325,11 @@ export class AttestationPool {
           payloadHash,
           slotNumber: blockProposal.slotNumber,
           indexWithinCheckpoint: blockProposal.indexWithinCheckpoint,
+          signer: sender.toString(),
         },
       );
 
-      return { added: true, alreadyExists: false, count: count + 1 };
+      return { added: true, alreadyExists: false, count: signerCount + 1 };
     });
   }
 
@@ -359,9 +401,11 @@ export class AttestationPool {
    *
    * - Detects duplicates by signed-payload hash (not archive); a re-broadcast of the
    *   exact same signed payload returns `alreadyExists: true`.
-   * - Distinct payload hashes at the same slot are tracked in the equivocation index.
-   *   Distinct payload bytes are retained up to the same cap so slashing watchers
-   *   can recover signed proposals.
+   * - Distinct payload hashes at the same slot are retained up to the per-slot cap, whoever
+   *   signed them, so slashing watchers can recover signed proposals.
+   * - `count` reports the distinct payload hashes from this proposal's signer at the slot, so
+   *   only one signer with two payloads looks like an equivocation.
+   * - A proposal whose signer cannot be recovered is not added.
    *
    * Note: This method only handles the CheckpointProposalCore. If the original
    * CheckpointProposal contains a lastBlock, the caller should extract it via
@@ -371,22 +415,34 @@ export class AttestationPool {
    * @returns Result indicating whether the proposal was added and duplicate detection info
    */
   public async tryAddCheckpointProposal(proposal: CheckpointProposalCore): Promise<TryAddResult> {
+    const sender = proposal.getSender();
+    if (!sender) {
+      this.log.warn(`Not adding checkpoint proposal with unrecoverable signer for slot ${proposal.slotNumber}`, {
+        slotNumber: proposal.slotNumber,
+        archive: proposal.archive.toString(),
+      });
+      return { added: false, alreadyExists: false, count: 0 };
+    }
+
     return await this.store.transactionAsync(async () => {
       const slot = proposal.slotNumber;
+      const signerKey = this.getSlotSignerKey(slot, sender.toString());
       const payloadHash = proposal.getPayloadHash();
+      const signerCount = await this.checkpointProposalHashesPerSlotAndSigner.getValueCountAsync(signerKey);
 
       if (await this.multimapHasValue(this.checkpointProposalHashesPerSlot, slot, payloadHash)) {
-        const count = await this.checkpointProposalHashesPerSlot.getValueCountAsync(slot);
-        return { added: false, alreadyExists: true, count };
+        return { added: false, alreadyExists: true, count: signerCount };
       }
 
-      const count = await this.checkpointProposalHashesPerSlot.getValueCountAsync(slot);
-      if (count >= MAX_CHECKPOINT_PROPOSALS_PER_SLOT) {
-        return { added: false, alreadyExists: false, count };
+      // Cap reached for this slot (no more new payload hashes accepted, from any signer).
+      const slotCount = await this.checkpointProposalHashesPerSlot.getValueCountAsync(slot);
+      if (slotCount >= MAX_CHECKPOINT_PROPOSALS_PER_SLOT) {
+        return { added: false, alreadyExists: false, count: signerCount };
       }
 
-      // Track the new payload hash for equivocation detection.
+      // Track the new payload hash for retention and for per-signer equivocation detection.
       await this.checkpointProposalHashesPerSlot.set(slot, payloadHash);
+      await this.checkpointProposalHashesPerSlotAndSigner.set(signerKey, payloadHash);
       await this.checkpointProposalsPerSlotAndHash.set(
         this.getCheckpointProposalKey(slot, payloadHash),
         proposal.toBuffer(),
@@ -396,9 +452,10 @@ export class AttestationPool {
         archive: proposal.archive.toString(),
         payloadHash,
         slotNumber: slot,
+        signer: sender.toString(),
       });
 
-      return { added: true, alreadyExists: false, count: count + 1 };
+      return { added: true, alreadyExists: false, count: signerCount + 1 };
     });
   }
 
@@ -548,6 +605,12 @@ export class AttestationPool {
         await this.checkpointProposalHashesPerSlot.delete(slot);
       }
 
+      for await (const key of this.checkpointProposalHashesPerSlotAndSigner.keysAsync({
+        end: `${oldestSlotPadded}-`,
+      })) {
+        await this.checkpointProposalHashesPerSlotAndSigner.delete(key);
+      }
+
       for await (const key of this.checkpointProposalsPerSlotAndHash.keysAsync({
         end: `${oldestSlotPadded}-`,
       })) {
@@ -560,6 +623,10 @@ export class AttestationPool {
       const blockPositionEndKey = oldestSlot * (1 << AttestationPool.INDEX_BITS);
       for await (const positionKey of this.blockProposalHashesPerSlotAndIndex.keysAsync({ end: blockPositionEndKey })) {
         await this.blockProposalHashesPerSlotAndIndex.delete(positionKey);
+      }
+
+      for await (const key of this.blockProposalHashesPerPositionAndSigner.keysAsync({ end: `${oldestSlotPadded}-` })) {
+        await this.blockProposalHashesPerPositionAndSigner.delete(key);
       }
 
       for await (const [key, buffer] of this.blockProposalsPerSlotIndexAndHash.entriesAsync({
