@@ -10,7 +10,7 @@ import {
 } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { sleep } from '@aztec-labs/foundation/sleep';
-import { openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
+import { openStoreAt, openTmpStore } from '@aztec-labs/kv-store/lmdb-v2';
 import {
   BlockHash,
   CommitteeAttestation,
@@ -24,6 +24,9 @@ import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import '@aztec-labs/stdlib/testing/jest';
 import { AppendOnlyTreeSnapshot } from '@aztec-labs/stdlib/trees';
 import { type IndexedTxEffect, TxHash, computeTxEffectLeaves } from '@aztec-labs/stdlib/tx';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   BlockArchiveNotConsistentError,
@@ -2514,6 +2517,49 @@ describe('BlockStore', () => {
       expect(pending!.checkpointNumber).toBe(1);
       expect(pending!.totalManaUsed).toBe(12345n);
       expect(pending!.feeAssetPriceModifier).toBe(-75n);
+    });
+
+    it('keeps the signer of a proposed checkpoint across a restart', async () => {
+      const dataDir = await mkdtemp(join(tmpdir(), 'block_store_signer_test-'));
+      try {
+        const signer = EthAddress.random();
+        const db = await openStoreAt(dataDir);
+        blockStore = new BlockStore(db);
+        await addBlocksForProposedCheckpoint(1, 1, 1);
+        await blockStore.addProposedCheckpoint({
+          checkpointNumber: CheckpointNumber(1),
+          header: CheckpointHeader.empty(),
+          startBlock: BlockNumber(1),
+          blockCount: 1,
+          totalManaUsed: 100n,
+          feeAssetPriceModifier: 50n,
+          signer,
+        });
+        await db.close();
+
+        const reopened = await openStoreAt(dataDir);
+        blockStore = new BlockStore(reopened);
+        expect((await blockStore.getProposedCheckpointByNumber(CheckpointNumber(1)))?.signer).toEqual(signer);
+        expect((await blockStore.getProposedCheckpointBySlot(SlotNumber(0)))?.signer).toEqual(signer);
+        await reopened.close();
+      } finally {
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    });
+
+    it('reads a proposed checkpoint stored without a signer as having none', async () => {
+      await addBlocksForProposedCheckpoint(1, 1, 1);
+      await blockStore.addProposedCheckpoint({
+        checkpointNumber: CheckpointNumber(1),
+        header: CheckpointHeader.empty(),
+        startBlock: BlockNumber(1),
+        blockCount: 1,
+        totalManaUsed: 100n,
+        feeAssetPriceModifier: 50n,
+      });
+      const pending = await blockStore.getLastProposedCheckpoint();
+      expect(pending).toBeDefined();
+      expect(pending!.signer).toBeUndefined();
     });
 
     it('clears proposed checkpoint when confirmed checkpoints are added', async () => {

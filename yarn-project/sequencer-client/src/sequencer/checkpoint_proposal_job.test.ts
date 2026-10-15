@@ -204,6 +204,7 @@ describe('CheckpointProposalJob', () => {
     publisher.enqueueProposeCheckpoint.mockResolvedValue(undefined);
     publisher.enqueueGovernanceCastSignal.mockResolvedValue(true);
     publisher.enqueueSlashingActions.mockResolvedValue(true);
+    publisher.getFeeAssetPriceModifier.mockResolvedValue(0n);
 
     // Default rollup contract reads used by pipelined fee-header derivation. Tests that exercise
     // the failure modes override these via jest.spyOn.
@@ -1028,16 +1029,27 @@ describe('CheckpointProposalJob', () => {
       const pipelinedJob = await createPipelinedJobWithBlock(proposedParent);
       mockL2BlockSource({ checkpointedNumber: CheckpointNumber(1), checkpointedHash: parentCheckpointHash });
 
+      // The tests sign proposals with a random signature, so pin the address the proposal recovers to.
+      const signer = EthAddress.random();
+      const createProposal = validatorClient.createCheckpointProposal.getMockImplementation()!;
+      validatorClient.createCheckpointProposal.mockImplementation(async (...args) => {
+        const proposal = await createProposal(...args);
+        jest.spyOn(proposal, 'getSender').mockReturnValue(signer);
+        return proposal;
+      });
+
       await pipelinedJob.executeAndAwait();
 
       // Built from local checkpoint data: startBlock = syncedToBlockNumber + 1, blockCount = blocks built,
       // checkpointNumber from the job — never derived from the (possibly corrupted) broadcast proposal archive.
+      // The signer is whoever signed the proposal, so equivocation can later be attributed to that key.
       expect(blockSink.addProposedCheckpoint).toHaveBeenCalledTimes(1);
       expect(blockSink.addProposedCheckpoint).toHaveBeenCalledWith(
         expect.objectContaining({
           checkpointNumber: CheckpointNumber(2),
           startBlock: BlockNumber(lastBlockNumber + 1),
           blockCount: 1,
+          signer,
         }),
       );
       // The proposed checkpoint must be pushed locally before the proposal is gossiped.

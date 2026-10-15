@@ -2,6 +2,7 @@ import { INITIAL_CHECKPOINT_NUMBER, INITIAL_L2_BLOCK_NUM } from '@aztec-labs/con
 import type { ViemCommitteeAttestations } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, IndexWithinCheckpoint, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
+import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { toArray } from '@aztec-labs/foundation/iterable';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { BufferReader } from '@aztec-labs/foundation/serialize';
@@ -147,6 +148,8 @@ type ProposedCheckpointStorage = CommonCheckpointStorage & {
   totalManaUsed: string;
   feeAssetPriceModifier: string;
   inboxMsgTotal: string;
+  /** Absent when the signer is unknown, including on records written before signers were stored. */
+  signer?: string;
 };
 
 export type RemoveCheckpointsResult = { blocksRemoved: L2Block[] | undefined };
@@ -1090,6 +1093,7 @@ export class BlockStore {
       totalManaUsed: BigInt(stored.totalManaUsed),
       feeAssetPriceModifier: BigInt(stored.feeAssetPriceModifier),
       inboxMsgTotal: BigInt(stored.inboxMsgTotal),
+      signer: stored.signer ? EthAddress.fromString(stored.signer) : undefined,
     };
   }
 
@@ -1607,6 +1611,7 @@ export class BlockStore {
         totalManaUsed: proposed.totalManaUsed.toString(),
         feeAssetPriceModifier: proposed.feeAssetPriceModifier.toString(),
         inboxMsgTotal: inboxMsgTotal.toString(),
+        ...(proposed.signer && { signer: proposed.signer.toString() }),
       });
     });
   }
