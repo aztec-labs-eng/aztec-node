@@ -11,3 +11,17 @@ export class NoCommitteeError extends Error {
     this.name = 'NoCommitteeError';
   }
 }
+
+/**
+ * The committee for an epoch cannot be served yet because its sample seed can still change on L1: the randao it
+ * samples has not been checkpointed, and the epoch that would checkpoint it is not over.
+ */
+export class CommitteeNotStableError extends Error {
+  constructor(
+    public readonly epoch: bigint,
+    public readonly l1BlockNumber: bigint,
+  ) {
+    super(`The committee for epoch ${epoch} is not stable yet as of L1 block ${l1BlockNumber}`);
+    this.name = 'CommitteeNotStableError';
+  }
+}

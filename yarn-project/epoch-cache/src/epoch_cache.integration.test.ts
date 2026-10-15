@@ -126,6 +126,12 @@ describeAcrossL1Forks('EpochCache integration', () => {
     expect(committee!.length).toBe(NUM_VALIDATORS);
     expect(seed).not.toBe(0n);
     expect(epoch).toBe(targetEpoch);
+
+    // The entry is read at the latest L1 block, so it is finalized only once that block is (finalized = latest - 16).
+    expect(epochCache.isFinalized(targetEpoch)).toBe(false);
+    await cheatCodes.mine(20);
+    dateProvider.advanceTime(DefaultL1ContractsConfig.ethereumSlotDuration);
+    await epochCache.getCommittee(slotForEpoch);
     expect(epochCache.isFinalized(targetEpoch)).toBe(true);
   });
 

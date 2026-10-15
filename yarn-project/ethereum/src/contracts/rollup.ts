@@ -343,6 +343,7 @@ export type CheckpointProposedArgs = {
 export type CheckpointProposedLog = L1EventLog<CheckpointProposedArgs>;
 
 const INSUFFICIENT_VALIDATOR_SET_SIZE_ERROR = 'ValidatorSelection__InsufficientValidatorSetSize';
+const EPOCH_NOT_STABLE_ERROR = 'ValidatorSelection__EpochNotStable';
 
 /** SlasherUpdated events are rare governance operations, so their watcher polls well below the client's interval. */
 const SLASHER_UPDATED_POLLING_INTERVAL_MS = 60_000;
@@ -353,6 +354,11 @@ function isValidatorSelectionError(err: unknown, errorName: string): boolean {
     getErrorCause(err, ContractFunctionRevertedError)?.data?.errorName === errorName ||
     decodeRpcRequestErrorName(err) === errorName
   );
+}
+
+/** Whether a rollup read reverted because the requested epoch's committee or seed can still change. */
+export function isEpochNotStableError(err: unknown): boolean {
+  return isValidatorSelectionError(err, EPOCH_NOT_STABLE_ERROR);
 }
 
 function decodeRpcRequestErrorName(err: unknown): string | undefined {
