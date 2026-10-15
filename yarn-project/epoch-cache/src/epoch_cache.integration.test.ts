@@ -10,6 +10,7 @@ import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
 import { TestDateProvider } from '@aztec-labs/foundation/timer';
+import { getTimestampForSlot } from '@aztec-labs/stdlib/epoch-helpers';
 import type { Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
@@ -204,5 +205,38 @@ describeAcrossL1Forks('EpochCache integration', () => {
     const l1TsAfter = epochCache.getCachedLastRefreshL1Timestamp(epochBefore);
     expect(l1TsAfter).toBeDefined();
     expect(l1TsAfter).not.toBe(l1TsBefore);
+  });
+
+  it('picks up the seed checkpointed after an early query once the cache TTL expires', async () => {
+    const epochDuration = await rollup.getEpochDuration();
+    const lagInEpochsForRandao = await rollup.getLagInEpochsForRandao();
+
+    await cheatCodes.setIntervalMining(0);
+    await cheatCodes.setAutomine(true);
+
+    // Land on the first block of a fresh epoch, so nothing has checkpointed its randao yet.
+    const samplingEpoch = EpochNumber((await rollup.getCurrentEpoch()) + 2);
+    await rollupCheatCodes.advanceToEpoch(samplingEpoch);
+
+    // The epoch whose seed samples the randao keyed at the start of the current epoch can already be queried.
+    const targetEpoch = EpochNumber(samplingEpoch + lagInEpochsForRandao);
+    const targetSlot = SlotNumber(Number(targetEpoch) * Number(epochDuration));
+    const targetTs = getTimestampForSlot(targetSlot, epochCache.getL1Constants());
+    const early = await epochCache.getCommittee(targetSlot);
+    expect(early.seed).toBe((await rollup.getSampleSeedAt(targetTs)).toBigInt());
+
+    // A setupEpoch later in the same epoch checkpoints the randao, which changes the target epoch's seed on L1.
+    await rollupCheatCodes.setupEpoch();
+    const seedOnL1 = (await rollup.getSampleSeedAt(targetTs)).toBigInt();
+    expect(seedOnL1).not.toBe(early.seed);
+    expect(await rollup.getCurrentEpoch()).toBe(samplingEpoch);
+
+    const latestBlock = await rollup.client.getBlock();
+    dateProvider.setTime(Number(latestBlock.timestamp) * 1000);
+    dateProvider.advanceTime(DefaultL1ContractsConfig.ethereumSlotDuration * 2);
+
+    const refreshed = await epochCache.getCommittee(targetSlot);
+    expect(refreshed.seed).toBe(seedOnL1);
+    expect(refreshed.committee).toEqual(await rollup.getCommitteeAt(targetTs));
   });
 });
