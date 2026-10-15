@@ -1495,7 +1495,7 @@ export class LibP2PService extends WithTracer implements P2PService {
       this.logger.debug(`Ignoring block proposal exceeding per-position cap`, {
         ...block.toBlockInfo(),
         indexWithinCheckpoint: block.indexWithinCheckpoint,
-        count,
+        signerCount: count,
         proposer: block.getSender()?.toString(),
         source: peerId.toString(),
       });
@@ -1740,7 +1740,7 @@ export class LibP2PService extends WithTracer implements P2PService {
     if (!added) {
       this.logger.debug(`Ignoring checkpoint proposal exceeding per-slot cap`, {
         ...checkpoint.toCheckpointInfo(),
-        count,
+        signerCount: count,
         source: peerId.toString(),
       });
       return {
