@@ -7,6 +7,7 @@ import {
   isEpochNotStableError,
 } from '@aztec-labs/ethereum/contracts';
 import { getFinalizedL1Block } from '@aztec-labs/ethereum/queries';
+import { maxBigint } from '@aztec-labs/foundation/bigint';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import type { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -69,7 +70,10 @@ type UnstableEpochEntry = {
   kind: 'unstable';
   /** L1 block at which the seed was found not to be fixed yet. */
   l1BlockNumber: bigint;
-  /** Local time in seconds from which the marker no longer applies: one Ethereum slot after that block. */
+  /**
+   * Local time in seconds from which the marker no longer applies: one Ethereum slot after that block, or after the
+   * check itself if the block is older than the local clock, so a lagging L1 tip is not re-checked on every call.
+   */
   expiresAt: bigint;
 };
 
@@ -504,7 +508,9 @@ export class EpochCache implements EpochCacheInterface {
     const unstable: UnstableEpochEntry = {
       kind: 'unstable',
       l1BlockNumber: blockNumber,
-      expiresAt: latestBlock.timestamp + BigInt(this.l1constants.ethereumSlotDuration),
+      expiresAt:
+        maxBigint(latestBlock.timestamp, BigInt(this.dateProvider.nowInSeconds())) +
+        BigInt(this.l1constants.ethereumSlotDuration),
     };
 
     if (!(await this.isSeedFixed(epoch, latestBlock))) {
@@ -532,6 +538,13 @@ export class EpochCache implements EpochCacheInterface {
       throw err;
     }
 
+    // Reads by block number follow the canonical chain, so a reorg mid-fetch could mix the seed check above with
+    // committee data from another fork. Confirm the queried block is still canonical before trusting the reads.
+    const queriedBlock = await this.rollup.client.getBlock({ blockNumber, includeTransactions: false });
+    if (queriedBlock.hash !== latestBlock.hash) {
+      throw new Error(`L1 block ${blockNumber} was reorged out while reading the committee for epoch ${epoch}`);
+    }
+
     const entry: CachedEpochEntry = {
       kind: 'committee',
       data: { committee, seed: seedBuffer.toBigInt(), epoch, isEscapeHatchOpen },
@@ -544,8 +557,9 @@ export class EpochCache implements EpochCacheInterface {
   }
 
   /**
-   * An entry is read only once its seed is fixed, so it can no longer change once the L1 block it was read at is
-   * finalized. Empty committees are never marked finalized so they always get re-queried after TTL. If L1 has no
+   * An entry is read only once its seed is fixed, so its committee and seed can no longer change once the L1 block it
+   * was read at is finalized. The escape hatch flag carries no such guarantee, since its read treats errors as closed
+   * and resolves the hatch address at the latest block. Empty committees are never marked finalized so they always get re-queried after TTL. If L1 has no
    * finalized block yet (devnet startup), entries stay unfinalized.
    */
   private isEntryFinalized(
