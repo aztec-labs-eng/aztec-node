@@ -4,6 +4,7 @@ import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
 import { times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
 import type { L1RollupConstants } from '@aztec-labs/stdlib/epoch-helpers';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { type MockProxy, mock } from 'jest-mock-extended';
@@ -183,10 +184,10 @@ describe('EpochCache', () => {
     await epochCache.getCommittee(SlotNumber.fromBigInt(targetSlot));
 
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
-    expect(rollupContract.getCommitteeAt).toHaveBeenCalledWith(slotTimestamp);
+    expect(rollupContract.getCommitteeAt).toHaveBeenCalledWith(slotTimestamp, { blockNumber: 100n });
 
     expect(rollupContract.getSampleSeedAt).toHaveBeenCalledTimes(1);
-    expect(rollupContract.getSampleSeedAt).toHaveBeenCalledWith(slotTimestamp);
+    expect(rollupContract.getSampleSeedAt).toHaveBeenCalledWith(slotTimestamp, { blockNumber: 100n });
   });
 
   it('should cache multiple epochs', async () => {
@@ -414,28 +415,27 @@ describe('EpochCache', () => {
       const epoch1Ts = l1GenesisTime + BigInt(EPOCH_DURATION * SLOT_DURATION);
       const latestTs = epoch1Ts + 10000n;
 
-      client.getBlock.mockResolvedValue({
-        timestamp: latestTs,
-        number: 100n,
-        hash: '0xeee',
-      } as any);
-
-      let resolveCommittee: (v: EthAddress[]) => void;
-      rollupContract.getCommitteeAt.mockImplementation(() => new Promise(resolve => (resolveCommittee = resolve)));
+      const latestBlock = promiseWithResolvers<GetBlockReturnType>();
+      client.getBlock.mockImplementation(((args?: { blockTag?: string }) =>
+        args?.blockTag === 'finalized'
+          ? Promise.resolve({ timestamp: latestTs, number: 100n, hash: '0xeee' } as unknown as GetBlockReturnType)
+          : latestBlock.promise) as typeof client.getBlock);
+      rollupContract.getCommitteeAt.mockResolvedValue(testCommittee);
       rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(0n));
 
       // Fire two concurrent requests
       const p1 = epochCache.getCommittee(epoch1Slot);
       const p2 = epochCache.getCommittee(epoch1Slot);
 
-      // Only one L1 call should be in-flight
-      expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
+      // Only one fetch should be in-flight
+      expect(client.getBlock).toHaveBeenCalledTimes(1);
 
-      // Resolve and both promises should return the same result
-      resolveCommittee!(testCommittee);
+      // Resolve and both promises should return the same result from a single committee read
+      latestBlock.resolve({ timestamp: latestTs, number: 100n, hash: '0xeee' } as unknown as GetBlockReturnType);
       const [r1, r2] = await Promise.all([p1, p2]);
       expect(r1.committee).toEqual(testCommittee);
       expect(r2.committee).toEqual(testCommittee);
+      expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
     });
 
     it('should eventually mark a non-finalized entry as finalized on re-query', async () => {
@@ -498,6 +498,108 @@ describe('EpochCache', () => {
       rollupContract.getCommitteeAt.mockClear();
       await epochCache.getCommittee(epoch1Slot);
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0); // lightweight refresh
+    });
+  });
+
+  describe('reads against per-block L1 state', () => {
+    const EPOCH_SECONDS = BigInt(EPOCH_DURATION * SLOT_DURATION);
+    // With lagInEpochsForRandao = 2, the seed for epoch 5 samples the randao checkpointed in epoch 3.
+    const targetEpoch = EpochNumber(5);
+    const targetSlot = SlotNumber(5 * EPOCH_DURATION);
+    const startOfEpoch = (epoch: number) => l1GenesisTime + BigInt(epoch) * EPOCH_SECONDS;
+
+    const provisionalCommittee = [4, 5, 6].map(EthAddress.fromNumber);
+    const finalCommittee = [7, 8, 9].map(EthAddress.fromNumber);
+
+    /** Rollup state as seen at one L1 block. */
+    type L1State = { committee: EthAddress[] | undefined; seed: bigint; setUp: boolean; escapeHatchOpen?: boolean };
+    type L1Block = { number: bigint; timestamp: bigint; hash: `0x${string}`; state: L1State };
+
+    let blocks: Map<bigint, L1Block>;
+    let latestNumber: bigint;
+    let finalizedNumber: bigint;
+
+    const hashOf = (number: bigint, fork = 0): `0x${string}` =>
+      `0x${fork.toString(16).padStart(8, '0')}${number.toString(16).padStart(56, '0')}`;
+
+    /** Mines an L1 block with the given rollup state and moves the local clock to its timestamp. */
+    const mineL1Block = (timestamp: bigint, state: L1State, fork = 0) => {
+      latestNumber += 1n;
+      blocks.set(latestNumber, { number: latestNumber, timestamp, hash: hashOf(latestNumber, fork), state });
+      jest.setSystemTime(Number(timestamp) * 1000);
+    };
+
+    const blockAt = (blockNumber: bigint | undefined) => {
+      const block = blocks.get(blockNumber ?? latestNumber);
+      if (!block) {
+        throw new Error(`Unknown L1 block ${blockNumber}`);
+      }
+      return block;
+    };
+
+    const toViemBlock = ({ number, timestamp, hash }: L1Block) =>
+      ({ number, timestamp, hash }) as unknown as GetBlockReturnType;
+
+    const getL1Block = (args?: { blockTag?: string; blockNumber?: bigint }) =>
+      Promise.resolve(toViemBlock(blockAt(args?.blockTag === 'finalized' ? finalizedNumber : args?.blockNumber)));
+
+    beforeEach(() => {
+      blocks = new Map();
+      latestNumber = 99n;
+      finalizedNumber = 0n;
+      blocks.set(0n, {
+        number: 0n,
+        timestamp: l1GenesisTime,
+        hash: hashOf(0n),
+        state: { committee: undefined, seed: 0n, setUp: false },
+      });
+
+      client.getBlock.mockImplementation(getL1Block as typeof client.getBlock);
+      rollupContract.getCommitteeAt.mockImplementation((_ts, opts) =>
+        Promise.resolve(blockAt(opts?.blockNumber).state.committee),
+      );
+      rollupContract.getSampleSeedAt.mockImplementation((_ts, opts) =>
+        Promise.resolve(Buffer32.fromBigInt(blockAt(opts?.blockNumber).state.seed)),
+      );
+      rollupContract.isEpochSetUp.mockImplementation((_epoch, opts) =>
+        Promise.resolve(blockAt(opts?.blockNumber).state.setUp),
+      );
+      rollupContract.isEscapeHatchOpen.mockImplementation((_epoch, opts) =>
+        Promise.resolve(blockAt(opts?.blockNumber).state.escapeHatchOpen ?? false),
+      );
+    });
+
+    it('reads every field of an entry at the same L1 block', async () => {
+      mineL1Block(startOfEpoch(5) + 60n, {
+        committee: provisionalCommittee,
+        seed: 1n,
+        setUp: true,
+        escapeHatchOpen: false,
+      });
+      const queriedBlock = blockAt(undefined);
+
+      // A new L1 block lands right after the cache reads the latest one, with a different committee, seed and hatch.
+      client.getBlock.mockImplementation((async (args?: { blockTag?: string; blockNumber?: bigint }) => {
+        const block = await getL1Block(args);
+        if (args?.blockTag === undefined && args?.blockNumber === undefined) {
+          mineL1Block(queriedBlock.timestamp + 12n, {
+            committee: finalCommittee,
+            seed: 2n,
+            setUp: true,
+            escapeHatchOpen: true,
+          });
+        }
+        return block;
+      }) as typeof client.getBlock);
+
+      const info = await epochCache.getCommittee(targetSlot);
+      expect(info).toEqual({
+        committee: provisionalCommittee,
+        seed: 1n,
+        epoch: targetEpoch,
+        isEscapeHatchOpen: false,
+      });
+      expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBe(queriedBlock.timestamp);
     });
   });
 
