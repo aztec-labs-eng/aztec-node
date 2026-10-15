@@ -86,28 +86,41 @@ export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => W
     }
 
     const newestSlotToConsider = SlotNumber(currentSlot - SCAN_SLOT_LAG);
+    // Never look back further than the lookback window, so a slot whose attestations can no longer be read
+    // (the attestation pool is pruned on finalization) is abandoned rather than stalling the scan on a retry.
+    const windowFloor = SlotNumber(Math.max(0, newestSlotToConsider - this.scanSlotLookback + 1));
     const oldestSlot =
-      this.lastScannedSlot === undefined
-        ? SlotNumber(Math.max(0, newestSlotToConsider - this.scanSlotLookback + 1))
-        : SlotNumber(this.lastScannedSlot + 1);
+      this.lastScannedSlot === undefined ? windowFloor : SlotNumber(Math.max(windowFloor, this.lastScannedSlot + 1));
     if (oldestSlot > newestSlotToConsider) {
       return;
     }
 
+    // Advance only across the leading run of completed slots. If a slot's attestation-pool read fails, hold
+    // just before it so the next scan retries it (bounded by windowFloor), instead of marking it scanned and
+    // never slashing its attesters. This watcher is the only checkpoint-attester slashing path.
+    let advanceTo: SlotNumber | undefined;
+    let blocked = false;
     for (let slot = oldestSlot; slot <= newestSlotToConsider; slot++) {
-      await this.scanSlot(slot);
+      const completed = await this.scanSlot(slot);
+      if (!completed) {
+        blocked = true;
+      } else if (!blocked) {
+        advanceTo = SlotNumber(slot);
+      }
     }
 
-    this.lastScannedSlot = newestSlotToConsider;
+    if (advanceTo !== undefined) {
+      this.lastScannedSlot = advanceTo;
+    }
   }
 
   /** Scans a single invalid-proposal slot. */
-  public async scanSlot(slot: SlotNumber): Promise<void> {
+  public async scanSlot(slot: SlotNumber): Promise<boolean> {
     if (
       this.invalidProposalSlotSource.hasProposalEquivocation(slot) ||
       !this.invalidProposalSlotSource.hasInvalidProposals(slot)
     ) {
-      return;
+      return true;
     }
 
     let attestations: CheckpointAttestation[];
@@ -115,14 +128,14 @@ export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => W
       attestations = await this.p2pClient.getCheckpointAttestationsForSlot(slot);
     } catch (err) {
       this.log.warn('Error getting checkpoint attestations for invalid proposal slot', { err, slot });
-      return;
+      return false;
     }
 
     // Slash only attesters whose signed payload matches an invalid checkpoint proposal
     // (see invalidCheckpointProposalHashesBySlot for why block-invalid slots are excluded).
     const invalidHashes = new Set(this.invalidProposalSlotSource.getInvalidCheckpointProposalHashes(slot));
     if (invalidHashes.size === 0) {
-      return;
+      return true;
     }
 
     const slashArgs = attestations
@@ -132,7 +145,7 @@ export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => W
       .filter(args => this.markAsNewOffense(args));
 
     if (slashArgs.length === 0) {
-      return;
+      return true;
     }
 
     this.log.info('Detected attestations to invalid checkpoint proposal', {
@@ -145,6 +158,7 @@ export class AttestedInvalidProposalWatcher extends (EventEmitter as new () => W
       })),
     });
     this.emit(WANT_TO_SLASH_EVENT, slashArgs);
+    return true;
   }
 
   private getSlashArgs(slot: SlotNumber, attestation: CheckpointAttestation): WantToSlashArgs | undefined {
