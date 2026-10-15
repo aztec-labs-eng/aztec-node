@@ -2334,7 +2334,7 @@ describe('ProposalHandler checkpoint validation', () => {
 
     it('does not slash the committing checkpoint attesters when the block was rejected for failed txs', async () => {
       // failed_txs is a tx-body defect outside the signed header and the checkpoint's signed payload, so a node that
-      // rejects a block for it must not slash a committing checkpoint's attesters (the A-2163 narrowing).
+      // rejects a block for it must not slash a committing checkpoint's attesters.
       const { blockResult, handler } = await rejectBlockThenValidateCommittingCheckpoint(
         false,
         new ReExFailedTxsError(1),
