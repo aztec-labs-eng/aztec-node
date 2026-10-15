@@ -9,7 +9,8 @@ import {
   CheckpointNumberSchema,
 } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
-import { schemas } from '@aztec-labs/foundation/schemas';
+import type { EthAddress } from '@aztec-labs/foundation/eth-address';
+import { optional, schemas } from '@aztec-labs/foundation/schemas';
 import { z } from 'zod';
 
 import { CommitteeAttestation } from '../block/proposal/committee_attestation.js';
@@ -48,6 +49,12 @@ export type StorageEnrichedCheckpointData = {
 export type ProposedOnlyCheckpointData = {
   totalManaUsed: bigint;
   feeAssetPriceModifier: bigint;
+  /**
+   * Address recovered from the signature of the checkpoint proposal this checkpoint came from. Undefined when unknown
+   * (a checkpoint built without a signed proposal, or one stored before signers were recorded), in which case a
+   * divergence from L1 is never attributed to anyone as equivocation.
+   */
+  signer?: EthAddress;
 };
 
 /** Inbox consumption record of a proposed checkpoint, mirroring what `propose` writes for it on L1. */
@@ -83,6 +90,7 @@ export const ProposedCheckpointDataSchema = z.object({
   totalManaUsed: schemas.BigInt,
   feeAssetPriceModifier: schemas.BigInt,
   inboxMsgTotal: schemas.BigInt,
+  signer: optional(schemas.EthAddress),
 });
 
 export const CheckpointDataSchema = z
