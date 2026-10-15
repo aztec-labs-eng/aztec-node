@@ -332,6 +332,181 @@ describeAcrossL1Forks('EthCheatCodes', () => {
     });
   });
 
+  describe('execWithPausedAnvil', () => {
+    const interval = 2;
+    // A block is observed up to one poll period plus an RPC round trip after it is mined.
+    const pollMs = 20;
+    const maxLagMs = 300;
+
+    let dateProvider: TestDateProvider;
+
+    type ObservedBlock = { number: number; timestamp: number; lagMs: number };
+
+    /** Polls for the first block above `after` and returns it with how far the node clock was past its timestamp. */
+    const waitForBlockAfter = async (after: number): Promise<ObservedBlock> => {
+      for (let i = 0; i < ((3 * interval) / pollMs) * 1000; i++) {
+        const block = await cheatCodes.publicClient.getBlock();
+        if (Number(block.number) > after) {
+          const timestamp = Number(block.timestamp);
+          return { number: Number(block.number), timestamp, lagMs: dateProvider.now() - timestamp * 1000 };
+        }
+        await sleep(pollMs);
+      }
+      throw new Error(`No L1 block mined after ${after}`);
+    };
+
+    /** Asserts `block` follows `prev`, `intervals` grid ticks later, and was mined when the node clock reached it. */
+    const expectOnGrid = (block: ObservedBlock, prev: ObservedBlock, intervals = 1) => {
+      expect(block.number).toBe(prev.number + 1);
+      expect(block.timestamp).toBe(prev.timestamp + intervals * interval);
+      expect(block.lagMs).toBeGreaterThan(-100);
+      expect(block.lagMs).toBeLessThan(maxLagMs);
+    };
+
+    beforeEach(() => {
+      dateProvider = new TestDateProvider();
+      cheatCodes = new EthCheatCodes([rpcUrl], dateProvider);
+    });
+
+    describe('with interval mining', () => {
+      let first: ObservedBlock;
+
+      beforeEach(async () => {
+        await cheatCodes.setBlockInterval(interval);
+        await cheatCodes.startIntervalMiningWithFreshBlock(interval);
+        first = await waitForBlockAfter(await cheatCodes.blockNumber());
+      });
+
+      it('resumes on the original grid after a pause mid-cycle without making the caller wait', async () => {
+        await sleep(1000);
+        const pauseStart = Date.now();
+        await cheatCodes.execWithPausedAnvil(() => sleep(200));
+        expect(Date.now() - pauseStart).toBeLessThan(200 + 150);
+
+        const next = await waitForBlockAfter(first.number);
+        expectOnGrid(next, first);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
+      it('keeps a pending resume when another anvil in the process stops', async () => {
+        const other = await startAnvil({ port: 0 });
+        try {
+          const prev = await waitForBlockAfter(await cheatCodes.blockNumber());
+          await sleep(500);
+          await cheatCodes.execWithPausedAnvil(() => sleep(100));
+          await other.stop();
+          // The resume is still pending, so it is the stop above that it has to survive.
+          expect(await cheatCodes.rpcCall('anvil_getIntervalMining', [])).toBeNull();
+
+          const next = await waitForBlockAfter(prev.number);
+          expectOnGrid(next, prev);
+          expectOnGrid(await waitForBlockAfter(next.number), next);
+        } finally {
+          await other.stop();
+        }
+      });
+
+      it('cancels a pending resume when its own anvil stops', async () => {
+        if (!anvil) {
+          return;
+        }
+        await cheatCodes.execWithPausedAnvil(() => sleep(100));
+        const { port } = anvil;
+        await anvil.stop();
+
+        // A stale resume would mine on, or switch interval mining on for, whatever anvil next listens on the port.
+        ({ anvil, rpcUrl } = await startAnvil({ port }));
+        cheatCodes = new EthCheatCodes([rpcUrl], dateProvider);
+        expect(await cheatCodes.getIntervalMining()).toBeNull();
+        const blockNumber = await cheatCodes.blockNumber();
+        await sleep(interval * 1000 + 500);
+        expect(await cheatCodes.blockNumber()).toBe(blockNumber);
+        expect(await cheatCodes.getIntervalMining()).toBeNull();
+      });
+
+      it('mines a tick the pause just ran past straight away, stamped on the grid', async () => {
+        await sleep(1000);
+        await cheatCodes.execWithPausedAnvil(() => sleep(1500));
+        const resumedAt = dateProvider.now();
+
+        const next = await waitForBlockAfter(first.number);
+        expect(next.number).toBe(first.number + 1);
+        expect(next.timestamp).toBe(first.timestamp + interval);
+        expect(dateProvider.now() - resumedAt).toBeLessThan(maxLagMs);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
+      it('skips the grid ticks a long pause ran past', async () => {
+        await sleep(1000);
+        await cheatCodes.execWithPausedAnvil(async () => {
+          await sleep(interval * 1000 + 500);
+          expect(await cheatCodes.blockNumber()).toBe(first.number);
+        });
+
+        const next = await waitForBlockAfter(first.number);
+        expectOnGrid(next, first, 2);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
+      it('lets a warp that resets the block interval take over a pending resume', async () => {
+        await sleep(1000);
+        await cheatCodes.execWithPausedAnvil(() => sleep(100));
+        expect(await cheatCodes.getIntervalMining()).toBe(interval);
+
+        const target = first.timestamp + 100;
+        await cheatCodes.warp(target, { resetBlockInterval: true });
+        const warped = await waitForBlockAfter(first.number);
+        expect(warped.timestamp).toBe(target);
+
+        const next = await waitForBlockAfter(warped.number);
+        expectOnGrid(next, warped);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
+      it('keeps a next-block timestamp set inside a pause', async () => {
+        const target = first.timestamp + 50;
+        await cheatCodes.execWithPausedAnvil(() => cheatCodes.setNextBlockTimestamp(target));
+
+        expect((await waitForBlockAfter(first.number)).timestamp).toBe(target);
+      });
+
+      it('resumes on the grid when a timestamp set inside a pause was used by a block mined there', async () => {
+        await sleep(1000);
+        const mid = await cheatCodes.execWithPausedAnvil(async () => {
+          await cheatCodes.setNextBlockTimestamp(first.timestamp + 1);
+          await cheatCodes.evmMine();
+          const mined = await waitForBlockAfter(first.number);
+          await sleep(800);
+          return mined;
+        });
+        expect(mid.timestamp).toBe(first.timestamp + 1);
+
+        const next = await waitForBlockAfter(mid.number);
+        expectOnGrid(next, mid);
+        expectOnGrid(await waitForBlockAfter(next.number), next);
+      });
+
+      it('lets setIntervalMining cancel a pending resume', async () => {
+        await sleep(1000);
+        await cheatCodes.execWithPausedAnvil(() => sleep(100));
+        await cheatCodes.setIntervalMining(0);
+
+        await sleep(interval * 1000 + 500);
+        expect(await cheatCodes.blockNumber()).toBe(first.number);
+        expect(await cheatCodes.getIntervalMining()).toBeNull();
+      });
+    });
+
+    it('restores automine straight away when interval mining is off', async () => {
+      expect(await cheatCodes.isAutoMining()).toBe(true);
+      await cheatCodes.execWithPausedAnvil(async () => {
+        expect(await cheatCodes.isAutoMining()).toBe(false);
+      });
+      expect(await cheatCodes.isAutoMining()).toBe(true);
+      expect(await cheatCodes.getIntervalMining()).toBeNull();
+    });
+  });
+
   it.each([100, 42, 99])(`setNextBlockTimestamp by %i`, async increment => {
     const blockNumber = await cheatCodes.blockNumber();
     const timestamp = await cheatCodes.lastBlockTimestamp();

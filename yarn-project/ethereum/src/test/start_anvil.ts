@@ -5,6 +5,7 @@ import type { TestDateProvider } from '@aztec-labs/foundation/timer';
 import { type ChildProcess, spawn } from 'child_process';
 
 import { resolveFoundryBinary } from '../foundry_binary.js';
+import { resetAnvilMiningState } from './eth_cheat_codes.js';
 import { getL1Hardfork } from './l1_hardfork.js';
 
 /** Minimal interface matching the @viem/anvil Anvil shape used by callers. */
@@ -236,6 +237,7 @@ export async function startAnvil(
 
   anvil.once('close', () => {
     status = 'idle';
+    resetAnvilMiningState(port);
   });
 
   let stopping: Promise<void> | undefined;
@@ -243,6 +245,7 @@ export async function startAnvil(
     if (status === 'idle') {
       return;
     }
+    resetAnvilMiningState(port);
     await (stopping ??= killChild(anvil));
   };
 
