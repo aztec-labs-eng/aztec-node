@@ -84,6 +84,7 @@ import type {
   CheckpointProposalJobTestEvent,
   CheckpointProposalJobTestHooks,
 } from './checkpoint_proposal_job_test_hooks.js';
+import { SequencerInterruptedError } from './errors.js';
 import type { SequencerEvents } from './events.js';
 import type { SequencerMetrics } from './metrics.js';
 import { RequestsTracker } from './requests_tracker.js';
@@ -1931,6 +1932,77 @@ describe('CheckpointProposalJob', () => {
       expect(checkpoint).toBeDefined();
       expect(preflightTotals()).toEqual([1000n, 1000n]);
       expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+    });
+
+    it('completes on a boundary when a block build fails mid-checkpoint, instead of losing the turn', async () => {
+      // Block 1 consumes a full 256-message block, landing between bucket boundaries. Block 2 hits a transient
+      // (non-insufficient-txs) build fault, which ends the loop mid-checkpoint. The already-built block must still
+      // publish: a transaction-free endpoint block consumes to the nearest closed boundary so the header lands on
+      // a publishable position, rather than the whole turn being discarded.
+      mockSubslots(8);
+      job.updateConfig({ maxBlocksPerCheckpoint: 8 });
+      streamingInbox.set(leaves(700), [100n, 200n, 300n, 400n, 500n, 600n, 700n]);
+
+      // The pre-publish simulation accepts only a total that lands on a closed bucket boundary, as L1 does.
+      const boundaries = new Set([100n, 200n, 300n, 400n, 500n, 600n, 700n]);
+      publisher.validateCheckpointHeaderAndInbox.mockImplementation((_header, plan) =>
+        boundaries.has(plan.expectedTotal)
+          ? Promise.resolve(plan.expectedTotal / 100n)
+          : Promise.reject(new Error('Rollup__InboxTotalNotAtBucketBoundary')),
+      );
+
+      // One-shot fault on the second block only; block 1 and the forced endpoint block build normally.
+      const realBuild = checkpointBuilder.buildBlock.bind(checkpointBuilder);
+      let buildCalls = 0;
+      jest.spyOn(checkpointBuilder, 'buildBlock').mockImplementation((...args) => {
+        buildCalls += 1;
+        if (buildCalls === 2) {
+          return Promise.reject(new Error('transient build fault'));
+        }
+        return realBuild(...args);
+      });
+
+      const { lastBlock } = await setupMultipleBlocks(2, [1, 0]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeDefined();
+      expect(publisher.enqueueProposeCheckpoint).toHaveBeenCalledTimes(1);
+      expect(preflightTotals().at(-1)).toBe(500n);
+    });
+
+    it('abandons the turn, not completing on a boundary, when the sequencer is interrupted mid-checkpoint', async () => {
+      // A SequencerInterruptedError hands the turn over, so the checkpoint is abandoned: the forced endpoint block
+      // must not run, and the mid-bucket cursor leaves nothing the pre-publish simulation will accept.
+      mockSubslots(8);
+      job.updateConfig({ maxBlocksPerCheckpoint: 8 });
+      streamingInbox.set(leaves(700), [100n, 200n, 300n, 400n, 500n, 600n, 700n]);
+
+      const boundaries = new Set([100n, 200n, 300n, 400n, 500n, 600n, 700n]);
+      publisher.validateCheckpointHeaderAndInbox.mockImplementation((_header, plan) =>
+        boundaries.has(plan.expectedTotal)
+          ? Promise.resolve(plan.expectedTotal / 100n)
+          : Promise.reject(new Error('Rollup__InboxTotalNotAtBucketBoundary')),
+      );
+
+      const realBuild = checkpointBuilder.buildBlock.bind(checkpointBuilder);
+      let buildCalls = 0;
+      jest.spyOn(checkpointBuilder, 'buildBlock').mockImplementation((...args) => {
+        buildCalls += 1;
+        if (buildCalls === 2) {
+          return Promise.reject(new SequencerInterruptedError());
+        }
+        return realBuild(...args);
+      });
+
+      const { lastBlock } = await setupMultipleBlocks(2, [1, 0]);
+      validatorClient.collectAttestations.mockResolvedValue(getAttestations(lastBlock));
+
+      const checkpoint = await job.executeAndAwait();
+
+      expect(checkpoint).toBeUndefined();
+      expect(publisher.enqueueProposeCheckpoint).not.toHaveBeenCalled();
     });
 
     it('treats the block that reaches the checkpoint block cap as the final block', async () => {

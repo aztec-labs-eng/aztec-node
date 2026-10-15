@@ -1282,12 +1282,33 @@ export class CheckpointProposalJob implements Traceable {
       // If there was an error building the block, we just exit the loop and give up the rest of the slot.
       // We don't want to risk building more blocks if something went wrong.
       if (buildResult.kind === 'failed') {
-        if (!(buildResult.error instanceof SequencerInterruptedError)) {
-          this.log.warn(`Halting block building for slot ${this.targetSlot}`, {
-            slot: this.targetSlot,
-            blocksBuilt,
-            error: buildResult.error,
+        // An interrupted sequencer is handing the turn over, so the checkpoint is abandoned rather than completed.
+        if (buildResult.error instanceof SequencerInterruptedError) {
+          break;
+        }
+        this.log.warn(`Halting block building for slot ${this.targetSlot}`, {
+          slot: this.targetSlot,
+          blocksBuilt,
+          error: buildResult.error,
+        });
+        // The build failed mid-checkpoint, so the consumed-message cursor may sit mid-bucket, which no checkpoint
+        // can be published on. Append a transaction-free endpoint block to the nearest closed boundary so the
+        // blocks already built and broadcast this slot are not discarded; a no-op when already on a boundary.
+        if (consumption.hasConsumedInThisCheckpoint) {
+          const forced = await this.buildForcedEndpointBlock(checkpointBuilder, consumption, {
+            blockTimestamp: timestamp,
+            blockNumber,
+            indexWithinCheckpoint,
+            txHashesAlreadyIncluded,
+            blockProposalOptions,
           });
+          if (forced.kind === 'aborted') {
+            return { aborted: true };
+          }
+          if (forced.kind === 'built') {
+            blocksInCheckpoint.push(forced.block);
+            blockPendingBroadcast = forced.proposal;
+          }
         }
         break;
       }
