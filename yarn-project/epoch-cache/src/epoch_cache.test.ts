@@ -421,22 +421,45 @@ describe('EpochCache', () => {
         hash: '0xeee',
       } as any);
 
-      let resolveCommittee: (v: EthAddress[]) => void;
-      rollupContract.getCommitteeAt.mockImplementation(() => new Promise(resolve => (resolveCommittee = resolve)));
+      rollupContract.getCommitteeAt.mockResolvedValue(testCommittee);
       rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(0n));
 
-      // Fire two concurrent requests
-      const p1 = epochCache.getCommittee(epoch1Slot);
-      const p2 = epochCache.getCommittee(epoch1Slot);
-
-      // Only one L1 call should be in-flight
-      expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
-
-      // Resolve and both promises should return the same result
-      resolveCommittee!(testCommittee);
-      const [r1, r2] = await Promise.all([p1, p2]);
+      // Fire two concurrent requests: both should share a single L1 fetch and get the same result
+      const [r1, r2] = await Promise.all([epochCache.getCommittee(epoch1Slot), epochCache.getCommittee(epoch1Slot)]);
       expect(r1.committee).toEqual(testCommittee);
       expect(r2.committee).toEqual(testCommittee);
+      expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not mark an entry settled from a block read after its committee', async () => {
+      // With lag=2, epoch 3's seed settles once L1 reaches the start of epoch 2.
+      const epoch3Slot = SlotNumber(3 * EPOCH_DURATION);
+      const epochSeconds = EPOCH_DURATION * SLOT_DURATION;
+      const settledTs = l1GenesisTime + BigInt(2 * epochSeconds);
+      const settledCommittee = [extraTestValidator, ...testCommittee];
+
+      // Model L1: right after the first committee read, the randao checkpoint lands in a block before the settling
+      // point and the head then reaches it. Reads observe whatever the chain looks like when they are issued.
+      let checkpointed = false;
+      client.getBlock.mockImplementation((args: any) => {
+        if (args?.blockTag === 'finalized') {
+          return Promise.resolve({ timestamp: l1GenesisTime, number: 1n, hash: '0xfin' } as any);
+        }
+        const [timestamp, number] = checkpointed ? [settledTs, 12n] : [settledTs - 2n * BigInt(SLOT_DURATION), 10n];
+        return Promise.resolve({ timestamp, number: args?.blockNumber ?? number, hash: '0xsame' } as any);
+      });
+      rollupContract.getCommitteeAt.mockImplementation(() => {
+        const committee = checkpointed ? settledCommittee : testCommittee;
+        checkpointed = true;
+        return Promise.resolve(committee);
+      });
+      rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(42n));
+
+      jest.setSystemTime(Number(settledTs) * 1000);
+      expect((await epochCache.getCommittee(epoch3Slot)).committee).toEqual(testCommittee);
+
+      jest.setSystemTime(Number(settledTs + BigInt(SLOT_DURATION)) * 1000);
+      expect((await epochCache.getCommittee(epoch3Slot)).committee).toEqual(settledCommittee);
     });
 
     it('should eventually mark a non-finalized entry as finalized on re-query', async () => {

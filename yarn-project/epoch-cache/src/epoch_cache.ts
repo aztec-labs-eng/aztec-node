@@ -455,11 +455,19 @@ export class EpochCache implements EpochCacheInterface {
     ts: bigint,
     prefetched?: { latestBlock: L1BlockInfo; finalizedBlock: { timestamp: bigint } | undefined },
   ): Promise<CachedEpochEntry> {
-    const [committee, seedBuffer, latestBlock, finalizedBlock, isEscapeHatchOpen] = await Promise.all([
+    // Read the blocks before the committee, so that on a node serving monotonic reads the committee comes from that block
+    // or a later one. Reading them in parallel could pair committee data from before the seed settled with a block past
+    // it, marking stale data settled.
+    const [latestBlock, finalizedBlock] = prefetched
+      ? [prefetched.latestBlock, prefetched.finalizedBlock]
+      : await Promise.all([
+          this.rollup.client.getBlock({ includeTransactions: false }),
+          getFinalizedL1Block(this.rollup.client),
+        ]);
+
+    const [committee, seedBuffer, isEscapeHatchOpen] = await Promise.all([
       this.rollup.getCommitteeAt(ts),
       this.rollup.getSampleSeedAt(ts),
-      prefetched?.latestBlock ?? this.rollup.client.getBlock({ includeTransactions: false }),
-      prefetched !== undefined ? prefetched.finalizedBlock : getFinalizedL1Block(this.rollup.client),
       this.rollup.isEscapeHatchOpen(epoch),
     ]);
 
