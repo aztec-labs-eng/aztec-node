@@ -297,6 +297,10 @@ describe('AztecLMDBStoreV2', () => {
           value: await map.getAsync('k'),
         })),
       ).resolves.toEqual({ writeTx: true, value: 'v' });
+      await expect(store.readOnlyTransaction(() => map.set('k', 'v2'))).rejects.toThrow(
+        'Cannot start a write transaction inside a read-only transaction',
+      );
+      await expect(map.getAsync('k')).resolves.toBe('v');
     });
 
     describe('with a single reader slot', () => {
@@ -341,6 +345,53 @@ describe('AztecLMDBStoreV2', () => {
         await expect(toArray({ [Symbol.asyncIterator]: () => abandoned })).rejects.toThrow(
           'Cursor was closed with its transaction',
         );
+      });
+
+      it('closes a cursor whose start was still in flight when its callback settled', async () => {
+        const map = smallStore.openMap<number, number>('ro-in-flight-cursor');
+        await smallStore.transactionAsync(async () => {
+          for (let i = 0; i < 50; i++) {
+            await map.set(i, i);
+          }
+        });
+
+        // Hold back the response to the snapshot's START_CURSOR until its callback has returned.
+        const cursorStarted = promiseWithResolvers<void>();
+        const deliverCursor = promiseWithResolvers<void>();
+        const sendMessage = smallStore.sendMessage.bind(smallStore);
+        vi.spyOn(smallStore, 'sendMessage').mockImplementation(async (msgType, body) => {
+          const response = await sendMessage(msgType, body);
+          if (msgType === LMDBMessageType.START_CURSOR && 'txId' in (body as object)) {
+            cursorStarted.resolve();
+            await deliverCursor.promise;
+          }
+          return response;
+        });
+
+        let firstEntry: Promise<unknown> | undefined;
+        const snapshot = smallStore.readOnlyTransaction(async () => {
+          firstEntry = map.entriesAsync()[Symbol.asyncIterator]().next();
+          await cursorStarted.promise;
+        });
+        await cursorStarted.promise;
+        await sleep(10);
+        deliverCursor.resolve();
+        await snapshot;
+        await firstEntry;
+        vi.restoreAllMocks();
+
+        // As above, the next snapshot must be a real one rather than a fallback queued behind this write.
+        const writeStaged = promiseWithResolvers<void>();
+        const finishWrite = promiseWithResolvers<void>();
+        const write = smallStore.transactionAsync(async () => {
+          await map.set(0, -1);
+          writeStaged.resolve();
+          await finishWrite.promise;
+        });
+        await writeStaged.promise;
+        await expect(smallStore.readOnlyTransaction(() => map.getAsync(0))).resolves.toBe(0);
+        finishWrite.resolve();
+        await write;
       });
 
       it('rejects snapshots still waiting for the slot when the store closes', async () => {

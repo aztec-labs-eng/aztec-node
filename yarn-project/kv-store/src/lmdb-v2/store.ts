@@ -160,16 +160,17 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
       throw new Error('Store is closed');
     }
 
+    // checked first: a read-only transaction that fell back to the writer queue runs inside a write transaction
+    if (this.readerCtx.getStore()) {
+      throw new Error('Cannot start a write transaction inside a read-only transaction');
+    }
+
     // transactionAsync might be called recursively
     // send any writes to the parent tx, but don't close it
     // if the callback throws then the parent tx will rollback automatically
     const currentTx = this.getCurrentWriteTx();
     if (currentTx) {
       return await callback(currentTx);
-    }
-
-    if (this.readerCtx.getStore()) {
-      throw new Error('Cannot start a write transaction inside a read-only transaction');
     }
 
     return this.writerQueue.put(async () => {
@@ -197,8 +198,8 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
    * further slot. Cursors still open when the callback settles are closed with the snapshot. A nested call reuses the
    * enclosing snapshot, and a call inside a write transaction reuses that transaction, uncommitted writes included.
    *
-   * If the native store keeps refusing to open a snapshot because every reader is busy, the callback runs as a
-   * {@link transactionAsync} instead: still consistent, but queued with the writes.
+   * If the native store keeps refusing to open a snapshot because every reader is busy, the callback runs inside a
+   * {@link transactionAsync} instead: still consistent and still unable to write, but queued with the writes.
    */
   async readOnlyTransaction<T extends Exclude<any, Promise<any>>>(
     callback: (tx: ReadTransaction) => Promise<T>,
@@ -231,7 +232,7 @@ export class AztecLMDBStoreV2 implements AztecAsyncKVStore, LMDBMessageChannel {
     this.log.warn(
       `No reader slot to open a read-only snapshot after ${START_READ_TX_ATTEMPTS} attempts, running it in the writer queue`,
     );
-    return this.transactionAsync(callback);
+    return this.transactionAsync(tx => this.readerCtx.run(tx, callback, tx));
   }
 
   /** Takes a slot from {@link availableReaders}, failing if the store was closed while waiting for it. */

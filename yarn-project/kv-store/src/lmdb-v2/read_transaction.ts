@@ -6,6 +6,8 @@ import {
   GET_CHUNK_SIZE,
   type LMDBMessageChannel,
   LMDBMessageType,
+  type LMDBRequestBody,
+  type LMDBResponseBody,
   SINGLE_PAGE_LIMIT,
 } from './message.js';
 
@@ -16,6 +18,8 @@ export class ReadTransaction {
   private readonly txField: { txId?: number };
   /** Cursors this transaction opened that are still open. */
   private readonly openCursors = new Set<number>();
+  /** START_CURSOR requests still waiting for a response, whose cursors are not in {@link openCursors} yet. */
+  private readonly pendingCursorStarts = new Set<Promise<unknown>>();
 
   /**
    * @param channel - Channel to the native store.
@@ -41,6 +45,7 @@ export class ReadTransaction {
    * finished. An iterator whose cursor is closed this way throws on its next page. Errors closing a cursor are thrown.
    */
   public async closeOpenCursors(): Promise<void> {
+    await Promise.allSettled([...this.pendingCursorStarts]);
     const cursors = [...this.openCursors];
     this.openCursors.clear();
     await Promise.all(cursors.map(cursor => this.channel.sendMessage(LMDBMessageType.CLOSE_CURSOR, { cursor })));
@@ -127,19 +132,15 @@ export class ReadTransaction {
       // A bounded scan asks for the whole limit up front: `endKey` is filtered client side, but in-range entries are
       // contiguous from `startKey`, so the first `limit` entries always contain every entry we may return.
       const singlePageLimit = typeof limit === 'number' && limit <= SINGLE_PAGE_LIMIT ? limit : undefined;
-      const response = await this.channel.sendMessage(LMDBMessageType.START_CURSOR, {
+      const response = await this.#startCursor({
         key: startKey,
         reverse,
         count: singlePageLimit ?? CURSOR_PAGE_SIZE,
         onePage: singlePageLimit !== undefined,
         db,
-        ...this.txField,
       });
 
       cursor = response.cursor ?? undefined;
-      if (typeof cursor === 'number') {
-        this.openCursors.add(cursor);
-      }
       let entries = response.entries;
       let done = typeof cursor !== 'number';
       let count = 0;
@@ -188,25 +189,41 @@ export class ReadTransaction {
     }
   }
 
+  /**
+   * Opens a cursor and registers it in {@link openCursors} as soon as the response arrives, before any caller resumes,
+   * so {@link closeOpenCursors} cannot miss a cursor whose iterator has not run since starting it.
+   */
+  #startCursor(body: Omit<LMDBRequestBody[LMDBMessageType.START_CURSOR], 'txId'>) {
+    const start: Promise<LMDBResponseBody[LMDBMessageType.START_CURSOR]> = this.channel
+      .sendMessage(LMDBMessageType.START_CURSOR, { ...body, ...this.txField })
+      .then(
+        response => {
+          this.pendingCursorStarts.delete(start);
+          if (typeof response.cursor === 'number') {
+            this.openCursors.add(response.cursor);
+          }
+          return response;
+        },
+        err => {
+          this.pendingCursorStarts.delete(start);
+          throw err;
+        },
+      );
+    this.pendingCursorStarts.add(start);
+    return start;
+  }
+
   async #countEntries(db: string, startKey: Uint8Array, endKey: Uint8Array, reverse: boolean): Promise<number> {
     this.assertIsOpen();
 
     let cursor: number | undefined;
     try {
-      const response = await this.channel.sendMessage(LMDBMessageType.START_CURSOR, {
-        key: startKey,
-        reverse,
-        count: 0,
-        onePage: false,
-        db,
-        ...this.txField,
-      });
+      const response = await this.#startCursor({ key: startKey, reverse, count: 0, onePage: false, db });
 
       cursor = response.cursor ?? undefined;
       if (typeof cursor !== 'number') {
         return 0;
       }
-      this.openCursors.add(cursor);
 
       const advanceResponse = await this.channel.sendMessage(LMDBMessageType.ADVANCE_CURSOR_COUNT, {
         cursor,

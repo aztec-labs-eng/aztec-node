@@ -2,13 +2,9 @@ import type { ReadTransaction } from './read_transaction.js';
 import type { AztecLMDBStoreV2 } from './store.js';
 import type { WriteTransaction } from './write_transaction.js';
 
+/** Runs `fn` in the enclosing write transaction, or in a new one. Throws inside a read-only transaction. */
 export function execInWriteTx<T>(store: AztecLMDBStoreV2, fn: (tx: WriteTransaction) => Promise<T>): Promise<T> {
-  const currentWrite = store.getCurrentWriteTx();
-  if (currentWrite) {
-    return fn(currentWrite);
-  } else {
-    return store.transactionAsync(fn);
-  }
+  return store.transactionAsync(fn);
 }
 
 export async function execInReadTx<T>(

@@ -1,4 +1,5 @@
 import { promiseWithResolvers } from '@aztec-labs/foundation/promise';
+import { sleep } from '@aztec-labs/foundation/sleep';
 import { vi } from 'vitest';
 
 import { describeAztecMap } from '../interfaces/map_test_suite.js';
@@ -39,7 +40,7 @@ describe('LMDBMap bulk reads', () => {
         }
       });
 
-      // Hold the call after its first GET, commit a write to a key of the second chunk, then let it continue.
+      // Hold the call after its first GET and issue a write to a key of the second chunk, giving it time to commit.
       const firstChunkRead = promiseWithResolvers<void>();
       const resume = promiseWithResolvers<void>();
       const sendMessage = store.sendMessage.bind(store);
@@ -55,13 +56,39 @@ describe('LMDBMap bulk reads', () => {
 
       const read = map.getManyAsync(keys);
       await firstChunkRead.promise;
-      await map.set(GET_CHUNK_SIZE, 'new');
+      const write = map.set(GET_CHUNK_SIZE, 'new');
+      await Promise.race([write, sleep(50)]);
       resume.resolve();
 
       expect(await read).toEqual(keys.map(() => 'old'));
+      await write;
       expect(await map.getAsync(GET_CHUNK_SIZE)).toBe('new');
     } finally {
       vi.restoreAllMocks();
+      await store.delete();
+    }
+  });
+
+  it('reads more than one request worth of keys inside a scan that holds the only reader slot', async () => {
+    const store = await openTmpStore('bulk-inside-scan', true, 10 * 1024 * 1024, 2);
+    try {
+      const map = store.openMap<number, string>('test');
+      const keys = Array.from({ length: GET_CHUNK_SIZE + 1 }, (_, i) => i);
+      await store.transactionAsync(async () => {
+        for (const key of keys) {
+          await map.set(key, 'v');
+        }
+      });
+
+      const bulkReads: (string | undefined)[][] = [];
+      for await (const [key] of map.entriesAsync()) {
+        if (key === 0) {
+          bulkReads.push(await map.getManyAsync(keys));
+        }
+      }
+
+      expect(bulkReads).toEqual([keys.map(() => 'v')]);
+    } finally {
       await store.delete();
     }
   });

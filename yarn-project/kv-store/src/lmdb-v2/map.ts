@@ -72,15 +72,18 @@ export class LMDBMap<K extends Key, V extends Value> implements AztecAsyncMap<K,
   }
 
   /**
-   * Reads values in input order. Keys are sent {@link GET_CHUNK_SIZE} per request, and a call that needs more than one
-   * request reads them all from a single read-only snapshot, so the result never mixes states from different commits.
+   * Reads values in input order. Keys are sent {@link GET_CHUNK_SIZE} per request. Outside a transaction, a call that
+   * needs more than one request runs in the writer queue so that no commit lands between its requests; it does not use
+   * a read-only snapshot, which would need a reader slot that an enclosing scan may be holding.
    */
   getManyAsync(keys: K[]): Promise<(V | undefined)[]> {
     const read = async (tx: ReadTransaction) => {
       const values = await tx.getMany(keys.map(key => serializeKey(this.prefix, key)));
       return values.map(value => (value ? this.encoder.unpack(value) : undefined));
     };
-    return keys.length > GET_CHUNK_SIZE ? this.store.readOnlyTransaction(read) : execInReadTx(this.store, read);
+    return keys.length > GET_CHUNK_SIZE && !this.store.getCurrentTx()
+      ? this.store.transactionAsync(read)
+      : execInReadTx(this.store, read);
   }
 
   hasAsync(key: K): Promise<boolean> {
