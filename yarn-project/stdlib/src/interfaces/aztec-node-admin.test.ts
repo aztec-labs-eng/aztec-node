@@ -34,7 +34,7 @@ describe('AztecNodeAdminApiSchema', () => {
     expect(config).toMatchObject({
       coinbase: expect.any(EthAddress),
       maxPendingTxCount: expect.any(Number),
-      logLevel: 'info;debug:p2p.*',
+      logLevel: 'info',
     });
   });
 
@@ -109,7 +109,7 @@ class MockAztecNodeAdmin implements AztecNodeAdmin {
       SlasherConfig & { maxPendingTxCount: number; logLevel: string }
   > {
     return Promise.resolve({
-      logLevel: 'info;debug:p2p.*',
+      logLevel: 'info',
       realProofs: false,
       proverTestDelayType: 'fixed',
       proverTestDelayMs: 100,

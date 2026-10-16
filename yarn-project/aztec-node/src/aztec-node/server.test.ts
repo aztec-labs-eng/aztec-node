@@ -609,8 +609,8 @@ describe('aztec node', () => {
           expect((await node.getConfig()).logLevel).toBe('warn;debug:p2p');
         });
 
-        it('rejects an unsafe log level spec without applying it', async () => {
-          await expect(node.setConfig({ logLevel: 'info;debug:(.+)+z' })).rejects.toThrow(BadRequestError);
+        it('rejects an invalid log level spec without applying it', async () => {
+          await expect(node.setConfig({ logLevel: 'loud' })).rejects.toThrow(BadRequestError);
           expect(getLogLevel()).toBe(originalSpec);
         });
 

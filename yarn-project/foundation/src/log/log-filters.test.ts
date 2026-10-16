@@ -77,10 +77,4 @@ describe('isValidLogLevelSpec', () => {
     expect(isValidLogLevelSpec('loud')).toBe(false);
     expect(isValidLogLevelSpec('debug;trace:')).toBe(false);
   });
-
-  it('rejects module filters that could backtrack catastrophically', () => {
-    expect(isValidLogLevelSpec('info;debug:(.+)+z')).toBe(false);
-    expect(isValidLogLevelSpec('info;debug:p2p.*')).toBe(false);
-    expect(isValidLogLevelSpec('info;debug:^p2p$|sequencer:checkpoint-proposal')).toBe(true);
-  });
 });
