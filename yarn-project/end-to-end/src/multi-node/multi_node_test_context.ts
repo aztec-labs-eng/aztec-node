@@ -4,7 +4,7 @@ import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
 import type { RollupCheatCodes } from '@aztec-labs/aztec/testing';
-import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import type { EpochCacheInterface, ProposerLookup, UnstableCommittee } from '@aztec-labs/epoch-cache';
 import { CommitteeNotStableError, RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
@@ -152,7 +152,7 @@ export function withOnlyOffense(offense: keyof SlashingPenalties, unit: bigint =
 /**
  * Reads the proposer of `slot` from a node's epoch cache. When the slot is in the next epoch and its committee is not
  * stable on L1 yet, because nothing has checkpointed the current epoch's randao, sets up the current epoch and retries
- * until the node's cached unstable marker expires. Rethrows `CommitteeNotStableError` for slots further ahead, whose
+ * until the node's cached unstable marker expires. Throws `CommitteeNotStableError` for slots further ahead, whose
  * seed no setup in the current epoch can fix, so callers can warp forward instead.
  */
 export async function getProposerFixingSeed(
@@ -160,33 +160,37 @@ export async function getProposerFixingSeed(
   cheatCodes: RollupCheatCodes,
   slot: SlotNumber,
 ): Promise<EthAddress | undefined> {
-  try {
-    return await epochCache.getProposerAttesterAddressInSlot(slot);
-  } catch (err) {
-    const l1Constants = epochCache.getL1Constants();
-    const nextEpoch = epochCache.getEpochNow() + 1;
-    if (!(err instanceof CommitteeNotStableError) || getEpochAtSlot(slot, l1Constants) > nextEpoch) {
-      throw err;
-    }
+  const lookup = await epochCache.lookupProposer(slot);
+  if (lookup.state !== 'unstable') {
+    return knownProposer(lookup, slot);
+  }
+  if (getEpochAtSlot(slot, epochCache.getL1Constants()) > epochCache.getEpochNow() + 1) {
+    throw new CommitteeNotStableError(BigInt(lookup.epoch), lookup.l1BlockNumber);
   }
 
   await cheatCodes.setupEpoch();
-  const { proposer } = await retryUntil(
+  const stable = await retryUntil(
     async () => {
-      try {
-        return { proposer: await epochCache.getProposerAttesterAddressInSlot(slot) };
-      } catch (err) {
-        if (err instanceof CommitteeNotStableError) {
-          return undefined;
-        }
-        throw err;
-      }
+      const retried = await epochCache.lookupProposer(slot);
+      return retried.state === 'unstable' ? undefined : retried;
     },
     `stable committee for slot ${slot}`,
     3 * epochCache.getL1Constants().ethereumSlotDuration,
     0.5,
   );
-  return proposer;
+  return knownProposer(stable, slot);
+}
+
+/** The proposer of a slot whose committee is known: undefined when anyone may propose, and throws without a committee. */
+function knownProposer(lookup: Exclude<ProposerLookup, UnstableCommittee>, slot: SlotNumber): EthAddress | undefined {
+  switch (lookup.state) {
+    case 'members':
+      return lookup.proposer;
+    case 'open':
+      return undefined;
+    case 'none':
+      throw new Error(`No committee on L1 for slot ${slot}`);
+  }
 }
 
 /** One HA pair: its two member nodes, the two shared validator keys, and the per-node coinbases. */

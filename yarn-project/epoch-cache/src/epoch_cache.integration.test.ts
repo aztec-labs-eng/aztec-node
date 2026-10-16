@@ -1,6 +1,6 @@
 import { getPublicClient } from '@aztec-labs/ethereum/client';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
-import { CommitteeNotStableError, RollupContract } from '@aztec-labs/ethereum/contracts';
+import { RollupContract } from '@aztec-labs/ethereum/contracts';
 import { deployAztecL1Contracts } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import { EthCheatCodes, RollupCheatCodes, describeAcrossL1Forks, startAnvil } from '@aztec-labs/ethereum/test';
 import type { Anvil } from '@aztec-labs/ethereum/test';
@@ -121,12 +121,14 @@ describeAcrossL1Forks('EpochCache integration', () => {
     // Query the specific target epoch rather than 'now', because auto-mining may have
     // advanced the dateProvider well past the target epoch.
     const slotForEpoch = SlotNumber(Number(targetEpoch) * Number(epochDuration));
-    const { committee, seed, epoch } = await epochCache.getCommittee(slotForEpoch);
+    const lookup = await epochCache.getCommittee(slotForEpoch);
 
-    expect(committee).toBeDefined();
-    expect(committee!.length).toBe(NUM_VALIDATORS);
-    expect(seed).not.toBe(0n);
-    expect(epoch).toBe(targetEpoch);
+    if (lookup.state !== 'members') {
+      throw new Error(`Expected a committee with members, got ${lookup.state}`);
+    }
+    expect(lookup.committee.length).toBe(NUM_VALIDATORS);
+    expect(lookup.seed).not.toBe(0n);
+    expect(lookup.epoch).toBe(targetEpoch);
 
     // The entry is read at the latest L1 block, so it is finalized only once that block is (finalized = latest - 16).
     expect(epochCache.isFinalized(targetEpoch)).toBe(false);
@@ -143,7 +145,7 @@ describeAcrossL1Forks('EpochCache integration', () => {
 
     // First fetch — works but may not be finalized (warp only mines one block).
     const result1 = await epochCache.getCommittee('now');
-    expect(result1.committee).toBeDefined();
+    expect(result1.state).toBe('members');
 
     // Mine some blocks to advance finalized, then advance time past TTL.
     await cheatCodes.mine(5);
@@ -151,7 +153,7 @@ describeAcrossL1Forks('EpochCache integration', () => {
 
     // Re-query: cache entry is stale, so it should re-fetch from L1.
     const result2 = await epochCache.getCommittee('now');
-    expect(result2.committee).toBeDefined();
+    expect(result2.state).toBe('members');
     // The entry was successfully re-fetched (we got a result without throwing).
   });
 
@@ -176,7 +178,7 @@ describeAcrossL1Forks('EpochCache integration', () => {
     // Record the epoch and populate the cache.
     const epochBefore = epochCache.getEpochNow();
     const before = await epochCache.getCommittee('now');
-    expect(before.committee).toBeDefined();
+    expect(before.state).toBe('members');
     expect(epochCache.isFinalized(epochBefore)).toBe(false);
 
     // Record the L1 timestamp at which the cache entry was last refreshed.
@@ -203,7 +205,7 @@ describeAcrossL1Forks('EpochCache integration', () => {
     // so we don't accidentally query a different epoch if time advanced.
     const slotForEpoch = SlotNumber(Number(epochBefore) * Number(epochDuration));
     const after = await epochCache.getCommittee(slotForEpoch);
-    expect(after.committee).toBeDefined();
+    expect(after.state).toBe('members');
     expect(after.epoch).toBe(before.epoch);
 
     // The cache was refreshed: the L1 timestamp must have advanced because
@@ -243,7 +245,7 @@ describeAcrossL1Forks('EpochCache integration', () => {
     it('serves a committee only once setupEpoch fixes its seed', async () => {
       const { samplingEpoch, targetSlot, targetTs } = await advanceToFreshSamplingEpoch();
       await syncClockPastLatestBlock();
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
       const blockBeforeSetup = await rollup.client.getBlockNumber({ cacheTime: 0 });
 
       // A setupEpoch later in the same epoch checkpoints the randao, which changes the target epoch's seed on L1.
@@ -255,8 +257,11 @@ describeAcrossL1Forks('EpochCache integration', () => {
 
       await syncClockPastLatestBlock();
       const info = await epochCache.getCommittee(targetSlot);
-      expect(info.seed).toBe(seedOnL1);
-      expect(info.committee).toEqual(await rollup.getCommitteeAt(targetTs));
+      expect(info).toMatchObject({
+        state: 'members',
+        seed: seedOnL1,
+        committee: await rollup.getCommitteeAt(targetTs),
+      });
     });
 
     it('keeps the gate closed after a bare checkpointRandao until the sampling epoch is over', async () => {
@@ -269,13 +274,16 @@ describeAcrossL1Forks('EpochCache integration', () => {
       });
       expect(await rollup.getCurrentEpoch()).toBe(samplingEpoch);
       await syncClockPastLatestBlock();
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
 
       await rollupCheatCodes.advanceToEpoch(EpochNumber(samplingEpoch + 1));
       await syncClockPastLatestBlock();
       const info = await epochCache.getCommittee(targetSlot);
-      expect(info.seed).toBe((await rollup.getSampleSeedAt(targetTs)).toBigInt());
-      expect(info.committee).toEqual(await rollup.getCommitteeAt(targetTs));
+      expect(info).toMatchObject({
+        state: 'members',
+        seed: (await rollup.getSampleSeedAt(targetTs)).toBigInt(),
+        committee: await rollup.getCommitteeAt(targetTs),
+      });
     });
   });
 });

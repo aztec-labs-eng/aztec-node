@@ -1,4 +1,5 @@
-import type { EpochCache, EpochCommitteeInfo } from '@aztec-labs/epoch-cache';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup, makeProposerLookup, makeUnstableCommittee } from '@aztec-labs/epoch-cache/test';
 import { CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
@@ -47,14 +48,16 @@ describe('AttestationsBlockWatcher', () => {
     committee = [proposer, EthAddress.fromString('0x0000000000000000000000000000000000000def')];
 
     // Default mock return values
-    epochCache.getProposerFromEpochCommittee.mockReturnValue(proposer);
+    epochCache.proposerFromCommitteeLookup.mockReturnValue(makeProposerLookup(proposer));
     epochCache.getL1Constants.mockReturnValue({ epochDuration: 32 } as L1RollupConstants);
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen: false,
-    } as EpochCommitteeInfo);
+    epochCache.getCommitteeForEpoch.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(0),
+        isEscapeHatchOpen: false,
+      }),
+    );
   });
 
   it('should emit WANT_TO_SLASH_EVENT for proposer when invalid checkpoint detected due to insufficient attestations', () => {
@@ -133,7 +136,7 @@ describe('AttestationsBlockWatcher', () => {
       timestamp: BigInt(Math.floor(Date.now() / 1000)),
     };
     const proposer2 = EthAddress.fromString('0x0000000000000000000000000000000000000def');
-    epochCache.getProposerFromEpochCommittee.mockReturnValue(proposer2);
+    epochCache.proposerFromCommitteeLookup.mockReturnValue(makeProposerLookup(proposer2));
 
     const attestor1 = EthAddress.fromString('0x0000000000000000000000000000000000000111');
     const attestor2 = EthAddress.fromString('0x0000000000000000000000000000000000000222');
@@ -187,12 +190,14 @@ describe('AttestationsBlockWatcher', () => {
   it('does not slash the rotation-derived proposer for a descendant whose epoch has the escape hatch open', async () => {
     // While the hatch is open, checkpoints are published outside the committee's proposer rotation, so the
     // committee member rotation yields for the slot did not necessarily publish this checkpoint.
-    epochCache.getCommitteeForEpoch.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(0),
-      isEscapeHatchOpen: true,
-    } as EpochCommitteeInfo);
+    epochCache.getCommitteeForEpoch.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(0),
+        isEscapeHatchOpen: true,
+      }),
+    );
 
     const descendant: CheckpointInfo = {
       archive: Fr.random(),
@@ -240,7 +245,7 @@ describe('AttestationsBlockWatcher', () => {
       timestamp: BigInt(Math.floor(Date.now() / 1000)),
     };
     const descendantProposer = EthAddress.fromString('0x0000000000000000000000000000000000000def');
-    epochCache.getProposerFromEpochCommittee.mockReturnValue(descendantProposer);
+    epochCache.proposerFromCommitteeLookup.mockReturnValue(makeProposerLookup(descendantProposer));
 
     const event: DescendentOfInvalidAttestationsCheckpointEvent = {
       type: 'descendentOfInvalidAttestationsCheckpointDetected',
@@ -274,7 +279,7 @@ describe('AttestationsBlockWatcher', () => {
       timestamp: BigInt(Math.floor(Date.now() / 1000)),
     };
     const d2Proposer = EthAddress.fromString('0x0000000000000000000000000000000000000bbb');
-    epochCache.getProposerFromEpochCommittee.mockReturnValue(d2Proposer);
+    epochCache.proposerFromCommitteeLookup.mockReturnValue(makeProposerLookup(d2Proposer));
 
     // D2 has invalid attestations of its own.
     watcher.handleInvalidCheckpoint({
@@ -320,8 +325,27 @@ describe('AttestationsBlockWatcher', () => {
     expect(handler).toHaveBeenCalledTimes(2);
   });
 
+  it('does not slash a descendant whose epoch committee is not stable', async () => {
+    epochCache.getCommitteeForEpoch.mockResolvedValue(makeUnstableCommittee(EpochNumber(0), 100n));
+
+    await watcher.handleDescendantOfInvalid({
+      type: 'descendentOfInvalidAttestationsCheckpointDetected',
+      checkpoint: {
+        archive: Fr.random(),
+        lastArchive: checkpointInfo.archive,
+        slotNumber: SlotNumber(2),
+        checkpointNumber: CheckpointNumber(2),
+        timestamp: BigInt(Math.floor(Date.now() / 1000)),
+      },
+      ancestorArchiveRoot: checkpointInfo.archive,
+      ancestorCheckpointNumber: checkpointInfo.checkpointNumber,
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('handles descendant-of-invalid event when no proposer is found', async () => {
-    epochCache.getProposerFromEpochCommittee.mockReturnValue(undefined);
+    epochCache.proposerFromCommitteeLookup.mockReturnValue(makeProposerLookup(undefined));
 
     const descendant: CheckpointInfo = {
       archive: Fr.random(),
@@ -341,7 +365,7 @@ describe('AttestationsBlockWatcher', () => {
   });
 
   it('should handle case when no proposer is found', () => {
-    epochCache.getProposerFromEpochCommittee.mockReturnValue(undefined);
+    epochCache.proposerFromCommitteeLookup.mockReturnValue(makeProposerLookup(undefined));
 
     const validationResult: ValidateCheckpointNegativeResult = {
       valid: false,

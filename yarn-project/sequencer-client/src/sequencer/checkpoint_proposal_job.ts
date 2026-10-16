@@ -1,4 +1,4 @@
-import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { type EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET, requireStableCommittee } from '@aztec-labs/epoch-cache';
 import { SimulationOverridesBuilder, type SimulationOverridesPlan } from '@aztec-labs/ethereum/contracts';
 import type { L1FeeAnalyzer } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
@@ -1976,16 +1976,16 @@ export class CheckpointProposalJob implements Traceable {
     proposal: CheckpointProposal,
   ): Promise<CommitteeAttestationsAndSigners | undefined> {
     const slotNumber = proposal.slotNumber;
-    const { committee, seed, epoch } = await this.epochCache.getCommittee(slotNumber);
+    const lookup = requireStableCommittee(await this.epochCache.getCommittee(slotNumber));
 
-    if (!committee) {
+    if (lookup.state === 'none') {
       throw new Error('No committee when collecting attestations');
-    } else if (committee.length === 0) {
+    } else if (lookup.state === 'open') {
       this.log.verbose(`Attesting committee is empty`);
       return CommitteeAttestationsAndSigners.empty(this.getSignatureContext());
-    } else {
-      this.log.debug(`Attesting committee length is ${committee.length}`, { committee });
     }
+    const { committee, seed, epoch } = lookup;
+    this.log.debug(`Attesting committee length is ${committee.length}`, { committee });
 
     const numberOfRequiredAttestations = computeQuorum(committee.length);
 

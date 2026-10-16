@@ -1,8 +1,8 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
-import { CommitteeNotStableError, NoCommitteeError } from '@aztec-labs/ethereum/contracts';
+import { makeMembershipLookup, makeProposerLookup, makeUnstableCommittee } from '@aztec-labs/epoch-cache/test';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
-import { PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
+import { type CheckpointAttestation, PeerErrorSeverity } from '@aztec-labs/stdlib/p2p';
 import { CheckpointHeader } from '@aztec-labs/stdlib/rollup';
 import { TEST_COORDINATION_SIGNATURE_CONTEXT, makeCheckpointAttestation } from '@aztec-labs/stdlib/testing';
 import { ConsensusTimetable } from '@aztec-labs/stdlib/timetable';
@@ -77,7 +77,7 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7033n,
       nowMs: 7033_000n, // past slot 97's attestation deadline (7032s) + disparity
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'ignore' });
@@ -104,8 +104,8 @@ describe('CheckpointAttestationValidator', () => {
       ts: 6905n,
       nowMs: 6905_000n, // within slot 97's window [6900, 7032]
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'accept' });
@@ -132,8 +132,8 @@ describe('CheckpointAttestationValidator', () => {
       ts: 6980n,
       nowMs: 6980_000n, // within slot 98's window [6972, 7104]
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'accept' });
@@ -159,8 +159,8 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7086n,
       nowMs: 7086_000n,
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'accept' });
@@ -187,7 +187,7 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7105n,
       nowMs: 7105_000n, // past slot 98's attestation deadline (7104s) + disparity
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'ignore' });
@@ -212,7 +212,7 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7150n,
       nowMs: 7150_000n,
     });
-    epochCache.isInCommittee.mockResolvedValue(false);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(false));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
@@ -237,8 +237,8 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7150n,
       nowMs: 7150_000n,
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'accept' });
@@ -263,8 +263,8 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7250n,
       nowMs: 7250_000n,
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
-    epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'accept' });
@@ -290,7 +290,8 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7150n,
       nowMs: 7150_000n,
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
@@ -315,8 +316,8 @@ describe('CheckpointAttestationValidator', () => {
       ts: 7150n,
       nowMs: 7150_000n,
     });
-    epochCache.isInCommittee.mockResolvedValue(true);
-    epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new NoCommitteeError());
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockResolvedValue({ state: 'none' });
 
     const result = await validator.validate(mockAttestation);
     expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.LowToleranceError });
@@ -344,17 +345,61 @@ describe('CheckpointAttestationValidator', () => {
 
     // A receiver-local lookup failure must not penalize the relaying peer: validate returns a
     // non-penalizing `ignore`, not a throw. See attestation_validator.ts.
-    epochCache.isInCommittee.mockRejectedValue(new Error('l1 rpc unavailable'));
+    epochCache.lookupMembership.mockRejectedValue(new Error('l1 rpc unavailable'));
     expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
 
     // Same for the proposer-lookup helper.
-    epochCache.isInCommittee.mockResolvedValue(true);
-    epochCache.getProposerAttesterAddressInSlot.mockRejectedValue(new Error('l1 node not synced'));
+    epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+    epochCache.lookupProposer.mockRejectedValue(new Error('l1 node not synced'));
     expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
 
     // And for a committee whose seed is not fixed on L1 yet.
-    epochCache.isInCommittee.mockRejectedValue(new CommitteeNotStableError(1n, 100n));
+    epochCache.lookupMembership.mockResolvedValue(makeUnstableCommittee(EpochNumber(1), 100n));
     expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
+  });
+
+  describe('committee states', () => {
+    let mockAttestation: CheckpointAttestation;
+
+    beforeEach(() => {
+      const header = CheckpointHeader.random({ slotNumber: SlotNumber(100) });
+      mockAttestation = makeCheckpointAttestation({ header, attesterSigner: attester, proposerSigner: proposer });
+      epochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot: SlotNumber(100), nextSlot: SlotNumber(101) });
+      // Slot 100 attestation window [7116, 7248]s; now inside so the committee lookup is reached.
+      epochCache.getEpochAndSlotNow.mockReturnValue({
+        epoch: EpochNumber(1),
+        slot: SlotNumber(100),
+        ts: 7150n,
+        nowMs: 7150_000n,
+      });
+    });
+
+    it.each(['open', 'none'] as const)('rejects an attester of a committee that is %s', async state => {
+      epochCache.lookupMembership.mockResolvedValue({ state });
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
+
+      expect(await validator.validate(mockAttestation)).toEqual({
+        result: 'reject',
+        severity: PeerErrorSeverity.HighToleranceError,
+      });
+    });
+
+    it('rejects when anyone may propose, as no proposer could have signed', async () => {
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+      epochCache.lookupProposer.mockResolvedValue({ state: 'open' });
+
+      expect(await validator.validate(mockAttestation)).toEqual({
+        result: 'reject',
+        severity: PeerErrorSeverity.HighToleranceError,
+      });
+    });
+
+    it('ignores without a penalty when the proposer lookup is unstable', async () => {
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+      epochCache.lookupProposer.mockResolvedValue(makeUnstableCommittee(EpochNumber(1), 100n));
+
+      expect(await validator.validate(mockAttestation)).toEqual({ result: 'ignore' });
+    });
   });
 
   describe('clock-disparity widening of the attestation receive window', () => {
@@ -368,8 +413,8 @@ describe('CheckpointAttestationValidator', () => {
       const header = CheckpointHeader.random({ slotNumber: SlotNumber(100) });
       const mockAttestation = makeCheckpointAttestation({ header, attesterSigner: attester, proposerSigner: proposer });
       epochCache.getTargetAndNextSlot.mockReturnValue({ targetSlot: SlotNumber(100), nextSlot: SlotNumber(101) });
-      epochCache.isInCommittee.mockResolvedValue(true);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
       epochCache.getEpochAndSlotNow.mockReturnValue({
         epoch: EpochNumber(1),
         slot: SlotNumber(100),

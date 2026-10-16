@@ -1,4 +1,5 @@
 import type { EpochCacheInterface } from '@aztec-labs/epoch-cache';
+import { makeMembershipLookup, makeProposerLookup } from '@aztec-labs/epoch-cache/test';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
 import { Fr } from '@aztec-labs/foundation/curves/bn254';
@@ -77,7 +78,7 @@ describe('FishermanAttestationValidator', () => {
         ts: 7033n,
         nowMs: 7033_000n, // past slot 97's attestation deadline (7032s) + disparity
       });
-      epochCache.isInCommittee.mockResolvedValue(true);
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
 
       const result = await validator.validate(mockAttestation);
       expect(result).toEqual({ result: 'ignore' });
@@ -85,7 +86,7 @@ describe('FishermanAttestationValidator', () => {
       // Should not check attestation pool if base validation fails
       expect(attestationPool.getCheckpointProposal).not.toHaveBeenCalled();
       // Should not try to resolve proposers if base validation fails
-      expect(epochCache.getProposerAttesterAddressInSlot).not.toHaveBeenCalled();
+      expect(epochCache.lookupProposer).not.toHaveBeenCalled();
     });
 
     it('returns high tolerance error if attester is not in committee', async () => {
@@ -99,8 +100,8 @@ describe('FishermanAttestationValidator', () => {
         targetSlot: SlotNumber(100),
         nextSlot: SlotNumber(101),
       });
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
-      epochCache.isInCommittee.mockResolvedValue(false);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(false));
 
       const result = await validator.validate(mockAttestation);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
@@ -121,8 +122,8 @@ describe('FishermanAttestationValidator', () => {
         targetSlot: SlotNumber(100),
         nextSlot: SlotNumber(101),
       });
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
-      epochCache.isInCommittee.mockResolvedValue(true);
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
 
       const result = await validator.validate(mockAttestation);
       expect(result).toEqual({ result: 'reject', severity: PeerErrorSeverity.HighToleranceError });
@@ -138,8 +139,8 @@ describe('FishermanAttestationValidator', () => {
         targetSlot: SlotNumber(100),
         nextSlot: SlotNumber(101),
       });
-      epochCache.isInCommittee.mockResolvedValue(true);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
     });
 
     it('returns accept if attestation payload matches proposal payload', async () => {
@@ -261,8 +262,8 @@ describe('FishermanAttestationValidator', () => {
         targetSlot: SlotNumber(100),
         nextSlot: SlotNumber(101),
       });
-      epochCache.isInCommittee.mockResolvedValue(true);
-      epochCache.getProposerAttesterAddressInSlot.mockResolvedValue(proposer.address);
+      epochCache.lookupMembership.mockResolvedValue(makeMembershipLookup(true));
+      epochCache.lookupProposer.mockResolvedValue(makeProposerLookup(proposer.address));
     });
 
     it('handles attestation pool errors gracefully', async () => {

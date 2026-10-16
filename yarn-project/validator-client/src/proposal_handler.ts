@@ -68,6 +68,7 @@ import {
   type InboxEndpointReader,
   checkInboxEndpoint,
 } from './checkpoint_endpoint_check.js';
+import { warnCommitteeNotStable } from './committee_not_stable.js';
 import type { ValidatorMetrics } from './metrics.js';
 import {
   type StreamingBlockCheckReason,
@@ -706,11 +707,15 @@ export class ProposalHandler {
           // which intentionally disables invalid-block slashing then.
           if (result.reason === 'checkpoint_proposal_equivocation') {
             this.markProposalEquivocation(slotNumber);
-          } else if (
-            isSlashableBlockProposalResult(result) &&
-            !(await this.epochCache.isEscapeHatchOpenAtSlot(slotNumber))
-          ) {
-            this.markInvalidProposalSlot(slotNumber);
+          } else if (isSlashableBlockProposalResult(result)) {
+            const escapeHatch = await this.epochCache.lookupEscapeHatchAtSlot(slotNumber);
+            if (escapeHatch.state === 'unstable') {
+              warnCommitteeNotStable(this.log, escapeHatch, slotNumber, 'block proposal');
+              return false;
+            }
+            if (!escapeHatch.isEscapeHatchOpen) {
+              this.markInvalidProposalSlot(slotNumber);
+            }
           }
           this.log.warn(
             `Non-validator block proposal ${blockNumber} at slot ${slotNumber} failed processing with ${result.reason}`,
@@ -755,7 +760,12 @@ export class ProposalHandler {
           return undefined;
         }
 
-        if (await this.epochCache.isEscapeHatchOpenAtSlot(proposal.slotNumber)) {
+        const escapeHatch = await this.epochCache.lookupEscapeHatchAtSlot(proposal.slotNumber);
+        if (escapeHatch.state === 'unstable') {
+          warnCommitteeNotStable(this.log, escapeHatch, proposal.slotNumber, 'checkpoint proposal');
+          return undefined;
+        }
+        if (escapeHatch.isEscapeHatchOpen) {
           this.log.warn(
             `Escape hatch open for slot ${proposal.slotNumber}, skipping checkpoint proposal validation`,
             proposalInfo,

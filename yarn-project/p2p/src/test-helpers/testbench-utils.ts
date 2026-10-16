@@ -308,7 +308,7 @@ export class InMemoryAttestationPool {
  */
 export function createMockEpochCache(): EpochCacheInterface {
   const cache: EpochCacheInterface = {
-    getCommittee: () => Promise.resolve({ committee: [], seed: 1n, epoch: EpochNumber.ZERO, isEscapeHatchOpen: false }),
+    getCommittee: () => Promise.resolve({ state: 'open', seed: 1n, epoch: EpochNumber.ZERO, isEscapeHatchOpen: false }),
     getProposerIndexEncoding: () => '0x' as `0x${string}`,
     getSlotNow: () => SlotNumber.ZERO,
     getTargetSlot: () => SlotNumber.ZERO,
@@ -323,7 +323,7 @@ export function createMockEpochCache(): EpochCacheInterface {
     computeProposerIndex: () => 0n,
     getCurrentAndNextSlot: () => ({ currentSlot: SlotNumber.ZERO, nextSlot: SlotNumber.ZERO }),
     getTargetAndNextSlot: () => ({ targetSlot: SlotNumber.ZERO, nextSlot: SlotNumber.ZERO }),
-    getProposerAttesterAddressInSlot: () => Promise.resolve(undefined),
+    lookupProposer: () => Promise.resolve({ state: 'open' }),
     getEpochAndSlotInNextL1Slot: () => ({
       epoch: EpochNumber.ZERO,
       slot: SlotNumber.ZERO,
@@ -336,11 +336,11 @@ export function createMockEpochCache(): EpochCacheInterface {
       ts: 0n,
       nowSeconds: 0n,
     }),
-    isInCommittee: () => Promise.resolve(false),
+    lookupMembership: () => Promise.resolve({ state: 'open' }),
     getRegisteredValidators: () => Promise.resolve([]),
-    filterInCommittee: () => Promise.resolve([]),
-    isEscapeHatchOpen: () => Promise.resolve(false),
-    isEscapeHatchOpenAtSlot: () => Promise.resolve(false),
+    filterInCommittee: () => Promise.resolve({ state: 'open' }),
+    lookupEscapeHatch: () => Promise.resolve({ state: 'open', isEscapeHatchOpen: false }),
+    lookupEscapeHatchAtSlot: () => Promise.resolve({ state: 'open', isEscapeHatchOpen: false }),
     getL1Constants: () => ({
       l1StartBlock: 0n,
       l1GenesisTime: 0n,
