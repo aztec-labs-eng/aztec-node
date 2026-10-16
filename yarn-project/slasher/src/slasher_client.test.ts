@@ -1,4 +1,5 @@
 import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
 import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import { AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND, AmsterdamForkDetector } from '@aztec-labs/ethereum/l1-tx-utils';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
@@ -136,7 +137,7 @@ describe('SlasherClient', () => {
     // Create mock EpochCache
     mockEpochCache = mockDeep<EpochCache>();
     mockEpochCache.getCommitteeForEpoch.mockImplementation(epoch =>
-      Promise.resolve({ committee, seed: 0n, epoch, isEscapeHatchOpen: false }),
+      Promise.resolve(makeCommitteeLookup({ committee, epoch })),
     );
     mockEpochCache.getL1Constants.mockReturnValue({
       l1StartBlock: 0n,
@@ -286,12 +287,14 @@ describe('SlasherClient', () => {
           offenseType: OffenseType.PROPOSED_INSUFFICIENT_ATTESTATIONS, // slot-based
         });
 
-        mockEpochCache.getCommitteeForEpoch.mockResolvedValueOnce({
-          committee: undefined,
-          seed: 0n,
-          epoch: EpochNumber(0),
-          isEscapeHatchOpen: false,
-        });
+        mockEpochCache.getCommitteeForEpoch.mockResolvedValueOnce(
+          makeCommitteeLookup({
+            committee: undefined,
+            seed: 0n,
+            epoch: EpochNumber(0),
+            isEscapeHatchOpen: false,
+          }),
+        );
 
         const action = await slasherClient.getVoteOffensesAction(SlotNumber.fromBigInt(currentSlot));
 

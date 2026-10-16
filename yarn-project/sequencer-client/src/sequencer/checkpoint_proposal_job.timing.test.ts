@@ -1,4 +1,5 @@
 import { EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
 import type { InboxContract } from '@aztec-labs/ethereum/contracts';
 import { BlockNumber, CheckpointNumber, EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Secp256k1Signer } from '@aztec-labs/foundation/crypto/secp256k1-signer';
@@ -413,12 +414,14 @@ describe('CheckpointProposalJob Timing Tests', () => {
 
     // Set up mocks
     epochCache = mockDeep<EpochCache>();
-    epochCache.getCommittee.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(1),
-      isEscapeHatchOpen: false,
-    });
+    epochCache.getCommittee.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(1),
+        isEscapeHatchOpen: false,
+      }),
+    );
 
     publisher = mockDeep<SequencerPublisher>();
     publisher.epochCache = epochCache;

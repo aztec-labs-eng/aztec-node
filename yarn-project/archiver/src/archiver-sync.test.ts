@@ -1,7 +1,8 @@
 import type { BlobClientInterface } from '@aztec-labs/blob-client/client';
 import { makeRandomBlob } from '@aztec-labs/blob-lib/testing';
 import { GENESIS_ARCHIVE_ROOT } from '@aztec-labs/constants';
-import type { EpochCache, EpochCommitteeInfo } from '@aztec-labs/epoch-cache';
+import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
 import { DefaultL1ContractsConfig } from '@aztec-labs/ethereum/config';
 import {
   BlockTagTooOldError,
@@ -192,7 +193,7 @@ describe('Archiver Sync', () => {
 
     // Create epoch cache mock (separate from fake)
     epochCache = mock<EpochCache>();
-    epochCache.getCommitteeForEpoch.mockResolvedValue({ committee: [] as EthAddress[] } as EpochCommitteeInfo);
+    epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee: [] as EthAddress[] }));
     // Create instrumentation mock
     const tracer = getTelemetryClient().getTracer('');
     instrumentation = mock<ArchiverInstrumentation>({ isEnabled: () => true, tracer });
@@ -224,10 +225,12 @@ describe('Archiver Sync', () => {
       // time covers it. Anything rebuilt from the decoded attestations loses it and can never be proven.
       fake.setTargetCommitteeSize(3);
       const signers = times(3, () => Secp256k1Signer.random());
-      epochCache.getCommitteeForEpoch.mockResolvedValue({
-        committee: signers.map(signer => signer.address),
-        seed: 0n,
-      } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: signers.map(signer => signer.address),
+          seed: 0n,
+        }),
+      );
       await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: 101n,
         signers,
@@ -741,7 +744,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(signer => signer.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee }));
 
       // Setup spy to listen for InvalidCheckpointDetected events
       const invalidCheckpointDetectedSpy = jest.fn();
@@ -911,7 +914,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(s => s.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee, seed: 0n } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee, seed: 0n }));
 
       const descendantOfInvalidSpy = jest.fn();
       archiver.events.on(L2BlockSourceEvents.DescendentOfInvalidAttestationsCheckpointDetected, descendantOfInvalidSpy);
@@ -983,7 +986,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(signer => signer.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee }));
 
       const invalidCheckpointDetectedSpy = jest.fn();
       archiver.events.on(L2BlockSourceEvents.InvalidAttestationsCheckpointDetected, invalidCheckpointDetectedSpy);
@@ -1051,7 +1054,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(signer => signer.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee }));
 
       // CP1 valid with well-formed blobs.
       await fake.addCheckpoint(CheckpointNumber(1), {
@@ -1084,7 +1087,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(signer => signer.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee }));
 
       const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: 70n,
@@ -1135,7 +1138,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(signer => signer.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee }));
 
       const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: 70n,
@@ -1184,11 +1187,13 @@ describe('Archiver Sync', () => {
     const openEscapeHatch = () => {
       fake.setTargetCommitteeSize(HATCH_COMMITTEE_SIZE);
       const committee = times(HATCH_COMMITTEE_SIZE, () => EthAddress.random());
-      epochCache.getCommitteeForEpoch.mockResolvedValue({
-        committee,
-        seed: 0n,
-        isEscapeHatchOpen: true,
-      } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(
+        makeCommitteeLookup({
+          committee,
+          seed: 0n,
+          isEscapeHatchOpen: true,
+        }),
+      );
     };
 
     it.each([
@@ -1244,11 +1249,13 @@ describe('Archiver Sync', () => {
       expect(await archiver.getCheckpointNumber()).toEqual(CheckpointNumber(1));
 
       const signers = times(3, Secp256k1Signer.random);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({
-        committee: signers.map(signer => signer.address),
-        seed: 0n,
-        isEscapeHatchOpen: false,
-      } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: signers.map(signer => signer.address),
+          seed: 0n,
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       await fake.addCheckpoint(CheckpointNumber(2), {
         l1BlockNumber: 80n,
@@ -1272,7 +1279,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       const signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(signer => signer.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee, seed: 0n } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee, seed: 0n }));
 
       const { checkpoint: cp1 } = await fake.addCheckpoint(CheckpointNumber(1), {
         l1BlockNumber: l1Blocks.cp1,
@@ -2169,7 +2176,7 @@ describe('Archiver Sync', () => {
       fake.setTargetCommitteeSize(3);
       signers = times(3, Secp256k1Signer.random);
       const committee = signers.map(signer => signer.address);
-      epochCache.getCommitteeForEpoch.mockResolvedValue({ committee, seed: 0n } as EpochCommitteeInfo);
+      epochCache.getCommitteeForEpoch.mockResolvedValue(makeCommitteeLookup({ committee, seed: 0n }));
       await useArchiver();
     });
 

@@ -1,4 +1,5 @@
 import { EpochCache } from '@aztec-labs/epoch-cache';
+import { makeCommitteeLookup } from '@aztec-labs/epoch-cache/test';
 import type { InboxContract } from '@aztec-labs/ethereum/contracts';
 import type { L1FeeAnalyzer } from '@aztec-labs/ethereum/l1-fee-analysis';
 import {
@@ -187,12 +188,14 @@ describe('CheckpointProposalJob', () => {
     dateProvider.setTime(slotStartTime * 1000); // Convert to milliseconds
 
     epochCache = mockDeep<EpochCache>();
-    epochCache.getCommittee.mockResolvedValue({
-      committee,
-      seed: 0n,
-      epoch: EpochNumber(1),
-      isEscapeHatchOpen: false,
-    });
+    epochCache.getCommittee.mockResolvedValue(
+      makeCommitteeLookup({
+        committee,
+        seed: 0n,
+        epoch: EpochNumber(1),
+        isEscapeHatchOpen: false,
+      }),
+    );
     epochCache.getL1Constants.mockImplementation(() => l1Constants);
 
     publisher = mockDeep<SequencerPublisher>();
@@ -2932,12 +2935,14 @@ describe('CheckpointProposalJob', () => {
 
     it('handles empty committee gracefully', async () => {
       // Mock empty committee
-      epochCache.getCommittee.mockResolvedValue({
-        committee: [],
-        seed: 0n,
-        epoch: EpochNumber(1),
-        isEscapeHatchOpen: false,
-      });
+      epochCache.getCommittee.mockResolvedValue(
+        makeCommitteeLookup({
+          committee: [],
+          seed: 0n,
+          epoch: EpochNumber(1),
+          isEscapeHatchOpen: false,
+        }),
+      );
 
       const { txs, block } = await setupTxsAndBlock(p2p, globalVariables, 1, chainId);
       checkpointBuilder.seedBlocks([block], [txs]);

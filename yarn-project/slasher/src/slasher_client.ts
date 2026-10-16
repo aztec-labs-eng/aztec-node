@@ -1,8 +1,8 @@
-import type { EpochCache } from '@aztec-labs/epoch-cache';
+import { type EpochCache, requireStableCommittee } from '@aztec-labs/epoch-cache';
 import { RollupContract, SlasherContract, SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import { AMSTERDAM_MAX_SLASHED_VALIDATORS_PER_ROUND, AmsterdamForkDetector } from '@aztec-labs/ethereum/l1-tx-utils';
 import { maxBigint } from '@aztec-labs/foundation/bigint';
-import { SlotNumber } from '@aztec-labs/foundation/branded-types';
+import { type EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { compactArray, partition, times } from '@aztec-labs/foundation/collection';
 import { EthAddress } from '@aztec-labs/foundation/eth-address';
 import { createLogger } from '@aztec-labs/foundation/log';
@@ -449,10 +449,23 @@ export class SlasherClient implements ProposerSlashActionProvider, SlasherClient
   /** Returns the committees that were active during the timespan of a given round */
   private collectCommitteesActiveDuringRound(round: bigint): Promise<EthAddress[][]> {
     const epochsToSlash = getEpochsForRound(round, this.settings);
-    const emptyCommittee = times(Number(this.settings.targetCommitteeSize), () => EthAddress.ZERO);
-    return Promise.all(
-      epochsToSlash.map(epoch => this.epochCache.getCommitteeForEpoch(epoch).then(c => c.committee ?? emptyCommittee)),
-    );
+    return Promise.all(epochsToSlash.map(epoch => this.getCommitteeToSlash(epoch)));
+  }
+
+  /**
+   * Returns an epoch's committee as the slash vote encodes it: a missing committee is the target committee size in zero
+   * addresses. A committee that is not stable yet throws, as the vote cannot be encoded without it.
+   */
+  private async getCommitteeToSlash(epoch: EpochNumber): Promise<EthAddress[]> {
+    const lookup = requireStableCommittee(await this.epochCache.getCommitteeForEpoch(epoch));
+    switch (lookup.state) {
+      case 'members':
+        return lookup.committee;
+      case 'open':
+        return [];
+      case 'none':
+        return times(Number(this.settings.targetCommitteeSize), () => EthAddress.ZERO);
+    }
   }
 
   /**

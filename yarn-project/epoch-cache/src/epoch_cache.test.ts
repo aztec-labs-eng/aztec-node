@@ -1,4 +1,4 @@
-import { CommitteeNotStableError, type RollupContract } from '@aztec-labs/ethereum/contracts';
+import type { RollupContract } from '@aztec-labs/ethereum/contracts';
 import type { ViemPublicClient } from '@aztec-labs/ethereum/types';
 import { EpochNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
 import { Buffer32 } from '@aztec-labs/foundation/buffer';
@@ -10,11 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import { type MockProxy, mock } from 'jest-mock-extended';
 import { type GetBlockReturnType, RpcRequestError, encodeErrorResult } from 'viem';
 
-import { EpochCache, type EpochCommitteeInfo, PROPOSER_PIPELINING_SLOT_OFFSET } from './epoch_cache.js';
+import type { CommitteeLookup, KnownCommitteeLookup, ProposerLookup } from './committee_lookup.js';
+import { EpochCache, PROPOSER_PIPELINING_SLOT_OFFSET } from './epoch_cache.js';
 
 class TestEpochCache extends EpochCache {
   /** Seeds the cache with a finalized entry so tests don't need to hit the mock rollup for known epochs. */
-  public seedCache(epoch: EpochNumber, committeeInfo: EpochCommitteeInfo): void {
+  public seedCache(epoch: EpochNumber, committeeInfo: KnownCommitteeLookup): void {
     this.cache.set(epoch, {
       kind: 'committee',
       data: committeeInfo,
@@ -25,9 +26,34 @@ class TestEpochCache extends EpochCache {
     });
   }
 
+  /** Seeds the cache with a fresh marker for an epoch whose seed is not fixed yet. */
+  public seedUnstable(epoch: EpochNumber, l1BlockNumber: bigint): void {
+    this.cache.set(epoch, {
+      kind: 'unstable',
+      l1BlockNumber,
+      lastRefreshL1Timestamp: BigInt(Math.floor(Date.now() / 1000)) + 10000n,
+    });
+  }
+
   public setCacheSize(size: number): void {
     this.config.cacheSize = size;
   }
+}
+
+/** Returns a lookup's committee, failing the test unless it has members. */
+function membersOf(lookup: CommitteeLookup): EthAddress[] {
+  if (lookup.state !== 'members') {
+    throw new Error(`Expected a committee with members, got ${lookup.state}`);
+  }
+  return lookup.committee;
+}
+
+/** Returns a lookup's proposer, failing the test unless the committee has members. */
+function proposerOf(lookup: ProposerLookup): EthAddress {
+  if (lookup.state !== 'members') {
+    throw new Error(`Expected a proposer, got ${lookup.state}`);
+  }
+  return lookup.proposer;
 }
 
 describe('EpochCache', () => {
@@ -92,6 +118,7 @@ describe('EpochCache', () => {
     epochCache = new TestEpochCache(rollupContract, testConstants);
     // Initialize the cache with the initial epoch's committee
     epochCache.seedCache(EpochNumber(0), {
+      state: 'members',
       epoch: EpochNumber(0),
       committee: testCommittee,
       seed: 0n,
@@ -105,7 +132,7 @@ describe('EpochCache', () => {
 
   it('should cache the validator set for the length of an epoch', async () => {
     // Initial call to get validators
-    const { committee: initialCommittee } = await epochCache.getCommittee();
+    const initialCommittee = membersOf(await epochCache.getCommittee());
     expect(initialCommittee).toEqual(testCommittee);
     // Not called as we should cache with the initial validator set
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0);
@@ -117,7 +144,7 @@ describe('EpochCache', () => {
     rollupContract.getCommitteeAt.mockResolvedValue([...testCommittee, extraTestValidator]);
 
     // Should use cached validators
-    const { committee: midEpochCommittee } = await epochCache.getCommittee();
+    const midEpochCommittee = membersOf(await epochCache.getCommittee());
     expect(midEpochCommittee).toEqual(testCommittee);
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0); // Still cached
 
@@ -125,7 +152,7 @@ describe('EpochCache', () => {
     jest.setSystemTime(Date.now() + Number(EPOCH_DURATION * SLOT_DURATION) * 1000);
 
     // Should fetch new validator
-    const { committee: nextEpochCommittee } = await epochCache.getCommittee();
+    const nextEpochCommittee = membersOf(await epochCache.getCommittee());
     expect(nextEpochCommittee).toEqual([...testCommittee, extraTestValidator]);
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1); // Called again for new epoch
   });
@@ -140,19 +167,19 @@ describe('EpochCache', () => {
 
     // Get validator for slot 0
     const { currentSlot } = epochCache.getCurrentAndNextSlot();
-    const currentProposer = await epochCache.getProposerAttesterAddressInSlot(currentSlot);
+    const currentProposer = proposerOf(await epochCache.lookupProposer(currentSlot));
     expect(currentProposer).toEqual(testCommittee[1]);
 
     // Move to next slot
     jest.setSystemTime(initialTime + Number(SLOT_DURATION) * 1000);
     const { currentSlot: nextSlot } = epochCache.getCurrentAndNextSlot();
-    const nextProposer = await epochCache.getProposerAttesterAddressInSlot(nextSlot);
+    const nextProposer = proposerOf(await epochCache.lookupProposer(nextSlot));
     expect(nextProposer).toEqual(testCommittee[1]);
 
     // Move to slot that wraps around validator set
     jest.setSystemTime(initialTime + Number(SLOT_DURATION) * 3 * 1000);
     const { currentSlot: nextNextSlot } = epochCache.getCurrentAndNextSlot();
-    const nextNextProposer = await epochCache.getProposerAttesterAddressInSlot(nextNextSlot);
+    const nextNextProposer = proposerOf(await epochCache.lookupProposer(nextNextSlot));
     expect(nextNextProposer).toEqual(testCommittee[0]);
   });
 
@@ -166,7 +193,7 @@ describe('EpochCache', () => {
 
     // Should request to update the validator set
     const { nextSlot } = epochCache.getCurrentAndNextSlot();
-    await epochCache.getProposerAttesterAddressInSlot(nextSlot);
+    await epochCache.lookupProposer(nextSlot);
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
   });
 
@@ -193,7 +220,7 @@ describe('EpochCache', () => {
 
   it('should cache multiple epochs', async () => {
     // Initial call to get validators
-    const { committee: initialCommittee } = await epochCache.getCommittee();
+    const initialCommittee = membersOf(await epochCache.getCommittee());
     expect(initialCommittee).toEqual(testCommittee);
 
     // Move time forward to next epoch (x 1000 for milliseconds)
@@ -203,13 +230,13 @@ describe('EpochCache', () => {
     rollupContract.getCommitteeAt.mockResolvedValue([...testCommittee, extraTestValidator]);
 
     // Should fetch new validator
-    const { committee: nextEpochCommittee } = await epochCache.getCommittee();
+    const nextEpochCommittee = membersOf(await epochCache.getCommittee());
     expect(nextEpochCommittee).toEqual([...testCommittee, extraTestValidator]);
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1); // Called again for new epoch
     rollupContract.getCommitteeAt.mockClear();
 
     // Should return the previous epoch still cached (SlotNumber(1) is a slot number, not an epoch)
-    const { committee: initialCommitteeRerequested } = await epochCache.getCommittee(SlotNumber(1));
+    const initialCommitteeRerequested = membersOf(await epochCache.getCommittee(SlotNumber(1)));
     expect(initialCommitteeRerequested).toEqual(testCommittee);
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0); // Cached
   });
@@ -224,7 +251,7 @@ describe('EpochCache', () => {
     // Seed the cache with 3 epochs worth of data
     for (let i = 0; i < 3; i++) {
       rollupContract.getCommitteeAt.mockResolvedValue(committees[i]);
-      const { committee: actual } = await epochCache.getCommittee(SlotNumber(i * EPOCH_DURATION));
+      const actual = membersOf(await epochCache.getCommittee(SlotNumber(i * EPOCH_DURATION)));
       expect(actual).toEqual(committees[i]);
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(i); // Epoch 0 is already initialized
     }
@@ -232,21 +259,21 @@ describe('EpochCache', () => {
     // Requesting any of them should not call the contract again
     rollupContract.getCommitteeAt.mockClear();
     for (let i = 0; i < 3; i++) {
-      const { committee: actual } = await epochCache.getCommittee(SlotNumber(i * EPOCH_DURATION));
+      const actual = membersOf(await epochCache.getCommittee(SlotNumber(i * EPOCH_DURATION)));
       expect(actual).toEqual(committees[i]);
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0);
     }
 
     // Requesting another epoch should cause the oldest to be purged
     rollupContract.getCommitteeAt.mockResolvedValue(committees[3]);
-    const { committee: fourth } = await epochCache.getCommittee(SlotNumber(3 * EPOCH_DURATION));
+    const fourth = membersOf(await epochCache.getCommittee(SlotNumber(3 * EPOCH_DURATION)));
     expect(fourth).toEqual(committees[3]);
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
     rollupContract.getCommitteeAt.mockClear();
 
     // So when going back to the first epoch, it should be re-requested from the contract
     rollupContract.getCommitteeAt.mockResolvedValue(committees[0]);
-    const { committee: first } = await epochCache.getCommittee(SlotNumber(0 * EPOCH_DURATION));
+    const first = membersOf(await epochCache.getCommittee(SlotNumber(0 * EPOCH_DURATION)));
     expect(first).toEqual(committees[0]);
     expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
   });
@@ -277,7 +304,7 @@ describe('EpochCache', () => {
     expect(rollupContract.getAttesters).toHaveBeenCalledTimes(2);
   });
 
-  it('throws CommitteeNotStableError when querying committee for future epoch beyond lag', async () => {
+  it('reports an unstable committee when querying committee for future epoch beyond lag', async () => {
     const { l1GenesisTime, epochDuration } = epochCache.getL1Constants();
 
     // Mock the client to return a current L1 timestamp that's close to genesis
@@ -293,8 +320,8 @@ describe('EpochCache', () => {
     const futureEpoch = BigInt(100);
     const futureSlot = futureEpoch * BigInt(epochDuration);
 
-    // Attempt to get committee for this future slot should throw: its sampled epoch has not even started on L1
-    await expect(epochCache.getCommittee(SlotNumber.fromBigInt(futureSlot))).rejects.toThrow(CommitteeNotStableError);
+    // The committee for this future slot is unstable: its sampled epoch has not even started on L1
+    expect(await epochCache.getCommittee(SlotNumber.fromBigInt(futureSlot))).toMatchObject({ state: 'unstable' });
   });
 
   describe('TTL-based caching', () => {
@@ -323,7 +350,7 @@ describe('EpochCache', () => {
 
       // First call: full fetch
       const result1 = await epochCache.getCommittee(epoch1Slot);
-      expect(result1.committee).toEqual(testCommittee);
+      expect(membersOf(result1)).toEqual(testCommittee);
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
       rollupContract.getCommitteeAt.mockClear();
 
@@ -333,8 +360,8 @@ describe('EpochCache', () => {
 
       // After TTL: lightweight refresh — block hash matches, so NO call to getCommitteeAt
       const result2 = await epochCache.getCommittee(epoch1Slot);
-      expect(result2.committee).toEqual(testCommittee); // same data, no reorg
-      expect(result2.seed).toBe(42n);
+      expect(membersOf(result2)).toEqual(testCommittee); // same data, no reorg
+      expect(result2).toMatchObject({ seed: 42n });
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(0);
     });
 
@@ -374,8 +401,8 @@ describe('EpochCache', () => {
       rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(99n));
 
       const result = await epochCache.getCommittee(epoch1Slot);
-      expect(result.committee).toEqual(updatedCommittee);
-      expect(result.seed).toBe(99n);
+      expect(membersOf(result)).toEqual(updatedCommittee);
+      expect(result).toMatchObject({ seed: 99n });
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1); // full re-fetch
     });
 
@@ -432,8 +459,8 @@ describe('EpochCache', () => {
       // Resolve and both promises should return the same result from a single committee read
       latestBlock.resolve({ timestamp: latestTs, number: 100n, hash: '0xeee' } as unknown as GetBlockReturnType);
       const [r1, r2] = await Promise.all([p1, p2]);
-      expect(r1.committee).toEqual(testCommittee);
-      expect(r2.committee).toEqual(testCommittee);
+      expect(membersOf(r1)).toEqual(testCommittee);
+      expect(membersOf(r2)).toEqual(testCommittee);
       expect(rollupContract.getCommitteeAt).toHaveBeenCalledTimes(1);
     });
 
@@ -493,7 +520,7 @@ describe('EpochCache', () => {
       rollupContract.getSampleSeedAt.mockResolvedValue(Buffer32.fromBigInt(42n));
 
       const result = await epochCache.getCommittee(epoch1Slot);
-      expect(result.committee).toEqual(testCommittee);
+      expect(membersOf(result)).toEqual(testCommittee);
       expect(epochCache.isFinalized(EpochNumber(1))).toBe(false);
 
       // Advance past TTL; should re-query since entry is not finalized.
@@ -604,6 +631,7 @@ describe('EpochCache', () => {
 
       const info = await epochCache.getCommittee(targetSlot);
       expect(info).toEqual({
+        state: 'members',
         committee: provisionalCommittee,
         seed: 1n,
         epoch: targetEpoch,
@@ -615,14 +643,12 @@ describe('EpochCache', () => {
     it('does not serve a committee whose seed can still change', async () => {
       // L1 is in the sampled epoch and nothing has checkpointed its randao yet.
       mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
 
       // setupEpoch runs for the sampled epoch, which writes its randao and changes the seed.
       mineL1Block(startOfEpoch(3) + 72n, { committee: finalCommittee, seed: 2n, setUp: true });
       const info = await epochCache.getCommittee(targetSlot);
-      expect(info.committee).toEqual(finalCommittee);
-      expect(info.seed).toBe(2n);
-      expect(info.epoch).toBe(targetEpoch);
+      expect(info).toMatchObject({ state: 'members', committee: finalCommittee, seed: 2n, epoch: targetEpoch });
     });
 
     it('serves the committee without reading storage once the latest L1 block is in the last L1 slot of the sampled epoch', async () => {
@@ -630,7 +656,7 @@ describe('EpochCache', () => {
       mineL1Block(startOfEpoch(4) - BigInt(SLOT_DURATION), { committee: finalCommittee, seed: 2n, setUp: false });
 
       const info = await epochCache.getCommittee(targetSlot);
-      expect(info.committee).toEqual(finalCommittee);
+      expect(membersOf(info)).toEqual(finalCommittee);
       expect(rollupContract.isEpochSetUp).not.toHaveBeenCalled();
     });
 
@@ -641,7 +667,7 @@ describe('EpochCache', () => {
         setUp: false,
       });
 
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
     });
 
     it('serves an empty committee while the seed can still change when the target committee size is zero', async () => {
@@ -654,33 +680,33 @@ describe('EpochCache', () => {
       mineL1Block(startOfEpoch(3) + 60n, { committee: [], seed: 1n, setUp: false });
 
       const info = await anyoneCanPropose.getCommittee(targetSlot);
-      expect(info.committee).toEqual([]);
+      expect(info.state).toEqual('open');
     });
 
     it('re-checks an unstable epoch on L1 at most once per Ethereum slot', async () => {
       mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
       const l1ReadsAfterFirstCheck = client.getBlock.mock.calls.length + rollupContract.isEpochSetUp.mock.calls.length;
 
       jest.setSystemTime(Date.now() + 6_000);
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
       expect(client.getBlock.mock.calls.length + rollupContract.isEpochSetUp.mock.calls.length).toBe(
         l1ReadsAfterFirstCheck,
       );
 
       mineL1Block(startOfEpoch(3) + 72n, { committee: provisionalCommittee, seed: 1n, setUp: false });
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
       expect(rollupContract.isEpochSetUp).toHaveBeenCalledTimes(2);
     });
 
     it('holds an unstable marker for an Ethereum slot even when the L1 tip lags the local clock', async () => {
       mineL1Block(startOfEpoch(3) + 60n, { committee: provisionalCommittee, seed: 1n, setUp: false });
       jest.setSystemTime(Date.now() + 20_000);
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
       const storageReadsAfterFirstCheck = rollupContract.isEpochSetUp.mock.calls.length;
 
       jest.setSystemTime(Date.now() + 6_000);
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
       expect(rollupContract.isEpochSetUp.mock.calls.length).toBe(storageReadsAfterFirstCheck);
     });
 
@@ -696,7 +722,7 @@ describe('EpochCache', () => {
 
       await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(/reorged out/);
       expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBeUndefined();
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
     });
 
     it('marks an entry finalized once the L1 block it was read at is finalized', async () => {
@@ -717,13 +743,13 @@ describe('EpochCache', () => {
 
     it('stores an unstable marker in place of a committee whose L1 block was reorged out', async () => {
       mineL1Block(startOfEpoch(3) + 60n, { committee: finalCommittee, seed: 2n, setUp: true });
-      expect((await epochCache.getCommittee(targetSlot)).committee).toEqual(finalCommittee);
+      expect(membersOf(await epochCache.getCommittee(targetSlot))).toEqual(finalCommittee);
 
       // The block that ran setupEpoch is reorged out, and the new chain has not run it.
       reorgL1Block(latestNumber, { committee: provisionalCommittee, seed: 1n, setUp: false });
       mineL1Block(startOfEpoch(3) + 72n, { committee: provisionalCommittee, seed: 1n, setUp: false }, 1);
 
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
       expect(epochCache.isFinalized(targetEpoch)).toBeUndefined();
     });
 
@@ -763,7 +789,7 @@ describe('EpochCache', () => {
         }),
       );
 
-      await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow(CommitteeNotStableError);
+      expect(await epochCache.getCommittee(targetSlot)).toMatchObject({ state: 'unstable' });
     });
 
     it('keeps a cached entry when the lightweight refresh fails', async () => {
@@ -776,6 +802,63 @@ describe('EpochCache', () => {
 
       await expect(epochCache.getCommittee(targetSlot)).rejects.toThrow('L1 RPC unavailable');
       expect(epochCache.getCachedLastRefreshL1Timestamp(targetEpoch)).toBe(lastRefresh);
+    });
+  });
+
+  describe('committee lookups', () => {
+    const slot = SlotNumber(EPOCH_DURATION);
+    const epoch = EpochNumber(1);
+
+    it('reports a committee with members', async () => {
+      rollupContract.getCommitteeAt.mockResolvedValue(testCommittee);
+
+      expect(await epochCache.getCommittee(slot)).toEqual({
+        state: 'members',
+        committee: testCommittee,
+        seed: 0n,
+        epoch,
+        isEscapeHatchOpen: false,
+      });
+      expect(testCommittee).toContainEqual(proposerOf(await epochCache.lookupProposer(slot)));
+      expect(await epochCache.lookupMembership(slot, testCommittee[0])).toEqual({
+        state: 'members',
+        inCommittee: true,
+      });
+      expect(await epochCache.lookupMembership(slot, extraTestValidator)).toEqual({
+        state: 'members',
+        inCommittee: false,
+      });
+      expect(await epochCache.filterInCommittee(slot, [testCommittee[1], extraTestValidator])).toEqual({
+        state: 'members',
+        inCommittee: [testCommittee[1]],
+      });
+      expect(await epochCache.lookupEscapeHatchAtSlot(slot)).toEqual({ state: 'members', isEscapeHatchOpen: false });
+    });
+
+    it.each([
+      ['open', []],
+      ['none', undefined],
+    ] as const)('reports a committee without members as %s', async (state, committee) => {
+      rollupContract.getCommitteeAt.mockResolvedValue(committee === undefined ? undefined : [...committee]);
+      rollupContract.isEscapeHatchOpen.mockResolvedValue(true);
+
+      expect(await epochCache.getCommittee(slot)).toEqual({ state, seed: 0n, epoch, isEscapeHatchOpen: true });
+      expect(await epochCache.lookupProposer(slot)).toEqual({ state });
+      expect(await epochCache.lookupMembership(slot, testCommittee[0])).toEqual({ state });
+      expect(await epochCache.filterInCommittee(slot, testCommittee)).toEqual({ state });
+      expect(await epochCache.lookupEscapeHatchAtSlot(slot)).toEqual({ state, isEscapeHatchOpen: true });
+    });
+
+    it('reports every lookup as unstable while the seed is not fixed', async () => {
+      epochCache.seedUnstable(epoch, 42n);
+      const unstable = { state: 'unstable', epoch, l1BlockNumber: 42n };
+
+      expect(await epochCache.getCommittee(slot)).toEqual(unstable);
+      expect(await epochCache.lookupProposer(slot)).toEqual(unstable);
+      expect(await epochCache.lookupMembership(slot, testCommittee[0])).toEqual(unstable);
+      expect(await epochCache.filterInCommittee(slot, testCommittee)).toEqual(unstable);
+      expect(await epochCache.lookupEscapeHatchAtSlot(slot)).toEqual(unstable);
+      expect(rollupContract.getCommitteeAt).not.toHaveBeenCalled();
     });
   });
 

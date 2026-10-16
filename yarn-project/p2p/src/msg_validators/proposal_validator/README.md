@@ -17,9 +17,10 @@ File: `proposal_validator.ts`
 | 3 | **Txs permitted**: if `disableTransactions`, must have 0 txHashes and 0 embedded txs | REJECT | MidToleranceError |
 | 4 | **Max txs**: `txHashes.length <= MAX_TXS_PER_CHECKPOINT` (based on blob capacity), further restricted by `maxTxsPerBlock` when configured. Also applies to checkpoint-embedded blocks. | REJECT | MidToleranceError |
 | 5 | **Embedded txs in txHashes**: every embedded tx's hash must appear in `txHashes` | REJECT | MidToleranceError |
-| 6 | **Proposer check**: signer must match expected proposer for slot (skipped if committee size = 0) | REJECT | MidToleranceError |
+| 6 | **Proposer check**: signer must match expected proposer for slot (skipped when the committee is `open`, i.e. size 0) | REJECT | MidToleranceError |
 | 7 | **Tx hash integrity**: each embedded tx's recomputed hash must match declared hash | REJECT | LowToleranceError |
-| 8 | **NoCommitteeError**: epoch cache cannot determine committee | REJECT | LowToleranceError |
+| 8 | **No committee**: proposer lookup is `none` | REJECT | LowToleranceError |
+| 9 | **Committee not stable**: proposer lookup is `unstable` (seed not fixed on L1), or it throws locally | IGNORE | none |
 
 Deserialization guards: `BlockProposal.fromBuffer` and `SignedTxs.fromBuffer` both enforce `txCount <= MAX_TXS_PER_BLOCK` (65536). Violation -> REJECT + LowToleranceError.
 
@@ -51,7 +52,7 @@ Only runs on validator nodes. Non-validator nodes use a default handler that tri
 | 23 | **Re-execution**: no failed txs | `failed_txs` (ReExFailedTxsError) -- **SLASHABLE** |
 | 24 | **Re-execution**: archive root and header match proposal | `state_mismatch` (ReExStateMismatchError) -- **SLASHABLE** |
 
-**Escape hatch**: during escape hatch periods (`isEscapeHatchOpenAtSlot`), re-execution and slashing are both disabled, and the proposal is rejected locally.
+**Escape hatch**: during escape hatch periods (`lookupEscapeHatchAtSlot`), re-execution and slashing are both disabled, and the proposal is rejected locally.
 
 **Conditional re-execution**: rules 22-24 only run when at least one condition is true: `fishermanMode` enabled, `slashBroadcastedInvalidBlockPenalty > 0`, committee membership, `alwaysReexecuteBlockProposals`, or `blobClient.canUpload()`.
 
