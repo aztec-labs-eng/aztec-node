@@ -50,6 +50,8 @@ export class BroadcastedInvalidCheckpointProposalWatcher
    * slot leaves the scan window rather than capped at a fixed count, which could evict a slot that is still rescanned.
    */
   private readonly emittedOffensesBySlot = new Map<SlotNumber, Set<string>>();
+  /** Slots below this one had their emitted offenses pruned and are not scanned again. */
+  private emittedOffensesPrunedBefore: SlotNumber | undefined;
   private readonly scanSlotLookback: number;
   private config: BroadcastedInvalidCheckpointProposalWatcherConfig;
   private lastScannedSlot: SlotNumber | undefined;
@@ -101,7 +103,11 @@ export class BroadcastedInvalidCheckpointProposalWatcher
     const oldestLookbackSlot = SlotNumber(Math.max(0, newestSlotToConsider - this.scanSlotLookback + 1));
     const oldestUnscannedSlot =
       this.lastScannedSlot === undefined ? oldestLookbackSlot : SlotNumber(this.lastScannedSlot + 1);
-    const oldestSlot = SlotNumber(Math.min(oldestLookbackSlot, oldestUnscannedSlot));
+    // Never go below a slot whose emitted offenses were already pruned, so an archiver anchor that moves back does not
+    // re-emit them.
+    const oldestSlot = SlotNumber(
+      Math.max(Math.min(oldestLookbackSlot, oldestUnscannedSlot), this.emittedOffensesPrunedBefore ?? 0),
+    );
     this.pruneEmittedOffensesBefore(oldestSlot);
     for (let slot = oldestSlot; slot <= newestSlotToConsider; slot++) {
       await this.scanSlot(SlotNumber(slot));
@@ -249,6 +255,7 @@ export class BroadcastedInvalidCheckpointProposalWatcher
   }
 
   private pruneEmittedOffensesBefore(oldestSlot: SlotNumber): void {
+    this.emittedOffensesPrunedBefore = oldestSlot;
     for (const slot of this.emittedOffensesBySlot.keys()) {
       if (slot < oldestSlot) {
         this.emittedOffensesBySlot.delete(slot);
