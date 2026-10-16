@@ -2579,6 +2579,7 @@ export class ProposalHandler {
       blockCount: blockData.indexWithinCheckpoint + 1,
       totalManaUsed: proposal.checkpointHeader.totalManaUsed.toBigInt(),
       feeAssetPriceModifier: proposal.feeAssetPriceModifier,
+      signer: proposal.getSender(),
     });
     return true;
   }
