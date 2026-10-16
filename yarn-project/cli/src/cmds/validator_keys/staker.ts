@@ -257,8 +257,8 @@ export async function processAttesterAccounts(
 }
 
 /**
- * Throws when registering any of `outputs` would fail because the proof-of-possession check of its BLS key needs more
- * gas than the GSE gives it. Governance sets that limit and can change it, so it is read from L1.
+ * Throws when registering any of `outputs` could fail because the proof-of-possession check of its BLS key is estimated
+ * to need more gas than the GSE gives it. Governance sets that limit and can change it, so it is read from L1.
  */
 export async function assertWithinProofOfPossessionGasLimit(gse: GSEContract, outputs: StakerOutput[]): Promise<void> {
   const gasLimit = Number(
@@ -285,16 +285,19 @@ export async function assertWithinProofOfPossessionGasLimit(gse: GSEContract, ou
     return;
   }
 
+  // Leave the same 10% margin below the limit that the derivation version budgets leave below the cap they target.
   const { version, budget } = LATEST_BLS_KEY_DERIVATION;
+  const maxGas = Math.floor(gasLimit * 0.9);
   const flags =
-    gasLimit < budget
-      ? `--bls-key-derivation-v${version} --bls-key-derivation-max-gas ${gasLimit}`
+    maxGas < budget
+      ? `--bls-key-derivation-v${version} --bls-key-derivation-max-gas ${maxGas}`
       : `--bls-key-derivation-v${version}`;
   throw new Error(
-    `Registering these validators would fail: the GSE at ${gse.address} gives each proof-of-possession check ` +
+    `Registering these validators could fail: the GSE at ${gse.address} gives each proof-of-possession check ` +
       `${gasLimit} gas, and the BLS keys of these attesters are estimated to need more: ` +
       `${overLimit.map(({ attester, estimatedGas }) => `${attester} (estimated at ${estimatedGas} gas)`).join(', ')}. ` +
-      `Derive BLS keys that fit by passing ${flags} to validator-keys new or add, which changes their BLS keys.`,
+      `To replace their BLS keys and keep their ETH keys, regenerate them with validator-keys new, the same mnemonic ` +
+      `or IKM and indices, and ${flags}.`,
   );
 }
 

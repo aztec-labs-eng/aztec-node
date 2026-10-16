@@ -398,8 +398,10 @@ they came from, so it leaves their `path` empty.
 
 Governance can change `proofOfPossessionGasLimit` at any time. `aztec validator-keys staker` and
 `aztec validator-keys new --staker-output` read the current value from the GSE and stop with an error naming every
-attester whose BLS key is estimated to need more gas, before writing any output. Derive replacement keys with
-`--bls-key-derivation-v6` and, if the current limit is below 270,000, `--bls-key-derivation-max-gas` set to that limit.
+attester whose BLS key is estimated to need more gas, before writing any output. To replace those BLS keys, regenerate
+the validators with `aztec validator-keys new`, the same mnemonic or IKM and indices, and `--bls-key-derivation-v6`. If
+the current limit minus 10% is below 270,000, also pass `--bls-key-derivation-max-gas` set to that value. The error
+names the exact flags.
 
 :::warning Regenerating keys
 To regenerate keys from your mnemonic, run the command with the same `--bls-key-derivation-v6` and

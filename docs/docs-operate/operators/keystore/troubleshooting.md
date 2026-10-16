@@ -76,16 +76,17 @@ See [BLS Keys and the Proof-of-Possession Gas Cap](./creating-keystores.md#bls-k
 
 ### BLS Key Over the GSE Proof-of-Possession Gas Limit
 
-**Error:** `Registering these validators would fail: the GSE at <address> gives each proof-of-possession check <limit> gas, and the BLS keys of these attesters are estimated to need more: ...`
+**Error:** `Registering these validators could fail: the GSE at <address> gives each proof-of-possession check <limit> gas, and the BLS keys of these attesters are estimated to need more: ...`
 
 **Cause:** `aztec validator-keys staker` or `aztec validator-keys new --staker-output` read the GSE's current
-`proofOfPossessionGasLimit`, and some BLS keys are estimated to need more gas than that, so their registration would
+`proofOfPossessionGasLimit`, and some BLS keys are estimated to need more gas than that, so their registration could
 fail. This happens when governance set a limit below the one the keys were checked against, or for keys created with
 `--skip-bls-key-gas-check`.
 
-**Solution:** Derive replacement BLS keys with `aztec validator-keys new` or `add` and the flags the error names:
-`--bls-key-derivation-v6`, plus `--bls-key-derivation-max-gas <limit>` when the limit is below 270,000. This changes the
-BLS keys of the listed validators.
+**Solution:** Regenerate the listed validators with `aztec validator-keys new`, the same mnemonic or IKM and indices,
+and the flags the error names: `--bls-key-derivation-v6`, plus `--bls-key-derivation-max-gas` at 10% below the limit when
+that is below 270,000. This replaces their BLS keys and keeps their ETH keys. `aztec validator-keys add` appends new
+validators instead, so it does not replace these keys.
 
 ### Legacy BLS Key Derivation (2.1.4 Users)
 
