@@ -53,34 +53,68 @@ export class DataTxValidator implements TxValidator<Tx> {
     return undefined;
   }
 
+  /**
+   * Checks the supplied public calldata entries against the calldata hashes of the public call requests. Every request
+   * must have an entry, and every entry must hash to its own hash and be used by some request. Several requests may
+   * share one entry, so a hash may appear at most as many times as requests use it. Both the calldata the calls receive
+   * and the supplied entries are capped. All of this is checked before hashing any entry.
+   */
   async #hasCorrectCalldata(tx: Tx): Promise<string | undefined> {
-    if (tx.publicFunctionCalldata.length !== tx.numberOfPublicCalls()) {
-      const reason = TX_ERROR_CALLDATA_COUNT_MISMATCH;
-      this.#log.verbose(
-        `Rejecting tx ${tx.getTxHash().toString()}. Reason: ${reason}. Expected ${tx.numberOfPublicCalls()}. Got ${
-          tx.publicFunctionCalldata.length
-        }.`,
-      );
-      return reason;
+    const txHash = tx.getTxHash().toString();
+    const calldataMap = tx.getCalldataMap();
+
+    const requestCountByHash = new Map<string, number>();
+    for (const [index, { request }] of tx.getPublicCallRequestsWithCalldata().entries()) {
+      const hash = request.calldataHash.toString();
+      if (!calldataMap.has(hash)) {
+        const reason = TX_ERROR_INCORRECT_CALLDATA;
+        this.#log.verbose(`Rejecting tx ${txHash}. Reason: ${reason}. Call request has no calldata entry.`, {
+          txHash,
+          callRequestIndex: index,
+        });
+        return reason;
+      }
+      requestCountByHash.set(hash, (requestCountByHash.get(hash) ?? 0) + 1);
     }
 
-    if (tx.getTotalPublicCalldataCount() > MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS) {
+    // A wrongly labeled entry can make the calls receive less calldata than is supplied, so both totals are capped.
+    const deliveredCount = tx.getDeliveredPublicCalldataCount();
+    const suppliedCount = tx.getTotalPublicCalldataCount();
+    if (
+      deliveredCount > MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS ||
+      suppliedCount > MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS
+    ) {
       const reason = TX_ERROR_CALLDATA_COUNT_TOO_LARGE;
       this.#log.verbose(
-        `Rejecting tx ${tx
-          .getTxHash()
-          .toString()}. Reason: ${reason}. Expected no greater than ${MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS} fields. Got ${tx.getTotalPublicCalldataCount()}.`,
+        `Rejecting tx ${txHash}. Reason: ${reason}. Expected no greater than ${MAX_FR_CALLDATA_TO_ALL_ENQUEUED_CALLS} fields.`,
+        { txHash, deliveredCount, suppliedCount },
       );
       return reason;
     }
 
-    const callRequests = tx.getPublicCallRequestsWithCalldata();
-    for (let i = 0; i < callRequests.length; i++) {
-      const { request, calldata } = callRequests[i];
-      const hash = await computeCalldataHash(calldata);
-      if (!hash.equals(request.calldataHash)) {
+    const entryCountByHash = new Map<string, number>();
+    for (const [index, cd] of tx.publicFunctionCalldata.entries()) {
+      const hash = cd.hash.toString();
+      const entryCount = (entryCountByHash.get(hash) ?? 0) + 1;
+      const requestCount = requestCountByHash.get(hash) ?? 0;
+      if (entryCount > requestCount) {
+        const reason = TX_ERROR_CALLDATA_COUNT_MISMATCH;
+        this.#log.verbose(
+          `Rejecting tx ${txHash}. Reason: ${reason}. Calldata entry is listed more times than call requests use it.`,
+          { txHash, calldataIndex: index, requestCount },
+        );
+        return reason;
+      }
+      entryCountByHash.set(hash, entryCount);
+    }
+
+    for (const [index, cd] of tx.publicFunctionCalldata.entries()) {
+      if (!(await computeCalldataHash(cd.values)).equals(cd.hash)) {
         const reason = TX_ERROR_INCORRECT_CALLDATA;
-        this.#log.verbose(`Rejecting tx ${tx.getTxHash().toString()}. Reason: ${reason}. Call request index: ${i}.`);
+        this.#log.verbose(`Rejecting tx ${txHash}. Reason: ${reason}. Calldata entry does not match its hash.`, {
+          txHash,
+          calldataIndex: index,
+        });
         return reason;
       }
     }
