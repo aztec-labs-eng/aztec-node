@@ -64,6 +64,7 @@ describe('multi-node/recovery/equivocation_recovery', () => {
     // - Total: 0.5 + 15 + 5 + 2.5 = 23s => use 24s
     const slashingUnit = BigInt(1e14);
     test = await MultiNodeTestContext.setup({
+      keepEpochsSetUp: true,
       ...MOCK_GOSSIP_MULTI_VALIDATOR_OPTS,
       ...MULTI_VALIDATOR_REORG_TIMING,
       initialValidators: validators,
