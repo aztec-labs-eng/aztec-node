@@ -3,7 +3,7 @@ import { SlasherAbi } from '@aztec-foundation/l1-artifacts';
 import type { AztecNodeConfig, AztecNodeService } from '@aztec-labs/aztec-node';
 import { EthAddress } from '@aztec-labs/aztec.js/addresses';
 import { Fr } from '@aztec-labs/aztec.js/fields';
-import { RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
+import { CommitteeNotStableError, RollupContract, type SlashingProposerContract } from '@aztec-labs/ethereum/contracts';
 import type { Operator } from '@aztec-labs/ethereum/deploy-aztec-l1-contracts';
 import type { ViemClient } from '@aztec-labs/ethereum/types';
 import { CheckpointNumber, SlotNumber } from '@aztec-labs/foundation/branded-types';
@@ -357,7 +357,8 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
   /**
    * Finds `count` consecutive slots (starting from `opts.fromSlot` or the current slot plus a
    * margin) whose proposers satisfy `predicate`, warping the L1 clock forward one epoch and
-   * retrying when the rollup reports `ValidatorSelection__EpochNotStable` for a future epoch.
+   * retrying when the rollup reports `ValidatorSelection__EpochNotStable` for a future epoch, or the
+   * epoch cache reports that a future epoch's seed can still change (`CommitteeNotStableError`).
    * Returns the matched slots and their proposer addresses. Encapsulates the slot-search loop
    * duplicated across the multi-validator tests.
    */
@@ -383,7 +384,7 @@ export class MultiNodeTestContext extends SingleNodeTestContext {
           candidate = SlotNumber(candidate + 1);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes('EpochNotStable')) {
+          if (!(err instanceof CommitteeNotStableError) && !msg.includes('EpochNotStable')) {
             throw err;
           }
           const block = await this.l1Client.getBlock({ includeTransactions: false });
