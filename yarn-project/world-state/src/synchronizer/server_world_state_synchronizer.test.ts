@@ -94,7 +94,7 @@ describe('ServerWorldStateSynchronizer', () => {
     const config: WorldStateConfig = {
       worldStateBlockCheckIntervalMS: 100,
       worldStateDbMapSizeKb: 1024 * 1024,
-      worldStateCheckpointHistory: 0,
+      worldStateHistoryRetention: { type: 'archive' },
     };
 
     server = new TestWorldStateSynchronizer(merkleTreeDb, blockAndMessagesSource, config, l2BlockStream);
@@ -301,7 +301,7 @@ describe('ServerWorldStateSynchronizer', () => {
         {
           worldStateBlockCheckIntervalMS: 100,
           worldStateDbMapSizeKb: 1024 * 1024,
-          worldStateCheckpointHistory: 1,
+          worldStateHistoryRetention: { type: 'rolling', checkpoints: 1 },
         },
         l2BlockStream,
       );

@@ -96,6 +96,7 @@ export class NativeWorldStateService implements MerkleTreeDatabase {
       await worldState.init();
     } catch (e) {
       log.error(`Error initializing world state: ${e}`);
+      await instance.close();
       throw e;
     }
 

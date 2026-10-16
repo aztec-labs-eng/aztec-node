@@ -71,7 +71,7 @@ describe('wsdb death', () => {
     await archiver.setInitialHeader(ws.getInitialHeader());
     const synchronizer = new ServerWorldStateSynchronizer(ws, archiver, {
       worldStateBlockCheckIntervalMS: 20,
-      worldStateCheckpointHistory: 0,
+      worldStateHistoryRetention: { type: 'archive' },
     });
     try {
       await synchronizer.start();
