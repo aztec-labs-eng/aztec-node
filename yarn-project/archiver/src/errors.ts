@@ -1,6 +1,7 @@
 import type { BlockNumber, CheckpointNumber } from '@aztec-labs/foundation/branded-types';
 import type { Fr } from '@aztec-labs/foundation/curves/bn254';
 import type { TxHash } from '@aztec-labs/stdlib/tx';
+import type { Hex } from 'viem';
 
 export class NoBlobBodiesFoundError extends Error {
   constructor(l2BlockNum: number) {
@@ -93,6 +94,24 @@ export class DuplicateTxHashError extends Error {
   ) {
     super(`Cannot insert block ${blockNumber}: tx ${txHash} is already included in block ${existingBlockNumber}`);
     this.name = 'DuplicateTxHashError';
+  }
+}
+
+/**
+ * Thrown when the propose calldata of a checkpoint cannot be recovered from its L1 tx: no known decoder matched the
+ * tx, and the L1 RPC served neither `trace_transaction` nor `debug_traceTransaction` for it.
+ */
+export class CheckpointCalldataUnavailableError extends Error {
+  constructor(
+    public readonly l1TxHash: Hex,
+    public readonly checkpointNumber: CheckpointNumber,
+  ) {
+    super(
+      `Cannot extract propose calldata for checkpoint ${checkpointNumber} from L1 tx ${l1TxHash}: neither ` +
+        `trace_transaction nor debug_traceTransaction succeeded. Set ETHEREUM_DEBUG_HOSTS to an L1 RPC that serves ` +
+        `one of them, with history back to this tx.`,
+    );
+    this.name = 'CheckpointCalldataUnavailableError';
   }
 }
 

@@ -27,6 +27,7 @@ import {
   toFunctionSelector,
 } from 'viem';
 
+import { CheckpointCalldataUnavailableError } from '../errors.js';
 import type { ArchiverInstrumentation } from '../modules/instrumentation.js';
 import { CalldataRetriever } from './calldata_retriever.js';
 import {
@@ -59,8 +60,8 @@ class TestCalldataRetriever extends CalldataRetriever {
     return super.tryDecodeDirectPropose(tx, expectedHashes, checkpointNumber, blockHash);
   }
 
-  public override async extractCalldataViaTrace(txHash: Hex): Promise<Hex> {
-    return await super.extractCalldataViaTrace(txHash);
+  public override async extractCalldataViaTrace(txHash: Hex, checkpointNumber: CheckpointNumber): Promise<Hex> {
+    return await super.extractCalldataViaTrace(txHash, checkpointNumber);
   }
 
   public override tryDecodeAndVerifyPropose(
@@ -252,7 +253,7 @@ describe('CalldataRetriever', () => {
       expect(instrumentation.recordBlockProposalTxTarget).toHaveBeenCalledWith(wrongAddress.toString(), true);
     });
 
-    it('should throw when tracing fails', async () => {
+    it('should throw a calldata unavailable error and count it when tracing fails', async () => {
       const proposeCalldata = makeProposeCalldata();
       const hashes = mockHashComputation();
 
@@ -270,9 +271,11 @@ describe('CalldataRetriever', () => {
       // Mock both trace methods to fail
       debugClient.request.mockRejectedValue(new Error(`Method not available`));
 
-      await expect(retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, hashes)).rejects.toThrow(
-        'Failed to trace transaction',
-      );
+      const error = await retriever.getCheckpointFromRollupTx(txHash, [], checkpointNumber, hashes).catch(err => err);
+      expect(error).toBeInstanceOf(CheckpointCalldataUnavailableError);
+      expect(error).toMatchObject({ l1TxHash: txHash, checkpointNumber });
+      expect(error.message).toContain('ETHEREUM_DEBUG_HOSTS');
+      expect(instrumentation.recordCheckpointCalldataUnavailable).toHaveBeenCalledTimes(1);
     });
 
     it('should throw when transaction retrieval fails', async () => {
@@ -343,7 +346,7 @@ describe('CalldataRetriever', () => {
           attestationsHash: wrongAttestationsHash,
           payloadDigest: hashes.payloadDigest,
         }),
-      ).rejects.toThrow('Failed to trace');
+      ).rejects.toThrow(CheckpointCalldataUnavailableError);
     });
 
     it('should validate payloadDigest', async () => {
@@ -413,7 +416,7 @@ describe('CalldataRetriever', () => {
           attestationsHash: hashes.attestationsHash,
           payloadDigest: wrongPayloadDigest,
         }),
-      ).rejects.toThrow('Failed to trace');
+      ).rejects.toThrow(CheckpointCalldataUnavailableError);
     });
   });
 
@@ -989,7 +992,7 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      const result = await retriever.extractCalldataViaTrace(txHash);
+      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
 
       expect(result).toBe(proposeCalldata);
       expect(debugClient.request).toHaveBeenCalledWith({ method: 'trace_transaction', params: [txHash] });
@@ -1027,7 +1030,7 @@ describe('CalldataRetriever', () => {
         ],
       });
 
-      const result = await retriever.extractCalldataViaTrace(txHash);
+      const result = await retriever.extractCalldataViaTrace(txHash, checkpointNumber);
 
       expect(result).toBe(proposeCalldata);
       expect(debugClient.request).toHaveBeenCalledTimes(2);
@@ -1045,8 +1048,8 @@ describe('CalldataRetriever', () => {
       // Second call (debug_traceTransaction) also fails
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
-        'Failed to trace transaction ' + txHash + ' to extract propose calldata',
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+        CheckpointCalldataUnavailableError,
       );
 
       expect(debugClient.request).toHaveBeenCalledTimes(2);
@@ -1060,8 +1063,8 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
-        'Failed to trace transaction ' + txHash + ' to extract propose calldata',
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+        CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot decode L1 tx'));
@@ -1070,8 +1073,8 @@ describe('CalldataRetriever', () => {
       debugClient.request.mockRejectedValueOnce(new Error('trace_transaction not supported'));
       debugClient.request.mockRejectedValueOnce(new Error('debug_traceTransaction not supported'));
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
-        'Failed to trace transaction ' + txHash + ' to extract propose calldata',
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
+        CheckpointCalldataUnavailableError,
       );
       expect(warnSpy).toHaveBeenCalledTimes(1);
 
@@ -1082,7 +1085,7 @@ describe('CalldataRetriever', () => {
       // Mock debug client to return empty trace
       debugClient.request.mockResolvedValueOnce([]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         'No successful propose calls found in transaction ' + txHash,
       );
     });
@@ -1129,7 +1132,7 @@ describe('CalldataRetriever', () => {
         },
       ]);
 
-      await expect(retriever.extractCalldataViaTrace(txHash)).rejects.toThrow(
+      await expect(retriever.extractCalldataViaTrace(txHash, checkpointNumber)).rejects.toThrow(
         'Multiple successful propose calls found in transaction ' + txHash + ' (2)',
       );
     });
