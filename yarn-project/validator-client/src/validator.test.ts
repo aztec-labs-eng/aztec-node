@@ -1435,6 +1435,24 @@ describe('ValidatorClient', () => {
           epochOrSlot: BigInt(proposal.slotNumber),
         },
       ]);
+      expect(emitSpy).not.toHaveBeenCalledWith(
+        WANT_TO_SLASH_EVENT,
+        expect.arrayContaining([expect.objectContaining({ offenseType: OffenseType.DUPLICATE_PROPOSAL })]),
+      );
+    });
+
+    it('does not slash the second signer when two signers propose at one position', async () => {
+      await validatorClient.registerHandlers();
+      const duplicateProposalCallback = p2pClient.registerDuplicateProposalCallback.mock.calls[0][0];
+      const emitSpy = jest.spyOn(validatorClient, 'emit');
+
+      // The node's view of the slot's proposer changed between two honest proposals, so p2p counts the second
+      // signer's proposal as a duplicate at that position and reports the second signer.
+      const secondSigner = Secp256k1Signer.random();
+      duplicateProposalCallback({ slot: proposal.slotNumber, proposer: secondSigner.address, type: 'block' });
+
+      expect(validatorClient.hasProposalEquivocation(proposal.slotNumber)).toBe(true);
+      expect(emitSpy).not.toHaveBeenCalledWith(WANT_TO_SLASH_EVENT, expect.anything());
     });
 
     it('marks invalid proposal slots when the bad attestation penalty is zero', async () => {
@@ -1707,6 +1725,10 @@ describe('ValidatorClient', () => {
           epochOrSlot: BigInt(checkpointProposal.slotNumber),
         },
       ]);
+      expect(emitSpy).not.toHaveBeenCalledWith(
+        WANT_TO_SLASH_EVENT,
+        expect.arrayContaining([expect.objectContaining({ offenseType: OffenseType.DUPLICATE_PROPOSAL })]),
+      );
     });
 
     it('does not mark invalid proposal slots after a non-slashable invalid checkpoint proposal', async () => {
