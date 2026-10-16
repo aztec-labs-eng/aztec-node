@@ -423,7 +423,7 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
       ): Promise<CheckpointAttestation[] | undefined> => this.attestToCheckpointProposal(checkpoint, proposalSender);
       this.p2pClient.registerValidatorCheckpointProposalHandler(checkpointHandler);
 
-      // Duplicate proposal handler - triggers slashing for equivocation
+      // Duplicate proposal handler - marks the slot as equivocated
       this.p2pClient.registerDuplicateProposalCallback((info: DuplicateProposalInfo) => {
         this.handleDuplicateProposal(info);
       });
@@ -918,29 +918,19 @@ export class ValidatorClient extends (EventEmitter as new () => WatcherEmitter) 
   }
 
   /**
-   * Handle detection of a duplicate proposal (equivocation).
-   * Emits a slash event when a proposer sends multiple proposals for the same position.
+   * Handle detection of a second proposal at the same position. Marks the slot as equivocated and clears pending
+   * bad-attestation offenses for it, but does not slash: p2p counts payloads per position, not per signer, so the
+   * reported proposer may be an honest validator whose proposal followed another signer's. The slasher's
+   * BroadcastedInvalidCheckpointProposalWatcher attributes DUPLICATE_PROPOSAL per signer once the slot closes.
    */
   private handleDuplicateProposal(info: DuplicateProposalInfo): void {
     const { slot, proposer, type } = info;
     this.proposalHandler.markProposalEquivocation(slot);
 
-    this.log.info(`Detected duplicate ${type} proposal offense from ${proposer.toString()} at slot ${slot}`, {
-      proposer: proposer.toString(),
-      slot,
-      type,
-      amount: this.config.slashDuplicateProposalPenalty,
-      offenseType: getOffenseTypeName(OffenseType.DUPLICATE_PROPOSAL),
-    });
-
-    this.emit(WANT_TO_SLASH_EVENT, [
-      {
-        validator: proposer,
-        amount: this.config.slashDuplicateProposalPenalty,
-        offenseType: OffenseType.DUPLICATE_PROPOSAL,
-        epochOrSlot: BigInt(slot),
-      },
-    ]);
+    this.log.info(
+      `Marked slot ${slot} as equivocated after a duplicate ${type} proposal (slasher watcher attributes the offense)`,
+      { proposer: proposer.toString(), slot, type },
+    );
 
     this.emit(WANT_TO_CLEAR_SLASH_EVENT, [
       {
